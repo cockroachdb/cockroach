@@ -87,10 +87,9 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	asStringOrNull := func(e tree.Expr, op string) (func() (bool, string, error), error) {
-		return p.TypeAsStringOrNull(ctx, e, op)
-	}
-	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
+	roleOptions, err := roleoption.MakeListFromKVOptions(
+		ctx, kvOptions, p.ExprEvaluator(opName).LazyStringOrNull,
+	)
 	if err != nil {
 		return nil, err
 	}

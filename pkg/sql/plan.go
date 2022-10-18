@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/errors"
 )
 
 // runParams is a struct containing all parameters passed to planNode.Next() and
@@ -527,6 +528,25 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
 	for _, planHook := range planHooks {
+
+		// If we don't have placeholder, we know we're just doing prepare and we
+		// should type check instead of doing the actual planning.
+		if !p.EvalContext().HasPlaceholders() {
+			matched, header, err := planHook.typeCheck(ctx, stmt, p)
+			if err != nil {
+				return nil, err
+			}
+			if !matched {
+				continue
+			}
+			return newHookFnNode(planHook.name, func(ctx context.Context, nodes []planNode, datums chan<- tree.Datums) error {
+				return errors.AssertionFailedf(
+					"cannot execute prepared %v statement",
+					planHook.name,
+				)
+			}, header, nil), nil
+		}
+
 		if fn, header, subplans, avoidBuffering, err := planHook.fn(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {

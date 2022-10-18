@@ -11,10 +11,12 @@
 package roleoption
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -27,8 +29,7 @@ type Option uint32
 type RoleOption struct {
 	Option
 	HasValue bool
-	// Need to resolve value in Exec for the case of placeholders.
-	Value func() (bool, string, error)
+	Value    func() (bool, string, error)
 }
 
 // KindList of role options.
@@ -176,23 +177,67 @@ func ToOption(str string) (Option, error) {
 // List is a list of role options.
 type List []RoleOption
 
+// MakeListFromKVOptions converts KVOptions to a List using
+// typeAsString to convert exprs to strings.
+func MakeListFromKVOptions(
+	ctx context.Context,
+	o tree.KVOptions,
+	typeAsStringOrNull func(context.Context, tree.Expr) (func() (isNull bool, _ string, _ error), error),
+) (List, error) {
+	roleOptions := make(List, len(o))
+
+	for i, ro := range o {
+		// Role options are always stored as keywords in ro.Key by the
+		// parser.
+		option, err := ToOption(string(ro.Key))
+		if err != nil {
+			return nil, err
+		}
+
+		if ro.Value != nil {
+			if ro.Value == tree.DNull {
+				roleOptions[i] = RoleOption{
+					Option: option, HasValue: true, Value: func() (bool, string, error) {
+						return true, "", nil
+					},
+				}
+			} else {
+				strFn, err := typeAsStringOrNull(ctx, ro.Value)
+				if err != nil {
+					return nil, err
+				}
+				roleOptions[i] = RoleOption{
+					Option: option, Value: strFn, HasValue: true,
+				}
+			}
+		} else {
+			roleOptions[i] = RoleOption{
+				Option: option, HasValue: false,
+			}
+		}
+	}
+
+	return roleOptions, nil
+}
+
 // GetSQLStmts returns a map of SQL stmts to apply each role option.
 // Maps stmts to values (value of the role option).
 func (rol List) GetSQLStmts(
 	onRoleOption func(Option), withID bool,
-) (map[string]func() (bool, string, error), error) {
+) (map[string]*RoleOption, error) {
 	if len(rol) <= 0 {
 		return nil, nil
 	}
 
-	stmts := make(map[string]func() (bool, string, error), len(rol))
+	stmts := make(map[string]*RoleOption, len(rol))
 
 	err := rol.CheckRoleOptionConflicts()
 	if err != nil {
 		return stmts, err
 	}
 
-	for _, ro := range rol {
+	for i := range rol {
+		ro := &rol[i]
 		if onRoleOption != nil {
 			onRoleOption(ro.Option)
 		}
@@ -208,11 +253,7 @@ func (rol List) GetSQLStmts(
 		if withID {
 			stmt = toSQLStmtsWithID[ro.Option]
 		}
-		if ro.HasValue {
-			stmts[stmt] = ro.Value
-		} else {
-			stmts[stmt] = nil
-		}
+		stmts[stmt] = ro
 	}
 
 	return stmts, nil

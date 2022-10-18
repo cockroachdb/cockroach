@@ -41,22 +41,6 @@ func (c *dropExternalConnectionNode) startExec(params runParams) error {
 	return params.p.dropExternalConnection(params, c.n)
 }
 
-type dropExternalConnectionEval struct {
-	externalConnectionName func() (string, error)
-}
-
-func (p *planner) makeDropExternalConnectionEval(
-	ctx context.Context, n *tree.DropExternalConnection,
-) (*dropExternalConnectionEval, error) {
-	var err error
-	eval := &dropExternalConnectionEval{}
-	eval.externalConnectionName, err = p.TypeAsString(ctx, n.ConnectionLabel, externalConnectionOp)
-	if err != nil {
-		return nil, err
-	}
-	return eval, err
-}
-
 func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalConnection) error {
 	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.SystemExternalConnectionsTable) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
@@ -67,12 +51,9 @@ func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalC
 	// TODO(adityamaru): Add some metrics to track DROP EXTERNAL CONNECTION
 	// usage.
 
-	eval, err := p.makeDropExternalConnectionEval(params.ctx, n)
-	if err != nil {
-		return err
-	}
-
-	name, err := eval.externalConnectionName()
+	name, err := p.ExprEvaluator(externalConnectionOp).String(
+		params.ctx, n.ConnectionLabel,
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve External Connection name")
 	}

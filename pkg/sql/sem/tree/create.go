@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
@@ -1886,47 +1885,6 @@ func (o LikeTableOpt) String() string {
 	default:
 		panic("unknown like table opt" + strconv.Itoa(int(o)))
 	}
-}
-
-// ToRoleOptions converts KVOptions to a roleoption.List using
-// typeAsString to convert exprs to strings.
-func (o KVOptions) ToRoleOptions(
-	typeAsStringOrNull func(e Expr, op string) (func() (bool, string, error), error), op string,
-) (roleoption.List, error) {
-	roleOptions := make(roleoption.List, len(o))
-
-	for i, ro := range o {
-		// Role options are always stored as keywords in ro.Key by the
-		// parser.
-		option, err := roleoption.ToOption(string(ro.Key))
-		if err != nil {
-			return nil, err
-		}
-
-		if ro.Value != nil {
-			if ro.Value == DNull {
-				roleOptions[i] = roleoption.RoleOption{
-					Option: option, HasValue: true, Value: func() (bool, string, error) {
-						return true, "", nil
-					},
-				}
-			} else {
-				strFn, err := typeAsStringOrNull(ro.Value, op)
-				if err != nil {
-					return nil, err
-				}
-				roleOptions[i] = roleoption.RoleOption{
-					Option: option, Value: strFn, HasValue: true,
-				}
-			}
-		} else {
-			roleOptions[i] = roleoption.RoleOption{
-				Option: option, HasValue: false,
-			}
-		}
-	}
-
-	return roleOptions, nil
 }
 
 func (o *KVOptions) formatAsRoleOptions(ctx *FmtCtx) {
