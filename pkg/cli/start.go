@@ -813,61 +813,7 @@ func waitForShutdown(
 			}
 		}
 
-		// Start the shutdown process in a separate goroutine so that it
-		// runs concurrently with the timeout check below.
-		go func() {
-			// The return value of startShutdown indicates whether the
-			// server has started already, and the graceful shutdown should
-			// call the Drain method. We cannot call Drain if the server has
-			// not started yet.
-			canUseDrain := serverStatusMu.startShutdown()
-
-			if !canUseDrain {
-				close(stopWithoutDrain)
-				return
-			}
-			// Don't use shutdownCtx because this is in a goroutine that may
-			// still be running after shutdownCtx's span has been finished.
-			drainCtx := logtags.AddTag(getS().AnnotateCtx(context.Background()), "server drain process", nil)
-
-			// Perform a graceful drain. We keep retrying forever, in
-			// case there are many range leases or some unavailability
-			// preventing progress. If the operator wants to expedite
-			// the shutdown, they will need to make it ungraceful
-			// via a 2nd signal.
-			var (
-				remaining     = uint64(math.MaxUint64)
-				prevRemaining = uint64(math.MaxUint64)
-				verbose       = false
-			)
-
-			for ; ; prevRemaining = remaining {
-				var err error
-				remaining, _, err = getS().Drain(drainCtx, verbose)
-				if err != nil {
-					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
-					break
-				}
-				if remaining == 0 {
-					// No more work to do.
-					break
-				}
-
-				// If range lease transfer stalls or the number of
-				// remaining leases somehow increases, verbosity is set
-				// to help with troubleshooting.
-				if remaining >= prevRemaining {
-					verbose = true
-				}
-
-				// Avoid a busy wait with high CPU usage if the server replies
-				// with an incomplete drain too quickly.
-				time.Sleep(200 * time.Millisecond)
-			}
-
-			stopper.Stop(drainCtx)
-		}()
-
+		startShutdownAsync(getS, stopper, serverStatusMu, stopWithoutDrain, true /* shouldDrain */)
 	// Don't return: we're shutting down gracefully.
 
 	case <-log.FatalChan():
@@ -961,6 +907,82 @@ func waitForShutdown(
 	}
 
 	return returnErr
+}
+
+// startShutdown begins the process that stops the server, asynchronously.
+//
+// The shouldDrain argument indicates that the shutdown is happening
+// some time after server startup has completed, and we are thus
+// interested in being graceful to application load.
+func startShutdownAsync(
+	getS func() serverShutdownInterface,
+	stopper *stop.Stopper,
+	serverStatusMu *serverStatus,
+	stopWithoutDrain chan struct{},
+	shouldDrain bool,
+) {
+	// StartAlwaysFlush both flushes and ensures that subsequent log
+	// writes are flushed too.
+	log.StartAlwaysFlush()
+
+	// Start the draining process in a separate goroutine so that it
+	// runs concurrently with the timeout check in waitForShutdown().
+	go func() {
+		// The return value of startShutdown indicates whether the
+		// server has started already, and the graceful shutdown should
+		// call the Drain method. We cannot call Drain if the server has
+		// not started yet.
+		canUseDrain := serverStatusMu.startShutdown()
+
+		if !canUseDrain {
+			// The server has not started yet. We can't use the Drain() call.
+			close(stopWithoutDrain)
+			return
+		}
+
+		// Don't use ctx because this is in a goroutine that may
+		// still be running after shutdownCtx's span has been finished.
+		drainCtx := logtags.AddTag(getS().AnnotateCtx(context.Background()), "server drain process", nil)
+
+		if shouldDrain {
+			// Perform a graceful drain. We keep retrying forever, in
+			// case there are many range leases or some unavailability
+			// preventing progress. If the operator wants to expedite
+			// the shutdown, they will need to make it ungraceful
+			// via a 2nd signal.
+			var (
+				remaining     = uint64(math.MaxUint64)
+				prevRemaining = uint64(math.MaxUint64)
+				verbose       = false
+			)
+
+			for ; ; prevRemaining = remaining {
+				var err error
+				remaining, _, err = getS().Drain(drainCtx, verbose)
+				if err != nil {
+					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
+					break
+				}
+				if remaining == 0 {
+					// No more work to do.
+					break
+				}
+
+				// If range lease transfer stalls or the number of
+				// remaining leases somehow increases, verbosity is set
+				// to help with troubleshooting.
+				if remaining >= prevRemaining {
+					verbose = true
+				}
+
+				// Avoid a busy wait with high CPU usage if the server replies
+				// with an incomplete drain too quickly.
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+
+		stopper.Stop(drainCtx)
+	}()
 }
 
 // makeServerOptionsForURL creates the input for MakeURLForServer().
