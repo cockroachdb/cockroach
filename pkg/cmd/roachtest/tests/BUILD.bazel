@@ -12,6 +12,7 @@ go_library(
         "admission_control_elastic_backup.go",
         "admission_control_elastic_cdc.go",
         "admission_control_index_overload.go",
+        "admission_control_index_overload_tpce.go",
         "admission_control_multi_store_overload.go",
         "admission_control_multitenant_fairness.go",
         "admission_control_snapshot_overload.go",

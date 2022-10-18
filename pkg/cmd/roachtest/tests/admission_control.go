@@ -36,4 +36,5 @@ func registerAdmission(r registry.Registry) {
 	registerTPCCOverload(r)
 	registerTPCCSevereOverload(r)
 	registerIndexOverload(r)
+	registerIndexOverloadTPCE(r)
 }
