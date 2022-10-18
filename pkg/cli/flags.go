@@ -410,9 +410,20 @@ func init() {
 
 	// Flags common to the start commands, the connect command, and the node join
 	// command.
-	for _, cmd := range append(StartCmds, connectInitCmd, connectJoinCmd) {
+	for _, cmd := range append(serverCmds, connectInitCmd, connectJoinCmd) {
 		f := cmd.Flags()
 
+		// Use a separate variable to store the value of ServerInsecure.
+		// We share the default with the ClientInsecure flag.
+		//
+		// NB: Insecure is deprecated. See #53404.
+		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+
+		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
+		// (which is a PreRun for this command):
+		_ = extraServerFlagInit // guru assignment
+
+		// NB: the address flags also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&startCtx.serverListenAddr, &serverListenPort), cliflags.ListenAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
@@ -488,12 +499,6 @@ func init() {
 		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
 		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
-		// Use a separate variable to store the value of ServerInsecure.
-		// We share the default with the ClientInsecure flag.
-		//
-		// NB: Insecure is deprecated. See #53404.
-		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
-
 		// Enable/disable various external storage endpoints.
 		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
 		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
@@ -538,18 +543,8 @@ func init() {
 	{
 		f := mtStartSQLCmd.Flags()
 		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
-		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
-		// (which is a PreRun for this command):
-		_ = extraServerFlagInit // guru assignment
-		// NB: Insecure is deprecated. See #53404.
-		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
 
-		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
 
 		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
