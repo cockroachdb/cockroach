@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
 )
@@ -787,6 +789,13 @@ func (c *tenantSideCostController) OnResponseWait(
 		return err
 	}
 
+	// Record the number of RUs consumed by the IO request.
+	if sp := tracing.SpanFromContext(ctx); sp != nil && sp.RecordingType() != tracingpb.RecordingOff {
+		sp.RecordStructured(&roachpb.TenantConsumption{
+			RU: float64(totalRU),
+		})
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -828,7 +837,7 @@ func (c *tenantSideCostController) OnExternalIOWait(
 }
 
 // OnExternalIO is part of the multitenant.TenantSideExternalIORecorder
-// interface.
+// interface. TODO(drewk): collect this for queries.
 func (c *tenantSideCostController) OnExternalIO(
 	ctx context.Context, usage multitenant.ExternalIOUsage,
 ) {

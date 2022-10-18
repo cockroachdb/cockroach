@@ -491,6 +491,7 @@ go_library(
         "//pkg/util/memzipper",
         "//pkg/util/metric",
         "//pkg/util/mon",
+        "//pkg/util/optional",
         "//pkg/util/protoutil",
         "//pkg/util/quotapool",
         "//pkg/util/randutil",

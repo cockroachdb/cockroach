@@ -546,8 +546,11 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
-		if ih.isTenant && ih.outputMode != unmodifiedOutput {
+		if ih.isTenant && ih.outputMode != unmodifiedOutput && ih.vectorized {
 			// Only output RU estimate if this is a tenant running EXPLAIN ANALYZE.
+			// Additionally, RUs aren't correctly propagated in all cases for plans
+			// that aren't vectorized - for example, EXPORT statements. For now,
+			// only output RU estimates for vectorized plans.
 			ob.AddRUEstimate(queryStats.RUEstimate)
 		}
 	}
