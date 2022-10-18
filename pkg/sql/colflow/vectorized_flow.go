@@ -259,11 +259,13 @@ func (f *vectorizedFlow) Setup(
 	f.countingSemaphore = newFDCountingSemaphore(
 		f.Cfg.VecFDSemaphore, f.Cfg.Metrics.VecOpenFDs, &flowCtx.EvalCtx.Settings.SV,
 	)
+	isTenant := flowCtx.Cfg.TenantCostController != nil
 	f.creator = newVectorizedFlowCreator(
 		helper,
 		vectorizedRemoteComponentCreator{},
 		recordingStats,
 		f.Gateway,
+		isTenant,
 		f.GetWaitGroup(),
 		f.GetRowSyncFlowConsumer(),
 		f.GetBatchSyncFlowConsumer(),
@@ -442,7 +444,7 @@ func (s *vectorizedFlowCreator) wrapWithVectorizedStatsCollectorBase(
 	}
 	vsc := newVectorizedStatsCollector(
 		op.Root, kvReader, columnarizer, component, inputWatch,
-		memMonitors, diskMonitors, inputStatsCollectors,
+		memMonitors, diskMonitors, inputStatsCollectors, s.isTenant,
 	)
 	op.Root = vsc
 	op.StatsCollectors = append(op.StatsCollectors, vsc)
@@ -603,6 +605,7 @@ type vectorizedFlowCreator struct {
 	streamIDToSpecIdx map[execinfrapb.StreamID]int
 	recordingStats    bool
 	isGatewayNode     bool
+	isTenant          bool
 	waitGroup         *sync.WaitGroup
 	podNodeDialer     *nodedialer.Dialer
 	flowID            execinfrapb.FlowID
@@ -657,6 +660,7 @@ func newVectorizedFlowCreator(
 	componentCreator remoteComponentCreator,
 	recordingStats bool,
 	isGatewayNode bool,
+	isTenant bool,
 	waitGroup *sync.WaitGroup,
 	rowSyncFlowConsumer execinfra.RowReceiver,
 	batchSyncFlowConsumer execinfra.BatchReceiver,
@@ -675,6 +679,7 @@ func newVectorizedFlowCreator(
 		streamIDToSpecIdx:      creator.streamIDToSpecIdx,
 		recordingStats:         recordingStats,
 		isGatewayNode:          isGatewayNode,
+		isTenant:               isTenant,
 		waitGroup:              waitGroup,
 		rowReceiver:            rowSyncFlowConsumer,
 		batchReceiver:          batchSyncFlowConsumer,

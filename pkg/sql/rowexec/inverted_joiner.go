@@ -778,6 +778,10 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.OutputHelper.Stats(),
 	}
+	if ij.FlowCtx.Cfg.TenantCostController != nil {
+		// Don't populate the consumed RU unless this is a tenant.
+		ret.Exec.ConsumedRU = optional.MakeUint(ij.scanStats.RuConsumed)
+	}
 	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStats)
 	return &ret
 }

@@ -1194,6 +1194,10 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
 		}
 	}
+	if jr.FlowCtx.Cfg.TenantCostController != nil {
+		// Don't populate the consumed RU unless this is a tenant.
+		ret.Exec.ConsumedRU = optional.MakeUint(jr.scanStats.RuConsumed)
+	}
 	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
 	return ret
 }
