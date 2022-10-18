@@ -456,17 +456,21 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// Now perform additional configuration tweaks specific to the start
 	// command.
 
+	st := serverCfg.BaseConfig.Settings
+
 	// Derive temporary/auxiliary directory specifications.
-	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
+	if st.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
 
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(
-		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
+	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
+		ctx, st, stopper, serverCfg.Stores,
 	); err != nil {
 		return err
 	}
 
+	// Configure the default storage engine.
+	// NB: we only support one engine type for now.
 	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
 		serverCfg.StorageEngine = enginepb.EngineTypePebble
 	}
