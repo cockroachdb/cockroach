@@ -64,6 +64,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -115,12 +117,26 @@ type adminServer struct {
 	internalExecutor *sql.InternalExecutor
 	server           *Server
 	memMonitor       *mon.BytesMonitor
+	statsLimiter     *quotapool.IntPool
 }
 
 // noteworthyAdminMemoryUsageBytes is the minimum size tracked by the
 // admin SQL pool before the pool start explicitly logging overall
 // usage growth in the log.
 var noteworthyAdminMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_ADMIN_MEMORY_USAGE", 100*1024)
+
+var tableStatsMaxFetcherConcurrency = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"server.admin.table_stats.max_fetcher_concurrency",
+	"maximum number of concurrent table stats fetches to run",
+	32, // arbitrary
+	func(i int64) error {
+		if i < 1 {
+			return errors.Errorf("illegal value %d: minimum values is 1", i)
+		}
+		return nil
+	},
+)
 
 // newAdminServer allocates and returns a new REST server for
 // administrative APIs.
@@ -132,6 +148,18 @@ func newAdminServer(
 		internalExecutor:      ie,
 		server:                s,
 	}
+	if cs := s.ClusterSettings(); cs != nil { // can be nil in testing
+		server.statsLimiter = quotapool.NewIntPool(
+			"table stats",
+			uint64(tableStatsMaxFetcherConcurrency.Get(&cs.SV)),
+		)
+		tableStatsMaxFetcherConcurrency.SetOnChange(&cs.SV, func(ctx context.Context) {
+			server.statsLimiter.UpdateCapacity(
+				uint64(tableStatsMaxFetcherConcurrency.Get(&cs.SV)),
+			)
+		})
+	}
+
 	// TODO(knz): We do not limit memory usage by admin operations
 	// yet. Is this wise?
 	server.memMonitor = mon.NewUnlimitedMonitor(
@@ -568,19 +596,28 @@ func (s *adminServer) getDatabaseStats(
 		err  error
 	}
 
+	// There's no reason to launch more goroutines than we will ultimately
+	// be able to launch
+	var sem *quotapool.IntPool
+	if s.statsLimiter != nil { // only nil in testing
+		sem = quotapool.NewIntPool(
+			"database stats", s.statsLimiter.Capacity(),
+		)
+	}
 	responses := make(chan tableStatsResponse, len(tableSpans))
-
 	for tableName, tableSpan := range tableSpans {
 		// Because Go reuses loop variables across iterations, we must
 		// make these local, stable copies for the async task to close
 		// over, else our results will be nondeterministic.
 		tableName := tableName
 		tableSpan := tableSpan
-		if err := s.server.stopper.RunAsyncTask(
-			ctx, "server.adminServer: requesting table stats",
+		if err := s.server.stopper.RunAsyncTaskEx(
+			ctx, stop.TaskOpts{
+				TaskName: "server.adminServer: requesting table stats",
+				Sem:      sem,
+			},
 			func(ctx context.Context) {
 				statsResponse, err := s.statsForSpan(ctx, tableSpan)
-
 				responses <- tableStatsResponse{
 					name: tableName,
 					resp: statsResponse,
@@ -1262,8 +1299,11 @@ func (s *adminServer) statsForSpan(
 	responses := make(chan nodeResponse, len(nodeIDs))
 	for nodeID := range nodeIDs {
 		nodeID := nodeID // avoid data race
-		if err := s.server.stopper.RunAsyncTask(
-			ctx, "server.adminServer: requesting remote stats",
+		if err := s.server.stopper.RunAsyncTaskEx(
+			ctx, stop.TaskOpts{
+				TaskName: "server.adminServer: requesting remote stats",
+				Sem:      s.statsLimiter,
+			},
 			func(ctx context.Context) {
 				// Set a generous timeout on the context for each individual query.
 				var spanResponse *serverpb.SpanStatsResponse
