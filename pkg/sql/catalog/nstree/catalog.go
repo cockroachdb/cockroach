@@ -59,6 +59,20 @@ func (c Catalog) ForEachNamespaceEntry(fn func(e NamespaceEntry) error) error {
 	})
 }
 
+// ForEachSchemaNamespaceEntryInDatabase iterates over all namespace
+// entries in an ordered fashion for the entries corresponding to
+// schemas in the requested database.
+func (c Catalog) ForEachSchemaNamespaceEntryInDatabase(
+	dbID descpb.ID, fn func(e NamespaceEntry) error,
+) error {
+	if !c.IsInitialized() {
+		return nil
+	}
+	return c.underlying.byName.ascendSchemasForDatabase(dbID, func(entry catalog.NameEntry) error {
+		return fn(entry.(NamespaceEntry))
+	})
+}
+
 // LookupDescriptorEntry looks up a descriptor by ID.
 func (c Catalog) LookupDescriptorEntry(id descpb.ID) catalog.Descriptor {
 	if !c.IsInitialized() || id == descpb.InvalidID {

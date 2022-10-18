@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 )
 
 // This file contains the two major components to name resolution:
@@ -173,6 +174,9 @@ type CommonLookupFlags struct {
 	IncludeDropped bool
 	// AvoidSynthetic specifies if the synthetic descriptors will be ignored.
 	AvoidSynthetic bool
+	// ParentID enforces that the resolved descriptor exist with this parent
+	// ID if non-zero.
+	ParentID catid.DescID
 }
 
 // SchemaLookupFlags is the flag struct suitable for GetSchemaByName().
@@ -191,7 +195,7 @@ type DatabaseListFlags struct {
 
 // DesiredObjectKind represents what kind of object is desired in a name
 // resolution attempt.
-type DesiredObjectKind int
+type DesiredObjectKind byte
 
 const (
 	// TableObject is used when a table-like object is desired from resolution.
@@ -217,7 +221,7 @@ func NewQualifiedObjectName(catalog, schema, object string, kind DesiredObjectKi
 
 // RequiredTableKind controls what kind of TableDescriptor backed object is
 // requested to be resolved.
-type RequiredTableKind int
+type RequiredTableKind byte
 
 // RequiredTableKind options have descriptive names.
 const (
