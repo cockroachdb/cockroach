@@ -105,8 +105,9 @@ func ConsistencyQueueShouldQueue(
 	interval time.Duration,
 ) (bool, float64) {
 	return consistencyQueueShouldQueueImpl(ctx, now, consistencyShouldQueueData{
-		desc, getQueueLastProcessed, isNodeAvailable,
-		disableLastProcessedCheck, interval})
+		desc: desc, lastUpdateNanos: 0, getQueueLastProcessed: getQueueLastProcessed,
+		isNodeAvailable: isNodeAvailable, disableLastProcessedCheck: disableLastProcessedCheck,
+		interval: interval})
 }
 
 // LogReplicaChangeTest adds a fake replica change event to the log for the
