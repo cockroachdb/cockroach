@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -173,6 +174,43 @@ func (m metadataSSTInfoReader) showBackup(
 	return nil
 }
 
+func showBackupTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	backup, ok := stmt.(*tree.ShowBackup)
+	if !ok {
+		return false, nil, nil
+	}
+	if backup.Path == nil && backup.InCollection != nil {
+		return showBackupsInCollectionTypeCheck(ctx, backup, p)
+	}
+	if err := exprutil.TypeCheck(
+		ctx, "SHOW BACKUP", p.SemaCtx(),
+		exprutil.Strings{backup.Path},
+		exprutil.StringArrays{tree.Exprs(backup.InCollection)},
+		exprutil.KVOptions{
+			KVOptions:  backup.Options,
+			Validation: showBackupOptions,
+		},
+	); err != nil {
+		return false, nil, err
+	}
+	infoReader := getBackupInfoReader(p, backup)
+	return true, infoReader.header(), nil
+}
+
+var showBackupOptions = exprutil.KVOptionValidationMap{
+	backupencryption.BackupOptEncPassphrase: exprutil.KVStringOptRequireValue,
+	backupencryption.BackupOptEncKMS:        exprutil.KVStringOptRequireValue,
+	backupOptWithPrivileges:                 exprutil.KVStringOptRequireNoValue,
+	backupOptAsJSON:                         exprutil.KVStringOptRequireNoValue,
+	backupOptWithDebugIDs:                   exprutil.KVStringOptRequireNoValue,
+	backupOptIncStorage:                     exprutil.KVStringOptRequireValue,
+	backupOptDebugMetadataSST:               exprutil.KVStringOptRequireNoValue,
+	backupOptEncDir:                         exprutil.KVStringOptRequireValue,
+	backupOptCheckFiles:                     exprutil.KVStringOptRequireNoValue,
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -181,65 +219,34 @@ func showBackupPlanHook(
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
-
+	exprEval := p.ExprEvaluator("SHOW BACKUP")
 	if backup.Path == nil && backup.InCollection != nil {
-		return showBackupsInCollectionPlanHook(ctx, backup, p)
+		collection, err := exprEval.StringArray(
+			ctx, tree.Exprs(backup.InCollection),
+		)
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		return showBackupsInCollectionPlanHook(ctx, collection, backup, p)
 	}
 
-	toFn, err := p.TypeAsString(ctx, backup.Path, "SHOW BACKUP")
+	to, err := exprEval.String(ctx, backup.Path)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
-	var inColFn func() ([]string, error)
+	var inCol []string
 	if backup.InCollection != nil {
-		inColFn, err = p.TypeAsStringArray(ctx, tree.Exprs(backup.InCollection), "SHOW BACKUP")
+		inCol, err = exprEval.StringArray(ctx, tree.Exprs(backup.InCollection))
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	expected := map[string]sql.KVStringOptValidate{
-		backupencryption.BackupOptEncPassphrase: sql.KVStringOptRequireValue,
-		backupencryption.BackupOptEncKMS:        sql.KVStringOptRequireValue,
-		backupOptWithPrivileges:                 sql.KVStringOptRequireNoValue,
-		backupOptAsJSON:                         sql.KVStringOptRequireNoValue,
-		backupOptWithDebugIDs:                   sql.KVStringOptRequireNoValue,
-		backupOptIncStorage:                     sql.KVStringOptRequireValue,
-		backupOptDebugMetadataSST:               sql.KVStringOptRequireNoValue,
-		backupOptEncDir:                         sql.KVStringOptRequireValue,
-		backupOptCheckFiles:                     sql.KVStringOptRequireNoValue,
-	}
-	optsFn, err := p.TypeAsStringOpts(ctx, backup.Options, expected)
+	infoReader := getBackupInfoReader(p, backup)
+	opts, err := exprEval.KVOptions(ctx, backup.Options, showBackupOptions)
 	if err != nil {
 		return nil, nil, nil, false, err
-	}
-	opts, err := optsFn()
-	if err != nil {
-		return nil, nil, nil, false, err
-	}
-
-	var infoReader backupInfoReader
-	if _, dumpSST := opts[backupOptDebugMetadataSST]; dumpSST {
-		infoReader = metadataSSTInfoReader{}
-	} else if _, asJSON := opts[backupOptAsJSON]; asJSON {
-		infoReader = manifestInfoReader{shower: jsonShower}
-	} else {
-		var shower backupShower
-		switch backup.Details {
-		case tree.BackupRangeDetails:
-			shower = backupShowerRanges
-		case tree.BackupFileDetails:
-			shower = backupShowerFileSetup(backup.InCollection)
-		case tree.BackupSchemaDetails:
-			shower = backupShowerDefault(p, true, opts)
-		case tree.BackupValidateDetails:
-			shower = backupShowerDoctor
-
-		default:
-			shower = backupShowerDefault(p, false, opts)
-		}
-		infoReader = manifestInfoReader{shower: shower}
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -252,17 +259,9 @@ func showBackupPlanHook(
 		)
 		// For old style show backup, 'to' is the resolved path to the full backup;
 		// for new SHOW BACKUP, 'to' is the subdirectory.
-		to, err := toFn()
-		if err != nil {
-			return err
-		}
-
-		if inColFn != nil {
+		if inCol != nil {
 			subdir = to
-			dest, err = inColFn()
-			if err != nil {
-				return err
-			}
+			dest = inCol
 		} else {
 			dest = append(dest, to)
 			// Deprecation notice for old `SHOW BACKUP` syntax. Remove this once the syntax is
@@ -482,6 +481,32 @@ you must pass the 'encryption_info_dir' parameter that points to the directory o
 	return fn, infoReader.header(), nil, false, nil
 }
 
+func getBackupInfoReader(p sql.PlanHookState, backup *tree.ShowBackup) backupInfoReader {
+	var infoReader backupInfoReader
+	if dumpSST := backup.Options.HasKey(backupOptDebugMetadataSST); dumpSST {
+		infoReader = metadataSSTInfoReader{}
+	} else if asJSON := backup.Options.HasKey(backupOptAsJSON); asJSON {
+		infoReader = manifestInfoReader{shower: jsonShower}
+	} else {
+		var shower backupShower
+		switch backup.Details {
+		case tree.BackupRangeDetails:
+			shower = backupShowerRanges
+		case tree.BackupFileDetails:
+			shower = backupShowerFileSetup(backup.InCollection)
+		case tree.BackupSchemaDetails:
+			shower = backupShowerDefault(p, true, backup.Options)
+		case tree.BackupValidateDetails:
+			shower = backupShowerDoctor
+
+		default:
+			shower = backupShowerDefault(p, false, backup.Options)
+		}
+		infoReader = manifestInfoReader{shower: shower}
+	}
+	return infoReader
+}
+
 // checkBackupFiles validates that each SST is in its expected storage location
 func checkBackupFiles(
 	ctx context.Context,
@@ -617,7 +642,7 @@ type backupShower struct {
 }
 
 // backupShowerHeaders defines the schema for the table presented to the user.
-func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.ResultColumns {
+func backupShowerHeaders(showSchemas bool, opts tree.KVOptions) colinfo.ResultColumns {
 	baseHeaders := colinfo.ResultColumns{
 		{Name: "database_name", Typ: types.String},
 		{Name: "parent_schema_name", Typ: types.String},
@@ -634,14 +659,14 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 	if showSchemas {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "create_statement", Typ: types.String})
 	}
-	if _, shouldShowPrivleges := opts[backupOptWithPrivileges]; shouldShowPrivleges {
+	if shouldShowPrivleges := opts.HasKey(backupOptWithPrivileges); shouldShowPrivleges {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "privileges", Typ: types.String})
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "owner", Typ: types.String})
 	}
-	if _, checkFiles := opts[backupOptCheckFiles]; checkFiles {
+	if checkFiles := opts.HasKey(backupOptCheckFiles); checkFiles {
 		baseHeaders = append(baseHeaders, colinfo.ResultColumn{Name: "file_bytes", Typ: types.Int})
 	}
-	if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
+	if shouldShowIDs := opts.HasKey(backupOptWithDebugIDs); shouldShowIDs {
 		baseHeaders = append(
 			colinfo.ResultColumns{
 				baseHeaders[0],
@@ -657,9 +682,10 @@ func backupShowerHeaders(showSchemas bool, opts map[string]string) colinfo.Resul
 	return baseHeaders
 }
 
-func backupShowerDefault(
-	p sql.PlanHookState, showSchemas bool, opts map[string]string,
-) backupShower {
+func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOptions) backupShower {
+	shouldShowPrivileges := opts.HasKey(backupOptWithPrivileges)
+	checkFiles := opts.HasKey(backupOptCheckFiles)
+	shouldShowIDs := opts.HasKey(backupOptWithDebugIDs)
 	return backupShower{
 		header: backupShowerHeaders(showSchemas, opts),
 		fn: func(ctx context.Context, info backupInfo) ([]tree.Datums, error) {
@@ -828,15 +854,15 @@ func backupShowerDefault(
 					if showSchemas {
 						row = append(row, createStmtDatum)
 					}
-					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
+					if shouldShowPrivileges {
 						row = append(row, tree.NewDString(showPrivileges(ctx, desc)))
 						owner := desc.GetPrivileges().Owner().SQLIdentifier()
 						row = append(row, tree.NewDString(owner))
 					}
-					if _, checkFiles := opts[backupOptCheckFiles]; checkFiles {
+					if checkFiles {
 						row = append(row, fileSizeDatum)
 					}
-					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
+					if shouldShowIDs {
 						// If showing debug IDs, interleave the IDs with the corresponding object names.
 						row = append(
 							tree.Datums{
@@ -869,13 +895,13 @@ func backupShowerDefault(
 					if showSchemas {
 						row = append(row, tree.DNull)
 					}
-					if _, shouldShowPrivileges := opts[backupOptWithPrivileges]; shouldShowPrivileges {
+					if shouldShowPrivileges {
 						row = append(row, tree.DNull)
 					}
-					if _, checkFiles := opts[backupOptCheckFiles]; checkFiles {
+					if checkFiles {
 						row = append(row, tree.DNull)
 					}
-					if _, shouldShowIDs := opts[backupOptWithDebugIDs]; shouldShowIDs {
+					if shouldShowIDs {
 						// If showing debug IDs, interleave the IDs with the corresponding object names.
 						row = append(
 							tree.Datums{
@@ -1326,28 +1352,33 @@ var jsonShower = backupShower{
 	},
 }
 
+func showBackupsInCollectionTypeCheck(
+	ctx context.Context, backup *tree.ShowBackup, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	if err := exprutil.TypeCheck(ctx, "SHOW BACKUPS", p.SemaCtx(),
+		exprutil.StringArrays{tree.Exprs(backup.InCollection)},
+	); err != nil {
+		return false, nil, err
+	}
+	return true, showBackupsInCollectionHeader, nil
+}
+
+var showBackupsInCollectionHeader = colinfo.ResultColumns{
+	{Name: "path", Typ: types.String},
+}
+
 // showBackupPlanHook implements PlanHookFn.
 func showBackupsInCollectionPlanHook(
-	ctx context.Context, backup *tree.ShowBackup, p sql.PlanHookState,
+	ctx context.Context, collection []string, backup *tree.ShowBackup, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
 
-	collectionFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backup.InCollection), "SHOW BACKUPS")
-	if err != nil {
+	if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
 		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		ctx, span := tracing.ChildSpan(ctx, backup.StatementTag())
 		defer span.Finish()
-
-		collection, err := collectionFn()
-		if err != nil {
-			return err
-		}
-
-		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, collection); err != nil {
-			return err
-		}
 
 		store, err := p.ExecCfg().DistSQLSrv.ExternalStorageFromURI(ctx, collection[0], p.User())
 		if err != nil {
@@ -1363,9 +1394,9 @@ func showBackupsInCollectionPlanHook(
 		}
 		return nil
 	}
-	return fn, colinfo.ResultColumns{{Name: "path", Typ: types.String}}, nil, false, nil
+	return fn, showBackupsInCollectionHeader, nil, false, nil
 }
 
 func init() {
-	sql.AddPlanHook("backupccl.showBackupPlanHook", showBackupPlanHook)
+	sql.AddPlanHook("backupccl.showBackupPlanHook", showBackupPlanHook, showBackupTypeCheck)
 }

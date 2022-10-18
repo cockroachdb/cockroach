@@ -70,10 +70,9 @@ func (p *planner) CreateRoleNode(
 		return nil, pgerror.Newf(pgcode.ReservedName, "%s cannot be used as a role name here", roleSpec.RoleSpecType)
 	}
 
-	asStringOrNull := func(e tree.Expr, op string) (func() (bool, string, error), error) {
-		return p.TypeAsStringOrNull(ctx, e, op)
-	}
-	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
+	roleOptions, err := roleoption.MakeListFromKVOptions(
+		ctx, kvOptions, p.ExprEvaluator(opName).LazyStringOrNull,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -216,11 +215,11 @@ func updateRoleOptions(
 	}
 
 	rowsAffected = 0
-	for stmt, value := range stmts {
+	for stmt, v := range stmts {
 		qargs := []interface{}{roleName}
 
-		if value != nil {
-			isNull, val, err := value()
+		if v.Value != nil {
+			isNull, val, err := v.Value()
 			if err != nil {
 				return 0, err
 			}
