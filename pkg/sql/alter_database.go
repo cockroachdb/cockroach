@@ -2218,7 +2218,9 @@ func (n *alterDatabaseSetZoneConfigExtensionNode) startExec(params runParams) er
 	// 3. Update the zone config for the database.
 
 	// Validate if the zone config extension is compatible with the database.
-	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(updatedRegionConfig)
+	dbZoneConfig, err := generateAndValidateZoneConfigForMultiRegionDatabase(
+		params.ctx, params.ExecCfg(), updatedRegionConfig,
+	)
 	if err != nil {
 		return err
 	}
