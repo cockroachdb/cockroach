@@ -19,4 +19,5 @@ export * from "./indexActionsApi";
 export * from "./schemaInsightsApi";
 export * from "./schedulesApi";
 export * from "./sqlApi";
+export * from "./statusApi";
 export * from "./tracezApi";

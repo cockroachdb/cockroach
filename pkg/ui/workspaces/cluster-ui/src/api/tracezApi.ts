@@ -35,43 +35,62 @@ export type GetTraceResponseMessage =
 
 const API_PREFIX = "_admin/v1";
 
-export function listTracingSnapshots(): Promise<ListTracingSnapshotsResponseMessage> {
+const proxyNonLocalNode = (path: string, nodeID: string): string => {
+  if (nodeID === "local") {
+    // While the server is clever enough to do the smart thing around proxying to node
+    // "local," it still queries gossip while doing it. We'd like to avoid a hard dependency
+    // on that to support malfunctioning clusters or nodes.
+    return path;
+  }
+  return path + `?remote_node_id=${nodeID}`;
+};
+
+export function listTracingSnapshots(
+  nodeID: string,
+): Promise<ListTracingSnapshotsResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.ListTracingSnapshotsResponse,
-    `${API_PREFIX}/trace_snapshots`,
+    proxyNonLocalNode(`${API_PREFIX}/trace_snapshots`, nodeID),
     null,
     null,
   );
 }
 
-export function takeTracingSnapshot(): Promise<TakeTracingSnapshotResponseMessage> {
+export function takeTracingSnapshot(
+  nodeID: string,
+): Promise<TakeTracingSnapshotResponseMessage> {
   const req = new TakeTracingSnapshotRequest();
   return fetchData(
     cockroach.server.serverpb.TakeTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots`,
+    proxyNonLocalNode(`${API_PREFIX}/trace_snapshots`, nodeID),
+    cockroach.server.serverpb.TakeTracingSnapshotRequest,
     req as any,
-    null,
   );
 }
 
-export function getTracingSnapshot(
-  snapshotID: number,
-): Promise<GetTracingSnapshotResponseMessage> {
+export function getTracingSnapshot(req: {
+  nodeID: string;
+  snapshotID: number;
+}): Promise<GetTracingSnapshotResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.GetTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots/${snapshotID}`,
+    proxyNonLocalNode(
+      `${API_PREFIX}/trace_snapshots/${req.snapshotID}`,
+      req.nodeID,
+    ),
     null,
     null,
   );
 }
 
-export function getTraceForSnapshot(
-  req: GetTraceRequestMessage,
-): Promise<GetTraceResponseMessage> {
+export function getTraceForSnapshot(req: {
+  nodeID: string;
+  req: GetTraceRequestMessage;
+}): Promise<GetTraceResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.GetTraceResponse,
-    `${API_PREFIX}/traces`,
-    req as any,
-    null,
+    proxyNonLocalNode(`${API_PREFIX}/traces`, req.nodeID),
+    cockroach.server.serverpb.GetTraceRequest,
+    req.req as any,
   );
 }
