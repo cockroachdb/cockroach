@@ -14,7 +14,10 @@ import { RouteComponentProps } from "react-router-dom";
 import {
   ListTracingSnapshotsResponseMessage,
   GetTracingSnapshotResponseMessage,
+  TakeTracingSnapshotResponseMessage,
 } from "src/api/tracezApi";
+import { Button, Icon } from "@cockroachlabs/ui-components";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Dropdown } from "src/dropdown";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -38,15 +41,23 @@ export interface SnapshotPageStateProps {
   snapshot: GetTracingSnapshotResponseMessage;
   snapshotError?: Error;
   snapshotLoading: boolean;
+  nodes?: cockroach.server.status.statuspb.INodeStatus[];
+  nodesLoading: boolean;
+  nodesError?: Error;
+  defaultNodeID: number;
+  takeSnapshot: (nodeID: number) => Promise<TakeTracingSnapshotResponseMessage>;
 }
 
 export interface SnapshotPageDispatchProps {
   setSort: (value: SortSetting) => void;
-  refreshSnapshots: () => void;
-  refreshSnapshot: (id: number) => void;
+  refreshSnapshots: (id: number) => void;
+  refreshSnapshot: (req: { nodeID: number; snapshotID: number }) => void;
+  refreshNodes: () => void;
 }
 
-type UrlParams = Partial<Record<"ascending" | "columnTitle", string>>;
+type UrlParams = Partial<
+  Record<"nodeID" | "snapshotID" | "ascending" | "columnTitle", string>
+>;
 export type SnapshotPageProps = SnapshotPageStateProps &
   SnapshotPageDispatchProps &
   RouteComponentProps<UrlParams>;
@@ -55,12 +66,16 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   const {
     history,
     match,
+    refreshNodes,
     refreshSnapshots,
     refreshSnapshot,
+    nodes,
     snapshots,
     snapshot,
     sort,
     setSort,
+    takeSnapshot,
+    defaultNodeID,
   } = props;
 
   // Sort Settings.
@@ -68,22 +83,61 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
   const columnTitle = match.params.columnTitle || "";
 
   const snapshotIDStr = getMatchParamByName(match, "snapshotID");
+  const nodeIDStr = getMatchParamByName(match, "nodeID");
+
+  // Load iniital data.
+  useEffect(() => {
+    refreshNodes();
+  }, [refreshNodes]);
 
   useEffect(() => {
-    refreshSnapshots();
-  }, [refreshSnapshots]);
+    if (!nodeIDStr) {
+      return;
+    }
+    refreshSnapshots(parseInt(nodeIDStr));
+  }, [nodeIDStr, refreshSnapshots]);
+
+  useEffect(() => {
+    if (!snapshotIDStr) {
+      return;
+    }
+    refreshSnapshot({
+      nodeID: parseInt(nodeIDStr),
+      snapshotID: parseInt(snapshotIDStr),
+    });
+  }, [nodeIDStr, snapshotIDStr, refreshSnapshot]);
 
   const snapArray = snapshots?.snapshots;
 
+  // If no node was provided, navigate to the default if provided, or the first.
   useEffect(() => {
-    if (snapshotIDStr || !snapArray) {
+    if (nodeIDStr || !nodes?.length) {
+      return;
+    }
+
+    const nodeIDs = nodes.map(node => node.desc.node_id);
+    let targetNodeID;
+    if (defaultNodeID && nodeIDs.includes(defaultNodeID)) {
+      targetNodeID = defaultNodeID;
+    } else {
+      targetNodeID = nodeIDs[0];
+    }
+    history.location.pathname = "/debug/tracez_v2/node/" + targetNodeID;
+    history.replace(history.location);
+  }, [nodes, nodeIDStr, defaultNodeID, history]);
+
+  // If a node was provided, but no snapshot was provided, navigate to the most recent.
+  useEffect(() => {
+    if (!nodeIDStr || snapshotIDStr || !snapArray?.length) {
       return;
     }
     const lastSnapshotID = snapArray[snapArray.length - 1].snapshot_id;
-    history.location.pathname = "/debug/tracez_v2/snapshot/" + lastSnapshotID;
+    history.location.pathname =
+      "/debug/tracez_v2/node/" + nodeIDStr + "/snapshot/" + lastSnapshotID;
     history.replace(history.location);
-  }, [snapArray, snapshotIDStr, history]);
+  }, [snapArray, snapshotIDStr, nodeIDStr, history]);
 
+  // Update sort based on URL.
   useEffect(() => {
     if (!columnTitle) {
       return;
@@ -91,15 +145,14 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     setSort({ columnTitle, ascending });
   }, [setSort, columnTitle, ascending]);
 
-  useEffect(() => {
-    if (!snapshotIDStr) {
-      return;
-    }
-    refreshSnapshot(parseInt(snapshotIDStr));
-  }, [snapshotIDStr, refreshSnapshot]);
-
   const onSnapshotSelected = (item: string) => {
-    history.location.pathname = "/debug/tracez_v2/snapshot/" + item;
+    history.location.pathname =
+      "/debug/tracez_v2/node/" + nodeIDStr + "/snapshot/" + item;
+    history.push(history.location);
+  };
+
+  const onNodeSelected = (item: string) => {
+    history.location.pathname = "/debug/tracez_v2/node/" + item;
     history.push(history.location);
   };
 
@@ -112,6 +165,19 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
       },
       history,
     );
+  };
+
+  const takeAndLoadSnapshot = () => {
+    takeSnapshot(parseInt(nodeIDStr)).then(resp => {
+      refreshSnapshots(parseInt(nodeIDStr));
+      // Load the new snapshot.
+      history.location.pathname =
+        "/debug/tracez_v2/node/" +
+        nodeIDStr +
+        "/snapshot/" +
+        resp.snapshot.snapshot_id.toString();
+      history.push(history.location);
+    });
   };
 
   const [snapshotItems, snapshotName] = useMemo(() => {
@@ -136,6 +202,25 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
     return [items, selectedName];
   }, [snapArray, snapshotIDStr]);
 
+  const [nodeItems, nodeName] = useMemo(() => {
+    if (!nodes) {
+      return [[], ""];
+    }
+    let selectedName = "";
+    const items = nodes.map(node => {
+      const id = node.desc.node_id.toString();
+      const out = {
+        name: "Node " + id,
+        value: id,
+      };
+      if (id === nodeIDStr) {
+        selectedName = out.name;
+      }
+      return out;
+    });
+    return [items, selectedName];
+  }, [nodes, nodeIDStr]);
+
   const isLoading = props.snapshotsLoading || props.snapshotLoading;
   const error = props.snapshotsError || props.snapshotError;
   return (
@@ -145,25 +230,41 @@ export const SnapshotPage: React.FC<SnapshotPageProps> = props => {
       <div>
         <PageConfig>
           <PageConfigItem>
-            <Dropdown items={snapshotItems} onChange={onSnapshotSelected}>
-              {snapshotName}
+            <Button onClick={takeAndLoadSnapshot} intent="secondary">
+              <Icon iconName="Download" /> Take snapshot
+            </Button>
+          </PageConfigItem>
+          <PageConfigItem>
+            <Dropdown items={nodeItems} onChange={onNodeSelected}>
+              {nodeName}
             </Dropdown>
           </PageConfigItem>
+          {snapshotItems.length > 0 && (
+            <PageConfigItem>
+              <Dropdown items={snapshotItems} onChange={onSnapshotSelected}>
+                {snapshotName}
+              </Dropdown>
+            </PageConfigItem>
+          )}
         </PageConfig>
       </div>
       <section className={cx("section")}>
-        <Loading
-          loading={isLoading}
-          page={"snapshots"}
-          error={error}
-          render={() => (
-            <SpanTable
-              snapshot={snapshot?.snapshot}
-              setSort={changeSortSetting}
-              sort={sort}
-            />
-          )}
-        />
+        {snapshotIDStr ? (
+          <Loading
+            loading={isLoading}
+            page={"snapshots"}
+            error={error}
+            render={() => (
+              <SpanTable
+                snapshot={snapshot?.snapshot}
+                setSort={changeSortSetting}
+                sort={sort}
+              />
+            )}
+          />
+        ) : (
+          "No snapshots found on this node."
+        )}
       </section>
     </div>
   );

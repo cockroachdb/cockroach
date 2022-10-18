@@ -455,15 +455,20 @@ const scheduleReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshSchedule = scheduleReducerObj.refresh;
 
-const snapshotsReducerObj = new CachedDataReducer(
+export const snapshotsKey = (nodeID: number): string => nodeID.toString();
+
+const snapshotsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.listTracingSnapshots,
   "snapshots",
+  snapshotsKey,
   moment.duration(1, "s"),
 );
 export const refreshSnapshots = snapshotsReducerObj.refresh;
 
-export const snapshotKey = (snapshotID: number): string =>
-  snapshotID.toString();
+export const snapshotKey = (req: {
+  nodeID: number;
+  snapshotID: number;
+}): string => req.nodeID.toString() + "/" + req.snapshotID.toString();
 
 const snapshotReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.getTracingSnapshot,
@@ -514,7 +519,7 @@ export interface APIReducersState {
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
-  snapshots: CachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponseMessage>;
+  snapshots: KeyedCachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponseMessage>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponseMessage>;
 }
 

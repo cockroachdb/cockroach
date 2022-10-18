@@ -13,12 +13,19 @@ import {
   SnapshotPageStateProps,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshSnapshot, refreshSnapshots } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshSnapshot,
+  refreshSnapshots,
+  snapshotKey,
+} from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
+import { getCurrentNodeIDCookie } from "src/views/reports/containers/debug/util";
 
 export const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "sortSetting/spans",
@@ -30,10 +37,21 @@ const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): SnapshotPageStateProps => {
-  const snapshotsState = state.cachedData.snapshots;
+  const nodeID = getMatchParamByName(props.match, "nodeID");
+  const snapshotsState = state.cachedData.snapshots[nodeID];
 
   const snapshotID = getMatchParamByName(props.match, "snapshotID");
-  const snapshotState = state.cachedData.snapshot[snapshotID];
+  const snapshotState =
+    state.cachedData.snapshot[
+      snapshotKey({
+        nodeID: parseInt(nodeID),
+        snapshotID: parseInt(snapshotID),
+      })
+    ];
+
+  const nodesState = state.cachedData.nodes;
+
+  const nodeIDCookie = getCurrentNodeIDCookie();
 
   return {
     sort: sortSetting.selector(state),
@@ -45,11 +63,19 @@ const mapStateToProps = (
     snapshot: snapshotState ? snapshotState.data : null,
     snapshotLoading: snapshotState ? snapshotState.inFlight : false,
     snapshotError: snapshotState ? snapshotState.lastError : null,
+
+    nodes: nodesState ? nodesState.data : null,
+    nodesLoading: nodesState ? nodesState.inFlight : false,
+    nodesError: nodesState ? nodesState.lastError : null,
+    defaultNodeID: nodeIDCookie?.length >= 2 ? parseInt(nodeIDCookie[1]) : null,
+
+    takeSnapshot: clusterUiApi.takeTracingSnapshot,
   };
 };
 
 const mapDispatchToProps = {
   setSort: sortSetting.set,
+  refreshNodes,
   refreshSnapshots,
   refreshSnapshot,
 };

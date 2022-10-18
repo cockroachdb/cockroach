@@ -35,43 +35,49 @@ export type GetTraceResponseMessage =
 
 const API_PREFIX = "_admin/v1";
 
-export function listTracingSnapshots(): Promise<ListTracingSnapshotsResponseMessage> {
+export function listTracingSnapshots(
+  nodeID: number,
+): Promise<ListTracingSnapshotsResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.ListTracingSnapshotsResponse,
-    `${API_PREFIX}/trace_snapshots`,
+    `${API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
     null,
     null,
   );
 }
 
-export function takeTracingSnapshot(): Promise<TakeTracingSnapshotResponseMessage> {
+export function takeTracingSnapshot(
+  nodeID: number,
+): Promise<TakeTracingSnapshotResponseMessage> {
   const req = new TakeTracingSnapshotRequest();
   return fetchData(
     cockroach.server.serverpb.TakeTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots`,
+    `${API_PREFIX}/trace_snapshots?remote_node_id=${nodeID}`,
+    cockroach.server.serverpb.TakeTracingSnapshotRequest,
     req as any,
-    null,
   );
 }
 
-export function getTracingSnapshot(
-  snapshotID: number,
-): Promise<GetTracingSnapshotResponseMessage> {
+export function getTracingSnapshot(req: {
+  nodeID: number;
+  snapshotID: number;
+}): Promise<GetTracingSnapshotResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.GetTracingSnapshotResponse,
-    `${API_PREFIX}/trace_snapshots/${snapshotID}`,
+    `${API_PREFIX}/trace_snapshots/${req.snapshotID}?remote_node_id=${req.nodeID}`,
     null,
     null,
   );
 }
 
-export function getTraceForSnapshot(
-  req: GetTraceRequestMessage,
-): Promise<GetTraceResponseMessage> {
+export function getTraceForSnapshot(req: {
+  nodeID: number;
+  req: GetTraceRequestMessage;
+}): Promise<GetTraceResponseMessage> {
   return fetchData(
     cockroach.server.serverpb.GetTraceResponse,
-    `${API_PREFIX}/traces`,
-    req as any,
-    null,
+    `${API_PREFIX}/traces?remote_node_id=${req.nodeID}`,
+    cockroach.server.serverpb.GetTraceRequest,
+    req.req as any,
   );
 }

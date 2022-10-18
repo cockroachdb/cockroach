@@ -28,6 +28,10 @@ import { AdminUIState } from "src/redux/state";
 import { nodeIDsStringifiedSelector } from "src/redux/nodes";
 import { refreshNodes, refreshUserSQLRoles } from "src/redux/apiReducers";
 import { selectHasViewActivityRedactedRole } from "src/redux/user";
+import {
+  getCurrentNodeIDCookie,
+  remoteNodeIDCookieName,
+} from "src/views/reports/containers/debug/util";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -162,20 +166,9 @@ interface ProxyToNodeSelectorProps {
 // will instruct CRDB to proxy HTTP requests to that nodeID. Selecting
 // "local" will reset the connection back to this specific node.
 const ProxyToNodeSelector = (props: ProxyToNodeSelectorProps) => {
-  const remoteNodeIDCookieName = "remote_node_id";
-
   // currentNodeIDCookie will either be empty or contain two elements
   // with the cookie name and value we're looking for
-  const currentNodeIDCookie: string[] = document.cookie
-    .split(";")
-    .map(cookieString => {
-      return cookieString.split("=").map(kv => {
-        return kv.trim();
-      });
-    })
-    .find(cookie => {
-      return cookie[0] === remoteNodeIDCookieName;
-    });
+  const currentNodeIDCookie = getCurrentNodeIDCookie();
   const setNodeIDCookie = (nodeID: string) => {
     document.cookie = `${remoteNodeIDCookieName}=${nodeID};path=/`;
     location.reload();
