@@ -11,6 +11,8 @@
 package geogfn
 
 import (
+	"math"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -120,4 +122,21 @@ func Centroid(g geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid) (geo.Geo
 	latLng := s2.LatLngFromPoint(s2.Point{Vector: centroidVector.Normalize()})
 	centroid := geom.NewPointFlat(geom.XY, []float64{latLng.Lng.Degrees(), latLng.Lat.Degrees()}).SetSRID(int(g.SRID()))
 	return geo.MakeGeographyFromGeomT(centroid)
+}
+
+// BoundingBoxHasNaNCoordinates checks if the bounding box of a Geography
+// has a NaN coordinate.
+func BoundingBoxHasNaNCoordinates(g geo.Geography) bool {
+	boundingBox := g.BoundingBoxRef()
+	if boundingBox == nil {
+		return false
+	}
+	// Don't use `:= range []float64{...}` to avoid memory allocation.
+	isNaN := func(ord float64) bool {
+		return math.IsNaN(ord)
+	}
+	if isNaN(boundingBox.LoX) || isNaN(boundingBox.LoY) || isNaN(boundingBox.HiX) || isNaN(boundingBox.HiY) {
+		return true
+	}
+	return false
 }

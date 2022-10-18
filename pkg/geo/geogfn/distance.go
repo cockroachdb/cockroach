@@ -45,6 +45,12 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
+	if BoundingBoxHasNaNCoordinates(a) {
+		return 0, geo.OutOfRangeError()
+	}
+	if BoundingBoxHasNaNCoordinates(b) {
+		return 0, geo.OutOfRangeError()
+	}
 	spheroid, err := spheroidFromGeography(a)
 	if err != nil {
 		return 0, err
