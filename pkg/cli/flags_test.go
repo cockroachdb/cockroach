@@ -1313,10 +1313,15 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 
 	defer initCLIDefaults()
 
+	expectedDefaultDir, err := base.GetAbsoluteStorePath("", "cockroach-data-tenant-9")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for _, td := range []struct {
 		args      []string
 		storePath string
-	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, "cockroach-data-tenant-9"},
+	}{{[]string{"mt", "start-sql", "--tenant-id", "9"}, expectedDefaultDir},
 		{[]string{"mt", "start-sql", "--tenant-id", "9", "--store", "/tmp/data"}, "/tmp/data"},
 	} {
 		t.Run(strings.Join(td.args, ","), func(t *testing.T) {
