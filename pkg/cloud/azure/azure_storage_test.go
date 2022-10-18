@@ -160,9 +160,7 @@ func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
 			})
 
 			require.NoError(t, err)
-
-			u := sut.(*azureStorage).container.URL()
-			require.Equal(t, tt.expected, u.String())
+			require.Equal(t, tt.expected, sut.(*azureStorage).container.URL())
 		})
 	}
 }

@@ -13,14 +13,18 @@ package azure
 import (
 	"context"
 	"fmt"
-	_ "github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	_ "github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
 	"io"
 	"net/url"
 	"path"
 	"strings"
 
-	"github.com/Azure/azure-storage-blob-go/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
+	_ "github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -94,7 +98,7 @@ func parseAzureURL(
 type azureStorage struct {
 	conf      *cloudpb.ExternalStorage_Azure
 	ioConf    base.ExternalIODirConfig
-	container azblob.ContainerURL
+	container *container.Client
 	prefix    string
 	settings  *cluster.Settings
 }
@@ -117,24 +121,28 @@ func makeAzureStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "azure environment")
 	}
-	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
 	u, err := url.Parse(fmt.Sprintf("https://%s.blob.%s", conf.AccountName, env.StorageEndpointSuffix))
 	if err != nil {
 		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
-	serviceURL := azblob.NewServiceURL(*u, p)
+
+	azClient, err := service.NewClientWithSharedKeyCredential(u.String(), credential, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	return &azureStorage{
 		conf:      conf,
 		ioConf:    args.IOConf,
-		container: serviceURL.NewContainerURL(conf.Container),
+		container: azClient.NewContainerClient(conf.Container),
 		prefix:    conf.Prefix,
 		settings:  args.Settings,
 	}, nil
 }
 
-func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
+func (s *azureStorage) getBlob(basename string) *blockblob.Client {
 	name := path.Join(s.prefix, basename)
-	return s.container.NewBlockBlobURL(name)
+	return s.container.NewBlockBlobClient(name)
 }
 
 func (s *azureStorage) Conf() cloudpb.ExternalStorage {
@@ -160,12 +168,10 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 	blob := s.getBlob(basename)
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
-		_, err := azblob.UploadStreamToBlockBlob(
-			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
-				BufferSize: int(cloud.WriteChunkSize.Get(&s.settings.SV)),
-				MaxBuffers: int(maxConcurrentUploadBuffers.Get(&s.settings.SV)),
-			},
-		)
+		_, err := blob.UploadStream(ctx, r, &azblob.UploadStreamOptions{
+			BlockSize:   cloud.WriteChunkSize.Get(&s.settings.SV),
+			Concurrency: int(maxConcurrentUploadBuffers.Get(&s.settings.SV)),
+		})
 		return err
 	}), nil
 }
@@ -182,38 +188,29 @@ func (s *azureStorage) ReadFileAt(
 	ctx, sp := tracing.ChildSpan(ctx, "azure.ReadFileAt")
 	defer sp.Finish()
 	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
-
-	// https://github.com/cockroachdb/cockroach/issues/23859
-	blob := s.getBlob(basename)
-	get, err := blob.Download(ctx, offset, azblob.CountToEnd, azblob.BlobAccessConditions{},
-		false /* rangeGetContentMD5 */, azblob.ClientProvidedKeyOptions{},
-	)
-	if err != nil {
-		if azerr := (azblob.StorageError)(nil); errors.As(err, &azerr) {
-			switch azerr.ServiceCode() {
-			// TODO(adityamaru): Investigate whether both these conditions are required.
-			case azblob.ServiceCodeBlobNotFound, azblob.ServiceCodeResourceNotFound:
-				// nolint:errwrap
-				return nil, 0, errors.Wrapf(
-					errors.Wrap(cloud.ErrFileDoesNotExist, "azure blob does not exist"),
-					"%v",
-					err.Error(),
-				)
-			}
+	resp, err := s.getBlob(basename).DownloadStream(ctx, &azblob.DownloadStreamOptions{Range: azblob.
+		HTTPRange{Offset: offset}})
+	if azerr := (*azcore.ResponseError)(nil); errors.As(err, &azerr) {
+		if azerr.ErrorCode == "BlobNotFound" {
+			// nolint:errwrap
+			return nil, 0, errors.Wrapf(
+				errors.Wrap(cloud.ErrFileDoesNotExist, "azure blob does not exist"),
+				"%v",
+				err.Error(),
+			)
 		}
-		return nil, 0, errors.Wrap(err, "failed to create azure reader")
+		return nil, 0, err
 	}
 	var size int64
 	if offset == 0 {
-		size = get.ContentLength()
+		size = *resp.ContentLength
 	} else {
-		size, err = cloud.CheckHTTPContentRangeHeader(get.ContentRange(), offset)
+		size, err = cloud.CheckHTTPContentRangeHeader(*resp.ContentRange, offset)
 		if err != nil {
 			return nil, 0, err
 		}
 	}
-	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
-
+	reader := resp.NewRetryReader(ctx, &azblob.RetryReaderOptions{MaxRetries: 3})
 	return ioctx.ReadCloserAdapter(reader), size, nil
 }
 
@@ -224,25 +221,23 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
 
-	var marker azblob.Marker
-	for marker.NotDone() {
-		response, err := s.container.ListBlobsHierarchySegment(
-			ctx, marker, delim, azblob.ListBlobsSegmentOptions{Prefix: dest},
-		)
+	pager := s.container.NewListBlobsHierarchyPager(delim, &container.ListBlobsHierarchyOptions{Prefix: &dest})
+	for pager.More() {
+		response, err := pager.NextPage(ctx)
+
 		if err != nil {
 			return errors.Wrap(err, "unable to list files for specified blob")
 		}
 		for _, blob := range response.Segment.BlobPrefixes {
-			if err := fn(strings.TrimPrefix(blob.Name, dest)); err != nil {
+			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
 		for _, blob := range response.Segment.BlobItems {
-			if err := fn(strings.TrimPrefix(blob.Name, dest)); err != nil {
+			if err := fn(strings.TrimPrefix(*blob.Name, dest)); err != nil {
 				return err
 			}
 		}
-		marker = response.NextMarker
 	}
 	return nil
 }
@@ -250,26 +245,24 @@ func (s *azureStorage) List(ctx context.Context, prefix, delim string, fn cloud.
 func (s *azureStorage) Delete(ctx context.Context, basename string) error {
 	err := contextutil.RunWithTimeout(ctx, "delete azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
-			blob := s.getBlob(basename)
-			_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+			_, err := s.getBlob(basename).Delete(ctx, nil)
 			return err
 		})
 	return errors.Wrap(err, "delete file")
 }
 
 func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
-	var props *azblob.BlobGetPropertiesResponse
+	var props blob.GetPropertiesResponse
 	err := contextutil.RunWithTimeout(ctx, "size azure file", cloud.Timeout.Get(&s.settings.SV),
 		func(ctx context.Context) error {
-			blob := s.getBlob(basename)
 			var err error
-			props, err = blob.GetProperties(ctx, azblob.BlobAccessConditions{}, azblob.ClientProvidedKeyOptions{})
+			props, err = s.getBlob(basename).GetProperties(ctx, nil)
 			return err
 		})
 	if err != nil {
 		return 0, errors.Wrap(err, "get file properties")
 	}
-	return props.ContentLength(), nil
+	return *props.ContentLength, nil
 }
 
 // Close is part of the cloud.ExternalStorage interface.
