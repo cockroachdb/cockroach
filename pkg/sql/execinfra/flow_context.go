@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -99,6 +100,11 @@ type FlowCtx struct {
 	// DiskMonitor is this flow's disk monitor. All disk usage for this flow must
 	// be registered through this monitor.
 	DiskMonitor *mon.BytesMonitor
+
+	// TenantCPUMonitor is used to estimate a query's CPU usage for tenants
+	// running EXPLAIN ANALYZE. Currently, it is only used by remote flows.
+	// The gateway flow is handled by the connExecutor.
+	TenantCPUMonitor multitenantcpu.CPUUsageHelper
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
