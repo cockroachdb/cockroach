@@ -56,7 +56,7 @@ func TestShowChangefeedJobsBasic(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH format='json'`)
 		defer closeFeed(t, foo)
 
 		type row struct {

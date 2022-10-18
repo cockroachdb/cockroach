@@ -1384,7 +1384,7 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		knobs.OverrideCursor = calculateCursor
 
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET format='json'`, castedFeed.JobID()))
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET resolved`, castedFeed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, castedFeed.JobID()))
 		waitForJobStatus(sqlDB, t, castedFeed.JobID(), `running`)

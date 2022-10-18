@@ -93,6 +93,15 @@ func (r Row) ForEachColumn() Iterator {
 	return iter{r: r, cols: r.valueCols}
 }
 
+// ForAllColumns returns Iterator for all columns.
+func (r Row) ForAllColumns() Iterator {
+	allCols := make([]int, 0)
+	for i := 0; i < len(r.cols); i++ {
+		allCols = append(allCols, i)
+	}
+	return iter{r: r, cols: allCols}
+}
+
 // ForEachUDTColumn returns Datum iterator for each column containing user defined types.
 func (r Row) ForEachUDTColumn() Iterator {
 	return iter{r: r, cols: r.udtCols}
