@@ -45,6 +45,16 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
+	for _, r := range aRegions {
+		if regionHasNaN(r) {
+			return 0, geo.OutOfRangeError()
+		}
+	}
+	for _, r := range bRegions {
+		if regionHasNaN(r) {
+			return 0, geo.OutOfRangeError()
+		}
+	}
 	spheroid, err := spheroidFromGeography(a)
 	if err != nil {
 		return 0, err
@@ -409,4 +419,30 @@ func regionToGeodistShape(r s2.Region) (geodist.Shape, error) {
 		return &s2GeodistPolygon{Polygon: r}, nil
 	}
 	return nil, pgerror.Newf(pgcode.InvalidParameterValue, "unknown region: %T", r)
+}
+
+// regionHasNaN returns true if any coordinate of any point in r is NaN.
+func regionHasNaN(r s2.Region) bool {
+	switch r := r.(type) {
+	case s2.Point:
+		return math.IsNaN(r.X) || math.IsNaN(r.Y) || math.IsNaN(r.Z)
+
+	case *s2.Polyline:
+		for _, p := range *r {
+			if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsNaN(p.Z) {
+				return true
+			}
+		}
+
+	case *s2.Polygon:
+		for i := 0; i < r.NumLoops(); i++ {
+			for _, p := range r.Loop(i).Vertices() {
+				if math.IsNaN(p.X) || math.IsNaN(p.Y) || math.IsNaN(p.Z) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
