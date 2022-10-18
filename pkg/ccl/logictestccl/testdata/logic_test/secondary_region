@@ -32,7 +32,7 @@ DATABASE no_list  ALTER DATABASE no_list CONFIGURE ZONE USING
                   num_voters = 3,
                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
                   voter_constraints = '[+region=ap-southeast-2]',
-                  lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+                  lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 statement ok
 CREATE DATABASE db PRIMARY REGION "ap-southeast-2" REGIONS "ca-central-1" SECONDARY REGION "ca-central-1"
@@ -42,14 +42,14 @@ query TT
 SHOW ZONE CONFIGURATION FOR DATABASE db;
 ----
 DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
-                         range_min_bytes = 134217728,
-                         range_max_bytes = 536870912,
-                         gc.ttlseconds = 90000,
-                         num_replicas = 4,
-                         num_voters = 3,
-                         constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
-                         voter_constraints = '[+region=ap-southeast-2]',
-                         lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+             range_min_bytes = 134217728,
+             range_max_bytes = 536870912,
+             gc.ttlseconds = 90000,
+             num_replicas = 4,
+             num_voters = 3,
+             constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1}',
+             voter_constraints = '[+region=ap-southeast-2]',
+             lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 # Secondary region cannot be the current primary region.
 statement error the secondary region cannot be the same as the current primary region
@@ -99,7 +99,7 @@ DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
              num_voters = 3,
              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
              voter_constraints = '[+region=ap-southeast-2]',
-             lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+             lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 # Verify that the zone configuration on the table is expected.
 query TT
@@ -113,7 +113,7 @@ TABLE db.public.rbt_in_primary  ALTER TABLE db.public.rbt_in_primary CONFIGURE Z
                                 num_voters = 3,
                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                 voter_constraints = '[+region=ap-southeast-2]',
-                                lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+                                lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
@@ -126,7 +126,7 @@ TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE Z
                                 num_voters = 3,
                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                 voter_constraints = '[+region=us-east-1]',
-                                lease_preferences = '[[+region=us-east-1, +region=ca-central-1]]'
+                                lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
@@ -153,7 +153,7 @@ PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TAB
                                               num_voters = 3,
                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                               voter_constraints = '[+region=us-east-1]',
-                                              lease_preferences = '[[+region=us-east-1, +region=ca-central-1]]'
+                                              lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
@@ -166,7 +166,7 @@ PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast
                                                    num_voters = 3,
                                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
                                                    voter_constraints = '[+region=ap-southeast-2]',
-                                                   lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+                                                   lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr
@@ -200,8 +200,8 @@ DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
              num_replicas = 5,
              num_voters = 5,
              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-             voter_constraints = e'{\'+region=ap-southeast-2,+region=ca-central-1\': 2}',
-             lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+             voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+             lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 # Verify that the zone configuration on the table is expected.
 query TT
@@ -214,8 +214,8 @@ TABLE db.public.rbt_in_primary  ALTER TABLE db.public.rbt_in_primary CONFIGURE Z
                                 num_replicas = 5,
                                 num_voters = 5,
                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                voter_constraints = e'{\'+region=ap-southeast-2,+region=ca-central-1\': 2}',
-                                lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+                                voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_us_east
@@ -227,8 +227,8 @@ TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE Z
                                 num_replicas = 5,
                                 num_voters = 5,
                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                voter_constraints = e'{\'+region=us-east-1,+region=ca-central-1\': 2}',
-                                lease_preferences = '[[+region=us-east-1, +region=ca-central-1]]'
+                                voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
@@ -254,8 +254,8 @@ PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TAB
                                               num_replicas = 5,
                                               num_voters = 5,
                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                              voter_constraints = e'{\'+region=us-east-1,+region=ca-central-1\': 2}',
-                                              lease_preferences = '[[+region=us-east-1, +region=ca-central-1]]'
+                                              voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                              lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
@@ -267,8 +267,8 @@ PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast
                                                    num_replicas = 5,
                                                    num_voters = 5,
                                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                                   voter_constraints = e'{\'+region=ap-southeast-2,+region=ca-central-1\': 2}',
-                                                   lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+                                                   voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                   lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr
@@ -295,8 +295,8 @@ DATABASE db  ALTER DATABASE db CONFIGURE ZONE USING
              num_replicas = 5,
              num_voters = 5,
              constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-             voter_constraints = e'{\'+region=ap-southeast-2,+region=ca-central-1\': 2}',
-             lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+             voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+             lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 # Verify that the zone configuration on the table is expected.
 # The number of replicas should be 7.
@@ -314,8 +314,8 @@ TABLE db.public.rbt_in_us_east  ALTER TABLE db.public.rbt_in_us_east CONFIGURE Z
                                 num_replicas = 5,
                                 num_voters = 5,
                                 constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                voter_constraints = e'{\'+region=us-east-1,+region=ca-central-1\': 2}',
-                                lease_preferences = '[[+region=us-east-1, +region=ca-central-1]]'
+                                voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE db.rbt_in_ca_central
@@ -341,8 +341,8 @@ PARTITION "us-east-1" OF TABLE db.public.rbr  ALTER PARTITION "us-east-1" OF TAB
                                               num_replicas = 5,
                                               num_voters = 5,
                                               constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                              voter_constraints = e'{\'+region=us-east-1,+region=ca-central-1\': 2}',
-                                              lease_preferences = '[[+region=us-east-1, +region=ca-central-1]]'
+                                              voter_constraints = '{+region=ca-central-1: 2, +region=us-east-1: 2}',
+                                              lease_preferences = '[[+region=us-east-1], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE db.rbr
@@ -354,8 +354,8 @@ PARTITION "ap-southeast-2" OF TABLE db.public.rbr  ALTER PARTITION "ap-southeast
                                                    num_replicas = 5,
                                                    num_voters = 5,
                                                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
-                                                   voter_constraints = e'{\'+region=ap-southeast-2,+region=ca-central-1\': 2}',
-                                                   lease_preferences = '[[+region=ap-southeast-2, +region=ca-central-1]]'
+                                                   voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                   lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
 
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "ca-central-1" OF TABLE db.rbr

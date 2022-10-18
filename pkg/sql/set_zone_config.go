@@ -880,6 +880,11 @@ type regionsGetter func(context.Context, *serverpb.RegionsRequest) (*serverpb.Re
 // will be rejected. Additionally, invalid constraints such as
 // [+region=us-east1, -region=us-east1] will also be rejected.
 func validateNoRepeatKeysInZone(zone *zonepb.ZoneConfig) error {
+	for _, leasePreference := range zone.LeasePreferences {
+		if err := validateNoRepeatKeysInConstraints(leasePreference.Constraints); err != nil {
+			return err
+		}
+	}
 	if err := validateNoRepeatKeysInConjunction(zone.Constraints); err != nil {
 		return err
 	}
@@ -888,31 +893,38 @@ func validateNoRepeatKeysInZone(zone *zonepb.ZoneConfig) error {
 
 func validateNoRepeatKeysInConjunction(conjunctions []zonepb.ConstraintsConjunction) error {
 	for _, constraints := range conjunctions {
-		// Because we expect to have a small number of constraints, a nested
-		// loop is probably better than allocating a map.
-		for i, curr := range constraints.Constraints {
-			for _, other := range constraints.Constraints[i+1:] {
-				// We don't want to enter the other validation logic if both of the constraints
-				// are attributes, due to the keys being the same for attributes.
-				if curr.Key == "" && other.Key == "" {
-					if curr.Value == other.Value {
+		if err := validateNoRepeatKeysInConstraints(constraints.Constraints); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateNoRepeatKeysInConstraints(constraints []zonepb.Constraint) error {
+	// Because we expect to have a small number of constraints, a nested
+	// loop is probably better than allocating a map.
+	for i, curr := range constraints {
+		for _, other := range constraints[i+1:] {
+			// We don't want to enter the other validation logic if both of the constraints
+			// are attributes, due to the keys being the same for attributes.
+			if curr.Key == "" && other.Key == "" {
+				if curr.Value == other.Value {
+					return pgerror.Newf(pgcode.CheckViolation,
+						"incompatible zone constraints: %q and %q", curr, other)
+				}
+			} else {
+				if curr.Type == zonepb.Constraint_REQUIRED {
+					if other.Type == zonepb.Constraint_REQUIRED && other.Key == curr.Key ||
+						other.Type == zonepb.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
 						return pgerror.Newf(pgcode.CheckViolation,
 							"incompatible zone constraints: %q and %q", curr, other)
 					}
-				} else {
-					if curr.Type == zonepb.Constraint_REQUIRED {
-						if other.Type == zonepb.Constraint_REQUIRED && other.Key == curr.Key ||
-							other.Type == zonepb.Constraint_PROHIBITED && other.Key == curr.Key && other.Value == curr.Value {
-							return pgerror.Newf(pgcode.CheckViolation,
-								"incompatible zone constraints: %q and %q", curr, other)
-						}
-					} else if curr.Type == zonepb.Constraint_PROHIBITED {
-						// If we have a -k=v pair, verify that there are not any
-						// +k=v pairs in the constraints.
-						if other.Type == zonepb.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
-							return pgerror.Newf(pgcode.CheckViolation,
-								"incompatible zone constraints: %q and %q", curr, other)
-						}
+				} else if curr.Type == zonepb.Constraint_PROHIBITED {
+					// If we have a -k=v pair, verify that there are not any
+					// +k=v pairs in the constraints.
+					if other.Type == zonepb.Constraint_REQUIRED && other.Key == curr.Key && other.Value == curr.Value {
+						return pgerror.Newf(pgcode.CheckViolation,
+							"incompatible zone constraints: %q and %q", curr, other)
 					}
 				}
 			}

@@ -43,6 +43,7 @@ kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconcili
 kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
+kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)
 kv.replica_stats.addsst_request_size_factor	integer	50000	the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1
 kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
@@ -120,9 +121,6 @@ sql.defaults.distsql	enumeration	auto	"default distributed SQL execution mode [o
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_alter_column_type.enabled	boolean	false	"default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
-This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
-sql.defaults.experimental_auto_rehoming.enabled	boolean	false	"default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_distsql_planning	enumeration	off	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
