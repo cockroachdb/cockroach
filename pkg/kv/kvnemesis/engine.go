@@ -34,6 +34,7 @@ type Engine struct {
 // MakeEngine returns a new Engine.
 func MakeEngine() (*Engine, error) {
 	opts := storage.DefaultPebbleOptions()
+	opts.FormatMajorVersion = 8 // for range key deletions
 	opts.FS = vfs.NewMem()
 	kvs, err := pebble.Open(`kvnemesis`, opts)
 	if err != nil {
@@ -97,25 +98,48 @@ func (e *Engine) Delete(key storage.MVCCKey) {
 	}
 }
 
+func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp) {
+	suffix := storage.EncodeMVCCTimestampSuffix(ts)
+	if err := e.kvs.RangeKeySet(from, to, suffix, nil, nil); err != nil {
+		panic(err)
+	}
+}
+
 // Iterate calls the given closure with every KV in the Engine, in ascending
 // order.
-func (e *Engine) Iterate(fn func(key storage.MVCCKey, value []byte, err error)) {
-	iter := e.kvs.NewIter(nil)
+func (e *Engine) Iterate(
+	fn func(key, endKey roachpb.Key, ts hlc.Timestamp, value []byte, err error),
+) {
+	iter := e.kvs.NewIter(&pebble.IterOptions{KeyTypes: storage.IterKeyTypePointsAndRanges})
 	defer func() { _ = iter.Close() }()
 	for iter.First(); iter.Valid(); iter.Next() {
-		if err := iter.Error(); err != nil {
-			fn(storage.MVCCKey{}, nil, err)
-			continue
-		}
+		hasPoint, _ := iter.HasPointAndRange()
 		var keyCopy, valCopy []byte
 		e.b, keyCopy = e.b.Copy(iter.Key(), 0 /* extraCap */)
 		e.b, valCopy = e.b.Copy(iter.Value(), 0 /* extraCap */)
-		key, err := storage.DecodeMVCCKey(keyCopy)
-		if err != nil {
-			fn(storage.MVCCKey{}, nil, err)
-			continue
+		if hasPoint {
+			key, err := storage.DecodeMVCCKey(keyCopy)
+			if err != nil {
+				fn(nil, nil, hlc.Timestamp{}, nil, err)
+			} else {
+				fn(key.Key, nil, key.Timestamp, valCopy, nil)
+			}
 		}
-		fn(key, valCopy, nil)
+		if iter.RangeKeyChanged() {
+			key, endKey := iter.RangeBounds()
+			for _, rk := range iter.RangeKeys() {
+				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
+				if err != nil {
+					fn(nil, nil, hlc.Timestamp{}, nil, err)
+				} else {
+					fn(key, endKey, ts, rk.Value, nil)
+				}
+			}
+		}
+	}
+
+	if err := iter.Error(); err != nil {
+		fn(nil, nil, hlc.Timestamp{}, nil, err)
 	}
 }
 
@@ -123,7 +147,7 @@ func (e *Engine) Iterate(fn func(key storage.MVCCKey, value []byte, err error)) 
 // debugging.
 func (e *Engine) DebugPrint(indent string) string {
 	var buf strings.Builder
-	e.Iterate(func(key storage.MVCCKey, value []byte, err error) {
+	e.Iterate(func(key, endKey roachpb.Key, ts hlc.Timestamp, value []byte, err error) {
 		if buf.Len() > 0 {
 			buf.WriteString("\n")
 		}
@@ -133,9 +157,12 @@ func (e *Engine) DebugPrint(indent string) string {
 			v, err := storage.DecodeMVCCValue(value)
 			if err != nil {
 				fmt.Fprintf(&buf, "(err:%s)", err)
-			} else {
+			} else if len(endKey) == 0 {
 				fmt.Fprintf(&buf, "%s%s %s -> %s",
-					indent, key.Key, key.Timestamp, v.Value.PrettyPrint())
+					indent, key, ts, v.Value.PrettyPrint())
+			} else {
+				fmt.Fprintf(&buf, "%s%s-%s %s -> %s",
+					indent, key, endKey, ts, v.Value.PrettyPrint())
 			}
 		}
 	})

@@ -136,9 +136,13 @@ func TestRandStep(t *testing.T) {
 				}
 			case *DeleteRangeOperation:
 				client.DeleteRange++
+			case *DeleteRangeUsingTombstoneOperation:
+				client.DeleteRangeUsingTombstone++
 			case *BatchOperation:
 				batch.Batch++
 				countClientOps(&batch.Ops, nil, o.Ops...)
+			default:
+				t.Fatalf("%T", o)
 			}
 		}
 	}
@@ -152,7 +156,8 @@ func TestRandStep(t *testing.T) {
 			*ScanOperation,
 			*BatchOperation,
 			*DeleteOperation,
-			*DeleteRangeOperation:
+			*DeleteRangeOperation,
+			*DeleteRangeUsingTombstoneOperation:
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
@@ -201,6 +206,8 @@ func TestRandStep(t *testing.T) {
 			case ChangeZoneType_ToggleGlobalReads:
 				counts.ChangeZone.ToggleGlobalReads++
 			}
+		default:
+			t.Fatalf("%T", o)
 		}
 		updateKeys(step.Op)
 

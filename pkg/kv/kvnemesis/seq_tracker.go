@@ -28,12 +28,12 @@ type SeqTracker struct {
 }
 
 type keyTS struct {
-	key string
-	ts  hlc.Timestamp
+	key, endKey string
+	ts          hlc.Timestamp
 }
 
 // Add associates key@ts with the provided Seq.
-func (tr *SeqTracker) Add(key roachpb.Key, ts hlc.Timestamp, seq kvnemesisutil.Seq) {
+func (tr *SeqTracker) Add(key, endKey roachpb.Key, ts hlc.Timestamp, seq kvnemesisutil.Seq) {
 	tr.Lock()
 	defer tr.Unlock()
 
@@ -41,13 +41,13 @@ func (tr *SeqTracker) Add(key roachpb.Key, ts hlc.Timestamp, seq kvnemesisutil.S
 		tr.seen = map[keyTS]kvnemesisutil.Seq{}
 	}
 
-	tr.seen[keyTS{key: string(key), ts: ts}] = seq
+	tr.seen[keyTS{key: string(key), endKey: string(endKey), ts: ts}] = seq
 }
 
 // Lookup checks whether the version key@ts is associated with a Seq.
-func (tr *SeqTracker) Lookup(key roachpb.Key, ts hlc.Timestamp) (kvnemesisutil.Seq, bool) {
+func (tr *SeqTracker) Lookup(key, endKey roachpb.Key, ts hlc.Timestamp) (kvnemesisutil.Seq, bool) {
 	tr.Lock()
 	defer tr.Unlock()
-	seq, ok := tr.seen[keyTS{key: string(key), ts: ts}]
+	seq, ok := tr.seen[keyTS{key: string(key), endKey: string(endKey), ts: ts}]
 	return seq, ok
 }

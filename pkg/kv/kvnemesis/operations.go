@@ -34,6 +34,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *DeleteRangeOperation:
 		return &o.Result
+	case *DeleteRangeUsingTombstoneOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -112,6 +114,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *DeleteOperation:
 		o.format(w, fctx)
 	case *DeleteRangeOperation:
+		o.format(w, fctx)
+	case *DeleteRangeUsingTombstoneOperation:
 		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
@@ -221,6 +225,11 @@ func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op DeleteRangeOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.DelRange(ctx, %s, %s, true /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), op.Seq)
+	op.Result.format(w)
+}
+
+func (op DeleteRangeUsingTombstoneOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.DelRangeUsingTombstone(ctx, %s, %s /* @%s */)`, fctx.receiver, roachpb.Key(op.Key), roachpb.Key(op.EndKey), op.Seq)
 	op.Result.format(w)
 }
 

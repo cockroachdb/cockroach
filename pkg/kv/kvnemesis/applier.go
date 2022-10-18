@@ -84,7 +84,8 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*ScanOperation,
 		*BatchOperation,
 		*DeleteOperation,
-		*DeleteRangeOperation:
+		*DeleteRangeOperation,
+		*DeleteRangeUsingTombstoneOperation:
 		applyClientOp(ctx, db, op, false)
 	case *SplitOperation:
 		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
@@ -287,6 +288,16 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 		for i, deletedKey := range deletedKeys {
 			o.Result.Keys[i] = deletedKey
 		}
+	case *DeleteRangeUsingTombstoneOperation:
+		_, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			b.DelRangeUsingTombstone(o.Key, o.EndKey)
+			setLastReqSeq(b, o.Seq)
+		})
+		o.Result = resultInit(ctx, err)
+		if err != nil {
+			return
+		}
+		o.Result.OptionalTimestamp = ts
 	case *BatchOperation:
 		b := &kv.Batch{}
 		applyBatchOp(ctx, b, db.Run, o)
@@ -332,6 +343,9 @@ func applyBatchOp(
 			setLastReqSeq(b, subO.Seq)
 		case *DeleteRangeOperation:
 			b.DelRange(subO.Key, subO.EndKey, true /* returnKeys */)
+			setLastReqSeq(b, subO.Seq)
+		case *DeleteRangeUsingTombstoneOperation:
+			b.DelRangeUsingTombstone(subO.Key, subO.EndKey)
 			setLastReqSeq(b, subO.Seq)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
@@ -388,6 +402,8 @@ func applyBatchOp(
 					subO.Result.Keys[j] = key
 				}
 			}
+		case *DeleteRangeUsingTombstoneOperation:
+			subO.Result = resultInit(ctx, err)
 		default:
 			panic(errors.AssertionFailedf(`unknown batch operation type: %T %v`, subO, subO))
 		}

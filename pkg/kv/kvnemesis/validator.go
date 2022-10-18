@@ -70,14 +70,17 @@ func Validate(steps []Step, kvs *Engine, dt *SeqTracker) []error {
 	}
 
 	var extraKVs []observedOp
-	for ks, kv := range v.kvsByKeyAndSeq {
-		kv := &observedWrite{
-			Key:       kv.Key.Key,
-			Value:     roachpb.Value{RawBytes: kv.Value},
-			Timestamp: kv.Key.Timestamp,
-			Seq:       ks.seq,
+	for seq, svs := range v.kvBySeq {
+		for _, sv := range svs {
+			kv := &observedWrite{
+				Key:       sv.Key,
+				EndKey:    sv.EndKey,
+				Value:     roachpb.Value{RawBytes: sv.Value},
+				Timestamp: sv.Timestamp,
+				Seq:       seq,
+			}
+			extraKVs = append(extraKVs, kv)
 		}
-		extraKVs = append(extraKVs, kv)
 	}
 
 	// These are writes that we saw in MVCC, but they weren't matched up to any
@@ -197,10 +200,11 @@ type observedOp interface {
 	observedMarker()
 }
 
+// An observedWrite is an effect of an operation.
 type observedWrite struct {
-	Key   roachpb.Key
-	Value roachpb.Value
-	Seq   kvnemesisutil.Seq
+	Key, EndKey roachpb.Key
+	Value       roachpb.Value
+	Seq         kvnemesisutil.Seq
 	// A write is materialized if it has a timestamp.
 	Timestamp     hlc.Timestamp
 	IsDeleteRange bool
@@ -241,20 +245,27 @@ type validator struct {
 	// NB: The Generator carefully ensures that each value written is unique
 	// globally over a run, so there's a 1:1 relationship between a value that was
 	// written and the operation that wrote it.
-	kvsByKeyAndSeq map[keySeq]storage.MVCCKeyValue
+	// kvsByKeyAndSeq map[keySeq]storage.MVCCKeyValue // TODO remove
+	kvBySeq map[kvnemesisutil.Seq][]tsSpanVal
 
 	failures []error
 }
 
 type keySeq struct {
-	key string
-	seq kvnemesisutil.Seq
+	key, endKey string
+	seq         kvnemesisutil.Seq
+}
+
+type tsSpanVal struct {
+	roachpb.Span
+	hlc.Timestamp
+	Value []byte
 }
 
 func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
-	kvsByKeyAndSeq := make(map[keySeq]storage.MVCCKeyValue)
+	kvBySeq := make(map[kvnemesisutil.Seq][]tsSpanVal)
 	var err error
-	kvs.Iterate(func(key storage.MVCCKey, value []byte, iterErr error) {
+	kvs.Iterate(func(key, endKey roachpb.Key, ts hlc.Timestamp, value []byte, iterErr error) {
 		if err != nil {
 			return
 		}
@@ -262,23 +273,26 @@ func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
 			err = errors.CombineErrors(err, iterErr)
 			return
 		}
-		seq, ok := tr.Lookup(key.Key, key.Timestamp)
+		seq, ok := tr.Lookup(key, endKey, ts)
 		if !ok {
-			err = errors.AssertionFailedf("no seqno found for %s @ %s", key.Key, key.Timestamp)
+			err = errors.AssertionFailedf("no seqno found for [%s,) @ %s", key, endKey, ts)
 			return
 		}
-		kvsByKeyAndSeq[keySeq{key: string(key.Key), seq: seq}] = storage.MVCCKeyValue{
-			Key:   key,
-			Value: value,
+		v := tsSpanVal{
+			Span:      roachpb.Span{Key: key, EndKey: endKey},
+			Timestamp: ts,
+			Value:     value,
 		}
+		kvBySeq[seq] = append(kvBySeq[seq], v)
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return &validator{
-		kvs:            kvs,
-		kvsByKeyAndSeq: kvsByKeyAndSeq,
+		kvs: kvs,
+		// kvsByKeyAndSeq: kvsByKeyAndSeq,
+		kvBySeq: kvBySeq,
 	}, nil
 }
 
@@ -287,14 +301,39 @@ const (
 	isBuffering  = true
 )
 
-func (v *validator) tryConsumeWrite(key roachpb.Key, seq kvnemesisutil.Seq) (hlc.Timestamp, bool) {
-	k := keySeq{key: string(key), seq: seq}
-	val, ok := v.kvsByKeyAndSeq[k]
+func (v *validator) tryConsumeWrite(key roachpb.Key, seq kvnemesisutil.Seq) (tsSpanVal, bool) {
+	svs, ok := v.tryConsumeRangedWrite(seq, key, nil)
 	if !ok {
-		return hlc.Timestamp{}, false
+		return tsSpanVal{}, false
 	}
-	delete(v.kvsByKeyAndSeq, k)
-	return val.Key.Timestamp, true
+	if len(svs) != 1 {
+		panic(fmt.Sprintf("expected exactly one element: %+v", svs))
+	}
+	return svs[0], true
+}
+
+func (v *validator) tryConsumeRangedWrite(
+	seq kvnemesisutil.Seq, key, endKey roachpb.Key,
+) ([]tsSpanVal, bool) {
+	svs, ok := v.kvBySeq[seq]
+	if !ok || len(svs) == 0 {
+		return nil, false
+	}
+	opSpan := roachpb.Span{Key: key, EndKey: endKey}
+
+	var sg roachpb.SpanGroup
+	for i := range svs {
+		cur := svs[i]
+		if !opSpan.Contains(cur.Span) {
+			// Operation wrote outside of its bounds, so don't
+			// consume the write leading to a failure.
+			return nil, false
+		}
+		sg.Add(cur.Span)
+	}
+
+	delete(v.kvBySeq, seq)
+	return svs, true
 }
 
 // processOp turns the result of an operation into its observations (which are
@@ -332,8 +371,8 @@ func (v *validator) processOp(buffering bool, op Operation) {
 				Seq:   t.Seq,
 				Value: roachpb.MakeValueFromString(t.Value()),
 			}
-			if ts, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
-				write.Timestamp = ts
+			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
+				write.Timestamp = sv.Timestamp
 			}
 			v.curObservations = append(v.curObservations, write)
 		}
@@ -341,11 +380,11 @@ func (v *validator) processOp(buffering bool, op Operation) {
 		if !buffering {
 			v.checkAtomic(`delete`, t.Result, op)
 		} else {
-			ts, _ := v.tryConsumeWrite(t.Key, t.Seq)
+			sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
 			write := &observedWrite{
 				Key:       t.Key,
 				Seq:       t.Seq,
-				Timestamp: ts,
+				Timestamp: sv.Timestamp,
 			}
 			v.curObservations = append(v.curObservations, write)
 		}
@@ -369,18 +408,76 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			// [^1]: https://github.com/cockroachdb/cockroach/pull/68003/files#diff-804b6fefcb2b7ae68fab388e6dcbaf7dbc3937a266b14b79c330b703ea9d0d95R382-R388
 			deleteOps := make([]observedOp, len(t.Result.Keys))
 			for i, key := range t.Result.Keys {
-				ts, _ := v.tryConsumeWrite(key, t.Seq)
+				sv, _ := v.tryConsumeWrite(key, t.Seq)
 				write := &observedWrite{
 					Key:           key,
 					Seq:           t.Seq,
 					Value:         roachpb.Value{},
 					IsDeleteRange: true, // only for String(), no semantics attached
-					Timestamp:     ts,
+					Timestamp:     sv.Timestamp,
 				}
 				deleteOps[i] = write
 			}
 			v.curObservations = append(v.curObservations, deleteOps...)
 			// The span ought to be empty right after the DeleteRange.
+			v.curObservations = append(v.curObservations, &observedScan{
+				Span: roachpb.Span{
+					Key:    t.Key,
+					EndKey: t.EndKey,
+				},
+				KVs: nil,
+			})
+		}
+	case *DeleteRangeUsingTombstoneOperation:
+		if !buffering {
+			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result, op)
+		} else {
+			// NB: MVCC range deletions aren't allowed in transactions (and can't be
+			// overwritten in the same non-txn'al batch), so we currently will only
+			// ever see one write to consume. With transactions (or self-overlapping
+			// batches) we could get the following:
+			//
+			//   txn.DelRangeUsingTombstone(a, c)
+			//   txn.Put(b, v)
+			//   txn.Commit
+			//
+			// The resulting atomic unit would emit two MVCC range deletions. [a,b)
+			// and [b\x00, c).
+			//
+			// The code here handles this and it is unit tested.
+			//
+			// TODO(tbg): if a ranged write "lost" a part, we wouldn't detect this.
+			// Say there are point writes at keys a and c and we're running a range
+			// deletion covering [a-z), but we only see range deletions for [a,b) and
+			// [b\x00, z) come out of MVCC. Validation will pass because there is no
+			// value at `b` (and never was), but the behaviour is unexpected. We could
+			// catch this (admittedly unlikely) behavior if we emitted special
+			// observed writes for the gaps as well, which would fail validation
+			// unless they got shadowed within their atomic unit.
+			svs, _ := v.tryConsumeRangedWrite(t.Seq, t.Key, t.EndKey)
+			var unobserved roachpb.SpanGroup
+			unobserved.Add(roachpb.Span{Key: t.Key, EndKey: t.EndKey})
+			for _, sv := range svs {
+				unobserved.Sub(sv.Span)
+				write := &observedWrite{
+					Key:       t.Key,
+					EndKey:    t.EndKey,
+					Seq:       t.Seq,
+					Timestamp: sv.Timestamp,
+				}
+				v.curObservations = append(v.curObservations, write)
+			}
+			// Add unmaterialized versions of the write for any gaps.
+			for _, sp := range unobserved.Slice() {
+				write := &observedWrite{
+					Key:    sp.Key,
+					EndKey: sp.EndKey,
+					Seq:    t.Seq,
+				}
+				v.curObservations = append(v.curObservations, write)
+			}
+			// The span ought to be empty right after the DeleteRange, even if parts of
+			// the DeleteRange that didn't materialize due to a shadowing operation.
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
@@ -646,24 +743,58 @@ func (v *validator) checkAtomicCommitted(
 	batch := v.kvs.kvs.NewIndexedBatch()
 	defer func() { _ = batch.Close() }()
 
-	// First, hide all of our writes from the view. Remember
-	// the index of the last ('most recent') write to each key
-	// so that we can check below whether any shadowed writes
-	// erroneously materialized.
-	lastWriteIdxByKey := make(map[string]int, len(txnObservations))
+	// type span struct {
+	// 	key, endKey string
+	// }
+	//lastWriteIdxByKey := make(map[span]int, len(txnObservations))
+
+	// First, hide all of our writes from the view. Remember the index of the last
+	// ('most recent') write to each key so that we can check below whether any
+	// shadowed writes erroneously materialized. Recall that writes can be ranged
+	// (mvcc range deletions), but these writes cannot be transactional. At the
+	// time of writing, we also don't do non-transactional batches (see
+	// DefaultConfig) which means in effect we'll only ever see ranged operations
+	// alone in an atomic unit. This code still handles these cases, and they are
+	// unit tested.
+
+	var lastWrites frontier
+	unshadowedByIdx := map[int][]lastWrite{}
+	var union roachpb.SpanGroup
+
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
 		observation := txnObservations[idx]
 		switch o := observation.(type) {
 		case *observedWrite:
+			// [--------) [--) [---)      prevUnion
+			//             [---------)    new span
+			// result:
+			//
+			// [--------) [----------)    union
+			//               [-)   [-)    added
+			//
+			//
+			prevUnion := union.Slice()
+			union.Add(roachpb.Span{Key: o.Key, EndKey: o.EndKey})
 
-			if _, ok := lastWriteIdxByKey[string(o.Key)]; !ok {
-				key := string(o.Key)
-				lastWriteIdxByKey[key] = idx
+			var added roachpb.SpanGroup
+			added.Add(union.Slice()...)
+			added.Sub(prevUnion...)
+
+			for _, cur := range added.Slice() {
+				// For this span, the current operation is the last write.
+				lw := lastWrite{
+					Span: cur,
+					idx:  idx,
+				}
+				lastWrites = append(lastWrites, lw)
+				unshadowedByIdx[idx] = append(unshadowedByIdx[idx], lw)
 			}
 
-			// The case in which timestamp is not set is that of a write which didn't
-			// materialize (say a superseded write in a txn), and which we thus don't
-			// have to delete.
+			if o.Timestamp.IsEmpty() {
+				// This write didn't materialize (say a superseded write in
+				// a txn), so it's not present here.
+				continue
+			}
 			mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
 			if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
 				panic(err)
@@ -674,6 +805,18 @@ func (v *validator) checkAtomicCommitted(
 	// Check if any key that was written twice in the txn had the overwritten
 	// writes materialize in kv. Also fill in all the read timestamps first so
 	// they show up in the failure message.
+	//
+	// Each point in the keyspace that occurs in any (point or ranged) observed
+	// write has a materialized observed write covering it if validation is to
+	// succeed. We iterate through our operations in the order in which they
+	// appear in the atomic unit and for each write "patch" it into the current
+	// view. Concretely,
+	//
+	// - a write replaces anything it overlaps (reflecting the fact that a write
+	// in a txn is only visible to that txn until it is shadowed by a later write
+	// in the same txn).
+	// - ranged writes may have up to three components: parts didn't materialize but also aren't shadowed (a correctness problem)
+	//var frontier frontier
 	var failure string
 	for idx, observation := range txnObservations {
 		if failure != `` {
@@ -681,27 +824,40 @@ func (v *validator) checkAtomicCommitted(
 		}
 		switch o := observation.(type) {
 		case *observedWrite:
-			var mvccKey storage.MVCCKey
-			if lastWriteIdx := lastWriteIdxByKey[string(o.Key)]; idx == lastWriteIdx {
-				// The last write of a given key in the txn wins and should have made it
-				// to kv.
-				mvccKey = storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+			// The last write of a given key in the txn wins and should have made it
+			// to kv. If this is not the last write, it might still be visible by
+			// subsequent reads (in validReadTimes), so we write it under the
+			// timestamp of the winning write[^1]. It will be replaced once newer writes
+			// show up.
+			//
+			// [^1]: that way, we don't have to explicitly clear it when it goes out
+			// of scope and we don't have to partition ranged writes.
+			writeTS := o.Timestamp
+
+			// These spans
+			//add := unshadowedByIdx[idx]
+
+			//lastWriteIdx := lastWriteIdxByKey[span{key: string(o.Key), endKey: string(o.EndKey)}]
+
+			if idx != 12345 /* lastWriteIdx*/ {
+				writeTS = txnObservations[0 /* lastWriteIdx */].(*observedWrite).Timestamp
 			} else {
 				if o.Timestamp.IsSet() {
 					failure = `committed txn overwritten key had write`
 				}
-				// This write was never materialized in KV because the key got
-				// overwritten later in the txn. But reads in the txn could have seen
-				// it, so we put in the batch being maintained for validReadTimes using
-				// the timestamp of the write for this key that eventually "won".
-				mvccKey = storage.MVCCKey{
-					Key:       o.Key,
-					Timestamp: txnObservations[lastWriteIdx].(*observedWrite).Timestamp,
+			}
+			if len(o.EndKey) == 0 {
+				if err := batch.Set(storage.EncodeMVCCKey(storage.MVCCKey{Key: o.Key, Timestamp: writeTS}), o.Value.RawBytes, nil); err != nil {
+					panic(err)
+				}
+			} else {
+				suffix := storage.EncodeMVCCTimestampSuffix(writeTS)
+				if err := batch.RangeKeySet(o.Key, o.EndKey, suffix, o.Value.RawBytes, nil); err != nil {
+					panic(err)
 				}
 			}
-			if err := batch.Set(storage.EncodeMVCCKey(mvccKey), o.Value.RawBytes, nil); err != nil {
-				panic(err)
-			}
+
+			// UGH the last index stuff needs more work
 		case *observedRead:
 			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes)
 		case *observedScan:
@@ -738,7 +894,7 @@ func (v *validator) checkAtomicCommitted(
 		var opValid disjointTimeSpans
 		switch o := observation.(type) {
 		case *observedWrite:
-			isLastWriteForKey := idx == lastWriteIdxByKey[string(o.Key)]
+			isLastWriteForKey := idx == 0 // lastWriteIdxByKey[string(o.Key)]
 			if !isLastWriteForKey {
 				continue
 			}

@@ -122,25 +122,23 @@ func TestValidate(t *testing.T) {
 	)
 
 	type seqKV struct {
-		storage.MVCCKeyValue
-		seq kvnemesisutil.Seq
+		key, endKey roachpb.Key
+		val         []byte
+		ts          hlc.Timestamp
+		seq         kvnemesisutil.Seq
 	}
 
 	kv := func(key string, ts int, seq kvnemesisutil.Seq /* only for value, i.e. no semantics */) seqKV {
 		return seqKV{
-			MVCCKeyValue: storage.MVCCKeyValue{
-				Key: storage.MVCCKey{
-					Key:       []byte(key),
-					Timestamp: hlc.Timestamp{WallTime: int64(ts)},
-				},
-				Value: roachpb.MakeValueFromString(PutOperation{Seq: seq}.Value()).RawBytes,
-			},
+			key: roachpb.Key(key),
+			ts:  hlc.Timestamp{WallTime: int64(ts)},
+			val: roachpb.MakeValueFromString(PutOperation{Seq: seq}.Value()).RawBytes,
 			seq: seq,
 		}
 	}
 	tombstone := func(key string, ts int, seq kvnemesisutil.Seq) seqKV {
 		r := kv(key, ts, seq)
-		r.Value = nil
+		r.val = nil
 		return r
 	}
 	kvs := func(kvs ...seqKV) []seqKV {
@@ -1664,12 +1662,12 @@ func TestValidate(t *testing.T) {
 			require.NoError(t, err)
 			defer e.Close()
 			for _, kv := range test.kvs {
-				e.Put(kv.Key, kv.Value)
+				e.Put(storage.MVCCKey{Key: kv.key, Timestamp: kv.ts}, kv.val)
 			}
 
 			tr := &SeqTracker{}
 			for _, kv := range test.kvs {
-				tr.Add(kv.Key.Key, kv.Key.Timestamp, kv.seq)
+				tr.Add(kv.key, kv.endKey, kv.ts, kv.seq)
 			}
 
 			var buf strings.Builder
@@ -1677,7 +1675,11 @@ func TestValidate(t *testing.T) {
 				fmt.Fprintln(&buf, strings.TrimSpace(step.String()))
 			}
 			for _, kv := range test.kvs {
-				fmt.Fprintln(&buf, kv.Key.String(), "@", kv.seq, mustGetStringValue(kv.Value))
+				if len(kv.endKey) == 0 {
+					fmt.Fprintln(&buf, kv.key, "@", kv.seq, mustGetStringValue(kv.val))
+				} else {
+					fmt.Fprintln(&buf, kv.key, "-", kv.endKey, "@", kv.seq, mustGetStringValue(kv.val))
+				}
 			}
 
 			if failures := Validate(test.steps, e, tr); len(failures) > 0 {

@@ -391,7 +391,7 @@ type StoreTestingKnobs struct {
 	// renewing expiration based leases.
 	LeaseRenewalDurationOverride time.Duration
 
-	RangefeedValueHeaderFilter func(key roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader)
+	RangefeedValueHeaderFilter func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader)
 
 	// MakeSystemConfigSpanUnavailableToQueues makes the system config span
 	// unavailable to queues that ask for it.

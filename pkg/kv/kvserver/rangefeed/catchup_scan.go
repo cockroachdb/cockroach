@@ -62,7 +62,7 @@ type CatchUpIterator struct {
 	close     func()
 	span      roachpb.Span
 	startTime hlc.Timestamp // exclusive
-	OnEmit    func(key roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader)
+	OnEmit    func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader)
 }
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader over the
@@ -167,14 +167,22 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 					var span roachpb.Span
 					a, span.Key = a.Copy(rangeKeys.Bounds.Key, 0)
 					a, span.EndKey = a.Copy(rangeKeys.Bounds.EndKey, 0)
+					ts := rangeKeys.Versions[j].Timestamp
 					err := outputFn(&roachpb.RangeFeedEvent{
 						DeleteRange: &roachpb.RangeFeedDeleteRange{
 							Span:      span,
-							Timestamp: rangeKeys.Versions[j].Timestamp,
+							Timestamp: ts,
 						},
 					})
 					if err != nil {
 						return err
+					}
+					if i.OnEmit != nil {
+						v, err := storage.DecodeMVCCValue(rangeKeys.Versions[j].Value)
+						if err != nil {
+							return err
+						}
+						i.OnEmit(span.Key, span.EndKey, ts, v.MVCCValueHeader)
 					}
 				}
 			}
@@ -304,7 +312,7 @@ func (i *CatchUpIterator) CatchUpScan(outputFn outputEventFn, withDiff bool) err
 				})
 				reorderBuf = append(reorderBuf, event)
 				if i.OnEmit != nil {
-					i.OnEmit(key, ts, mvccVal.MVCCValueHeader)
+					i.OnEmit(key, nil, ts, mvccVal.MVCCValueHeader)
 				}
 			}
 		}

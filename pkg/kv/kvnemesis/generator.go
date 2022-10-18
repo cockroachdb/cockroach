@@ -104,6 +104,8 @@ type ClientOperationConfig struct {
 	DeleteExisting int
 	// DeleteRange is an operation that Deletes a key range that may contain values.
 	DeleteRange int
+	// DeleteRange is an operation that invokes DeleteRangeUsingTombstone.
+	DeleteRangeUsingTombstone int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -170,19 +172,20 @@ type ChangeZoneConfig struct {
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:           1,
-		GetMissingForUpdate:  1,
-		GetExisting:          1,
-		GetExistingForUpdate: 1,
-		PutMissing:           1,
-		PutExisting:          1,
-		Scan:                 1,
-		ScanForUpdate:        1,
-		ReverseScan:          1,
-		ReverseScanForUpdate: 1,
-		DeleteMissing:        1,
-		DeleteExisting:       1,
-		DeleteRange:          1,
+		GetMissing:                1,
+		GetMissingForUpdate:       1,
+		GetExisting:               1,
+		GetExistingForUpdate:      1,
+		PutMissing:                1,
+		PutExisting:               1,
+		Scan:                      1,
+		ScanForUpdate:             1,
+		ReverseScan:               1,
+		ReverseScanForUpdate:      1,
+		DeleteMissing:             1,
+		DeleteExisting:            1,
+		DeleteRange:               1,
+		DeleteRangeUsingTombstone: 1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -227,6 +230,10 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
+	// DeleteRangeUsingTombstone does not support transactions.
+	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
+	config.Ops.ClosureTxn.CommitBatchOps.DeleteRangeUsingTombstone = 0
 	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
@@ -436,6 +443,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 	addOpGen(allowed, randDelRange, c.DeleteRange)
+	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -519,6 +527,14 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 	key, endKey := randSpan(rng)
 	seq := g.nextSeq()
 	return delRange(key, endKey, seq)
+}
+
+func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
+	// We don't write any new keys to `g.keys` on a DeleteRange operation,
+	// because DelRange(..) only deletes existing keys.
+	key, endKey := randSpan(rng)
+	seq := g.nextSeq()
+	return delRangeUsingTombstone(key, endKey, seq)
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -739,6 +755,10 @@ func del(key string, seq kvnemesisutil.Seq) Operation {
 
 func delRange(key, endKey string, seq kvnemesisutil.Seq) Operation {
 	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
+}
+
+func delRangeUsingTombstone(key, endKey string, seq kvnemesisutil.Seq) Operation {
+	return Operation{DeleteRangeUsingTombstone: &DeleteRangeUsingTombstoneOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
 }
 
 func split(key string) Operation {

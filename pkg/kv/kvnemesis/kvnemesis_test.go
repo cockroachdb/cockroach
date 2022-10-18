@@ -47,10 +47,10 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 		// Make sure we know the seq for each of our writes when they come out of
 		// the rangefeed. We do this via an interceptor to avoid having to change
 		// RangeFeed's APIs.
-		RangefeedValueHeaderFilter: func(key roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
+		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
 			seq := kvnemesisutil.Seq(vh.Seq)
 			if seq > 0 {
-				tr.Add(key, ts, seq)
+				tr.Add(key, endKey, ts, seq)
 			}
 		},
 	}
