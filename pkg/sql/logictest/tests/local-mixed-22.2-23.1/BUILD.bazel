@@ -2,7 +2,7 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
 go_test(
-    name = "local-mixed-22_1-22_2_test",
+    name = "local-mixed-22_2-23_1_test",
     size = "enormous",
     srcs = ["generated_test.go"],
     args = ["-test.timeout=3595s"],
