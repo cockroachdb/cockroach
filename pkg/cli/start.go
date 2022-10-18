@@ -431,6 +431,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
 		return clierror.NewError(err, exit.FatalError())
 	}
+	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
