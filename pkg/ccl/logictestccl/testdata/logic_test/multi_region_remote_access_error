@@ -63,7 +63,6 @@ CREATE TABLE messages_rbr (
     account_id INT NOT NULL,
     message_id   UUID DEFAULT gen_random_uuid(),
     message    STRING NOT NULL,
-    crdb_region crdb_internal_region NOT NULL,
     PRIMARY KEY (account_id),
     INDEX msg_idx(message)
 )
@@ -176,6 +175,83 @@ CREATE TABLE json_arr2_rbt (
 statement ok
 SET enforce_home_region = true
 
+### Regression tests for issue #89875
+
+# Non-DML statements should not error out due to enforce_home_region.
+query T
+SELECT table_name FROM [SHOW CREATE messages_global]
+----
+messages_global
+
+# Non-DML SHOW RANGES statement on RBR table should succeed.
+query I
+SELECT DISTINCT range_id FROM [SHOW RANGES FROM TABLE messages_rbr]
+----
+52
+
+# Update does not fail when accessing all rows in messages_rbr because lookup
+# join does not error out the lookup table in phase 1.
+statement ok
+UPDATE messages_rbt SET account_id = -account_id WHERE account_id NOT IN (SELECT account_id FROM messages_rbr)
+
+# Update should fail accessing all rows in messages_rbr.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
+UPDATE messages_rbt SET account_id = -account_id WHERE message_id NOT IN (SELECT message_id FROM messages_rbr)
+
+# Update should fail accessing all rows in messages_rbr.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
+UPDATE messages_rbr SET account_id = -account_id WHERE account_id NOT IN (SELECT account_id FROM messages_rbt)
+
+# Delete does not fail when accessing all rows in messages_rbr because lookup
+# join does not error out the lookup table in phase 1.
+statement ok
+DELETE FROM messages_rbt WHERE account_id NOT IN (SELECT account_id FROM messages_rbr)
+
+# Delete should fail accessing all rows in messages_rbr.
+# join does not error out the lookup table in phase 1.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
+DELETE FROM messages_rbt WHERE message_id NOT IN (SELECT message_id FROM messages_rbr)
+
+# Delete of potentially all rows in messages_rbr should fail.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
+DELETE FROM messages_rbr WHERE account_id NOT IN (SELECT account_id FROM messages_rbt)
+
+# Delete accessing all regions should fail.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
+DELETE FROM messages_rbr WHERE message = 'Hello World!'
+
+# Insert should fail accessing all rows in messages_rbr.
+statement error pq: Query has no home region\. Try adding a filter on messages_rbr\.crdb_region and/or on key column \(messages_rbr\.account_id\)\.
+INSERT INTO messages_rbt SELECT * FROM messages_rbr
+
+# Insert into an RBR table should succeed. New rows are placed in the gateway region.
+statement ok
+INSERT INTO messages_rbr SELECT * FROM messages_rbt
+
+# Upsert into an RBR table should succeed.
+statement ok
+UPSERT INTO messages_rbr SELECT * FROM messages_rbt
+
+# Upsert should fail accessing all rows in messages_rbr.
+statement error pq: Query has no home region\. Try adding a LIMIT clause\.
+UPSERT INTO messages_rbt SELECT * FROM messages_rbr
+
+# Upsert into an RBR table uses locality-optimized lookup join and should
+# succeed.
+statement ok
+UPSERT INTO messages_rbr SELECT * FROM messages_rbt
+
+# UNION ALL where one branch scans all rows of an RBR table should fail.
+statement error pq: Query has no home region\. Try adding a LIMIT clause\.
+SELECT * FROM messages_rbr UNION ALL SELECT * FROM messages_rbt
+
+# UNION ALL where one branch scans 1 row of an RBR table should succeed.
+query TTT
+SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) UNION ALL SELECT * FROM messages_rbt
+----
+
+### End regression tests for issue #89875
+
 # A join relation with no home region as the left input of lookup join should
 # not be allowed.
 statement error pq: Query has no home region\. Try adding a filter on rbr\.crdb_region and/or on key column \(rbr\.account_id\)\.
@@ -192,10 +268,10 @@ statement error pq: Query has no home region\. Try adding a filter on p\.crdb_re
 SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
 p.crdb_region = c.crdb_region LIMIT 1
 
-# Locality optimized lookup join should not error out in phase 1.
-query TTT retry
+# Locality optimized join is not allowed if the input is a full scan of an RBR
+# table.
+statement error pq: Query has no home region. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_id\)\.
 SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
-----
 
 # Locality optimized lookup join should not error out in phase 1.
 query TT retry
@@ -296,7 +372,7 @@ SELECT * FROM customers c JOIN orders o ON c.id = o.cust_id AND
   (c.crdb_region = o.crdb_region) WHERE c.id = '69a1c2c2-5b18-459e-94d2-079dc53a4dd0'
 
 # Locality optimized lookup join is allowed.
-query TTTTTTT retry
+query TTTTTT retry
 SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
 ----
 
@@ -331,7 +407,7 @@ SELECT message from messages_rbt@messages_rbt_pkey
 ----
 
 # A local join between an RBR and RBT table should be allowed.
-query TTTTTTT retry
+query TTTTTT retry
 SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
@@ -340,17 +416,18 @@ query T retry
 EXPLAIN(OPT) SELECT * FROM  messages_rbt rbt INNER LOOKUP JOIN messages_rbr rbr ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
-inner-join (lookup messages_rbr [as=rbr])
- ├── flags: force lookup join (into right side)
- ├── lookup columns are key
- ├── project
- │    ├── scan messages_rbt [as=rbt]
- │    └── projections
- │         └── 'ap-southeast-2'
- └── filters (true)
+project
+ └── inner-join (lookup messages_rbr [as=rbr])
+      ├── flags: force lookup join (into right side)
+      ├── lookup columns are key
+      ├── project
+      │    ├── scan messages_rbt [as=rbt]
+      │    └── projections
+      │         └── 'ap-southeast-2'
+      └── filters (true)
 
 # A local join between an RBR and RBT table should be allowed.
-query TTTTTTT retry
+query TTTTTT retry
 SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
@@ -359,12 +436,13 @@ query T retry
 EXPLAIN(OPT) SELECT * FROM messages_rbr rbr INNER LOOKUP JOIN messages_rbt rbt ON rbr.account_id = rbt.account_id
 AND rbr.crdb_region = 'ap-southeast-2'
 ----
-inner-join (lookup messages_rbt [as=rbt])
- ├── flags: force lookup join (into right side)
- ├── lookup columns are key
- ├── scan messages_rbr [as=rbr]
- │    └── constraint: /4/1: [/'ap-southeast-2' - /'ap-southeast-2']
- └── filters (true)
+project
+ └── inner-join (lookup messages_rbt [as=rbt])
+      ├── flags: force lookup join (into right side)
+      ├── lookup columns are key
+      ├── scan messages_rbr [as=rbr]
+      │    └── constraint: /4/1: [/'ap-southeast-2' - /'ap-southeast-2']
+      └── filters (true)
 
 # A lookup join with a global table as either input should be allowed.
 query TTTTTT retry
@@ -414,7 +492,7 @@ SELECT * FROM messages_rbr_alt rbr INNER LOOKUP JOIN messages_global g2 ON rbr.a
 
 # A lookup join relation with a left input join relation which uses locality
 # optimized scan in one of the tables of the lookup join should be allowed.
-query TTTTTTTTTT retry
+query TTTTTTTTT retry
 SELECT * FROM (SELECT * FROM messages_rbr LIMIT 1) rbr INNER LOOKUP JOIN
   messages_global g2 ON rbr.account_id = g2.account_id
   INNER LOOKUP JOIN messages_global g3 ON g2.account_id = g3.account_id
@@ -443,6 +521,11 @@ inner-join (lookup messages_global [as=g3])
 
 statement ok
 ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+# Regression test for issue #88788
+# A full scan on an RBT table should error out lookup join.
+statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
+SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
 
 # Select from REGIONAL BY TABLE should indicate the gateway region to use.
 statement error pq: Query is not running in its home region. Try running the query from region 'us-east-1'.

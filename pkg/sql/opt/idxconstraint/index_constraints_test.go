@@ -138,6 +138,7 @@ func TestIndexConstraints(t *testing.T) {
 					execBld := execbuilder.New(
 						context.Background(), nil /* execFactory */, nil /* optimizer */, f.Memo(), nil, /* catalog */
 						&remainingFilter, &evalCtx, false, /* allowAutoCommit */
+						false, /* isANSIDML */
 					)
 					expr, err := execBld.BuildScalar()
 					if err != nil {

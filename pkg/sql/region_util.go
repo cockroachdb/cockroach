@@ -2322,3 +2322,8 @@ func (p *planner) GetMultiregionConfig(
 	}
 	return &regionConfig, true
 }
+
+// IsANSIDML is part of the eval.Planner interface.
+func (p *planner) IsANSIDML() bool {
+	return p.stmt.IsANSIDML()
+}
