@@ -53,7 +53,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 			// Check if we should upgrade cluster version, keep checking upgrade
 			// status, or stop attempting upgrade.
 			if quit, err := s.upgradeStatus(ctx); err != nil {
-				log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
+				log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", err)
 				continue
 			} else if quit {
 				log.Info(ctx, "no need to upgrade, cluster already at the newest version")
@@ -76,7 +76,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 					sessiondata.InternalExecutorOverride{User: security.RootUserName()},
 					"SET CLUSTER SETTING version = crdb_internal.node_executable_version();",
 				); err != nil {
-					log.Infof(ctx, "error when finalizing cluster version upgrade: %s", err)
+					log.Errorf(ctx, "error when finalizing cluster version upgrade: %v", err)
 				} else {
 					log.Info(ctx, "successfully upgraded cluster version")
 					return
@@ -85,7 +85,7 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 		}
 	}); err != nil {
 		cancel()
-		log.Infof(ctx, "failed attempt to upgrade cluster version, error: %s", err)
+		log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", err)
 	}
 }
 

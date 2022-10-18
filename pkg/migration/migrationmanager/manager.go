@@ -101,10 +101,16 @@ func (m *Manager) Migrate(
 	user security.SQLUsername,
 	from, to clusterversion.ClusterVersion,
 	updateSystemVersionSetting sql.UpdateVersionSystemSettingHook,
-) error {
+) (returnErr error) {
 	// TODO(irfansharif): Should we inject every ctx here with specific labels
 	// for each migration, so they log distinctly?
 	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
+	defer func() {
+		if returnErr != nil {
+			log.Warningf(ctx, "error encountered during version upgrade: %v", returnErr)
+		}
+	}()
+
 	if from == to {
 		// Nothing to do here.
 		log.Infof(ctx, "no need to migrate, cluster already at newest version")
