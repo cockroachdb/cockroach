@@ -72,7 +72,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	if err := repeatRunE(ctx, t, c, node, "install dependencies", `
-		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils
+		sudo apt-get -qq install make python3.7 libpq-dev python3.7-dev gcc python3-setuptools python-setuptools build-essential python3.7-distutils python3-virtualenv
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -91,8 +91,15 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
+	if err := repeatRunE(
+		ctx, t, c, node, "create virtualenv", `virtualenv venv`,
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := repeatRunE(ctx, t, c, node, "install pytest", `
-		sudo pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic
+		source venv/bin/activate &&
+			pip3 install --upgrade --force-reinstall setuptools pytest==6.0.1 pytest-xdist psycopg2 alembic
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +118,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("installing sqlalchemy-cockroachdb")
 	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
-		cd /mnt/data1/sqlalchemy-cockroachdb && sudo pip3 install .
+		source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb && pip3 install .
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +137,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	t.Status("building sqlalchemy")
 	if err := repeatRunE(ctx, t, c, node, "building sqlalchemy", `
-		cd /mnt/data1/sqlalchemy && python3 setup.py build
+		source venv/bin/activate && cd /mnt/data1/sqlalchemy && python3 setup.py build
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -150,10 +157,8 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	blocklistName, expectedFailures, ignoredlistName, ignoredlist := sqlAlchemyBlocklists.getLists(version)
-	if expectedFailures == nil {
-		t.Fatalf("No sqlalchemy blocklist defined for cockroach version %s", version)
-	}
+	blocklistName, expectedFailures := "sqlAlchemyBlocklist", sqlAlchemyBlocklist
+	ignoredlistName, ignoredlist := "sqlAlchemyIgnoreList", sqlAlchemyIgnoreList
 	t.L().Printf("Running cockroach version %s, using blocklist %s, using ignoredlist %s",
 		version, blocklistName, ignoredlistName)
 
@@ -161,7 +166,7 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Note that this is expected to return an error, since the test suite
 	// will fail. And it is safe to swallow it here.
 	result, err := c.RunWithDetailsSingleNode(ctx, t.L(), node,
-		`cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
+		`source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb/ && pytest --maxfail=0 \
 		--dburi='cockroachdb://root@localhost:26257/defaultdb?sslmode=disable&disable_cockroachdb_telemetry=true' \
 		test/test_suite_sqlalchemy.py
 	`)
