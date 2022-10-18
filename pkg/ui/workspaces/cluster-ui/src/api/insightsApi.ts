@@ -589,6 +589,7 @@ type ExecutionInsightsResponseRow = {
   causes: string[];
   problem: string;
   index_recommendations: string[];
+  plan_gist: string;
 };
 
 export type StatementInsights = StatementInsightEvent[];
@@ -628,6 +629,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       problem: row.problem,
       indexRecommendations: row.index_recommendations,
       insights: null,
+      planGist: row.plan_gist,
     };
   });
 }
@@ -667,6 +669,7 @@ const statementInsightsQuery: InsightQuery<
       index_recommendations,
       problem,
       causes,
+      plan_gist,
       row_number()                          OVER (
         PARTITION BY txn_fingerprint_id
         ORDER BY end_time DESC
