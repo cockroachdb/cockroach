@@ -45,23 +45,24 @@ func (c *createExternalConectionNode) startExec(params runParams) error {
 	return params.p.createExternalConnection(params, c.n)
 }
 
-type externalConnectionEval struct {
-	externalConnectionName     func() (string, error)
-	externalConnectionEndpoint func() (string, error)
+type externalConnection struct {
+	name     string
+	endpoint string
 }
 
-func (p *planner) makeExternalConnectionEval(
+func (p *planner) parseExternalConnection(
 	ctx context.Context, n *tree.CreateExternalConnection,
-) (*externalConnectionEval, error) {
-	var err error
-	eval := &externalConnectionEval{}
-	eval.externalConnectionName, err = p.TypeAsString(ctx, n.ConnectionLabelSpec.Label, externalConnectionOp)
-	if err != nil {
-		return nil, err
+) (ec externalConnection, err error) {
+	exprEval := p.ExprEvaluator(externalConnectionOp)
+	if ec.name, err = exprEval.String(
+		ctx, n.ConnectionLabelSpec.Label,
+	); err != nil {
+		return externalConnection{}, errors.Wrap(err, "failed to resolve External Connection name")
 	}
-
-	eval.externalConnectionEndpoint, err = p.TypeAsString(ctx, n.As, externalConnectionOp)
-	return eval, err
+	if ec.endpoint, err = exprEval.String(ctx, n.As); err != nil {
+		return externalConnection{}, errors.Wrap(err, "failed to resolve External Connection endpoint")
+	}
+	return ec, nil
 }
 
 func (p *planner) createExternalConnection(
@@ -83,18 +84,14 @@ func (p *planner) createExternalConnection(
 	// TODO(adityamaru): Add some metrics to track CREATE EXTERNAL CONNECTION
 	// usage.
 
-	eval, err := p.makeExternalConnectionEval(params.ctx, n)
+	ec, err := p.parseExternalConnection(params.ctx, n)
 	if err != nil {
 		return err
 	}
 
 	ex := externalconn.NewMutableExternalConnection()
-	name, err := eval.externalConnectionName()
-	if err != nil {
-		return errors.Wrap(err, "failed to resolve External Connection name")
-	}
 	// TODO(adityamaru): Revisit if we need to reject certain kinds of names.
-	ex.SetConnectionName(name)
+	ex.SetConnectionName(ec.name)
 
 	// TODO(adityamaru): Create an entry in the `system.privileges` table for the
 	// newly created External Connection with the appropriate privileges. We will
@@ -102,11 +99,9 @@ func (p *planner) createExternalConnection(
 
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
-	as, err := eval.externalConnectionEndpoint()
-	if err != nil {
-		return errors.Wrap(err, "failed to resolve External Connection endpoint")
-	}
-	exConn, err := externalconn.ExternalConnectionFromURI(params.ctx, params.ExecCfg(), p.User(), as)
+	exConn, err := externalconn.ExternalConnectionFromURI(
+		params.ctx, params.ExecCfg(), p.User(), ec.endpoint,
+	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
 	}
@@ -123,7 +118,7 @@ func (p *planner) createExternalConnection(
 
 		// Grant user `ALL` on the newly created External Connection.
 		grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION "%s" TO %s`,
-			name, p.User().SQLIdentifier())
+			ec.name, p.User().SQLIdentifier())
 		_, err = ie.ExecEx(params.ctx,
 			"grant-on-create-external-connection", txn,
 			sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, grantStatement)
