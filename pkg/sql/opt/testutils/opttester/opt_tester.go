@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -251,6 +252,14 @@ type Flags struct {
 	// SkipRace indicates that a test should be skipped if the race detector is
 	// enabled.
 	SkipRace bool
+
+	// RoundFloatsInStrings can be set to use a regular expression to find floats
+	// that may be embedded in strings and replace them with rounded versions.
+	RoundFloatsInStrings bool
+
+	// RoundFloatsInStringsDecimalPlaces specifies the number of decimal places to round floats
+	// embedded in strings to and is only used if roundFloatsInStrings is true.
+	RoundFloatsInStringsDecimalPlaces int
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -619,6 +628,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
+		if ot.Flags.RoundFloatsInStrings {
+			return roundFloatsInString(ot.FormatExpr(e), ot.Flags.RoundFloatsInStringsDecimalPlaces)
+		}
 		return ot.FormatExpr(e)
 
 	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
@@ -881,9 +893,40 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 	return result, nil
 }
 
+func roundFloatsInString(s string, decimalPlaces int) string {
+	return string(regexp.MustCompile(`(\d+\.\d+)`).ReplaceAllFunc([]byte(s), func(x []byte) []byte {
+		f, err := strconv.ParseFloat(string(x), 64)
+		if err != nil {
+			return []byte(err.Error())
+		}
+		formatSpecifier := "%." + fmt.Sprintf("%dg", decimalPlaces)
+		return []byte(fmt.Sprintf(formatSpecifier, f))
+	}))
+}
+
 // Set parses an argument that refers to a flag.
 // See OptTester.RunCommand for supported flags.
 func (f *Flags) Set(arg datadriven.CmdArg) error {
+	if strings.HasPrefix(arg.Key, "round-in-strings") {
+		// Use 6 decimal places by default.
+		decimalPlaces := 6
+		re, err := regexp.Compile(`round-in-strings(-*)(\d*)`)
+		if err != nil {
+			return err
+		}
+		match := re.FindStringSubmatch(arg.Key)
+		if len(match) != 0 {
+			if match[2] != "" {
+				decimalPlaces, err = strconv.Atoi(match[2])
+				if err != nil {
+					return err
+				}
+			}
+		}
+		f.RoundFloatsInStrings = true
+		f.RoundFloatsInStringsDecimalPlaces = decimalPlaces
+		return nil
+	}
 	switch arg.Key {
 	case "set":
 		for _, val := range arg.Vals {
