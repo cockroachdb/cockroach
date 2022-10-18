@@ -1081,7 +1081,7 @@ ALTER TABLE t47742 INJECT STATISTICS '[
 ]'
 ----
 
-opt
+opt round-in-strings=5
 SELECT a, b::string FROM t47742 WHERE b = true
 ----
 project
@@ -1091,7 +1091,7 @@ project
  ├── fd: ()-->(6)
  ├── index-join t47742
  │    ├── columns: a:1(int) t47742.b:2(bool!null)
- │    ├── stats: [rows=3063.5, distinct(2)=1.00247, null(2)=0]
+ │    ├── stats: [rows=3063.5, distinct(2)=1.0025, null(2)=0]
  │    │   histogram(2)=  0    0    0.0024693 3063.5
  │    │                <--- false ----------- true
  │    ├── fd: ()-->(2)
