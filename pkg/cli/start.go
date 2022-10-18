@@ -388,6 +388,12 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		return err
 	}
 
+	// If any store has something to say against a server start-up
+	// (e.g. previously detected corruption), listen to them now.
+	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
+		return clierror.NewError(err, exit.FatalError())
+	}
+
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -424,12 +430,6 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, true /* isServerCmd */)
 	if err != nil {
 		return err
-	}
-
-	// If any store has something to say against a server start-up
-	// (e.g. previously detected corruption), listen to them now.
-	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
-		return clierror.NewError(err, exit.FatalError())
 	}
 	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
 
