@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestTypeAsString(t *testing.T) {
+func TestEvalAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -40,9 +40,9 @@ func TestTypeAsString(t *testing.T) {
 		{expr: tree.NewDInt(3), expectedErr: true},
 	}
 
-	t.Run("TypeAsString", func(t *testing.T) {
+	t.Run("EvalAsString", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsString(ctx, td.expr, "test")
+			s, err := p.EvalAsString(ctx, td.expr, "test")
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)
@@ -50,10 +50,6 @@ func TestTypeAsString(t *testing.T) {
 				continue
 			} else if td.expectedErr {
 				t.Fatal("expected error; got none")
-			}
-			s, err := fn()
-			if err != nil {
-				t.Fatal(err)
 			}
 			if s != td.expected {
 				t.Fatalf("expected %s; got %s", td.expected, s)
@@ -61,9 +57,9 @@ func TestTypeAsString(t *testing.T) {
 		}
 	})
 
-	t.Run("TypeAsStringArray", func(t *testing.T) {
+	t.Run("EvalAsStringArray", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsStringArray(ctx, []tree.Expr{td.expr, td.expr}, "test")
+			a, err := p.EvalAsStringArray(ctx, []tree.Expr{td.expr, td.expr}, "test")
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)
@@ -71,10 +67,6 @@ func TestTypeAsString(t *testing.T) {
 				continue
 			} else if td.expectedErr {
 				t.Fatal("expected error; got none")
-			}
-			a, err := fn()
-			if err != nil {
-				t.Fatal(err)
 			}
 			expected := []string{td.expected, td.expected}
 			if !reflect.DeepEqual(a, expected) {

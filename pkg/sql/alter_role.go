@@ -71,6 +71,27 @@ func (p *planner) AlterRole(ctx context.Context, n *tree.AlterRole) (planNode, e
 	return p.AlterRoleNode(ctx, n.Name, n.IfExists, n.IsRole, "ALTER ROLE", n.KVOptions)
 }
 
+func asStringOrNull(
+	ctx context.Context, p *planner,
+) func(e tree.Expr, op string) (func() (bool, string, error), error) {
+	return func(e tree.Expr, op string) (func() (bool, string, error), error) {
+		expr, err := tree.TypeCheckAndRequire(ctx, e, p.SemaCtx(), types.String, op)
+		if err != nil {
+			return nil, err
+		}
+		return func() (bool, string, error) {
+			got, err := eval.Expr(ctx, p.EvalContext(), expr)
+			if err != nil {
+				return false, "", err
+			}
+			if got == tree.DNull {
+				return true, "", nil
+			}
+			return false, string(*got.(*tree.DString)), nil
+		}, nil
+	}
+}
+
 func (p *planner) AlterRoleNode(
 	ctx context.Context,
 	roleSpec tree.RoleSpec,
@@ -87,10 +108,9 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 
-	asStringOrNull := func(e tree.Expr, op string) (func() (bool, string, error), error) {
-		return p.TypeAsStringOrNull(ctx, e, op)
-	}
-	roleOptions, err := kvOptions.ToRoleOptions(asStringOrNull, opName)
+	roleOptions, err := kvOptions.ToRoleOptions(
+		asStringOrNull(ctx, p), opName,
+	)
 	if err != nil {
 		return nil, err
 	}

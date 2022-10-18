@@ -38,12 +38,8 @@ func loadExternalConnections(
 	var rows []tree.Datums
 
 	if n.ConnectionLabel != nil {
-		externalConnectionName, err := params.p.TypeAsString(params.ctx, n.ConnectionLabel,
+		name, err := params.p.EvalAsString(params.ctx, n.ConnectionLabel,
 			externalConnectionOp)
-		if err != nil {
-			return nil, err
-		}
-		name, err := externalConnectionName()
 		if err != nil {
 			return nil, err
 		}
@@ -84,11 +80,7 @@ func (p *planner) ShowCreateExternalConnection(
 	// If the user is not admin, and is running a `SHOW CREATE EXTERNAL CONNECTION foo`
 	// check if the user is the owner of the object.
 	if !hasPrivileges && n.ConnectionLabel != nil {
-		externalConnectionName, err := p.TypeAsString(ctx, n.ConnectionLabel, externalConnectionOp)
-		if err != nil {
-			return nil, err
-		}
-		name, err := externalConnectionName()
+		name, err := p.EvalAsString(ctx, n.ConnectionLabel, externalConnectionOp)
 		if err != nil {
 			return nil, err
 		}

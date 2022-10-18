@@ -8640,7 +8640,7 @@ func TestRestorePauseOnError(t *testing.T) {
 	sqlDB.Exec(t, `DROP DATABASE r1`)
 
 	restoreQuery := `RESTORE DATABASE r1 FROM 'nodelocal://0/eventlogging' WITH DEBUG_PAUSE_ON = 'error'`
-	findJobQuery := `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%RESTORE DATABASE%' ORDER BY created DESC`
+	findJobQuery := `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%RESTORE DATABASE%' AND job_type = 'RESTORE' ORDER BY created DESC`
 
 	// Verify that a RESTORE job will self pause on an error, but can be resumed
 	// after the source of error is fixed.

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,12 +50,12 @@ const (
 	optUpdatesLastBackupMetric = "updates_cluster_last_backup_time_metric"
 )
 
-var scheduledBackupOptionExpectValues = map[string]sql.KVStringOptValidate{
-	optFirstRun:                sql.KVStringOptRequireValue,
-	optOnExecFailure:           sql.KVStringOptRequireValue,
-	optOnPreviousRunning:       sql.KVStringOptRequireValue,
-	optIgnoreExistingBackups:   sql.KVStringOptRequireNoValue,
-	optUpdatesLastBackupMetric: sql.KVStringOptRequireNoValue,
+var scheduledBackupOptionExpectValues = map[string]evalexpr.KVStringOptValidate{
+	optFirstRun:                evalexpr.KVStringOptRequireValue,
+	optOnExecFailure:           evalexpr.KVStringOptRequireValue,
+	optOnPreviousRunning:       evalexpr.KVStringOptRequireValue,
+	optIgnoreExistingBackups:   evalexpr.KVStringOptRequireNoValue,
+	optUpdatesLastBackupMetric: evalexpr.KVStringOptRequireNoValue,
 }
 
 // scheduledBackupGCProtectionEnabled is used to enable and disable the chaining
@@ -66,27 +67,27 @@ var scheduledBackupGCProtectionEnabled = settings.RegisterBoolSetting(
 	true, /* defaultValue */
 ).WithPublic()
 
-// scheduledBackupEval is a representation of tree.ScheduledBackup, prepared
+// scheduledBackupSpec is a representation of tree.ScheduledBackup, prepared
 // for evaluation
-type scheduledBackupEval struct {
+type scheduledBackupSpec struct {
 	*tree.ScheduledBackup
 
 	isEnterpriseUser bool
 
 	// Schedule specific properties that get evaluated.
-	scheduleLabel        func() (string, error)
-	recurrence           func() (string, error)
-	fullBackupRecurrence func() (string, error)
-	scheduleOpts         func() (map[string]string, error)
+	scheduleLabel        *string
+	recurrence           *string
+	fullBackupRecurrence *string
+	scheduleOpts         map[string]string
 
 	// Backup specific properties that get evaluated.
 	// We need to evaluate anything in the tree.Backup node that allows
 	// placeholders to be specified so that we store evaluated
 	// backup statement in the schedule.
-	destination          func() ([]string, error)
-	encryptionPassphrase func() (string, error)
-	kmsURIs              func() ([]string, error)
-	incrementalStorage   func() ([]string, error)
+	destinations         []string
+	encryptionPassphrase *string
+	kmsURIs              []string
+	incrementalStorage   []string
 }
 
 func parseOnError(onError string, details *jobspb.ScheduleDetails) error {
@@ -199,17 +200,11 @@ func frequencyFromCron(now time.Time, cronStr string) (time.Duration, error) {
 	return expr.Next(nextRun).Sub(nextRun), nil
 }
 
-func computeScheduleRecurrence(
-	now time.Time, evalFn func() (string, error),
-) (*scheduleRecurrence, error) {
-	if evalFn == nil {
+func computeScheduleRecurrence(now time.Time, rec *string) (*scheduleRecurrence, error) {
+	if rec == nil {
 		return neverRecurs, nil
 	}
-	cronStr, err := evalFn()
-	if err != nil {
-		return nil, err
-	}
-
+	cronStr := *rec
 	frequency, err := frequencyFromCron(now, cronStr)
 	if err != nil {
 		return nil, err
@@ -248,22 +243,17 @@ const scheduleBackupOp = "CREATE SCHEDULE FOR BACKUP"
 // doCreateBackupSchedule creates requested schedule (or schedules).
 // It is a plan hook implementation responsible for the creating of scheduled backup.
 func doCreateBackupSchedules(
-	ctx context.Context, p sql.PlanHookState, eval *scheduledBackupEval, resultsCh chan<- tree.Datums,
+	ctx context.Context, p sql.PlanHookState, eval *scheduledBackupSpec, resultsCh chan<- tree.Datums,
 ) error {
 	if eval.ScheduleLabelSpec.IfNotExists {
-		scheduleLabel, err := eval.scheduleLabel()
-		if err != nil {
-			return err
-		}
-
-		exists, err := checkScheduleAlreadyExists(ctx, p, scheduleLabel)
+		exists, err := checkScheduleAlreadyExists(ctx, p, *eval.scheduleLabel)
 		if err != nil {
 			return err
 		}
 
 		if exists {
 			p.BufferClientNotice(ctx,
-				pgnotice.Newf("schedule %q already exists, skipping", scheduleLabel),
+				pgnotice.Newf("schedule %q already exists, skipping", eval.scheduleLabel),
 			)
 			return nil
 		}
@@ -314,34 +304,22 @@ func doCreateBackupSchedules(
 
 	// Evaluate encryption passphrase if set.
 	if eval.encryptionPassphrase != nil {
-		pw, err := eval.encryptionPassphrase()
-		if err != nil {
-			return errors.Wrapf(err, "failed to evaluate backup encryption_passphrase")
-		}
-		backupNode.Options.EncryptionPassphrase = tree.NewStrVal(pw)
+		backupNode.Options.EncryptionPassphrase = tree.NewStrVal(
+			*eval.encryptionPassphrase,
+		)
 	}
 
 	// Evaluate encryption KMS URIs if set.
 	// Only one of encryption passphrase and KMS URI should be set, but this check
 	// is done during backup planning so we do not need to worry about it here.
 	var kmsURIs []string
-	if eval.kmsURIs != nil {
-		kmsURIs, err = eval.kmsURIs()
-		if err != nil {
-			return errors.Wrapf(err, "failed to evaluate backup kms_uri")
-		}
-		for _, kmsURI := range kmsURIs {
-			backupNode.Options.EncryptionKMSURI = append(backupNode.Options.EncryptionKMSURI,
-				tree.NewStrVal(kmsURI))
-		}
+	for _, kmsURI := range eval.kmsURIs {
+		backupNode.Options.EncryptionKMSURI = append(backupNode.Options.EncryptionKMSURI,
+			tree.NewStrVal(kmsURI))
 	}
 
 	// Evaluate required backup destinations.
-	destinations, err := eval.destination()
-	if err != nil {
-		return errors.Wrapf(err, "failed to evaluate backup destination paths")
-	}
-
+	destinations := eval.destinations
 	for _, dest := range destinations {
 		backupNode.To = append(backupNode.To, tree.NewStrVal(dest))
 	}
@@ -357,19 +335,12 @@ func doCreateBackupSchedules(
 
 	var scheduleLabel string
 	if eval.scheduleLabel != nil {
-		label, err := eval.scheduleLabel()
-		if err != nil {
-			return err
-		}
-		scheduleLabel = label
+		scheduleLabel = *eval.scheduleLabel
 	} else {
 		scheduleLabel = fmt.Sprintf("BACKUP %d", env.Now().Unix())
 	}
 
-	scheduleOptions, err := eval.scheduleOpts()
-	if err != nil {
-		return err
-	}
+	scheduleOptions := eval.scheduleOpts
 
 	// Check if backups were already taken to this collection.
 	_, ignoreExisting := scheduleOptions[optIgnoreExistingBackups]
@@ -415,10 +386,7 @@ func doCreateBackupSchedules(
 
 		var incDests []string
 		if eval.incrementalStorage != nil {
-			incDests, err = eval.incrementalStorage()
-			if err != nil {
-				return err
-			}
+			incDests = eval.incrementalStorage
 			for _, incDest := range incDests {
 				backupNode.Options.IncrementalStorage = append(backupNode.Options.IncrementalStorage, tree.NewStrVal(incDest))
 			}
@@ -758,11 +726,11 @@ func fullyQualifyScheduledBackupTargetTables(
 	return fqTablePatterns, nil
 }
 
-// makeScheduleBackupEval prepares helper scheduledBackupEval struct to assist in evaluation
+// makeScheduleBackupSpec prepares helper scheduledBackupSpec struct to assist in evaluation
 // of various schedule and backup specific components.
-func makeScheduledBackupEval(
+func makeScheduledBackupSpec(
 	ctx context.Context, p sql.PlanHookState, schedule *tree.ScheduledBackup,
-) (*scheduledBackupEval, error) {
+) (*scheduledBackupSpec, error) {
 	var err error
 	if schedule.Targets != nil && schedule.Targets.Tables.TablePatterns != nil {
 		// Table backup targets must be fully qualified during scheduled backup
@@ -776,46 +744,50 @@ func makeScheduledBackupEval(
 		}
 	}
 
-	eval := &scheduledBackupEval{ScheduledBackup: schedule}
+	spec := &scheduledBackupSpec{ScheduledBackup: schedule}
 
 	if schedule.ScheduleLabelSpec.Label != nil {
-		eval.scheduleLabel, err = p.TypeAsString(ctx, schedule.ScheduleLabelSpec.Label, scheduleBackupOp)
+		label, err := p.EvalAsString(ctx, schedule.ScheduleLabelSpec.Label, scheduleBackupOp)
 		if err != nil {
 			return nil, err
 		}
+		spec.scheduleLabel = &label
 	}
 
 	if schedule.Recurrence == nil {
 		// Sanity check: recurrence must be specified.
 		return nil, errors.New("RECURRING clause required")
 	}
-
-	eval.recurrence, err = p.TypeAsString(ctx, schedule.Recurrence, scheduleBackupOp)
-	if err != nil {
-		return nil, err
+	{
+		rec, err := p.EvalAsString(ctx, schedule.Recurrence, scheduleBackupOp)
+		if err != nil {
+			return nil, err
+		}
+		spec.recurrence = &rec
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
 		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
 		"BACKUP INTO LATEST")
-	eval.isEnterpriseUser = enterpriseCheckErr == nil
+	spec.isEnterpriseUser = enterpriseCheckErr == nil
 
-	if eval.isEnterpriseUser && schedule.FullBackup != nil {
+	if spec.isEnterpriseUser && schedule.FullBackup != nil {
 		if schedule.FullBackup.AlwaysFull {
-			eval.fullBackupRecurrence = eval.recurrence
-			eval.recurrence = nil
+			spec.fullBackupRecurrence = spec.recurrence
+			spec.recurrence = nil
 		} else {
-			eval.fullBackupRecurrence, err = p.TypeAsString(
+			rec, err := p.EvalAsString(
 				ctx, schedule.FullBackup.Recurrence, scheduleBackupOp)
 			if err != nil {
 				return nil, err
 			}
+			spec.fullBackupRecurrence = &rec
 		}
-	} else if !eval.isEnterpriseUser {
+	} else if !spec.isEnterpriseUser {
 		if schedule.FullBackup == nil || schedule.FullBackup.AlwaysFull {
 			// All backups are full cluster backups for free users.
-			eval.fullBackupRecurrence = eval.recurrence
-			eval.recurrence = nil
+			spec.fullBackupRecurrence = spec.recurrence
+			spec.recurrence = nil
 			if schedule.FullBackup == nil {
 				p.BufferClientNotice(ctx,
 					pgnotice.Newf("Without an enterprise license,"+
@@ -828,40 +800,41 @@ func makeScheduledBackupEval(
 		}
 	}
 
-	eval.scheduleOpts, err = p.TypeAsStringOpts(
+	spec.scheduleOpts, err = p.EvalAsStringOpts(
 		ctx, schedule.ScheduleOptions, scheduledBackupOptionExpectValues)
 	if err != nil {
 		return nil, err
 	}
 
-	eval.destination, err = p.TypeAsStringArray(ctx, tree.Exprs(schedule.To), scheduleBackupOp)
+	spec.destinations, err = p.EvalAsStringArray(ctx, tree.Exprs(schedule.To), scheduleBackupOp)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "failed to evaluate backup destination paths")
 	}
 	if schedule.BackupOptions.EncryptionPassphrase != nil {
-		eval.encryptionPassphrase, err =
-			p.TypeAsString(ctx, schedule.BackupOptions.EncryptionPassphrase, scheduleBackupOp)
+		passphrase, err :=
+			p.EvalAsString(ctx, schedule.BackupOptions.EncryptionPassphrase, scheduleBackupOp)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to evaluate backup encryption_passphrase")
 		}
+		spec.encryptionPassphrase = &passphrase
 	}
 
 	if schedule.BackupOptions.EncryptionKMSURI != nil {
-		eval.kmsURIs, err = p.TypeAsStringArray(ctx, tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
+		spec.kmsURIs, err = p.EvalAsStringArray(ctx, tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
 			scheduleBackupOp)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "failed to evaluate backup kms_uri")
 		}
 	}
 	if schedule.BackupOptions.IncrementalStorage != nil {
-		eval.incrementalStorage, err = p.TypeAsStringArray(ctx,
+		spec.incrementalStorage, err = p.EvalAsStringArray(ctx,
 			tree.Exprs(schedule.BackupOptions.IncrementalStorage),
 			scheduleBackupOp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return eval, nil
+	return spec, nil
 }
 
 // scheduledBackupHeader is the header for "CREATE SCHEDULE..." statements results.
@@ -914,6 +887,38 @@ func collectScheduledBackupTelemetry(
 	logCreateScheduleTelemetry(ctx, incRecurrence, fullRecurrence, firstRun, ignoreExisting, details, backupEvent)
 }
 
+func createBackupScheduleTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	schedule, ok := stmt.(*tree.ScheduledBackup)
+	if !ok {
+		return false, nil, nil
+	}
+	stringExprs := evalexpr.Strings{
+		schedule.ScheduleLabelSpec.Label,
+		schedule.Recurrence,
+		schedule.BackupOptions.EncryptionPassphrase,
+	}
+	if schedule.FullBackup != nil {
+		stringExprs = append(stringExprs, schedule.FullBackup.Recurrence)
+	}
+	opts := evalexpr.KVOptions{
+		KVOptions:  schedule.ScheduleOptions,
+		Validation: scheduledBackupOptionExpectValues,
+	}
+	stringArrays := evalexpr.StringArrays{
+		tree.Exprs(schedule.To),
+		tree.Exprs(schedule.BackupOptions.EncryptionKMSURI),
+		tree.Exprs(schedule.BackupOptions.IncrementalStorage),
+	}
+	if err := evalexpr.TypeCheck(
+		ctx, scheduleBackupOp, p.SemaCtx(), stringExprs, stringArrays, opts,
+	); err != nil {
+		return false, nil, err
+	}
+	return true, scheduledBackupHeader, nil
+}
+
 func createBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
@@ -922,7 +927,7 @@ func createBackupScheduleHook(
 		return nil, nil, nil, false, nil
 	}
 
-	eval, err := makeScheduledBackupEval(ctx, p, schedule)
+	eval, err := makeScheduledBackupSpec(ctx, p, schedule)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -940,5 +945,7 @@ func createBackupScheduleHook(
 }
 
 func init() {
-	sql.AddPlanHook("schedule backup", createBackupScheduleHook)
+	sql.AddPlanHook(
+		"schedule backup", createBackupScheduleHook, createBackupScheduleTypeCheck,
+	)
 }

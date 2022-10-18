@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 	pbtypes "github.com/gogo/protobuf/types"
@@ -39,7 +40,7 @@ type scheduleDetails struct {
 }
 
 func loadSchedules(
-	ctx context.Context, p sql.PlanHookState, eval *alterBackupScheduleEval,
+	ctx context.Context, p sql.PlanHookState, eval *alterBackupScheduleSpec,
 ) (scheduleDetails, error) {
 	scheduleID := eval.scheduleID
 	s := scheduleDetails{}
@@ -105,7 +106,7 @@ func loadSchedules(
 func doAlterBackupSchedules(
 	ctx context.Context,
 	p sql.PlanHookState,
-	eval *alterBackupScheduleEval,
+	eval *alterBackupScheduleSpec,
 	resultsCh chan<- tree.Datums,
 ) error {
 	s, err := loadSchedules(ctx, p, eval)
@@ -239,15 +240,12 @@ func emitAlteredSchedule(
 }
 
 func processScheduleOptions(
-	ctx context.Context, p sql.PlanHookState, eval *alterBackupScheduleEval, s scheduleDetails,
+	ctx context.Context, p sql.PlanHookState, eval *alterBackupScheduleSpec, s scheduleDetails,
 ) error {
 	if eval.scheduleOptions == nil {
 		return nil
 	}
-	scheduleOptions, err := eval.scheduleOptions()
-	if err != nil {
-		return err
-	}
+	scheduleOptions := eval.scheduleOptions
 	fullDetails := s.fullJob.ScheduleDetails()
 	var incDetails *jobspb.ScheduleDetails
 	if s.incJob != nil {
@@ -305,7 +303,7 @@ func processScheduleOptions(
 	return nil
 }
 
-func processOptions(eval *alterBackupScheduleEval, s scheduleDetails) error {
+func processOptions(eval *alterBackupScheduleSpec, s scheduleDetails) error {
 	opts := eval.backupOptions
 	fullOpts := &s.fullStmt.Options
 	if err := processOptionsForArgs(opts, fullOpts); err != nil {
@@ -352,21 +350,17 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 }
 
 func processRecurrence(
-	recurrence func() (string, error), fullJob *jobs.ScheduledJob, incJob *jobs.ScheduledJob,
+	recurrence string, fullJob *jobs.ScheduledJob, incJob *jobs.ScheduledJob,
 ) error {
-	if recurrence == nil {
+	if recurrence == "" {
 		return nil
 	}
-	recurrenceStr, err := recurrence()
-	if err != nil {
-		return err
-	}
 	if incJob != nil {
-		if err := incJob.SetSchedule(recurrenceStr); err != nil {
+		if err := incJob.SetSchedule(recurrence); err != nil {
 			return err
 		}
 	} else {
-		if err := fullJob.SetSchedule(recurrenceStr); err != nil {
+		if err := fullJob.SetSchedule(recurrence); err != nil {
 			return err
 		}
 	}
@@ -377,13 +371,13 @@ func processFullBackupRecurrence(
 	ctx context.Context,
 	p sql.PlanHookState,
 	fullBackupAlways bool,
-	fullBackupRecurrence func() (string, error),
+	fullBackupRecurrence string,
 	isEnterpriseUser bool,
 	s scheduleDetails,
 ) (scheduleDetails, error) {
 	var err error
 
-	if !fullBackupAlways && fullBackupRecurrence == nil {
+	if !fullBackupAlways && fullBackupRecurrence == "" {
 		return s, nil
 	}
 
@@ -422,10 +416,8 @@ func processFullBackupRecurrence(
 		*s.incStmt = *s.fullStmt
 		s.incStmt.AppendToLatest = true
 
-		scheduleExprFn := func() (string, error) {
-			return s.fullJob.ScheduleExpr(), nil
-		}
-		incRecurrence, err := computeScheduleRecurrence(env.Now(), scheduleExprFn)
+		rec := s.fullJob.ScheduleExpr()
+		incRecurrence, err := computeScheduleRecurrence(env.Now(), &rec)
 		if err != nil {
 			return scheduleDetails{}, err
 		}
@@ -468,12 +460,7 @@ func processFullBackupRecurrence(
 	}
 	// We have an incremental backup at this point.
 	// Make no (further) changes, and just edit the cadence on the full.
-
-	fullBackupRecurrenceStr, err := fullBackupRecurrence()
-	if err != nil {
-		return scheduleDetails{}, err
-	}
-	if err := s.fullJob.SetSchedule(fullBackupRecurrenceStr); err != nil {
+	if err := s.fullJob.SetSchedule(fullBackupRecurrence); err != nil {
 		return scheduleDetails{}, err
 	}
 
@@ -509,32 +496,25 @@ func validateFullIncrementalFrequencies(p sql.PlanHookState, s scheduleDetails) 
 	return nil
 }
 
-func processLabel(eval *alterBackupScheduleEval, s scheduleDetails) error {
-	if eval.label == nil {
+func processLabel(eval *alterBackupScheduleSpec, s scheduleDetails) error {
+	if eval.label == "" {
 		return nil
 	}
-	label, err := eval.label()
-	if err != nil {
-		return err
-	}
-	s.fullJob.SetScheduleLabel(label)
+	s.fullJob.SetScheduleLabel(eval.label)
 	if s.incJob == nil {
 		return nil
 	}
-	s.incJob.SetScheduleLabel(label)
+	s.incJob.SetScheduleLabel(eval.label)
 	return nil
 }
 
-func processInto(p sql.PlanHookState, eval *alterBackupScheduleEval, s scheduleDetails) error {
+func processInto(p sql.PlanHookState, eval *alterBackupScheduleSpec, s scheduleDetails) error {
 	if eval.into == nil {
 		return nil
 	}
-	into, err := eval.into()
-	if err != nil {
-		return err
-	}
+	into := eval.into
 	s.fullStmt.To = make([]tree.Expr, len(into))
-	for i, dest := range into {
+	for i, dest := range eval.into {
 		s.fullStmt.To[i] = tree.NewStrVal(dest)
 	}
 
@@ -561,25 +541,26 @@ func processInto(p sql.PlanHookState, eval *alterBackupScheduleEval, s scheduleD
 	return nil
 }
 
-type alterBackupScheduleEval struct {
+type alterBackupScheduleSpec struct {
 	// Schedule specific properties that get evaluated.
 	scheduleID           uint64
-	recurrence           func() (string, error)
-	fullBackupRecurrence func() (string, error)
+	recurrence           string
+	fullBackupRecurrence string
 	fullBackupAlways     bool
 	isEnterpriseUser     bool
-	label                func() (string, error)
-	into                 func() ([]string, error)
+	label                string
+	into                 []string
 	backupOptions        tree.BackupOptions
-	scheduleOptions      func() (map[string]string, error)
+	scheduleOptions      map[string]string
 }
 
-// makeScheduleBackupEval prepares helper scheduledBackupEval struct to assist in evaluation
-// of various schedule and backup specific components.
-func makeAlterBackupScheduleEval(
+// makeAlterBackupScheduleSpec construct alterBackupScheduleSpec struct to assist
+// by evaluating the various parameter for the schedule and backup specific
+// components.
+func makeAlterBackupScheduleSpec(
 	ctx context.Context, p sql.PlanHookState, alterStmt *tree.AlterBackupSchedule,
-) (*alterBackupScheduleEval, error) {
-	eval := &alterBackupScheduleEval{
+) (*alterBackupScheduleSpec, error) {
+	eval := &alterBackupScheduleSpec{
 		scheduleID: alterStmt.ScheduleID,
 	}
 	var err error
@@ -602,23 +583,23 @@ func makeAlterBackupScheduleEval(
 			if typedCmd.FullBackup.AlwaysFull {
 				eval.fullBackupAlways = true
 			} else {
-				eval.fullBackupRecurrence, err = p.TypeAsString(ctx, typedCmd.FullBackup.Recurrence, alterBackupScheduleOp)
+				eval.fullBackupRecurrence, err = p.EvalAsString(ctx, typedCmd.FullBackup.Recurrence, alterBackupScheduleOp)
 			}
 		case *tree.AlterBackupScheduleSetRecurring:
 			if err := observe("SET RECURRING"); err != nil {
 				return nil, err
 			}
-			eval.recurrence, err = p.TypeAsString(ctx, typedCmd.Recurrence, alterBackupScheduleOp)
+			eval.recurrence, err = p.EvalAsString(ctx, typedCmd.Recurrence, alterBackupScheduleOp)
 		case *tree.AlterBackupScheduleSetLabel:
 			if err := observe("SET LABEL"); err != nil {
 				return nil, err
 			}
-			eval.label, err = p.TypeAsString(ctx, typedCmd.Label, alterBackupScheduleOp)
+			eval.label, err = p.EvalAsString(ctx, typedCmd.Label, alterBackupScheduleOp)
 		case *tree.AlterBackupScheduleSetInto:
 			if err := observe("SET INTO"); err != nil {
 				return nil, err
 			}
-			eval.into, err = p.TypeAsStringArray(ctx, tree.Exprs(typedCmd.Into), alterBackupScheduleOp)
+			eval.into, err = p.EvalAsStringArray(ctx, tree.Exprs(typedCmd.Into), alterBackupScheduleOp)
 		case *tree.AlterBackupScheduleSetWith:
 			if typedCmd.With.Detached != nil {
 				err = errors.Newf("DETACHED is required for scheduled backups and cannot be altered")
@@ -633,17 +614,13 @@ func makeAlterBackupScheduleEval(
 		if err != nil {
 			return nil, err
 		}
-		// TODO(benbardin): Block duplicate schedule options if possible.
-		eval.scheduleOptions, err = p.TypeAsStringOpts(ctx, scheduleOptions, map[string]sql.KVStringOptValidate{
-			// optFirstRun and optIgnoreExistingBackups excluded here, as they don't
-			// make much sense in the context of ALTER.
-			optOnExecFailure:           sql.KVStringOptAny,
-			optOnPreviousRunning:       sql.KVStringOptAny,
-			optUpdatesLastBackupMetric: sql.KVStringOptAny,
-		})
-		if err != nil {
-			return nil, err
-		}
+	}
+	// TODO(benbardin): Block duplicate schedule options if possible.
+	eval.scheduleOptions, err = p.EvalAsStringOpts(
+		ctx, scheduleOptions, alterBackupScheduleOptions,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
@@ -654,6 +631,52 @@ func makeAlterBackupScheduleEval(
 	return eval, nil
 }
 
+var alterBackupScheduleOptions = evalexpr.KVOptionValidationMap{
+	// optFirstRun and optIgnoreExistingBackups excluded here, as they don't
+	// make much sense in the context of ALTER.
+	optOnExecFailure:           evalexpr.KVStringOptAny,
+	optOnPreviousRunning:       evalexpr.KVStringOptAny,
+	optUpdatesLastBackupMetric: evalexpr.KVStringOptAny,
+}
+
+func alterBackupScheduleTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	alterStmt, ok := stmt.(*tree.AlterBackupSchedule)
+	if !ok {
+		return false, nil, nil
+	}
+	var strings evalexpr.Strings
+	var stringArrays evalexpr.StringArrays
+	var opts tree.KVOptions
+	for _, cmd := range alterStmt.Cmds {
+		switch typedCmd := cmd.(type) {
+		case *tree.AlterBackupScheduleSetFullBackup:
+			strings = append(strings, typedCmd.FullBackup.Recurrence)
+		case *tree.AlterBackupScheduleSetRecurring:
+			strings = append(strings, typedCmd.Recurrence)
+		case *tree.AlterBackupScheduleSetLabel:
+			strings = append(strings, typedCmd.Label)
+		case *tree.AlterBackupScheduleSetInto:
+			stringArrays = append(stringArrays, tree.Exprs(typedCmd.Into))
+		case *tree.AlterBackupScheduleSetWith:
+
+		case *tree.AlterBackupScheduleSetScheduleOption:
+			opts = append(opts, typedCmd.Option)
+		}
+	}
+	if err := evalexpr.TypeCheck(
+		ctx, alterBackupScheduleOp, p.SemaCtx(),
+		strings, stringArrays, evalexpr.KVOptions{
+			KVOptions:  opts,
+			Validation: alterBackupScheduleOptions,
+		},
+	); err != nil {
+		return false, nil, err
+	}
+	return true, scheduledBackupHeader, nil
+}
+
 func alterBackupScheduleHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
@@ -662,7 +685,7 @@ func alterBackupScheduleHook(
 		return nil, nil, nil, false, nil
 	}
 
-	eval, err := makeAlterBackupScheduleEval(ctx, p, alterScheduleStmt)
+	eval, err := makeAlterBackupScheduleSpec(ctx, p, alterScheduleStmt)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -680,5 +703,5 @@ func alterBackupScheduleHook(
 }
 
 func init() {
-	sql.AddPlanHook("schedule backup", alterBackupScheduleHook)
+	sql.AddPlanHook("schedule backup", alterBackupScheduleHook, alterBackupScheduleTypeCheck)
 }

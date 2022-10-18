@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -72,7 +73,7 @@ var featureChangefeedEnabled = settings.RegisterBoolSetting(
 ).WithPublic()
 
 func init() {
-	sql.AddPlanHook("changefeed", changefeedPlanHook)
+	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)
 	jobs.RegisterConstructor(
 		jobspb.TypeChangefeed,
 		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
@@ -99,6 +100,40 @@ func getChangefeedStatement(stmt tree.Statement) *annotatedChangefeedStatement {
 	}
 }
 
+var (
+	sinklessHeader = colinfo.ResultColumns{
+		{Name: "table", Typ: types.String},
+		{Name: "key", Typ: types.Bytes},
+		{Name: "value", Typ: types.Bytes},
+	}
+	withSinkHeader = colinfo.ResultColumns{
+		{Name: "job_id", Typ: types.Int},
+	}
+)
+
+func changefeedTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	changefeedStmt := getChangefeedStatement(stmt)
+	if changefeedStmt == nil {
+		return false, nil, nil
+	}
+	if err := evalexpr.TypeCheck(ctx, `CREATE CHANGEFEED`, p.SemaCtx(),
+		evalexpr.Strings{changefeedStmt.SinkURI},
+		&evalexpr.KVOptions{
+			KVOptions:  changefeedStmt.Options,
+			Validation: changefeedvalidators.CreateOptionValidations,
+		},
+	); err != nil {
+		return false, nil, err
+	}
+	unspecifiedSink := changefeedStmt.SinkURI == nil
+	if unspecifiedSink {
+		return true, sinklessHeader, nil
+	}
+	return true, withSinkHeader, nil
+}
+
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -108,11 +143,11 @@ func changefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	var sinkURIFn func() (string, error)
-	var header colinfo.ResultColumns
+	var sinkURI string
 	unspecifiedSink := changefeedStmt.SinkURI == nil
-	avoidBuffering := false
+	avoidBuffering := unspecifiedSink
 
+	var header colinfo.ResultColumns
 	if unspecifiedSink {
 		// An unspecified sink triggers a fairly radical change in behavior.
 		// Instead of setting up a system.job to emit to a sink in the
@@ -121,25 +156,18 @@ func changefeedPlanHook(
 		// over pgwire. The types of these rows are `(topic STRING, key BYTES,
 		// value BYTES)` and they correspond exactly to what would be emitted to
 		// a sink.
-		sinkURIFn = func() (string, error) { return ``, nil }
-		header = colinfo.ResultColumns{
-			{Name: "table", Typ: types.String},
-			{Name: "key", Typ: types.Bytes},
-			{Name: "value", Typ: types.Bytes},
-		}
 		avoidBuffering = true
+		header = sinklessHeader
 	} else {
 		var err error
-		sinkURIFn, err = p.TypeAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
+		sinkURI, err = p.EvalAsString(ctx, changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, false, changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
 		}
-		header = colinfo.ResultColumns{
-			{Name: "job_id", Typ: types.Int},
-		}
+		header = withSinkHeader
 	}
 
-	optsFn, err := p.TypeAsStringOpts(ctx, changefeedStmt.Options, changefeedvalidators.CreateOptionValidations)
+	rawOpts, err := p.EvalAsStringOpts(ctx, changefeedStmt.Options, changefeedvalidators.CreateOptionValidations)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -153,21 +181,12 @@ func changefeedPlanHook(
 			return err
 		}
 
-		sinkURI, err := sinkURIFn()
-		if err != nil {
-			return changefeedbase.MarkTaggedError(err, changefeedbase.UserInput)
-		}
-
 		if !unspecifiedSink && sinkURI == `` {
 			// Error if someone specifies an INTO with the empty string. We've
 			// already sent the wrong result column headers.
 			return errors.New(`omit the SINK clause for inline results`)
 		}
 
-		rawOpts, err := optsFn()
-		if err != nil {
-			return err
-		}
 		opts := changefeedbase.MakeStatementOptions(rawOpts)
 
 		jr, err := createChangefeedJobRecord(

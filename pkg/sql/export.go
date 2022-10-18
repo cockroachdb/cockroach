@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -83,13 +84,13 @@ const (
 	parquetSuffix         = "parquet"
 )
 
-var exportOptionExpectValues = map[string]KVStringOptValidate{
-	exportOptionChunkRows:   KVStringOptRequireValue,
-	exportOptionDelimiter:   KVStringOptRequireValue,
-	exportOptionFileName:    KVStringOptRequireValue,
-	exportOptionNullAs:      KVStringOptRequireValue,
-	exportOptionCompression: KVStringOptRequireValue,
-	exportOptionChunkSize:   KVStringOptRequireValue,
+var exportOptionExpectValues = map[string]evalexpr.KVStringOptValidate{
+	exportOptionChunkRows:   evalexpr.KVStringOptRequireValue,
+	exportOptionDelimiter:   evalexpr.KVStringOptRequireValue,
+	exportOptionFileName:    evalexpr.KVStringOptRequireValue,
+	exportOptionNullAs:      evalexpr.KVStringOptRequireValue,
+	exportOptionCompression: evalexpr.KVStringOptRequireValue,
+	exportOptionChunkSize:   evalexpr.KVStringOptRequireValue,
 }
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.

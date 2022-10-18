@@ -56,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -917,6 +918,39 @@ func restoreJobDescription(
 	return tree.AsStringWithFQNames(r, ann), nil
 }
 
+func restoreTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	restoreStmt, ok := stmt.(*tree.Restore)
+	if !ok {
+		return false, nil, nil
+	}
+	if err := evalexpr.TypeCheck(
+		ctx, "RESTORE", p.SemaCtx(),
+		append(
+			evalexpr.MakeStringArraysFromOptList(restoreStmt.From),
+			tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
+			tree.Exprs(restoreStmt.Options.IncrementalStorage),
+		),
+		evalexpr.Strings{
+			restoreStmt.Subdir,
+			restoreStmt.Options.EncryptionPassphrase,
+			restoreStmt.Options.IntoDB,
+			restoreStmt.Options.NewDBName,
+			restoreStmt.Options.AsTenant,
+			restoreStmt.Options.DebugPauseOn,
+		},
+	); err != nil {
+		return false, nil, err
+	}
+	if restoreStmt.Options.Detached {
+		header = jobs.DetachedJobExecutionResultHeader
+	} else {
+		header = jobs.BulkJobExecutionResultHeader
+	}
+	return true, header, nil
+}
+
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -945,50 +979,53 @@ func restorePlanHook(
 			errors.New("to set the verify_backup_table_data option, the schema_only option must be set")
 	}
 
-	fromFns := make([]func() ([]string, error), len(restoreStmt.From))
-	for i := range restoreStmt.From {
-		fromFn, err := p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.From[i]), "RESTORE")
+	from := make([][]string, len(restoreStmt.From))
+	for i, expr := range restoreStmt.From {
+		v, err := p.EvalAsStringArray(ctx, tree.Exprs(expr), "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
-		fromFns[i] = fromFn
+		from[i] = v
 	}
 
-	var pwFn func() (string, error)
-	var err error
+	var pw string
 	if restoreStmt.Options.EncryptionPassphrase != nil {
-		pwFn, err = p.TypeAsString(ctx, restoreStmt.Options.EncryptionPassphrase, "RESTORE")
+		var err error
+		pw, err = p.EvalAsString(ctx, restoreStmt.Options.EncryptionPassphrase, "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	var kmsFn func() ([]string, error)
+	var kms []string
 	if restoreStmt.Options.DecryptionKMSURI != nil {
 		if restoreStmt.Options.EncryptionPassphrase != nil {
 			return nil, nil, nil, false, errors.New("cannot have both encryption_passphrase and kms option set")
 		}
-		kmsFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
+		var err error
+		kms, err = p.EvalAsStringArray(ctx, tree.Exprs(restoreStmt.Options.DecryptionKMSURI),
 			"RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	var intoDBFn func() (string, error)
+	var intoDB string
 	if restoreStmt.Options.IntoDB != nil {
 		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
 			return nil, nil, nil, false, errors.New("cannot set into_db option when only restoring system users")
 		}
-		intoDBFn, err = p.TypeAsString(ctx, restoreStmt.Options.IntoDB, "RESTORE")
+		var err error
+		intoDB, err = p.EvalAsString(ctx, restoreStmt.Options.IntoDB, "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	subdirFn := func() (string, error) { return "", nil }
+	var subdir string
 	if restoreStmt.Subdir != nil {
-		subdirFn, err = p.TypeAsString(ctx, restoreStmt.Subdir, "RESTORE")
+		var err error
+		subdir, err = p.EvalAsString(ctx, restoreStmt.Subdir, "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -1001,38 +1038,40 @@ func restorePlanHook(
 				"https://www.cockroachlabs.com/docs/stable/restore.html#view-the-backup-subdirectories"))
 	}
 
-	var incStorageFn func() ([]string, error)
+	var incStorage []string
 	if restoreStmt.Options.IncrementalStorage != nil {
 		if restoreStmt.Subdir == nil {
-			err = errors.New("incremental_location can only be used with the following" +
+			err := errors.New("incremental_location can only be used with the following" +
 				" syntax: 'RESTORE [target] FROM [subdirectory] IN [destination]'")
 			return nil, nil, nil, false, err
 		}
-		incStorageFn, err = p.TypeAsStringArray(ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
+		var err error
+		incStorage, err = p.EvalAsStringArray(ctx, tree.Exprs(restoreStmt.Options.IncrementalStorage),
 			"RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	var newDBNameFn func() (string, error)
+	var newDBName string
 	if restoreStmt.Options.NewDBName != nil {
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors ||
 			len(restoreStmt.Targets.Databases) != 1 {
-			err = errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
+			err := errors.New("new_db_name can only be used for RESTORE DATABASE with a single target" +
 				" database")
 			return nil, nil, nil, false, err
 		}
 		if restoreStmt.DescriptorCoverage == tree.SystemUsers {
 			return nil, nil, nil, false, errors.New("cannot set new_db_name option when only restoring system users")
 		}
-		newDBNameFn, err = p.TypeAsString(ctx, restoreStmt.Options.NewDBName, "RESTORE")
+		var err error
+		newDBName, err = p.EvalAsString(ctx, restoreStmt.Options.NewDBName, "RESTORE")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	var newTenantIDFn func() (*roachpb.TenantID, error)
+	var newTenantID *roachpb.TenantID
 	if restoreStmt.Options.AsTenant != nil {
 		if restoreStmt.DescriptorCoverage == tree.AllDescriptors || !restoreStmt.Targets.TenantID.IsSet() {
 			err := errors.Errorf("%q can only be used when running RESTORE TENANT for a single tenant", restoreOptAsTenant)
@@ -1041,12 +1080,9 @@ func restorePlanHook(
 		// TODO(dt): it'd be nice to have TypeAsInt or TypeAsTenantID and then in
 		// sql.y an int_or_placeholder, but right now the hook view of planner only
 		// has TypeAsString so we'll just atoi it.
-		fn, err := p.TypeAsString(ctx, restoreStmt.Options.AsTenant, "RESTORE")
-		if err != nil {
-			return nil, nil, nil, false, err
-		}
-		newTenantIDFn = func() (*roachpb.TenantID, error) {
-			s, err := fn()
+		var err error
+		newTenantID, err = func() (*roachpb.TenantID, error) {
+			s, err := p.EvalAsString(ctx, restoreStmt.Options.AsTenant, "RESTORE")
 			if err != nil {
 				return nil, err
 			}
@@ -1059,6 +1095,9 @@ func restorePlanHook(
 			}
 			id := roachpb.MakeTenantID(uint64(x))
 			return &id, nil
+		}()
+		if err != nil {
+			return nil, nil, nil, false, err
 		}
 	}
 
@@ -1069,19 +1108,6 @@ func restorePlanHook(
 
 		if !(p.ExtendedEvalContext().TxnIsSingleStmt || restoreStmt.Options.Detached) {
 			return errors.Errorf("RESTORE cannot be used inside a multi-statement transaction without DETACHED option")
-		}
-
-		subdir, err := subdirFn()
-		if err != nil {
-			return err
-		}
-
-		from := make([][]string, len(fromFns))
-		for i := range fromFns {
-			from[i], err = fromFns[i]()
-			if err != nil {
-				return err
-			}
 		}
 
 		if err := checkPrivilegesForRestore(ctx, restoreStmt, p, from); err != nil {
@@ -1097,60 +1123,14 @@ func restorePlanHook(
 			endTime = asOf.Timestamp
 		}
 
-		var passphrase string
-		if pwFn != nil {
-			passphrase, err = pwFn()
-			if err != nil {
-				return err
-			}
-		}
-
-		var kms []string
-		if kmsFn != nil {
-			kms, err = kmsFn()
-			if err != nil {
-				return err
-			}
-		}
-
-		var intoDB string
-		if intoDBFn != nil {
-			intoDB, err = intoDBFn()
-			if err != nil {
-				return err
-			}
-		}
-
-		var newDBName string
-		if newDBNameFn != nil {
-			newDBName, err = newDBNameFn()
-			if err != nil {
-				return err
-			}
-		}
-		var newTenantID *roachpb.TenantID
-		if newTenantIDFn != nil {
-			newTenantID, err = newTenantIDFn()
-			if err != nil {
-				return err
-			}
-		}
-
 		// incFrom will contain the directory URIs for incremental backups (i.e.
 		// <prefix>/<subdir>) iff len(From)==1, regardless of the
 		// 'incremental_location' param. len(From)=1 implies that the user has not
 		// explicitly passed incremental backups, so we'll have to look for any in
 		// <prefix>/<subdir>. len(incFrom)>1 implies the incremental backups are
 		// locality aware.
-		var incFrom []string
-		if incStorageFn != nil {
-			incFrom, err = incStorageFn()
-			if err != nil {
-				return err
-			}
-		}
 
-		return doRestorePlan(ctx, restoreStmt, p, from, incFrom, passphrase, kms, intoDB,
+		return doRestorePlan(ctx, restoreStmt, p, from, incStorage, pw, kms, intoDB,
 			newDBName, newTenantID, endTime, resultsCh, subdir)
 	}
 
@@ -1679,12 +1659,8 @@ func doRestorePlan(
 
 	var debugPauseOn string
 	if restoreStmt.Options.DebugPauseOn != nil {
-		pauseOnFn, err := p.TypeAsString(ctx, restoreStmt.Options.DebugPauseOn, "RESTORE")
-		if err != nil {
-			return err
-		}
-
-		debugPauseOn, err = pauseOnFn()
+		var err error
+		debugPauseOn, err = p.EvalAsString(ctx, restoreStmt.Options.DebugPauseOn, "RESTORE")
 		if err != nil {
 			return err
 		}
@@ -2258,5 +2234,5 @@ func restoreCreateDefaultPrimaryRegionEnums(
 }
 
 func init() {
-	sql.AddPlanHook("restore", restorePlanHook)
+	sql.AddPlanHook("restore", restorePlanHook, restoreTypeCheck)
 }

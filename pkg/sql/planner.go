@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -615,110 +616,72 @@ func (p *planner) LookupTableByID(
 	return table, nil
 }
 
-// TypeAsString enforces (not hints) that the given expression typechecks as a
-// string and returns a function that can be called to get the string value
-// during (planNode).Start.
-// To also allow NULLs to be returned, use TypeAsStringOrNull() instead.
-func (p *planner) TypeAsString(
-	ctx context.Context, e tree.Expr, op string,
-) (func() (string, error), error) {
+// EvalAsString enforces (not hints) that the given expression type-checks
+// and evaluates as a string value. To also allow NULLs to be returned, use
+// EvalAsStringOrNull() instead.
+func (p *planner) EvalAsString(ctx context.Context, e tree.Expr, op string) (string, error) {
 	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	evalFn := p.makeStringEvalFn(ctx, typedE)
-	return func() (string, error) {
-		isNull, str, err := evalFn()
-		if err != nil {
-			return "", err
-		}
-		if isNull {
-			return "", errors.Errorf("expected string, got NULL")
-		}
-		return str, nil
-	}, nil
+	isNull, str, err := evalAsStringOrNull(ctx, p.EvalContext(), typedE)
+	if err != nil {
+		return "", err
+	}
+	if isNull {
+		return "", errors.Errorf("expected string, got NULL")
+	}
+	return str, nil
 }
 
-// TypeAsStringOrNull is like TypeAsString but allows NULLs.
-func (p *planner) TypeAsStringOrNull(
+// EvalAsStringOrNull is like TypeAsString but allows NULLs.
+func (p *planner) EvalAsStringOrNull(
 	ctx context.Context, e tree.Expr, op string,
-) (func() (bool, string, error), error) {
+) (null bool, _ string, _ error) {
 	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.String, op)
 	if err != nil {
-		return nil, err
+		return false, "", err
 	}
-	return p.makeStringEvalFn(ctx, typedE), nil
+	return evalAsStringOrNull(ctx, p.EvalContext(), typedE)
 }
 
-func (p *planner) makeStringEvalFn(
-	ctx context.Context, typedE tree.TypedExpr,
-) func() (bool, string, error) {
-	return func() (bool, string, error) {
-		d, err := eval.Expr(ctx, p.EvalContext(), typedE)
-		if err != nil {
-			return false, "", err
-		}
-		if d == tree.DNull {
-			return true, "", nil
-		}
-		str, ok := d.(*tree.DString)
-		if !ok {
-			return false, "", errors.Errorf("failed to cast %T to string", d)
-		}
-		return false, string(*str), nil
+func evalAsStringOrNull(
+	ctx context.Context, ec *eval.Context, typedE tree.TypedExpr,
+) (null bool, _ string, _ error) {
+	d, err := eval.Expr(ctx, ec, typedE)
+	if err != nil {
+		return false /* null */, "", err
 	}
+	if d == tree.DNull {
+		return true /* null */, "", nil
+	}
+	str, ok := d.(*tree.DString)
+	if !ok {
+		return false /* null */, "", errors.Errorf("failed to cast %T to string", d)
+	}
+	return false /* null */, string(*str), nil
 }
 
-// TypeAsBool enforces (not hints) that the given expression typechecks as a
-// bool and returns a function that can be called to get the bool value
-// during (planNode).Start.
-func (p *planner) TypeAsBool(
-	ctx context.Context, e tree.Expr, op string,
-) (func() (bool, error), error) {
+// EvalAsBool enforces (not hints) that the given expression type checks
+// and evaluates as a bool.
+func (p *planner) EvalAsBool(ctx context.Context, e tree.Expr, op string) (bool, error) {
 	typedE, err := tree.TypeCheckAndRequire(ctx, e, &p.semaCtx, types.Bool, op)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	evalFn := p.makeBoolEvalFn(typedE)
-	return func() (bool, error) {
-		isNull, b, err := evalFn(ctx)
-		if err != nil {
-			return false, err
-		}
-		if isNull {
-			return false, errors.Errorf("expected string, got NULL")
-		}
-		return b, nil
-	}, nil
-}
-
-func (p *planner) makeBoolEvalFn(typedE tree.TypedExpr) func(context.Context) (bool, bool, error) {
-	return func(ctx context.Context) (bool, bool, error) {
-		d, err := eval.Expr(ctx, p.EvalContext(), typedE)
-		if err != nil {
-			return false, false, err
-		}
-		if d == tree.DNull {
-			return true, false, nil
-		}
-		b, ok := d.(*tree.DBool)
-		if !ok {
-			return false, false, errors.Errorf("failed to cast %T to bool", d)
-		}
-		return false, bool(*b), nil
+	d, err := eval.Expr(ctx, p.EvalContext(), typedE)
+	if err != nil {
+		return false, err
 	}
+	if d == tree.DNull {
+		return false, errors.Errorf("expected string, got NULL")
+	}
+	b, ok := d.(*tree.DBool)
+	if !ok {
+		return false, errors.Errorf("failed to cast %T to bool", d)
+	}
+	return bool(*b), nil
 }
-
-// KVStringOptValidate indicates the requested validation of a TypeAsStringOpts
-// option.
-type KVStringOptValidate string
-
-// KVStringOptValidate values
-const (
-	KVStringOptAny            KVStringOptValidate = `any`
-	KVStringOptRequireNoValue KVStringOptValidate = `no-value`
-	KVStringOptRequireValue   KVStringOptValidate = `value`
-)
 
 // evalStringOptions evaluates the KVOption values as strings and returns them
 // in a map. Options with no value have an empty string.
@@ -726,7 +689,7 @@ func evalStringOptions(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	opts []exec.KVOption,
-	optValidate map[string]KVStringOptValidate,
+	optValidate map[string]evalexpr.KVStringOptValidate,
 ) (map[string]string, error) {
 	res := make(map[string]string, len(opts))
 	for _, opt := range opts {
@@ -740,12 +703,12 @@ func evalStringOptions(
 			return nil, err
 		}
 		if val == tree.DNull {
-			if validate == KVStringOptRequireValue {
+			if validate == evalexpr.KVStringOptRequireValue {
 				return nil, errors.Errorf("option %q requires a value", k)
 			}
 			res[k] = ""
 		} else {
-			if validate == KVStringOptRequireNoValue {
+			if validate == evalexpr.KVStringOptRequireNoValue {
 				return nil, errors.Errorf("option %q does not take a value", k)
 			}
 			str, ok := val.(*tree.DString)
@@ -758,13 +721,11 @@ func evalStringOptions(
 	return res, nil
 }
 
-// TypeAsStringOpts enforces (not hints) that the given expressions
-// typecheck as strings, and returns a function that can be called to
-// get the string value during (planNode).Start.
-func (p *planner) TypeAsStringOpts(
-	ctx context.Context, opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
-) (func() (map[string]string, error), error) {
-	typed := make(map[string]tree.TypedExpr, len(opts))
+// EvalAsStringOpts evaluates the provided expressions as a string map.
+func (p *planner) EvalAsStringOpts(
+	ctx context.Context, opts tree.KVOptions, optValidate map[string]evalexpr.KVStringOptValidate,
+) (map[string]string, error) {
+	res := make(map[string]string, len(opts))
 	for _, opt := range opts {
 		k := string(opt.Key)
 		validate, ok := optValidate[k]
@@ -773,73 +734,38 @@ func (p *planner) TypeAsStringOpts(
 		}
 
 		if opt.Value == nil {
-			if validate == KVStringOptRequireValue {
+			if validate == evalexpr.KVStringOptRequireValue {
 				return nil, errors.Errorf("option %q requires a value", k)
 			}
-			typed[k] = nil
+			res[k] = ""
 			continue
 		}
-		if validate == KVStringOptRequireNoValue {
+		if validate == evalexpr.KVStringOptRequireNoValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
-		r, err := tree.TypeCheckAndRequire(ctx, opt.Value, &p.semaCtx, types.String, k)
+		s, err := p.EvalAsString(ctx, opt.Value, k)
 		if err != nil {
 			return nil, err
 		}
-		typed[k] = r
+		res[k] = s
 	}
-	fn := func() (map[string]string, error) {
-		res := make(map[string]string, len(typed))
-		for name, e := range typed {
-			if e == nil {
-				res[name] = ""
-				continue
-			}
-			d, err := eval.Expr(ctx, p.EvalContext(), e)
-			if err != nil {
-				return nil, err
-			}
-			str, ok := d.(*tree.DString)
-			if !ok {
-				return res, errors.Errorf("failed to cast %T to string", d)
-			}
-			res[name] = string(*str)
-		}
-		return res, nil
-	}
-	return fn, nil
+	return res, nil
 }
 
-// TypeAsStringArray enforces (not hints) that the given expressions all typecheck as
-// strings and returns a function that can be called to get the string values
-// during (planNode).Start.
-func (p *planner) TypeAsStringArray(
+// EvalAsStringArray enforces (not hints) that the given expressions
+// evaluate as strings.
+func (p *planner) EvalAsStringArray(
 	ctx context.Context, exprs tree.Exprs, op string,
-) (func() ([]string, error), error) {
-	typedExprs := make([]tree.TypedExpr, len(exprs))
-	for i := range exprs {
-		typedE, err := tree.TypeCheckAndRequire(ctx, exprs[i], &p.semaCtx, types.String, op)
+) ([]string, error) {
+	strs := make([]string, 0, len(exprs))
+	for _, expr := range exprs {
+		str, err := p.EvalAsString(ctx, expr, op)
 		if err != nil {
 			return nil, err
 		}
-		typedExprs[i] = typedE
+		strs = append(strs, str)
 	}
-	fn := func() ([]string, error) {
-		strs := make([]string, len(exprs))
-		for i := range exprs {
-			d, err := eval.Expr(ctx, p.EvalContext(), typedExprs[i])
-			if err != nil {
-				return nil, err
-			}
-			str, ok := d.(*tree.DString)
-			if !ok {
-				return strs, errors.Errorf("failed to cast %T to string", d)
-			}
-			strs[i] = string(*str)
-		}
-		return strs, nil
-	}
-	return fn, nil
+	return strs, nil
 }
 
 // SessionData is part of the PlanHookState interface.

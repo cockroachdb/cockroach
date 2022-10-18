@@ -10,20 +10,20 @@ package changefeedvalidators
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 )
 
 func makeValMap(
 	src map[string]changefeedbase.OptionPermittedValues,
-) map[string]sql.KVStringOptValidate {
-	dst := make(map[string]sql.KVStringOptValidate, len(src))
+) map[string]evalexpr.KVStringOptValidate {
+	dst := make(map[string]evalexpr.KVStringOptValidate, len(src))
 	for k, v := range src {
 		if v.CanBeEmpty {
-			dst[k] = sql.KVStringOptAny
+			dst[k] = evalexpr.KVStringOptAny
 		} else if v.Type == changefeedbase.OptionTypeFlag {
-			dst[k] = sql.KVStringOptRequireNoValue
+			dst[k] = evalexpr.KVStringOptRequireNoValue
 		} else {
-			dst[k] = sql.KVStringOptRequireValue
+			dst[k] = evalexpr.KVStringOptRequireValue
 		}
 	}
 	return dst

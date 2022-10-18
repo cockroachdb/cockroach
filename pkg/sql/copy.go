@@ -195,11 +195,7 @@ func newCopyMachine(
 				"DELIMITER unsupported in BINARY format",
 			)
 		}
-		fn, err := c.p.TypeAsString(ctx, n.Options.Delimiter, "COPY")
-		if err != nil {
-			return nil, err
-		}
-		delim, err := fn()
+		delim, err := c.p.EvalAsString(ctx, n.Options.Delimiter, "COPY")
 		if err != nil {
 			return nil, err
 		}
@@ -218,14 +214,11 @@ func newCopyMachine(
 				"NULL unsupported in BINARY format",
 			)
 		}
-		fn, err := c.p.TypeAsString(ctx, n.Options.Null, "COPY")
+		null, err := c.p.EvalAsString(ctx, n.Options.Null, "COPY")
 		if err != nil {
 			return nil, err
 		}
-		c.null, err = fn()
-		if err != nil {
-			return nil, err
-		}
+		c.null = null
 	}
 	if n.Options.Escape != nil {
 		s := n.Options.Escape.RawString()

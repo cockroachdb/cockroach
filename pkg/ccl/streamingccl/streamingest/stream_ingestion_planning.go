@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -35,6 +36,27 @@ func streamIngestionJobDescription(
 ) (string, error) {
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(streamIngestion, ann), nil
+}
+
+var resultColumns = colinfo.ResultColumns{
+	{Name: "ingestion_job_id", Typ: types.Int},
+	{Name: "producer_job_id", Typ: types.Int},
+}
+
+func ingestionTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	ingestionStmt, ok := stmt.(*tree.StreamIngestion)
+	if !ok {
+		return false, nil, nil
+	}
+	if err := evalexpr.TypeCheck(
+		ctx, "INGESTION", p.SemaCtx(),
+		evalexpr.StringArrays{tree.Exprs(ingestionStmt.From)},
+	); err != nil {
+		return false, nil, err
+	}
+	return true, resultColumns, nil
 }
 
 func ingestionPlanHook(
@@ -59,7 +81,7 @@ func ingestionPlanHook(
 		)
 	}
 
-	fromFn, err := p.TypeAsStringArray(ctx, tree.Exprs(ingestionStmt.From), "INGESTION")
+	from, err := p.EvalAsStringArray(ctx, tree.Exprs(ingestionStmt.From), "INGESTION")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -72,11 +94,6 @@ func ingestionPlanHook(
 			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
 			"RESTORE FROM REPLICATION STREAM",
 		); err != nil {
-			return err
-		}
-
-		from, err := fromFn()
-		if err != nil {
 			return err
 		}
 
@@ -184,14 +201,11 @@ func ingestionPlanHook(
 		return nil
 	}
 
-	return fn, colinfo.ResultColumns{
-		{Name: "ingestion_job_id", Typ: types.Int},
-		{Name: "producer_job_id", Typ: types.Int},
-	}, nil, false, nil
+	return fn, resultColumns, nil, false, nil
 }
 
 func init() {
-	sql.AddPlanHook("ingestion", ingestionPlanHook)
+	sql.AddPlanHook("ingestion", ingestionPlanHook, ingestionTypeCheck)
 	jobs.RegisterConstructor(
 		jobspb.TypeStreamIngestion,
 		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {

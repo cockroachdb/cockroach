@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/evalexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -486,6 +487,39 @@ func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
 	return nil
 }
 
+func backupTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	backupStmt := getBackupStatement(stmt)
+	if backupStmt == nil {
+		return false, nil, nil
+	}
+	detached := backupStmt.Options.Detached == tree.DBoolTrue
+	if detached {
+		header = jobs.DetachedJobExecutionResultHeader
+	} else {
+		header = jobs.BulkJobExecutionResultHeader
+	}
+	if err := evalexpr.TypeCheck(
+		ctx, "BACKUP", p.SemaCtx(),
+		evalexpr.Strings{
+			backupStmt.Subdir,
+			backupStmt.Options.EncryptionPassphrase,
+		},
+		evalexpr.StringArrays{
+			tree.Exprs(backupStmt.To),
+			backupStmt.IncrementalFrom,
+			tree.Exprs(backupStmt.Options.IncrementalStorage),
+			tree.Exprs(backupStmt.Options.EncryptionKMSURI),
+		},
+		evalexpr.Bools{
+			backupStmt.Options.CaptureRevisionHistory,
+		}); err != nil {
+		return false, nil, err
+	}
+	return true, header, nil
+}
+
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -494,7 +528,6 @@ func backupPlanHook(
 	if backupStmt == nil {
 		return nil, nil, nil, false, nil
 	}
-
 	if err := featureflag.CheckEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -503,6 +536,8 @@ func backupPlanHook(
 	); err != nil {
 		return nil, nil, nil, false, err
 	}
+
+	detached := backupStmt.Options.Detached == tree.DBoolTrue
 
 	// Deprecation notice for `BACKUP TO` syntax. Remove this once the syntax is
 	// deleted in 22.2.
@@ -515,36 +550,32 @@ func backupPlanHook(
 	}
 
 	var err error
-	subdirFn := func() (string, error) { return "", nil }
+	var subdir string
 	if backupStmt.Subdir != nil {
-		subdirFn, err = p.TypeAsString(ctx, backupStmt.Subdir, "BACKUP")
+		subdir, err = p.EvalAsString(ctx, backupStmt.Subdir, "BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	toFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.To), "BACKUP")
+	to, err := p.EvalAsStringArray(ctx, tree.Exprs(backupStmt.To), "BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-	incrementalFromFn, err := p.TypeAsStringArray(ctx, backupStmt.IncrementalFrom, "BACKUP")
+	incrementalFrom, err := p.EvalAsStringArray(ctx, backupStmt.IncrementalFrom, "BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
-	incToFn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.Options.IncrementalStorage),
+	incrementalStorage, err := p.EvalAsStringArray(ctx, tree.Exprs(backupStmt.Options.IncrementalStorage),
 		"BACKUP")
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
-	detached := false
-	if backupStmt.Options.Detached == tree.DBoolTrue {
-		detached = true
-	}
-	revisionHistoryFn := func() (bool, error) { return false, nil } // Defaults to false.
+	var revisionHistory bool
 	if backupStmt.Options.CaptureRevisionHistory != nil {
-		revisionHistoryFn, err = p.TypeAsBool(ctx, backupStmt.Options.CaptureRevisionHistory, "BACKUP")
+		revisionHistory, err = p.EvalAsBool(ctx, backupStmt.Options.CaptureRevisionHistory, "BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
@@ -552,33 +583,25 @@ func backupPlanHook(
 
 	encryptionParams := jobspb.BackupEncryptionOptions{Mode: jobspb.EncryptionMode_None}
 
-	var pwFn func() (string, error)
+	var pw string
 	if backupStmt.Options.EncryptionPassphrase != nil {
-		fn, err := p.TypeAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
+		pw, err = p.EvalAsString(ctx, backupStmt.Options.EncryptionPassphrase, "BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
-		pwFn = fn
 		encryptionParams.Mode = jobspb.EncryptionMode_Passphrase
 	}
 
-	var kmsFn func() ([]string, error)
+	var kms []string
 	if backupStmt.Options.EncryptionKMSURI != nil {
 		if encryptionParams.Mode != jobspb.EncryptionMode_None {
 			return nil, nil, nil, false,
 				errors.New("cannot have both encryption_passphrase and kms option set")
 		}
-		fn, err := p.TypeAsStringArray(ctx, tree.Exprs(backupStmt.Options.EncryptionKMSURI),
+		kms, err = p.EvalAsStringArray(ctx, tree.Exprs(backupStmt.Options.EncryptionKMSURI),
 			"BACKUP")
 		if err != nil {
 			return nil, nil, nil, false, err
-		}
-		kmsFn = func() ([]string, error) {
-			res, err := fn()
-			if err == nil {
-				return res, nil
-			}
-			return nil, err
 		}
 		encryptionParams.Mode = jobspb.EncryptionMode_KMS
 	}
@@ -592,30 +615,12 @@ func backupPlanHook(
 			return errors.Errorf("BACKUP cannot be used inside a multi-statement transaction without DETACHED option")
 		}
 
-		subdir, err := subdirFn()
-		if err != nil {
-			return err
-		}
-
-		to, err := toFn()
-		if err != nil {
-			return err
-		}
 		if len(to) > 1 {
 			if err := requireEnterprise(p.ExecCfg(), "partitioned destinations"); err != nil {
 				return err
 			}
 		}
 
-		incrementalFrom, err := incrementalFromFn()
-		if err != nil {
-			return err
-		}
-
-		incrementalStorage, err := incToFn()
-		if err != nil {
-			return err
-		}
 		if !backupStmt.Nested && len(incrementalStorage) > 0 {
 			return errors.New("incremental_location option not supported with `BACKUP TO` syntax")
 		}
@@ -637,28 +642,17 @@ func backupPlanHook(
 
 		switch encryptionParams.Mode {
 		case jobspb.EncryptionMode_Passphrase:
-			pw, err := pwFn()
-			if err != nil {
-				return err
-			}
 			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
 				return err
 			}
 			encryptionParams.RawPassphrae = pw
 		case jobspb.EncryptionMode_KMS:
-			encryptionParams.RawKmsUris, err = kmsFn()
-			if err != nil {
-				return err
-			}
+			encryptionParams.RawKmsUris = kms
 			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
 				return err
 			}
 		}
 
-		revisionHistory, err := revisionHistoryFn()
-		if err != nil {
-			return err
-		}
 		if revisionHistory {
 			if err := requireEnterprise(p.ExecCfg(), "revision_history"); err != nil {
 				return err
@@ -1441,5 +1435,9 @@ func updateBackupDetails(
 }
 
 func init() {
-	sql.AddPlanHook("backupccl.backupPlanHook", backupPlanHook)
+	sql.AddPlanHook(
+		"backupccl.backupPlanHook",
+		backupPlanHook,
+		backupTypeCheck,
+	)
 }

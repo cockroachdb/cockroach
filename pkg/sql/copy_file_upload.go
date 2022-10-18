@@ -113,11 +113,7 @@ func newFileUploadMachine(
 	if n.Options.Destination == nil {
 		return nil, errors.Newf("destination required")
 	}
-	destFn, err := f.c.p.TypeAsString(ctx, n.Options.Destination, "COPY")
-	if err != nil {
-		return nil, err
-	}
-	dest, err := destFn()
+	dest, err := f.c.p.EvalAsString(ctx, n.Options.Destination, "COPY")
 	if err != nil {
 		return nil, err
 	}
