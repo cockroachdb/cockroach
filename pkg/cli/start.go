@@ -773,10 +773,14 @@ func waitForShutdown(
 	// is stopped externally (for example, via the quit endpoint).
 	select {
 	case err := <-errChan:
-		// StartAlwaysFlush both flushes and ensures that subsequent log
-		// writes are flushed too.
-		log.StartAlwaysFlush()
-		return err
+		// An error in errChat signals that the early server startup failed.
+		returnErr = err
+		// At this point, we do not expect any application load, etc., and
+		// therefore we are OK with an expedited shutdown: pass false to
+		// shouldDrain.
+		startShutdownAsync(getS, stopper, serverStatusMu, stopWithoutDrain, false /* shouldDrain */)
+		// We do not return here, on purpose, because we want the common
+		// shutdown logic below to apply for this case as well.
 
 	case <-stopper.ShouldQuiesce():
 		// Receiving a signal on ShouldQuiesce means that a shutdown was
