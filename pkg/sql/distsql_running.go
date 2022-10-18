@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -610,6 +611,11 @@ func (dsp *DistSQLPlanner) Run(
 
 	recv.outputTypes = plan.GetResultTypes()
 	recv.contendedQueryMetric = dsp.distSQLSrv.Metrics.ContendedQueriesCount
+	if dsp.distSQLSrv.TenantCostController != nil && planCtx.planner != nil {
+		if instrumentation := planCtx.planner.curPlan.instrumentation; instrumentation != nil {
+			recv.needTenantStats = instrumentation.collectExecStats
+		}
+	}
 
 	if len(flows) == 1 {
 		// We ended up planning everything locally, regardless of whether we
@@ -751,7 +757,8 @@ type DistSQLReceiver struct {
 	// this node's clock.
 	clockUpdater clockUpdater
 
-	stats *topLevelQueryStats
+	stats           *topLevelQueryStats
+	needTenantStats bool
 
 	expectedRowsRead int64
 	progressAtomic   *uint64
@@ -1185,6 +1192,11 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 
+	if r.needTenantStats {
+		// Estimate the network egress using the in-memory size of the row.
+		r.stats.networkEgressEstimate += int64(row.Size())
+	}
+
 	if r.discardRows {
 		// Discard rows.
 		return r.status
@@ -1241,6 +1253,14 @@ func (r *DistSQLReceiver) PushBatch(
 		// row with the row count in it, so just grab that and exit.
 		r.resultWriter.IncrementRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
 		return r.status
+	}
+
+	if r.needTenantStats {
+		// Estimate the network egress using the in-memory size of the batch.
+		// TODO(drewk): this is an overestimate because it includes all the overhead
+		// for the batch, as well as any additional capacity of its vectors.
+		// Consider implementing a function to get just the size of the data.
+		r.stats.networkEgressEstimate += colmem.GetBatchMemSize(batch)
 	}
 
 	if r.discardRows {

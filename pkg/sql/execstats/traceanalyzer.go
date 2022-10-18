@@ -123,6 +123,7 @@ type QueryLevelStats struct {
 	KVTime                time.Duration
 	NetworkMessages       int64
 	ContentionTime        time.Duration
+	RUEstimate            int64
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks

@@ -532,6 +532,9 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+		if queryStats.RUEstimate != 0 {
+			ob.AddRUEstimate(queryStats.RUEstimate)
+		}
 	}
 
 	if len(ih.regions) > 0 {

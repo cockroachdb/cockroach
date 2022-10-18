@@ -343,6 +343,7 @@ go_library(
         "//pkg/sql/colexec",
         "//pkg/sql/colfetcher",
         "//pkg/sql/colflow",
+        "//pkg/sql/colmem",
         "//pkg/sql/contention",
         "//pkg/sql/contention/txnidcache",
         "//pkg/sql/contentionpb",

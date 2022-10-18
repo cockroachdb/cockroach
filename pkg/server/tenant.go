@@ -703,3 +703,7 @@ func (noopTenantSideCostController) OnExternalIO(
 	ctx context.Context, usage multitenant.ExternalIOUsage,
 ) {
 }
+
+func (noopTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
+	return nil
+}
