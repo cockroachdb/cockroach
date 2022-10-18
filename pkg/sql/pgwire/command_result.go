@@ -218,7 +218,8 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 		return err
 	}
 	r.rowsAffected++
-	return r.conn.bufferRow(ctx, row, r)
+	_, err := r.conn.bufferRow(ctx, row, r, false /* discardResult */)
+	return err
 }
 
 // AddBatch is part of the sql.RestrictedCommandResult interface.
@@ -227,7 +228,32 @@ func (r *commandResult) AddBatch(ctx context.Context, batch coldata.Batch) error
 		return err
 	}
 	r.rowsAffected += batch.Length()
-	return r.conn.bufferBatch(ctx, batch, r)
+	_, err := r.conn.bufferBatch(ctx, batch, r, false /* discardResult */)
+	return err
+}
+
+// GetRowNetworkEgress is part of the sql.statsResultWriter interface.
+func (r *commandResult) GetRowNetworkEgress(ctx context.Context, row tree.Datums) (int64, error) {
+	r.assertNotReleased()
+	if r.err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(r.err,
+			"can't call GetRowNetworkEgress after having set error",
+		))
+	}
+	return r.conn.bufferRow(ctx, row, r, true /* discardResult */)
+}
+
+// GetBatchNetworkEgress is part of the sql.statsResultWriter interface.
+func (r *commandResult) GetBatchNetworkEgress(
+	ctx context.Context, batch coldata.Batch,
+) (int64, error) {
+	r.assertNotReleased()
+	if r.err != nil {
+		panic(errors.NewAssertionErrorWithWrappedErrf(r.err,
+			"can't call GetBatchNetworkEgress after having set error",
+		))
+	}
+	return r.conn.bufferBatch(ctx, batch, r, true /* discardResult */)
 }
 
 // SupportsAddBatch is part of the sql.RestrictedCommandResult interface.

@@ -1239,7 +1239,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg)
+	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats)
 
 	// The transaction (from planner.txn) may already have been committed at this point,
 	// due to one-phase commit optimization or an error. Since we use that transaction
@@ -1274,7 +1274,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // Query-level execution statistics are collected using the statement's trace
 // and the plan's flow metadata. It also populates the regions field and
 // annotates the explainPlan field of the instrumentationHelper.
-func populateQueryLevelStatsAndRegions(ctx context.Context, p *planner, cfg *ExecutorConfig) {
+func populateQueryLevelStatsAndRegions(
+	ctx context.Context, p *planner, cfg *ExecutorConfig, topLevelStats *topLevelQueryStats,
+) {
 	ih := &p.instrumentation
 	if _, ok := ih.Tracing(); !ok {
 		return
@@ -1296,6 +1298,17 @@ func populateQueryLevelStatsAndRegions(ctx context.Context, p *planner, cfg *Exe
 			panic(fmt.Sprintf(msg, ih.fingerprint, err))
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
+	} else {
+		// If this query is being run by a tenant, record the RUs consumed by
+		// network egress to the client.
+		if cfg.DistSQLSrv != nil {
+			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
+				if costCfg := costController.GetCostConfig(); costCfg != nil {
+					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(networkEgressRUEstimate)
+				}
+			}
+		}
 	}
 	if ih.traceMetadata != nil && ih.explainPlan != nil {
 		ih.regions = ih.traceMetadata.annotateExplain(
@@ -1513,6 +1526,9 @@ type topLevelQueryStats struct {
 	rowsRead int64
 	// rowsWritten is the number of rows written.
 	rowsWritten int64
+	// networkEgressEstimate is an estimate for the number of bytes sent to the
+	// client. It is used for estimating the number of RUs consumed by a query.
+	networkEgressEstimate int64
 }
 
 // execWithDistSQLEngine converts a plan to a distributed SQL physical plan and

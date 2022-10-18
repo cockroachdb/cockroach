@@ -250,6 +250,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:       6,
 		ContentionTime:        7 * time.Second,
 		MaxDiskUsage:          8,
+		RUEstimate:            9,
 	}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent:      8,
@@ -261,6 +262,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:       13,
 		ContentionTime:        14 * time.Second,
 		MaxDiskUsage:          15,
+		RUEstimate:            16,
 	}
 	expected := execstats.QueryLevelStats{
 		NetworkBytesSent:      9,
@@ -272,6 +274,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		NetworkMessages:       19,
 		ContentionTime:        21 * time.Second,
 		MaxDiskUsage:          15,
+		RUEstimate:            25,
 	}
 
 	aCopy := a
