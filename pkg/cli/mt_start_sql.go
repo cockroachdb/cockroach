@@ -13,16 +13,27 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/spf13/cobra"
 )
 
@@ -73,8 +84,38 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Change the permission mask for all created files.
+	//
+	// We're considering everything produced by a cockroach node
+	// to potentially contain sensitive information, so it should
+	// not be world-readable.
+	disableOtherPermissionBits()
+
+	// Set up the signal handlers. This also ensures that any of these
+	// signals received beyond this point do not interrupt the startup
+	// sequence until the point signals are checked below.
+	// We want to set up signal handling before starting logging, because
+	// logging uses buffering, and we want to be able to sync
+	// the buffers in the signal handler below. If we started capturing
+	// signals later, some startup logging might be lost.
 	signalCh := make(chan os.Signal, 1)
 	signal.Notify(signalCh, drainSignals...)
+
+	// Check for stores with full disks and exit with an informative exit
+	// code. This needs to happen early during start, before we perform any
+	// writes to the filesystem including log rotation. We need to guarantee
+	// that the process continues to exit with the Disk Full exit code. A
+	// flapping exit code can affect alerting, including the alerting
+	// performed within CockroachCloud.
+	if err := exitIfDiskFull(vfs.Default, serverCfg.Stores.Specs); err != nil {
+		return err
+	}
+
+	// If any store has something to say against a server start-up
+	// (e.g. previously detected corruption), listen to them now.
+	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
+		return clierror.NewError(err, exit.FatalError())
+	}
 
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
@@ -84,16 +125,61 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
 	ambientCtx := serverCfg.AmbientCtx
-	ctx = ambientCtx.AnnotateCtx(ctx)
 
+	// Annotate the context, and set up a tracing span for the start process.
+	//
+	// The context annotation ensures that server identifiers show up
+	// in the logging metadata as soon as they are known.
+	//
+	// The tracing span is because we want any logging happening beyond
+	// this point to be accounted to this start context, including
+	// logging related to the initialization of the logging
+	// infrastructure below.  This span concludes when the startup
+	// goroutine started below has completed.  TODO(andrei): we don't
+	// close the span on the early returns below.
+	var startupSpan *tracing.Span
+	ctx, startupSpan = ambientCtx.AnnotateCtxWithSpan(ctx, "server start")
+
+	// Set up the logging and profiling output.
+	//
+	// We want to do this as early as possible, because most of the code
+	// in CockroachDB may use logging, and until logging has been
+	// initialized log files will be created in $TMPDIR instead of their
+	// expected location.
+	//
+	// This initialization uses the various configuration parameters
+	// initialized by flag handling (before runStart was called). Any
+	// additional server configuration tweaks for the startup process
+	// must be necessarily non-logging-related, as logging parameters
+	// cannot be picked up beyond this point.
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
 	}
-	defer stopper.Stop(ctx)
+	defer stopper.Stop(ctx) // TODO(knz): Move this.
 	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
 
+	// We don't care about GRPCs fairly verbose logs in most client commands,
+	// but when actually starting a server, we enable them.
+	grpcutil.LowerSeverity(severity.WARNING)
+
+	// Tweak GOMAXPROCS if we're in a cgroup / container that has cpu limits set.
+	// The GO default for GOMAXPROCS is NumCPU(), however this is less
+	// than ideal if the cgroup is limited to a number lower than that.
+	//
+	// TODO(bilal): various global settings have already been initialized based on
+	// GOMAXPROCS(0) by now.
+	cgroups.AdjustMaxProcs(ctx)
+
+	// Now perform additional configuration tweaks specific to the start
+	// command.
+
 	st := serverCfg.BaseConfig.Settings
+
+	// Derive temporary/auxiliary directory specifications.
+	if st.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
+		return err
+	}
 
 	// This value is injected in order to have something populated during startup.
 	// In the initial 20.2 release of multi-tenant clusters, no version state was
@@ -117,7 +203,30 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Configure the default storage engine.
+	// NB: we only support one engine type for now.
+	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
+		serverCfg.StorageEngine = enginepb.EngineTypePebble
+	}
+
+	// Initialize the node's configuration from startup parameters.
+	// This also reads the part of the configuration that comes from
+	// environment variables.
+	if err := serverCfg.InitSQLServer(ctx); err != nil {
+		return err
+	}
+
+	// The configuration is now ready to report to the user and the log
+	// file. We had to wait after InitNode() so that all configuration
+	// environment variables, which are reported too, have been read and
+	// registered.
+	reportConfiguration(ctx)
+
 	initGEOS(ctx)
+
+	// Beyond this point, the configuration is set and the server is
+	// ready to start.
+	log.Ops.Info(ctx, "starting cockroach SQL node")
 
 	tenantServer, err := server.NewTenantServer(
 		ctx,
@@ -132,6 +241,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Inform the user if the network settings are suspicious. We need
+	// to do that after starting to listen because we need to know
+	// which advertise address NewServer() has decided.
+	hintServerCmdFlags(ctx, cmd)
+
 	// If another process was waiting on the PID (e.g. using a FIFO),
 	// this is when we can tell them the node has started listening.
 	if startCtx.pidFile != "" {
@@ -141,10 +255,40 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// If the invoker has requested an URL update, do it now that
+	// the server is ready to accept SQL connections.
+	// (Note: as stated above, ReadyFn is called after the server
+	// has started listening on its socket, but possibly before
+	// the cluster has been initialized and can start processing requests.
+	// This is OK for SQL clients, as the connection will be accepted
+	// by the network listener and will just wait/suspend until
+	// the cluster initializes, at which point it will be picked up
+	// and let the client go through, transparently.)
+	if startCtx.listeningURLFile != "" {
+		log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+		// (Re-)compute the client connection URL. We cannot do this
+		// earlier (e.g. above, in the runStart function) because
+		// at this time the address and port have not been resolved yet.
+		clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
+		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
+		if err != nil {
+			log.Errorf(ctx, "failed computing the URL: %v", err)
+			return err
+		}
+
+		if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
+			log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
+		}
+	}
+
 	// Ensure the configuration logging is written to disk in case a
 	// process is waiting for the sdnotify readiness to read important
 	// information from there.
 	log.Flush()
+
+	// When the start up completes, so can the start up span
+	// defined above.
+	defer startupSpan.Finish()
 
 	// Signal readiness. This unblocks the process when running with
 	// --background or under systemd.
