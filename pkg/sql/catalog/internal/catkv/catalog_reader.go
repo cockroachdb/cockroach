@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -43,6 +44,14 @@ type CatalogReader interface {
 	// ScanNamespaceForDatabaseSchemas scans the portion of the namespace table
 	// which contains all schema name entries for a given database.
 	ScanNamespaceForDatabaseSchemas(
+		ctx context.Context,
+		txn *kv.Txn,
+		db catalog.DatabaseDescriptor,
+	) (nstree.Catalog, error)
+
+	// ScanNamespaceForDatabaseEntries scans the portion of the namespace table
+	// which contains all name entries for children of a given database.
+	ScanNamespaceForDatabaseEntries(
 		ctx context.Context,
 		txn *kv.Txn,
 		db catalog.DatabaseDescriptor,
@@ -131,55 +140,55 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 	return mc.Catalog, nil
 }
 
-// ScanNamespaceForDatabases is part of the CatalogReader interface.
-func (cr catalogReader) ScanNamespaceForDatabases(
-	ctx context.Context, txn *kv.Txn,
+func (cr catalogReader) scanNamespace(
+	ctx context.Context, txn *kv.Txn, prefix roachpb.Key,
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 	cq := catalogQuery{catalogReader: cr}
 	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
 		b.Header.MaxSpanRequestKeys = 0
-		prefix := catalogkeys.MakeDatabaseNameKey(codec, "")
 		b.Scan(prefix, prefix.PrefixEnd())
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
 	}
 	return mc.Catalog, nil
+}
+
+// ScanNamespaceForDatabases is part of the CatalogReader interface.
+func (cr catalogReader) ScanNamespaceForDatabases(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.Catalog, error) {
+	return cr.scanNamespace(
+		ctx, txn, catalogkeys.MakeDatabaseNameKey(cr.codec, ""),
+	)
 }
 
 // ScanNamespaceForDatabaseSchemas is part of the CatalogReader interface.
 func (cr catalogReader) ScanNamespaceForDatabaseSchemas(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) (nstree.Catalog, error) {
-	var mc nstree.MutableCatalog
-	cq := catalogQuery{catalogReader: cr}
-	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		b.Header.MaxSpanRequestKeys = 0
-		prefix := catalogkeys.MakeSchemaNameKey(cr.codec, db.GetID(), "" /* name */)
-		b.Scan(prefix, prefix.PrefixEnd())
-	})
-	if err != nil {
-		return nstree.Catalog{}, err
-	}
-	return mc.Catalog, nil
+	return cr.scanNamespace(
+		ctx, txn, catalogkeys.MakeSchemaNameKey(cr.codec, db.GetID(), "" /* name */),
+	)
+}
+
+// ScanNamespaceForDatabaseEntries is part of the CatalogReader interface.
+func (cr catalogReader) ScanNamespaceForDatabaseEntries(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	return cr.scanNamespace(
+		ctx, txn, catalogkeys.MakeDatabaseChildrenNameKeyPrefix(cr.codec, db.GetID()),
+	)
 }
 
 // ScanNamespaceForSchemaObjects is part of the CatalogReader interface.
 func (cr catalogReader) ScanNamespaceForSchemaObjects(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 ) (nstree.Catalog, error) {
-	var mc nstree.MutableCatalog
-	cq := catalogQuery{catalogReader: cr}
-	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
-		b.Header.MaxSpanRequestKeys = 0
-		prefix := catalogkeys.MakeObjectNameKey(cr.codec, db.GetID(), sc.GetID(), "" /* name */)
-		b.Scan(prefix, prefix.PrefixEnd())
-	})
-	if err != nil {
-		return nstree.Catalog{}, err
-	}
-	return mc.Catalog, nil
+	return cr.scanNamespace(ctx, txn, catalogkeys.MakeObjectNameKey(
+		cr.codec, db.GetID(), sc.GetID(), "", /* name */
+	))
 }
 
 // GetDescriptorEntries is part of the CatalogReader interface.

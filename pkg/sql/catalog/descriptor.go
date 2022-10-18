@@ -898,6 +898,13 @@ type FunctionDescriptor interface {
 // error if the state is anything but public. The error describes the state of
 // the descriptor.
 func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error {
+	if flags.ParentID != 0 {
+		parent := desc.GetParentID()
+		if parent != 0 && parent != flags.ParentID {
+			return ErrDescriptorNotFound
+		}
+	}
+
 	switch {
 	case desc.Dropped() && !flags.IncludeDropped:
 		return NewInactiveDescriptorError(ErrDescriptorDropped)
