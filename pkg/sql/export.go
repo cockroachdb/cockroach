@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -83,13 +84,13 @@ const (
 	parquetSuffix         = "parquet"
 )
 
-var exportOptionExpectValues = map[string]KVStringOptValidate{
-	exportOptionChunkRows:   KVStringOptRequireValue,
-	exportOptionDelimiter:   KVStringOptRequireValue,
-	exportOptionFileName:    KVStringOptRequireValue,
-	exportOptionNullAs:      KVStringOptRequireValue,
-	exportOptionCompression: KVStringOptRequireValue,
-	exportOptionChunkSize:   KVStringOptRequireValue,
+var exportOptionExpectValues = map[string]exprutil.KVStringOptValidate{
+	exportOptionChunkRows:   exprutil.KVStringOptRequireValue,
+	exportOptionDelimiter:   exprutil.KVStringOptRequireValue,
+	exportOptionFileName:    exprutil.KVStringOptRequireValue,
+	exportOptionNullAs:      exprutil.KVStringOptRequireValue,
+	exportOptionCompression: exprutil.KVStringOptRequireValue,
+	exportOptionChunkSize:   exprutil.KVStringOptRequireValue,
 }
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
@@ -168,7 +169,12 @@ func (ef *execFactory) ConstructExport(
 					"are allowed to access the specified %s URI", conf.Provider.String()))
 		}
 	}
-	optVals, err := evalStringOptions(ef.ctx, ef.planner.EvalContext(), options, exportOptionExpectValues)
+	exprEval := ef.planner.ExprEvaluator("EXPORT")
+	treeOptions := make(tree.KVOptions, len(options))
+	for i, o := range options {
+		treeOptions[i] = tree.KVOption{Key: tree.Name(o.Key), Value: o.Value}
+	}
+	optVals, err := exprEval.KVOptions(ef.ctx, treeOptions, exportOptionExpectValues)
 	if err != nil {
 		return nil, err
 	}

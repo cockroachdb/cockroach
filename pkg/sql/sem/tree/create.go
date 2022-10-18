@@ -1890,12 +1890,12 @@ func (o LikeTableOpt) String() string {
 
 // ToRoleOptions converts KVOptions to a roleoption.List using
 // typeAsString to convert exprs to strings.
-func (o KVOptions) ToRoleOptions(
+func (o *KVOptions) ToRoleOptions(
 	typeAsStringOrNull func(e Expr, op string) (func() (bool, string, error), error), op string,
 ) (roleoption.List, error) {
-	roleOptions := make(roleoption.List, len(o))
+	roleOptions := make(roleoption.List, len(*o))
 
-	for i, ro := range o {
+	for i, ro := range *o {
 		// Role options are always stored as keywords in ro.Key by the
 		// parser.
 		option, err := roleoption.ToOption(string(ro.Key))

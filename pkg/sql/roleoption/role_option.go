@@ -27,8 +27,7 @@ type Option uint32
 type RoleOption struct {
 	Option
 	HasValue bool
-	// Need to resolve value in Exec for the case of placeholders.
-	Value func() (bool, string, error)
+	Value    func() (bool, string, error)
 }
 
 // KindList of role options.
@@ -180,19 +179,20 @@ type List []RoleOption
 // Maps stmts to values (value of the role option).
 func (rol List) GetSQLStmts(
 	onRoleOption func(Option), withID bool,
-) (map[string]func() (bool, string, error), error) {
+) (map[string]*RoleOption, error) {
 	if len(rol) <= 0 {
 		return nil, nil
 	}
 
-	stmts := make(map[string]func() (bool, string, error), len(rol))
+	stmts := make(map[string]*RoleOption, len(rol))
 
 	err := rol.CheckRoleOptionConflicts()
 	if err != nil {
 		return stmts, err
 	}
 
-	for _, ro := range rol {
+	for i := range rol {
+		ro := &rol[i]
 		if onRoleOption != nil {
 			onRoleOption(ro.Option)
 		}
@@ -208,11 +208,7 @@ func (rol List) GetSQLStmts(
 		if withID {
 			stmt = toSQLStmtsWithID[ro.Option]
 		}
-		if ro.HasValue {
-			stmts[stmt] = ro.Value
-		} else {
-			stmts[stmt] = nil
-		}
+		stmts[stmt] = ro
 	}
 
 	return stmts, nil
