@@ -115,6 +115,13 @@ func TestCCLLogic_multi_region_drop_region(
 	runCCLLogicTest(t, "multi_region_drop_region")
 }
 
+func TestCCLLogic_multi_region_foreign_key_lookup_join(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_foreign_key_lookup_join")
+}
+
 func TestCCLLogic_multi_region_import_export(
 	t *testing.T,
 ) {

@@ -621,3 +621,95 @@ func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.Pr
 	}
 	return projections
 }
+
+// ForeignKeyConstraintFilters examines `maybeFKTableScanExpr`, the left input
+// to lookup join, and `pkTableScanPrivate`, the lookup table of lookup join,
+// along with the `indexCols` of the current index being considered for lookup
+// join. `onClauseLookupRelStrictKeyCols` contains the ON clause equijoin
+// columns which form a reduced strict key and lookupRelEquijoinCols contains
+// the full set of equijoin columns on the lookup table. If
+// `onClauseLookupRelStrictKeyCols` is a proper subset of FK constraint
+// referencing columns on `maybeFKTableScanExpr`, then equijoin predicates are
+// built between PK/FK columns not currently represented in
+// `lookupRelEquijoinCols`, and returned to the caller.
+func (c *CustomFuncs) ForeignKeyConstraintFilters(
+	maybeFKTableScanExpr memo.RelExpr,
+	pkTableScanPrivate *memo.ScanPrivate,
+	indexCols, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols opt.ColSet,
+) (pkFkFilters memo.FiltersExpr) {
+	md := c.mem.Metadata()
+
+	var ok bool
+	var projectExpr *memo.ProjectExpr
+	var selectExpr *memo.SelectExpr
+	possibleScan := maybeFKTableScanExpr
+	if projectExpr, ok = possibleScan.(*memo.ProjectExpr); ok {
+		possibleScan = projectExpr.Input
+	}
+	if selectExpr, ok = possibleScan.(*memo.SelectExpr); ok {
+		possibleScan = selectExpr.Input
+	}
+	scanRelExpr, ok := possibleScan.(*memo.ScanExpr)
+	if !ok {
+		return nil
+	}
+	pkTable := md.Table(pkTableScanPrivate.Table)
+	fkTable := md.Table(scanRelExpr.Table)
+
+	for i := 0; i < fkTable.OutboundForeignKeyCount(); i++ {
+		fk := fkTable.OutboundForeignKey(i)
+		if pkTable.ID() != fk.ReferencedTableID() {
+			continue
+		}
+		pkFkFilters = nil
+		nextFK := false
+		var pkColSet opt.ColSet
+		for j := 0; j < fk.ColumnCount() && !nextFK; j++ {
+			lookupColumnOrd := fk.ReferencedColumnOrdinal(pkTable, j)
+			pkColID := pkTableScanPrivate.Table.ColumnID(lookupColumnOrd)
+			pkColSet.Add(pkColID)
+		}
+
+		// The strict key covered by equijoin columns must be a subset of the PK-FK
+		// constraint to guarantee equating the remaining PK-FK columns is legal.
+		if !onClauseLookupRelStrictKeyCols.SubsetOf(pkColSet) {
+			continue
+		}
+		for j := 0; j < fk.ColumnCount() && !nextFK; j++ {
+			lookupColumnOrd := fk.ReferencedColumnOrdinal(pkTable, j)
+			inputColumnOrd := fk.OriginColumnOrdinal(fkTable, j)
+			inputColID := scanRelExpr.Table.ColumnID(inputColumnOrd)
+			pkColID := pkTableScanPrivate.Table.ColumnID(lookupColumnOrd)
+			if lookupRelEquijoinCols.Contains(pkColID) {
+				// This column is already in an ON clause equality predicate, no need
+				// to build a new one.
+				continue
+			}
+			if selectExpr != nil && !selectExpr.Relational().OutputCols.Contains(inputColID) {
+				nextFK = true
+				break
+			}
+			if projectExpr != nil && !projectExpr.Passthrough.Contains(inputColID) {
+				nextFK = true
+				break
+			}
+			if !indexCols.Contains(pkColID) {
+				nextFK = true
+				break
+			}
+			pkFkFilters = append(pkFkFilters,
+				c.f.ConstructFiltersItem(
+					c.f.ConstructEq(c.f.ConstructVariable(inputColID),
+						c.f.ConstructVariable(pkColID)),
+				),
+			)
+		}
+		if !nextFK && len(pkFkFilters) > 0 {
+			// If we got this far without nextFK being set, then we found a useful
+			// foreign key and have built equality predicates on all PK/FK columns not
+			// contained in lookupRelEquijoinCols.
+			return pkFkFilters
+		}
+	}
+	return nil
+}
