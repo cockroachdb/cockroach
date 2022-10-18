@@ -423,11 +423,6 @@ func init() {
 		// Certificates directory. Use a server-specific flag and value to ignore environment
 		// variables, but share the same default.
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
-	}
-
-	// Flags common to the start commands and the connect command.
-	for _, cmd := range append(StartCmds, connectInitCmd) {
-		f := cmd.Flags()
 
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
@@ -437,30 +432,32 @@ func init() {
 			// relevant when running a single node.
 			_ = f.MarkHidden(cliflags.AdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
+			_ = f.MarkHidden(cliflags.HTTPAdvertiseAddr.Name)
 		}
 
-		// Backward-compatibility flags.
+		if cmd == startCmd || cmd == startSingleNodeCmd {
+			// Backward-compatibility flags.
 
-		// These are deprecated but until we have qualitatively new
-		// functionality in the flags above, there is no need to nudge the
-		// user away from them with a deprecation warning. So we keep
-		// them, but hidden from docs so that they don't appear as
-		// redundant with the main flags.
-		cliflagcfg.VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ServerHost)
-		_ = f.MarkHidden(cliflags.ServerHost.Name)
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
-		_ = f.MarkHidden(cliflags.ServerPort.Name)
+			// These are deprecated but until we have qualitatively new
+			// functionality in the flags above, there is no need to nudge the
+			// user away from them with a deprecation warning. So we keep
+			// them, but hidden from docs so that they don't appear as
+			// redundant with the main flags.
+			cliflagcfg.VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ServerHost)
+			_ = f.MarkHidden(cliflags.ServerHost.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
+			_ = f.MarkHidden(cliflags.ServerPort.Name)
 
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
-		_ = f.MarkHidden(cliflags.AdvertiseHost.Name)
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertisePort}, cliflags.AdvertisePort)
-		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
+			_ = f.MarkHidden(cliflags.AdvertiseHost.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertisePort}, cliflags.AdvertisePort)
+			_ = f.MarkHidden(cliflags.AdvertisePort.Name)
 
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
-		_ = f.MarkHidden(cliflags.ListenHTTPAddrAlias.Name)
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPPort}, cliflags.ListenHTTPPort)
-		_ = f.MarkHidden(cliflags.ListenHTTPPort.Name)
-
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
+			_ = f.MarkHidden(cliflags.ListenHTTPAddrAlias.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPPort}, cliflags.ListenHTTPPort)
+			_ = f.MarkHidden(cliflags.ListenHTTPPort.Name)
+		}
 	}
 
 	// Flags common to the start commands only.
