@@ -4179,6 +4179,7 @@ disable_partially_distributed_plans                   off                 NULL  
 disable_plan_gists                                    off                 NULL      NULL        NULL        string
 disallow_full_table_scans                             off                 NULL      NULL        NULL        string
 distsql                                               off                 NULL      NULL        NULL        string
+enable_auto_rehoming                                  off                 NULL      NULL        NULL        string
 enable_experimental_alter_column_type_general         off                 NULL      NULL        NULL        string
 enable_experimental_stream_replication                off                 NULL      NULL        NULL        string
 enable_implicit_select_for_update                     on                  NULL      NULL        NULL        string
@@ -4193,7 +4194,7 @@ enforce_home_region                                   off                 NULL  
 escape_string_warning                                 on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy         off                 NULL      NULL        NULL        string
 experimental_distsql_planning                         off                 NULL      NULL        NULL        string
-experimental_enable_auto_rehoming                     off                 NULL      NULL        NULL        string
+experimental_enable_auto_rehoming                     off                  NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning      off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                       off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints  on                  NULL      NULL        NULL        string
@@ -4313,6 +4314,7 @@ disable_partially_distributed_plans                   off                 NULL  
 disable_plan_gists                                    off                 NULL  user     NULL      off                 off
 disallow_full_table_scans                             off                 NULL  user     NULL      off                 off
 distsql                                               off                 NULL  user     NULL      off                 off
+enable_auto_rehoming                                  off                 NULL  user     NULL      off                 off
 enable_experimental_alter_column_type_general         off                 NULL  user     NULL      off                 off
 enable_experimental_stream_replication                off                 NULL  user     NULL      off                 off
 enable_implicit_select_for_update                     on                  NULL  user     NULL      on                  on
@@ -4444,6 +4446,7 @@ disable_plan_gists                                    NULL    NULL     NULL     
 disallow_full_table_scans                             NULL    NULL     NULL     NULL        NULL
 distsql                                               NULL    NULL     NULL     NULL        NULL
 distsql_workmem                                       NULL    NULL     NULL     NULL        NULL
+enable_auto_rehoming                                  NULL    NULL     NULL     NULL        NULL
 enable_experimental_alter_column_type_general         NULL    NULL     NULL     NULL        NULL
 enable_experimental_stream_replication                NULL    NULL     NULL     NULL        NULL
 enable_implicit_select_for_update                     NULL    NULL     NULL     NULL        NULL
