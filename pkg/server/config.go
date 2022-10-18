@@ -753,7 +753,16 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	return enginesCopy, nil
 }
 
-// InitNode parses node attributes and bootstrap addresses.
+// InitSQLServer finalizes the configuration of a SQL-only node.
+// It initializes additional configuration flags from the environment.
+func (cfg *Config) InitSQLServer(ctx context.Context) error {
+	cfg.readSQLEnvironmentVariables()
+	return nil
+}
+
+// InitNode finalizes the configuration of a KV node.
+// It parses node attributes and bootstrap addresses and
+// initializes additional configuration flags from the environment.
 func (cfg *Config) InitNode(ctx context.Context) error {
 	cfg.readEnvironmentVariables()
 
@@ -803,12 +812,16 @@ func (cfg *BaseConfig) RequireWebSession() bool {
 	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
 }
 
+func (cfg *Config) readSQLEnvironmentVariables() {
+	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
+	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
+}
+
 // readEnvironmentVariables populates all context values that are environment
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
-	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
-	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
+	cfg.readSQLEnvironmentVariables()
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
