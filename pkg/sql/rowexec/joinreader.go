@@ -1196,6 +1196,7 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ret.Exec.MaxAllocatedDisk.Add(jr.streamerInfo.diskMonitor.MaximumBytes())
 		}
 	}
+	ret.Exec.ConsumedRU = optional.MakeUint(jr.scanStats.ConsumedRU)
 	execstats.PopulateKVMVCCStats(&ret.KV, &jr.scanStats)
 	return ret
 }

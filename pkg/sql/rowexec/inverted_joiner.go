@@ -780,6 +780,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: ij.OutputHelper.Stats(),
 	}
+	ret.Exec.ConsumedRU = optional.MakeUint(ij.scanStats.ConsumedRU)
 	execstats.PopulateKVMVCCStats(&ret.KV, &ij.scanStats)
 	return &ret
 }
