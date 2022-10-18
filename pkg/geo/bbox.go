@@ -281,18 +281,26 @@ func boundingBoxFromGeomTGeographyType(g geom.T) (s2.Rect, error) {
 	rect := s2.EmptyRect()
 	switch g := g.(type) {
 	case *geom.Point:
-		return geogPointsBBox(g), nil
+		return geogPointsBBox(g)
 	case *geom.MultiPoint:
-		return geogPointsBBox(g), nil
+		return geogPointsBBox(g)
 	case *geom.LineString:
-		return geogLineBBox(g), nil
+		return geogLineBBox(g)
 	case *geom.MultiLineString:
 		for i := 0; i < g.NumLineStrings(); i++ {
-			rect = rect.Union(geogLineBBox(g.LineString(i)))
+			r, err := geogLineBBox(g.LineString(i))
+			if err != nil {
+				return s2.EmptyRect(), err
+			}
+			rect = rect.Union(r)
 		}
 	case *geom.Polygon:
 		for i := 0; i < g.NumLinearRings(); i++ {
-			rect = rect.Union(geogLineBBox(g.LinearRing(i)))
+			r, err := geogLineBBox(g.LinearRing(i))
+			if err != nil {
+				return s2.EmptyRect(), err
+			}
+			rect = rect.Union(r)
 		}
 	case *geom.MultiPolygon:
 		for i := 0; i < g.NumPolygons(); i++ {
@@ -318,22 +326,30 @@ func boundingBoxFromGeomTGeographyType(g geom.T) (s2.Rect, error) {
 
 // geogPointsBBox constructs a bounding box, represented as a s2.Rect, for the set
 // of points contained in g.
-func geogPointsBBox(g geom.T) s2.Rect {
+func geogPointsBBox(g geom.T) (s2.Rect, error) {
 	rect := s2.EmptyRect()
 	flatCoords := g.FlatCoords()
 	for i := 0; i < len(flatCoords); i += g.Stride() {
-		rect = rect.AddPoint(s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i]))
+		point := s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i])
+		if !point.IsValid() {
+			return s2.EmptyRect(), OutOfRangeError()
+		}
+		rect = rect.AddPoint(point)
 	}
-	return rect
+	return rect, nil
 }
 
 // geogLineBBox constructs a bounding box, represented as a s2.Rect, for the line
 // or ring/loop represented by g.
-func geogLineBBox(g geom.T) s2.Rect {
+func geogLineBBox(g geom.T) (s2.Rect, error) {
 	bounder := s2.NewRectBounder()
 	flatCoords := g.FlatCoords()
 	for i := 0; i < len(flatCoords); i += g.Stride() {
-		bounder.AddPoint(s2.PointFromLatLng(s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i])))
+		point := s2.LatLngFromDegrees(flatCoords[i+1], flatCoords[i])
+		if !point.IsValid() {
+			return s2.EmptyRect(), OutOfRangeError()
+		}
+		bounder.AddPoint(s2.PointFromLatLng(point))
 	}
-	return bounder.RectBound()
+	return bounder.RectBound(), nil
 }
