@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -251,6 +252,10 @@ type Flags struct {
 	// SkipRace indicates that a test should be skipped if the race detector is
 	// enabled.
 	SkipRace bool
+
+	// RoundFloatsInStringsSigFigs specifies the number of significant figures
+	// to round floats embedded in strings to where zero means do not round.
+	RoundFloatsInStringsSigFigs int
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -619,6 +624,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
+		if ot.Flags.RoundFloatsInStringsSigFigs > 0 {
+			return floatcmp.RoundFloatsInString(ot.FormatExpr(e), ot.Flags.RoundFloatsInStringsSigFigs)
+		}
 		return ot.FormatExpr(e)
 
 	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
@@ -884,7 +892,24 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 // Set parses an argument that refers to a flag.
 // See OptTester.RunCommand for supported flags.
 func (f *Flags) Set(arg datadriven.CmdArg) error {
+	if strings.HasPrefix(arg.Key, "round-in-strings") {
+		significantFigures, err := floatcmp.ParseRoundInStringsDirective(arg.Key)
+		if err != nil {
+			return err
+		}
+		f.RoundFloatsInStringsSigFigs = significantFigures
+		return nil
+	}
 	switch arg.Key {
+	case "round-in-strings":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("round-in-strings requires a single argument")
+		}
+		sigFigs, err := strconv.Atoi(arg.Vals[0])
+		if err != nil {
+			return err
+		}
+		f.RoundFloatsInStringsSigFigs = sigFigs
 	case "set":
 		for _, val := range arg.Vals {
 			s := strings.Split(val, "=")
