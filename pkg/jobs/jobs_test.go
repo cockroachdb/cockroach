@@ -2360,6 +2360,11 @@ func TestJobInTxn(t *testing.T) {
 			}
 			return fn, nil, nil, false, nil
 		},
+		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
+		) (matched bool, _ colinfo.ResultColumns, _ error) {
+			_, matched = stmt.(*tree.Backup)
+			return matched, nil, nil
+		},
 	)
 	jobs.RegisterConstructor(jobspb.TypeBackup, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
@@ -2396,6 +2401,11 @@ func TestJobInTxn(t *testing.T) {
 				return err
 			}
 			return fn, nil, nil, false, nil
+		},
+		func(_ context.Context, stmt tree.Statement, execCtx sql.PlanHookState,
+		) (matched bool, _ colinfo.ResultColumns, _ error) {
+			_, matched = stmt.(*tree.Restore)
+			return matched, nil, nil
 		},
 	)
 	jobs.RegisterConstructor(jobspb.TypeRestore, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {

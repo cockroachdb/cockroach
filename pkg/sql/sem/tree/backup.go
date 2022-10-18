@@ -204,6 +204,16 @@ type KVOption struct {
 // KVOptions is a list of KVOptions.
 type KVOptions []KVOption
 
+// HasKey searches the set of options to discover if it has key.
+func (o *KVOptions) HasKey(key Name) bool {
+	for _, kv := range *o {
+		if kv.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
 // Format implements the NodeFormatter interface.
 func (o *KVOptions) Format(ctx *FmtCtx) {
 	for i := range *o {
