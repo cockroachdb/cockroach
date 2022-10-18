@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -62,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/roundfloatsinstring"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -251,6 +253,14 @@ type Flags struct {
 	// SkipRace indicates that a test should be skipped if the race detector is
 	// enabled.
 	SkipRace bool
+
+	// RoundFloatsInStrings can be set to use a regular expression to find floats
+	// that may be embedded in strings and replace them with rounded versions.
+	RoundFloatsInStrings bool
+
+	// RoundFloatsInStringsSignificantFigures specifies the number of significant figures
+	// to round floats embedded in strings to and is only used if roundFloatsInStrings is true.
+	RoundFloatsInStringsSignificantFigures int
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -619,6 +629,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
+		if ot.Flags.RoundFloatsInStrings {
+			return roundfloatsinstring.RoundFloatsInString(ot.FormatExpr(e), ot.Flags.RoundFloatsInStringsSignificantFigures)
+		}
 		return ot.FormatExpr(e)
 
 	case "assign-placeholders-build", "assign-placeholders-norm", "assign-placeholders-opt":
@@ -884,6 +897,26 @@ func ruleNamesToRuleSet(args []string) (RuleSet, error) {
 // Set parses an argument that refers to a flag.
 // See OptTester.RunCommand for supported flags.
 func (f *Flags) Set(arg datadriven.CmdArg) error {
+	if strings.HasPrefix(arg.Key, "round-in-strings") {
+		// Use 6 significant figures by default.
+		significantFigures := 6
+		re, err := regexp.Compile(`round-in-strings(-*)(\d*)`)
+		if err != nil {
+			return err
+		}
+		match := re.FindStringSubmatch(arg.Key)
+		if len(match) != 0 {
+			if match[2] != "" {
+				significantFigures, err = strconv.Atoi(match[2])
+				if err != nil {
+					return err
+				}
+			}
+		}
+		f.RoundFloatsInStrings = true
+		f.RoundFloatsInStringsSignificantFigures = significantFigures
+		return nil
+	}
 	switch arg.Key {
 	case "set":
 		for _, val := range arg.Vals {

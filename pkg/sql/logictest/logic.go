@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/roundfloatsinstring"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -897,6 +898,10 @@ type logicQuery struct {
 	// roundFloatsInStrings can be set to use a regular expression to find floats
 	// that may be embedded in strings and replace them with rounded versions.
 	roundFloatsInStrings bool
+
+	// roundFloatsInStringsSignificantFigures specifies the number of significant figures
+	// to round floats embedded in strings to and is only used if roundFloatsInStrings is true.
+	roundFloatsInStringsSignificantFigures int
 }
 
 var allowedKVOpTypes = []string{
@@ -2546,13 +2551,31 @@ func (t *logicTest) processSubtest(
 						case "noticetrace":
 							query.noticetrace = true
 
-						case "round-in-strings":
-							query.roundFloatsInStrings = true
-
 						case "async":
 							query.expectAsync = true
 
 						default:
+							if strings.HasPrefix(opt, "round-in-strings") {
+								// Use 6 significant figures by default.
+								significantFigures := 6
+								re, err := regexp.Compile(`round-in-strings(-*)(\d*)`)
+								if err != nil {
+									return err
+								}
+								match := re.FindStringSubmatch(opt)
+								if len(match) != 0 {
+									if match[2] != "" {
+										significantFigures, err = strconv.Atoi(match[2])
+										if err != nil {
+											return err
+										}
+									}
+								}
+								query.roundFloatsInStrings = true
+								query.roundFloatsInStringsSignificantFigures = significantFigures
+								break
+							}
+
 							if strings.HasPrefix(opt, "nodeidx=") {
 								idx, err := strconv.ParseInt(strings.SplitN(opt, "=", 2)[1], 10, 64)
 								if err != nil {
@@ -3308,7 +3331,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 						}
 						s := fmt.Sprint(val)
 						if query.roundFloatsInStrings {
-							s = roundFloatsInString(s)
+							s = roundfloatsinstring.RoundFloatsInString(s, query.roundFloatsInStringsSignificantFigures)
 						}
 						actualResultsRaw = append(actualResultsRaw, s)
 					} else {
@@ -4116,14 +4139,4 @@ func (t *logicTest) printCompletion(path string, config logictestbase.TestCluste
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.Name,
 		t.progress, t.failures, unsupportedMsg)
-}
-
-func roundFloatsInString(s string) string {
-	return string(regexp.MustCompile(`(\d+\.\d+)`).ReplaceAllFunc([]byte(s), func(x []byte) []byte {
-		f, err := strconv.ParseFloat(string(x), 64)
-		if err != nil {
-			return []byte(err.Error())
-		}
-		return []byte(fmt.Sprintf("%.6g", f))
-	}))
 }
