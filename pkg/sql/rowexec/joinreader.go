@@ -1181,6 +1181,9 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 		},
 		Output: jr.OutputHelper.Stats(),
+		Exec: execinfrapb.ExecStats{
+			ConsumedRU: optional.MakeUint(jr.scanStats.RuConsumed),
+		},
 	}
 	// Note that there is no need to include the maximum bytes of
 	// jr.limitedMemMonitor because it is a child of jr.MemMonitor.

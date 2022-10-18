@@ -177,6 +177,9 @@ func (s *ComponentStats) formatStats(fn func(suffix string, value interface{})) 
 	if s.Exec.MaxAllocatedDisk.HasValue() {
 		fn("max sql temp disk usage", humanize.IBytes(s.Exec.MaxAllocatedDisk.Value()))
 	}
+	if s.Exec.ConsumedRU.HasValue() {
+		fn("request units consumed", humanizeutil.Count(s.Exec.ConsumedRU.Value()))
+	}
 
 	// Output stats.
 	if s.Output.NumBatches.HasValue() {
@@ -263,6 +266,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.Exec.MaxAllocatedDisk.HasValue() {
 		result.Exec.MaxAllocatedDisk = other.Exec.MaxAllocatedDisk
+	}
+	if !result.Exec.ConsumedRU.HasValue() {
+		result.Exec.ConsumedRU = other.Exec.ConsumedRU
 	}
 
 	// Output stats.
@@ -356,6 +362,7 @@ func (s *ComponentStats) MakeDeterministic() {
 	timeVal(&s.Exec.ExecTime)
 	resetUint(&s.Exec.MaxAllocatedMem)
 	resetUint(&s.Exec.MaxAllocatedDisk)
+	resetUint(&s.Exec.ConsumedRU)
 
 	// Output.
 	resetUint(&s.Output.NumBatches)

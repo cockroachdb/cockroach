@@ -775,6 +775,7 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(ij.diskMonitor.MaximumBytes())),
+			ConsumedRU:       optional.MakeUint(ij.scanStats.RuConsumed),
 		},
 		Output: ij.OutputHelper.Stats(),
 	}

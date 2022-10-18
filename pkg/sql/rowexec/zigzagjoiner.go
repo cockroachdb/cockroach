@@ -865,6 +865,9 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		KV:     kvStats,
 		Output: z.OutputHelper.Stats(),
+		Exec: execinfrapb.ExecStats{
+			ConsumedRU: optional.MakeUint(z.scanStats.RuConsumed),
+		},
 	}
 }
 

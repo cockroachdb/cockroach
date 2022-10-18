@@ -317,6 +317,9 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(tr.Ctx, tr.ExecStatsTrace)),
 			BatchRequestsIssued: optional.MakeUint(uint64(tr.fetcher.GetBatchRequestsIssued())),
 		},
+		Exec: execinfrapb.ExecStats{
+			ConsumedRU: optional.MakeUint(tr.scanStats.RuConsumed),
+		},
 		Output: tr.OutputHelper.Stats(),
 	}
 	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
