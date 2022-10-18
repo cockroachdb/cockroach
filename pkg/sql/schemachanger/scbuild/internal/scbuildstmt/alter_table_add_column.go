@@ -122,6 +122,7 @@ func alterTableAddColumn(
 			GeneratedAsIdentityType: desc.GeneratedAsIdentityType,
 			PgAttributeNum:          desc.GetPGAttributeNum(),
 		},
+		unique: d.Unique.IsUnique,
 	}
 	if ptr := desc.GeneratedAsIdentitySequenceOption; ptr != nil {
 		spec.col.GeneratedAsIdentitySequenceOption = *ptr
@@ -277,6 +278,7 @@ type addColumnSpec struct {
 	def      *scpb.ColumnDefaultExpression
 	onUpdate *scpb.ColumnOnUpdateExpression
 	comment  *scpb.ColumnComment
+	unique   bool
 }
 
 // addColumn is a helper function which adds column element targets and ensures
@@ -338,6 +340,11 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 	// follow-up change in order to get this in.
 	allTargets := b.QueryByID(spec.tbl.TableID)
 	if spec.def == nil && spec.colType.ComputeExpr == nil {
+		if !spec.colType.IsNullable && spec.unique {
+			panic(scerrors.NotImplementedErrorf(n,
+				"`ADD COLUMN NOT NULL UNIQUE` is problematic with "+
+					"concurrent insert. See issue #90174"))
+		}
 		b.Add(&scpb.IndexColumn{
 			TableID:       spec.tbl.TableID,
 			IndexID:       existing.IndexID,
