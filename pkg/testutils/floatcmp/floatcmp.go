@@ -13,6 +13,11 @@
 package floatcmp
 
 import (
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
@@ -74,4 +79,27 @@ const (
 // either is 0.
 func EqualApprox(expected interface{}, actual interface{}, fraction float64, margin float64) bool {
 	return cmp.Equal(expected, actual, cmpopts.EquateApprox(fraction, margin), cmpopts.EquateNaNs())
+}
+
+// RoundFloatsInString rounds floats in a given string to the given number of significant figures.
+func RoundFloatsInString(s string, significantFigures int) string {
+	return string(regexp.MustCompile(`(\d+\.\d+)`).ReplaceAllFunc([]byte(s), func(x []byte) []byte {
+		f, err := strconv.ParseFloat(string(x), 64)
+		if err != nil {
+			return []byte(err.Error())
+		}
+		formatSpecifier := "%." + fmt.Sprintf("%dg", significantFigures)
+		return []byte(fmt.Sprintf(formatSpecifier, f))
+	}))
+}
+
+// ParseRoundInStringsDirective parses the directive and returns the number of
+// significant figures to round floats to.
+func ParseRoundInStringsDirective(directive string) (int, error) {
+	kv := strings.Split(directive, "=")
+	if len(kv) == 1 {
+		// Use 6 significant figures by default.
+		return 6, nil
+	}
+	return strconv.Atoi(kv[1])
 }

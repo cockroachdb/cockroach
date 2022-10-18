@@ -894,9 +894,9 @@ type logicQuery struct {
 	// messages.
 	rawOpts string
 
-	// roundFloatsInStrings can be set to use a regular expression to find floats
-	// that may be embedded in strings and replace them with rounded versions.
-	roundFloatsInStrings bool
+	// roundFloatsInStringsSigFigs specifies the number of significant figures
+	// to round floats embedded in strings to where zero means do not round.
+	roundFloatsInStringsSigFigs int
 }
 
 var allowedKVOpTypes = []string{
@@ -2551,13 +2551,19 @@ func (t *logicTest) processSubtest(
 						case "noticetrace":
 							query.noticetrace = true
 
-						case "round-in-strings":
-							query.roundFloatsInStrings = true
-
 						case "async":
 							query.expectAsync = true
 
 						default:
+							if strings.HasPrefix(opt, "round-in-strings") {
+								significantFigures, err := floatcmp.ParseRoundInStringsDirective(opt)
+								if err != nil {
+									return err
+								}
+								query.roundFloatsInStringsSigFigs = significantFigures
+								break
+							}
+
 							if strings.HasPrefix(opt, "nodeidx=") {
 								idx, err := strconv.ParseInt(strings.SplitN(opt, "=", 2)[1], 10, 64)
 								if err != nil {
@@ -3312,8 +3318,8 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 							val = "·"
 						}
 						s := fmt.Sprint(val)
-						if query.roundFloatsInStrings {
-							s = roundFloatsInString(s)
+						if query.roundFloatsInStringsSigFigs > 0 {
+							s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
 						}
 						actualResultsRaw = append(actualResultsRaw, s)
 					} else {
@@ -4121,14 +4127,4 @@ func (t *logicTest) printCompletion(path string, config logictestbase.TestCluste
 	}
 	t.outf("--- done: %s with config %s: %d tests, %d failures%s", path, config.Name,
 		t.progress, t.failures, unsupportedMsg)
-}
-
-func roundFloatsInString(s string) string {
-	return string(regexp.MustCompile(`(\d+\.\d+)`).ReplaceAllFunc([]byte(s), func(x []byte) []byte {
-		f, err := strconv.ParseFloat(string(x), 64)
-		if err != nil {
-			return []byte(err.Error())
-		}
-		return []byte(fmt.Sprintf("%.6g", f))
-	}))
 }
