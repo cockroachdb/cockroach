@@ -73,6 +73,7 @@ var _ queueImpl = &consistencyQueue{}
 // A data wrapper to allow for the shouldQueue method to be easier to test.
 type consistencyShouldQueueData struct {
 	desc                      *roachpb.RangeDescriptor
+	lastUpdateNanos           int64
 	getQueueLastProcessed     func(ctx context.Context) (hlc.Timestamp, error)
 	isNodeAvailable           func(nodeID roachpb.NodeID) bool
 	disableLastProcessedCheck bool
@@ -109,7 +110,8 @@ func (q *consistencyQueue) shouldQueue(
 ) (bool, float64) {
 	return consistencyQueueShouldQueueImpl(ctx, now,
 		consistencyShouldQueueData{
-			desc: repl.Desc(),
+			desc:            repl.Desc(),
+			lastUpdateNanos: repl.GetMVCCStats().LastUpdateNanos,
 			getQueueLastProcessed: func(ctx context.Context) (hlc.Timestamp, error) {
 				return repl.getQueueLastProcessed(ctx, q.name)
 			},
@@ -125,8 +127,8 @@ func (q *consistencyQueue) shouldQueue(
 		})
 }
 
-// ConsistencyQueueShouldQueueImpl is exposed for testability without having
-// to setup a fully fledged replica.
+// consistencyQueueShouldQueueImpl is exposed for testability without having to
+// setup a fully fledged replica.
 func consistencyQueueShouldQueueImpl(
 	ctx context.Context, now hlc.ClockTimestamp, data consistencyShouldQueueData,
 ) (bool, float64) {
@@ -142,6 +144,14 @@ func consistencyQueueShouldQueueImpl(
 		}
 		if shouldQ, priority = shouldQueueAgain(now.ToTimestamp(), lpTS, data.interval); !shouldQ {
 			return false, 0
+		}
+
+		// Bump priority by up to +1 if the replica is for a range that has been
+		// recently modified.
+		// TODO(pavelkalinnikov): Consider bumping up to +K.
+		cliff := data.lastUpdateNanos + data.interval.Nanoseconds()
+		if n := now.ToTimestamp().GoTime().UnixNano(); n >= data.lastUpdateNanos && n < cliff {
+			priority += float64(cliff-n) / float64(data.interval.Nanoseconds())
 		}
 	}
 	// Check if all replicas are available.
