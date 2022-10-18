@@ -49,6 +49,10 @@ apt-get install --yes \
   python3 \
   unzip
 
+# Enable support for executing binaries of all architectures via qemu emulation
+# (necessary for building arm64 Docker images)
+docker run --privileged --rm tonistiigi/binfmt --install all
+
 case $ARCH in
     x86_64) WHICH=x86_64; SHASUM=97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 ;;
     aarch64) WHICH=aarch64; SHASUM=77620f99e9d5f39cf4a49294c6a68c89a978ecef144894618974b9958efe3c2a ;;
