@@ -68,6 +68,7 @@ message Transaction {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TransactionFingerprintID",
     (gogoproto.nullable) = false];
   string user_priority = 3;
+  bool implicit_txn = 4;
 }
 
 message Statement {
@@ -99,7 +100,6 @@ message Statement {
   repeated int64 nodes = 17;
   google.protobuf.Duration contention = 18 [(gogoproto.stdduration) = true];
   repeated string index_recommendations = 19;
-
 }
 
 message Insight {

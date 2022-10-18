@@ -72,7 +72,7 @@ func TestInsightsIntegration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, count, "expect:0, actual:%d, queries:%s", count, queryText)
 
-	queryDelayInSeconds := 2 * latencyThreshold.Seconds()
+	queryDelayInSeconds := latencyThreshold.Seconds()
 	// Execute a "long-running" statement, running longer than our latencyThreshold.
 	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", queryDelayInSeconds)
 	require.NoError(t, err)
@@ -97,14 +97,16 @@ func TestInsightsIntegration(t *testing.T) {
 			"status, "+
 			"start_time, "+
 			"end_time, "+
-			"full_scan "+
+			"full_scan, "+
+			"implicit_txn "+
 			"FROM crdb_internal.node_execution_insights where "+
 			"query = $1 and app_name = $2 ", "SELECT pg_sleep($1)", appName)
 
 		var query, status string
 		var startInsights, endInsights time.Time
 		var fullScan bool
-		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan)
+		var implicitTxn bool
+		err = row.Scan(&query, &status, &startInsights, &endInsights, &fullScan, &implicitTxn)
 
 		if err != nil {
 			return err
@@ -147,10 +149,28 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	_, err = conn.Exec("CREATE TABLE t (id string, s string);")
 	require.NoError(t, err)
 
-	queryDelayInSeconds := 2 * latencyThreshold.Seconds()
-	// Execute a "long-running" statement, running longer than our latencyThreshold.
-	_, err = conn.ExecContext(ctx, "SELECT pg_sleep($1)", queryDelayInSeconds)
+	// Execute a "long-running" statement, running longer than our latencyThreshold (100ms).
+	_, err = conn.ExecContext(ctx, "SELECT pg_sleep(.11)")
 	require.NoError(t, err)
+
+	testutils.SucceedsWithin(t, func() error {
+		row := conn.QueryRowContext(ctx, "SELECT "+
+			"implicit_txn "+
+			"FROM crdb_internal.node_execution_insights where "+
+			"app_name = $1 and query = $2 ", appName, "SELECT pg_sleep(_)")
+
+		var implicitTxn bool
+		err = row.Scan(&implicitTxn)
+		if err != nil {
+			return err
+		}
+
+		if implicitTxn != true {
+			return fmt.Errorf("expected implicit_txn '%v', but was %v", true, implicitTxn)
+		}
+
+		return nil
+	}, 2*time.Second)
 
 	var priorities = []struct {
 		setPriorityQuery      string
@@ -205,23 +225,29 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 		testutils.SucceedsWithin(t, func() error {
 			row := conn.QueryRowContext(ctx, "SELECT "+
 				"query, "+
-				"priority "+
+				"priority, "+
+				"implicit_txn "+
 				"FROM crdb_internal.node_execution_insights where "+
 				"app_name = $1 and query = $2  ", appName, p.queryNoValues)
 
 			var query, priority string
-			err = row.Scan(&query, &priority)
+			var implicitTxn bool
+			err = row.Scan(&query, &priority, &implicitTxn)
 
 			if err != nil {
 				return err
 			}
 
 			if query != p.queryNoValues {
-				return fmt.Errorf("expected '%s', but was %s", p.queryNoValues, query)
+				return fmt.Errorf("expected query '%s', but was %s", p.queryNoValues, query)
 			}
 
 			if priority != p.expectedPriorityValue {
-				return fmt.Errorf("expected '%s', but was %s", p.expectedPriorityValue, priority)
+				return fmt.Errorf("expected priority '%s', but was %s", p.expectedPriorityValue, priority)
+			}
+
+			if implicitTxn != false {
+				return fmt.Errorf("expected implicit_txn '%v', but was %v", false, implicitTxn)
 			}
 
 			return nil
