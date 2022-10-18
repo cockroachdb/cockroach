@@ -184,7 +184,7 @@ func (d *Distribution) FromIndexScan(
 			// If the above methods failed to find a distribution, then the
 			// distribution is all regions in the database.
 			regionsNames, ok := tabMeta.GetRegionsInDatabase(evalCtx.Planner)
-			if !ok && evalCtx.SessionData().EnforceHomeRegion {
+			if !ok && evalCtx.SessionData().EnforceHomeRegion && evalCtx.Planner.IsANSIDML() {
 				err := pgerror.New(pgcode.QueryHasNoHomeRegion,
 					"Query has no home region. Try accessing only tables defined in multi-region databases.")
 				panic(err)

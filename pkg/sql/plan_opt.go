@@ -619,7 +619,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		f = gf
 	}
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
-		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit)
+		bld := execbuilder.New(f, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit, stmt.IsANSIDML())
 		plan, err := bld.Build()
 		if err != nil {
 			return err
@@ -641,6 +641,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		explainFactory := explain.NewFactory(f)
 		bld := execbuilder.New(
 			explainFactory, &opc.optimizer, mem, &opc.catalog, mem.RootExpr(), evalCtx, allowAutoCommit,
+			stmt.IsANSIDML(),
 		)
 		plan, err := bld.Build()
 		if err != nil {

@@ -452,6 +452,11 @@ func (ep *DummyEvalPlanner) GetMultiregionConfig(databaseID descpb.ID) (interfac
 	return nil /* regionConfig */, false
 }
 
+// IsANSIDML is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) IsANSIDML() bool {
+	return false
+}
+
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
