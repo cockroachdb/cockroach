@@ -615,10 +615,7 @@ If problems persist, please see %s.`
 
 			// Have we already received a signal to terminate? If so, just
 			// stop here.
-			serverStatusMu.Lock()
-			draining := serverStatusMu.draining
-			serverStatusMu.Unlock()
-			if draining {
+			if serverStatusMu.shutdownInProgress() {
 				return nil
 			}
 
@@ -636,9 +633,21 @@ If problems persist, please see %s.`
 				return errors.Wrap(err, "cockroach server exited with error")
 			}
 			// Server started, notify the shutdown monitor running concurrently.
-			serverStatusMu.Lock()
-			serverStatusMu.started = true
-			serverStatusMu.Unlock()
+			if shutdownInProgress := serverStatusMu.setStarted(); shutdownInProgress {
+				// A shutdown was requested already, e.g. by sending SIGTERM to the process:
+				// maybeWaitForShutdown (which runs concurrently with this goroutine) has
+				// called serverStatusMu.startShutdown() already.
+				// However, because setStarted() had not been called before,
+				// maybeWaitForShutdown did not call Stop on the stopper.
+				// So we do it here.
+				stopper.Stop(ctx)
+				return nil
+			}
+			// After this point, if a shutdown is requested concurrently
+			// with the startup steps below, the stopper.Stop() method will
+			// be called by the shutdown goroutine, which in turn will cause
+			// all these startup steps to fail. So we do not need to look at
+			// the "shutdown status" in serverStatusMu any more.
 
 			// Start up the diagnostics reporting and update check loops.
 			// We don't do this in (*server.Server).Start() because we don't
@@ -677,13 +686,54 @@ If problems persist, please see %s.`
 		&serverStatusMu)
 }
 
+// serverStatus coordinates the async goroutine that starts the server
+// up (e.g. in runStart) and the async goroutine that stops the server
+// (in waitForShutdown).
+//
+// We need this intermediate coordination because it isn't safe to try
+// to drain a server that doesn't exist or is in the middle of
+// starting up, or to start a server after shutdown has begun.
+//
+// TODO(knz): clarify the transfer of ownership for the stopper.Stop
+// call further, as per suggestion in https://github.com/cockroachdb/cockroach/issues/90233.
 type serverStatus struct {
 	syncutil.Mutex
-	// Used to synchronize server startup with server shutdown if something
-	// interrupts the process during initialization (it isn't safe to try to
-	// drain a server that doesn't exist or is in the middle of starting up,
-	// or to start a server after draining has begun).
-	started, draining bool
+	// started indicates that the server has started already. After
+	// started has become true, a graceful shutdown should use a soft
+	// drain.
+	started bool
+	// shutdownRequested indicates that shutdown has started
+	// already. After draining has become true, server startup should
+	// stop.
+	shutdownRequested bool
+}
+
+// setStarted marks the server as started. It returns whether shutdown
+// has been requested already. In that case, we know that the shutdown
+// goroutine did not use the stopper, so the server startup can do
+// that.
+func (s *serverStatus) setStarted() bool {
+	s.Lock()
+	defer s.Unlock()
+	s.started = true
+	return s.shutdownRequested
+}
+
+// shutdownInProgress returns whether a shutdown has been requested
+// already.
+func (s *serverStatus) shutdownInProgress() bool {
+	s.Lock()
+	defer s.Unlock()
+	return s.shutdownRequested
+}
+
+// startShutdown registers the shutdown request and returns whether
+// the server was started already.
+func (s *serverStatus) startShutdown() bool {
+	s.Lock()
+	defer s.Unlock()
+	s.shutdownRequested = true
+	return s.started
 }
 
 // serverShutdownInterface is the subset of the APIs on a server
@@ -763,18 +813,16 @@ func waitForShutdown(
 			}
 		}
 
-		// Start the draining process in a separate goroutine so that it
+		// Start the shutdown process in a separate goroutine so that it
 		// runs concurrently with the timeout check below.
 		go func() {
-			serverStatusMu.Lock()
-			serverStatusMu.draining = true
-			drainingIsSafe := serverStatusMu.started
-			serverStatusMu.Unlock()
+			// The return value of startShutdown indicates whether the
+			// server has started already, and the graceful shutdown should
+			// call the Drain method. We cannot call Drain if the server has
+			// not started yet.
+			canUseDrain := serverStatusMu.startShutdown()
 
-			// drainingIsSafe may have been set in the meantime, but that's ok.
-			// In the worst case, we're not draining a Server that has *just*
-			// started. Not desirable, but not terrible either.
-			if !drainingIsSafe {
+			if !canUseDrain {
 				close(stopWithoutDrain)
 				return
 			}
