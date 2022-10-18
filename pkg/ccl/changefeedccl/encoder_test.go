@@ -1051,3 +1051,57 @@ func makeTestTypes(rng *rand.Rand, numKeyTypes, numColTypes int) (keyTypes, valT
 
 	return randTypes(numKeyTypes, true), randTypes(numColTypes, false)
 }
+
+func TestParquetEncoder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer TestingSetIncludeParquetMetadata()()
+
+		tests := []struct {
+			name           string
+			changefeedStmt string
+		}{
+			{
+				name: "Without Compression",
+				changefeedStmt: fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+					`WITH format=%s`, changefeedbase.OptFormatParquet),
+			},
+			{
+				name: "With Compression",
+				changefeedStmt: fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+					`WITH format=%s, compression='gzip'`, changefeedbase.OptFormatParquet),
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL)`)
+				defer sqlDB.Exec(t, `DROP TABLE FOO`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false),(3, NULL, NULL, 4.5, NULL)`)
+				foo := feed(t, f, test.changefeedStmt)
+				defer closeFeed(t, foo)
+
+				assertPayloads(t, foo, []string{
+					`foo: [1]->{"after": {"a": true, "i": 1, "x": "Alice", "y": 3, "z": 0.5032135844230652}}`,
+					`foo: [2]->{"after": {"a": false, "i": 2, "x": "Bob", "y": 2, "z": "NaN"}}`,
+					`foo: [3]->{"after": {"a": null, "i": 3, "x": null, "y": null, "z": 4.5}}`,
+				})
+
+				sqlDB.Exec(t, `UPDATE foo SET x='wonderland' where i=1`)
+				assertPayloads(t, foo, []string{
+					`foo: [1]->{"after": {"a": true, "i": 1, "x": "wonderland", "y": 3, "z": 0.5032135844230652}}`,
+				})
+
+				sqlDB.Exec(t, `DELETE from foo where i=1`)
+				assertPayloads(t, foo, []string{
+					`foo: [1]->{"after": null}`,
+				})
+			})
+		}
+	}
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
