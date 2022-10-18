@@ -145,7 +145,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 	if len(ids) != 1 {
 		t.Fatalf("expected one dead NodeID, got %v", ids)
 	}
-	const expr = "this.node.is.terminating.because.a.replica.inconsistency.was.detected"
+	const expr = "This.node.is.terminating.because.a.replica.inconsistency.was.detected"
 	c.Run(ctx, c.Node(1), "grep "+
 		expr+" "+"{log-dir}/cockroach.log")
 
