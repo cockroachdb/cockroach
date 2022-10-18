@@ -123,6 +123,7 @@ type QueryLevelStats struct {
 	KVTime                time.Duration
 	NetworkMessages       int64
 	ContentionTime        time.Duration
+	RUEstimate            int64
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -156,6 +157,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.KVTime += other.KVTime
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
+	s.RUEstimate += other.RUEstimate
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a

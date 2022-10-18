@@ -1340,7 +1340,11 @@ func cookTag(
 
 // bufferRow serializes a row and adds it to the buffer. Depending on the buffer
 // size limit, bufferRow may flush the buffered data to the connection.
-func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult) error {
+// bufferRow returns the number of buffered bytes. If discardResult is true, the
+// buffer is reset without flushing to the client.
+func (c *conn) bufferRow(
+	ctx context.Context, row tree.Datums, r *commandResult, discardResult bool,
+) (size int64, err error) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
 	for i, col := range row {
@@ -1357,16 +1361,25 @@ func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult)
 			c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 		}
 	}
+	size = int64(c.msgBuilder.Len())
+	if discardResult && c.msgBuilder.err == nil {
+		c.msgBuilder.reset()
+		return size, nil
+	}
 	if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected err from buffer"))
 	}
-	return c.maybeFlush(r.pos, r.bufferingDisabled)
+	return size, c.maybeFlush(r.pos, r.bufferingDisabled)
 }
 
 // bufferBatch serializes a batch and adds all the rows from it to the buffer.
 // It is a noop for zero-length batch. Depending on the buffer size limit,
 // bufferBatch may flush the buffered data to the connection.
-func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandResult) error {
+// bufferBatch returns the number of buffered bytes. If discardResult is true,
+// the buffer is reset without flushing to the client.
+func (c *conn) bufferBatch(
+	ctx context.Context, batch coldata.Batch, r *commandResult, discardResult bool,
+) (size int64, err error) {
 	sel := batch.Selection()
 	n := batch.Length()
 	if n > 0 {
@@ -1395,15 +1408,20 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 					c.msgBuilder.setError(errors.Errorf("unsupported format code %s", fmtCode))
 				}
 			}
+			size += int64(c.msgBuilder.Len())
+			if discardResult && c.msgBuilder.err == nil {
+				c.msgBuilder.reset()
+				continue
+			}
 			if err := c.msgBuilder.finishMsg(&c.writerState.buf); err != nil {
 				panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 			}
 			if err := c.maybeFlush(r.pos, r.bufferingDisabled); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
-	return nil
+	return size, nil
 }
 
 func (c *conn) bufferReadyForQuery(txnStatus byte) {
