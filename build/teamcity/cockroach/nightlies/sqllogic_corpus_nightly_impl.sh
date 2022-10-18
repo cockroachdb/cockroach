@@ -75,14 +75,15 @@ if [ $exit_status = 0 ]; then
 fi
 
 # Generate a corpus for all mixed version variants
-for config in local-mixed-22.1-22.2; do
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --process_test_failures test -- --config=ci \
-    //pkg/sql/logictest/tests/$config/... \
-    --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed\
-    --test_env=GO_TEST_WRAP_TESTV=1 \
-    --test_env=GO_TEST_WRAP=1 \
-    --test_timeout=7200 \
-    || exit_status=$?
+for config in local-mixed-22.2-23.1; do
+  $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --process_test_failures test -- --config=ci \
+      //pkg/sql/logictest/tests/$config/... \
+      --test_arg=--declarative-corpus=$ARTIFACTS_DIR/corpus-mixed \
+      --test_env=GO_TEST_WRAP_TESTV=1 \
+      --test_env=GO_TEST_WRAP=1 \
+      --test_timeout=7200 \
+      || exit_status=$?
+done
 
 # Any generated corpus should be validated on the current version first, which
 # indicates we can replay it on the same version.
