@@ -62,13 +62,14 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created     time.Time
-	codec       io.WriteCloser
-	rawSize     int
-	numMessages int
-	buf         bytes.Buffer
-	alloc       kvevent.Alloc
-	oldestMVCC  hlc.Timestamp
+	created      time.Time
+	codec        io.WriteCloser
+	rawSize      int
+	numMessages  int
+	buf          bytes.Buffer
+	alloc        kvevent.Alloc
+	oldestMVCC   hlc.Timestamp
+	parquetCodec *parquetFileWriter
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -419,6 +420,9 @@ func makeCloudStorageSink(
 		// would require a bit of refactoring.
 		s.ext = `.csv`
 		s.rowDelimiter = []byte{'\n'}
+	case changefeedbase.OptFormatParquet:
+		s.ext = `.parquet`
+		s.rowDelimiter = nil
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, encodingOpts.Format)
@@ -454,6 +458,12 @@ func makeCloudStorageSink(
 	} else {
 		s.metrics = (*sliMetrics)(nil)
 	}
+
+	if encodingOpts.Format == changefeedbase.OptFormatParquet {
+		parquetSinkWithEncoder := makeParquetCloudStorageSink(s)
+		return parquetSinkWithEncoder, nil
+	}
+
 	return s, nil
 }
 
@@ -663,6 +673,11 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
+	if file.parquetCodec != nil {
+		if err := s.flushParquet(file); err != nil {
+			return err
+		}
+	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
 	fileID := s.fileID
@@ -782,6 +797,29 @@ func (s *cloudStorageSink) Close() error {
 
 // Dial implements the Sink interface.
 func (s *cloudStorageSink) Dial() error {
+	return nil
+}
+
+func (s *cloudStorageSink) flushParquet(file *cloudStorageSinkFile) error {
+	// The order of getting size and close is important - we should get size
+	// after Close, as Close adds more data to buffer.
+	if err := file.parquetCodec.parquetWriter.Close(); err != nil {
+		return err
+	}
+	file.rawSize = len(file.buf.Bytes())
+	if file.codec != nil {
+		// Parquet compression can be done in 2 ways: using the parquetwriter
+		// itself or relying on the Sink's compression. Currently, we are using
+		// Sink's compression. When we create the parquet writer, we pass in the
+		// file's buffer to it (see parquetCloudStorageSink) and the writer writes
+		// to that buffer. Once its done, we need to compress that data by writing
+		// to file's codec.
+		tempBuf := bytes.NewBuffer(file.buf.Bytes())
+		file.buf.Reset()
+		if _, err := file.codec.Write(tempBuf.Bytes()); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
