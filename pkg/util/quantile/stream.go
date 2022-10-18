@@ -233,7 +233,7 @@ func (s *Stream) flush() {
 func (s *Stream) maybeSort() {
 	if !s.sorted {
 		s.sorted = true
-		sort.Sort(s.b)
+		sort.Sort(&s.b)
 	}
 }
 
