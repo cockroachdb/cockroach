@@ -602,7 +602,7 @@ If problems persist, please see %s.`
 		// errChan defined above. However, in Go the code pattern "if err
 		// != nil { return err }" is more common. Expecting contributors
 		// to remember to write "if err != nil { errChan <- err }" beyond
-		// this point is optimistic. To avoid any error, we capture all
+		// this point is optimistic. To avoid any mistake, we capture all
 		// the error returns in a closure, and do the errChan reporting,
 		// if needed, when that function returns.
 		if err := func() error {
