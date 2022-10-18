@@ -19,12 +19,10 @@ ARCH=$(uname -m)
 # Add third-party APT repositories.
 apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
-deb https://download.docker.com/linux/ubuntu bionic stable
+deb https://download.docker.com/linux/ubuntu focal stable
 EOF
-# Git 2.7, which ships with Xenial, has a bug where submodule metadata sometimes
-# uses absolute paths instead of relative paths, which means the affected
-# submodules cannot be mounted in Docker containers. Use the latest version of
-# Git until we upgrade to a newer Ubuntu distribution.
+# This was necessary for a bug back in Xenial.
+# TODO(#90203): Determine if this is still necessary.
 add-apt-repository ppa:git-core/ppa
 apt-get update --yes
 
@@ -48,6 +46,14 @@ apt-get install --yes \
   python2 \
   python3 \
   unzip
+
+# Enable support for executing binaries of all architectures via qemu emulation
+# (necessary for building arm64 Docker images)
+apt-get install --yes qemu binfmt-support qemu-user-static
+
+# Verify that both of the platforms we support Docker for can be built.
+docker run --attach=stdout --attach=stderr --platform=linux/amd64 --rm --pull=always registry.access.redhat.com/ubi8/ubi-minimal uname -p
+docker run --attach=stdout --attach=stderr --platform=linux/arm64 --rm --pull=always registry.access.redhat.com/ubi8/ubi-minimal uname -p
 
 case $ARCH in
     x86_64) WHICH=x86_64; SHASUM=97bf730372f9900b2dfb9206fccbcf92f5c7f3b502148b832e77451aa0f9e0e6 ;;
