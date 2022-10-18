@@ -332,7 +332,7 @@ export function populateStatementInsightsFromProblemAndCauses(
   statements: StatementInsightEvent[],
 ): StatementInsightEvent[] {
   if (!statements || statements?.length === 0) {
-    return;
+    return [];
   }
   const stmts: StatementInsightEvent[] = [];
   statements.forEach(statement => {
