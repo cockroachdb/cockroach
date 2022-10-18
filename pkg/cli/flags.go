@@ -469,70 +469,71 @@ func init() {
 			cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPPort}, cliflags.ListenHTTPPort)
 			_ = f.MarkHidden(cliflags.ListenHTTPPort.Name)
 		}
-	}
 
-	// Flags common to the start commands only.
-	for _, cmd := range StartCmds {
-		f := cmd.Flags()
+		if cmd != connectInitCmd && cmd != connectJoinCmd {
+			cliflagcfg.StringFlag(f, &serverSocketDir, cliflags.SocketDir)
+			cliflagcfg.BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
 
-		// Server flags.
-		cliflagcfg.StringFlag(f, &serverSocketDir, cliflags.SocketDir)
-		cliflagcfg.BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
+			// The following flag is planned to become non-experimental in 21.1.
+			cliflagcfg.BoolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
+			_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
 
-		// The following flag is planned to become non-experimental in 21.1.
-		cliflagcfg.BoolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
-		_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
+			// More server flags.
 
-		// More server flags.
+			if cmd != mtStartSQLCmd {
+				// TODO(knz): SQL-only servers should probably also support per-locality server
+				// addresses, for multi-region support.
+				// See: https://github.com/cockroachdb/cockroach/issues/90172
+				cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
+			}
 
-		cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
+			cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
 
-		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
+			cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
+			cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+			cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+			cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
 
-		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
-		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
-		cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
+			cliflagcfg.StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile)
 
-		cliflagcfg.StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile)
+			cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
+			cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
 
-		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+			// Enable/disable various external storage endpoints.
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound, cliflags.ExternalIOEnableNonAdminImplicitAndArbitraryOutbound)
 
-		// Enable/disable various external storage endpoints.
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound, cliflags.ExternalIOEnableNonAdminImplicitAndArbitraryOutbound)
+			// Certificate principal map.
+			cliflagcfg.StringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
 
-		// Certificate principal map.
-		cliflagcfg.StringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
+			// Cluster name verification.
+			cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
+			cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
+			if cmd == startSingleNodeCmd {
+				// Even though all server flags are supported for
+				// 'start-single-node', we intend that command to be used by
+				// beginners / developers running on a single machine. To
+				// enhance the UX, we hide the flags since they are not directly
+				// relevant when running a single node.
+				_ = f.MarkHidden(cliflags.ClusterName.Name)
+				_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
+				_ = f.MarkHidden(cliflags.MaxOffset.Name)
+				_ = f.MarkHidden(cliflags.LocalityAdvertiseAddr.Name)
+			}
 
-		// Cluster name verification.
-		cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
-		if cmd == startSingleNodeCmd {
-			// Even though all server flags are supported for
-			// 'start-single-node', we intend that command to be used by
-			// beginners / developers running on a single machine. To
-			// enhance the UX, we hide the flags since they are not directly
-			// relevant when running a single node.
-			_ = f.MarkHidden(cliflags.ClusterName.Name)
-			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
-			_ = f.MarkHidden(cliflags.MaxOffset.Name)
-			_ = f.MarkHidden(cliflags.LocalityAdvertiseAddr.Name)
+			// Engine flags.
+			cliflagcfg.VarFlag(f, cacheSizeValue, cliflags.Cache)
+			cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
+			cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
+			// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
+			// the stores flag has been parsed and the storage device that a percentage
+			// refers to becomes known.
+			cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+			cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
+			cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
 		}
-
-		// Engine flags.
-		cliflagcfg.VarFlag(f, cacheSizeValue, cliflags.Cache)
-		cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
-		cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
-		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
-		// the stores flag has been parsed and the storage device that a percentage
-		// refers to becomes known.
-		cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-		cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
 
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
@@ -543,34 +544,7 @@ func init() {
 	{
 		f := mtStartSQLCmd.Flags()
 		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
-
-		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
-
-		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
-		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
-		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
-
 		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
-
-		// Enable/disable various external storage endpoints.
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
-
-		// Engine flags.
-		cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
-		cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
-		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
-		// the stores flag has been parsed and the storage device that a percentage
-		// refers to becomes known.
-		cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-
-		if backgroundFlagDefined {
-			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
-		}
 	}
 
 	// Flags that apply to commands that start servers.
