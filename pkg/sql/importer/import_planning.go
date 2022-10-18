@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -106,40 +107,40 @@ const (
 	runningStatusImportBundleParseSchema jobs.RunningStatus = "parsing schema on Import Bundle"
 )
 
-var importOptionExpectValues = map[string]sql.KVStringOptValidate{
-	csvDelimiter:        sql.KVStringOptRequireValue,
-	csvComment:          sql.KVStringOptRequireValue,
-	csvNullIf:           sql.KVStringOptRequireValue,
-	csvSkip:             sql.KVStringOptRequireValue,
-	csvRowLimit:         sql.KVStringOptRequireValue,
-	csvStrictQuotes:     sql.KVStringOptRequireNoValue,
-	csvAllowQuotedNulls: sql.KVStringOptRequireNoValue,
+var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
+	csvDelimiter:        exprutil.KVStringOptRequireValue,
+	csvComment:          exprutil.KVStringOptRequireValue,
+	csvNullIf:           exprutil.KVStringOptRequireValue,
+	csvSkip:             exprutil.KVStringOptRequireValue,
+	csvRowLimit:         exprutil.KVStringOptRequireValue,
+	csvStrictQuotes:     exprutil.KVStringOptRequireNoValue,
+	csvAllowQuotedNulls: exprutil.KVStringOptRequireNoValue,
 
-	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
-	mysqlOutfileFieldSep: sql.KVStringOptRequireValue,
-	mysqlOutfileEnclose:  sql.KVStringOptRequireValue,
-	mysqlOutfileEscape:   sql.KVStringOptRequireValue,
+	mysqlOutfileRowSep:   exprutil.KVStringOptRequireValue,
+	mysqlOutfileFieldSep: exprutil.KVStringOptRequireValue,
+	mysqlOutfileEnclose:  exprutil.KVStringOptRequireValue,
+	mysqlOutfileEscape:   exprutil.KVStringOptRequireValue,
 
-	importOptionSSTSize:      sql.KVStringOptRequireValue,
-	importOptionDecompress:   sql.KVStringOptRequireValue,
-	importOptionOversample:   sql.KVStringOptRequireValue,
-	importOptionSaveRejected: sql.KVStringOptRequireNoValue,
+	importOptionSSTSize:      exprutil.KVStringOptRequireValue,
+	importOptionDecompress:   exprutil.KVStringOptRequireValue,
+	importOptionOversample:   exprutil.KVStringOptRequireValue,
+	importOptionSaveRejected: exprutil.KVStringOptRequireNoValue,
 
-	importOptionSkipFKs:          sql.KVStringOptRequireNoValue,
-	importOptionDisableGlobMatch: sql.KVStringOptRequireNoValue,
-	importOptionDetached:         sql.KVStringOptRequireNoValue,
+	importOptionSkipFKs:          exprutil.KVStringOptRequireNoValue,
+	importOptionDisableGlobMatch: exprutil.KVStringOptRequireNoValue,
+	importOptionDetached:         exprutil.KVStringOptRequireNoValue,
 
-	optMaxRowSize: sql.KVStringOptRequireValue,
+	optMaxRowSize: exprutil.KVStringOptRequireValue,
 
-	avroStrict:             sql.KVStringOptRequireNoValue,
-	avroSchema:             sql.KVStringOptRequireValue,
-	avroSchemaURI:          sql.KVStringOptRequireValue,
-	avroRecordsSeparatedBy: sql.KVStringOptRequireValue,
-	avroBinRecords:         sql.KVStringOptRequireNoValue,
-	avroJSONRecords:        sql.KVStringOptRequireNoValue,
+	avroStrict:             exprutil.KVStringOptRequireNoValue,
+	avroSchema:             exprutil.KVStringOptRequireValue,
+	avroSchemaURI:          exprutil.KVStringOptRequireValue,
+	avroRecordsSeparatedBy: exprutil.KVStringOptRequireValue,
+	avroBinRecords:         exprutil.KVStringOptRequireNoValue,
+	avroJSONRecords:        exprutil.KVStringOptRequireNoValue,
 
-	pgDumpIgnoreAllUnsupported: sql.KVStringOptRequireNoValue,
-	pgDumpIgnoreShuntFileDest:  sql.KVStringOptRequireValue,
+	pgDumpIgnoreAllUnsupported: exprutil.KVStringOptRequireNoValue,
+	pgDumpIgnoreShuntFileDest:  exprutil.KVStringOptRequireValue,
 }
 
 var pgDumpMaxLoggedStmts = 1024
@@ -236,8 +237,8 @@ func importJobDescription(
 	stmt.Options = nil
 	for k, v := range opts {
 		opt := tree.KVOption{Key: tree.Name(k)}
-		val := importOptionExpectValues[k] == sql.KVStringOptRequireValue
-		val = val || (importOptionExpectValues[k] == sql.KVStringOptAny && len(v) > 0)
+		val := importOptionExpectValues[k] == exprutil.KVStringOptRequireValue
+		val = val || (importOptionExpectValues[k] == exprutil.KVStringOptAny && len(v) > 0)
 		if val {
 			opt.Value = tree.NewDString(v)
 		}
@@ -328,6 +329,31 @@ func resolveUDTsUsedByImportInto(
 	return typeDescs, err
 }
 
+func importTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	importStmt, ok := stmt.(*tree.Import)
+	if !ok {
+		return false, nil, nil
+	}
+	if err := exprutil.TypeCheck(
+		ctx, "IMPORT", p.SemaCtx(),
+		exprutil.KVOptions{
+			KVOptions: importStmt.Options, Validation: importOptionExpectValues,
+		},
+		exprutil.StringArrays{
+			importStmt.Files,
+		},
+	); err != nil {
+		return false, nil, err
+	}
+	header = jobs.BulkJobExecutionResultHeader
+	if importStmt.Options.HasKey(importOptionDetached) {
+		header = jobs.DetachedJobExecutionResultHeader
+	}
+	return true, header, nil
+}
+
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -353,21 +379,39 @@ func importPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	filesFn, err := p.TypeAsStringArray(ctx, importStmt.Files, "IMPORT")
+	exprEval := p.ExprEvaluator("IMPORT")
+	opts, err := exprEval.KVOptions(
+		ctx, importStmt.Options, importOptionExpectValues,
+	)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
-
-	optsFn, err := p.TypeAsStringOpts(ctx, importStmt.Options, importOptionExpectValues)
-	if err != nil {
-		return nil, nil, nil, false, err
-	}
-
-	opts, optsErr := optsFn()
 
 	var isDetached bool
 	if _, ok := opts[importOptionDetached]; ok {
 		isDetached = true
+	}
+
+	filenamePatterns, err := exprEval.StringArray(ctx, importStmt.Files)
+	if err != nil {
+		return nil, nil, nil, false, err
+	}
+
+	// Certain ExternalStorage URIs require super-user access. Check all the
+	// URIs passed to the IMPORT command.
+	for _, file := range filenamePatterns {
+		_, err := cloud.ExternalStorageConfFromURI(file, p.User())
+		if err != nil {
+			// If it is a workload URI, it won't parse as a storage config, but it
+			// also doesn't have any auth concerns so just continue.
+			if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
+				continue
+			}
+			return nil, nil, nil, false, err
+		}
+		if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
+			return nil, nil, nil, false, err
+		}
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -377,32 +421,6 @@ func importPlanHook(
 
 		if !(p.ExtendedEvalContext().TxnIsSingleStmt || isDetached) {
 			return errors.Errorf("IMPORT cannot be used inside a multi-statement transaction without DETACHED option")
-		}
-
-		if optsErr != nil {
-			return optsErr
-		}
-
-		filenamePatterns, err := filesFn()
-		if err != nil {
-			return err
-		}
-
-		// Certain ExternalStorage URIs require super-user access. Check all the
-		// URIs passed to the IMPORT command.
-		for _, file := range filenamePatterns {
-			_, err := cloud.ExternalStorageConfFromURI(file, p.User())
-			if err != nil {
-				// If it is a workload URI, it won't parse as a storage config, but it
-				// also doesn't have any auth concerns so just continue.
-				if _, workloadErr := parseWorkloadConfig(file); workloadErr == nil {
-					continue
-				}
-				return err
-			}
-			if err := cloudprivilege.CheckDestinationPrivileges(ctx, p, []string{file}); err != nil {
-				return err
-			}
 		}
 
 		var files []string
@@ -1199,5 +1217,5 @@ func (u *unsupportedStmtLogger) flush() error {
 }
 
 func init() {
-	sql.AddPlanHook("import", importPlanHook)
+	sql.AddPlanHook("import", importPlanHook, importTypeCheck)
 }

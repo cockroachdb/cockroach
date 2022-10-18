@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -46,6 +47,22 @@ type planHookFn func(
 	context.Context, tree.Statement, PlanHookState,
 ) (fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode, avoidBuffering bool, err error)
 
+// PlanHookTypeCheckFn is a function that can intercept a statement being
+// prepared and type check its arguments. It exists in parallel to PlanHookFn.
+// This exists so that we can ensure that the PlanHookFn is always called in a
+// context where placeholders are populated. When opaque statements which are
+// associated with a PlanHook are prepared, the resultant plan is not marked
+// as executable. Instead, the statement will be re-prepared in the context of
+// execution will the same EvalContext and placeholders as will be passed into
+// its returned PlanHookRowFn.
+//
+// This function should detect if the statement matches the expectation for
+// the PlanHook and should type-check (but not evaluate) any expressions which
+// may use placeholders.
+type PlanHookTypeCheckFn func(
+	context.Context, tree.Statement, PlanHookState,
+) (matched bool, header colinfo.ResultColumns, err error)
+
 // PlanHookRowFn describes the row-production for hook-created plans. The
 // channel argument is used to return results to the plan's runner. It's
 // a blocking channel, so implementors should be careful to only use blocking
@@ -56,8 +73,9 @@ type planHookFn func(
 type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
 
 type planHook struct {
-	name string
-	fn   planHookFn
+	name      string
+	fn        planHookFn
+	typeCheck PlanHookTypeCheckFn
 }
 
 var planHooks []planHook
@@ -87,12 +105,7 @@ type PlanHookState interface {
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
-	TypeAsString(ctx context.Context, e tree.Expr, op string) (func() (string, error), error)
-	TypeAsBool(ctx context.Context, e tree.Expr, op string) (func() (bool, error), error)
-	TypeAsStringArray(ctx context.Context, e tree.Exprs, op string) (func() ([]string, error), error)
-	TypeAsStringOpts(
-		ctx context.Context, opts tree.KVOptions, optsValidate map[string]KVStringOptValidate,
-	) (func() (map[string]string, error), error)
+	ExprEvaluator(op string) exprutil.Evaluator
 	User() username.SQLUsername
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.
@@ -121,8 +134,10 @@ type PlanHookState interface {
 // construct a planNode that runs that func in a goroutine during Start.
 //
 // See PlanHookState comments for information about why plan hooks are needed.
-func AddPlanHook(name string, fn planHookFn) {
-	planHooks = append(planHooks, planHook{name: name, fn: fn})
+func AddPlanHook(name string, fn planHookFn, typeCheck PlanHookTypeCheckFn) {
+	planHooks = append(planHooks, planHook{
+		name: name, fn: fn, typeCheck: typeCheck,
+	})
 }
 
 // ClearPlanHooks is used by tests to clear out any mocked out plan hooks that
