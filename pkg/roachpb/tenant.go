@@ -38,13 +38,22 @@ var MaxTenantID = MakeTenantID(math.MaxUint64)
 
 // MakeTenantID constructs a new TenantID from the provided uint64.
 func MakeTenantID(id uint64) TenantID {
-	checkValid(id)
+	assertValid(id)
 	return TenantID{id}
+}
+
+// MakeTenantIDNoPanic constructs a new TenantID from the provided uint64.
+// It returns an error rather than panicking on an invalid ID.
+func MakeTenantIDNoPanic(id uint64) (TenantID, error) {
+	if err := checkValid(id); err != nil {
+		return TenantID{}, err
+	}
+	return TenantID{id}, nil
 }
 
 // ToUint64 returns the TenantID as a uint64.
 func (t TenantID) ToUint64() uint64 {
-	checkValid(t.InternalValue)
+	assertValid(t.InternalValue)
 	return t.InternalValue
 }
 
@@ -63,10 +72,20 @@ func (t TenantID) String() string {
 // SafeValue implements the redact.SafeValue interface.
 func (t TenantID) SafeValue() {}
 
+// ErrInvalidTenantID is returned when a function encounters tenant ID 0.
+var ErrInvalidTenantID = errors.New("invalid tenant ID 0")
+
 // Protects against zero value.
-func checkValid(id uint64) {
+func checkValid(id uint64) error {
 	if id == 0 {
-		panic("invalid tenant ID 0")
+		return ErrInvalidTenantID
+	}
+	return nil
+}
+
+func assertValid(id uint64) {
+	if err := checkValid(id); err != nil {
+		panic(err.Error())
 	}
 }
 
