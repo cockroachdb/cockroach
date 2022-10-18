@@ -1167,8 +1167,13 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 				"This feature will be removed in the next version of CockroachDB.")
 	}
 
-	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
-	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed
+	changed := func(flagName string) bool {
+		fl := pf.Lookup(cliflags.ListenAddr.Name)
+		return fl != nil && fl.Changed
+	}
+
+	listenAddrSpecified := changed(cliflags.ListenAddr.Name) || changed(cliflags.ServerHost.Name)
+	advAddrSpecified := changed(cliflags.AdvertiseAddr.Name) || changed(cliflags.AdvertiseHost.Name)
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
 		log.Ops.Shoutf(ctx, severity.WARNING,
