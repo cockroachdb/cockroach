@@ -399,6 +399,8 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// The context annotation ensures that server identifiers show up
+	// in the logging metadata as soon as they are known.
 	ambientCtx := serverCfg.AmbientCtx
 
 	// Annotate the context, and set up a tracing span for the start process.
