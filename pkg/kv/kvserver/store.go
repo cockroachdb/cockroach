@@ -1534,23 +1534,64 @@ func (s *Store) SetDraining(drain bool, reporter func(int, redact.SafeString), v
 						break
 					}
 
+					// Is the lease owned by this store?
+					leaseLocallyOwned := drainingLeaseStatus.OwnedBy(s.StoreID())
+
+					// Is there some other replica that we can transfer the lease to?
 					// Learner replicas aren't allowed to become the leaseholder or raft
-					// leader, so only consider the `Voters` replicas.
-					needsLeaseTransfer := len(r.Desc().Replicas().VoterDescriptors()) > 1 &&
-						drainingLeaseStatus.IsValid() &&
-						drainingLeaseStatus.OwnedBy(s.StoreID())
+					// leader, so only consider the Voters replicas.
+					transferTargetAvailable := len(r.Desc().Replicas().VoterDescriptors()) > 1
+
+					// If so, and the lease is proscribed, we have to reacquire it so that
+					// we can transfer it away. Other replicas won't know that this lease
+					// is proscribed and not usable by this replica, so failing to
+					// transfer the lease away could cause temporary unavailability.
+					needsLeaseReacquisition := leaseLocallyOwned && transferTargetAvailable &&
+						drainingLeaseStatus.State == kvserverpb.LeaseState_PROSCRIBED
+
+					// Otherwise, if the lease is locally owned and valid, transfer it.
+					needsLeaseTransfer := leaseLocallyOwned && transferTargetAvailable &&
+						drainingLeaseStatus.State == kvserverpb.LeaseState_VALID
+
+					if !needsLeaseTransfer && !needsLeaseReacquisition {
+						// Skip this replica.
+						atomic.AddInt32(&numTransfersAttempted, -1)
+						return
+					}
+
+					if needsLeaseReacquisition {
+						// Re-acquire the proscribed lease for this replica so that we can
+						// transfer it away during a later iteration.
+						desc := r.Desc()
+						if verbose || log.V(1) {
+							// This logging is useful to troubleshoot incomplete drains.
+							log.Infof(ctx, "attempting to acquire proscribed lease %v for range %s",
+								drainingLeaseStatus.Lease, desc)
+						}
+
+						_, pErr := r.redirectOnOrAcquireLease(ctx)
+						if pErr != nil {
+							const failFormat = "failed to acquire proscribed lease %s for range %s when draining: %v"
+							infoArgs := []interface{}{drainingLeaseStatus.Lease, desc, pErr}
+							if verbose {
+								log.Dev.Infof(ctx, failFormat, infoArgs...)
+							} else {
+								log.VErrEventf(ctx, 1 /* level */, failFormat, infoArgs...)
+							}
+							// The lease reacquisition failed. Either we no longer hold the
+							// lease or we will need to attempt to reacquire it again. Either
+							// way, handle this on a future iteration.
+							return
+						}
+
+						// The lease reacquisition succeeded. Proceed to the lease transfer.
+					}
 
 					// Note that this code doesn't deal with transferring the Raft
 					// leadership. Leadership tries to follow the lease, so when leases
 					// are transferred, leadership will be transferred too. For ranges
 					// without leases we probably should try to move the leadership
 					// manually to a non-draining replica.
-
-					if !needsLeaseTransfer {
-						// Skip this replica.
-						atomic.AddInt32(&numTransfersAttempted, -1)
-						return
-					}
 
 					desc, conf := r.DescAndSpanConfig()
 

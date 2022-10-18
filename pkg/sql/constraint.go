@@ -155,7 +155,7 @@ func (p *planner) ConstrainPrimaryIndexSpanByExpr(
 		remainingFilter = tree.DBoolTrue
 	} else {
 		eb := execbuilder.New(ctx, newExecFactory(ctx, p), &p.optPlanningCtx.optimizer,
-			nf.Memo(), &oc, &remaining, evalCtx, false)
+			nf.Memo(), &oc, &remaining, evalCtx, false, p.IsANSIDML())
 		eb.SetBuiltinFuncWrapper(semaCtx.FunctionResolver)
 		expr, err := eb.BuildScalar()
 		if err != nil {

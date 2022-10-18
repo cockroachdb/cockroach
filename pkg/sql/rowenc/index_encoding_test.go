@@ -1052,8 +1052,6 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 				expectedContainsKeys = all
 			}
 
-			t.Logf("left: %s\nright: %s\nlTrigrams: %v\nrTrigrams: %v\nany: %v\nall: %v\n", left, right, lTrigrams, rTrigrams, any, all)
-
 			d, err := eval.Expr(context.Background(), &evalCtx, expr)
 			require.NoError(t, err)
 			expected := bool(*d.(*tree.DBool))

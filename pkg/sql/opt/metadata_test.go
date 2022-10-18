@@ -455,3 +455,8 @@ func (f *fakeGetMultiregionConfigPlanner) GetMultiregionConfig(
 	f.getMultiregionConfigCalled++
 	return nil, false
 }
+
+// IsANSIDML is part of the eval.Planner interface.
+func (f *fakeGetMultiregionConfigPlanner) IsANSIDML() bool {
+	return false
+}

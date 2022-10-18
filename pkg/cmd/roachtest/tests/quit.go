@@ -312,7 +312,8 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 				invLeaseMap[i] = invalidLeases
 			}
 		}
-		// (1): is there a range with no replica outside of nodeID?
+		// (1): is there a range where every replica thinks the lease is held by
+		// nodeID? If so, the value in knownRanges will be set to 0.
 		var leftOver []string
 		for r, n := range knownRanges {
 			if n == 0 {
@@ -322,7 +323,8 @@ func (q *quitTest) checkNoLeases(ctx context.Context, nodeID int) {
 		if len(leftOver) > 0 {
 			q.Fatalf("(1) ranges with no lease outside of node %d: %# v", nodeID, pretty.Formatter(leftOver))
 		}
-		// (2): is there a range with left over replicas on nodeID?
+		// (2): is there a range where any replica thinks the lease is held by
+		// nodeID?
 		//
 		// TODO(knz): Eventually we want this condition to be always
 		// true, i.e. fail the test immediately if found to be false
