@@ -1,1 +1,7 @@
 echo
+----
+input:
+  b-c    <-- ts=1
+a---c    <-- ts=2
+result:
+a-c    <-- ts=2

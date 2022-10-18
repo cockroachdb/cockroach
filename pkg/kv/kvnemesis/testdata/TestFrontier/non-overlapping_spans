@@ -1,5 +1,10 @@
 echo
 ----
+input:
+a-b          <-- ts=1
+  b-d        <-- ts=2
+      f-z    <-- ts=3
+result:
 a-b          <-- ts=1
   b-d        <-- ts=2
       f-z    <-- ts=3

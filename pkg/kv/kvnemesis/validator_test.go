@@ -1676,9 +1676,18 @@ func TestValidate(t *testing.T) {
 			}
 			for _, kv := range test.kvs {
 				if len(kv.endKey) == 0 {
-					fmt.Fprintln(&buf, kv.key, "@", kv.seq, mustGetStringValue(kv.val))
+					k := storage.MVCCKey{
+						Key:       kv.key,
+						Timestamp: kv.ts,
+					}
+					fmt.Fprintln(&buf, k, "@", kv.seq, mustGetStringValue(kv.val))
 				} else {
-					fmt.Fprintln(&buf, kv.key, "-", kv.endKey, "@", kv.seq, mustGetStringValue(kv.val))
+					k := storage.MVCCRangeKey{
+						StartKey:  kv.key,
+						EndKey:    kv.endKey,
+						Timestamp: kv.ts,
+					}
+					fmt.Fprintln(&buf, k, "@", kv.seq, mustGetStringValue(kv.val))
 				}
 			}
 

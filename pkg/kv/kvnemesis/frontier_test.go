@@ -13,8 +13,6 @@ package kvnemesis
 
 import (
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -99,46 +97,17 @@ func TestFrontier(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, w.Do(t, tc.name, func(t *testing.T, path string) {
-			// Flatten all start and end keys in a slice, sort them, and
-			// assign them indexes (used for printing pretty pictures).
-			var ks []string
-			for _, w := range tc.adds {
-				ks = append(ks, string(w.Key))
-				if len(w.EndKey) > 0 {
-					ks = append(ks, string(w.EndKey))
-				}
-			}
-			sort.Strings(ks)
-
-			k2indent := map[string]int{} // key to indent
-			var indent int
-			for _, k := range ks {
-				if _, ok := k2indent[k]; !ok {
-					indent += len(k)
-					k2indent[k] = indent
-					indent += 1
-				}
-			}
-			t.Log(k2indent)
-			indent += 3
-
 			var buf strings.Builder
+			fmt.Fprintln(&buf, "input:")
+			fmt.Fprint(&buf, frontier(tc.adds))
+
+			var f frontier
 			for _, w := range tc.adds {
-				k := string(w.Key)
-				ek := string(w.EndKey)
-				pk := k2indent[k]
-				var pek int
-				if ek != "" {
-					pek = k2indent[ek] - pk
-				}
-				pr := indent - pk - pek
-				fmt.Fprintf(&buf, "%"+strconv.Itoa(pk)+"s", k)
-				if ek != "" {
-					fmt.Fprintf(&buf, "%s%s", strings.Repeat("-", pek-len(ek)), ek)
-				}
-				fmt.Fprintf(&buf, "%"+strconv.Itoa(pr)+"s", "") // just pad
-				fmt.Fprintf(&buf, "<-- ts=%d\n", w.ts.WallTime)
+				f = f.Add(w)
 			}
+			fmt.Fprintln(&buf, "result:")
+			fmt.Fprint(&buf, f)
+
 			echotest.Require(t, buf.String(), path)
 		}))
 	}

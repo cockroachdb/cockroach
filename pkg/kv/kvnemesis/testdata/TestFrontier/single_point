@@ -1,3 +1,6 @@
 echo
 ----
+input:
+a    <-- ts=1
+result:
 a    <-- ts=1

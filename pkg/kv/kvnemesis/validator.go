@@ -13,6 +13,7 @@ package kvnemesis
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -757,37 +758,65 @@ func (v *validator) checkAtomicCommitted(
 	// alone in an atomic unit. This code still handles these cases, and they are
 	// unit tested.
 
-	var lastWrites frontier
-	unshadowedByIdx := map[int][]lastWrite{}
-	var union roachpb.SpanGroup
+	// get the timestamp here for a committed operation and make sure they're all
+	// equal and then we can simplify the building of the batch.
 
+	var failure string
+
+	// writeTS is populated with the timestamp of the materialized observed writes
+	// (if there are any). We'll use it below to maintain the "view" of prefixes
+	// of atomic unit.
+	var writeTS hlc.Timestamp
+
+	lastWritesByIdx := map[int]struct{}{}
+	var lastWrites roachpb.SpanGroup
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
 		observation := txnObservations[idx]
 		switch o := observation.(type) {
 		case *observedWrite:
-			// [--------) [--) [---)      prevUnion
-			//             [---------)    new span
-			// result:
+			sp := roachpb.Span{Key: o.Key, EndKey: o.EndKey}
+			// Check if the last writes set already covers the current write.
 			//
-			// [--------) [----------)    union
-			//               [-)   [-)    added
+			// Writes are fragmented in the sense that they are either fully the
+			// last write or not, since all (materialized) writes happened at the
+			// same MVCC timestamp, at least in the absence of bugs.
 			//
+			// For example, a Put A that gets shadowed by an MVCC rangedel B that
+			// then gets overlaid by a Put C and then intersected by another
+			// rangedel D should give an "incremental history" (as we construct it
+			// further down below)
+			//                      [-----D----)
+			//              C
+			// [----------B------------)
+			//       A
 			//
-			prevUnion := union.Slice()
-			union.Add(roachpb.Span{Key: o.Key, EndKey: o.EndKey})
-
-			var added roachpb.SpanGroup
-			added.Add(union.Slice()...)
-			added.Sub(prevUnion...)
-
-			for _, cur := range added.Slice() {
-				// For this span, the current operation is the last write.
-				lw := lastWrite{
-					Span: cur,
-					idx:  idx,
+			// and lastWrites will be
+			//
+			// [-----B-----)C[--B--)[-----D----)
+			//
+			// In particular, when we constructed the observedWrite for our rangedels,
+			// we construct them for the actual spans from the rangefeed, not the span
+			// of the operation.
+			var lastWrite bool
+			{
+				var g roachpb.SpanGroup
+				g.Add(lastWrites.Slice()...)
+				lastWrite = !g.Sub(sp) // if subtracting did nothing, it's a most recent write
+				if !lastWrite {
+					// Otherwise, add it back in, which should restore the old set. If it
+					// didn't, there was partial overlap, which shouldn't be possible.
+					g.Add(sp)
 				}
-				lastWrites = append(lastWrites, lw)
-				unshadowedByIdx[idx] = append(unshadowedByIdx[idx], lw)
+				if then, now := lastWrites.Slice(), g.Slice(); !reflect.DeepEqual(then, now) {
+					v.failures = append(v.failures,
+						errors.AssertionFailedf("%s has write %q partially overlapping %v", atomicType, sp, then))
+					return
+				}
+			}
+
+			if lastWrite {
+				lastWritesByIdx[idx] = struct{}{}
+				lastWrites.Add(sp)
 			}
 
 			if o.Timestamp.IsEmpty() {
@@ -795,57 +824,62 @@ func (v *validator) checkAtomicCommitted(
 				// a txn), so it's not present here.
 				continue
 			}
-			mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
-			if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
-				panic(err)
+
+			if writeTS.IsEmpty() {
+				writeTS = o.Timestamp
+			} else if o.Timestamp != writeTS {
+				failure = fmt.Sprintf("%s wrote at MVCC timestamps %s and %s", atomicType, writeTS, o.Timestamp)
+				break
+			}
+
+			if len(o.EndKey) == 0 { // point write
+				mvccKey := storage.MVCCKey{Key: o.Key, Timestamp: o.Timestamp}
+				if err := batch.Delete(storage.EncodeMVCCKey(mvccKey), nil); err != nil {
+					panic(err)
+				}
+			} else { // ranged write
+				suffix := storage.EncodeMVCCTimestampSuffix(o.Timestamp)
+				if err := batch.RangeKeyUnset(o.Key, o.EndKey, suffix, nil); err != nil {
+					panic(err)
+				}
 			}
 		}
 	}
 
-	// Check if any key that was written twice in the txn had the overwritten
-	// writes materialize in kv. Also fill in all the read timestamps first so
-	// they show up in the failure message.
-	//
-	// Each point in the keyspace that occurs in any (point or ranged) observed
-	// write has a materialized observed write covering it if validation is to
-	// succeed. We iterate through our operations in the order in which they
-	// appear in the atomic unit and for each write "patch" it into the current
-	// view. Concretely,
-	//
-	// - a write replaces anything it overlaps (reflecting the fact that a write
-	// in a txn is only visible to that txn until it is shadowed by a later write
-	// in the same txn).
-	// - ranged writes may have up to three components: parts didn't materialize but also aren't shadowed (a correctness problem)
-	//var frontier frontier
-	var failure string
-	for idx, observation := range txnObservations {
+	// Iterate through the observations, building up the snapshot visible at each
+	// point in the atomic unit and filling in the valid read times (validating
+	// them later, in a separate loop, for better errors). We also check that only
+	// the most recent writes materialized (i.e. showed up in MVCC). Check if any
+	// key that was written twice in the txn had the overwritten writes
+	// materialize in kv.
+	for _, observation := range txnObservations {
 		if failure != `` {
 			break
 		}
 		switch o := observation.(type) {
 		case *observedWrite:
-			// The last write of a given key in the txn wins and should have made it
-			// to kv. If this is not the last write, it might still be visible by
-			// subsequent reads (in validReadTimes), so we write it under the
-			// timestamp of the winning write[^1]. It will be replaced once newer writes
-			// show up.
-			//
-			// [^1]: that way, we don't have to explicitly clear it when it goes out
-			// of scope and we don't have to partition ranged writes.
-			writeTS := o.Timestamp
-
-			// These spans
-			//add := unshadowedByIdx[idx]
-
-			//lastWriteIdx := lastWriteIdxByKey[span{key: string(o.Key), endKey: string(o.EndKey)}]
-
-			if idx != 12345 /* lastWriteIdx*/ {
-				writeTS = txnObservations[0 /* lastWriteIdx */].(*observedWrite).Timestamp
-			} else {
-				if o.Timestamp.IsSet() {
-					failure = `committed txn overwritten key had write`
-				}
+			// Only the most recent write between overlapping mutations makes it into MVCC.
+			// writeTS was populated above as the unique timestamp at which the writes became
+			// visible. We know the operation had writes (we're looking at one now) and so
+			// this operation has either materialized or is covered by a later one that did,
+			// and so we must have a timestamp here.
+			if writeTS.IsEmpty() {
+				failure = atomicType + ` has no materialized write`
+				break
 			}
+
+			sp := roachpb.Span{Key: o.Key, EndKey: o.EndKey}
+			if !lastWrites.Encloses(sp) && o.Timestamp.IsSet() {
+				failure = `committed txn overwritten key had write`
+				break
+			}
+
+			// Make this write visible (at writeTS, regardless of whether it's the
+			// last write or not, since that's the snapshot at which our operation
+			// wrote). Helpfully, pebble will deal with all the partitioning of range
+			// tombstones that might be necessary under the hood. For example, if we
+			// currently have [a,z) and now are adding a Put(b), we'll automatically
+			// have [a,b); b; [b,z) after.
 			if len(o.EndKey) == 0 {
 				if err := batch.Set(storage.EncodeMVCCKey(storage.MVCCKey{Key: o.Key, Timestamp: writeTS}), o.Value.RawBytes, nil); err != nil {
 					panic(err)
@@ -856,8 +890,6 @@ func (v *validator) checkAtomicCommitted(
 					panic(err)
 				}
 			}
-
-			// UGH the last index stuff needs more work
 		case *observedRead:
 			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes)
 		case *observedScan:
@@ -894,11 +926,8 @@ func (v *validator) checkAtomicCommitted(
 		var opValid disjointTimeSpans
 		switch o := observation.(type) {
 		case *observedWrite:
-			isLastWriteForKey := idx == 0 // lastWriteIdxByKey[string(o.Key)]
-			if !isLastWriteForKey {
-				continue
-			}
-			if o.Timestamp.IsEmpty() {
+			_, isLastWrite := lastWritesByIdx[idx]
+			if isLastWrite && o.Timestamp.IsEmpty() {
 				failure = atomicType + ` missing write at seq ` + o.Seq.String()
 				continue
 			}
@@ -919,16 +948,8 @@ func (v *validator) checkAtomicCommitted(
 
 	// Finally, validate that the write timestamp of the transaction matches the
 	// write timestamp of each write within that transaction.
-	for _, observation := range txnObservations {
-		if failure != `` {
-			break
-		}
-		switch o := observation.(type) {
-		case *observedWrite:
-			if o.Timestamp.IsSet() && execTimestamp.IsSet() && o.Timestamp != execTimestamp {
-				failure = fmt.Sprintf(`mismatched write timestamp %s`, execTimestamp)
-			}
-		}
+	if failure == `` && writeTS.IsSet() && execTimestamp.IsSet() && writeTS != execTimestamp {
+		failure = fmt.Sprintf(`mismatched write timestamp %s and exec timestamp %s`, writeTS, execTimestamp)
 	}
 
 	if failure != `` {

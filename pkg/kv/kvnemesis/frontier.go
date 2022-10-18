@@ -12,6 +12,11 @@
 package kvnemesis
 
 import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -24,105 +29,104 @@ type lastWrite struct {
 
 type frontier []lastWrite // non-overlapping sorted spans
 
-// `g` are the elements of `f` that survived the insertion (i.e. weren't entirely
-// replaced by lw). Together with `delta` (the this gives the resulting
-// frontier (after sorting).
-func (f frontier) addInternal(lw lastWrite) (g, delta frontier) {
+func (f frontier) Add(w lastWrite) frontier {
+	// Find the first element of the frontier overlapping `w`. Recall that the
+	// frontier has no self-overlap and elements are sorted in ascending order.
+	idx := sort.Search(len(f), func(i int) bool {
+		return f[i].Span.EndKey.Compare(w.Span.Key) > 0 &&
+			f[i].Span.Key.Compare(w.Span.EndKey) < 0
+	})
+	if idx >= len(f) {
+		// The entire frontier is strictly to the left of `w` so
+		// we can just append `w`.
+		return append(f, w)
+	}
+	var g frontier
+	for i := 0; i < idx; i++ {
+		g = append(g, f[:idx]...)
+	}
+	// A span overlaps `w`. It may extend to the left, or to the right, or be fully contained in `w`.
+	if f[idx].Key.Compare(w.Key) < 0 {
+		// Current element extends to the left of `w`.
+		//    [------...   cur
+		//       [---...   w
+		// Add an element representing only the "outside" part.
+		tmp := f[idx]
+		tmp.EndKey = w.Key
+		g = append(g, tmp)
+	}
+	// Next is `w`, though note that it may overlap subsequent elements, which
+	// will be elided/truncated in subsequent loop iterations below.
+	g = append(g, w)
 
-	/*
-		var g frontier
-		// The effects of `lw`.
-		var delta frontier
-
-		_ = g
-		_ = delta
-
-		defer func() {
-			sort.Slice(g, func(i, j int) bool {
-				return keys.MustAddr(g[i].Span.Key).Less(keys.MustAddr(g[j].Key))
-			})
-		}()
-		for _, ex := range f {
-			if len(lw.Span.EndKey) == 0 {
-				// A previous iteration already consumed all of `lw`, so just have to add
-				// `f` back to `g`.
-				g = append(g, ex)
-				continue
-			}
-
-			// This span is in the frontier and may now (partially or entirely) be
-			// replaced by (part of) lw.
-			//
-			// Example 1:
-			//
-			// [----------)     ex
-			//    [---)         lw
-			//
-			// gives:
-			//
-			// [--)   [---)     keep
-			//    [---)         insert
-			//     empty        todo
-			//
-			// Example 2:
-			// [-----)          ex
-			//    [-------)     lw
-			//
-			// gives:
-			//
-			// [--)             keep
-			//    [--)          insert
-			//       [----)     todo
-			//
-			// In particular `todo` and `insert` are either zero or one spans,
-			// and `todo` is up to two spans.
-			var keep roachpb.SpanGroup
-			keep.Add(ex.Span)
-			keep.Sub(lw.Span)
-			var insert roachpb.SpanGroup
-			insert.Add(ex.Span)
-			insert.Sub(keep.Slice()...)
-			if sl := insert.Slice(); len(sl) != 1 {
-				panic(fmt.Sprintf("expected to insert one slice: %+v", sl))
-			}
-			var todo roachpb.SpanGroup
-			todo.Add(lw.Span)
-			todo.Sub(insert.Slice()...)
-			for _, sp := range keep.Slice() {
-				tmp := ex
-				tmp.Span = sp
-				g = append(g, tmp)
-			}
-			for _, sp := range insert.Slice() {
-				tmp := lw
-				tmp.Span = sp
-				g = append(g, tmp)
-			}
-			todoSl := todo.Slice()
-			if len(todoSl) == 0 {
-				lw.Span = roachpb.Span{}
-				// Keep going to add subsequent items of `f` back to `g`.
-				continue
-			}
-			if len(todoSl) == 2 {
-				// A part of `todo` is to the left of the current span in the existing
-				// frontier. Because we visit those in ascending order, we can blindly
-				// insert `lw` into `todoSl[0]` since we know it doesn't overlap anything
-				// (or previous iteration would've handled it already).
-				tmp := lw
-				tmp.Span = todoSl[0]
-				todoSl = todoSl[1:]
-				g = append(g, tmp)
-			}
-			lw.Span = todoSl[0]
+	for ; idx < len(f); idx++ {
+		if f[idx].EndKey.Compare(w.EndKey) <= 0 {
+			// f[idx] is covered by `w` so elide it.
+			continue
 		}
-		if len(lw.EndKey) != 0 {
-			// Whatever is left of `lw` can blindly be inserted since it doesn't
-			// overlap `f`.
-			g = append(g, lw)
+		if f[idx].Key.Compare(w.EndKey) >= 0 {
+			// f[idx] is entirely to the right of `w` so it gets in verbatim.
+			g = append(g, f[idx])
+			continue
 		}
-		return g
+		if f[idx].EndKey.Compare(w.EndKey) > 0 {
+			// Current element overlaps `w` and extends to the right. This can
+			// happen only once, though we don't use that.
+			//  ...-------)    cur
+			//  ...----)       w
+			// Add an element representing only the "outside" part.
+			tmp := f[idx]
+			tmp.Key = w.EndKey
+		}
+		panic("unreachable")
+	}
+	return g
+}
 
-	*/
-	return nil, nil
+func (f frontier) String() string {
+	// Flatten all start and end keys in a slice, sort them, and
+	// assign them indexes (used for printing pretty pictures).
+	//
+	// We don't use the invariant that the frontier consists of
+	// self-nonoverlapping sorted elements here because it's nice
+	// to be able to nicely stringify any set of spans.
+	var ks []string
+	for _, w := range f {
+		ks = append(ks, string(w.Key))
+		if len(w.EndKey) > 0 {
+			ks = append(ks, string(w.EndKey))
+		}
+	}
+	sort.Strings(ks)
+
+	k2indent := map[string]int{} // key to indent
+	var indent int
+	for _, k := range ks {
+		if _, ok := k2indent[k]; !ok {
+			indent += len(k)
+			k2indent[k] = indent
+			indent += 1
+		}
+	}
+	indent += 3
+
+	var buf strings.Builder
+	for _, w := range f {
+		k := string(w.Key)
+		ek := string(w.EndKey)
+		pk := k2indent[k]
+		var pek int
+		if ek != "" {
+			pek = k2indent[ek] - pk
+		}
+		pr := indent - pk - pek
+		fmt.Fprintf(&buf, "%"+strconv.Itoa(pk)+"s", k)
+		if ek != "" {
+			fmt.Fprintf(&buf, "%s%s", strings.Repeat("-", pek-len(ek)), ek)
+		}
+		fmt.Fprintf(&buf, "%"+strconv.Itoa(pr)+"s", "") // just pad
+		fmt.Fprintf(&buf, "<-- ts=%d\n", w.ts.WallTime)
+	}
+
+	return buf.String()
 }
