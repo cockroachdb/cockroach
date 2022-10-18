@@ -89,7 +89,8 @@ func NewReader(
 	return NewTestingReader(storage, slReader, f, codec, keys.SQLInstancesTableID, clock, stopper)
 }
 
-// Start initializes the rangefeed for the Reader.
+// Start initializes the rangefeed for the Reader. The rangefeed will run until
+// the stopper stops.
 func (r *Reader) Start(ctx context.Context) error {
 	rf := r.maybeStartRangeFeed(ctx)
 	select {
