@@ -18,6 +18,7 @@ import {
   selectStatementInsightDetails,
   selectStatementInsightsError,
 } from "src/store/insights/statementInsights";
+import { selectIsTenant } from "src/store/uiConfig";
 
 const mapStateToProps = (
   state: AppState,
@@ -28,6 +29,7 @@ const mapStateToProps = (
   return {
     insightEventDetails: insightStatements,
     insightError: insightError,
+    isTenant: selectIsTenant(state),
   };
 };
 

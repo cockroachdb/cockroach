@@ -40,6 +40,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       rowsRead: 100,
       insights: null,
       indexRecommendations: ["make this index"],
+      planGist: "abc",
     },
     {
       statementID: "f72f37ea-b3a0-451f-80b8-dfb27d0bc2a9",
@@ -65,6 +66,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       rowsRead: 100,
       insights: null,
       indexRecommendations: ["make that index"],
+      planGist: "abc",
     },
     {
       statementID: "f72f37ea-b3a0-451f-80b8-dfb27d0bc2a9",
@@ -91,6 +93,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       rowsRead: 100,
       insights: null,
       indexRecommendations: ["make these indices"],
+      planGist: "abc",
     },
   ],
   statementsError: null,
