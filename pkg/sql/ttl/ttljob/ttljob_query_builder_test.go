@@ -45,7 +45,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 				mockTime,
 				[]string{"col1", "col2"},
 				"relation_name",
-				rangeToProcess{
+				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 					endPK:   tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
@@ -111,7 +111,7 @@ LIMIT 2`,
 				mockTime,
 				[]string{"col1", "col2"},
 				"table_name",
-				rangeToProcess{},
+				spanToProcess{},
 				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
@@ -170,7 +170,7 @@ LIMIT 2`,
 				mockTime,
 				[]string{"col1", "col2"},
 				"table_name",
-				rangeToProcess{
+				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100)},
 					endPK:   tree.Datums{tree.NewDInt(181)},
 				},
@@ -236,7 +236,7 @@ LIMIT 2`,
 				mockTime,
 				[]string{"col1", "col2"},
 				"table_name",
-				rangeToProcess{
+				spanToProcess{
 					endPK: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
 				mockTime,
@@ -300,7 +300,7 @@ LIMIT 2`,
 				mockTime,
 				[]string{"col1", "col2"},
 				"table_name",
-				rangeToProcess{
+				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				},
 				mockTime,

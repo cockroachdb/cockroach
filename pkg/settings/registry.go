@@ -145,6 +145,9 @@ var retiredSettings = map[string]struct{}{
 	"kv.refresh_range.time_bound_iterators.enabled":             {},
 	"sql.defaults.datestyle.enabled":                            {},
 	"sql.defaults.intervalstyle.enabled":                        {},
+
+	// removed as of 22.2.1
+	"sql.ttl.default_range_concurrency": {},
 }
 
 // sqlDefaultSettings is the list of "grandfathered" existing sql.defaults

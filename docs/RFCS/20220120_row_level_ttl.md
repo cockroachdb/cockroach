@@ -137,6 +137,8 @@ TTL metadata is stored on the TableDescriptor:
 ```protobuf
 message TableDescriptor {
   message RowLevelTTL {
+    option (gogoproto.equal) = true;
+  
     // DurationExpr is the automatically assigned interval for when the TTL should apply to a row.
     optional string duration_expr = 1 [(gogoproto.nullable)=false, (gogoproto.casttype)="Expression"];
     // SelectBatchSize is the amount of rows that should be fetched at a time
@@ -147,8 +149,8 @@ message TableDescriptor {
     optional string deletion_cron = 4 [(gogoproto.nullable)=false];
     // ScheduleID is the ID of the row-level TTL job schedules.
     optional int64 schedule_id = 5 [(gogoproto.customname)="ScheduleID",(gogoproto.nullable)=false];
-    // RangeConcurrency is the number of ranges to process at a time.
-    optional int64 range_concurrency = 6 [(gogoproto.nullable)=false];
+    // RangeConcurrency is based on the number of spans and is no longer configurable.
+    reserved 6;
     // DeleteRateLimit is the maximum amount of rows to delete per second.
     optional int64 delete_rate_limit = 7 [(gogoproto.nullable)=false];
     // Pause is set if the TTL job should not run.
@@ -180,7 +182,6 @@ the following options to control the TTL job:
 | `ttl_expiration_expression`   | If set, uses the expression specified as the TTL expiration. Defaults to just using the `crdb_internal_expiration` column.                                |
 | `ttl_select_batch_size`       | How many rows to fetch from the range that have expired at a given time. Defaults to 500. Must be at least `1`.                                           |
 | `ttl_delete_batch_size`       | How many rows to delete at a time. Defaults to 100. Must be at least `1`.                                                                                 |
-| `ttl_range_concurrency`       | How many concurrent ranges are being worked on at a time. Defaults to `cpu_core_count`. Must be at least `1`.                                             |
 | `ttl_delete_rate_limit`       | Maximum number of rows to be deleted per second (acts as the rate limit). Defaults to 0 (signifying none).                                                |
 | `ttl_row_stats_poll_interval` | Whilst the TTL job is running, counts rows and expired rows on the table to report as prometheus metrics. By default unset, meaning no stats are fetched. |
 | `ttl_pause`                   | Stops the TTL job from executing.                                                                                                                         |
@@ -291,8 +292,7 @@ are additional knobs a user can use to control how effective the deletion
 performs:
 * how often the deletion job runs (controls amount of "junk" data left)
 * table GC time (when tombstones are removed and space is therefore reclaimed)
-* the size of the ranges on the table, which has knock on effects for
-  `ttl_range_concurrency`.
+* the distribution of the ranges on the table
 
 ### Admission Control
 To ensure the deletion job does not affect foreground traffic, we plan on using
