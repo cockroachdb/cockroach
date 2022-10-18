@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local local-use-db-lookup
 
 # Set the distsql_workmem to the default production value because of a problem
 # with losing 'name' attribute when spilling to disk (#78547).
