@@ -14,6 +14,7 @@ package descs
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -349,6 +351,81 @@ func newMutableSyntheticDescriptorAssertionError(id descpb.ID) error {
 	return errors.AssertionFailedf("attempted mutable access of synthetic descriptor %d", id)
 }
 
+// GetAllDescriptorsForDatabase retrieves the complete set of descriptors
+// in the requested database.
+func (tc *Collection) GetAllDescriptorsForDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	ns, err := tc.stored.GetAllDescriptorNamesForDatabase(ctx, txn, db)
+	if err != nil {
+		return ns, err
+	}
+	var ids catalog.DescriptorIDSet
+	ids.Add(db.GetID())
+	_ = ns.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		if !strings.HasPrefix(e.GetName(), catconstants.PgTempSchemaName) &&
+			e.GetID() != catconstants.PublicSchemaID {
+			ids.Add(e.GetID())
+		}
+		return nil
+	})
+	var functionIDs catalog.DescriptorIDSet
+	addSchema := func(sc catalog.SchemaDescriptor) {
+		_ = sc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
+			functionIDs.Add(overload.ID)
+			return nil
+		})
+	}
+	for _, f := range []func(func(descriptor catalog.Descriptor) error) error{
+		tc.uncommitted.iterateUncommittedByID,
+		tc.synthetic.iterateSyntheticByID,
+	} {
+		_ = f(func(desc catalog.Descriptor) error {
+			if desc.GetParentID() == db.GetID() {
+				ids.Add(desc.GetID())
+			}
+			if sc, isSchema := desc.(catalog.SchemaDescriptor); isSchema {
+				addSchema(sc)
+			}
+			return nil
+		})
+	}
+	flags := tree.CommonLookupFlags{
+		AvoidLeased:    true,
+		IncludeOffline: true,
+		IncludeDropped: true,
+	}
+	// getDescriptorsByID must be used to ensure proper validation hydration etc.
+	descs, err := tc.getDescriptorsByID(ctx, txn, flags, ids.Ordered()...)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	var ret nstree.MutableCatalog
+	for _, desc := range descs {
+		ret.UpsertDescriptorEntry(desc)
+	}
+	_ = ns.ForEachSchemaNamespaceEntryInDatabase(db.GetID(), func(
+		e nstree.NamespaceEntry,
+	) error {
+		if sc, ok := ret.LookupDescriptorEntry(
+			e.GetID(),
+		).(catalog.SchemaDescriptor); ok {
+			addSchema(sc)
+		}
+
+		return nil
+	})
+
+	descs, err = tc.getDescriptorsByID(ctx, txn, flags, functionIDs.Ordered()...)
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	for _, desc := range descs {
+		ret.UpsertDescriptorEntry(desc)
+	}
+	return ret.Catalog, nil
+}
+
 // GetAllDescriptors returns all descriptors visible by the transaction,
 func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error) {
 	if err := tc.stored.EnsureAllDescriptors(ctx, txn); err != nil {
@@ -451,14 +528,17 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 	if desc := all.LookupDescriptorEntry(db.GetID()); desc == nil || desc.DescriptorType() != catalog.Database {
 		return nil, sqlerrors.NewUndefinedDatabaseError(db.GetName())
 	}
+	dbID := db.GetID()
 	var ret []catalog.TableDescriptor
-	for _, desc := range all.OrderedDescriptors() {
-		if desc.GetParentID() == db.GetID() {
-			if table, ok := desc.(catalog.TableDescriptor); ok {
-				ret = append(ret, table)
-			}
+	_ = all.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		if desc.GetParentID() != dbID {
+			return nil
 		}
-	}
+		if table, ok := desc.(catalog.TableDescriptor); ok {
+			ret = append(ret, table)
+		}
+		return nil
+	})
 	return ret, nil
 }
 

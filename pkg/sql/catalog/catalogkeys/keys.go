@@ -160,10 +160,16 @@ func MakeDatabaseNameKey(codec keys.SQLCodec, name string) roachpb.Key {
 	return EncodeNameKey(codec, NewNameKeyComponents(keys.RootNamespaceID, keys.RootNamespaceID, name))
 }
 
+// MakeDatabaseChildrenNameKeyPrefix constructs a key which is a prefix to all
+// namespace entries for children of the requested database.
+func MakeDatabaseChildrenNameKeyPrefix(codec keys.SQLCodec, parentID descpb.ID) roachpb.Key {
+	r := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
+	return encoding.EncodeUvarintAscending(r, uint64(parentID))
+}
+
 // EncodeNameKey encodes nameKey using codec.
 func EncodeNameKey(codec keys.SQLCodec, nameKey catalog.NameKey) roachpb.Key {
-	r := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
-	r = encoding.EncodeUvarintAscending(r, uint64(nameKey.GetParentID()))
+	r := MakeDatabaseChildrenNameKeyPrefix(codec, nameKey.GetParentID())
 	r = encoding.EncodeUvarintAscending(r, uint64(nameKey.GetParentSchemaID()))
 	if nameKey.GetName() != "" {
 		r = encoding.EncodeBytesAscending(r, []byte(nameKey.GetName()))
