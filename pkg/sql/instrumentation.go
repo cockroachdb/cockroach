@@ -121,8 +121,8 @@ type instrumentationHelper struct {
 
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
-	// If savePlanForStats is true, the explainPlan will be collected and returned
-	// via PlanForStats().
+	// If savePlanForStats is true and the explainPlan was collected, the
+	// serialized version of the plan will be returned via PlanForStats().
 	savePlanForStats bool
 
 	explainPlan  *explain.Plan
@@ -268,8 +268,8 @@ func (ih *instrumentationHelper) Setup(
 	ih.stmtDiagnosticsRecorder = stmtDiagnosticsRecorder
 	ih.withStatementTrace = cfg.TestingKnobs.WithStatementTrace
 
-	ih.savePlanForStats =
-		statsCollector.ShouldSaveLogicalPlanDesc(fingerprint, implicitTxn, p.SessionData().Database)
+	var previouslySampled bool
+	previouslySampled, ih.savePlanForStats = statsCollector.ShouldSample(fingerprint, implicitTxn, p.SessionData().Database)
 
 	defer func() {
 		if ih.ShouldBuildExplainPlan() {
@@ -300,7 +300,7 @@ func (ih *instrumentationHelper) Setup(
 
 	ih.collectExecStats = collectTxnExecStats
 
-	if !collectTxnExecStats && ih.savePlanForStats {
+	if !collectTxnExecStats && !previouslySampled {
 		// We don't collect the execution stats for statements in this txn, but
 		// this is the first time we see this statement ever, so we'll collect
 		// its execution stats anyway (unless the user disabled txn stats
@@ -451,7 +451,7 @@ func (ih *instrumentationHelper) ShouldUseJobForCreateStats() bool {
 // ShouldBuildExplainPlan returns true if we should build an explain plan and
 // call RecordExplainPlan.
 func (ih *instrumentationHelper) ShouldBuildExplainPlan() bool {
-	return ih.collectBundle || ih.collectExecStats || ih.savePlanForStats ||
+	return ih.collectBundle || ih.collectExecStats ||
 		ih.outputMode == explainAnalyzePlanOutput ||
 		ih.outputMode == explainAnalyzeDistSQLOutput
 }
@@ -484,7 +484,7 @@ func (ih *instrumentationHelper) RecordPlanInfo(
 // collected (nil otherwise). It should be called after RecordExplainPlan() and
 // RecordPlanInfo().
 func (ih *instrumentationHelper) PlanForStats(ctx context.Context) *roachpb.ExplainTreePlanNode {
-	if ih.explainPlan == nil {
+	if ih.explainPlan == nil || !ih.savePlanForStats {
 		return nil
 	}
 

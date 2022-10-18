@@ -61,7 +61,7 @@ const (
 //     system table.
 //   - set-time: this changes the clock time perceived by SQL Stats subsystem.
 //     This is useful when unit tests need to manipulate times.
-//   - should-sample-logical-plan: this checks if the given tuple of
+//   - should-sample: this checks if the given tuple of
 //     (db, implicitTxn, fingerprint) will be sampled
 //     next time it is being executed.
 func TestSQLStatsDataDriven(t *testing.T) {
@@ -129,7 +129,7 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			}
 			stubTime.setTime(tm)
 			return stubTime.Now().String()
-		case "should-sample-logical-plan":
+		case "should-sample":
 			mustHaveArgsOrFatal(t, d, fingerprintArgs, implicitTxnArgs, dbNameArgs)
 
 			var dbName string
@@ -145,13 +145,12 @@ func TestSQLStatsDataDriven(t *testing.T) {
 			// them.
 			fingerprint = strings.Replace(fingerprint, "%", " ", -1)
 
-			return fmt.Sprintf("%t",
-				appStats.ShouldSaveLogicalPlanDesc(
-					fingerprint,
-					implicitTxn,
-					dbName,
-				),
+			previouslySampled, savePlanForStats := appStats.ShouldSample(
+				fingerprint,
+				implicitTxn,
+				dbName,
 			)
+			return fmt.Sprintf("%t, %t", previouslySampled, savePlanForStats)
 		}
 
 		return ""

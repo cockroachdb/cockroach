@@ -227,16 +227,17 @@ func (s *Container) RecordStatementExecStats(
 	return nil
 }
 
-// ShouldSaveLogicalPlanDesc implements sqlstats.Writer interface.
-func (s *Container) ShouldSaveLogicalPlanDesc(
+// ShouldSample implements sqlstats.Writer interface.
+func (s *Container) ShouldSample(
 	fingerprint string, implicitTxn bool, database string,
-) bool {
-	lastSampled := s.getLogicalPlanLastSampled(sampledPlanKey{
+) (previouslySampled, savePlanForStats bool) {
+	lastSampled, previouslySampled := s.getLogicalPlanLastSampled(sampledPlanKey{
 		stmtNoConstants: fingerprint,
 		implicitTxn:     implicitTxn,
 		database:        database,
 	})
-	return s.shouldSaveLogicalPlanDescription(lastSampled)
+	savePlanForStats = s.shouldSaveLogicalPlanDescription(lastSampled)
+	return previouslySampled, savePlanForStats
 }
 
 // RecordTransaction implements sqlstats.Writer interface and saves

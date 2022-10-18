@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -935,6 +936,122 @@ func TestIsAtLeastVersion(t *testing.T) {
 			db.CheckQueryResults(t, query, [][]string{{tc.expected}})
 		}
 	}
+}
+
+func TestTxnContentionEventsTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the cluster. (One node is sufficient; the outliers system
+	// is currently in-memory only.)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	args := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Settings: settings}}
+	tc := testcluster.StartTestCluster(t, 1, args)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+
+	sqlDB.Exec(
+		t,
+		`SET CLUSTER SETTING sql.metrics.statement_details.plan_collection.enabled = false;`)
+
+	// Reduce the resolution interval to speed up the test.
+	sqlDB.Exec(
+		t,
+		`SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'`)
+
+	sqlDB.Exec(t, "CREATE TABLE t (id string, s string);")
+
+	causeContention := func(insertValue string, updateValue string) {
+		// Create a new connection, and then in a go routine have it start a
+		// transaction, update a row, sleep for a time, and then complete the
+		// transaction. With original connection attempt to update the same row
+		// being updated concurrently in the separate go routine, this will be
+		// blocked until the original transaction completes.
+		var wgTxnStarted sync.WaitGroup
+		wgTxnStarted.Add(1)
+
+		// Lock to wait for the txn to complete to avoid the test finishing
+		// before the txn is committed.
+		var wgTxnDone sync.WaitGroup
+		wgTxnDone.Add(1)
+
+		go func() {
+			defer wgTxnDone.Done()
+			tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
+			require.NoError(t, errTxn)
+			_, errTxn = tx.ExecContext(ctx,
+				"INSERT INTO t (id, s) VALUES ('test', $1);",
+				insertValue)
+			require.NoError(t, errTxn)
+			wgTxnStarted.Done()
+			_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.5);")
+			require.NoError(t, errTxn)
+			errTxn = tx.Commit()
+			require.NoError(t, errTxn)
+		}()
+
+		start := timeutil.Now()
+
+		// Need to wait for the txn to start to ensure lock contention.
+		wgTxnStarted.Wait()
+		// This will be blocked until the updateRowWithDelay finishes.
+		_, errUpdate := conn.ExecContext(
+			ctx, "UPDATE t SET s = $1 where id = 'test';", updateValue)
+		require.NoError(t, errUpdate)
+		end := timeutil.Now()
+		require.GreaterOrEqual(t, end.Sub(start), 500*time.Millisecond)
+
+		wgTxnDone.Wait()
+	}
+
+	causeContention("insert1", "update1")
+	causeContention("insert2", "update2")
+
+	rowCount := 0
+
+	// Verify the table content is valid.
+	// Filter the fingerprint id to only be the query in the test.
+	// This ensures the event is the one caused in the test and not by some other
+	// internal workflow.
+	testutils.SucceedsWithin(t, func() error {
+		rows, errVerify := conn.QueryContext(ctx, `SELECT 
+			blocking_txn_id, 
+			waiting_txn_id 
+			FROM crdb_internal.transaction_contention_events tce 
+			inner join ( 
+			select 
+			transaction_fingerprint_id, 
+			metadata->'query' as query 
+			from crdb_internal.statement_statistics t 
+			where metadata->>'query' like 'UPDATE t SET %') stats 
+			on stats.transaction_fingerprint_id = tce.waiting_txn_fingerprint_id`)
+		if errVerify != nil {
+			return errVerify
+		}
+
+		for rows.Next() {
+			rowCount++
+
+			var blocking, waiting string
+			errVerify = rows.Scan(&blocking, &waiting)
+			if errVerify != nil {
+				return errVerify
+			}
+
+		}
+
+		if rowCount < 1 {
+			return fmt.Errorf("transaction_contention_events did not return any rows")
+		}
+		return nil
+	}, 5*time.Second)
+
+	require.LessOrEqual(t, rowCount, 2, "transaction_contention_events "+
+		"found 3 rows. It should only record first, but there is a chance based "+
+		"on sampling to get 2 rows.")
+
 }
 
 // This test doesn't care about the contents of these virtual tables;
