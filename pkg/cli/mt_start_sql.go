@@ -112,7 +112,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	}
 
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
-		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
+		ctx, st, stopper, serverCfg.Stores,
 	); err != nil {
 		return err
 	}
