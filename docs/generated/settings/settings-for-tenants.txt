@@ -39,6 +39,7 @@ kv.protectedts.reconciliation.interval	duration	5m0s	the frequency for reconcili
 kv.range_split.by_load_enabled	boolean	true	allow automatic splits of ranges based on where load is concentrated
 kv.range_split.load_qps_threshold	integer	2500	the QPS over which, the range becomes a candidate for load based splitting
 kv.rangefeed.enabled	boolean	false	if set, rangefeed registration is enabled
+kv.rangefeed.range_stuck_threshold	duration	1m0s	restart rangefeeds if they don't emit anything for the specified threshold; 0 disables (kv.closed_timestamp.side_transport_interval takes precedence)
 kv.replica_stats.addsst_request_size_factor	integer	50000	the divisor that is applied to addsstable request sizes, then recorded in a leaseholders QPS; 0 means all requests are treated as cost 1
 kv.replication_reports.interval	duration	1m0s	the frequency for generating the replication_constraint_stats, replication_stats_report and replication_critical_localities reports (set to 0 to disable)
 kv.transaction.max_intents_bytes	integer	4194304	maximum number of bytes used to track locks in transactions
