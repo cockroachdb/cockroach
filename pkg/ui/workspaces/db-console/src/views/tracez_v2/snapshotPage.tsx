@@ -13,9 +13,15 @@ import {
   SnapshotPageStateProps,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshSnapshot, refreshSnapshots } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshSnapshot,
+  refreshSnapshots,
+  snapshotKey,
+} from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { getMatchParamByName } from "src/util/query";
@@ -30,26 +36,42 @@ const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): SnapshotPageStateProps => {
-  const snapshotsState = state.cachedData.snapshots;
+  const nodeID = getMatchParamByName(props.match, "nodeID");
+  const snapshotsState = state.cachedData.snapshots[nodeID];
 
   const snapshotID = getMatchParamByName(props.match, "snapshotID");
-  const snapshotState = state.cachedData.snapshot[snapshotID];
+  const snapshotState =
+    state.cachedData.snapshot[
+      snapshotKey({
+        nodeID: nodeID,
+        snapshotID: parseInt(snapshotID),
+      })
+    ];
+
+  const nodesState = state.cachedData.nodes;
 
   return {
     sort: sortSetting.selector(state),
 
+    // Pass down valid to gate redirect.
     snapshots: snapshotsState ? snapshotsState.data : null,
     snapshotsLoading: snapshotsState ? snapshotsState.inFlight : false,
     snapshotsError: snapshotsState ? snapshotsState.lastError : null,
+    snapshotsValid: snapshotsState?.valid,
 
     snapshot: snapshotState ? snapshotState.data : null,
     snapshotLoading: snapshotState ? snapshotState.inFlight : false,
     snapshotError: snapshotState ? snapshotState.lastError : null,
+
+    nodes: nodesState ? nodesState.data : null,
+
+    takeSnapshot: clusterUiApi.takeTracingSnapshot,
   };
 };
 
 const mapDispatchToProps = {
   setSort: sortSetting.set,
+  refreshNodes,
   refreshSnapshots,
   refreshSnapshot,
 };
