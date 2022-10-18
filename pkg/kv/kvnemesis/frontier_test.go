@@ -14,6 +14,7 @@ package kvnemesis
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,25 +28,77 @@ import (
 func TestFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	mkW := func(k, ek string, ts int64) lastWrite {
+		return lastWrite{
+			Span: roachpb.Span{Key: roachpb.Key(k), EndKey: roachpb.Key(ek)},
+			idx:  0, // for now
+			ts:   hlc.Timestamp{WallTime: ts},
+		}
+
+	}
+	c := func(ws ...lastWrite) []lastWrite {
+		return ws
+	}
+
 	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))
 	defer w.Check(t)
+
+	const (
+		ts1 = 1 + iota
+		ts2
+		ts3
+	)
 
 	for _, tc := range []struct {
 		name string
 		adds []lastWrite
 	}{
 		{
+			name: "single point",
+			adds: c(mkW("a", "", ts1)),
+		},
+		{
 			name: "single span",
-			adds: []lastWrite{
-				{
-					Span: roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
-					idx:  1,
-					ts:   hlc.Timestamp{WallTime: 123},
-				},
-			},
+			adds: c(mkW("a", "b", ts1)),
+		},
+		{
+			name: "non-overlapping spans",
+			adds: c(
+				mkW("a", "b", ts1),
+				mkW("b", "d", ts2),
+				mkW("f", "z", ts3),
+			),
+		},
+		{
+			name: "identical points",
+			adds: c(
+				mkW("a", "", ts1),
+				mkW("a", "", ts2),
+			),
+		},
+		{
+			name: "identical spans",
+			adds: c(
+				mkW("b", "c", ts1),
+				mkW("b", "c", ts2),
+			),
+		},
+		{
+			name: "second covering, extending left",
+			adds: c(
+				mkW("b", "c", ts1),
+				mkW("a", "c", ts2),
+			),
+		},
+		{
+			name: "second covering, extending right",
+			adds: c(
+				mkW("b", "c", ts1),
+				mkW("b", "d", ts2),
+			),
 		},
 	} {
-		w.Do(t, tc.name, func(t *testing.T, path string) {
+		t.Run(tc.name, w.Do(t, tc.name, func(t *testing.T, path string) {
 			// Flatten all start and end keys in a slice, sort them, and
 			// assign them indexes (used for printing pretty pictures).
 			var ks []string
@@ -61,23 +114,32 @@ func TestFrontier(t *testing.T) {
 			var indent int
 			for _, k := range ks {
 				if _, ok := k2indent[k]; !ok {
-					k2indent[k] = indent
 					indent += len(k)
+					k2indent[k] = indent
+					indent += 1
 				}
 			}
+			t.Log(k2indent)
+			indent += 3
 
 			var buf strings.Builder
 			for _, w := range tc.adds {
 				k := string(w.Key)
 				ek := string(w.EndKey)
-				if ek == "" {
-					fmt.Fprintf(&buf, "%s%s", strings.Repeat(" ", k2indent[k]), k)
-				} else {
-					fmt.Fprintf(&buf, "%s%s%s%s", strings.Repeat(" ", k2indent[k]), k, strings.Repeat("-", k2indent[ek]-k2indent[k]), ek)
+				pk := k2indent[k]
+				var pek int
+				if ek != "" {
+					pek = k2indent[ek] - pk
 				}
+				pr := indent - pk - pek
+				fmt.Fprintf(&buf, "%"+strconv.Itoa(pk)+"s", k)
+				if ek != "" {
+					fmt.Fprintf(&buf, "%s%s", strings.Repeat("-", pek-len(ek)), ek)
+				}
+				fmt.Fprintf(&buf, "%"+strconv.Itoa(pr)+"s", "") // just pad
+				fmt.Fprintf(&buf, "<-- ts=%d\n", w.ts.WallTime)
 			}
 			echotest.Require(t, buf.String(), path)
-		})
+		}))
 	}
-
 }
