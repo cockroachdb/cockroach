@@ -753,7 +753,8 @@ func (c *tenantSideCostController) OnRequestWait(ctx context.Context) error {
 	return c.limiter.Wait(ctx, 0)
 }
 
-// OnResponse is part of the multitenant.TenantSideBatchInterceptor interface.
+// OnResponseWait is part of the multitenant.TenantSideBatchInterceptor
+// interface.
 func (c *tenantSideCostController) OnResponseWait(
 	ctx context.Context, req tenantcostmodel.RequestInfo, resp tenantcostmodel.ResponseInfo,
 ) error {
@@ -852,4 +853,9 @@ func (c *tenantSideCostController) onExternalIO(
 	c.mu.Unlock()
 
 	return nil
+}
+
+// GetCostConfig is part of the multitenant.TenantSideCostController interface.
+func (c *tenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
+	return &c.costCfg
 }

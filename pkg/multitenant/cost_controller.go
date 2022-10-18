@@ -32,6 +32,10 @@ type TenantSideCostController interface {
 		nextLiveInstanceIDFn NextLiveInstanceIDFn,
 	) error
 
+	// GetCostConfig returns the cost model config this TenantSideCostController
+	// is using.
+	GetCostConfig() *tenantcostmodel.Config
+
 	TenantSideKVInterceptor
 
 	TenantSideExternalIORecorder
