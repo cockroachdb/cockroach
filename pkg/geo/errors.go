@@ -32,6 +32,14 @@ func NewMismatchingSRIDsError(a geopb.SpatialObject, b geopb.SpatialObject) erro
 	)
 }
 
+// OutOfRangeError returns the error message to use if a spatial object contains
+// an NaN coordinate. This is the same message that Postgres uses.
+func OutOfRangeError() error {
+	return pgerror.Newf(
+		pgcode.InvalidParameterValue, "input is out of range",
+	)
+}
+
 // EmptyGeometryError is an error that is returned when the Geometry or any
 // parts of its subgeometries are empty.
 type EmptyGeometryError struct {
