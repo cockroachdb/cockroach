@@ -12,6 +12,7 @@ package insights
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -47,7 +48,11 @@ var _ Provider = &concurrentBufferIngester{}
 // Performance was deemed acceptable under 10,000 concurrent goroutines.
 const bufferSize = 8192
 
-type eventBuffer [bufferSize]*event
+type eventBuffer [bufferSize]event
+
+var eventBufferPool = sync.Pool{
+	New: func() interface{} { return new(eventBuffer) },
+}
 
 type event struct {
 	sessionID   clusterunique.ID
@@ -64,7 +69,8 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 		for {
 			select {
 			case events := <-i.eventBufferCh:
-				i.ingest(events)
+				i.ingest(events) // note that injest clears the buffer
+				eventBufferPool.Put(events)
 			case <-stopper.ShouldQuiesce():
 				atomic.StoreUint64(&i.running, 0)
 				return
@@ -90,10 +96,10 @@ func (i *concurrentBufferIngester) Start(ctx context.Context, stopper *stop.Stop
 }
 
 func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
-	for _, e := range events {
+	for idx, e := range events {
 		// Because an eventBuffer is a fixed-size array, rather than a slice,
 		// we do not know how full it is until we hit a nil entry.
-		if e == nil {
+		if e == (event{}) {
 			break
 		}
 		if e.statement != nil {
@@ -101,6 +107,7 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 		} else {
 			i.registry.ObserveTransaction(e.sessionID, e.transaction)
 		}
+		events[idx] = event{}
 	}
 }
 
@@ -125,7 +132,7 @@ func (i *concurrentBufferIngester) ObserveStatement(
 		return
 	}
 	i.guard.AtomicWrite(func(writerIdx int64) {
-		i.guard.eventBuffer[writerIdx] = &event{
+		i.guard.eventBuffer[writerIdx] = event{
 			sessionID: sessionID,
 			statement: statement,
 		}
@@ -139,7 +146,7 @@ func (i *concurrentBufferIngester) ObserveTransaction(
 		return
 	}
 	i.guard.AtomicWrite(func(writerIdx int64) {
-		i.guard.eventBuffer[writerIdx] = &event{
+		i.guard.eventBuffer[writerIdx] = event{
 			sessionID:   sessionID,
 			transaction: transaction,
 		}
@@ -158,7 +165,7 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 		registry:      registry,
 	}
 
-	i.guard.eventBuffer = &eventBuffer{}
+	i.guard.eventBuffer = eventBufferPool.Get().(*eventBuffer)
 	i.guard.ConcurrentBufferGuard = contentionutils.NewConcurrentBufferGuard(
 		func() int64 {
 			return bufferSize
@@ -167,7 +174,7 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 			if atomic.LoadUint64(&i.running) == 1 {
 				i.eventBufferCh <- i.guard.eventBuffer
 			}
-			i.guard.eventBuffer = &eventBuffer{}
+			i.guard.eventBuffer = eventBufferPool.Get().(*eventBuffer)
 		},
 	)
 	return i

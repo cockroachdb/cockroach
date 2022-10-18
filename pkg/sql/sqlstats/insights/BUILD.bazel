@@ -21,6 +21,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql/clusterunique",
         "//pkg/sql/contention/contentionutils",
+        "//pkg/util",
         "//pkg/util/cache",
         "//pkg/util/metric",
         "//pkg/util/quantile",
