@@ -85,6 +85,9 @@ type TestClusterConfig struct {
 	// DeclarativeCorpusCollection enables support for collecting corpuses
 	// for the declarative schema changer.
 	DeclarativeCorpusCollection bool
+	// UseIndexLookupForDescriptorsInDatabase enables support for performing
+	// a lookup join when reading descriptors for virtual tables.
+	UseIndexLookupForDescriptorsInDatabase bool
 }
 
 const threeNodeTenantConfigName = "3node-tenant"
@@ -446,6 +449,11 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:       "multiregion-15node-5region-3azs",
 		NumNodes:   15,
 		Localities: multiregion15node5region3azsLocalities,
+	},
+	{
+		Name:                "local-use-db-lookup",
+		NumNodes:            1,
+		OverrideDistSQLMode: "off",
 	},
 	{
 		Name:                        "local-mixed-22.2-23.1",
