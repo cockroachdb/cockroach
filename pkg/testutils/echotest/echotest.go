@@ -145,10 +145,12 @@ func (w *Walker) Check(t T) {
 		t.Errorf("some test files are not referenced by a test case, to remove them use:\n%s", rm)
 	}
 	if len(w.missingFiles) > 0 {
-		mk := fmt.Sprintf(`mkdir -p %[1]q && cd %[1]q && echo 'echo'`, w.dir)
+		mk := fmt.Sprintf(`mkdir -p %[1]q && \
+(cd %[1]q && echo 'echo'`, w.dir)
 		for _, f := range w.missingFiles {
 			mk += fmt.Sprintf(" \\\n  | tee %q", f)
 		}
+		mk += ")"
 		t.Errorf("some test cases have no test file, to initialize them use the below snippet, then re-run with -rewrite:\n%s", mk)
 	}
 }
