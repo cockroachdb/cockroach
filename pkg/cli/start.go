@@ -779,13 +779,19 @@ func waitForShutdown(
 		return err
 
 	case <-stopper.ShouldQuiesce():
-		// Server is being stopped externally and our job is finished
-		// here since we don't know if it's a graceful shutdown or not.
-		<-stopper.IsStopped()
+		// Receiving a signal on ShouldQuiesce means that a shutdown was
+		// requested via the Drain RPC. The RPC code takes ownership
+		// of calling stopper.Stop.
+		//
+		// We fall through to the common logic below so that an operator
+		// looking at a server running in the foreground on their terminal
+		// can see what is going on.
+
 		// StartAlwaysFlush both flushes and ensures that subsequent log
 		// writes are flushed too.
 		log.StartAlwaysFlush()
-		return nil
+		// We do not return here, on purpose, because we want the common
+		// shutdown logic below to apply for this case as well.
 
 	case sig := <-signalCh:
 		// We start flushing log writes from here, because if a
