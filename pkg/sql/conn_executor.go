@@ -990,6 +990,11 @@ func (s *Server) newConnExecutor(
 		ex.phaseTimes,
 		s.cfg.SQLStatsTestingKnobs,
 	)
+	if s.cfg.DistSQLSrv != nil {
+		ex.cpuStatsCollector = multitenant.CpuUsageHelper{
+			CostController: s.cfg.DistSQLSrv.TenantCostController,
+		}
+	}
 	ex.dataMutatorIterator.onApplicationNameChange = func(newName string) {
 		ex.applicationName.Store(newName)
 		ex.applicationStats = ex.server.sqlStats.GetApplicationStats(newName, false /* internal */)
@@ -1433,6 +1438,10 @@ type connExecutor struct {
 	// statsCollector is used to collect statistics about SQL statements and
 	// transactions.
 	statsCollector sqlstats.StatsCollector
+
+	// cpuStatsCollector is used to estimate RU consumption due to CPU usage for
+	// tenants.
+	cpuStatsCollector multitenant.CpuUsageHelper
 
 	// applicationName is the same as sessionData.ApplicationName. It's copied
 	// here as an atomic so that it can be read concurrently by serialize().

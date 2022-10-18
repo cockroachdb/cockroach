@@ -280,6 +280,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	if !result.FlowStats.MaxDiskUsage.HasValue() {
 		result.FlowStats.MaxDiskUsage = other.FlowStats.MaxDiskUsage
 	}
+	if !result.FlowStats.ConsumedRU.HasValue() {
+		result.FlowStats.ConsumedRU = other.FlowStats.ConsumedRU
+	}
 
 	return &result
 }
