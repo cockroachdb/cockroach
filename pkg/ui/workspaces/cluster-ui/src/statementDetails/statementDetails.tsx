@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode } from "react";
+import React, { ReactNode, useEffect } from "react";
 import { Col, Row, Tabs } from "antd";
 import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { Text, InlineAlert } from "@cockroachlabs/ui-components";
@@ -45,7 +45,6 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
 import styles from "./statementDetails.module.scss";
 import { commonStyles } from "src/common";
-import { NodeSummaryStats } from "../nodes";
 import { UIConfigState } from "../store";
 import { StatementDetailsRequest } from "src/api/statementsApi";
 import {
@@ -76,33 +75,14 @@ type IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosti
 
 const { TabPane } = Tabs;
 
-export interface Fraction {
-  numerator: number;
-  denominator: number;
-}
-
 export type StatementDetailsProps = StatementDetailsOwnProps &
   RouteComponentProps<{ implicitTxn: string; statement: string }>;
 
 export interface StatementDetailsState {
   plansSortSetting: SortSetting;
   currentTab?: string;
+  cardWidth: number;
 }
-
-export type NodesSummary = {
-  nodeStatuses: cockroach.server.status.statuspb.INodeStatus[];
-  nodeIDs: string[];
-  nodeStatusByID: Dictionary<cockroach.server.status.statuspb.INodeStatus>;
-  nodeSums: NodeSummaryStats;
-  nodeDisplayNameByID: Dictionary<string>;
-  livenessStatusByNodeID: Dictionary<
-    cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-  >;
-  livenessByNodeID: Dictionary<
-    cockroach.kv.kvserver.liveness.livenesspb.ILiveness
-  >;
-  storeIDsByNodeID: Dictionary<string[]>;
-};
 
 export interface StatementDetailsDispatchProps {
   refreshStatementDetails: (req: StatementDetailsRequest) => void;
@@ -216,6 +196,7 @@ export class StatementDetails extends React.Component<
         columnTitle: "lastExecTime",
       },
       currentTab: searchParams.get("tab") || "overview",
+      cardWidth: 700,
     };
     this.activateDiagnosticsRef = React.createRef();
 
@@ -253,7 +234,21 @@ export class StatementDetails extends React.Component<
     this.props.refreshStatementDetails(req);
   };
 
+  handleResize = (): void => {
+    // Use the same size as the summary card and remove a space for margin (22).
+    const cardWidth = document.getElementById("first-card")
+      ? document.getElementById("first-card")?.offsetWidth - 22
+      : 700;
+    if (cardWidth !== this.state.cardWidth) {
+      this.setState({
+        cardWidth: cardWidth,
+      });
+    }
+  };
+
   componentDidMount(): void {
+    window.addEventListener("resize", this.handleResize);
+    this.handleResize();
     this.refreshStatementDetails(
       this.props.timeScale,
       this.props.statementFingerprintID,
@@ -513,6 +508,7 @@ export class StatementDetails extends React.Component<
     if (!hasData) {
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
+    const { cardWidth } = this.state;
     const { nodeRegions, isTenant } = this.props;
     const { stats } = this.props.statementDetails.statement;
     const {
@@ -569,7 +565,7 @@ export class StatementDetails extends React.Component<
     const executionAndPlanningOps: Partial<Options> = {
       axes: [{}, { label: "Time Spent" }],
       series: [{}, { label: "Execution" }, { label: "Planning" }],
-      width: 735,
+      width: cardWidth,
     };
 
     const rowsProcessedTimeseries: AlignedData = generateRowsProcessedTimeseries(
@@ -578,7 +574,7 @@ export class StatementDetails extends React.Component<
     const rowsProcessedOps: Partial<Options> = {
       axes: [{}, { label: "Rows" }],
       series: [{}, { label: "Rows Read" }, { label: "Rows Written" }],
-      width: 735,
+      width: cardWidth,
     };
 
     const execRetriesTimeseries: AlignedData = generateExecRetriesTimeseries(
@@ -588,7 +584,7 @@ export class StatementDetails extends React.Component<
       axes: [{}, { label: "Retries" }],
       series: [{}, { label: "Retries" }],
       legend: { show: false },
-      width: 735,
+      width: cardWidth,
     };
 
     const execCountTimeseries: AlignedData = generateExecCountTimeseries(
@@ -598,7 +594,7 @@ export class StatementDetails extends React.Component<
       axes: [{}, { label: "Execution Counts" }],
       series: [{}, { label: "Execution Counts" }],
       legend: { show: false },
-      width: 735,
+      width: cardWidth,
     };
 
     const contentionTimeseries: AlignedData = generateContentionTimeseries(
@@ -608,7 +604,7 @@ export class StatementDetails extends React.Component<
       axes: [{}, { label: "Contention" }],
       series: [{}, { label: "Contention" }],
       legend: { show: false },
-      width: 735,
+      width: cardWidth,
     };
 
     return (
@@ -637,7 +633,7 @@ export class StatementDetails extends React.Component<
           </Row>
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <SummaryCard className={cx("summary-card")}>
+              <SummaryCard id="first-card" className={cx("summary-card")}>
                 {!isTenant && (
                   <div>
                     <div className={summaryCardStylesCx("summary--card__item")}>
