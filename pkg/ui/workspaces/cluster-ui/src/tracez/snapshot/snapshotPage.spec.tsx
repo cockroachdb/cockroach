@@ -16,7 +16,9 @@ import * as H from "history";
 
 import { SortSetting } from "../../sortedtable";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { TakeTracingSnapshotResponseMessage } from "src/api/tracezApi";
 import GetTracingSnapshotResponse = cockroach.server.serverpb.GetTracingSnapshotResponse;
+import ListTracingSnapshotsResponse = cockroach.server.serverpb.ListTracingSnapshotsResponse;
 
 const getMockSnapshotPageProps = (): SnapshotPageProps => {
   const history = H.createHashHistory();
@@ -29,8 +31,14 @@ const getMockSnapshotPageProps = (): SnapshotPageProps => {
       isExact: false,
       params: {},
     },
-    refreshSnapshot: (id: number): void => {},
-    refreshSnapshots: (): void => {},
+    refreshSnapshot: (_req: { nodeID: number; snapshotID: number }): void => {},
+    refreshSnapshots: (_id: number): void => {},
+    defaultNodeID: undefined,
+    nodesLoading: false,
+    refreshNodes: (): void => {},
+    takeSnapshot(_nodeID: number): Promise<TakeTracingSnapshotResponseMessage> {
+      return Promise.resolve(undefined);
+    },
     setSort: (value: SortSetting): void => {},
     snapshotError: undefined,
     snapshotLoading: false,
@@ -45,6 +53,7 @@ const getMockSnapshotPageProps = (): SnapshotPageProps => {
 describe("Snapshot", () => {
   it("renders expected snapshot table columns", () => {
     const props = getMockSnapshotPageProps();
+    props.match.params.snapshotID = "1";
     props.snapshot = GetTracingSnapshotResponse.fromObject({
       snapshot: {
         spans: [{ span_id: 1 }],
