@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1075,6 +1076,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerStartLogicalPlan, timeutil.Now())
 
+	// Begin measuring CPU usage for tenants. This is a no-op for non-tenants.
+	ex.cpuStatsCollector.StartCollection(ctx)
+
 	// If adminAuditLogging is enabled, we want to check for HasAdminRole
 	// before the deferred maybeLogStatement.
 	// We must check prior to execution in the case the txn is aborted due to
@@ -1239,7 +1243,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.extraTxnState.bytesRead += stats.bytesRead
 	ex.extraTxnState.rowsWritten += stats.rowsWritten
 
-	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats)
+	populateQueryLevelStatsAndRegions(ctx, planner, ex.server.cfg, &stats, &ex.cpuStatsCollector)
 
 	// The transaction (from planner.txn) may already have been committed at this point,
 	// due to one-phase commit optimization or an error. Since we use that transaction
@@ -1275,7 +1279,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // and the plan's flow metadata. It also populates the regions field and
 // annotates the explainPlan field of the instrumentationHelper.
 func populateQueryLevelStatsAndRegions(
-	ctx context.Context, p *planner, cfg *ExecutorConfig, topLevelStats *topLevelQueryStats,
+	ctx context.Context,
+	p *planner,
+	cfg *ExecutorConfig,
+	topLevelStats *topLevelQueryStats,
+	cpuStats *multitenantcpu.CPUUsageHelper,
 ) {
 	ih := &p.instrumentation
 	if _, ok := ih.Tracing(); !ok {
@@ -1299,13 +1307,14 @@ func populateQueryLevelStatsAndRegions(
 		}
 		log.VInfof(ctx, 1, msg, ih.fingerprint, err)
 	} else {
-		// If this query is being run by a tenant, record the RUs consumed by
-		// network egress to the client.
+		// If this query is being run by a tenant, record the RUs consumed by CPU
+		// usage and network egress to the client.
 		if cfg.DistSQLSrv != nil {
 			if costController := cfg.DistSQLSrv.TenantCostController; costController != nil {
 				if costCfg := costController.GetCostConfig(); costCfg != nil {
 					networkEgressRUEstimate := costCfg.PGWireEgressCost(topLevelStats.networkEgressEstimate)
 					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(networkEgressRUEstimate)
+					ih.queryLevelStatsWithErr.Stats.RUEstimate += int64(cpuStats.EndCollection(ctx))
 				}
 			}
 		}

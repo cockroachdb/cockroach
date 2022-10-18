@@ -296,6 +296,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/multitenant",
+        "//pkg/multitenant/multitenantcpu",
         "//pkg/obs",
         "//pkg/obsservice/obspb",
         "//pkg/obsservice/obspb/opentelemetry-proto/common/v1:common",

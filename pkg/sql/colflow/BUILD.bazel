@@ -18,6 +18,7 @@ go_library(
         "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
+        "//pkg/multitenant/multitenantcpu",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/settings",
