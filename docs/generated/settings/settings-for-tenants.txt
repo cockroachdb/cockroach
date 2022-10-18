@@ -118,9 +118,6 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.experimental_alter_column_type.enabled	boolean	false	"default value for experimental_alter_column_type session setting; enables the use of ALTER COLUMN TYPE for general conversions
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
-sql.defaults.experimental_auto_rehoming.enabled	boolean	false	"default value for experimental_enable_auto_rehoming; allows for rows in REGIONAL BY ROW tables to be auto-rehomed on UPDATE
-This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.experimental_distsql_planning	enumeration	off	"default experimental_distsql_planning mode; enables experimental opt-driven DistSQL planning [off = 0, on = 1]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
