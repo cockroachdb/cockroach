@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -468,6 +469,7 @@ func (s *vectorizedFlowCreator) wrapWithNetworkVectorizedStatsCollector(
 // statistics that the outbox is responsible for, nil is returned if stats are
 // not being collected.
 func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
+	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	statsCollectors []colexecop.VectorizedStatsCollector,
 	originSQLInstanceID base.SQLInstanceID,
@@ -475,6 +477,13 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 	if !s.recordingStats {
 		return nil
 	}
+	// Begin collecting CPU usage before the flow starts. We'll finish collection
+	// once the last outbox on the node finishes. Note that this is a no-op if
+	// this flow doesn't belong to a tenant.
+	cpuStatsCollector := multitenant.CpuUsageHelper{
+		CostController: flowCtx.Cfg.TenantCostController,
+	}
+	cpuStatsCollector.StartCollection(ctx)
 	return func() []*execinfrapb.ComponentStats {
 		lastOutboxOnRemoteNode := atomic.AddInt32(&s.numOutboxesDrained, 1) == atomic.LoadInt32(&s.numOutboxes) && !s.isGatewayNode
 		numResults := len(statsCollectors)
@@ -494,6 +503,7 @@ func (s *vectorizedFlowCreator) makeGetStatsFnForOutbox(
 				FlowStats: execinfrapb.FlowStats{
 					MaxMemUsage:  optional.MakeUint(uint64(flowCtx.Mon.MaximumBytes())),
 					MaxDiskUsage: optional.MakeUint(uint64(flowCtx.DiskMonitor.MaximumBytes())),
+					ConsumedRU:   optional.MakeUint(uint64(cpuStatsCollector.EndCollection(ctx))),
 				},
 			})
 		}
@@ -1040,7 +1050,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 		// Set up an Outbox.
 		outbox, err := s.setupRemoteOutputStream(
 			ctx, flowCtx, opWithMetaInfo, opOutputTypes, outputStream, factory,
-			s.makeGetStatsFnForOutbox(flowCtx, opWithMetaInfo.StatsCollectors, outputStream.OriginNodeID),
+			s.makeGetStatsFnForOutbox(ctx, flowCtx, opWithMetaInfo.StatsCollectors, outputStream.OriginNodeID),
 		)
 		if err != nil {
 			return err
