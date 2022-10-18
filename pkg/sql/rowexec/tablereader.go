@@ -319,6 +319,10 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
+	if tr.FlowCtx.Cfg.TenantCostController != nil {
+		// Don't populate the consumed RU unless this is a tenant.
+		ret.Exec.ConsumedRU = optional.MakeUint(tr.scanStats.RuConsumed)
+	}
 	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
 	return ret
 }

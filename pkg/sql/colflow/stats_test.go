@@ -43,7 +43,7 @@ func TestNumBatches(t *testing.T) {
 	vsc := newVectorizedStatsCollector(
 		noop, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{},
 		timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
-		nil, /* inputStatsCollectors */
+		nil /* inputStatsCollectors */, false, /* isTenant */
 	)
 	vsc.Init(ctx)
 	for {
@@ -69,7 +69,7 @@ func TestNumTuples(t *testing.T) {
 		vsc := newVectorizedStatsCollector(
 			noop, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{},
 			timeutil.NewStopWatch(), nil /* memMonitors */, nil, /* diskMonitors */
-			nil, /* inputStatsCollectors */
+			nil /* inputStatsCollectors */, false, /* isTenant */
 		)
 		vsc.Init(ctx)
 		for {
@@ -105,7 +105,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		leftInput := newVectorizedStatsCollector(
 			leftSource, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{ID: 0},
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
-			nil, /* inputStatsCollectors */
+			nil /* inputStatsCollectors */, false, /* isTenant */
 		)
 		rightSource := &timeAdvancingOperator{
 			OneInputHelper: colexecop.MakeOneInputHelper(makeFiniteChunksSourceWithBatchSize(tu.testAllocator, nBatches, coldata.BatchSize())),
@@ -114,7 +114,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		rightInput := newVectorizedStatsCollector(
 			rightSource, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{ID: 1},
 			timeutil.NewTestStopWatch(timeSource.Now), nil /* memMonitors */, nil, /* diskMonitors */
-			nil, /* inputStatsCollectors */
+			nil /* inputStatsCollectors */, false, /* isTenant */
 		)
 		mergeJoiner := colexecjoin.NewMergeJoinOp(
 			tu.testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
@@ -133,6 +133,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 			timeAdvancingMergeJoiner, nil /* kvReader */, nil /* columnarizer */, execinfrapb.ComponentID{ID: 2},
 			mjInputWatch, nil /* memMonitors */, nil, /* diskMonitors */
 			[]childStatsCollector{leftInput.(childStatsCollector), rightInput.(childStatsCollector)},
+			false, /* isTenant */
 		)
 
 		// The inputs are identical, so the merge joiner should output

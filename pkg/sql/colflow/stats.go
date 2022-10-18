@@ -156,6 +156,7 @@ func newVectorizedStatsCollector(
 	memMonitors []*mon.BytesMonitor,
 	diskMonitors []*mon.BytesMonitor,
 	inputStatsCollectors []childStatsCollector,
+	isTenant bool,
 ) colexecop.VectorizedStatsCollector {
 	// TODO(cathymw): Refactor to have specialized stats collectors for
 	// memory/disk stats and IO operators.
@@ -165,6 +166,7 @@ func newVectorizedStatsCollector(
 		columnarizer:       columnarizer,
 		memMonitors:        memMonitors,
 		diskMonitors:       diskMonitors,
+		isTenant:           isTenant,
 	}
 }
 
@@ -177,6 +179,7 @@ type vectorizedStatsCollectorImpl struct {
 	columnarizer colexecop.VectorizedStatsCollector
 	memMonitors  []*mon.BytesMonitor
 	diskMonitors []*mon.BytesMonitor
+	isTenant     bool
 }
 
 // GetStats is part of the colexecop.VectorizedStatsCollector interface.
@@ -212,14 +215,14 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 	}
 
 	if vsc.kvReader != nil {
-		// Note that kvReader is non-nil only for ColBatchScans, and this is the
-		// only case when we want to add the number of rows read, bytes read,
-		// and the contention time (because the wrapped row-execution KV reading
-		// processors - joinReaders, tableReaders, zigzagJoiners, and
-		// invertedJoiners - will add these statistics themselves). Similarly,
-		// for those wrapped processors it is ok to show the time as "execution
-		// time" since "KV time" would only make sense for tableReaders, and
-		// they are less likely to be wrapped than others.
+		// Note that kvReader is non-nil only for vectorized operators that perform
+		// kv operations, and this is the only case when we want to add the number
+		// of rows read, bytes read, and the contention time (because the wrapped
+		// row-execution KV reading processors - joinReaders, tableReaders,
+		// zigzagJoiners, and invertedJoiners - will add these statistics
+		// themselves). Similarly, for those wrapped processors it is ok to show the
+		// time as "execution time" since "KV time" would only make sense for
+		// tableReaders, and they are less likely to be wrapped than others.
 		s.KV.KVTime.Set(time)
 		s.KV.TuplesRead.Set(uint64(vsc.kvReader.GetRowsRead()))
 		s.KV.BytesRead.Set(uint64(vsc.kvReader.GetBytesRead()))
@@ -227,6 +230,10 @@ func (vsc *vectorizedStatsCollectorImpl) GetStats() *execinfrapb.ComponentStats 
 		s.KV.ContentionTime.Set(vsc.kvReader.GetCumulativeContentionTime())
 		scanStats := vsc.kvReader.GetScanStats()
 		execstats.PopulateKVMVCCStats(&s.KV, &scanStats)
+		if vsc.isTenant {
+			// Only set the RUs consumed if this is a tenant.
+			s.Exec.ConsumedRU.Set(scanStats.RuConsumed)
+		}
 	} else {
 		s.Exec.ExecTime.Set(time)
 	}

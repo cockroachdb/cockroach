@@ -862,10 +862,15 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
 	}
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		KV:     kvStats,
 		Output: z.OutputHelper.Stats(),
 	}
+	if z.FlowCtx.Cfg.TenantCostController != nil {
+		// Don't populate the consumed RU unless this is a tenant.
+		ret.Exec.ConsumedRU = optional.MakeUint(z.scanStats.RuConsumed)
+	}
+	return ret
 }
 
 func (z *zigzagJoiner) getBytesRead() int64 {
