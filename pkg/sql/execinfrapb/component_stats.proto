@@ -162,4 +162,7 @@ message OutputStats {
 message FlowStats {
   optional util.optional.Uint max_mem_usage = 1 [(gogoproto.nullable) = false];
   optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
+  // Amount of RUs consumed due to CPU usage while executing the flow. Currently
+  // only used for remote flows.
+  optional util.optional.Uint consumed_r_u = 3 [(gogoproto.nullable) = false];
 }

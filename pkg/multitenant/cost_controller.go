@@ -12,11 +12,15 @@ package multitenant
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // TenantSideCostController is an interface through which tenant code reports
@@ -31,6 +35,10 @@ type TenantSideCostController interface {
 		externalUsageFn ExternalUsageFn,
 		nextLiveInstanceIDFn NextLiveInstanceIDFn,
 	) error
+
+	// GetCPUMovingAvg returns an exponential moving average used for estimating
+	// the CPU usage (in CPU secs) per wall-clock second.
+	GetCPUMovingAvg() (cpuAvg float64)
 
 	// GetCostConfig returns the cost model config this TenantSideCostController
 	// is using.
@@ -127,3 +135,52 @@ type TenantSideExternalIORecorder interface {
 type exemptCtxValueType struct{}
 
 var exemptCtxValue interface{} = exemptCtxValueType{}
+
+// CPUUsageHelper is used to estimate the RUs consumed by a query due to CPU
+// usage. It works by using a moving average for the process CPU usage to
+// project what the usage *would* be if the query hadn't run, then subtracts
+// that from the actual measured CPU usage.
+type CPUUsageHelper struct {
+	startCPU        float64
+	avgCPUPerSecond float64
+	startTime       time.Time
+	CostController  TenantSideCostController
+}
+
+// StartCollection should be called at the beginning of execution for a flow.
+// It is a no-op for non-tenants.
+func (h *CPUUsageHelper) StartCollection(ctx context.Context) {
+	if h.CostController == nil {
+		return
+	}
+	h.startTime = timeutil.Now()
+	h.startCPU = GetCPUSeconds(ctx)
+	h.avgCPUPerSecond = h.CostController.GetCPUMovingAvg()
+}
+
+// EndCollection should be called at the end of execution for a flow in order to
+// get the estimated number of RUs consumed due to CPU usage. It returns zero
+// for non-tenants.
+func (h *CPUUsageHelper) EndCollection(ctx context.Context) (ruFomCPU float64) {
+	if h.CostController == nil || h.CostController.GetCostConfig() == nil {
+		return 0
+	}
+	cpuDelta := GetCPUSeconds(ctx) - h.startCPU
+	timeElapsed := timeutil.Since(h.startTime)
+	expectedCPUDelta := timeElapsed.Seconds() * h.avgCPUPerSecond
+	cpuUsageSeconds := cpuDelta - expectedCPUDelta
+	if cpuUsageSeconds < 0 {
+		cpuUsageSeconds = 0
+	}
+	return float64(h.CostController.GetCostConfig().PodCPUCost(cpuUsageSeconds))
+}
+
+// GetCPUSeconds returns the total CPU usage of the current process in seconds.
+func GetCPUSeconds(ctx context.Context) (cpuSecs float64) {
+	userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+	if err != nil {
+		log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		return 0
+	}
+	return float64(userTimeMillis+sysTimeMillis) * 1e-3
+}

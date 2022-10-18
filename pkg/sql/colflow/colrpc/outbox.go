@@ -73,7 +73,7 @@ type Outbox struct {
 	// operators that are in the same tree as this Outbox. The stats will be
 	// added into the span as Structured payload and returned to the gateway as
 	// execinfrapb.ProducerMetadata.
-	getStats func() []*execinfrapb.ComponentStats
+	getStats func(context.Context) []*execinfrapb.ComponentStats
 
 	// A copy of Run's caller ctx, with no StreamID tag.
 	// Used to pass a clean context to the input.Next.
@@ -87,7 +87,7 @@ func NewOutbox(
 	unlimitedAllocator *colmem.Allocator,
 	input colexecargs.OpWithMetaInfo,
 	typs []*types.T,
-	getStats func() []*execinfrapb.ComponentStats,
+	getStats func(context.Context) []*execinfrapb.ComponentStats,
 ) (*Outbox, error) {
 	c, err := colserde.NewArrowBatchConverter(typs)
 	if err != nil {
@@ -345,7 +345,7 @@ func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errT
 		// Retrieving stats and draining the metadata is only safe if the input
 		// to the outbox was properly initialized.
 		if o.span != nil && o.getStats != nil {
-			for _, s := range o.getStats() {
+			for _, s := range o.getStats(ctx) {
 				o.span.RecordStructured(s)
 			}
 		}
