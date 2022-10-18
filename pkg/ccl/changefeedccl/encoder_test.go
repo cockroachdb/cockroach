@@ -1051,3 +1051,31 @@ func makeTestTypes(rng *rand.Rand, numKeyTypes, numColTypes int) (keyTypes, valT
 
 	return randTypes(numKeyTypes, true), randTypes(numColTypes, false)
 }
+
+func TestParquetEncoder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		TestingSetIncludeParquetMetadata()
+
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
+INDEX (y))`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false),(3, NULL, NULL, 4.5, NULL)`)
+
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo `+
+			`WITH format=%s,initial_scan='only'`, changefeedbase.OptFormatParquet))
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"a":true,"i":1,"x":"Alice","y":3,"z":0.5032135844230652}`,
+			`foo: [2]->{"a":false,"i":2,"x":"Bob","y":2,"z":"NaN"}`,
+			// NULL values are omitted from parquet row when encoding
+			`foo: [3]->{"i":3,"z":4.5}`,
+		})
+
+	}
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}

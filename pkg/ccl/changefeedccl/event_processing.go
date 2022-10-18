@@ -49,15 +49,16 @@ type frontier interface{ Frontier() hlc.Timestamp }
 
 type kvEventToRowConsumer struct {
 	frontier
-	encoder   Encoder
-	scratch   bufalloc.ByteAllocator
-	sink      EventSink
-	cursor    hlc.Timestamp
-	knobs     TestingKnobs
-	decoder   cdcevent.Decoder
-	details   ChangefeedConfig
-	evaluator *cdceval.Evaluator
-	safeExpr  string
+	encoder        Encoder
+	scratch        bufalloc.ByteAllocator
+	sink           EventSink
+	cursor         hlc.Timestamp
+	knobs          TestingKnobs
+	decoder        cdcevent.Decoder
+	details        ChangefeedConfig
+	evaluator      *cdceval.Evaluator
+	safeExpr       string
+	encodingFormat changefeedbase.FormatType
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
@@ -79,12 +80,13 @@ func newEventConsumer(
 	cfg := flowCtx.Cfg
 	evalCtx := flowCtx.EvalCtx
 
+	encodingOpts, err := feed.Opts.GetEncodingOptions()
+	if err != nil {
+		return nil, nil, err
+	}
+
 	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
 		var err error
-		encodingOpts, err := feed.Opts.GetEncodingOptions()
-		if err != nil {
-			return nil, err
-		}
 		encoder, err := getEncoder(encodingOpts, feed.Targets)
 		if err != nil {
 			return nil, err
@@ -108,7 +110,12 @@ func newEventConsumer(
 		// Pick a reasonable default.
 		numWorkers = defaultNumWorkers()
 	}
-	if numWorkers <= 1 || isSinkless {
+
+	// We cannot have a separate encoder and sink for parquet format (see
+	// parquet_sink_cloudstorage.go). Because of this the current nprox solution
+	// does not work for parquet format. TODO (ganeshb) Add nprox support for
+	// parquet format
+	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
 			return nil, nil, err
@@ -188,6 +195,11 @@ func newKVEventToRowConsumer(
 		}
 	}
 
+	encodingOpts, err := details.Opts.GetEncodingOptions()
+	if err != nil {
+		return nil, err
+	}
+
 	return &kvEventToRowConsumer{
 		frontier:             frontier,
 		encoder:              encoder,
@@ -200,6 +212,7 @@ func newKVEventToRowConsumer(
 		topicNamer:           topicNamer,
 		evaluator:            evaluator,
 		safeExpr:             safeExpr,
+		encodingFormat:       encodingOpts.Format,
 	}, nil
 }
 
@@ -316,6 +329,16 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		evCtx.topic = topic
 	}
 
+	if c.encodingFormat == changefeedbase.OptFormatParquet {
+		return c.encodeForParquet(
+			ctx,
+			updatedRow,
+			topic,
+			schemaTimestamp,
+			mvccTimestamp,
+			ev.DetachAlloc(),
+		)
+	}
 	var keyCopy, valueCopy []byte
 	encodedKey, err := c.encoder.EncodeKey(ctx, updatedRow)
 	if err != nil {
@@ -355,6 +378,25 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 // Close is a noop for the kvEventToRowConsumer because it
 // has no goroutines in flight.
 func (c *kvEventToRowConsumer) Close() error {
+	return nil
+}
+
+func (c *kvEventToRowConsumer) encodeForParquet(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	topic TopicDescriptor,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	sinkWithEncoder, ok := c.sink.(SinkWithEncoder)
+	if !ok {
+		return errors.AssertionFailedf("Expected a SinkWithEncoder for parquet format, found %T", c.sink)
+	}
+	if err := sinkWithEncoder.EncodeAndEmitRow(
+		ctx, updatedRow, topic, updated, mvcc, alloc,
+	); err != nil {
+		return err
+	}
 	return nil
 }
 
