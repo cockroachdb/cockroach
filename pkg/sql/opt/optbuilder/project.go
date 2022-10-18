@@ -196,9 +196,10 @@ func (b *Builder) resolveColRef(e tree.Expr, inScope *scope) tree.TypedExpr {
 		if resolveErr != nil {
 			// It may be a reference to a table, e.g. SELECT tbl FROM tbl.
 			// Attempt to resolve as a TupleStar. We do not attempt to resolve
-			// as a TupleStar if we are inside a view definition because views
-			// do not support * expressions.
-			if !b.insideViewDef && sqlerrors.IsUndefinedColumnError(resolveErr) {
+			// as a TupleStar if we are inside a view or function definition
+			// because views and functions do not support * expressions.
+			if !b.insideViewDef && !b.insideFuncDef &&
+				sqlerrors.IsUndefinedColumnError(resolveErr) {
 				return func() tree.TypedExpr {
 					defer wrapColTupleStarPanic(resolveErr)
 					return inScope.resolveType(columnNameAsTupleStar(colName), types.Any)
