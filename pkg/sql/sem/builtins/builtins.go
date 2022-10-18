@@ -5245,8 +5245,10 @@ value if you rely on the HLC for accuracy.`,
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				key := tree.MustBeDBytes(args[0])
-				remainder, _, err := keys.DecodeTenantPrefix([]byte(key))
-				if err != nil {
+				remainder, _, err := keys.DecodeTenantPrefixE([]byte(key))
+				if errors.Is(err, roachpb.ErrInvalidTenantID) {
+					return tree.NewDBytes(key), nil
+				} else if err != nil {
 					return nil, err
 				}
 				return tree.NewDBytes(tree.DBytes(remainder)), nil
