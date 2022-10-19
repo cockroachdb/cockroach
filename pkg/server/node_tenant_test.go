@@ -74,20 +74,21 @@ func TestRedactRecording(t *testing.T) {
 func TestNewSpanFields(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type calcifiedRecordedSpan struct {
-		TraceID           tracingpb.TraceID
-		SpanID            tracingpb.SpanID
-		ParentSpanID      tracingpb.SpanID
-		Operation         string
-		TagGroups         []tracingpb.TagGroup
-		StartTime         time.Time
-		Duration          time.Duration
-		Logs              []tracingpb.LogRecord
-		Verbose           bool
-		RecordingMode     tracingpb.RecordingMode
-		GoroutineID       uint64
-		Finished          bool
-		StructuredRecords []tracingpb.StructuredRecord
-		ChildrenMetadata  map[string]tracingpb.OperationMetadata
+		TraceID                    tracingpb.TraceID
+		SpanID                     tracingpb.SpanID
+		ParentSpanID               tracingpb.SpanID
+		Operation                  string
+		TagGroups                  []tracingpb.TagGroup
+		StartTime                  time.Time
+		Duration                   time.Duration
+		Logs                       []tracingpb.LogRecord
+		Verbose                    bool
+		RecordingMode              tracingpb.RecordingMode
+		GoroutineID                uint64
+		Finished                   bool
+		StructuredRecords          []tracingpb.StructuredRecord
+		StructuredRecordsSizeBytes int64
+		ChildrenMetadata           map[string]tracingpb.OperationMetadata
 	}
 	_ = (*calcifiedRecordedSpan)((*tracingpb.RecordedSpan)(nil))
 }

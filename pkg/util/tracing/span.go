@@ -359,6 +359,19 @@ func (sp *Span) GetConfiguredRecording() tracingpb.Recording {
 // This function is used to import a recording from another node.
 func (sp *Span) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
 	if !sp.detectUseAfterFinish() {
+		// Handle recordings coming from 22.2 nodes that don't have the
+		// StructuredRecordsSizeBytes field set.
+		// TODO(andrei): remove this in 23.2.
+		for i := range remoteRecording {
+			if len(remoteRecording[i].StructuredRecords) != 0 && remoteRecording[i].StructuredRecordsSizeBytes == 0 {
+				size := int64(0)
+				for _, rec := range remoteRecording[i].StructuredRecords {
+					size += int64(rec.MemorySize())
+				}
+				remoteRecording[i].StructuredRecordsSizeBytes = size
+			}
+		}
+
 		sp.i.ImportRemoteRecording(remoteRecording)
 	}
 }
@@ -421,7 +434,8 @@ func (sp *Span) Recordf(format string, args ...interface{}) {
 // if the underlying Span has been optimized out (i.e. is a noop span). Payloads
 // may also be dropped due to sizing constraints.
 //
-// The caller must not mutate the item once RecordStructured has been called.
+// RecordStructured does not take ownership of item; it marshals it into an Any
+// proto.
 func (sp *Span) RecordStructured(item Structured) {
 	if sp.detectUseAfterFinish() {
 		return

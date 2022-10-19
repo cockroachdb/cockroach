@@ -92,6 +92,43 @@ func (s *RecordedSpan) EnsureTagGroup(name string) *TagGroup {
 	return &s.TagGroups[len(s.TagGroups)-1]
 }
 
+// AddStructuredRecord adds r to s' structured logs and returns r.MemorySize().
+//
+// Note that the limit on the size of a span's structured records is not
+// enforced here. If it's needed, the caller has to do it.
+func (s *RecordedSpan) AddStructuredRecord(r *StructuredRecord) int64 {
+	size := int64(r.MemorySize())
+	s.StructuredRecords = append(s.StructuredRecords, *r)
+	s.StructuredRecordsSizeBytes += size
+	return size
+}
+
+// TrimStructured potentially drops structured log records in order to keep the
+// structured record size <= maxSize. The prefix of the records that sum up to
+// <= maxSize is kept.
+func (s *RecordedSpan) TrimStructured(maxSize int64) int64 {
+	if s.StructuredRecordsSizeBytes <= maxSize {
+		return 0
+	}
+	size := int64(0)
+	for i := range s.StructuredRecords {
+		recordSize := int64(s.StructuredRecords[i].MemorySize())
+		if size+recordSize > maxSize {
+			// Zero-out the slice elements that are about to be trimmed, so they can
+			// be GC'ed.
+			for j := i; j < len(s.StructuredRecords); j++ {
+				s.StructuredRecords[j] = StructuredRecord{}
+			}
+			// Trim all records from i onwards.
+			s.StructuredRecords = s.StructuredRecords[:i]
+			break
+		}
+	}
+	oldSize := s.StructuredRecordsSizeBytes
+	s.StructuredRecordsSizeBytes = size
+	return oldSize - size
+}
+
 // AddTag adds a tag to the group. If a tag with the given key already exists,
 // its value is updated.
 func (tg *TagGroup) AddTag(k, v string) {
