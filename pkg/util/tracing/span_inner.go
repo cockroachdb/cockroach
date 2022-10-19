@@ -126,10 +126,11 @@ func treeifyRecording(rec tracingpb.Recording) Trace {
 
 	// Include the orphans under the root.
 	orphans := rec.OrphanSpans()
-	for _, sp := range orphans {
-		r.addChild(treeifyRecordingInner(sp, byParent))
+	traces := make([]Trace, len(orphans))
+	for i, sp := range orphans {
+		traces[i] = treeifyRecordingInner(sp, byParent)
 	}
-	r.sortChildren()
+	r.addChildren(traces, 0 /* maxSpans */, 0 /* maxStructuredBytes */)
 	return r
 }
 
@@ -137,11 +138,11 @@ func treeifyRecordingInner(
 	sp tracingpb.RecordedSpan, byParent map[tracingpb.SpanID][]*tracingpb.RecordedSpan,
 ) Trace {
 	r := MakeTrace(sp)
-	for _, s := range byParent[sp.SpanID] {
-		r.addChild(treeifyRecordingInner(*s, byParent))
+	children := make([]Trace, len(byParent[sp.SpanID]))
+	for i, s := range byParent[sp.SpanID] {
+		children[i] = treeifyRecordingInner(*s, byParent)
 	}
-	r.sortChildren()
-
+	r.addChildren(children, 0 /* maxSpans */, 0 /* maxStructuredBytes */)
 	return r
 }
 
