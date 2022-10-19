@@ -28,6 +28,7 @@ import (
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/kr/pretty"
@@ -73,12 +74,18 @@ type fileSSTSink struct {
 		ba            *mon.BoundAccount
 		reservedBytes int64
 	}
+
+	metrics *Metrics
 }
 
 func makeFileSSTSink(
-	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *mon.BoundAccount,
+	ctx context.Context,
+	conf sstSinkConf,
+	dest cloud.ExternalStorage,
+	backupMem *mon.BoundAccount,
+	metrics *Metrics,
 ) (*fileSSTSink, error) {
-	s := &fileSSTSink{conf: conf, dest: dest}
+	s := &fileSSTSink{conf: conf, dest: dest, metrics: metrics}
 	s.memAcc.ba = backupMem
 
 	// Reserve memory for the file buffer. Incrementally reserve memory in chunks
@@ -141,6 +148,9 @@ func (s *fileSSTSink) sortQueue() {
 // When the queue length or sum of the data sizes in it exceeds thresholds the
 // queue is sorted and the first half is flushed.
 func (s *fileSSTSink) push(ctx context.Context, resp exportedSpan) error {
+	ctx, sp := tracing.ChildSpan(ctx, "fileSSTSink.push")
+	defer sp.Finish()
+
 	s.queue = append(s.queue, resp)
 	s.queueSize += len(resp.dataSST)
 
@@ -166,6 +176,9 @@ func (s *fileSSTSink) push(ctx context.Context, resp exportedSpan) error {
 }
 
 func (s *fileSSTSink) flush(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "fileSSTSink.flush")
+	defer sp.Finish()
+
 	s.sortQueue()
 	for i := range s.queue {
 		if err := s.write(ctx, s.queue[i]); err != nil {
@@ -177,6 +190,9 @@ func (s *fileSSTSink) flush(ctx context.Context) error {
 }
 
 func (s *fileSSTSink) flushFile(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "fileSSTSink.flushFile")
+	defer sp.Finish()
+
 	if s.out == nil {
 		return nil
 	}
@@ -189,6 +205,10 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 		log.Warningf(ctx, "failed to close write in fileSSTSink: % #v", pretty.Formatter(err))
 		return errors.Wrap(err, "writing SST")
 	}
+
+	s.metrics.FileSSTSinkFlushedBytes.Inc(s.flushedSize)
+	s.metrics.FileSSTSinkFlushedFiles.Inc(int64(len(s.flushedFiles)))
+
 	s.outName = ""
 	s.out = nil
 
@@ -218,6 +238,9 @@ func (s *fileSSTSink) flushFile(ctx context.Context) error {
 }
 
 func (s *fileSSTSink) open(ctx context.Context) error {
+	ctx, sp := tracing.ChildSpan(ctx, "fileSSTSink.open")
+	defer sp.Finish()
+
 	s.outName = generateUniqueSSTName(s.conf.id)
 	if s.ctx == nil {
 		s.ctx, s.cancel = context.WithCancel(ctx)
@@ -240,6 +263,9 @@ func (s *fileSSTSink) open(ctx context.Context) error {
 }
 
 func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
+	ctx, sp := tracing.ChildSpan(ctx, "fileSSTSink.write")
+	defer sp.Finish()
+
 	s.stats.files++
 
 	span := resp.metadata.Span
@@ -273,10 +299,10 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	//
 	// TODO(msbutler): investigate using single a single iterator that surfaces
 	// all point keys first and then all range keys
-	if err := s.copyPointKeys(resp.dataSST); err != nil {
+	if err := s.copyPointKeys(ctx, resp.dataSST); err != nil {
 		return err
 	}
-	if err := s.copyRangeKeys(resp.dataSST); err != nil {
+	if err := s.copyRangeKeys(ctx, resp.dataSST); err != nil {
 		return err
 	}
 
@@ -312,7 +338,10 @@ func (s *fileSSTSink) write(ctx context.Context, resp exportedSpan) error {
 	return nil
 }
 
-func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
+func (s *fileSSTSink) copyPointKeys(ctx context.Context, dataSST []byte) error {
+	_, sp := tracing.ChildSpan(ctx, "fileSSTSink.copyPointKeys")
+	defer sp.Finish()
+
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsOnly,
 		LowerBound: keys.LocalMax,
@@ -345,7 +374,10 @@ func (s *fileSSTSink) copyPointKeys(dataSST []byte) error {
 	return nil
 }
 
-func (s *fileSSTSink) copyRangeKeys(dataSST []byte) error {
+func (s *fileSSTSink) copyRangeKeys(ctx context.Context, dataSST []byte) error {
+	_, sp := tracing.ChildSpan(ctx, "fileSSTSink.copyRangeKeys")
+	defer sp.Finish()
+
 	iterOpts := storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypeRangesOnly,
 		LowerBound: keys.LocalMax,

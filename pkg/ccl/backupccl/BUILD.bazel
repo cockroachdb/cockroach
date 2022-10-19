@@ -17,6 +17,7 @@ go_library(
         "create_scheduled_backup.go",
         "file_sst_sink.go",
         "key_rewriter.go",
+        "metrics.go",
         "restoration_data.go",
         "restore_data_processor.go",
         "restore_job.go",

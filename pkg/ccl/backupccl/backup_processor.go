@@ -551,7 +551,8 @@ func runBackupProcessor(
 			return err
 		}
 
-		sink, err := makeFileSSTSink(ctx, sinkConf, storage, memAcc)
+		metrics := flowCtx.Cfg.JobRegistry.MetricsStruct().Backup.(*Metrics)
+		sink, err := makeFileSSTSink(ctx, sinkConf, storage, memAcc, metrics)
 		if err != nil {
 			return err
 		}
