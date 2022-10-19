@@ -451,12 +451,12 @@ DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY bar.a DESC 
 
 # Test aliased table names, ORDER BY and LIMIT where ORDER BY references the target
 # table.
-query ITIIT
-DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY foo.a DESC LIMIT 3 RETURNING *;
+query ITI
+DELETE FROM u_a AS foo USING u_b AS bar WHERE bar.a > foo.c ORDER BY foo.a DESC LIMIT 3 RETURNING foo.*;
 ----
-7  d  35  40  d
-6  d  30  40  d
-5  d  25  40  d
+7  d  35
+6  d  30
+5  d  25
 
 query ITI rowsort
 SELECT * FROM u_a;
