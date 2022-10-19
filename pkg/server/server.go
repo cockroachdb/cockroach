@@ -143,6 +143,7 @@ type Server struct {
 	obsServer     *obs.EventsServer
 	raftTransport *kvserver.RaftTransport
 	stopper       *stop.Stopper
+	stopTrigger   *stopTrigger
 
 	debug    *debug.Server
 	kvProber *kvprober.Prober
@@ -813,6 +814,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
+	stopTrigger := newStopTrigger()
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:        serverpb.MakeOptionalNodesStatusServer(sStatus),
@@ -830,6 +832,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
 		stopper:                  stopper,
+		stopTrigger:              stopTrigger,
 		clock:                    clock,
 		runtime:                  runtimeSampler,
 		rpcContext:               rpcContext,
@@ -889,7 +892,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
 	node.InitLogger(sqlServer.execCfg)
 
-	drain := newDrainServer(cfg.BaseConfig, stopper, grpcServer, sqlServer)
+	drain := newDrainServer(cfg.BaseConfig, stopper, stopTrigger, grpcServer, sqlServer)
 	drain.setNode(node, nodeLiveness)
 
 	*lateBoundServer = Server{
@@ -927,6 +930,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		obsServer:              eventsServer,
 		raftTransport:          raftTransport,
 		stopper:                stopper,
+		stopTrigger:            stopTrigger,
 		debug:                  debugServer,
 		kvProber:               kvProber,
 		replicationReporter:    replicationReporter,
@@ -1711,8 +1715,8 @@ func (s *Server) Stop() {
 
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
-func (s *Server) ShutdownRequested() <-chan error {
-	return s.sqlServer.ShutdownRequested()
+func (s *Server) ShutdownRequested() <-chan ShutdownRequest {
+	return s.stopTrigger.C()
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.
