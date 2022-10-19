@@ -578,7 +578,7 @@ If problems persist, please see %s.`
 	// if we get stuck on something during initialization (#10138).
 	var serverStatusMu serverStatus
 	var s *server.Server
-	errChan := make(chan error, 1)
+	serverStartupErrC := make(chan error, 1)
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
@@ -599,11 +599,11 @@ If problems persist, please see %s.`
 		defer startupSpan.Finish()
 
 		// Any error beyond this point should be reported through the
-		// errChan defined above. However, in Go the code pattern "if err
+		// serverStartupErrC defined above. However, in Go the code pattern "if err
 		// != nil { return err }" is more common. Expecting contributors
-		// to remember to write "if err != nil { errChan <- err }" beyond
-		// this point is optimistic. To avoid any error, we capture all
-		// the error returns in a closure, and do the errChan reporting,
+		// to remember to write "if err != nil { serverStartupErrC <- err }" beyond
+		// this point is optimistic. To avoid any mistake, we capture all
+		// the error returns in a closure, and do the serverStartupErrC reporting,
 		// if needed, when that function returns.
 		if err := func() error {
 			// Instantiate the server.
@@ -615,10 +615,7 @@ If problems persist, please see %s.`
 
 			// Have we already received a signal to terminate? If so, just
 			// stop here.
-			serverStatusMu.Lock()
-			draining := serverStatusMu.draining
-			serverStatusMu.Unlock()
-			if draining {
+			if serverStatusMu.shutdownInProgress() {
 				return nil
 			}
 
@@ -636,9 +633,21 @@ If problems persist, please see %s.`
 				return errors.Wrap(err, "cockroach server exited with error")
 			}
 			// Server started, notify the shutdown monitor running concurrently.
-			serverStatusMu.Lock()
-			serverStatusMu.started = true
-			serverStatusMu.Unlock()
+			if shutdownInProgress := serverStatusMu.setStarted(); shutdownInProgress {
+				// A shutdown was requested already, e.g. by sending SIGTERM to the process:
+				// maybeWaitForShutdown (which runs concurrently with this goroutine) has
+				// called serverStatusMu.startShutdown() already.
+				// However, because setStarted() had not been called before,
+				// maybeWaitForShutdown did not call Stop on the stopper.
+				// So we do it here.
+				stopper.Stop(ctx)
+				return nil
+			}
+			// After this point, if a shutdown is requested concurrently
+			// with the startup steps below, the stopper.Stop() method will
+			// be called by the shutdown goroutine, which in turn will cause
+			// all these startup steps to fail. So we do not need to look at
+			// the "shutdown status" in serverStatusMu any more.
 
 			// Start up the diagnostics reporting and update check loops.
 			// We don't do this in (*server.Server).Start() because we don't
@@ -665,7 +674,7 @@ If problems persist, please see %s.`
 			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
 				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
 		}(); err != nil {
-			errChan <- err
+			serverStartupErrC <- err
 		}
 	}()
 
@@ -673,17 +682,58 @@ If problems persist, please see %s.`
 		// NB: we delay the access to s, as it is assigned
 		// asynchronously in a goroutine above.
 		func() serverShutdownInterface { return s },
-		stopper, errChan, signalCh,
+		stopper, serverStartupErrC, signalCh,
 		&serverStatusMu)
 }
 
+// serverStatus coordinates the async goroutine that starts the server
+// up (e.g. in runStart) and the async goroutine that stops the server
+// (in waitForShutdown).
+//
+// We need this intermediate coordination because it isn't safe to try
+// to drain a server that doesn't exist or is in the middle of
+// starting up, or to start a server after shutdown has begun.
+//
+// TODO(knz): clarify the transfer of ownership for the stopper.Stop
+// call further, as per suggestion in https://github.com/cockroachdb/cockroach/issues/90233.
 type serverStatus struct {
 	syncutil.Mutex
-	// Used to synchronize server startup with server shutdown if something
-	// interrupts the process during initialization (it isn't safe to try to
-	// drain a server that doesn't exist or is in the middle of starting up,
-	// or to start a server after draining has begun).
-	started, draining bool
+	// started indicates that the server has started already. After
+	// started has become true, a graceful shutdown should use a soft
+	// drain.
+	started bool
+	// shutdownRequested indicates that shutdown has started
+	// already. After draining has become true, server startup should
+	// stop.
+	shutdownRequested bool
+}
+
+// setStarted marks the server as started. It returns whether shutdown
+// has been requested already. In that case, we know that the shutdown
+// goroutine did not use the stopper, so the server startup can do
+// that.
+func (s *serverStatus) setStarted() bool {
+	s.Lock()
+	defer s.Unlock()
+	s.started = true
+	return s.shutdownRequested
+}
+
+// shutdownInProgress returns whether a shutdown has been requested
+// already.
+func (s *serverStatus) shutdownInProgress() bool {
+	s.Lock()
+	defer s.Unlock()
+	return s.shutdownRequested
+}
+
+// startShutdown registers the shutdown request and returns whether
+// the server was started already.
+func (s *serverStatus) startShutdown() bool {
+	s.Lock()
+	defer s.Unlock()
+	s.shutdownRequested = true
+	return s.started
 }
 
 // serverShutdownInterface is the subset of the APIs on a server
@@ -696,11 +746,11 @@ type serverShutdownInterface interface {
 // waitForShutdown lets the server run asynchronously and waits for
 // shutdown, either due to the server spontaneously shutting down
 // (signaled by stopper), or due to a server error (signaled on
-// errChan), by receiving a signal (signaled by signalCh).
+// serverStartupErrC), by receiving a signal (signaled by signalCh).
 func waitForShutdown(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
-	errChan chan error,
+	serverStartupErrC chan error,
 	signalCh chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
@@ -722,20 +772,30 @@ func waitForShutdown(
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via the quit endpoint).
 	select {
-	case err := <-errChan:
-		// StartAlwaysFlush both flushes and ensures that subsequent log
-		// writes are flushed too.
-		log.StartAlwaysFlush()
-		return err
+	case err := <-serverStartupErrC:
+		// An error in errChat signals that the early server startup failed.
+		returnErr = err
+		// At this point, we do not expect any application load, etc., and
+		// therefore we are OK with an expedited shutdown: pass false to
+		// shouldDrain.
+		startShutdownAsync(getS, stopper, serverStatusMu, stopWithoutDrain, false /* shouldDrain */)
+		// We do not return here, on purpose, because we want the common
+		// shutdown logic below to apply for this case as well.
 
 	case <-stopper.ShouldQuiesce():
-		// Server is being stopped externally and our job is finished
-		// here since we don't know if it's a graceful shutdown or not.
-		<-stopper.IsStopped()
+		// Receiving a signal on ShouldQuiesce means that a shutdown was
+		// requested via the Drain RPC. The RPC code takes ownership
+		// of calling stopper.Stop.
+		//
+		// We fall through to the common logic below so that an operator
+		// looking at a server running in the foreground on their terminal
+		// can see what is going on.
+
 		// StartAlwaysFlush both flushes and ensures that subsequent log
 		// writes are flushed too.
 		log.StartAlwaysFlush()
-		return nil
+		// We do not return here, on purpose, because we want the common
+		// shutdown logic below to apply for this case as well.
 
 	case sig := <-signalCh:
 		// We start flushing log writes from here, because if a
@@ -763,63 +823,7 @@ func waitForShutdown(
 			}
 		}
 
-		// Start the draining process in a separate goroutine so that it
-		// runs concurrently with the timeout check below.
-		go func() {
-			serverStatusMu.Lock()
-			serverStatusMu.draining = true
-			drainingIsSafe := serverStatusMu.started
-			serverStatusMu.Unlock()
-
-			// drainingIsSafe may have been set in the meantime, but that's ok.
-			// In the worst case, we're not draining a Server that has *just*
-			// started. Not desirable, but not terrible either.
-			if !drainingIsSafe {
-				close(stopWithoutDrain)
-				return
-			}
-			// Don't use shutdownCtx because this is in a goroutine that may
-			// still be running after shutdownCtx's span has been finished.
-			drainCtx := logtags.AddTag(getS().AnnotateCtx(context.Background()), "server drain process", nil)
-
-			// Perform a graceful drain. We keep retrying forever, in
-			// case there are many range leases or some unavailability
-			// preventing progress. If the operator wants to expedite
-			// the shutdown, they will need to make it ungraceful
-			// via a 2nd signal.
-			var (
-				remaining     = uint64(math.MaxUint64)
-				prevRemaining = uint64(math.MaxUint64)
-				verbose       = false
-			)
-
-			for ; ; prevRemaining = remaining {
-				var err error
-				remaining, _, err = getS().Drain(drainCtx, verbose)
-				if err != nil {
-					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
-					break
-				}
-				if remaining == 0 {
-					// No more work to do.
-					break
-				}
-
-				// If range lease transfer stalls or the number of
-				// remaining leases somehow increases, verbosity is set
-				// to help with troubleshooting.
-				if remaining >= prevRemaining {
-					verbose = true
-				}
-
-				// Avoid a busy wait with high CPU usage if the server replies
-				// with an incomplete drain too quickly.
-				time.Sleep(200 * time.Millisecond)
-			}
-
-			stopper.Stop(drainCtx)
-		}()
-
+		startShutdownAsync(getS, stopper, serverStatusMu, stopWithoutDrain, true /* shouldDrain */)
 	// Don't return: we're shutting down gracefully.
 
 	case <-log.FatalChan():
@@ -913,6 +917,82 @@ func waitForShutdown(
 	}
 
 	return returnErr
+}
+
+// startShutdown begins the process that stops the server, asynchronously.
+//
+// The shouldDrain argument indicates that the shutdown is happening
+// some time after server startup has completed, and we are thus
+// interested in being graceful to application load.
+func startShutdownAsync(
+	getS func() serverShutdownInterface,
+	stopper *stop.Stopper,
+	serverStatusMu *serverStatus,
+	stopWithoutDrain chan struct{},
+	shouldDrain bool,
+) {
+	// StartAlwaysFlush both flushes and ensures that subsequent log
+	// writes are flushed too.
+	log.StartAlwaysFlush()
+
+	// Start the draining process in a separate goroutine so that it
+	// runs concurrently with the timeout check in waitForShutdown().
+	go func() {
+		// The return value of startShutdown indicates whether the
+		// server has started already, and the graceful shutdown should
+		// call the Drain method. We cannot call Drain if the server has
+		// not started yet.
+		canUseDrain := serverStatusMu.startShutdown()
+
+		if !canUseDrain {
+			// The server has not started yet. We can't use the Drain() call.
+			close(stopWithoutDrain)
+			return
+		}
+
+		// Don't use ctx because this is in a goroutine that may
+		// still be running after shutdownCtx's span has been finished.
+		drainCtx := logtags.AddTag(getS().AnnotateCtx(context.Background()), "server drain process", nil)
+
+		if shouldDrain {
+			// Perform a graceful drain. We keep retrying forever, in
+			// case there are many range leases or some unavailability
+			// preventing progress. If the operator wants to expedite
+			// the shutdown, they will need to make it ungraceful
+			// via a 2nd signal.
+			var (
+				remaining     = uint64(math.MaxUint64)
+				prevRemaining = uint64(math.MaxUint64)
+				verbose       = false
+			)
+
+			for ; ; prevRemaining = remaining {
+				var err error
+				remaining, _, err = getS().Drain(drainCtx, verbose)
+				if err != nil {
+					log.Ops.Errorf(drainCtx, "graceful drain failed: %v", err)
+					break
+				}
+				if remaining == 0 {
+					// No more work to do.
+					break
+				}
+
+				// If range lease transfer stalls or the number of
+				// remaining leases somehow increases, verbosity is set
+				// to help with troubleshooting.
+				if remaining >= prevRemaining {
+					verbose = true
+				}
+
+				// Avoid a busy wait with high CPU usage if the server replies
+				// with an incomplete drain too quickly.
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+
+		stopper.Stop(drainCtx)
+	}()
 }
 
 // makeServerOptionsForURL creates the input for MakeURLForServer().
