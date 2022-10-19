@@ -101,7 +101,11 @@ func (g *SpanGroup) Slice() []Span {
 	if rg == nil {
 		return nil
 	}
-	ret := make([]Span, 0, rg.Len())
+	n := rg.Len()
+	if n == 0 {
+		return nil
+	}
+	ret := make([]Span, 0, n)
 	it := rg.Iterator()
 	for {
 		rng, next := it.Next()
