@@ -18,6 +18,7 @@ go_library(
         "//pkg/cloud/externalconn/utils",
         "//pkg/security/username",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/contextutil",
         "//pkg/util/ioctx",
