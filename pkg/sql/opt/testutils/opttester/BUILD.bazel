@@ -47,6 +47,7 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/stats",
         "//pkg/testutils",
+        "//pkg/testutils/floatcmp",
         "//pkg/testutils/sqlutils",
         "//pkg/util",
         "//pkg/util/hlc",
