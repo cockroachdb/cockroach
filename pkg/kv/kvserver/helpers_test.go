@@ -550,15 +550,3 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		}
 	}
 }
-
-// ChecksumRange returns a checksum over the KV data of the given range.
-func ChecksumRange(
-	ctx context.Context, desc roachpb.RangeDescriptor, snap storage.Reader,
-) ([]byte, error) {
-	lim := quotapool.NewRateLimiter("test", quotapool.Inf(), 0)
-	res, err := replicaSHA512(ctx, desc, snap, roachpb.ChecksumMode_CHECK_FULL, lim)
-	if err != nil {
-		return nil, err
-	}
-	return res.SHA512[:], nil
-}
