@@ -188,3 +188,24 @@ SELECT ((col2::FLOAT8 // 1.0:::FLOAT8::FLOAT8)::FLOAT8) FROM t87605@[0] ORDER BY
 ----
 1.234567e+06
 1.2345678901234e+13
+
+# Regression test for issue #89961.
+
+statement ok
+CREATE TABLE t89961 (a float PRIMARY KEY, INDEX (a DESC))
+
+statement ok
+INSERT INTO t89961 VALUES ('NaN')
+
+# We use st_makepointm because it is sensitive to different NaN encodings. The
+# following two queries should have the same result.
+
+query T
+SELECT st_makepointm(a, 1.234567890123456e+07, -0.6571774097533073)::string FROM t89961@t89961_pkey
+----
+0101000040010000000000F87FDCE9D6DC298C67412DEF51EB9807E5BF
+
+query T
+SELECT st_makepointm(a, 1.234567890123456e+07, -0.6571774097533073)::string FROM t89961@t89961_a_idx;
+----
+0101000040010000000000F87FDCE9D6DC298C67412DEF51EB9807E5BF
