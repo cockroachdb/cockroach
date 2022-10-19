@@ -544,6 +544,9 @@ func runTPCHVec(
 	t.Status("waiting for full replication")
 	err := WaitFor3XReplication(ctx, t, conn)
 	require.NoError(t, err)
+
+	conn.Exec("SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;")
+	defer conn.Exec("RESET CLUSTER SETTING sql.stats.automatic_collection.enabled;")
 	createStatsFromTables(t, conn, tpchTables)
 
 	testRun(ctx, t, c, conn, testCase)
