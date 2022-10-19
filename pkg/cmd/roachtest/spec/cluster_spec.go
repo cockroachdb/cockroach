@@ -186,7 +186,6 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	createVMOpts.GeoDistributed = s.Geo
 	machineType := s.InstanceType
-	ssdCount := s.SSDs
 	if s.CPUs != 0 {
 		// Default to the user-supplied machine type, if any.
 		// Otherwise, pick based on requested CPU count.
@@ -202,21 +201,22 @@ func (s *ClusterSpec) RoachprodOpts(
 				machineType = AzureMachineType(s.CPUs, s.HighMem)
 			}
 		}
+	}
 
-		// Local SSD can only be requested
-		// - if configured to prefer doing so,
-		// - if no particular volume size is requested, and,
-		// - on AWS, if the machine type supports it.
-		if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) {
-			// Ensure SSD count is at least 1 if UseLocalSSD is true.
-			if ssdCount == 0 {
-				ssdCount = 1
-			}
-			createVMOpts.SSDOpts.UseLocalSSD = true
-			createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
-		} else {
-			createVMOpts.SSDOpts.UseLocalSSD = false
+	ssdCount := s.SSDs
+	// Local SSD can only be requested
+	// - if configured to prefer doing so,
+	// - if no particular volume size is requested, and,
+	// - on AWS, if the machine type supports it.
+	if s.PreferLocalSSD && s.VolumeSize == 0 && (s.Cloud != AWS || awsMachineSupportsSSD(machineType)) {
+		// Ensure SSD count is at least 1 if UseLocalSSD is true.
+		if ssdCount == 0 {
+			ssdCount = 1
 		}
+		createVMOpts.SSDOpts.UseLocalSSD = true
+		createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
+	} else {
+		createVMOpts.SSDOpts.UseLocalSSD = false
 	}
 
 	if s.FileSystem == Zfs {
