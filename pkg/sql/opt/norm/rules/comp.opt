@@ -47,11 +47,7 @@
         ) &
         (CanConstructBinary Minus $right $leftRight) &
         (Let
-            ($result $ok):(FoldBinaryCheckNull
-                Minus
-                $right
-                $leftRight
-            )
+            ($result $ok):(FoldBinary Minus $right $leftRight)
             $ok
         )
 )
@@ -77,12 +73,7 @@
         ) &
         (CanConstructBinary Plus $right $leftRight) &
         (Let
-            ($result $ok):(FoldBinaryCheckNull
-                Plus
-                $right
-                $leftRight
-            )
-            $ok
+            ($result $ok):(FoldBinary Plus $right $leftRight) $ok
         )
 )
 =>
@@ -107,12 +98,7 @@
         ) &
         (CanConstructBinary Minus $leftLeft $right) &
         (Let
-            ($result $ok):(FoldBinaryCheckNull
-                Minus
-                $leftLeft
-                $right
-            )
-            $ok
+            ($result $ok):(FoldBinary Minus $leftLeft $right) $ok
         )
 )
 =>
