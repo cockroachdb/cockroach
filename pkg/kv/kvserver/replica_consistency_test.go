@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -164,7 +163,6 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 	ctx := context.Background()
 	sb := &strings.Builder{}
-	lim := quotapool.NewRateLimiter("rate", 1e9, 0)
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
@@ -175,9 +173,9 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	}
 
 	// Hash the empty state.
-	rh, err := replicaSHA512(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, lim)
+	rd, err := CalcReplicaDigest(ctx, desc, eng)
 	require.NoError(t, err)
-	fmt.Fprintf(sb, "checksum0: %x\n", rh.SHA512[:])
+	fmt.Fprintf(sb, "checksum0: %x\n", rd.SHA512)
 
 	// We incrementally add writes, and check the checksums after each write to
 	// make sure they differ such that each write affects the checksum.
@@ -213,17 +211,16 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 			require.NoError(t, storage.MVCCPut(ctx, eng, nil, key, ts, localTS, value, nil))
 		}
 
-		rh, err = replicaSHA512(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, lim)
+		rd, err := CalcReplicaDigest(ctx, desc, eng)
 		require.NoError(t, err)
-		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rh.SHA512[:])
+		fmt.Fprintf(sb, "checksum%d: %x\n", i+1, rd.SHA512)
 	}
 
 	// Run another check to obtain stats for the final state.
-	rh, err = replicaSHA512(ctx, desc, eng, roachpb.ChecksumMode_CHECK_FULL, lim)
+	rd, err = CalcReplicaDigest(ctx, desc, eng)
 	require.NoError(t, err)
-
 	jsonpb := protoutil.JSONPb{Indent: "  "}
-	json, err := jsonpb.Marshal(&rh.RecomputedMS)
+	json, err := jsonpb.Marshal(&rd.RecomputedMS)
 	require.NoError(t, err)
 	fmt.Fprintf(sb, "stats: %s\n", string(json))
 

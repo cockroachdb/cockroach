@@ -60,7 +60,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -10431,9 +10430,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		// Regression test for #31870.
 		snap := tc.engine.NewSnapshot()
 		defer snap.Close()
-		res, err := replicaSHA512(ctx, *tc.repl.Desc(), tc.engine,
-			roachpb.ChecksumMode_CHECK_FULL,
-			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Limit(math.MaxFloat64), math.MaxInt64))
+		res, err := CalcReplicaDigest(ctx, *tc.repl.Desc(), tc.engine)
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
@@ -10998,17 +10995,13 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			ts, err := test.setupFn()
-			if err != nil {
-				t.Fatal(err)
-			}
+			require.NoError(t, err)
 			ba, expTS := test.batchFn(ts)
 			actualTS, err := send(ba)
 			if !testutils.IsError(err, test.expErr) {
 				t.Fatalf("expected error %q; got \"%v\"", test.expErr, err)
 			}
-			if actualTS != expTS {
-				t.Fatalf("expected ts=%s; got %s", expTS, actualTS)
-			}
+			require.Equal(t, expTS, actualTS)
 		})
 	}
 }

@@ -379,9 +379,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		require.NotNil(t, desc)
 
 		// Compute a checksum over the content of the problematic range.
-		hash, err := kvserver.ChecksumRange(context.Background(), *desc, cpEng)
+		rd, err := kvserver.CalcReplicaDigest(context.Background(), *desc, cpEng)
 		require.NoError(t, err)
-		hashes[i] = hash
+		hashes[i] = rd.SHA512[:]
 	}
 
 	assert.Equal(t, hashes[0], hashes[2])    // s1 and s3 agree

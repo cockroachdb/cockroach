@@ -18,6 +18,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -551,14 +552,11 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 	}
 }
 
-// ChecksumRange returns a checksum over the KV data of the given range.
-func ChecksumRange(
+// CalcReplicaDigest computes a digest of the replicated data for the given
+// range. For testing only.
+func CalcReplicaDigest(
 	ctx context.Context, desc roachpb.RangeDescriptor, snap storage.Reader,
-) ([]byte, error) {
-	lim := quotapool.NewRateLimiter("test", 1<<30, 1<<30)
-	res, err := replicaSHA512(ctx, desc, snap, roachpb.ChecksumMode_CHECK_FULL, lim)
-	if err != nil {
-		return nil, err
-	}
-	return res.SHA512[:], nil
+) (*ReplicaDigest, error) {
+	lim := quotapool.NewRateLimiter("test", quotapool.Limit(math.MaxFloat64), math.MaxInt64)
+	return calcReplicaDigest(ctx, desc, snap, roachpb.ChecksumMode_CHECK_FULL, lim)
 }
