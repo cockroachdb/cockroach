@@ -29,16 +29,11 @@
 # The rule can only perform this transformation if all of the following criteria
 # are met:
 #
-#   1. $leftRight is an integer, float, decimal, or interval. This restriction
-#      can be lifted for any type that we can construct a zero value of. The
-#      zero value of the right type is required in order to check for
-#      overflow/underflow (see #5).
+#   1. The generated Minus expression will error if there is an overflow (see
+#      ArithmeticErrorsOnOverflow).
 #   2. A Minus overload for the given input types exists and has an appropriate
 #      volatility.
-#   3. The result type of the overload is equivalent to the type of $right. This
-#      is required in order to check for overflow/underflow (see #5).
-#   4. The evaluation of the Minus operator causes no error.
-#   5. The evaluation of the Minus operator does not overflow or underflow.
+#  2. There is no error when evaluating the new binary expression.
 #
 # NOTE: Ne is not part of the operator choices because it wasn't handled in
 #       normalize.go either. We can add once we've proved it's OK to do so.
@@ -46,9 +41,13 @@
 (Eq | Ge | Gt | Le | Lt
     (Plus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
     $right:(ConstValue) &
+        (ArithmeticErrorsOnOverflow
+            (TypeOf $right)
+            (TypeOf $leftRight)
+        ) &
         (CanConstructBinary Minus $right $leftRight) &
         (Let
-            ($result $ok):(FoldBinaryCheckOverflow
+            ($result $ok):(FoldBinaryCheckNull
                 Minus
                 $right
                 $leftRight
@@ -72,9 +71,13 @@
 (Eq | Ge | Gt | Le | Lt
     (Minus $leftLeft:^(ConstValue) $leftRight:(ConstValue))
     $right:(ConstValue) &
+        (ArithmeticErrorsOnOverflow
+            (TypeOf $right)
+            (TypeOf $leftRight)
+        ) &
         (CanConstructBinary Plus $right $leftRight) &
         (Let
-            ($result $ok):(FoldBinaryCheckOverflow
+            ($result $ok):(FoldBinaryCheckNull
                 Plus
                 $right
                 $leftRight
@@ -98,9 +101,13 @@
 (Eq | Ge | Gt | Le | Lt
     (Minus $leftLeft:(ConstValue) $leftRight:^(ConstValue))
     $right:(ConstValue) &
+        (ArithmeticErrorsOnOverflow
+            (TypeOf $leftLeft)
+            (TypeOf $right)
+        ) &
         (CanConstructBinary Minus $leftLeft $right) &
         (Let
-            ($result $ok):(FoldBinaryCheckOverflow
+            ($result $ok):(FoldBinaryCheckNull
                 Minus
                 $leftLeft
                 $right
