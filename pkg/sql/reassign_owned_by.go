@@ -205,6 +205,9 @@ func (n *reassignOwnedByNode) reassignDatabaseOwner(
 	if err != nil {
 		return err
 	}
+	if mutableDbDesc.Dropped() {
+		return nil
+	}
 	owner, err := decodeusername.FromRoleSpec(
 		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
 	)
@@ -230,6 +233,9 @@ func (n *reassignOwnedByNode) reassignSchemaOwner(
 	mutableSchemaDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, params.p.txn, schemaDesc.GetID())
 	if err != nil {
 		return err
+	}
+	if mutableSchemaDesc.Dropped() {
+		return nil
 	}
 	owner, err := decodeusername.FromRoleSpec(
 		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
@@ -257,7 +263,9 @@ func (n *reassignOwnedByNode) reassignTableOwner(
 	if err != nil {
 		return err
 	}
-
+	if mutableTbDesc.Dropped() {
+		return nil
+	}
 	tableName, err := params.p.getQualifiedTableName(params.ctx, tbDesc)
 	if err != nil {
 		return err
@@ -287,6 +295,9 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 	mutableTypDesc, err := params.p.Descriptors().GetMutableDescriptorByID(params.ctx, params.p.txn, typDesc.GetID())
 	if err != nil {
 		return err
+	}
+	if mutableTypDesc.Dropped() {
+		return nil
 	}
 	arrayDesc, err := params.p.Descriptors().GetMutableTypeVersionByID(
 		params.ctx, params.p.txn, typDesc.GetArrayTypeID())
@@ -335,6 +346,9 @@ func (n *reassignOwnedByNode) reassignFunctionOwner(
 	)
 	if err != nil {
 		return err
+	}
+	if mutableDesc.Dropped() {
+		return nil
 	}
 	newOwner, err := decodeusername.FromRoleSpec(
 		params.p.SessionData(), username.PurposeValidation, n.n.NewRole,
