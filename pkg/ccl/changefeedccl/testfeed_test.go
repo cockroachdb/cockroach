@@ -911,6 +911,9 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 					m.Resolved = nil
 					return m, nil
 				case changefeedbase.OptFormatCSV:
+					if isNew := c.markSeen(m); !isNew {
+						continue
+					}
 					return m, nil
 				default:
 					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
