@@ -51,7 +51,9 @@ func (l *bufferEventChunkQueue) dequeue() (e Event, ok bool) {
 		}
 		l.head = l.head.next
 		freeBufferEventChunk(toFree)
-		return l.dequeue()
+		if !ok {
+			return l.dequeue()
+		}
 	}
 
 	if !ok {
@@ -117,7 +119,7 @@ func (bec *bufferEventChunk) pop() (e Event, ok bool, consumedAll bool) {
 
 	e = bec.events[bec.head]
 	bec.head++
-	return e, true, false
+	return e, true, bec.head == bufferEventChunkArrSize
 }
 
 func (bec *bufferEventChunk) empty() bool {
