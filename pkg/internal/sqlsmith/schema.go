@@ -243,7 +243,7 @@ FROM
 			key := tree.MakeSchemaQualifiedTypeName(scName, name)
 			udtMapping[key] = typ
 		default:
-			return nil, errors.New("unsupported SQLSmith type kind")
+			return nil, errors.Newf("unsupported SQLSmith type kind: %s", string(membersRaw))
 		}
 	}
 	var udts []*types.T

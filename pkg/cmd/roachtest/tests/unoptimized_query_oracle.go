@@ -42,6 +42,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 	for i := range disableRuleSpecs {
 		disableRuleSpec := &disableRuleSpecs[i]
 		for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+			setupName := setupName
 			var clusterSpec spec.ClusterSpec
 			switch setupName {
 			case sqlsmith.SeedMultiRegionSetupName:
