@@ -271,7 +271,7 @@ func NewTenantServer(
 	)
 
 	// Create a drain server.
-	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, sqlServer)
+	drainServer := newDrainServer(baseCfg, args.stopper, args.stopTrigger, args.grpc, sqlServer)
 	// Connect the admin server to the drain service.
 	//
 	// TODO(knz): This would not be necessary if we could use the
@@ -696,7 +696,7 @@ func (s *SQLServerWrapper) StartDiagnostics(ctx context.Context) {
 
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
-func (s *SQLServerWrapper) ShutdownRequested() <-chan error {
+func (s *SQLServerWrapper) ShutdownRequested() <-chan ShutdownRequest {
 	return s.sqlServer.ShutdownRequested()
 }
 
@@ -892,6 +892,7 @@ func makeTenantSQLServerArgs(
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
 		stopper:                  stopper,
+		stopTrigger:              newStopTrigger(),
 		clock:                    clock,
 		runtime:                  runtime,
 		rpcContext:               rpcContext,
