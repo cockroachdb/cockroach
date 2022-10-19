@@ -93,12 +93,10 @@ func DecodeFloatAscending(buf []byte) ([]byte, float64, error) {
 // DecodeFloatDescending decodes floats encoded with EncodeFloatDescending.
 func DecodeFloatDescending(buf []byte) ([]byte, float64, error) {
 	b, r, err := DecodeFloatAscending(buf)
-	if r != 0 {
-		// All values except for 0 and NaN were negated in
-		// EncodeFloatDescending, so we have to negate them back. Note that we
-		// don't need to check whether r is NaN since negating NaN gives back
-		// NaN too. Negative zero uses composite indexes to decode itself
-		// correctly.
+	if r != 0 && !math.IsNaN(r) {
+		// All values except for 0 and NaN were negated in EncodeFloatDescending, so
+		// we have to negate them back. Negative zero uses composite indexes to
+		// decode itself correctly.
 		r = -r
 	}
 	return b, r, err
