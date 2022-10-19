@@ -337,6 +337,8 @@ SELECT * FROM a AS OF SYSTEM TIME $ts
 
 # Test that USING works.
 
+subtest delete_using
+
 statement ok
 CREATE TABLE u_a (
     a INT NOT NULL PRIMARY KEY,
