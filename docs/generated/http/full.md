@@ -6276,6 +6276,103 @@ DrainResponse is the response to a successful DrainRequest.
 
 
 
+## DecommissionPreCheck
+
+
+
+DecommissionPreCheck requests that the server execute preliminary checks
+to evaluate the possibility of successfully decommissioning a given node.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+DecommissionPreCheckRequest requests that preliminary checks be run to
+ensure that the specified node(s) can be decommissioned successfully.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_ids | [int32](#cockroach.server.serverpb.DecommissionPreCheckRequest-int32) | repeated |  | [reserved](#support-status) |
+| num_replica_report | [int32](#cockroach.server.serverpb.DecommissionPreCheckRequest-int32) |  | The maximum number of ranges for which to report errors. | [reserved](#support-status) |
+| strict_readiness | [bool](#cockroach.server.serverpb.DecommissionPreCheckRequest-bool) |  | If true, all ranges on the checked nodes must only need replacement or removal for decommissioning. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+DecommissionPreCheckResponse returns the number of replicas that encountered
+errors when running preliminary decommissioning checks, as well as the
+associated error messages and traces, for each node.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| checked_nodes | [DecommissionPreCheckResponse.NodeCheckResult](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeCheckResult) | repeated | Status of the preliminary decommission checks across nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeCheckResult"></a>
+#### DecommissionPreCheckResponse.NodeCheckResult
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.DecommissionPreCheckResponse-int32) |  |  | [reserved](#support-status) |
+| decommission_readiness | [DecommissionPreCheckResponse.NodeReadiness](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.NodeReadiness) |  |  | [reserved](#support-status) |
+| liveness_status | [cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus) |  | The liveness status of the given node. | [reserved](#support-status) |
+| replica_count | [int64](#cockroach.server.serverpb.DecommissionPreCheckResponse-int64) |  | The number of total replicas on the node, computed by scanning range descriptors. | [reserved](#support-status) |
+| checked_ranges | [DecommissionPreCheckResponse.RangeCheckResult](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.RangeCheckResult) | repeated | The details and recorded traces from preprocessing each range with a replica on the checked nodes that resulted in error, up to the maximum specified in the request. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.DecommissionPreCheckResponse.RangeCheckResult"></a>
+#### DecommissionPreCheckResponse.RangeCheckResult
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| range_id | [int32](#cockroach.server.serverpb.DecommissionPreCheckResponse-int32) |  |  | [reserved](#support-status) |
+| allocatorAction | [string](#cockroach.server.serverpb.DecommissionPreCheckResponse-string) |  | The action determined by the allocator that is needed for the range. | [reserved](#support-status) |
+| events | [TraceEvent](#cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.TraceEvent) | repeated | All trace events collected while processing the range in the allocator. | [reserved](#support-status) |
+| error | [string](#cockroach.server.serverpb.DecommissionPreCheckResponse-string) |  | The error message from the allocator's processing, if any. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.DecommissionPreCheckResponse-cockroach.server.serverpb.TraceEvent"></a>
+#### TraceEvent
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| time | [google.protobuf.Timestamp](#cockroach.server.serverpb.DecommissionPreCheckResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.DecommissionPreCheckResponse-string) |  |  | [reserved](#support-status) |
+
+
+
+
+
+
 ## Decommission
 
 
