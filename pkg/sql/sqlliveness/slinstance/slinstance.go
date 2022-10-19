@@ -96,7 +96,7 @@ func (s *session) setExpiration(exp hlc.Timestamp) {
 type SessionEventListener interface {
 	// OnSessionDeleted is called when the session liveness record is found to be
 	// missing.
-	OnSessionDeleted()
+	OnSessionDeleted(context.Context)
 }
 
 // Instance implements the sqlliveness.Instance interface by storing the
@@ -144,7 +144,7 @@ func (l *Instance) clearSession(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if expiration := l.mu.s.Expiration(); expiration.Less(l.clock.Now()) {
-		l.sessionEvents.OnSessionDeleted()
+		l.sessionEvents.OnSessionDeleted(ctx)
 	}
 	l.mu.s = nil
 	l.mu.blockCh = make(chan struct{})
@@ -258,7 +258,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 						// the session failed.
 						close(l.mu.blockCh)
 					}()
-					l.sessionEvents.OnSessionDeleted()
+					l.sessionEvents.OnSessionDeleted(ctx)
 					return
 				}
 				l.setSession(newSession)
@@ -378,4 +378,4 @@ type dummySessionEventListener struct{}
 var _ SessionEventListener = &dummySessionEventListener{}
 
 // OnSessionDeleted implements the slinstance.SessionEventListener interface.
-func (d *dummySessionEventListener) OnSessionDeleted() {}
+func (d *dummySessionEventListener) OnSessionDeleted(context.Context) {}
