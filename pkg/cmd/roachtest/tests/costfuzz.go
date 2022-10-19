@@ -27,6 +27,7 @@ import (
 
 func registerCostFuzz(r registry.Registry) {
 	for _, setupName := range []string{sqlsmith.RandTableSetupName, sqlsmith.SeedMultiRegionSetupName} {
+		setupName := setupName
 		var clusterSpec spec.ClusterSpec
 		switch setupName {
 		case sqlsmith.SeedMultiRegionSetupName:

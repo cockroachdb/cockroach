@@ -138,6 +138,7 @@ func runOneRoundQueryComparison(
 
 	rnd, seed := randutil.NewTestRand()
 	t.L().Printf("seed: %d", seed)
+	t.L().Printf("setupName: %s", qct.setupName)
 
 	setup := sqlsmith.Setups[qct.setupName](rnd)
 
