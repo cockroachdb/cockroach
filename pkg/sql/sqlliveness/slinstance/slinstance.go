@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -151,14 +149,6 @@ func (l *Instance) setSession(s *session) {
 }
 
 func (l *Instance) clearSession(ctx context.Context) {
-	l.checkExpiry(ctx)
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.mu.s = nil
-	l.mu.blockCh = make(chan struct{})
-}
-
-func (l *Instance) checkExpiry(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if expiration := l.mu.s.Expiration(); expiration.Less(l.clock.Now()) {
@@ -166,6 +156,8 @@ func (l *Instance) checkExpiry(ctx context.Context) {
 		// associated with the session.
 		l.mu.s.invokeSessionExpiryCallbacks(ctx)
 	}
+	l.mu.s = nil
+	l.mu.blockCh = make(chan struct{})
 }
 
 // createSession tries until it can create a new session and returns an error
@@ -255,59 +247,30 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 		case <-t.C:
 			t.Read = true
 			s, _ := l.getSessionOrBlockCh()
-			// TODO(aaditya): consider combining `DefaultTTL` and `DefaultHeartBeat` into a single knob to make these
-			//  timeouts less fragile
-			timeout := l.ttl()/2 + l.hb()
 			if s == nil {
-				var newSession *session
-				if err := contextutil.RunWithTimeout(ctx, "sqlliveness create session", timeout, func(ctx context.Context) error {
-					var err error
-					newSession, err = l.createSession(ctx)
-					return err
-				}); err != nil {
-					log.Errorf(ctx, "sqlliveness failed to create new session: %v", err)
-					func() {
-						l.mu.Lock()
-						defer l.mu.Unlock()
-						close(l.mu.blockCh)
-					}()
+				newSession, err := l.createSession(ctx)
+				if err != nil {
 					return
 				}
 				l.setSession(newSession)
 				t.Reset(l.hb())
 				continue
 			}
-			var found bool
-			err := contextutil.RunWithTimeout(ctx, "sqlliveness extend session", timeout, func(ctx context.Context) error {
-				var err error
-				found, err = l.extendSession(ctx, s)
-				return err
-			})
-			switch {
-			case errors.HasType(err, (*contextutil.TimeoutError)(nil)):
-				// Retry without clearing the session because we don't know the current status.
-				l.checkExpiry(ctx)
-				t.Reset(0)
-				continue
-			case err != nil && ctx.Err() == nil:
-				log.Errorf(ctx, "sqlliveness failed to extend session: %v", err)
-				fallthrough
-			case err != nil:
-				// TODO(ajwerner): Decide whether we actually should exit the heartbeat loop here if the context is not
-				// canceled. Consider the case of an ambiguous result error: shouldn't we try again?
+			found, err := l.extendSession(ctx, s)
+			if err != nil {
 				l.clearSession(ctx)
 				return
-			case !found:
-				// No existing session found, immediately create one.
+			}
+			if !found {
 				l.clearSession(ctx)
 				// Start next loop iteration immediately to insert a new session.
 				t.Reset(0)
-			default:
-				if log.V(2) {
-					log.Infof(ctx, "extended SQL liveness session %s", s.ID())
-				}
-				t.Reset(l.hb())
+				continue
 			}
+			if log.V(2) {
+				log.Infof(ctx, "extended SQL liveness session %s", s.ID())
+			}
+			t.Reset(l.hb())
 		}
 	}
 }
