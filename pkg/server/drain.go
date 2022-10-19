@@ -97,6 +97,7 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 
 type drainServer struct {
 	stopper      *stop.Stopper
+	stopTrigger  *stopTrigger
 	grpc         *grpcServer
 	sqlServer    *SQLServer
 	drainSleepFn func(time.Duration)
@@ -109,7 +110,11 @@ type drainServer struct {
 
 // newDrainServer constructs a drainServer suitable for any kind of server.
 func newDrainServer(
-	cfg BaseConfig, stopper *stop.Stopper, grpc *grpcServer, sqlServer *SQLServer,
+	cfg BaseConfig,
+	stopper *stop.Stopper,
+	stopTrigger *stopTrigger,
+	grpc *grpcServer,
+	sqlServer *SQLServer,
 ) *drainServer {
 	var drainSleepFn = time.Sleep
 	if cfg.TestingKnobs.Server != nil {
@@ -119,6 +124,7 @@ func newDrainServer(
 	}
 	return &drainServer{
 		stopper:      stopper,
+		stopTrigger:  stopTrigger,
 		grpc:         grpc,
 		sqlServer:    sqlServer,
 		drainSleepFn: drainSleepFn,
@@ -175,7 +181,7 @@ func (s *drainServer) maybeShutdownAfterDrain(
 		// away (and who knows whether gRPC-goroutines are tied up in some
 		// stopper task somewhere).
 		s.grpc.Stop()
-		s.stopper.Stop(ctx)
+		s.stopTrigger.signalStop(ctx, MakeShutdownRequest(ShutdownReasonDrainRPC, nil /* err */))
 	}()
 
 	select {

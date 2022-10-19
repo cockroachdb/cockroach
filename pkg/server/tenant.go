@@ -238,7 +238,7 @@ func startTenantInternal(
 	tenantStatusServer.privilegeChecker = adminAuthzCheck
 	tenantStatusServer.sqlServer = s
 
-	drainServer = newDrainServer(baseCfg, args.stopper, args.grpc, s)
+	drainServer = newDrainServer(baseCfg, args.stopper, args.stopTrigger, args.grpc, s)
 
 	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
@@ -595,6 +595,7 @@ func makeTenantSQLServerArgs(
 		SQLConfig:                &sqlCfg,
 		BaseConfig:               &baseCfg,
 		stopper:                  stopper,
+		stopTrigger:              newStopTrigger(),
 		clock:                    clock,
 		runtime:                  runtime,
 		rpcContext:               rpcContext,
