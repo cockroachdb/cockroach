@@ -95,26 +95,70 @@ EOF
 tc_end_block "Make and publish release S3 artifacts"
 
 
-tc_start_block "Make and push docker images"
+tc_start_block "Make and push multiarch docker images"
 configure_docker_creds
 docker_login_with_google
 docker_login
 
-# TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
-curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
-cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
-cp -r licenses build/deploy/
+declare -a latest_images
+declare -a latest_images_by_branch
+declare -a arch_specific_images
+declare -a combined_image_args
 
-docker build \
-  --label version=$version \
-  --no-cache \
-  --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \
-  --tag=${gcr_repository}:${build_name} \
-  build/deploy
+for platform_name in "${platform_names[@]}"; do
+  tarball_arch="$(tarball_arch_from_platform_name "$platform_name")"
+  docker_arch="$(docker_arch_from_platform_name "$platform_name")"
+  linux_platform=linux
+  if [[ $tarball_arch == "arm64" ]]; then
+    linux_platform=linux-3.7.10-gnu
+  fi
+  # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
+  # NB: tar usually stops reading as soon as it sees an empty block but that makes
+  # curl unhappy, so passing `--ignore-zeros` will cause it to read to the end.
+  cp --recursive "build/deploy" "build/deploy-${docker_arch}"
+  curl \
+    --fail \
+    --silent \
+    --show-error \
+    --output /dev/stdout \
+    --url "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
+    | tar \
+    --directory="build/deploy-${docker_arch}" \
+    --extract \
+    --file=/dev/stdin \
+    --ungzip \
+    --ignore-zeros \
+    --strip-components=1
+  cp --recursive licenses "build/deploy-${docker_arch}"
+  # Move the libs where Dockerfile expects them to be
+  mv build/deploy-${docker_arch}/lib/* build/deploy-${docker_arch}/
+  rmdir build/deploy-${docker_arch}/lib
 
-docker push "${dockerhub_repository}:${build_name}"
-docker push "${gcr_repository}:${build_name}"
-tc_end_block "Make and push docker images"
+  build_docker_tag="${gcr_repository}:${docker_arch}-${build_name}"
+
+  docker build \
+    --label version="$version" \
+    --no-cache \
+    --pull \
+    --platform="linux/${docker_arch}" \
+    --tag="${dockerhub_repository}:${docker_arch}-"{"${build_name}",latest,latest-"${release_branch}"} \
+    --tag="${gcr_repository}:${docker_arch}-${build_name}" \
+    "build/deploy-${docker_arch}"
+  docker push "${dockerhub_repository}:${docker_arch}-${build_name}"
+  docker push "${gcr_repository}:${docker_arch}-${build_name}"
+  
+  arch_specific_images=( "${arch_specific_images[@]}" "${build_docker_tag}" )
+  combined_image_args=( "${docker_tags[@]}" --amend "${build_docker_tag}" )
+  latest_images=("${latest_images[@]}" "${dockerhub_repository}:${docker-arch}-latest")
+  latest_images_by_branch=("${latest_images_by_branch[@]}" "${dockerhub_repository}:${docker_arch}-latest-${release_branch}")
+done
+
+docker manifest create "${combined_docker_tag}" "${docker_amends[@]}"
+docker manifest push "${combined_docker_tag}"
+
+docker manifest create "${dockerhub_repository}:latest" "${docker_amends[@]}"
+docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${docker_amends[@]}"
+tc_end_block "Make and push multiarch docker images"
 
 
 tc_start_block "Push release tag to GitHub"
@@ -152,24 +196,26 @@ tc_end_block "Publish S3 binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ -z "$PRE_RELEASE" ]]; then
-  docker push "${dockerhub_repository}:latest-${release_branch}"
+  docker push "${latest_images_by_branch[@]}"
+  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
 else
-  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tag was _not_ pushed."
+  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
 fi
-tc_end_block "Tag docker image as latest-RELEASE_BRANCH"
+tc_end_block "Tag docker images as latest-RELEASE_BRANCH"
 
 
-tc_start_block "Tag docker image as latest"
+tc_start_block "Tag docker images as latest"
 # Only push the "latest" tag for our most recent release branch and for the
 # latest unstable release
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
-  docker push "${dockerhub_repository}:latest"
+  docker push "${latest_images[@]}"
+  docker manifest push "${dockerhub_repository}:latest"
 else
-  echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
+  echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
 fi
-tc_end_block "Tag docker image as latest"
+tc_end_block "Tag docker images as latest"
 
 
 tc_start_block "Verify docker images"
@@ -177,12 +223,13 @@ tc_start_block "Verify docker images"
 images=(
   "${dockerhub_repository}:${build_name}"
   "${gcr_repository}:${build_name}"
+  "${arch_specific_images[@]}"
 )
 if [[ -z "$PRE_RELEASE" ]]; then
-  images+=("${dockerhub_repository}:latest-${release_branch}")
+  images+=("${dockerhub_repository}:latest-${release_branch}" "${latest_images_by_branch[@]}")
 fi
 if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
-  images+=("${dockerhub_repository}:latest")
+  images+=("${dockerhub_repository}:latest" "${latest_images[@]}")
 fi
 
 error=0
