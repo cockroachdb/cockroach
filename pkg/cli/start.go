@@ -578,7 +578,7 @@ If problems persist, please see %s.`
 	// if we get stuck on something during initialization (#10138).
 	var serverStatusMu serverStatus
 	var s *server.Server
-	errChan := make(chan error, 1)
+	serverStartupErrC := make(chan error, 1)
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
@@ -599,11 +599,11 @@ If problems persist, please see %s.`
 		defer startupSpan.Finish()
 
 		// Any error beyond this point should be reported through the
-		// errChan defined above. However, in Go the code pattern "if err
+		// serverStartupErrC defined above. However, in Go the code pattern "if err
 		// != nil { return err }" is more common. Expecting contributors
-		// to remember to write "if err != nil { errChan <- err }" beyond
+		// to remember to write "if err != nil { serverStartupErrC <- err }" beyond
 		// this point is optimistic. To avoid any mistake, we capture all
-		// the error returns in a closure, and do the errChan reporting,
+		// the error returns in a closure, and do the serverStartupErrC reporting,
 		// if needed, when that function returns.
 		if err := func() error {
 			// Instantiate the server.
@@ -674,7 +674,7 @@ If problems persist, please see %s.`
 			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
 				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
 		}(); err != nil {
-			errChan <- err
+			serverStartupErrC <- err
 		}
 	}()
 
@@ -682,7 +682,7 @@ If problems persist, please see %s.`
 		// NB: we delay the access to s, as it is assigned
 		// asynchronously in a goroutine above.
 		func() serverShutdownInterface { return s },
-		stopper, errChan, signalCh,
+		stopper, serverStartupErrC, signalCh,
 		&serverStatusMu)
 }
 
@@ -746,11 +746,11 @@ type serverShutdownInterface interface {
 // waitForShutdown lets the server run asynchronously and waits for
 // shutdown, either due to the server spontaneously shutting down
 // (signaled by stopper), or due to a server error (signaled on
-// errChan), by receiving a signal (signaled by signalCh).
+// serverStartupErrC), by receiving a signal (signaled by signalCh).
 func waitForShutdown(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
-	errChan chan error,
+	serverStartupErrC chan error,
 	signalCh chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
@@ -772,7 +772,7 @@ func waitForShutdown(
 	// Block until one of the signals above is received or the stopper
 	// is stopped externally (for example, via the quit endpoint).
 	select {
-	case err := <-errChan:
+	case err := <-serverStartupErrC:
 		// An error in errChat signals that the early server startup failed.
 		returnErr = err
 		// At this point, we do not expect any application load, etc., and
