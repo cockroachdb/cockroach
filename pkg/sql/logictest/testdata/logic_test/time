@@ -580,3 +580,19 @@ query B
 SELECT t + '-18:00:00'::INTERVAL < '07:00:00'::TIME FROM t88128
 ----
 true
+
+subtest regression_90053
+
+# Regression tests for #90053. Do not normalize comparisons with constants when
+# addition/subtraction of the types involved could overflow without an error.
+query B
+SELECT '00:01:40.01+09:00:00' < (col::TIMETZ + '-83 years -1 mons -38 days -10:32:23.707137')
+FROM (VALUES ('03:16:01.252182+01:49:00')) v(col);
+----
+true
+
+query B
+SELECT t::TIME + '-11 hrs'::INTERVAL > '01:00'::TIME
+FROM (VALUES ('03:00')) v(t)
+----
+true
