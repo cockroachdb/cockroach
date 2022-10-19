@@ -116,6 +116,26 @@ docker push "${dockerhub_repository}:${build_name}"
 docker push "${gcr_repository}:${build_name}"
 tc_end_block "Make and push docker images"
 
+tc_start_block "Make and push non-root docker images"
+# Replace the FROM directive to use the newly created image as the base
+sed "s,@FROM@,${dockerhub_repository}:${build_name}," build/deploy/Dockerfile.nonroot.in > build/deploy/Dockerfile.nonroot
+echo "Generated Dockerfile:"
+cat build/deploy/Dockerfile.nonroot
+
+docker build \
+  --label version=$version \
+  --no-cache \
+  --tag=${dockerhub_repository}:{"$build_name"-nonroot,latest-nonroot,latest-"${release_branch}"-nonroot} \
+  --tag=${gcr_repository}:${build_name}-nonroot \
+  -f build/deploy/Dockerfile.nonroot \
+  build/deploy
+rm -f build/deploy/Dockerfile.nonroot
+
+docker push "${dockerhub_repository}:${build_name}-nonroot"
+docker push "${gcr_repository}:${build_name}-nonroot"
+
+tc_end_block "Make and push non-root docker images"
+
 
 tc_start_block "Push release tag to GitHub"
 configure_git_ssh_key
@@ -153,6 +173,7 @@ tc_end_block "Publish S3 binaries and archive as latest"
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ -z "$PRE_RELEASE" ]]; then
   docker push "${dockerhub_repository}:latest-${release_branch}"
+  docker push "${dockerhub_repository}:latest-${release_branch}-nonroot"
 else
   echo "The ${dockerhub_repository}:latest-${release_branch} docker image tag was _not_ pushed."
 fi
@@ -166,6 +187,7 @@ tc_start_block "Tag docker image as latest"
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
   docker push "${dockerhub_repository}:latest"
+  docker push "${dockerhub_repository}:latest-nonroot"
 else
   echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
 fi
@@ -180,9 +202,11 @@ images=(
 )
 if [[ -z "$PRE_RELEASE" ]]; then
   images+=("${dockerhub_repository}:latest-${release_branch}")
+  images+=("${dockerhub_repository}:latest-${release_branch}-nonroot")
 fi
 if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
   images+=("${dockerhub_repository}:latest")
+  images+=("${dockerhub_repository}:latest-nonroot")
 fi
 
 error=0

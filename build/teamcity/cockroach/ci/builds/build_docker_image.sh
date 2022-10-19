@@ -30,8 +30,10 @@ tc_end_block "Copy cockroach binary and dependency files to build/deploy"
 tc_start_block "Build and save docker image to artifacts"
 
 docker_image_tar_name="cockroach-docker-image.tar"
+docker_image_nonroot_tar_name="cockroach-docker-image-nonroot.tar"
 
 docker_tag="cockroachdb/cockroach-ci"
+docker_tag_nonroot="cockroachdb/cockroach-ci-nonroot"
 
 docker build \
   --no-cache \
@@ -43,5 +45,15 @@ docker build \
 docker save "$docker_tag" | gzip > "${artifacts}/${docker_image_tar_name}".gz
 
 cp upstream_artifacts/cockroach "${artifacts}"/cockroach
+
+sed "s,@FROM@,${docker_tag}," build/deploy/Dockerfile.nonroot.in > build/deploy/Dockerfile.nonroot
+cat build/deploy/Dockerfile.nonroot
+docker build \
+  --no-cache \
+  --tag="${docker_tag_nonroot}" \
+  -f build/deploy/Dockerfile.nonroot \
+  build/deploy
+rm -f build/deploy/Dockerfile.nonroot
+docker save "${docker_tag_nonroot}" | gzip > "${artifacts}/${docker_image_nonroot_tar_name}".gz
 
 tc_end_block "Build and save docker image to artifacts"

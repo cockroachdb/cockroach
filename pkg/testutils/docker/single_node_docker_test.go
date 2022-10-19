@@ -39,6 +39,41 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
+const (
+	defaultTimeout      = 10 * time.Second
+	waitInitTimeout     = 80 * time.Second
+	initSuccessFile     = "init_success"
+	cockroachEntrypoint = "/cockroach/cockroach"
+	hostPort            = "8080"
+	cockroachPort       = "26257"
+	hostIP              = "127.0.0.1"
+)
+
+type dockerNode struct {
+	cl     client.APIClient
+	contID string
+}
+
+var testImages = []struct {
+	name  string
+	image string
+	home  string
+	user  string
+}{
+	{
+		name:  "root-image",
+		image: "cockroachdb/cockroach-ci:latest",
+		home:  "/cockroach",
+		user:  "root",
+	},
+	{
+		name:  "nonroot-image",
+		image: "cockroachdb/cockroach-ci-nonroot:latest",
+		home:  "/roacher",
+		user:  "1001",
+	},
+}
+
 // sqlQuery consists of a sql query and the expected result.
 type sqlQuery struct {
 	query          string
@@ -60,9 +95,8 @@ type runContainerArgs struct {
 // a single-node cockroach server using runContainerArgs,
 // and execute sql queries in this running container.
 type singleNodeDockerTest struct {
-	testName         string
+	testNamePrefix   string
 	runContainerArgs runContainerArgs
-	containerName    string
 	// sqlOpts are arguments passed to a `cockroach sql` command.
 	sqlOpts []string
 	// sqlQueries are queries to run in this container, and their expected results.
@@ -80,8 +114,7 @@ func TestSingleNodeDocker(t *testing.T) {
 
 	var dockerTests = []singleNodeDockerTest{
 		{
-			testName:      "single-node-secure-mode",
-			containerName: "roach1",
+			testNamePrefix: "single-node-secure-mode",
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -108,8 +141,7 @@ func TestSingleNodeDocker(t *testing.T) {
 			},
 		},
 		{
-			testName:      "single-node-insecure-mode",
-			containerName: "roach2",
+			testNamePrefix: "single-node-insecure-mode",
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -135,8 +167,7 @@ func TestSingleNodeDocker(t *testing.T) {
 			},
 		},
 		{
-			testName:      "single-node-insecure-mem-mode",
-			containerName: "roach3",
+			testNamePrefix: "single-node-insecure-mem-mode",
 			runContainerArgs: runContainerArgs{
 				envSetting: []string{
 					"COCKROACH_DATABASE=mydb",
@@ -187,105 +218,92 @@ func TestSingleNodeDocker(t *testing.T) {
 		t.Errorf("%v", err)
 	}
 
-	for _, test := range dockerTests {
-		t.Run(test.testName, func(t *testing.T) {
-
-			if err := contextutil.RunWithTimeout(
-				ctx,
-				"start container",
-				defaultTimeout,
-				func(ctx context.Context) error {
-					return dn.startContainer(
-						ctx,
-						test.containerName,
-						test.runContainerArgs.envSetting,
-						test.runContainerArgs.volSetting,
-						test.runContainerArgs.cmd,
-					)
-				},
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := contextutil.RunWithTimeout(
-				ctx,
-				"wait for the server to finish the initialization",
-				waitInitTimeout,
-				func(ctx context.Context) error {
-					return dn.waitInitFinishes(ctx)
-				},
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			if err := contextutil.RunWithTimeout(
-				ctx,
-				"show log",
-				defaultTimeout,
-				func(ctx context.Context) error {
-					return dn.showContainerLog(ctx, fmt.Sprintf("%s.log", test.testName))
-				},
-			); err != nil {
-				log.Warningf(ctx, "cannot show container log: %v", err)
-			}
-
-			for _, qe := range test.sqlQueries {
-				query := qe.query
-				expected := qe.expectedResult
+	for i, test := range dockerTests {
+		for _, img := range testImages {
+			t.Run(fmt.Sprintf("%s-%s", test.testNamePrefix, img.name), func(t *testing.T) {
+				containerName := fmt.Sprintf("roach-%d-%s", i, img.name)
+				if err := contextutil.RunWithTimeout(
+					ctx,
+					"start container",
+					defaultTimeout,
+					func(ctx context.Context) error {
+						return dn.startContainer(
+							ctx,
+							img.image,
+							containerName,
+							test.runContainerArgs.envSetting,
+							test.runContainerArgs.volSetting,
+							test.runContainerArgs.cmd,
+						)
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
 
 				if err := contextutil.RunWithTimeout(
 					ctx,
-					fmt.Sprintf("execute command \"%s\"", query),
+					"wait for the server to finish the initialization",
+					waitInitTimeout,
+					func(ctx context.Context) error {
+						return dn.waitInitFinishes(ctx, img.home, img.user)
+					},
+				); err != nil {
+					t.Fatal(err)
+				}
+
+				if err := contextutil.RunWithTimeout(
+					ctx,
+					"show log",
 					defaultTimeout,
 					func(ctx context.Context) error {
-						resp, err := dn.execSQLQuery(ctx, query, test.sqlOpts)
-						if err != nil {
-							return err
-						}
-						cleanedOutput, err := cleanQueryResult(resp.stdOut)
-						if err != nil {
-							return err
-						}
-						if cleanedOutput != expected {
-							return fmt.Errorf("executing %s, expect:\n%#v\n, got\n%#v", query, expected, cleanedOutput)
-						}
-						return nil
+						return dn.showContainerLog(ctx, fmt.Sprintf("%s.log", containerName))
+					},
+				); err != nil {
+					log.Warningf(ctx, "cannot show container log: %v", err)
+				}
+
+				for _, qe := range test.sqlQueries {
+					query := qe.query
+					expected := qe.expectedResult
+
+					if err := contextutil.RunWithTimeout(
+						ctx,
+						fmt.Sprintf("execute command \"%s\"", query),
+						defaultTimeout,
+						func(ctx context.Context) error {
+							resp, err := dn.execSQLQuery(ctx, query, test.sqlOpts, img.user)
+							if err != nil {
+								return err
+							}
+							cleanedOutput, err := cleanQueryResult(resp.stdOut)
+							if err != nil {
+								return err
+							}
+							if cleanedOutput != expected {
+								return fmt.Errorf("executing %s, expect:\n%#v\n, got\n%#v", query, expected, cleanedOutput)
+							}
+							return nil
+						},
+					); err != nil {
+						t.Errorf("%v", err)
+					}
+				}
+
+				if err := contextutil.RunWithTimeout(
+					ctx,
+					"remove current container",
+					defaultTimeout,
+					func(ctx context.Context) error {
+						return dn.rmContainer(ctx)
 					},
 				); err != nil {
 					t.Errorf("%v", err)
 				}
-			}
 
-			if err := contextutil.RunWithTimeout(
-				ctx,
-				"remove current container",
-				defaultTimeout,
-				func(ctx context.Context) error {
-					return dn.rmContainer(ctx)
-				},
-			); err != nil {
-				t.Errorf("%v", err)
-			}
-
-		})
+			})
+		}
 	}
 
-}
-
-const (
-	imageName           = "cockroachdb/cockroach-ci:latest"
-	defaultTimeout      = 10 * time.Second
-	waitInitTimeout     = 80 * time.Second
-	initSuccessFile     = "init_success"
-	cockroachEntrypoint = "./cockroach"
-	hostPort            = "8080"
-	cockroachPort       = "26257"
-	hostIP              = "127.0.0.1"
-)
-
-type dockerNode struct {
-	cl     client.APIClient
-	contID string
 }
 
 // removeLocalData removes existing database saved in cockroach-data.
@@ -342,7 +360,12 @@ func (dn *dockerNode) showContainerLog(ctx context.Context, logFileName string) 
 // startContainer starts a container with given setting for environment
 // variables, mounted volumes, and command to run.
 func (dn *dockerNode) startContainer(
-	ctx context.Context, containerName string, envSetting []string, volSetting []string, cmd []string,
+	ctx context.Context,
+	imageName string,
+	containerName string,
+	envSetting []string,
+	volSetting []string,
+	cmd []string,
 ) error {
 
 	containerConfig := container.Config{
@@ -386,15 +409,15 @@ func (dn *dockerNode) startContainer(
 // removeAllContainers removes all running containers based on the cockroach-ci
 // docker image by force.
 func (dn *dockerNode) removeAllContainers(ctx context.Context) error {
-	filter := filters.NewArgs(filters.Arg("ancestor", imageName))
+	var imageFilters []filters.KeyValuePair
+	for _, img := range testImages {
+		imageFilters = append(imageFilters, filters.Arg("ancestor", img.image))
+	}
+	filter := filters.NewArgs(imageFilters...)
 	conts, err := dn.cl.ContainerList(ctx,
 		types.ContainerListOptions{All: true, Filters: filter})
 	if err != nil {
-		return errors.Wrapf(
-			err,
-			"cannot list all containers on docker image %s",
-			imageName,
-		)
+		return errors.Wrapf(err, "cannot list all containers on docker images")
 	}
 	for _, cont := range conts {
 		err := dn.cl.ContainerRemove(ctx, cont.ID,
@@ -465,15 +488,14 @@ func (dn *dockerNode) InspectExecResp(ctx context.Context, execID string) (execR
 // execCommand is to execute command in the current container, and returns the
 // execution result and possible error.
 func (dn *dockerNode) execCommand(
-	ctx context.Context, cmd []string, workingDir string,
+	ctx context.Context, cmd []string, user string,
 ) (*execResult, error) {
 	execID, err := dn.cl.ContainerExecCreate(ctx, dn.contID, types.ExecConfig{
-		User:         "root",
+		User:         user,
 		AttachStderr: true,
 		AttachStdout: true,
 		Tty:          true,
 		Cmd:          cmd,
-		WorkingDir:   workingDir,
 	})
 
 	if err != nil {
@@ -509,18 +531,18 @@ func (dn *dockerNode) execCommand(
 // waitInitFinishes waits till the server finishes all init steps or timeout,
 // whichever earlier. It keeps listening to the initSuccessFile till it is closed and
 // written.
-func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
+func (dn *dockerNode) waitInitFinishes(ctx context.Context, workingDir string, user string) error {
 	var res *execResult
 	var err error
 
 	// Run the binary which listens to the /cockroach folder until the
 	// initialization process has finished or timeout.
 	res, err = dn.execCommand(ctx, []string{
-		"./docker-fsnotify",
-		"/cockroach",
+		"/cockroach/docker-fsnotify",
+		workingDir,
 		initSuccessFile,
 		strconv.Itoa(int(waitInitTimeout.Seconds())),
-	}, "/cockroach")
+	}, user)
 	if err != nil {
 		return errors.Wrapf(err, "cannot run fsnotify to listen to %s:\nres:%#v\n", initSuccessFile, res)
 	}
@@ -534,13 +556,13 @@ func (dn *dockerNode) waitInitFinishes(ctx context.Context) error {
 // execSQLQuery executes the sql query and returns the server's output and
 // possible error.
 func (dn *dockerNode) execSQLQuery(
-	ctx context.Context, sqlQuery string, sqlQueryOpts []string,
+	ctx context.Context, sqlQuery string, sqlQueryOpts []string, user string,
 ) (*execResult, error) {
 	query := append([]string{cockroachEntrypoint, "sql", "-e", sqlQuery},
 		sqlQueryOpts...,
 	)
 
-	res, err := dn.execCommand(ctx, query, "/cockroach")
+	res, err := dn.execCommand(ctx, query, user)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error executing query \"%s\"", sqlQuery)
 	}
