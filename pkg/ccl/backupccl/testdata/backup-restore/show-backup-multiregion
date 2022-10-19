@@ -1,6 +1,6 @@
 # These tests validate the SHOW BACKUP command for multi-region databases.
 
-new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1
+new-server name=s1 allow-implicit-access localities=us-east-1,us-west-1,eu-central-1 disable-tenant
 ----
 
 exec-sql

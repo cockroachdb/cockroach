@@ -272,6 +272,9 @@ type TestServerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
+
+	// TestTenants returns the test tenants associated with the server
+	TestTenants() []TestTenantInterface
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

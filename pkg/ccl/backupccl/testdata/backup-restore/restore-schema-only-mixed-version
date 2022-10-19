@@ -1,6 +1,8 @@
 # Tests that RESTORE with schema_only cannot get run in a mixed version cluster
+# Disabled to run within tenants because version gating infra does not play nice within tenants.
+# More investigation required.
 
-new-server name=s1 beforeVersion=Start22_2
+new-server name=s1 beforeVersion=Start22_2 disable-tenant
 ----
 
 exec-sql

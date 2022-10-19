@@ -118,8 +118,8 @@ func init() {
 	cloud.RegisterKMSFromURIFactory(MakeTestKMS, "testkms")
 }
 
-func makeTableSpan(tableID uint32) roachpb.Span {
-	k := keys.SystemSQLCodec.TablePrefix(tableID)
+func makeTableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
+	k := codec.TablePrefix(tableID)
 	return roachpb.Span{Key: k, EndKey: k.PrefixEnd()}
 }
 
@@ -213,9 +213,11 @@ func TestBackupRestorePartitioned(t *testing.T) {
 
 	const numAccounts = 1000
 
+	// Disabled to run within tenant as certain MR features are not available to tenants.
 	args := base.TestClusterArgs{
 		ServerArgsPerNode: map[int]base.TestServerArgs{
 			0: {
+				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "west"},
 					// NB: This has the same value as an az in the east region
@@ -225,6 +227,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			1: {
+				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					// NB: This has the same value as an az in the west region
@@ -234,6 +237,7 @@ func TestBackupRestorePartitioned(t *testing.T) {
 				}},
 			},
 			2: {
+				DisableDefaultTestTenant: true,
 				Locality: roachpb.Locality{Tiers: []roachpb.Tier{
 					{Key: "region", Value: "east"},
 					{Key: "az", Value: "az2"},
@@ -1507,8 +1511,10 @@ func TestBackupRestoreResume(t *testing.T) {
 	const numAccounts = 1000
 	tc, outerDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
-
-	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), keys.SystemSQLCodec, "data", "bank")
+	srv := tc.TenantOrServer(0)
+	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
+	clusterID := srv.RPCContext().LogicalClusterID.Get()
+	backupTableDesc := desctestutils.TestingGetPublicTableDescriptor(tc.Servers[0].DB(), codec, "data", "bank")
 
 	t.Run("backup", func(t *testing.T) {
 		for _, item := range []struct {
@@ -1521,14 +1527,14 @@ func TestBackupRestoreResume(t *testing.T) {
 			item := item
 			t.Run(item.testName, func(t *testing.T) {
 				sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-				backupStartKey := backupTableDesc.PrimaryIndexSpan(keys.SystemSQLCodec).Key
-				backupEndKey, err := randgen.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+				backupStartKey := backupTableDesc.PrimaryIndexSpan(codec).Key
+				backupEndKey, err := randgen.TestingMakePrimaryIndexKeyForTenant(backupTableDesc, codec, numAccounts/2)
 				if err != nil {
 					t.Fatal(err)
 				}
 				backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
 				mockManifest, err := protoutil.Marshal(&backuppb.BackupManifest{
-					ClusterID: tc.Servers[0].RPCContext().LogicalClusterID.Get(),
+					ClusterID: clusterID,
 					Files: []backuppb.BackupManifest_File{
 						{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 					},
@@ -1587,12 +1593,11 @@ func TestBackupRestoreResume(t *testing.T) {
 		sqlDB.Exec(t, `BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 		restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
-		restoreTableID, err := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).
-			DescIDGenerator.GenerateUniqueDescID(ctx)
+		restoreTableID, err := tc.TenantOrServer(0).ExecutorConfig().(sql.ExecutorConfig).DescIDGenerator.GenerateUniqueDescID(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}
-		restoreHighWaterMark, err := randgen.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+		restoreHighWaterMark, err := randgen.TestingMakePrimaryIndexKeyForTenant(backupTableDesc, codec, numAccounts/2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1639,6 +1644,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 
 	serverArgs := base.TestServerArgs{
 		DisableSpanConfigs: true,
+
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		},
@@ -6259,7 +6265,11 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	withoutTS := hlc.Timestamp{}
 
 	const numAccounts = 1
-	serverArgs := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
+		// Disabled to probabilistically spin up a tenant in each server because the
+		// test explicitly sets up tenants to test on.
+		DisableDefaultTestTenant: true}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	var numExportRequests int
 
@@ -6734,7 +6744,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
-	}}
+
+		// Disabled to probabilistically spin up a tenant in each server because the
+		// test explicitly sets up tenants to test on.
+		DisableDefaultTestTenant: true},
+	}
 
 	const numAccounts = 1
 	ctx := context.Background()
@@ -7207,6 +7221,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 
 	allowRequest := make(chan struct{})
 	defer close(allowRequest)
+
 	params := base.TestClusterArgs{}
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
@@ -7238,7 +7253,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.Regexp(t,
-		`timeout: operation "ExportRequest for span /Table/\d+/.*\" timed out after \S+ \(given timeout 3s\)`,
+		`timeout: operation "ExportRequest for span .*/Table/\d+/.*\" timed out after \S+ \(given timeout 3s\)`,
 		err.Error())
 }
 
@@ -8180,7 +8195,9 @@ func TestRestoreJobEventLogging(t *testing.T) {
 	defer jobs.TestingSetProgressThresholds()()
 
 	baseDir := "testdata"
-	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	args := base.TestServerArgs{
+		ExternalIODir: baseDir,
+		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
@@ -8188,7 +8205,8 @@ func TestRestoreJobEventLogging(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(
+			raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
@@ -8261,7 +8279,10 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	close(blockBackfills)
 
 	var chunkCount int32
-	serverArgs := base.TestServerArgs{}
+	// Disable running within a tenant because expected index span is not received.
+	// More investigation is necessary.
+	// https://github.com/cockroachdb/cockroach/issues/88633
+	serverArgs := base.TestServerArgs{DisableDefaultTestTenant: true}
 	serverArgs.Knobs = base.TestingKnobs{
 		// Configure knobs to block the index backfills.
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -8292,6 +8313,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	)
 	defer cleanupFn()
 	kvDB := tc.Server(0).DB()
+	codec := tc.TenantOrServer(0).ExecutorConfig().(sql.ExecutorConfig).Codec
 
 	locationToDir := func(location string) string {
 		return strings.Replace(location, localFoo, filepath.Join(rawDir, "foo"), 1)
@@ -8316,7 +8338,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 	fullBackupSpans := getSpansFromManifest(ctx, t, locationToDir(fullBackup))
 	require.Equal(t, 1, len(fullBackupSpans))
-	require.Equal(t, fmt.Sprintf("/Table/%d/{1-2}", dataBankTableID), fullBackupSpans[0].String())
+	require.Regexp(t, fmt.Sprintf(".*/Table/%d/{1-2}", dataBankTableID), fullBackupSpans[0].String())
 
 	// Now we're going to add an index. We should only see the index
 	// appear in the backup once it is PUBLIC.
@@ -8371,7 +8393,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 		inc3Loc, fullBackup, inc1Loc, inc2Loc)
 	inc3Spans := getSpansFromManifest(ctx, t, locationToDir(inc3Loc))
 	require.Equal(t, 1, len(inc3Spans))
-	require.Equal(t, fmt.Sprintf("/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
+	require.Regexp(t, fmt.Sprintf(".*/Table/%d/{2-3}", dataBankTableID), inc3Spans[0].String())
 
 	// Drop the index.
 	sqlDB.Exec(t, `DROP INDEX new_balance_idx`)
@@ -8390,7 +8412,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 			fullBackup, inc1Loc, inc2Loc, inc3Loc)
 		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[1]`, [][]string{{numAccountsStr}})
 		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[2]`, [][]string{{numAccountsStr}})
-		kvCount, err := getKVCount(ctx, kvDB, "restoredb", "bank")
+		kvCount, err := getKVCount(ctx, kvDB, codec, "restoredb", "bank")
 		require.NoError(t, err)
 		require.Equal(t, 2*numAccounts, kvCount)
 
@@ -8425,7 +8447,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 		// The synthesized index addition has completed.
 		sqlDB.CheckQueryResults(t, `SELECT count(*) FROM restoredb.bank@[2]`, [][]string{{numAccountsStr}})
-		kvCount, err := getKVCount(ctx, kvDB, "restoredb", "bank")
+		kvCount, err := getKVCount(ctx, kvDB, codec, "restoredb", "bank")
 		require.NoError(t, err)
 		require.Equal(t, 2*numAccounts, kvCount)
 
@@ -8445,7 +8467,7 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 
 		// Allow backfills to proceed.
 		close(blockBackfills)
-		kvCount, err := getKVCount(ctx, kvDB, "restoredb", "bank")
+		kvCount, err := getKVCount(ctx, kvDB, codec, "restoredb", "bank")
 		require.NoError(t, err)
 		require.Equal(t, numAccounts, kvCount)
 
@@ -8546,17 +8568,17 @@ CREATE DATABASE test; USE test;
 CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX idx_2 (b), INDEX idx_3 (c), INDEX idx_4 (b, c));
 DROP INDEX idx_3;
 `)
-
+	codec := keys.SystemSQLCodec
 	clearHistoricalTableVersions := func() {
 		// Save the latest value of the descriptor.
-		table := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "t")
+		table := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "test", "t")
 		mutTable := tabledesc.NewBuilder(table.TableDesc()).BuildExistingMutableTable()
 		mutTable.Version = 0
 
 		// Reset the descriptor table to clear the revisions of the initial table
 		// descriptor.
 		var b kv.Batch
-		descriptorTableSpan := makeTableSpan(keys.DescriptorTableID)
+		descriptorTableSpan := makeTableSpan(codec, keys.DescriptorTableID)
 		b.AddRawRequest(&roachpb.RevertRangeRequest{
 			RequestHeader: roachpb.RequestHeader{
 				Key:    descriptorTableSpan.Key,
@@ -8612,7 +8634,9 @@ func TestRestorePauseOnError(t *testing.T) {
 	defer jobs.TestingSetProgressThresholds()()
 
 	baseDir := "testdata"
-	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	args := base.TestServerArgs{
+		ExternalIODir: baseDir,
+		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
@@ -8620,7 +8644,13 @@ func TestRestorePauseOnError(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		jobRegistry := tc.Servers[i].JobRegistry()
+		if tc.StartedDefaultTestTenant() {
+			jobRegistry = tc.Servers[i].TestTenants()[0].JobRegistry()
+		}
+
+		jobRegistry.(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.
+			Resumer{
 			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
@@ -9026,6 +9056,9 @@ func TestExcludeDataFromBackupAndRestore(t *testing.T) {
 	tc, sqlDB, iodir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 10,
 		InitManualReplication, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
+				// Disabled to run within tenants because the function that sets up the restoring cluster
+				// has not been configured yet to run within tenants.
+				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(), // speeds up test
 					SpanConfig: &spanconfig.TestingKnobs{
@@ -9695,7 +9728,7 @@ func TestBackupNoOverwriteCheckpoint(t *testing.T) {
 
 	// List all the BACKUP-CHECKPOINTS in the progress directory and see
 	// if there are as many as we'd expect if none got overwritten.
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	execCfg := tc.TenantOrServer(0).ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
 	store, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, "userfile:///a", username.RootUserName())
 	require.NoError(t, err)
@@ -9913,7 +9946,10 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 	defer jobs.TestingSetProgressThresholds()()
 
 	baseDir := "testdata"
-	args := base.TestServerArgs{ExternalIODir: baseDir, Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
+	args := base.TestServerArgs{
+
+		ExternalIODir: baseDir,
+		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
 	params := base.TestClusterArgs{ServerArgs: args}
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
 		InitManualReplication, params)
@@ -9921,7 +9957,7 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 
 	var forceFailure bool
 	for i := range tc.Servers {
-		tc.Servers[i].JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+		tc.TenantOrServer(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
 			jobspb.TypeRestore: func(raw jobs.Resumer) jobs.Resumer {
 				r := raw.(*restoreResumer)
 				r.testingKnobs.beforePublishingDescriptors = func() error {
