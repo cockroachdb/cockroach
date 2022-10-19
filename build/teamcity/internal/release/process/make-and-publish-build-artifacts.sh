@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -euxo pipefail
 
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
@@ -65,20 +65,53 @@ $BAZEL_BIN/pkg/cmd/publish-provisional-artifacts/publish-provisional-artifacts_/
 EOF
 tc_end_block "Compile and publish S3 artifacts"
 
-tc_start_block "Make and push docker image"
+tc_start_block "Make and push multiarch docker images"
 configure_docker_creds
 docker_login_with_google
 
-# TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
-# NB: tar usually stops reading as soon as it sees an empty block but that makes
-# curl unhappy, so passing `i` will cause it to read to the end.
-curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
-cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
-cp -r licenses build/deploy/
+gcr_tag="${gcr_repository}:${build_name}"
+declare -a docker_manifest_amends
 
-docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
-docker push "${gcr_repository}:${build_name}"
-tc_end_block "Make and push docker image"
+for platform_name in "${platform_names[@]}"; do
+  tarball_arch="$(tarball_arch_from_platform_name "$platform_name")"
+  docker_arch="$(docker_arch_from_platform_name "$platform_name")"
+  linux_platform=linux
+  if [[ $tarball_arch == "aarch64" ]]; then
+    linux_platform=linux-3.7.10-gnu
+  fi
+  # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
+  # NB: tar usually stops reading as soon as it sees an empty block but that makes
+  # curl unhappy, so passing `--ignore-zeros` will cause it to read to the end.
+  cp --recursive "build/deploy" "build/deploy-${docker_arch}"
+  curl \
+    --fail \
+    --silent \
+    --show-error \
+    --output /dev/stdout \
+    --url "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
+    | tar \
+    --directory="build/deploy-${docker_arch}" \
+    --extract \
+    --file=/dev/stdin \
+    --ungzip \
+    --ignore-zeros \
+    --strip-components=1
+  cp --recursive licenses "build/deploy-${docker_arch}"
+  # Move the libs where Dockerfile expects them to be
+  mv build/deploy-${docker_arch}/lib/* build/deploy-${docker_arch}/
+  rmdir build/deploy-${docker_arch}/lib
+
+  build_docker_tag="${gcr_repository}:${docker_arch}-${build_name}"
+  docker build --no-cache --pull --platform "linux/${docker_arch}" --tag="${build_docker_tag}" "build/deploy-${docker_arch}"
+  docker push "$build_docker_tag"
+  docker_manifest_amends+=("--amend" "${build_docker_tag}")
+done
+
+docker manifest create "${gcr_tag}" "${docker_manifest_amends[@]}"
+docker manifest push "${gcr_tag}"
+tc_end_block "Make and push multiarch docker images"
+
+
 
 # Make finding the tag name easy.
 cat << EOF
