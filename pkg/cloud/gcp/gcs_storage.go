@@ -13,7 +13,6 @@ package gcp
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net/url"
 	"path"
@@ -32,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/http2"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/impersonate"
@@ -260,8 +259,7 @@ func createImpersonateCredentials(
 func (g *gcsStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	_, sp := tracing.ChildSpan(ctx, "gcs.Writer")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.Writer: %s",
-		path.Join(g.prefix, basename))})
+	sp.SetTag("path", attribute.StringValue(path.Join(g.prefix, basename)))
 
 	w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
 	w.ChunkSize = int(cloud.WriteChunkSize.Get(&g.settings.SV))
@@ -285,8 +283,7 @@ func (g *gcsStorage) ReadFileAt(
 
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.ReadFileAt")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.ReadFileAt: %s",
-		path.Join(g.prefix, basename))})
+	sp.SetTag("path", attribute.StringValue(path.Join(g.prefix, basename)))
 
 	r := cloud.NewResumingReader(ctx,
 		func(ctx context.Context, pos int64) (io.ReadCloser, error) {
@@ -320,7 +317,7 @@ func (g *gcsStorage) List(ctx context.Context, prefix, delim string, fn cloud.Li
 	dest := cloud.JoinPathPreservingTrailingSlash(g.prefix, prefix)
 	ctx, sp := tracing.ChildSpan(ctx, "gcs.List")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("gcs.List: %s", dest)})
+	sp.SetTag("path", attribute.StringValue(dest))
 
 	it := g.bucket.Objects(ctx, &gcs.Query{Prefix: dest, Delimiter: delim})
 	for {

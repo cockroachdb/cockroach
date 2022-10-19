@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/gogo/protobuf/types"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
@@ -621,7 +621,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 	}
 
 	ctx, sp := tracing.ChildSpan(ctx, "s3.Writer")
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.Writer: %s", path.Join(s.prefix, basename))})
+	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
 		// Upload the file to S3.
@@ -681,7 +681,7 @@ func (s *s3Storage) ReadFileAt(
 ) (ioctx.ReadCloserCtx, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.ReadFileAt")
 	defer sp.Finish()
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.ReadFileAt: %s", path.Join(s.prefix, basename))})
+	sp.SetTag("path", attribute.StringValue(path.Join(s.prefix, basename)))
 
 	stream, err := s.openStreamAt(ctx, basename, offset)
 	if err != nil {
@@ -727,7 +727,7 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
-	sp.RecordStructured(&types.StringValue{Value: fmt.Sprintf("s3.List: %s", dest)})
+	sp.SetTag("path", attribute.StringValue(dest))
 
 	client, err := s.getClient(ctx)
 	if err != nil {
