@@ -171,6 +171,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// Then use them here.
 
 	serverStatus := &serverStatus{}
-	serverStatus.setStarted(sqlServer)
+	serverStatus.setStarted(sqlServer, stopper)
 	return waitForShutdown(stopper, sqlServer.ShutdownRequested(), signalCh, serverStatus)
 }
