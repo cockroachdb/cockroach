@@ -478,10 +478,23 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 		if err := ca.tick(); err != nil {
 			var e kvevent.ErrBufferClosed
 			if errors.As(err, &e) {
-				// ErrBufferClosed is a signal that
-				// our kvfeed has exited expectedly.
+				// ErrBufferClosed is a signal that our kvfeed has exited expectedly. If
+				// so we need to make sure all events are cleared to the sink before
+				// exiting.
 				err = e.Unwrap()
 				if errors.Is(err, kvevent.ErrNormalRestartReason) {
+					log.Infof(ca.Ctx, "flushing event consumer before expected exit")
+					if ca.eventConsumer != nil {
+						if err := ca.eventConsumer.Flush(ca.Ctx); err != nil {
+							log.Warningf(ca.Ctx, "error flushing event consumer: %s", err)
+						}
+					}
+					log.Infof(ca.Ctx, "flushing sink before expected exit")
+					if ca.sink != nil {
+						if err := ca.sink.Flush(ca.Ctx); err != nil {
+							log.Warningf(ca.Ctx, `error flushing sink: %s`, err)
+						}
+					}
 					err = nil
 				}
 			} else {
