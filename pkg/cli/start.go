@@ -928,7 +928,7 @@ func startShutdownAsync(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
 	serverStatusMu *serverStatus,
-	stopWithoutDrain chan struct{},
+	stopWithoutDrain chan<- struct{},
 	shouldDrain bool,
 ) {
 	// StartAlwaysFlush both flushes and ensures that subsequent log
