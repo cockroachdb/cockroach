@@ -479,6 +479,65 @@ message DrainResponse {
   reserved 1;
 }
 
+// DecommissionPreCheckRequest requests that preliminary checks be run to
+// ensure that the specified node(s) can be decommissioned successfully.
+message DecommissionPreCheckRequest {
+  repeated int32 node_ids = 1 [(gogoproto.customname) = "NodeIDs",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+  // The maximum number of ranges for which to report errors.
+  int32 num_replica_report = 2;
+
+  // If true, all ranges on the checked nodes must only need replacement or
+  // removal for decommissioning.
+  bool strict_readiness = 3;
+}
+
+// DecommissionPreCheckResponse returns the number of replicas that encountered
+// errors when running preliminary decommissioning checks, as well as the
+// associated error messages and traces, for each node.
+message DecommissionPreCheckResponse {
+  enum NodeReadiness {
+    UNKNOWN = 0;
+    READY = 1;
+    ALREADY_DECOMMISSIONED = 2;
+    ALLOCATION_ERRORS = 3;
+  }
+
+  message RangeCheckResult {
+    int32 range_id = 1 [ (gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+    // The action determined by the allocator that is needed for the range.
+    string allocatorAction = 2;
+    // All trace events collected while processing the range in the allocator.
+    repeated TraceEvent events = 3;
+    // The error message from the allocator's processing, if any.
+    string error = 4;
+  }
+
+  message NodeCheckResult {
+    int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+
+    NodeReadiness decommission_readiness = 2;
+
+    // The liveness status of the given node.
+    kv.kvserver.liveness.livenesspb.NodeLivenessStatus liveness_status = 3;
+
+    // The number of total replicas on the node, computed by scanning range
+    // descriptors.
+    int64 replica_count = 4;
+
+    // The details and recorded traces from preprocessing each range with a
+    // replica on the checked nodes that resulted in error, up to the maximum
+    // specified in the request.
+    repeated RangeCheckResult checked_ranges = 5 [(gogoproto.nullable) = false];
+  }
+
+  // Status of the preliminary decommission checks across nodes.
+  repeated NodeCheckResult checked_nodes = 1 [(gogoproto.nullable) = false];
+}
+
 // DecommissionStatusRequest requests the decommissioning status for the
 // specified or, if none are specified, all nodes.
 message DecommissionStatusRequest {
@@ -1070,6 +1129,11 @@ service Admin {
   // We do not expose this via HTTP unless we have a way to authenticate
   // + authorize streaming RPC connections. See #42567.
   rpc Drain(DrainRequest) returns (stream DrainResponse) {
+  }
+
+  // DecommissionPreCheck requests that the server execute preliminary checks
+  // to evaluate the possibility of successfully decommissioning a given node.
+  rpc DecommissionPreCheck(DecommissionPreCheckRequest) returns (DecommissionPreCheckResponse) {
   }
 
   // Decommission puts the node(s) into the specified decommissioning state.
