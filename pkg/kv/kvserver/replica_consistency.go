@@ -458,7 +458,7 @@ func (*Replica) checksumInitialWait(ctx context.Context) time.Duration {
 }
 
 // computeChecksumDone sends the checksum computation result to the receiver.
-func (*Replica) computeChecksumDone(rc *replicaChecksum, result *replicaHash) {
+func (*Replica) computeChecksumDone(rc *replicaChecksum, result *ReplicaDigest) {
 	var c CollectChecksumResponse
 	if result != nil {
 		c.Checksum = result.SHA512[:]
@@ -475,21 +475,23 @@ func (*Replica) computeChecksumDone(rc *replicaChecksum, result *replicaHash) {
 	close(rc.result)
 }
 
-type replicaHash struct {
-	SHA512                    [sha512.Size]byte
-	PersistedMS, RecomputedMS enginepb.MVCCStats
+// ReplicaDigest holds a summary of the replicated state on a replica.
+type ReplicaDigest struct {
+	SHA512       [sha512.Size]byte
+	PersistedMS  enginepb.MVCCStats
+	RecomputedMS enginepb.MVCCStats
 }
 
-// replicaSHA512 computes the SHA512 hash of the replica data at the given
-// snapshot. Either the full replicated state is taken into account, or only
-// RangeAppliedState (which includes MVCC stats), depending on the mode.
-func replicaSHA512(
+// CalcReplicaDigest computes the SHA512 hash and MVCC stats of the replica data
+// at the given snapshot. Depending on the mode, it either considers the full
+// replicated state, or only RangeAppliedState (including MVCC stats).
+func CalcReplicaDigest(
 	ctx context.Context,
 	desc roachpb.RangeDescriptor,
 	snap storage.Reader,
 	mode roachpb.ChecksumMode,
 	limiter *quotapool.RateLimiter,
-) (*replicaHash, error) {
+) (*ReplicaDigest, error) {
 	statsOnly := mode == roachpb.ChecksumMode_CHECK_STATS
 
 	// Iterate over all the data in the range.
@@ -573,20 +575,17 @@ func replicaSHA512(
 		return err
 	}
 
-	var ms enginepb.MVCCStats
 	// In statsOnly mode, we hash only the RangeAppliedState. In regular mode, hash
 	// all of the replicated key space.
+	var result ReplicaDigest
 	if !statsOnly {
-		var err error
-		ms, err = rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0, /* nowNanos */
+		ms, err := rditer.ComputeStatsForRangeWithVisitors(&desc, snap, 0, /* nowNanos */
 			pointKeyVisitor, rangeKeyVisitor)
 		if err != nil {
 			return nil, err
 		}
+		result.RecomputedMS = ms
 	}
-
-	var result replicaHash
-	result.RecomputedMS = ms
 
 	rangeAppliedState, err := stateloader.Make(desc.RangeID).LoadRangeAppliedState(ctx, snap)
 	if err != nil {
@@ -691,7 +690,7 @@ func (r *Replica) computeChecksumPostApply(
 		); err != nil {
 			log.Errorf(ctx, "checksum collection did not join: %v", err)
 		} else {
-			result, err := replicaSHA512(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
+			result, err := CalcReplicaDigest(ctx, desc, snap, cc.Mode, r.store.consistencyLimiter)
 			if err != nil {
 				log.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil
