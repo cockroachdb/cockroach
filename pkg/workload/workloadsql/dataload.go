@@ -31,6 +31,9 @@ import (
 type InsertsDataLoader struct {
 	BatchSize   int
 	Concurrency int
+
+	// If true, UPSERT will be used instead of INSERT
+	UseUpsert bool
 }
 
 // InitialDataLoad implements the InitialDataLoader interface.
@@ -107,7 +110,11 @@ func (l InsertsDataLoader) InitialDataLoad(
 						}
 					}
 					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
+					cmd := "INSERT"
+					if l.UseUpsert {
+						cmd = "UPSERT"
+					}
+					fmt.Fprintf(&insertStmtBuf, `%s INTO "%s" VALUES `, cmd, table.Name)
 					params = params[:0]
 					numRows = 0
 					return nil
