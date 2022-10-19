@@ -424,13 +424,12 @@ func TestBackupManifestFileCount(t *testing.T) {
 	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size='128mb'")
 	sqlDB.Exec(t, "BACKUP INTO 'userfile:///backup'")
 	rows := sqlDB.QueryRow(t, "SELECT count(distinct(path)) FROM [SHOW BACKUP FILES FROM LATEST IN 'userfile:///backup']")
 	var count int
 	rows.Scan(&count)
-	// We expect no more than 1 file per backup processor
-	require.True(t, multiNode >= count)
+	// We expect no more than (# of backup processors) file per backup processor
+	require.True(t, multiNode*6 >= count)
 }
 
 func TestBackupRestoreAppend(t *testing.T) {
@@ -8942,50 +8941,6 @@ CREATE SCHEMA db.s;
 `)
 
 	sqlDB.Exec(t, `BACKUP DATABASE db TO 'nodelocal://0/test/2'`)
-}
-
-func TestBackupMemMonitorSSTSinkQueueSize(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	memoryMonitor := mon.NewMonitor(
-		"test-mem",
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		-1,            /* increment */
-		math.MaxInt64, /* noteworthy */
-		cluster.MakeTestingClusterSettings(),
-	)
-	ctx := context.Background()
-	byteLimit := 14 << 20 // 14 MiB
-	memoryMonitor.Start(ctx, nil, mon.NewStandaloneBudget(int64(byteLimit)))
-	defer memoryMonitor.Stop(ctx)
-	params := base.TestClusterArgs{}
-	knobs := base.TestingKnobs{
-		DistSQL: &execinfra.TestingKnobs{
-			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
-				BackupMemMonitor: memoryMonitor,
-			},
-		},
-	}
-	params.ServerArgs.Knobs = knobs
-
-	const numAccounts = 100
-
-	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
-		InitManualReplication, params)
-	defer cleanup()
-
-	// Run a backup and expect the Grow() for the fileSSTSink to return a memory error
-	// since the default queue byte size is 16MiB.
-	sqlDB.ExpectErr(t, "failed to reserve memory for fileSSTSink queue", `BACKUP INTO 'nodelocal://0/foo'`)
-
-	// Reduce the queue byte size cluster setting.
-	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '13MiB'`)
-
-	// Now the backup should succeed because it is below the `byteLimit`.
-	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://0/bar'`)
 }
 
 // TestBackupRestoreSeperateIncrementalPrefix tests that a backup/restore round
