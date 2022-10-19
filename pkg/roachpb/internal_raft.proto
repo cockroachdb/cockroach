@@ -12,7 +12,6 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
 // RaftTruncatedState contains metadata about the truncated portion of the raft log.
