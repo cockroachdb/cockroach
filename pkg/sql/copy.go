@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -45,6 +46,18 @@ const CopyBatchRowSizeDefault = 100
 
 // When this many rows are in the copy buffer, they are inserted.
 var copyBatchRowSize = util.ConstantWithMetamorphicTestRange("copy-batch-size", CopyBatchRowSizeDefault, 1, 10000)
+
+// SetCopyFromBatchSize exports overriding copy batch size for test code.
+func SetCopyFromBatchSize(i int) int {
+	old := copyBatchRowSize
+	if buildutil.CrdbTestBuild {
+		copyBatchRowSize = i
+	} else {
+		// We don't want non-test code mutating globals.
+		panic("SetCopyFromBatchSize is a test utility that requires crdb_test tag")
+	}
+	return old
+}
 
 type copyMachineInterface interface {
 	run(ctx context.Context) error
@@ -766,7 +779,6 @@ func (p *planner) preparePlannerForCopy(
 		txn = kv.NewTxnWithSteppingEnabled(ctx, p.execCfg.DB, nodeID, sessiondatapb.Normal)
 		txnTs = p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
-
 	}
 	txnOpt.resetPlanner(ctx, p, txn, txnTs, stmtTs)
 	if implicitTxn {
