@@ -331,3 +331,27 @@ user testuser2
 
 statement ok
 DROP TABLE t1;
+
+# In issue #90238 we noticed that reassign owned by does not skip
+# over dropped descriptor as it scans the entire descriptors table
+# to determine which ones to update ownership on. This can lead be
+# problematic scenarios since it will attempt to modify ownership
+# on descriptors that may have had their parents cleaned up.
+subtest reassign_owned_by_with_dropped_descriptors
+user root
+statement ok
+CREATE DATABASE db1;
+ALTER DATABASE db1 OWNER TO testuser;
+CREATE SCHEMA db1.sc1;
+ALTER SCHEMA db1.sc1 OWNER TO testuser;
+CREATE TABLE db1.sc1.table(n int);
+ALTER TABLE db1.sc1.table OWNER TO testuser;
+
+statement ok
+DROP SCHEMA db1.sc1 CASCADE;
+
+statement ok
+use db1;
+REASSIGN OWNED BY testuser TO testuser2;
+
+
