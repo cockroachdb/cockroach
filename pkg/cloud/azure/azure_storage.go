@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
@@ -31,6 +32,14 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
+
+var maxConcurrentUploadBuffers = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"cloudstorage.azure.concurrent_upload_buffers",
+	"controls the number of concurrent buffers that will be used by the Azure client when uploading chunks."+
+		"Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload",
+	1,
+).WithPublic()
 
 const (
 	// AzureAccountNameParam is the query parameter for account_name in an azure URI.
@@ -151,6 +160,7 @@ func (s *azureStorage) Writer(ctx context.Context, basename string) (io.WriteClo
 		_, err := azblob.UploadStreamToBlockBlob(
 			ctx, r, blob, azblob.UploadStreamToBlockBlobOptions{
 				BufferSize: int(cloud.WriteChunkSize.Get(&s.settings.SV)),
+				MaxBuffers: int(maxConcurrentUploadBuffers.Get(&s.settings.SV)),
 			},
 		)
 		return err
