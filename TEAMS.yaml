@@ -75,7 +75,7 @@ cockroachdb/cluster-ui:
 cockroachdb/obs-inf-prs:
   triage_column_id: 14196277
 cockroachdb/multi-tenant:
-  triage_column_id: 16575985
+  triage_column_id: 486214074
 cockroachdb/jobs:
   aliases:
     cockroachdb/jobs-prs: other
