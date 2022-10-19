@@ -4,6 +4,6 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Del(ctx, "a" /* @s1 */) // <nil>
   txn.Del(ctx, "b" /* @s2 */) // <nil>
   return nil
-}) // @0.000000002,0 <nil>
-"a"/0.000000002,0 @ s1 <nil>
-committed txn missing write at seq s2: [d]"a":0.000000002,0-><nil>@s1 [d]"b":missing-><nil>@s2
+}) // @0.000000001,0 <nil>
+"a"/0.000000001,0 @ s1 <nil>
+committed txn missing write at seq s2: [d]"a":0.000000001,0-><nil>@s1 [d]"b":missing-><nil>@s2

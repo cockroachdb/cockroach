@@ -1,11 +1,11 @@
 echo
 ----
-db0.Put(ctx, "a", v1) // @0.000000003,0 <nil>
+db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-  txn.DelRange(ctx, "a", "c", true /* @s2 */) // @0.000000003,0 (a, b, <nil>)
+  txn.DelRange(ctx, "a", "c", true /* @s2 */) // @0.000000002,0 (a, b, <nil>)
   return nil
-}) // @0.000000003,0 <nil>
-"a"/0.000000002,0 @ s1 v1
-"a"/0.000000003,0 @ s2 <nil>
-mismatched write timestamp 0.000000003,0: [w]"a":0.000000002,0->v1@s1
-committed txn missing write at seq s2: [dr.d]"a":0.000000003,0-><nil>@s2 [dr.d]"b":missing-><nil>@s2 [s]{a-c}:{gap:[<min>, 0.000000002,0),[0.000000003,0, <max>)}->[]
+}) // @0.000000002,0 <nil>
+"a"/0.000000001,0 @ s1 v1
+"a"/0.000000002,0 @ s2 <nil>
+mismatched write timestamp 0.000000001,0 and exec timestamp 0.000000002,0: [w]"a":0.000000001,0->v1@s1
+committed txn missing write at seq s2: [dr.d]"a":0.000000002,0-><nil>@s2 [dr.d]"b":missing-><nil>@s2 [dr.s]{a-c}:{gap:[<min>, 0.000000001,0),[0.000000002,0, <max>)}->[]

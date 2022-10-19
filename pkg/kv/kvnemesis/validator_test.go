@@ -104,8 +104,8 @@ func TestValidate(t *testing.T) {
 	)
 
 	const (
-		noTS = 0
-		t1   = 1 + iota
+		noTS = iota
+		t1
 		t2
 		t3
 		t4
@@ -442,6 +442,7 @@ func TestValidate(t *testing.T) {
 					withResult(del(`a`, s2)),
 				), t1)),
 			},
+			kvs: kvs(tombstone("a", t1, s2)),
 		},
 		{
 			name: "two transactionally committed deletes of the same key",
@@ -593,7 +594,7 @@ func TestValidate(t *testing.T) {
 				step(withReadResultTS(get(`a`), ``, t1)),
 				step(withResultTS(put(`a`, s1), t2)),
 			},
-			kvs: kvs(kv(`a`, t1, s1)),
+			kvs: kvs(kv(`a`, t2, s1)),
 		},
 		{
 			name: "one read before delete",

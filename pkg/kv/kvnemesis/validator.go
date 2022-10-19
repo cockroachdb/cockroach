@@ -322,19 +322,28 @@ func (v *validator) tryConsumeRangedWrite(
 	}
 	opSpan := roachpb.Span{Key: key, EndKey: endKey}
 
-	var sg roachpb.SpanGroup
+	var consumed []tsSpanVal
+	var remaining []tsSpanVal
 	for i := range svs {
 		cur := svs[i]
 		if !opSpan.Contains(cur.Span) {
-			// Operation wrote outside of its bounds, so don't
-			// consume the write leading to a failure.
-			return nil, false
+			// Operation must have written this write but doesn't want to consume it
+			// right now, so skip it. For example, DeleteRange decomposes into point
+			// deletes and will look these deletes up here one by one. If an operation
+			// truly wrote outside of its span, this will cause a failure in
+			// validation.
+			remaining = append(remaining, cur)
+			continue
 		}
-		sg.Add(cur.Span)
+		consumed = append(consumed, cur)
 	}
 
-	delete(v.kvBySeq, seq)
-	return svs, true
+	if len(remaining) == 0 {
+		delete(v.kvBySeq, seq)
+	} else {
+		v.kvBySeq[seq] = remaining
+	}
+	return consumed, len(consumed) > 0
 }
 
 // processOp turns the result of an operation into its observations (which are
@@ -426,7 +435,8 @@ func (v *validator) processOp(buffering bool, op Operation) {
 					Key:    t.Key,
 					EndKey: t.EndKey,
 				},
-				KVs: nil,
+				IsDeleteRange: true, // just for printing
+				KVs:           nil,
 			})
 		}
 	case *DeleteRangeUsingTombstoneOperation:
@@ -809,7 +819,7 @@ func (v *validator) checkAtomicCommitted(
 				}
 				if then, now := lastWrites.Slice(), g.Slice(); !reflect.DeepEqual(then, now) {
 					v.failures = append(v.failures,
-						errors.AssertionFailedf("%s has write %q partially overlapping %v", atomicType, sp, then))
+						errors.AssertionFailedf("%s has write %q partially overlapping %+v; subtracting and re-adding gave %+v", atomicType, sp, then, now))
 					return
 				}
 			}
@@ -825,11 +835,11 @@ func (v *validator) checkAtomicCommitted(
 				continue
 			}
 
+			// NB: we allow writeTS to change here, since that will be caught by
+			// validation below anyway, and we can produce better errors then since
+			// read timestamps will be filled in.
 			if writeTS.IsEmpty() {
 				writeTS = o.Timestamp
-			} else if o.Timestamp != writeTS {
-				failure = fmt.Sprintf("%s wrote at MVCC timestamps %s and %s", atomicType, writeTS, o.Timestamp)
-				break
 			}
 
 			if len(o.EndKey) == 0 { // point write
@@ -852,7 +862,7 @@ func (v *validator) checkAtomicCommitted(
 	// the most recent writes materialized (i.e. showed up in MVCC). Check if any
 	// key that was written twice in the txn had the overwritten writes
 	// materialize in kv.
-	for _, observation := range txnObservations {
+	for idx, observation := range txnObservations {
 		if failure != `` {
 			break
 		}
@@ -862,14 +872,15 @@ func (v *validator) checkAtomicCommitted(
 			// writeTS was populated above as the unique timestamp at which the writes became
 			// visible. We know the operation had writes (we're looking at one now) and so
 			// this operation has either materialized or is covered by a later one that did,
-			// and so we must have a timestamp here.
+			// and so we must have a timestamp here. We defer the failure to the next for
+			// loop, as we will have filled in the read timestamps at that time.
 			if writeTS.IsEmpty() {
-				failure = atomicType + ` has no materialized write`
-				break
+				continue
 			}
 
-			sp := roachpb.Span{Key: o.Key, EndKey: o.EndKey}
-			if !lastWrites.Encloses(sp) && o.Timestamp.IsSet() {
+			_, isLastWrite := lastWritesByIdx[idx]
+
+			if !isLastWrite && o.Timestamp.IsSet() {
 				failure = `committed txn overwritten key had write`
 				break
 			}
@@ -927,7 +938,10 @@ func (v *validator) checkAtomicCommitted(
 		switch o := observation.(type) {
 		case *observedWrite:
 			_, isLastWrite := lastWritesByIdx[idx]
-			if isLastWrite && o.Timestamp.IsEmpty() {
+			if !isLastWrite {
+				continue
+			}
+			if o.Timestamp.IsEmpty() {
 				failure = atomicType + ` missing write at seq ` + o.Seq.String()
 				continue
 			}

@@ -1,5 +1,5 @@
 echo
 ----
-db0.Put(ctx, "a", v1) // @0.000000002,0 TransactionRetryWithProtoRefreshError:
-"a"/0.000000002,0 @ s1 v1
-uncommitted put had writes: [w]"a":0.000000002,0->v1@s1
+db0.Put(ctx, "a", v1) // @0.000000001,0 TransactionRetryWithProtoRefreshError:
+"a"/0.000000001,0 @ s1 v1
+uncommitted put had writes: [w]"a":0.000000001,0->v1@s1

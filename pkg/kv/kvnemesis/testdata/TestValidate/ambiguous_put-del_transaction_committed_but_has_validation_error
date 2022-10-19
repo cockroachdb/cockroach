@@ -5,6 +5,6 @@ db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Del(ctx, "b" /* @s2 */) // <nil>
   return nil
 }) // result is ambiguous: boom
-"a"/0.000000002,0 @ s1 v1
-"b"/0.000000003,0 @ s2 <nil>
-ambiguous txn non-atomic timestamps: [w]"a":0.000000002,0->v1@s1 [d]"b":0.000000003,0-><nil>@s2
+"a"/0.000000001,0 @ s1 v1
+"b"/0.000000002,0 @ s2 <nil>
+ambiguous txn non-atomic timestamps: [w]"a":0.000000001,0->v1@s1 [d]"b":0.000000002,0-><nil>@s2

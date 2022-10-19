@@ -1,5 +1,5 @@
 echo
 ----
 db0.Del(ctx, "a" /* @s1 */) // result is ambiguous: boom
-db0.Del(ctx, "a" /* @s2 */) // @0.000000003,0 <nil>
-"a"/0.000000003,0 @ s2 <nil>
+db0.Del(ctx, "a" /* @s2 */) // @0.000000002,0 <nil>
+"a"/0.000000002,0 @ s2 <nil>

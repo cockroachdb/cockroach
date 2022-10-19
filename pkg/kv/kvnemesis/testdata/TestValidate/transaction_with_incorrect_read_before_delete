@@ -1,12 +1,12 @@
 echo
 ----
-db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
+db0.Put(ctx, "a", v1) // @0.000000001,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.Get(ctx, "a") // (<nil>, <nil>)
   txn.Del(ctx, "a" /* @s2 */) // <nil>
   txn.Get(ctx, "a") // (<nil>, <nil>)
   return nil
-}) // @0.000000003,0 <nil>
-"a"/0.000000002,0 @ s1 v1
-"a"/0.000000003,0 @ s2 <nil>
-committed txn non-atomic timestamps: [r]"a":[<min>, 0.000000002,0)-><nil> [d]"a":0.000000003,0-><nil>@s2 [r]"a":[<min>, 0.000000002,0),[0.000000003,0, <max>)-><nil>
+}) // @0.000000002,0 <nil>
+"a"/0.000000001,0 @ s1 v1
+"a"/0.000000002,0 @ s2 <nil>
+committed txn non-atomic timestamps: [r]"a":[<min>, 0.000000001,0)-><nil> [d]"a":0.000000002,0-><nil>@s2 [r]"a":[<min>, 0.000000001,0),[0.000000002,0, <max>)-><nil>

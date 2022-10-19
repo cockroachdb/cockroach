@@ -1,15 +1,15 @@
 echo
 ----
-db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
-db0.Put(ctx, "b", v2) // @0.000000003,0 <nil>
-db0.Put(ctx, "c", v3) // @0.000000004,0 <nil>
+db0.Put(ctx, "a", v1) // @0.000000001,0 <nil>
+db0.Put(ctx, "b", v2) // @0.000000002,0 <nil>
+db0.Put(ctx, "c", v3) // @0.000000003,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.DelRange(ctx, "a", "c", true /* @s4 */) // (a, b, <nil>)
   return nil
-}) // @0.000000005,0 <nil>
-db0.Scan(ctx, "a", "d", 0) // @0.000000005,0 (c:v3, <nil>)
-"a"/0.000000002,0 @ s1 v1
-"b"/0.000000003,0 @ s2 v2
-"c"/0.000000004,0 @ s3 v3
-"a"/0.000000005,0 @ s4 <nil>
-"b"/0.000000005,0 @ s4 <nil>
+}) // @0.000000004,0 <nil>
+db0.Scan(ctx, "a", "d", 0) // @0.000000004,0 (c:v3, <nil>)
+"a"/0.000000001,0 @ s1 v1
+"b"/0.000000002,0 @ s2 v2
+"c"/0.000000003,0 @ s3 v3
+"a"/0.000000004,0 @ s4 <nil>
+"b"/0.000000004,0 @ s4 <nil>

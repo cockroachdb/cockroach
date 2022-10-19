@@ -1,14 +1,14 @@
 echo
 ----
-db0.Put(ctx, "a", v1) // @0.000000002,0 <nil>
-db0.Put(ctx, "b", v2) // @0.000000003,0 <nil>
+db0.Put(ctx, "a", v1) // @0.000000001,0 <nil>
+db0.Put(ctx, "b", v2) // @0.000000002,0 <nil>
 {
   b := &Batch{}
   b.Scan(ctx, "a", "c") // (b:v1, <nil>)
   b.Scan(ctx, "b", "d") // (b:v1, <nil>)
   b.Scan(ctx, "c", "e") // <nil>
-  db0.Run(ctx, b) // @0.000000004,0 <nil>
+  db0.Run(ctx, b) // @0.000000003,0 <nil>
 }
-"a"/0.000000002,0 @ s1 v1
-"b"/0.000000003,0 @ s2 v2
-committed batch non-atomic timestamps: [s]{a-c}:{0:[0,0, 0,0), gap:[<min>, 0.000000002,0)}->["b":v1] [s]{b-d}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["b":v1] [s]{c-e}:{gap:[<min>, <max>)}->[]
+"a"/0.000000001,0 @ s1 v1
+"b"/0.000000002,0 @ s2 v2
+committed batch non-atomic timestamps: [s]{a-c}:{0:[0,0, 0,0), gap:[<min>, 0.000000001,0)}->["b":v1] [s]{b-d}:{0:[0,0, 0,0), gap:[<min>, <max>)}->["b":v1] [s]{c-e}:{gap:[<min>, <max>)}->[]
