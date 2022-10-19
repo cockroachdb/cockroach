@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -49,37 +48,6 @@ func (c *CustomFuncs) ArithmeticErrorsOnOverflow(left, right *types.T) bool {
 		return false
 	}
 	return true
-}
-
-// FoldBinaryCheckNull attempts to evaluate a binary expression with
-// constant inputs. The only operations supported are plus and minus. It returns
-// a constant expression if all the following criteria are met:
-//
-//  1. An overload function for the given operator and input types exists and
-//     has an appropriate volatility.
-//  2. There is no error when evaluating the binary expression.
-//
-// If any of these conditions are not met, it returns ok=false.
-func (c *CustomFuncs) FoldBinaryCheckNull(
-	op opt.Operator, left, right opt.ScalarExpr,
-) (_ opt.ScalarExpr, ok bool) {
-	o, ok := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
-	if !ok || !c.CanFoldOperator(o.Volatility) {
-		return nil, false
-	}
-	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
-	// TODO(mgartner): FoldBinaryCheckNull is similar to FoldBinary, except
-	// for this NULL check. The NULL check might not be necessary since we no
-	// longer use this function on TIME and INTERVAL types, so maybe we can
-	// reuse FoldBinary instead.
-	if lDatum == tree.DNull || rDatum == tree.DNull {
-		return nil, false
-	}
-	result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, o.EvalOp, lDatum, rDatum)
-	if err != nil {
-		return nil, false
-	}
-	return c.f.ConstructConstVal(result, o.ReturnType), true
 }
 
 // NormalizeTupleEquality remaps the elements of two tuples compared for
