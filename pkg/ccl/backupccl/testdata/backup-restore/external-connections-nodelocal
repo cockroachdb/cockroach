@@ -19,9 +19,16 @@ exec-sql
 BACKUP INTO 'external://conn-foo/cluster';
 ----
 
+# filter out the tenant_settings row to ensure the test can run within and outside a tenant
 query-sql
-SELECT object_name, object_type, backup_type FROM [SHOW BACKUP LATEST IN
-'external://conn-foo/cluster'] ORDER BY object_name;
+SELECT
+  object_name, object_type, backup_type
+FROM
+ [SHOW BACKUP LATEST IN 'external://conn-foo/cluster']
+WHERE
+ object_name != 'tenant_settings'
+ORDER BY
+  object_name;
 ----
 bank table full
 comments table full
@@ -45,7 +52,6 @@ scheduled_jobs table full
 schema schema full
 settings table full
 system database full
-tenant_settings table full
 ui table full
 users table full
 zones table full

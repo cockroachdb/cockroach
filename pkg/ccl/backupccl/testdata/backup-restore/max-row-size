@@ -17,10 +17,10 @@ exec-sql
 SET CLUSTER SETTING sql.guardrails.max_row_size_err = '16KiB';
 ----
 
-query-sql
+exec-sql expect-error-regex=(row larger than max row size: table 109 family 0 primary key .*/Table/109/1/2/0 size .*)
 INSERT INTO maxrow VALUES (2, repeat('x', 20000))
 ----
-pq: row larger than max row size: table 109 family 0 primary key /Table/109/1/2/0 size 20013
+regex matches error
 
 exec-sql
 BACKUP maxrow INTO 'nodelocal://1/maxrow';
@@ -39,10 +39,10 @@ SELECT i, pg_column_size(s) FROM d2.maxrow ORDER BY i;
 ----
 1 20004
 
-query-sql
+exec-sql expect-error-regex=(row larger than max row size: table 112 family 0 primary key .*/Table/112/1/2/0 size .*)
 INSERT INTO d2.maxrow VALUES (2, repeat('y', 20000));
 ----
-pq: row larger than max row size: table 112 family 0 primary key /Table/112/1/2/0 size 20014
+regex matches error
 
 exec-sql
 SET CLUSTER SETTING sql.guardrails.max_row_size_err = DEFAULT;

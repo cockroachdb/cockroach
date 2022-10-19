@@ -1,4 +1,6 @@
-new-server name=s1 localities=us-east-1,us-west-1,us-west-2,eu-central-1
+# disabled to run within tenant because ALTER SPLIT cmd is not supported within tenant
+
+new-server name=s1 disable-tenant localities=us-east-1,us-west-1,us-west-2,eu-central-1
 ----
 
 exec-sql

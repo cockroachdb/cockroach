@@ -3,8 +3,11 @@
 # appropriately during a cluster restore. The conflicting system tables in the
 # restoring cluster should be copied to a descriptor ID higher than any
 # descriptor in the backup.
+#
+# disabled to run within a tenant because they cannot set zone configs
+# https://github.com/cockroachdb/cockroach/issues/49854?version=v22.2
 
-new-server name=s1
+new-server name=s1 disable-tenant
 ----
 
 exec-sql
@@ -23,7 +26,7 @@ exec-sql
 BACKUP INTO 'nodelocal://0/conflicting-descriptors';
 ----
 
-new-server name=s2 share-io-dir=s1
+new-server name=s2 share-io-dir=s1 disable-tenant
 ----
 
 # Create 4 dummy system tables that will have conflicting IDs with the database,
