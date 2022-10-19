@@ -2543,6 +2543,14 @@ func (s *adminServer) getStatementBundle(ctx context.Context, id int64, w http.R
 	_, _ = io.Copy(w, &bundle)
 }
 
+// DecommissionPreCheck runs checks and returns the DecommissionPreCheckResponse
+// for the given nodes.
+func (s *adminServer) DecommissionPreCheck(
+	ctx context.Context, req *serverpb.DecommissionPreCheckRequest,
+) (*serverpb.DecommissionPreCheckResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DecommissionPreCheck not implemented")
+}
+
 // DecommissionStatus returns the DecommissionStatus for all or the given nodes.
 func (s *adminServer) DecommissionStatus(
 	ctx context.Context, req *serverpb.DecommissionStatusRequest,
