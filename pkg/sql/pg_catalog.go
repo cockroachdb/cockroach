@@ -471,7 +471,16 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				colID := index.GetKeyColumnID(i)
 				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
-				if err := addColumn(column, idxID, uint32(column.GetPGAttributeNum())); err != nil {
+				if err := addColumn(column, idxID, uint32(i+1)); err != nil {
+					return err
+				}
+			}
+
+			for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+				colID := index.GetStoredColumnID(i)
+				idxID := h.IndexOid(table.GetID(), index.GetID())
+				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
+				if err := addColumn(column, idxID, uint32(i+1+index.NumKeyColumns())); err != nil {
 					return err
 				}
 			}
