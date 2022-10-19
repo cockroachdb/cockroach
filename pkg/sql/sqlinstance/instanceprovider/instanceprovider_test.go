@@ -101,6 +101,6 @@ type channelSessionEventListener struct {
 var _ slinstance.SessionEventListener = &channelSessionEventListener{}
 
 // OnSessionDeleted implements the slinstance.SessionEventListener interface.
-func (d *channelSessionEventListener) OnSessionDeleted() {
+func (d *channelSessionEventListener) OnSessionDeleted(context.Context) {
 	close(d.c)
 }
