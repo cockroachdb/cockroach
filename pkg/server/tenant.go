@@ -480,7 +480,7 @@ func makeTenantSQLServerArgs(
 			Clock:             clock,
 			Stopper:           stopper,
 			HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
-			Linearizable:      false,
+			Linearizable:      sqlCfg.Linearizable,
 			Metrics:           txnMetrics,
 			TestingKnobs:      clientKnobs,
 		},
