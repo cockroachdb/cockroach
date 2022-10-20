@@ -138,7 +138,10 @@ func Run(ctx context.Context, cfg Config) error {
 	// Regardless of whether drain succeeds, we must also close the buffer to release
 	// any resources, and to let the consumer (changeAggregator) know that no more writes
 	// are expected so that it can transition to a draining state.
-	err = errors.CombineErrors(f.writer.Drain(ctx), f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason))
+	err = errors.CombineErrors(
+		f.writer.Drain(ctx),
+		f.writer.CloseWithReason(ctx, kvevent.ErrNormalRestartReason),
+	)
 
 	if err == nil {
 		// This context is canceled by the change aggregator when it receives
