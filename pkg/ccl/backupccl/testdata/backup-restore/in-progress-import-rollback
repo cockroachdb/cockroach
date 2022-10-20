@@ -106,11 +106,26 @@ SELECT count(*) FROM d.foofoo;
 ----
 1
 
+# Start and pause another import to ensure the restore checker doesn't spuriously fail on
+# descriptors with an in-progress import.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'import.after_ingest';
+----
+
+exec-sql
+CREATE TABLE foo_offline (i INT PRIMARY KEY, s STRING);
+----
+
+import expect-pausepoint tag=never_unpause
+IMPORT INTO foo_offline (i,s) CSV DATA ('nodelocal://0/export1/export*-n*.0.csv')
+----
+job paused at pausepoint
+
 
 # Even though the full table will get backed up from ts=0 during the next round of incremental
 # backups, only active indexes (foo_idx and foo_new_idx) should appear in the restored cluster.
 exec-sql
-DROP INDEX foo_to_drop_idx;
+DROP INDEX foo@foo_to_drop_idx;
 ----
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
@@ -286,7 +301,7 @@ job tag=bb wait-for-state=cancelled
 # Even though the full table will get backed up from ts=0 during the next round of incremental
 # backups, only active indexes (foo2_idx and foo2_new_idx) should appear in the restored cluster.
 exec-sql
-DROP INDEX foo2_to_drop_idx;
+DROP INDEX foo2@foo2_to_drop_idx;
 ----
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.

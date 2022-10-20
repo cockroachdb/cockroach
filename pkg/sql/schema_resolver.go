@@ -188,6 +188,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 	schemaID := desc.GetParentSchemaID()
 	scDesc, err := sr.descCollection.GetImmutableSchemaByID(ctx, sr.txn, schemaID,
 		tree.SchemaLookupFlags{
+			Required:       true,
 			IncludeOffline: true,
 			IncludeDropped: true,
 			AvoidLeased:    true,
