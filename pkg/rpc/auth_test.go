@@ -179,7 +179,7 @@ func TestTenantAuthRequest(t *testing.T) {
 	makeAdminSplitReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
-		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key}
+		return &roachpb.AdminSplitRequest{RequestHeader: h, SplitKey: s.Key, Class: roachpb.AdminSplitRequest_INGESTION}
 	}
 	makeAdminScatterReq := func(key string) roachpb.Request {
 		s := makeSpan(key)

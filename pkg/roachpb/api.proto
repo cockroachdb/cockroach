@@ -812,6 +812,13 @@ message EndTxnResponse {
 // of hlc.Timestamp{} (I.E. The zero timestamp so they are always eligible for
 // automatic merging).
 message AdminSplitRequest {
+
+  enum Class {
+    ARBITRARY = 0;
+    INGESTION = 1;
+    ORGANIZATION = 2;
+  }
+
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes split_key = 2 [(gogoproto.casttype) = "Key"];
   reserved 3;
@@ -821,6 +828,8 @@ message AdminSplitRequest {
   // cause the split to be rejected. This can be used by a caller to effectively
   // send a "conditional split" request, i.e. a split if not already split.
   repeated bytes predicate_keys = 5 [(gogoproto.casttype) = "Key"];
+
+  Class class = 6;
 }
 
 // An AdminSplitResponse is the return value from the AdminSplit()

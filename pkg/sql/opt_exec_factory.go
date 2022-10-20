@@ -1944,21 +1944,18 @@ func (ef *execFactory) ConstructAlterTableSplit(
 		return nil, err
 	}
 
-	knobs := ef.planner.ExecCfg().TenantTestingKnobs
-	if !(knobs != nil && knobs.AllowSplitAndScatter) && !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
-	}
-
 	expirationTime, err := parseExpirationTime(ef.ctx, ef.planner.EvalContext(), expiration)
 	if err != nil {
 		return nil, err
 	}
 
+	knobs := ef.planner.ExecCfg().TenantTestingKnobs
 	return &splitNode{
-		tableDesc:      index.Table().(*optTable).desc,
-		index:          index.(*optIndex).idx,
-		rows:           input.(planNode),
-		expirationTime: expirationTime,
+		tableDesc:                index.Table().(*optTable).desc,
+		index:                    index.(*optIndex).idx,
+		rows:                     input.(planNode),
+		expirationTime:           expirationTime,
+		testAllowSplitAndScatter: knobs != nil && knobs.AllowSplitAndScatter,
 	}, nil
 }
 

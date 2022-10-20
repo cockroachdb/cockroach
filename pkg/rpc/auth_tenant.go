@@ -129,10 +129,10 @@ func (a tenantAuthorizer) authorize(
 // authBatch authorizes the provided tenant to invoke the Batch RPC with the
 // provided args.
 func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchRequest) error {
-	// Consult reqMethodAllowlist to determine whether each request in the batch
+	// Consult reqAllowed to determine whether each request in the batch
 	// is permitted. If not, reject the entire batch.
 	for _, ru := range args.Requests {
-		if !reqAllowed(ru.GetInner()) {
+		if !reqAllowed(ru.GetInner(), tenID) {
 			return authErrorf("request [%s] not permitted", args.Summary())
 		}
 	}
@@ -149,35 +149,35 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 	return nil
 }
 
-var reqMethodAllowlist = [...]bool{
-	roachpb.Get:            true,
-	roachpb.Put:            true,
-	roachpb.ConditionalPut: true,
-	roachpb.Increment:      true,
-	roachpb.Delete:         true,
-	roachpb.DeleteRange:    true,
-	roachpb.ClearRange:     true,
-	roachpb.RevertRange:    true,
-	roachpb.Scan:           true,
-	roachpb.ReverseScan:    true,
-	roachpb.EndTxn:         true,
-	roachpb.AdminSplit:     true,
-	roachpb.HeartbeatTxn:   true,
-	roachpb.QueryTxn:       true,
-	roachpb.QueryIntent:    true,
-	roachpb.QueryLocks:     true,
-	roachpb.InitPut:        true,
-	roachpb.Export:         true,
-	roachpb.AdminScatter:   true,
-	roachpb.AddSSTable:     true,
-	roachpb.Refresh:        true,
-	roachpb.RefreshRange:   true,
-	roachpb.IsSpanEmpty:    true,
-}
-
-func reqAllowed(r roachpb.Request) bool {
-	m := int(r.Method())
-	return m < len(reqMethodAllowlist) && reqMethodAllowlist[m]
+func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
+	switch t := r.(type) {
+	case *roachpb.GetRequest,
+		*roachpb.PutRequest,
+		*roachpb.ConditionalPutRequest,
+		*roachpb.IncrementRequest,
+		*roachpb.DeleteRequest,
+		*roachpb.DeleteRangeRequest,
+		*roachpb.ClearRangeRequest,
+		*roachpb.RevertRangeRequest,
+		*roachpb.ScanRequest,
+		*roachpb.ReverseScanRequest,
+		*roachpb.EndTxnRequest,
+		*roachpb.HeartbeatTxnRequest,
+		*roachpb.QueryTxnRequest,
+		*roachpb.QueryIntentRequest,
+		*roachpb.QueryLocksRequest,
+		*roachpb.InitPutRequest,
+		*roachpb.ExportRequest,
+		*roachpb.AdminScatterRequest,
+		*roachpb.AddSSTableRequest,
+		*roachpb.RefreshRequest,
+		*roachpb.RefreshRangeRequest,
+		*roachpb.IsSpanEmptyRequest:
+		return true
+	case *roachpb.AdminSplitRequest:
+		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID == roachpb.SystemTenantID
+	}
+	return false
 }
 
 // authRangeLookup authorizes the provided tenant to invoke the RangeLookup RPC
