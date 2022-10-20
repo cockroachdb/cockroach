@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
@@ -303,13 +304,23 @@ type cloudStorageSink struct {
 	// called, these fields are based on the statement time of the changefeed.
 	dataFileTs        string
 	dataFilePartition string
+	inBackfill        bool
 	prevFilename      string
 	metrics           metricsRecorder
 
 	asyncFlushActive bool
-	flushCtx         context.Context
 	flushGroup       sync.WaitGroup
-	flushErr         atomic.Value
+	flushCtx         context.Context
+	flushQueue       struct {
+		syncutil.Mutex
+		err error
+		q   []destFile
+	}
+}
+
+type destFile struct {
+	file *cloudStorageSinkFile
+	dest string
 }
 
 var cloudStorageSinkIDAtomic int64
@@ -385,8 +396,7 @@ func makeCloudStorageSink(
 	}
 
 	if s.timestampOracle != nil {
-		s.dataFileTs = cloudStorageFormatTime(s.timestampOracle.inclusiveLowerBoundTS())
-		s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
+		s.setDataFileTimestamp()
 	}
 
 	switch encodingOpts.Format {
@@ -587,13 +597,18 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 		return err
 	}
 	s.files.Clear(true /* addNodesToFreeList */)
+	s.setDataFileTimestamp()
+	return s.waitAsyncFlush()
+}
 
+func (s *cloudStorageSink) setDataFileTimestamp() {
 	// Record the least resolved timestamp being tracked in the frontier as of this point,
 	// to use for naming files until the next `Flush()`. See comment on cloudStorageSink
 	// for an overview of the naming convention and proof of correctness.
-	s.dataFileTs = cloudStorageFormatTime(s.timestampOracle.inclusiveLowerBoundTS())
-	s.dataFilePartition = s.timestampOracle.inclusiveLowerBoundTS().GoTime().Format(s.partitionFormat)
-	return s.waitAsyncFlush()
+	ts, resolvedSeen := s.timestampOracle.inclusiveLowerBoundTS()
+	s.dataFileTs = cloudStorageFormatTime(ts)
+	s.dataFilePartition = ts.GoTime().Format(s.partitionFormat)
+	s.inBackfill = resolvedSeen
 }
 
 // enableAsyncFlush controls async flushing behavior for this sink.
@@ -607,10 +622,9 @@ var enableAsyncFlush = settings.RegisterBoolSetting(
 // waitAsyncFlush waits until all async flushes complete.
 func (s *cloudStorageSink) waitAsyncFlush() error {
 	s.flushGroup.Wait()
-	if v := s.flushErr.Load(); v != nil {
-		return v.(error)
-	}
-	return nil
+	s.flushQueue.Lock()
+	defer s.flushQueue.Unlock()
+	return s.flushQueue.err
 }
 
 // flushFile flushes file to the cloud storage.
@@ -648,21 +662,54 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		return file.flushToStorage(ctx, s.es, dest, s.metrics)
 	}
 
-	s.flushGroup.Add(1)
-	go func() {
-		defer s.flushGroup.Done()
-		// NB: must use s.flushCtx; ctx may be short lived (i.e. cancelled).
-		if err := file.flushToStorage(s.flushCtx, s.es, dest, s.metrics); err != nil {
-			log.Errorf(ctx, "error flushing file to storage: %s", err)
-			// We must use the same type for error we store in flushErr.
-			s.flushErr.CompareAndSwap(nil, &flushError{error: err})
-		}
-	}()
+	s.flushQueue.Lock()
+	defer s.flushQueue.Unlock()
+	// Start a new go routine if the flush queue is empty, OR if we are performing
+	// backfill (either due to initial scan or schema change). During backfill, we
+	// are guaranteed to see exactly 1 version of the key.  Therefore, even if the
+	// flushed files get reordered, and a newer file (with higher fileID) gets
+	// written out first, the key ordering guarantees (i.e. no unseen version
+	// emitted with lower timestamp) would still be preserved (because the key has
+	// exactly 1 version).
+	if s.flushQueue.q == nil || s.inBackfill {
+		s.flushGroup.Add(1)
+		go func() {
+			s.asyncFlush(file, dest)
+		}()
+	} else {
+		s.flushQueue.q = append(s.flushQueue.q, destFile{file: file, dest: dest})
+	}
 	return nil
 }
 
-type flushError struct {
-	error
+func (s *cloudStorageSink) asyncFlush(file *cloudStorageSinkFile, dest string) {
+	defer s.flushGroup.Done()
+
+	pop := func(err error) destFile {
+		s.flushQueue.Lock()
+		defer s.flushQueue.Unlock()
+		s.flushQueue.err = err
+
+		if len(s.flushQueue.q) > 0 {
+			f := s.flushQueue.q[0]
+			s.flushQueue.q = s.flushQueue.q[1:]
+			return f
+		}
+		s.flushQueue.q = nil
+		return destFile{}
+	}
+
+	f := destFile{file: file, dest: dest}
+	for f.file != nil {
+		err := f.file.flushToStorage(s.flushCtx, s.es, f.dest, s.metrics)
+		if err != nil {
+			log.Errorf(s.flushCtx, "error flushing file to storage: %s", err)
+		}
+		f = pop(err)
+		if err != nil {
+			return
+		}
+	}
 }
 
 // flushToStorage writes out file into external storage into 'dest'.
