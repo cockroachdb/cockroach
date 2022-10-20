@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -44,18 +45,16 @@ var showTableStatsJSONColumns = colinfo.ResultColumns{
 
 const showTableStatsOptForecast = "forecast"
 
-var showTableStatsOptValidate = map[string]KVStringOptValidate{
-	showTableStatsOptForecast: KVStringOptRequireNoValue,
+var showTableStatsOptValidate = map[string]exprutil.KVStringOptValidate{
+	showTableStatsOptForecast: exprutil.KVStringOptRequireNoValue,
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
-	optsFn, err := p.TypeAsStringOpts(ctx, n.Options, showTableStatsOptValidate)
-	if err != nil {
-		return nil, err
-	}
-	opts, err := optsFn()
+	opts, err := p.ExprEvaluator("SHOW STATISTICS").KVOptions(
+		ctx, n.Options, showTableStatsOptValidate,
+	)
 	if err != nil {
 		return nil, err
 	}

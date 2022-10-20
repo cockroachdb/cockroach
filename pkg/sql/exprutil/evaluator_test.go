@@ -8,24 +8,30 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sql
+package exprutil
 
 import (
 	"context"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-func TestTypeAsString(t *testing.T) {
+func TestEvalAsString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	p := planner{}
+	sc := tree.MakeSemaContext()
+	s := cluster.MakeTestingClusterSettings()
+	exprEval := MakeEvaluator(
+		"test", &sc, eval.NewTestingEvalContext(s),
+	)
 	testData := []struct {
 		expr        tree.Expr
 		expected    string
@@ -40,9 +46,9 @@ func TestTypeAsString(t *testing.T) {
 		{expr: tree.NewDInt(3), expectedErr: true},
 	}
 
-	t.Run("TypeAsString", func(t *testing.T) {
+	t.Run("EvalAsString", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsString(ctx, td.expr, "test")
+			s, err := exprEval.String(ctx, td.expr)
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)
@@ -50,10 +56,6 @@ func TestTypeAsString(t *testing.T) {
 				continue
 			} else if td.expectedErr {
 				t.Fatal("expected error; got none")
-			}
-			s, err := fn()
-			if err != nil {
-				t.Fatal(err)
 			}
 			if s != td.expected {
 				t.Fatalf("expected %s; got %s", td.expected, s)
@@ -61,9 +63,9 @@ func TestTypeAsString(t *testing.T) {
 		}
 	})
 
-	t.Run("TypeAsStringArray", func(t *testing.T) {
+	t.Run("EvalAsStringArray", func(t *testing.T) {
 		for _, td := range testData {
-			fn, err := p.TypeAsStringArray(ctx, []tree.Expr{td.expr, td.expr}, "test")
+			a, err := exprEval.StringArray(ctx, []tree.Expr{td.expr, td.expr})
 			if err != nil {
 				if !td.expectedErr {
 					t.Fatalf("expected no error; got %v", err)
@@ -71,10 +73,6 @@ func TestTypeAsString(t *testing.T) {
 				continue
 			} else if td.expectedErr {
 				t.Fatal("expected error; got none")
-			}
-			a, err := fn()
-			if err != nil {
-				t.Fatal(err)
 			}
 			expected := []string{td.expected, td.expected}
 			if !reflect.DeepEqual(a, expected) {
