@@ -369,11 +369,61 @@ func init() {
 	// avoid printing some messages to standard output in that case.
 	_, startCtx.inBackground = envutil.EnvString(backgroundEnvVar, 1)
 
-	// Flags common to the start commands, the connect command, and the node join
-	// command.
+	// Flags common to KV-only servers.
 	for _, cmd := range append(StartCmds, connectInitCmd, connectJoinCmd) {
 		f := cmd.Flags()
 
+		// Cluster joining flags. We need to enable this both for 'start'
+		// and 'start-single-node' although the latter does not support
+		// --join, because it delegates its logic to that of 'start', and
+		// 'start' will check that the flag is properly defined.
+		cliflagcfg.VarFlag(f, &serverCfg.JoinList, cliflags.Join)
+		cliflagcfg.BoolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords)
+
+		if cmd != connectJoinCmd {
+			// The initialization token and expected peers. For 'start' commands this is optional.
+			cliflagcfg.StringFlag(f, &startCtx.initToken, cliflags.InitToken)
+			cliflagcfg.IntFlag(f, &startCtx.numExpectedNodes, cliflags.NumExpectedInitialNodes)
+			cliflagcfg.BoolFlag(f, &startCtx.genCertsForSingleNode, cliflags.SingleNode)
+		}
+
+		if cmd == startSingleNodeCmd {
+			// Even though all server flags are supported for
+			// 'start-single-node', we intend that command to be used by
+			// beginners / developers running on a single machine. To
+			// enhance the UX, we hide the flags since they are not directly
+			// relevant when running a single node.
+			_ = f.MarkHidden(cliflags.Join.Name)
+			_ = f.MarkHidden(cliflags.JoinPreferSRVRecords.Name)
+			_ = f.MarkHidden(cliflags.InitToken.Name)
+		}
+
+		// Node attributes.
+		//
+		// TODO(knz): do we want SQL-only servers to have node-level
+		// attributes too? Would this be useful for e.g. SQL query
+		// planning?
+		if cmd != connectInitCmd && cmd != connectJoinCmd {
+			cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
+		}
+	}
+
+	// Flags common to the start commands, the connect command, and the node join
+	// command.
+	for _, cmd := range append(serverCmds, connectInitCmd, connectJoinCmd) {
+		f := cmd.Flags()
+
+		// Use a separate variable to store the value of ServerInsecure.
+		// We share the default with the ClientInsecure flag.
+		//
+		// NB: Insecure is deprecated. See #53404.
+		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
+
+		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
+		// (which is a PreRun for this command):
+		_ = extraServerFlagInit // guru assignment
+
+		// NB: the address flags also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&startCtx.serverListenAddr, &serverListenPort), cliflags.ListenAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
 		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
@@ -385,133 +435,116 @@ func init() {
 		// variables, but share the same default.
 		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
 
-		// Cluster joining flags. We need to enable this both for 'start'
-		// and 'start-single-node' although the latter does not support
-		// --join, because it delegates its logic to that of 'start', and
-		// 'start' will check that the flag is properly defined.
-		cliflagcfg.VarFlag(f, &serverCfg.JoinList, cliflags.Join)
-		cliflagcfg.BoolFlag(f, &serverCfg.JoinPreferSRVRecords, cliflags.JoinPreferSRVRecords)
-	}
-
-	// Flags common to the start commands and the connect command.
-	for _, cmd := range append(StartCmds, connectInitCmd) {
-		f := cmd.Flags()
-
-		// The initialization token and expected peers. For 'start' commands this is optional.
-		cliflagcfg.StringFlag(f, &startCtx.initToken, cliflags.InitToken)
-		cliflagcfg.IntFlag(f, &startCtx.numExpectedNodes, cliflags.NumExpectedInitialNodes)
-		cliflagcfg.BoolFlag(f, &startCtx.genCertsForSingleNode, cliflags.SingleNode)
-
 		if cmd == startSingleNodeCmd {
 			// Even though all server flags are supported for
 			// 'start-single-node', we intend that command to be used by
 			// beginners / developers running on a single machine. To
 			// enhance the UX, we hide the flags since they are not directly
 			// relevant when running a single node.
-			_ = f.MarkHidden(cliflags.Join.Name)
-			_ = f.MarkHidden(cliflags.JoinPreferSRVRecords.Name)
 			_ = f.MarkHidden(cliflags.AdvertiseAddr.Name)
 			_ = f.MarkHidden(cliflags.SQLAdvertiseAddr.Name)
-			_ = f.MarkHidden(cliflags.InitToken.Name)
+			_ = f.MarkHidden(cliflags.HTTPAdvertiseAddr.Name)
 		}
 
-		// Backward-compatibility flags.
+		if cmd == startCmd || cmd == startSingleNodeCmd {
+			// Backward-compatibility flags.
 
-		// These are deprecated but until we have qualitatively new
-		// functionality in the flags above, there is no need to nudge the
-		// user away from them with a deprecation warning. So we keep
-		// them, but hidden from docs so that they don't appear as
-		// redundant with the main flags.
-		cliflagcfg.VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ServerHost)
-		_ = f.MarkHidden(cliflags.ServerHost.Name)
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
-		_ = f.MarkHidden(cliflags.ServerPort.Name)
+			// These are deprecated but until we have qualitatively new
+			// functionality in the flags above, there is no need to nudge the
+			// user away from them with a deprecation warning. So we keep
+			// them, but hidden from docs so that they don't appear as
+			// redundant with the main flags.
+			cliflagcfg.VarFlag(f, aliasStrVar{&startCtx.serverListenAddr}, cliflags.ServerHost)
+			_ = f.MarkHidden(cliflags.ServerHost.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverListenPort}, cliflags.ServerPort)
+			_ = f.MarkHidden(cliflags.ServerPort.Name)
 
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
-		_ = f.MarkHidden(cliflags.AdvertiseHost.Name)
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertisePort}, cliflags.AdvertisePort)
-		_ = f.MarkHidden(cliflags.AdvertisePort.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertiseAddr}, cliflags.AdvertiseHost)
+			_ = f.MarkHidden(cliflags.AdvertiseHost.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverAdvertisePort}, cliflags.AdvertisePort)
+			_ = f.MarkHidden(cliflags.AdvertisePort.Name)
 
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
-		_ = f.MarkHidden(cliflags.ListenHTTPAddrAlias.Name)
-		cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPPort}, cliflags.ListenHTTPPort)
-		_ = f.MarkHidden(cliflags.ListenHTTPPort.Name)
-
-	}
-
-	// Flags common to the start commands only.
-	for _, cmd := range StartCmds {
-		f := cmd.Flags()
-
-		// Server flags.
-		cliflagcfg.StringFlag(f, &serverSocketDir, cliflags.SocketDir)
-		cliflagcfg.BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
-
-		// The following flag is planned to become non-experimental in 21.1.
-		cliflagcfg.BoolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
-		_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
-
-		// More server flags.
-
-		cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
-
-		cliflagcfg.StringFlag(f, &serverCfg.Attrs, cliflags.Attrs)
-		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
-
-		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
-		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
-		cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
-
-		cliflagcfg.StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile)
-
-		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
-
-		// Use a separate variable to store the value of ServerInsecure.
-		// We share the default with the ClientInsecure flag.
-		//
-		// NB: Insecure is deprecated. See #53404.
-		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
-
-		// Enable/disable various external storage endpoints.
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound, cliflags.ExternalIOEnableNonAdminImplicitAndArbitraryOutbound)
-
-		// Certificate principal map.
-		cliflagcfg.StringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
-
-		// Cluster name verification.
-		cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
-		cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
-		if cmd == startSingleNodeCmd {
-			// Even though all server flags are supported for
-			// 'start-single-node', we intend that command to be used by
-			// beginners / developers running on a single machine. To
-			// enhance the UX, we hide the flags since they are not directly
-			// relevant when running a single node.
-			_ = f.MarkHidden(cliflags.ClusterName.Name)
-			_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
-			_ = f.MarkHidden(cliflags.MaxOffset.Name)
-			_ = f.MarkHidden(cliflags.LocalityAdvertiseAddr.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPAddr}, cliflags.ListenHTTPAddrAlias)
+			_ = f.MarkHidden(cliflags.ListenHTTPAddrAlias.Name)
+			cliflagcfg.VarFlag(f, aliasStrVar{&serverHTTPPort}, cliflags.ListenHTTPPort)
+			_ = f.MarkHidden(cliflags.ListenHTTPPort.Name)
 		}
 
-		// Engine flags.
-		cliflagcfg.VarFlag(f, cacheSizeValue, cliflags.Cache)
-		cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
-		cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
-		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
-		// the stores flag has been parsed and the storage device that a percentage
-		// refers to becomes known.
-		cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-		cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
+		if cmd != connectInitCmd && cmd != connectJoinCmd {
+			cliflagcfg.StringFlag(f, &serverSocketDir, cliflags.SocketDir)
+			cliflagcfg.BoolFlag(f, &startCtx.unencryptedLocalhostHTTP, cliflags.UnencryptedLocalhostHTTP)
+
+			// The following flag is planned to become non-experimental in 21.1.
+			cliflagcfg.BoolFlag(f, &serverCfg.AcceptSQLWithoutTLS, cliflags.AcceptSQLWithoutTLS)
+			_ = f.MarkHidden(cliflags.AcceptSQLWithoutTLS.Name)
+
+			// More server flags.
+
+			if cmd != mtStartSQLCmd {
+				// TODO(knz): SQL-only servers should probably also support per-locality server
+				// addresses, for multi-region support.
+				// See: https://github.com/cockroachdb/cockroach/issues/90172
+				cliflagcfg.VarFlag(f, &localityAdvertiseHosts, cliflags.LocalityAdvertiseAddr)
+			}
+
+			cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
+
+			cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
+			cliflagcfg.VarFlag(f, &serverCfg.StorageEngine, cliflags.StorageEngine)
+			cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
+			cliflagcfg.StringFlag(f, &serverCfg.ClockDevicePath, cliflags.ClockDevice)
+
+			cliflagcfg.StringFlag(f, &startCtx.listeningURLFile, cliflags.ListeningURLFile)
+
+			cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
+			cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
+
+			// Enable/disable various external storage endpoints.
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
+			cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound, cliflags.ExternalIOEnableNonAdminImplicitAndArbitraryOutbound)
+
+			// Certificate principal map.
+			cliflagcfg.StringSliceFlag(f, &startCtx.serverCertPrincipalMap, cliflags.CertPrincipalMap)
+
+			// Cluster name verification.
+			cliflagcfg.VarFlag(f, clusterNameSetter{&baseCfg.ClusterName}, cliflags.ClusterName)
+			cliflagcfg.BoolFlag(f, &baseCfg.DisableClusterNameVerification, cliflags.DisableClusterNameVerification)
+			if cmd == startSingleNodeCmd {
+				// Even though all server flags are supported for
+				// 'start-single-node', we intend that command to be used by
+				// beginners / developers running on a single machine. To
+				// enhance the UX, we hide the flags since they are not directly
+				// relevant when running a single node.
+				_ = f.MarkHidden(cliflags.ClusterName.Name)
+				_ = f.MarkHidden(cliflags.DisableClusterNameVerification.Name)
+				_ = f.MarkHidden(cliflags.MaxOffset.Name)
+				_ = f.MarkHidden(cliflags.LocalityAdvertiseAddr.Name)
+			}
+
+			// Engine flags.
+			cliflagcfg.VarFlag(f, cacheSizeValue, cliflags.Cache)
+			cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
+			cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
+			// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
+			// the stores flag has been parsed and the storage device that a percentage
+			// refers to becomes known.
+			cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+			cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
+			cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
+		}
 
 		if backgroundFlagDefined {
 			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
+	}
+
+	// Multi-tenancy start-sql command flags.
+	{
+		f := mtStartSQLCmd.Flags()
+		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
+		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
 	}
 
 	// Flags that apply to commands that start servers.
@@ -887,50 +920,6 @@ func init() {
 			if f.Lookup(cliflags.Verbose.Name) == nil {
 				cliflagcfg.BoolFlag(f, &debugCtx.verbose, cliflags.Verbose)
 			}
-		}
-	}
-
-	// Multi-tenancy start-sql command flags.
-	{
-		f := mtStartSQLCmd.Flags()
-		cliflagcfg.VarFlag(f, &tenantIDWrapper{&serverCfg.SQLConfig.TenantID}, cliflags.TenantID)
-		// NB: serverInsecure populates baseCfg.{Insecure,SSLCertsDir} in this the following method
-		// (which is a PreRun for this command):
-		_ = extraServerFlagInit // guru assignment
-		// NB: Insecure is deprecated. See #53404.
-		cliflagcfg.BoolFlag(f, &startCtx.serverInsecure, cliflags.ServerInsecure)
-
-		cliflagcfg.StringFlag(f, &startCtx.serverSSLCertsDir, cliflags.ServerCertsDir)
-		// NB: this also gets PreRun treatment via extraServerFlagInit to populate BaseCfg.SQLAddr.
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverSQLAddr, &serverSQLPort), cliflags.ListenSQLAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAddr, &serverHTTPPort), cliflags.ListenHTTPAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverHTTPAdvertiseAddr, &serverHTTPAdvertisePort), cliflags.HTTPAdvertiseAddr)
-		cliflagcfg.VarFlag(f, addr.NewAddrSetter(&serverAdvertiseAddr, &serverAdvertisePort), cliflags.AdvertiseAddr)
-
-		cliflagcfg.VarFlag(f, &serverCfg.Locality, cliflags.Locality)
-		cliflagcfg.VarFlag(f, &serverCfg.MaxOffset, cliflags.MaxOffset)
-		cliflagcfg.VarFlag(f, &storeSpecs, cliflags.Store)
-		cliflagcfg.StringFlag(f, &startCtx.pidFile, cliflags.PIDFile)
-		cliflagcfg.StringFlag(f, &startCtx.geoLibsDir, cliflags.GeoLibsDir)
-
-		cliflagcfg.StringSliceFlag(f, &serverCfg.SQLConfig.TenantKVAddrs, cliflags.KVAddrs)
-
-		// Enable/disable various external storage endpoints.
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableHTTP, cliflags.ExternalIODisableHTTP)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableOutbound, cliflags.ExternalIODisabled)
-		cliflagcfg.BoolFlag(f, &serverCfg.ExternalIODirConfig.DisableImplicitCredentials, cliflags.ExternalIODisableImplicitCredentials)
-
-		// Engine flags.
-		cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
-		cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
-		// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
-		// the stores flag has been parsed and the storage device that a percentage
-		// refers to becomes known.
-		cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
-		cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
-
-		if backgroundFlagDefined {
-			cliflagcfg.BoolFlag(f, &startBackground, cliflags.Background)
 		}
 	}
 
