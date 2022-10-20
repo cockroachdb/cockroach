@@ -21,8 +21,9 @@ SELECT crdb_internal.destroy_tenant(5);
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-5 false {"id": "5", "state": "DROP"}
-6 true {"id": "6", "state": "ACTIVE"}
+1 true {"id": "1", "name": "system", "state": "ACTIVE"}
+5 false {"id": "5", "name": "", "state": "DROP"}
+6 true {"id": "6", "name": "", "state": "ACTIVE"}
 
 exec-sql
 BACKUP INTO 'nodelocal://1/cluster'
@@ -48,8 +49,9 @@ RESTORE FROM LATEST IN 'nodelocal://1/cluster'
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-5 false {"id": "5", "state": "DROP"}
-6 true {"id": "6", "state": "ACTIVE"}
+1 true {"id": "1", "name": "system", "state": "ACTIVE"}
+5 false {"id": "5", "name": "", "state": "DROP"}
+6 true {"id": "6", "name": "", "state": "ACTIVE"}
 
 exec-sql
 RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
@@ -58,6 +60,7 @@ RESTORE TENANT 6 FROM LATEST IN 'nodelocal://1/tenant6' WITH tenant = '7';
 query-sql
 SELECT id,active,crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants;
 ----
-5 false {"id": "5", "state": "DROP"}
-6 true {"id": "6", "state": "ACTIVE"}
-7 true {"id": "7", "state": "ACTIVE"}
+1 true {"id": "1", "name": "system", "state": "ACTIVE"}
+5 false {"id": "5", "name": "", "state": "DROP"}
+6 true {"id": "6", "name": "", "state": "ACTIVE"}
+7 true {"id": "7", "name": "", "state": "ACTIVE"}

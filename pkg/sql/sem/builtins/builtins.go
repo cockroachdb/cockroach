@@ -107,7 +107,6 @@ var (
 		"input value must be <= %d (maximum Unicode code point)", utf8.MaxRune)
 	errStringTooLarge = pgerror.Newf(pgcode.ProgramLimitExceeded,
 		"requested length too large, exceeds %s", humanizeutil.IBytes(builtinconstants.MaxAllocatedStringSize))
-	errInvalidNull = pgerror.New(pgcode.InvalidParameterValue, "input cannot be NULL")
 )
 
 func categorizeType(t *types.T) string {
@@ -4813,21 +4812,64 @@ value if you rely on the HLC for accuracy.`,
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if err := requireNonNull(args[0]); err != nil {
-					return nil, err
-				}
 				sTenID, err := mustBeDIntInTenantRange(args[0])
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Tenant.CreateTenant(ctx, uint64(sTenID)); err != nil {
+				if err := evalCtx.Tenant.CreateTenant(ctx, uint64(sTenID), ""); err != nil {
 					return nil, err
 				}
 				return args[0], nil
 			},
-			Info:              "Creates a new tenant with the provided ID. Must be run by the System tenant.",
-			Volatility:        volatility.Volatile,
-			CalledOnNullInput: true,
+			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
+				}
+				tenantName := tree.MustBeDString(args[1])
+				if err := evalCtx.Tenant.CreateTenant(ctx, uint64(sTenID), string(tenantName)); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"crdb_internal.rename_tenant": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMultiTenancy,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"id", types.Int},
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				sTenID, err := mustBeDIntInTenantRange(args[0])
+				if err != nil {
+					return nil, err
+				}
+				tenantName := tree.MustBeDString(args[1])
+				if err := evalCtx.Tenant.RenameTenant(ctx, uint64(sTenID), string(tenantName)); err != nil {
+					return nil, err
+				}
+				return args[0], nil
+			},
+			Info:       "Renames the specified tenant. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
 		},
 	),
 
@@ -9801,13 +9843,6 @@ func recentTimestamp(ctx context.Context, evalCtx *eval.Context) (time.Time, err
 		return time.Time{}, err
 	}
 	return evalCtx.StmtTimestamp.Add(offset), nil
-}
-
-func requireNonNull(d tree.Datum) error {
-	if d == tree.DNull {
-		return errInvalidNull
-	}
-	return nil
 }
 
 func followerReadTimestamp(

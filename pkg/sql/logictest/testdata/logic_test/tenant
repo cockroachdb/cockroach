@@ -1,8 +1,9 @@
 # LogicTest: !3node-tenant-default-configs
-query IBT colnames
-SELECT * FROM system.tenants ORDER BY id
+query IBIT colnames
+SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
-id  active  info
+id  active  length  name
+1   true    12      system
 
 # Create two tenants.
 
@@ -12,18 +13,52 @@ SELECT crdb_internal.create_tenant(5)
 5
 
 query I
-SELECT crdb_internal.create_tenant(10)
+SELECT crdb_internal.create_tenant(10, 'tenant-number-ten')
 ----
 10
 
-query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTT colnames
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  crdb_internal.pb_to_json
-5   true    {"id": "5", "state": "ACTIVE"}
-10  true    {"id": "10", "state": "ACTIVE"}
+id  active  name               crdb_internal.pb_to_json
+1   true    system             {"id": "1", "name": "system", "state": "ACTIVE"}
+5   true    NULL               {"id": "5", "name": "", "state": "ACTIVE"}
+10  true    tenant-number-ten  {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
+
+# Check we can add a name where none existed before.
+query I
+SELECT crdb_internal.rename_tenant(5, 'my-tenant')
+----
+5
+
+query IBT colnames
+SELECT id, active, name FROM system.tenants ORDER BY id
+----
+id  active  name
+1   true    system
+5   true    my-tenant
+10  true    tenant-number-ten
+
+
+# Check we can change the name when there was one before.
+query I
+SELECT crdb_internal.rename_tenant(5, 'my-new-tenant-name')
+----
+5
+
+# Check for duplicate names.
+query error name "tenant-number-ten" is already taken
+SELECT crdb_internal.rename_tenant(5, 'tenant-number-ten')
+
+query IBT colnames
+SELECT id, active, name FROM system.tenants ORDER BY id
+----
+id  active  name
+1   true    system
+5   true    my-new-tenant-name
+10  true    tenant-number-ten
 
 # Garbage collect a non-drop tenant fails.
 
@@ -37,14 +72,15 @@ SELECT crdb_internal.destroy_tenant(5)
 ----
 5
 
-query IBT colnames
-SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+query IBTT colnames
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  crdb_internal.pb_to_json
-5   false   {"id": "5", "state": "DROP"}
-10  true    {"id": "10", "state": "ACTIVE"}
+id  active  name                crdb_internal.pb_to_json
+1   true    system              {"id": "1", "name": "system", "state": "ACTIVE"}
+5   false   my-new-tenant-name  {"id": "5", "name": "my-new-tenant-name", "state": "DROP"}
+10  true    tenant-number-ten   {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
 
 # Try to recreate an existing tenant.
@@ -54,6 +90,9 @@ SELECT crdb_internal.create_tenant(5)
 
 query error pgcode 42710 tenant "10" already exists
 SELECT crdb_internal.create_tenant(10)
+
+query error pgcode 42710 tenant "11" with name "tenant-number-ten" already exists
+SELECT crdb_internal.create_tenant(11, 'tenant-number-ten')
 
 # Try to manipulate system.tenants directly as the root user.
 
@@ -73,6 +112,9 @@ DELETE FROM system.tenants WHERE id = 10
 
 query error pgcode 22023 cannot create tenant "1", ID assigned to system tenant
 SELECT crdb_internal.create_tenant(1)
+
+query error pgcode 22023 cannot rename tenant "1", ID assigned to system tenant
+SELECT crdb_internal.rename_tenant(1, 'hello')
 
 query error pgcode 22023 cannot destroy tenant "1", ID assigned to system tenant
 SELECT crdb_internal.destroy_tenant(1)
@@ -145,7 +187,8 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
-10  true    {"id": "10", "state": "ACTIVE"}
+1   true    {"id": "1", "name": "system", "state": "ACTIVE"}
+10  true    {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
 query error tenant resource limits require a CCL binary
 SELECT crdb_internal.update_tenant_resource_limits(10, 1000, 100, 0, now(), 0)

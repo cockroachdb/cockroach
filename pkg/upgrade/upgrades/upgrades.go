@@ -164,6 +164,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		fixInvalidObjectsThatLookLikeBadUserfileConstraint,
 	),
+	upgrade.NewTenantUpgrade("add a name column to system.tenants and populate a system tenant entry",
+		toCV(clusterversion.TenantNames),
+		NoPrecondition,
+		addTenantNameColumnAndSystemTenantEntry,
+	),
 }
 
 func init() {

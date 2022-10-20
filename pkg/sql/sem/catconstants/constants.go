@@ -40,6 +40,9 @@ const SystemDatabaseName = "system"
 // SystemTableName is a type for system table names.
 type SystemTableName string
 
+// SystemTenantName is the tenant name of the system tenant.
+const SystemTenantName = "system"
+
 // Names of tables in the system database.
 const (
 	NamespaceTableName                     SystemTableName = "namespace"

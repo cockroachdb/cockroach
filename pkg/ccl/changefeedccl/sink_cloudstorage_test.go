@@ -197,7 +197,9 @@ func TestCloudStorageSink(t *testing.T) {
 	testWithAndWithoutAsyncFlushing := func(t *testing.T, name string, testFn func(*testing.T)) {
 		t.Helper()
 		testutils.RunTrueAndFalse(t, name+"/asyncFlush", func(t *testing.T, enable bool) {
+			old := enableAsyncFlush.Get(&settings.SV)
 			enableAsyncFlush.Override(context.Background(), &settings.SV, enable)
+			defer enableAsyncFlush.Override(context.Background(), &settings.SV, old)
 			testFn(t)
 		})
 	}
@@ -460,7 +462,7 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	waitAsyncFlush := func(s Sink) error {
-		return s.(*cloudStorageSink).waitAsyncFlush()
+		return s.(*cloudStorageSink).waitAsyncFlush(context.Background())
 	}
 	testWithAndWithoutAsyncFlushing(t, `bucketing`, func(t *testing.T) {
 		t1 := makeTopic(`t1`)

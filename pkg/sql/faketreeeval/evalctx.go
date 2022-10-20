@@ -542,7 +542,12 @@ var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessio
 	"cannot evaluate tenant operation in this context")
 
 // CreateTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ uint64) error {
+func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ uint64, _ string) error {
+	return errors.WithStack(errEvalTenant)
+}
+
+// RenameTenant is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) RenameTenant(_ context.Context, _ uint64, _ string) error {
 	return errors.WithStack(errEvalTenant)
 }
 

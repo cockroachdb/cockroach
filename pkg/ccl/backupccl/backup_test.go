@@ -6844,11 +6844,16 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t, `select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`, [][]string{
+			{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`SELECT id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants`,
-			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+			`SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`10`, `true`, `NULL`, `{"id": "10", "name": "", "state": "ACTIVE"}`},
+			},
 		)
 		restoreDB.CheckQueryResults(t,
 			`SELECT ru_refill_rate, instance_id, next_instance_id, current_share_sum
@@ -6874,8 +6879,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 		// Mark tenant as DROP.
 		restoreDB.Exec(t, `SELECT crdb_internal.destroy_tenant(10)`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info) from system.tenants`,
-			[][]string{{`10`, `false`, `{"id": "10", "state": "DROP"}`}},
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`10`, `false`, `NULL`, `{"id": "10", "name": "", "state": "DROP"}`},
+			},
 		)
 
 		// Make GC job scheduled by destroy_tenant run in 1 second.
@@ -6896,8 +6904,11 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
-			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`10`, `true`, `NULL`, `{"id": "10", "name": "", "state": "ACTIVE"}`},
+			},
 		)
 
 		_, restoreConn10 = serverutils.StartTenant(
@@ -6917,11 +6928,18 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{"succeeded"}, {"succeeded"}},
 		)
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t,
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
-			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`10`, `true`, `NULL`, `{"id": "10", "name": "", "state": "ACTIVE"}`},
+			},
 		)
 	})
 
@@ -6939,11 +6957,18 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t,
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
-			[][]string{{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`}},
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`10`, `true`, `NULL`, `{"id": "10", "name": "", "state": "ACTIVE"}`},
+			},
 		)
 
 		_, restoreConn10 := serverutils.StartTenant(
@@ -6972,14 +6997,19 @@ func TestBackupRestoreTenant(t *testing.T) {
 		defer restoreTC.Stopper().Stop(ctx)
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
-		restoreDB.CheckQueryResults(t, `select * from system.tenants`, [][]string{})
+		restoreDB.CheckQueryResults(t,
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			[][]string{
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
-			`select id, active, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
+			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`10`, `true`, `{"id": "10", "state": "ACTIVE"}`},
-				{`11`, `true`, `{"id": "11", "state": "ACTIVE"}`},
-				{`20`, `true`, `{"id": "20", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`10`, `true`, `NULL`, `{"id": "10", "name": "", "state": "ACTIVE"}`},
+				{`11`, `true`, `NULL`, `{"id": "11", "name": "", "state": "ACTIVE"}`},
+				{`20`, `true`, `NULL`, `{"id": "20", "name": "", "state": "ACTIVE"}`},
 			},
 		)
 
