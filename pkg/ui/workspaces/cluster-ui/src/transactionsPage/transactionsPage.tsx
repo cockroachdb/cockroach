@@ -63,10 +63,10 @@ import { commonStyles } from "../common";
 import {
   TimeScaleDropdown,
   TimeScale,
-  toDateRange,
   timeScaleToString,
   timeScale1hMinOptions,
   getValidOption,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
@@ -118,7 +118,7 @@ export type TransactionsPageProps = TransactionsPageStateProps &
 function statementsRequestFromProps(
   props: TransactionsPageProps,
 ): protos.cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(props.timeScale);
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),

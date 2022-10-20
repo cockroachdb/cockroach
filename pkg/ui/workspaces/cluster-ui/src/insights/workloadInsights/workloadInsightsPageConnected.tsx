@@ -39,7 +39,14 @@ import {
   selectFilters,
   selectSortSetting,
 } from "src/store/insights/transactionInsights";
-import { bindActionCreators } from "redux";
+import { bindActionCreators, Dispatch } from "redux";
+import { TimeScale } from "../../timeScaleDropdown";
+import { actions as sqlStatsActions } from "../../store/sqlStats";
+import {
+  StatementInsightDetails,
+  StatementInsightDetailsDispatchProps,
+  StatementInsightDetailsStateProps,
+} from "../workloadInsightDetails";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -62,7 +69,9 @@ const statementMapStateToProps = (
   selectedColumnNames: selectColumns(state),
 });
 
-const TransactionDispatchProps = {
+const TransactionDispatchProps = (
+  dispatch: Dispatch,
+): TransactionInsightsViewDispatchProps => ({
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     localStorageActions.update({
       key: "filters/InsightsPage",
@@ -73,10 +82,19 @@ const TransactionDispatchProps = {
       key: "sortSetting/InsightsPage",
       value: ss,
     }),
+  setTimeScale: (ts: TimeScale) => {
+    dispatch(
+      sqlStatsActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+  },
   refreshTransactionInsights: transactionInsights.refresh,
-};
+});
 
-const StatementDispatchProps: StatementInsightsViewDispatchProps = {
+const StatementDispatchProps = (
+  dispatch: Dispatch,
+): StatementInsightsViewDispatchProps => ({
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     localStorageActions.update({
       key: "filters/InsightsPage",
@@ -92,8 +110,15 @@ const StatementDispatchProps: StatementInsightsViewDispatchProps = {
       key: "showColumns/StatementInsightsPage",
       value: value.join(","),
     }),
+  setTimeScale: (ts: TimeScale) => {
+    dispatch(
+      sqlStatsActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+  },
   refreshStatementInsights: statementInsights.refresh,
-};
+});
 
 type StateProps = {
   transactionInsightsViewStateProps: TransactionInsightsViewStateProps;
@@ -120,14 +145,8 @@ export const WorkloadInsightsPageConnected = withRouter(
       statementInsightsViewStateProps: statementMapStateToProps(state, props),
     }),
     dispatch => ({
-      transactionInsightsViewDispatchProps: bindActionCreators(
-        TransactionDispatchProps,
-        dispatch,
-      ),
-      statementInsightsViewDispatchProps: bindActionCreators(
-        StatementDispatchProps,
-        dispatch,
-      ),
+      transactionInsightsViewDispatchProps: TransactionDispatchProps(dispatch),
+      statementInsightsViewDispatchProps: StatementDispatchProps(dispatch),
     }),
     (stateProps, dispatchProps) => ({
       transactionInsightsViewProps: {
