@@ -20,7 +20,6 @@ import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
 import {
   calculateActiveFilters,
-  defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
@@ -43,6 +42,7 @@ import { InsightsError } from "../../insightsErrorComponent";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
+import { TimeScale } from "../../../timeScaleDropdown";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -59,6 +59,7 @@ export type TransactionInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshTransactionInsights: () => void;
+  setTimeScale: (ts: TimeScale) => void;
 };
 
 export type TransactionInsightsViewProps = TransactionInsightsViewStateProps &
@@ -78,6 +79,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     refreshTransactionInsights,
     onFiltersChange,
     onSortChange,
+    setTimeScale,
     dropDownSelect,
   } = props;
 
@@ -232,6 +234,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
                 data={filteredTransactions}
                 sortSetting={sortSetting}
                 onChangeSortSetting={onChangeSortSetting}
+                setTimeScale={setTimeScale}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={

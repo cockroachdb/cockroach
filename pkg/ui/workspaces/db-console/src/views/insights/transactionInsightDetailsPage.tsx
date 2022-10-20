@@ -18,6 +18,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { refreshTransactionInsightDetails } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import { selectTransactionInsightDetails } from "src/views/insights/insightsSelectors";
+import { setGlobalTimeScaleAction } from "src/redux/statements";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -33,8 +34,9 @@ const mapStateToProps = (
   };
 };
 
-const mapDispatchToProps = {
+const mapDispatchToProps: TransactionInsightDetailsDispatchProps = {
   refreshTransactionInsightDetails: refreshTransactionInsightDetails,
+  setTimeScale: setGlobalTimeScaleAction,
 };
 
 const TransactionInsightDetailsPage = withRouter(

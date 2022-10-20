@@ -17,12 +17,17 @@ import {
 } from "src/sortedtable";
 import { Count, DATE_FORMAT, Duration, limitText } from "src/util";
 import { InsightExecEnum, StatementInsightEvent } from "src/insights";
-import { InsightCell, insightsTableTitles } from "../util";
+import {
+  InsightCell,
+  insightsTableTitles,
+  StatementDetailsLink,
+} from "../util";
 import { StatementInsights } from "../../../api";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
 import styles from "../util/workloadInsights.module.scss";
+import { TimeScale } from "../../../timeScaleDropdown";
 
 const cx = classNames.bind(styles);
 
@@ -35,7 +40,9 @@ interface StatementInsightsTable {
   visibleColumns: ColumnDescriptor<StatementInsightEvent>[];
 }
 
-export function makeStatementInsightsColumns(): ColumnDescriptor<StatementInsightEvent>[] {
+export function makeStatementInsightsColumns(
+  setTimeScale: (ts: TimeScale) => void,
+): ColumnDescriptor<StatementInsightEvent>[] {
   const execType = InsightExecEnum.STATEMENT;
   return [
     {
@@ -52,7 +59,8 @@ export function makeStatementInsightsColumns(): ColumnDescriptor<StatementInsigh
     {
       name: "statementFingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: StatementInsightEvent) => item.statementFingerprintID,
+      cell: (item: StatementInsightEvent) =>
+        StatementDetailsLink(item, setTimeScale),
       sort: (item: StatementInsightEvent) => item.statementFingerprintID,
       showByDefault: true,
     },
