@@ -1806,6 +1806,12 @@ func (s *Server) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
 }
 
+// LogicalClusterID implements cli.serverStartupInterface. This
+// implementation exports the logical cluster ID of the system tenant.
+func (s *Server) LogicalClusterID() uuid.UUID {
+	return s.sqlServer.LogicalClusterID()
+}
+
 // StartDiagnostics starts periodic diagnostics reporting and update checking.
 // NOTE: This is not called in PreStart so that it's disabled by default for
 // testing.
