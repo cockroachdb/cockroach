@@ -3173,7 +3173,7 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 func splitAndScatter(
 	ctx context.Context, db *kv.DB, key roachpb.Key, expirationTime hlc.Timestamp,
 ) error {
-	if err := db.AdminSplit(ctx, key, expirationTime); err != nil {
+	if err := db.AdminSplit(ctx, key, expirationTime, roachpb.AdminSplitRequestSchema); err != nil {
 		return err
 	}
 	_, err := db.AdminScatter(ctx, key, 0 /* maxSize */)

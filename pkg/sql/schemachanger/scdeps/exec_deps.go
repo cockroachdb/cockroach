@@ -323,7 +323,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 	span := table.IndexSpan(d.codec, indexToBackfill.GetID())
 	const backfillSplitExpiration = time.Hour
 	expirationTime := d.txn.DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
-	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
+	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime, roachpb.AdminSplitRequestIngestion)
 }
 
 // GetResumeSpans implements the scexec.BackfillerTracker interface.

@@ -9596,7 +9596,12 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	defer s.Stopper().Stop(context.Background())
 
 	splitKey := roachpb.Key("b")
-	if err := kvDB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(
+		ctx,
+		splitKey,
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequestIngestion,
+	); err != nil {
 		t.Fatal(err)
 	}
 
