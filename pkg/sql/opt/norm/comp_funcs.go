@@ -44,47 +44,43 @@ func (c *CustomFuncs) CommuteInequality(
 	panic(errors.AssertionFailedf("called commuteInequality with operator %s", redact.Safe(op)))
 }
 
-// FoldBinaryCheckOverflow attempts to evaluate a binary expression with
+// ArithmeticErrorsOnOverflow returns true if addition or subtraction with the
+// given types will cause an error when the value overflows or underflows.
+func (c *CustomFuncs) ArithmeticErrorsOnOverflow(left, right *types.T) bool {
+	switch left.Family() {
+	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+	default:
+		return false
+	}
+	switch right.Family() {
+	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+	default:
+		return false
+	}
+	return true
+}
+
+// FoldBinaryCheckNull attempts to evaluate a binary expression with
 // constant inputs. The only operations supported are plus and minus. It returns
 // a constant expression if all the following criteria are met:
 //
-//  1. The right datum is an integer, float, decimal, or interval. This
-//     restriction can be lifted for any type that we can construct a zero value
-//     of. The zero value of the right type is required in order to check for
-//     overflow/underflow (see #5).
-//  2. An overload function for the given operator and input types exists and
+//  1. An overload function for the given operator and input types exists and
 //     has an appropriate volatility.
-//  3. The result type of the overload is equivalent to the type of left. This
-//     is required in order to check for overflow/underflow (see #5).
-//  4. The evaluation causes no error.
-//  5. The evaluation does not overflow or underflow.
+//  2. There is no error when evaluating the binary expression.
 //
 // If any of these conditions are not met, it returns ok=false.
-func (c *CustomFuncs) FoldBinaryCheckOverflow(
+func (c *CustomFuncs) FoldBinaryCheckNull(
 	op opt.Operator, left, right opt.ScalarExpr,
 ) (_ opt.ScalarExpr, ok bool) {
-	var zeroDatumForRightType tree.Datum
-	switch right.DataType().Family() {
-	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
-		zeroDatumForRightType = tree.DZero
-	case types.IntervalFamily:
-		zeroDatumForRightType = tree.DZeroInterval
-	default:
-		// Any other type families of right are not supported.
-		return nil, false
-	}
-
 	o, ok := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
 	if !ok || !c.CanFoldOperator(o.Volatility) {
 		return nil, false
 	}
-	if !o.ReturnType.Equivalent(left.DataType()) {
-		// We can only check for overflow or underflow when the result type
-		// matches the type of left.
-		return nil, false
-	}
-
 	lDatum, rDatum := memo.ExtractConstDatum(left), memo.ExtractConstDatum(right)
+	// TODO(mgartner): FoldBinaryCheckNull is similar to FoldBinary, except
+	// for this NULL check. The NULL check might not be necessary since we no
+	// longer use this function on TIME and INTERVAL types, so maybe we can
+	// reuse FoldBinary instead.
 	if lDatum == tree.DNull || rDatum == tree.DNull {
 		return nil, false
 	}
@@ -92,34 +88,6 @@ func (c *CustomFuncs) FoldBinaryCheckOverflow(
 	if err != nil {
 		return nil, false
 	}
-
-	cmpResLeft, err := result.CompareError(c.f.evalCtx, lDatum)
-	if err != nil {
-		return nil, false
-	}
-
-	cmpRightZero, err := rDatum.CompareError(c.f.evalCtx, zeroDatumForRightType)
-	if err != nil {
-		return nil, false
-	}
-
-	// If the operator is + and right is <0, check for underflow.
-	if op == opt.PlusOp && cmpRightZero < 0 && cmpResLeft > 0 {
-		return nil, false
-	}
-	// If the operator is + and right is >=0, check for overflow.
-	if op == opt.PlusOp && cmpRightZero >= 0 && cmpResLeft < 0 {
-		return nil, false
-	}
-	// If the operator is - and right is <0, check for overflow.
-	if op == opt.MinusOp && cmpRightZero < 0 && cmpResLeft < 0 {
-		return nil, false
-	}
-	// If the operator is - and right is >=0, check for underflow.
-	if op == opt.MinusOp && cmpRightZero >= 0 && cmpResLeft > 0 {
-		return nil, false
-	}
-	// The operation did not overflow or underflow.
 	return c.f.ConstructConstVal(result, o.ReturnType), true
 }
 
