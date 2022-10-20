@@ -341,9 +341,9 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value 
 func (b *SSTBatcher) Reset(ctx context.Context) error {
 	b.sstWriter.Close()
 	b.sstFile = &storage.MemFile{}
-	// Create "Ingestion" SSTs in the newer RocksDBv2 format only if  all nodes
-	// in the cluster can support it. Until then, for backward compatibility,
-	// create SSTs in the leveldb format ("backup" ones).
+	// Create sstables intended for ingestion using the newest format that all
+	// nodes can support. MakeIngestionSSTWriter will handle cluster version
+	// gating using b.settings.
 	b.sstWriter = storage.MakeIngestionSSTWriter(ctx, b.settings, b.sstFile)
 	b.batchStartKey = b.batchStartKey[:0]
 	b.batchEndKey = b.batchEndKey[:0]
