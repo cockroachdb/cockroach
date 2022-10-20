@@ -565,6 +565,17 @@ func registerRestore(r registry.Registry) {
 						t.L().Printf("pausing RESTORE job")
 						// Pause the job and wait for it to transition to a paused state.
 						_, err = conn.ExecContext(ctx, `PAUSE JOB $1`, jobID)
+						if err != nil {
+							// The pause job request should not fail unless the job has already succeeded,
+							// in which case, the test should gracefully succeed.
+							var status string
+							errStatusCheck := conn.QueryRow(
+								`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
+							require.NoError(t, errStatusCheck)
+							if status == "succeeded" {
+								return nil
+							}
+						}
 						require.NoError(t, err)
 						testutils.SucceedsSoon(t, func() error {
 							var status string
