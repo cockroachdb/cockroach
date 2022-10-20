@@ -1,0 +1,67 @@
+new-cluster localities=us-east-1,us-east-1,us-west-1,us-west-1,us-central-1,us-central-1,us-central-1,eu-west-1,eu-west-1,eu-west-1
+----
+
+exec-sql idx=2
+SET CLUSTER SETTING server.time_until_store_dead = '25s';
+----
+
+exec-sql idx=2
+CREATE DATABASE db PRIMARY REGION "us-west-1" REGIONS "us-central-1", "eu-west-1" SECONDARY REGION "us-east-1";
+----
+
+exec-sql idx=2
+ALTER DATABASE db SURVIVE REGION FAILURE;
+----
+
+exec-sql idx=2
+CREATE TABLE db.rbt(k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY TABLE IN "us-west-1";
+----
+
+exec-sql idx=2
+INSERT INTO db.rbt VALUES (1, 1), (2,2)
+----
+
+# Two of nodes 4, 5, 6, 7, 8, and 9 will have replicas, but it's not deterministic.
+wait-for-zone-config-changes idx=2 db-name=db table-name=rbt num-voters=5 num-non-voters=1 leaseholder=2 voters=0,1,3
+----
+
+# Execute query in us-west-1.
+trace-sql idx=2
+SELECT * FROM db.rbt WHERE k = 1
+----
+served locally: true
+served via follower read: false
+
+# Execute query in us-east-1.
+refresh-range-descriptor-cache idx=0 table-name=rbt
+SELECT * FROM db.rbt WHERE k = 1
+----
+LAG_BY_CLUSTER_SETTING
+
+trace-sql idx=0
+SELECT * FROM db.rbt WHERE k = 1
+----
+served locally: false
+
+# Stop all the nodes in us-west-1.
+stop-server idx=2
+----
+
+stop-server idx=3
+----
+
+# Four of nodes 4, 5, 6, 7, 8, and 9 will have replicas, but it's not deterministic.
+wait-for-zone-config-changes idx=0 db-name=db table-name=rbt num-voters=5 num-non-voters=1 leaseholder=0 voters=1
+----
+
+refresh-range-descriptor-cache idx=0 table-name=rbt
+SELECT * FROM db.rbt WHERE k = 2
+----
+LAG_BY_CLUSTER_SETTING
+
+# Reads from us-east-1 now should be local since the data should have failed over.
+trace-sql idx=0
+SELECT * FROM db.rbt WHERE k = 1
+----
+served locally: true
+served via follower read: false

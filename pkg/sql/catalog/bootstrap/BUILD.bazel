@@ -15,6 +15,8 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catconstants",
         "//pkg/sql/sem/tree",
         "//pkg/util/iterutil",
         "//pkg/util/log",

@@ -194,6 +194,12 @@ SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 			case "cleanup-cluster":
 				ds.cleanup(ctx)
 
+			case "stop-server":
+				mustHaveArgOrFatal(t, d, serverIdx)
+				var idx int
+				d.ScanArgs(t, serverIdx, &idx)
+				ds.tc.StopServer(idx)
+
 			case "exec-sql":
 				mustHaveArgOrFatal(t, d, serverIdx)
 				var err error
@@ -301,7 +307,7 @@ SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 				// There's a lot going on here and things can fail at various steps, for
 				// completely legitimate reasons, which is why this thing needs to be
 				// wrapped in a succeeds soon.
-				if err := testutils.SucceedsSoonError(func() error {
+				if err := testutils.SucceedsWithinError(func() error {
 					desc, err := ds.tc.LookupRange(lookupKey)
 					if err != nil {
 						return err
@@ -404,7 +410,7 @@ SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s'
 					}
 
 					return nil
-				}); err != nil {
+				}, 2*time.Minute); err != nil {
 					return err.Error()
 				}
 

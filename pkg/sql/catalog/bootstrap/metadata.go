@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -116,6 +118,17 @@ func (ms MetadataSchema) ForEachCatalogDescriptor(fn func(desc catalog.Descripto
 	for _, desc := range ms.descs {
 		if err := fn(desc); err != nil {
 			return iterutil.Map(err)
+		}
+	}
+	return nil
+}
+
+// FindDescriptorByName retrieves the descriptor with the specified
+// name. It returns nil if no descriptor with this name was found.
+func (ms MetadataSchema) FindDescriptorByName(name string) catalog.Descriptor {
+	for _, desc := range ms.descs {
+		if desc.GetName() == name {
+			return desc
 		}
 	}
 	return nil
@@ -452,6 +465,74 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
+	addSystemTenantEntry(target)
+}
+
+// addSystemTenantEntry adds a kv pair to system.tenants to define the initial
+// system tenant entry.
+func addSystemTenantEntry(target *MetadataSchema) {
+	info := descpb.TenantInfo{
+		ID:    roachpb.SystemTenantID.ToUint64(),
+		Name:  catconstants.SystemTenantName,
+		State: descpb.TenantInfo_ACTIVE,
+	}
+	infoBytes, err := protoutil.Marshal(&info)
+	if err != nil {
+		panic(err)
+	}
+
+	// Find the system.tenant descriptor in the newly created catalog.
+	desc := target.FindDescriptorByName(string(catconstants.TenantsTableName))
+	if desc == nil {
+		// No system.tenant table (we're likely in a secondary
+		// tenant). Nothing to do.
+		return
+	}
+	tenantsTableDesc := desc.(catalog.TableDescriptor)
+
+	// TODO(knz): What if more indexes or columns are added to the table
+	// after this code has been written? I sure wish I could express
+	// this using SQL statements (perhaps as a separate code generator
+	// that would provide raw bytes that I can paste here?)
+	values := []tree.Datum{
+		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
+		tree.MakeDBool(true),
+		tree.NewDBytes(tree.DBytes(infoBytes)),
+		tree.NewDString(info.Name),
+	}
+	if len(tenantsTableDesc.PublicColumns()) != len(values) {
+		panic(errors.New("programming error: update values when adding columns to the tenants table"))
+	}
+	var colIDtoRowIndex catalog.TableColMap
+	for i, c := range tenantsTableDesc.PublicColumns() {
+		colIDtoRowIndex.Set(c.GetID(), i)
+	}
+
+	// Encode the PK row.
+	primaryIndex := tenantsTableDesc.GetPrimaryIndex()
+	primaryIndexPairs, err := rowenc.EncodePrimaryIndex(
+		target.codec, tenantsTableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	if err != nil {
+		panic(err)
+	}
+	for _, k := range primaryIndexPairs {
+		target.otherKV = append(target.otherKV,
+			roachpb.KeyValue{Key: k.Key, Value: k.Value})
+	}
+
+	// Encode the secondary index rows.
+	secondaryIndexes := tenantsTableDesc.PublicNonPrimaryIndexes()
+	for _, secondaryIndex := range secondaryIndexes {
+		secondaryIndexPairs, err := rowenc.EncodeSecondaryIndex(
+			target.codec, tenantsTableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+		if err != nil {
+			panic(err)
+		}
+		for _, k := range secondaryIndexPairs {
+			target.otherKV = append(target.otherKV,
+				roachpb.KeyValue{Key: k.Key, Value: k.Value})
+		}
+	}
 }
 
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a

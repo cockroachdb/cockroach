@@ -246,11 +246,11 @@ func (d sqlDecoder) DecodeDescMetadataID(key roachpb.Key) (uint32, error) {
 // DecodeTenantMetadataID decodes a tenant ID from a tenant metadata key.
 func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, error) {
 	// Extract table and index ID from key.
-	remaining, tableID, _, err := d.DecodeIndexPrefix(key)
+	remaining, tableID, indexID, err := d.DecodeIndexPrefix(key)
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
-	if tableID != TenantsTableID {
+	if tableID != TenantsTableID || indexID != TenantsTablePrimaryKeyIndexID {
 		return roachpb.TenantID{}, errors.Errorf("key is not a tenant table entry: %v", key)
 	}
 	// Extract the tenant ID.
