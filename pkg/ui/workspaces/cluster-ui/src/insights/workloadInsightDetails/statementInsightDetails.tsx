@@ -39,6 +39,11 @@ import { commonStyles } from "src/common";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { CockroachCloudContext } from "../../contexts";
+import {
+  TransactionDetailsLink,
+  StatementDetailsLink,
+} from "../workloadInsights/util";
+import { TimeScale } from "../../timeScaleDropdown";
 
 const tableCx = classNames.bind(insightTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
@@ -48,7 +53,12 @@ export interface StatementInsightDetailsStateProps {
   insightError: Error | null;
 }
 
+export interface StatementInsightDetailsDispatchProps {
+  setTimeScale: (ts: TimeScale) => void;
+}
+
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
+  StatementInsightDetailsDispatchProps &
   RouteComponentProps<unknown>;
 
 export class StatementInsightDetails extends React.Component<StatementInsightDetailsProps> {
@@ -196,7 +206,11 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
                 />
                 <SummaryCardItem
                   label="Transaction Fingerprint ID"
-                  value={String(insightDetails.transactionFingerprintID)}
+                  value={TransactionDetailsLink(
+                    insightDetails.transactionFingerprintID,
+                    insightDetails.startTime,
+                    this.props.setTimeScale,
+                  )}
                 />
                 <SummaryCardItem
                   label="Transaction Execution ID"
@@ -204,7 +218,10 @@ export class StatementInsightDetails extends React.Component<StatementInsightDet
                 />
                 <SummaryCardItem
                   label="Statement Fingerprint ID"
-                  value={String(insightDetails.statementFingerprintID)}
+                  value={StatementDetailsLink(
+                    insightDetails,
+                    this.props.setTimeScale,
+                  )}
                 />
               </SummaryCard>
             </Col>
