@@ -898,7 +898,6 @@ func (ts *TestServer) StartTenant(
 	sqlServer, authServer, drainServer, addr, httpAddr, err := startTenantInternal(
 		ctx,
 		stopper,
-		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
 	)

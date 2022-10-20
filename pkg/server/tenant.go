@@ -61,13 +61,9 @@ import (
 
 // StartTenant starts a stand-alone SQL server against a KV backend.
 func StartTenant(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
-	baseCfg BaseConfig,
-	sqlCfg SQLConfig,
+	ctx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (*SQLServerWrapper, error) {
-	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +109,7 @@ func (s *SQLServerWrapper) Drain(
 
 // startTenantInternal is used to build TestServers.
 func startTenantInternal(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
-	baseCfg BaseConfig,
-	sqlCfg SQLConfig,
+	ctx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (
 	sqlServer *SQLServer,
 	authServer *authenticationServer,
@@ -135,7 +127,7 @@ func startTenantInternal(
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
 
-	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg)
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
@@ -381,11 +373,7 @@ func startTenantInternal(
 }
 
 func makeTenantSQLServerArgs(
-	startupCtx context.Context,
-	stopper *stop.Stopper,
-	kvClusterName string,
-	baseCfg BaseConfig,
-	sqlCfg SQLConfig,
+	startupCtx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -393,13 +381,6 @@ func makeTenantSQLServerArgs(
 	// the instance ID (once known) as a tag.
 	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
-
-	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
-	// and this tenant work.
-	//
-	// TODO(tbg): address this when we introduce the real tenant RPCs in:
-	// https://github.com/cockroachdb/cockroach/issues/47898
-	baseCfg.ClusterName = kvClusterName
 
 	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
 

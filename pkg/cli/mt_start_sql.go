@@ -86,8 +86,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	ambientCtx := serverCfg.AmbientCtx
 	ctx = ambientCtx.AnnotateCtx(ctx)
 
-	const clusterName = ""
-
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
@@ -124,7 +122,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	sqlServer, err := server.StartTenant(
 		ctx,
 		stopper,
-		clusterName,
 		serverCfg.BaseConfig,
 		serverCfg.SQLConfig,
 	)
