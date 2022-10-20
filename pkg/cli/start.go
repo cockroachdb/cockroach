@@ -383,7 +383,42 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 //
 // If the argument startSingleNode is set the replication factor
 // will be set to 1 all zone configs (see initial_sql.go).
-func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnErr error) {
+func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
+	const serverType redact.SafeString = "node"
+
+	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+		// Beware of not writing simply 'return server.NewServer()'. This is
+		// because it would cause the serverStartupInterface reference to
+		// always be non-nil, even if NewServer returns a nil pointer (and
+		// an error). The code below is dependent on the interface
+		// reference remaining nil in case of error.
+		s, err := server.NewServer(serverCfg, stopper)
+		if err != nil {
+			return nil, err
+		}
+		return s, nil
+	}
+
+	maybeRunInitialSQL := func(ctx context.Context, s serverStartupInterface) error {
+		// Run SQL for new clusters.
+		//
+		// TODO(knz): If/when we want auto-creation of an initial admin user,
+		// this can be achieved here.
+		return runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */)
+	}
+
+	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, maybeRunInitialSQL)
+}
+
+// runStartInternal contains the code common to start a regular server
+// or a SQL-only server.
+func runStartInternal(
+	cmd *cobra.Command,
+	serverType redact.SafeString,
+	initConfigFn func(context.Context) error,
+	newServerFn newServerFn,
+	maybeRunInitialSQL func(context.Context, serverStartupInterface) error,
+) error {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -483,7 +518,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	cgroups.AdjustMaxProcs(ctx)
 
 	// Check the --join flag.
-	if !cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
+	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name); fl != nil && !fl.Changed {
 		err := errors.WithHint(
 			errors.New("no --join flags provided to 'cockroach start'"),
 			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
@@ -492,6 +527,13 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 
 	// Now perform additional configuration tweaks specific to the start
 	// command.
+
+	// Initialize the node's configuration from startup parameters.
+	// This also reads the part of the configuration that comes from
+	// environment variables.
+	if err := initConfigFn(ctx); err != nil {
+		return errors.Wrapf(err, "failed to initialize %s", serverType)
+	}
 
 	st := serverCfg.BaseConfig.Settings
 
@@ -510,13 +552,6 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// NB: we only support one engine type for now.
 	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
 		serverCfg.StorageEngine = enginepb.EngineTypePebble
-	}
-
-	// Initialize the node's configuration from startup parameters.
-	// This also reads the part of the configuration that comes from
-	// environment variables.
-	if err := serverCfg.InitNode(ctx); err != nil {
-		return errors.Wrap(err, "failed to initialize node")
 	}
 
 	// The configuration is now ready to report to the user and the log
@@ -552,34 +587,12 @@ If problems persist, please see %s.`
 
 	initGEOS(ctx)
 
-	const serverType redact.SafeString = "node"
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
 
 	// Run the rest of the startup process in a goroutine separate from
 	// the main goroutine to avoid preventing proper handling of signals
 	// if we get stuck on something during initialization (#10138).
-
-	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
-		// Beware of not writing simply 'return server.NewServer()'. This is
-		// because it would cause the serverStartupInterface reference to
-		// always be non-nil, even if NewServer returns a nil pointer (and
-		// an error). The code below is dependent on the interface
-		// reference remaining nil in case of error.
-		s, err := server.NewServer(serverCfg, stopper)
-		if err != nil {
-			return nil, err
-		}
-		return s, nil
-	}
-
-	maybeRunInitialSQL := func(ctx context.Context, s serverStartupInterface) error {
-		// Run SQL for new clusters.
-		//
-		// TODO(knz): If/when we want auto-creation of an initial admin user,
-		// this can be achieved here.
-		return runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */)
-	}
 
 	srvStatus, serverShutdownReqC := createAndStartServerAsync(ctx,
 		tBegin, &serverCfg, stopper, startupSpan, newServerFn, maybeRunInitialSQL, serverType)
