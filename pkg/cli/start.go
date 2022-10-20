@@ -311,6 +311,41 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
+type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error)
+
+type serverStartupInterface interface {
+	serverShutdownInterface
+
+	// ClusterSettings retrieves this server's settings.
+	ClusterSettings() *cluster.Settings
+
+	// LogicalClusterID retrieves this server's logical cluster ID.
+	LogicalClusterID() uuid.UUID
+
+	// PreStart starts the server on the specified port(s) and
+	// initializes subsystems.
+	// It does not activate the pgwire listener over the network / unix
+	// socket, which is done by the AcceptClients() method. The separation
+	// between the two exists so that SQL initialization can take place
+	// before the first client is accepted.
+	PreStart(ctx context.Context) error
+
+	// StartDiagnostics starts periodic diagnostics reporting and update checking.
+	// NOTE: This is not called in PreStart so that it's disabled by default for
+	// testing.
+	StartDiagnostics(ctx context.Context)
+
+	// AcceptClients starts listening for incoming SQL clients over the network.
+	AcceptClients(ctx context.Context) error
+
+	// InitialStart returns whether this node is starting for the first time.
+	// This is (currently) used when displaying the server status report
+	// on the terminal & in logs. We know that some folk have automation
+	// that depend on certain strings displayed from this when orchestrating
+	// KV-only nodes.
+	InitialStart() bool
+}
+
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
@@ -525,8 +560,15 @@ If problems persist, please see %s.`
 	// the main goroutine to avoid preventing proper handling of signals
 	// if we get stuck on something during initialization (#10138).
 	var serverStatusMu serverStatus
-	var s *server.Server
+	var s serverStartupInterface
 	serverStartupErrC := make(chan error, 1)
+
+	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+		return server.NewServer(serverCfg, stopper)
+	}
+
+	const isStorageClusterNode = true
+
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
@@ -556,7 +598,7 @@ If problems persist, please see %s.`
 		if err := func() error {
 			// Instantiate the server.
 			var err error
-			s, err = server.NewServer(serverCfg, stopper)
+			s, err = newServerFn(ctx, serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
 			}
@@ -605,11 +647,19 @@ If problems persist, please see %s.`
 			}
 			initialStart := s.InitialStart()
 
-			// Run SQL for new clusters.
-			// TODO(knz): If/when we want auto-creation of an initial admin user,
-			// this can be achieved here.
-			if err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
-				return err
+			if isStorageClusterNode {
+				// Run SQL for new clusters.
+				//
+				// TODO(knz): If/when we want auto-creation of an initial admin user,
+				// this can be achieved here.
+				//
+				// TODO(knz): It's unfortunate that this conditional is piercing the
+				// veil of the serverStartupInterface type, but the alternative
+				// (extracting all the dependencies of runInitialSQL into the interface)
+				// is objectively worse.
+				if err := runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
+					return err
+				}
 			}
 
 			// Now let SQL clients in.
@@ -620,7 +670,7 @@ If problems persist, please see %s.`
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
-				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
+				isStorageClusterNode, initialStart, s.LogicalClusterID())
 		}(); err != nil {
 			serverStartupErrC <- err
 		}
@@ -1034,7 +1084,7 @@ func reportServerInfo(
 		buf.Printf("cluster name:\t%s\n", log.SafeManaged(baseCfg.ClusterName))
 	}
 	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get()
-	if tenantClusterID.Equal(uuid.Nil) {
+	if tenantClusterID.Equal(clusterID) {
 		buf.Printf("clusterID:\t%s\n", log.SafeManaged(clusterID))
 	} else {
 		buf.Printf("storage clusterID:\t%s\n", log.SafeManaged(clusterID))

@@ -96,7 +96,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 
@@ -1716,6 +1716,12 @@ func (s *Server) TempDir() string {
 // PGServer exports the pgwire server. Used by tests.
 func (s *Server) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
+}
+
+// LogicalClusterID implements cli.serverStartupInterface. This
+// implementation exports the logical cluster ID of the system tenant.
+func (s *Server) LogicalClusterID() uuid.UUID {
+	return s.sqlServer.LogicalClusterID()
 }
 
 // StartDiagnostics starts periodic diagnostics reporting and update checking.
