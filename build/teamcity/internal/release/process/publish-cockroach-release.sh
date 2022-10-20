@@ -95,26 +95,71 @@ EOF
 tc_end_block "Make and publish release S3 artifacts"
 
 
-tc_start_block "Make and push docker images"
+tc_start_block "Make and push multiarch docker images"
 configure_docker_creds
 docker_login_with_google
 docker_login
 
-# TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
-curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
-cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
-cp -r licenses build/deploy/
+declare -a gcr_amends
+declare -a dockerhub_amends
 
-docker build \
-  --label version=$version \
-  --no-cache \
-  --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \
-  --tag=${gcr_repository}:${build_name} \
-  build/deploy
+for platform_name in "${platform_names[@]}"; do
+  tarball_arch="$(tarball_arch_from_platform_name "$platform_name")"
+  docker_arch="$(docker_arch_from_platform_name "$platform_name")"
+  linux_platform=linux
+  if [[ $tarball_arch == "aarch64" ]]; then
+    linux_platform=linux-3.7.10-gnu
+  fi
+  # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
+  # NB: tar usually stops reading as soon as it sees an empty block but that makes
+  # curl unhappy, so passing `--ignore-zeros` will cause it to read to the end.
+  cp --recursive "build/deploy" "build/deploy-${docker_arch}"
+  curl \
+    --fail \
+    --silent \
+    --show-error \
+    --output /dev/stdout \
+    --url "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
+    | tar \
+    --directory="build/deploy-${docker_arch}" \
+    --extract \
+    --file=/dev/stdin \
+    --ungzip \
+    --ignore-zeros \
+    --strip-components=1
+  cp --recursive licenses "build/deploy-${docker_arch}"
+  # Move the libs where Dockerfile expects them to be
+  mv build/deploy-${docker_arch}/lib/* build/deploy-${docker_arch}/
+  rmdir build/deploy-${docker_arch}/lib
 
-docker push "${dockerhub_repository}:${build_name}"
-docker push "${gcr_repository}:${build_name}"
-tc_end_block "Make and push docker images"
+  dockerhub_arch_tag="${dockerhub_repository}:${docker_arch}-${build_name}"
+  gcr_arch_tag="${gcr_repository}:${docker_arch}-${build_name}"
+  dockerhub_amends+=("--amend" "$dockerhub_arch_tag")
+  gcr_amends+=("--amend" "$gcr_arch_tag")
+
+  # Tag the arch specific images with only one tag per repository. The manifests will reference the tags.
+  docker build \
+    --label version="$version" \
+    --no-cache \
+    --pull \
+    --platform="linux/${docker_arch}" \
+    --tag="${dockerhub_arch_tag}" \
+    --tag="${gcr_arch_tag}" \
+    "build/deploy-${docker_arch}"
+  docker push "$gcr_arch_tag"
+  docker push "$dockerhub_arch_tag"
+done
+
+gcr_tag="${gcr_repository}:${build_name}"
+dockerhub_tag="${dockerhub_repository}:${build_name}"
+docker manifest create "${gcr_tag}" "${gcr_amends[@]}"
+docker manifest push "${gcr_tag}"
+docker manifest create "${dockerhub_tag}" "${dockerhub_amends[@]}"
+docker manifest push "${dockerhub_tag}"
+
+docker manifest create "${dockerhub_repository}:latest" "${dockerhub_amends[@]}"
+docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_amends[@]}"
+tc_end_block "Make and push multiarch docker images"
 
 
 tc_start_block "Push release tag to GitHub"
@@ -152,31 +197,31 @@ tc_end_block "Publish S3 binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ -z "$PRE_RELEASE" ]]; then
-  docker push "${dockerhub_repository}:latest-${release_branch}"
+  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
 else
-  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tag was _not_ pushed."
+  echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
 fi
-tc_end_block "Tag docker image as latest-RELEASE_BRANCH"
+tc_end_block "Tag docker images as latest-RELEASE_BRANCH"
 
 
-tc_start_block "Tag docker image as latest"
+tc_start_block "Tag docker images as latest"
 # Only push the "latest" tag for our most recent release branch and for the
 # latest unstable release
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || -n "${PRE_RELEASE}" ]]; then
-  docker push "${dockerhub_repository}:latest"
+  docker manifest push "${dockerhub_repository}:latest"
 else
-  echo "The ${dockerhub_repository}:latest docker image tag was _not_ pushed."
+  echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
 fi
-tc_end_block "Tag docker image as latest"
+tc_end_block "Tag docker images as latest"
 
 
 tc_start_block "Verify docker images"
 
 images=(
-  "${dockerhub_repository}:${build_name}"
-  "${gcr_repository}:${build_name}"
+  "${dockerhub_tag}"
+  "${gcr_tag}"
 )
 if [[ -z "$PRE_RELEASE" ]]; then
   images+=("${dockerhub_repository}:latest-${release_branch}")
@@ -188,32 +233,35 @@ fi
 error=0
 
 for img in "${images[@]}"; do
-  docker rmi "$img"
-  docker pull "$img"
-  output=$(docker run "$img" version)
-  build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
-  sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
-  build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
-
-  # Build Type should always be "release"
-  if [ "$build_type" != "release" ]; then
-    echo "ERROR: Release type mismatch, expected 'release', got '$build_type'"
-    error=1
-  fi
-  if [ "$sha" != "$BUILD_VCS_NUMBER" ]; then
-    echo "ERROR: SHA mismatch, expected '$BUILD_VCS_NUMBER', got '$sha'"
-    error=1
-  fi
-  if [ "$build_tag" != "$build_name" ]; then
-    echo "ERROR: Build tag mismatch, expected '$build_name', got '$build_tag'"
-    error=1
-  fi
-
-  build_tag_output=$(docker run "$img" version --build-tag)
-  if [ "$build_tag_output" != "$build_name" ]; then
-    echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$build_name', got '$build_tag_output'"
-    error=1
-  fi
+  for platform_name in "${platform_names[@]}"; do
+    docker_arch="$(docker_arch_from_platform_name "$platform_name")"
+    docker rmi "$img" || true
+    docker pull --platform="linux/${docker_arch}" "$img"
+    output=$(docker run --platform="linux/${docker_arch}" "$img" version)
+    build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+    sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+    build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  
+    # Build Type should always be "release"
+    if [ "$build_type" != "release" ]; then
+      echo "ERROR: Release type mismatch, expected 'release', got '$build_type'"
+      error=1
+    fi
+    if [ "$sha" != "$BUILD_VCS_NUMBER" ]; then
+      echo "ERROR: SHA mismatch, expected '$BUILD_VCS_NUMBER', got '$sha'"
+      error=1
+    fi
+    if [ "$build_tag" != "$build_name" ]; then
+      echo "ERROR: Build tag mismatch, expected '$build_name', got '$build_tag'"
+      error=1
+    fi
+  
+    build_tag_output=$(docker run --platform="linux/${docker_arch}" "$img" version --build-tag)
+    if [ "$build_tag_output" != "$build_name" ]; then
+      echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$build_name', got '$build_tag_output'"
+      error=1
+    fi
+  done
 done
 
 if [ $error = 1 ]; then
