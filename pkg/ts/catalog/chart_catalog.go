@@ -2827,9 +2827,9 @@ var charts = []sectionDescription{
 		Organization: [][]string{{SQLLayer, "SQL", "Row Level TTL"}},
 		Charts: []chartDescription{
 			{
-				Title: "Active Range Deletes",
+				Title: "Active Span Deletes",
 				Metrics: []string{
-					"jobs.row_level_ttl.num_active_ranges",
+					"jobs.row_level_ttl.num_active_spans",
 				},
 				AxisLabel: "Num Running",
 			},
@@ -2852,7 +2852,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Net Processing Latency",
 				Metrics: []string{
-					"jobs.row_level_ttl.range_total_duration",
+					"jobs.row_level_ttl.span_total_duration",
 				},
 				AxisLabel: "Latency (nanoseconds)",
 			},
