@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,10 +37,40 @@ import (
 )
 
 func init() {
-	sql.AddPlanHook("alter changefeed", alterChangefeedPlanHook)
+	sql.AddPlanHook("alter changefeed", alterChangefeedPlanHook, alterChangefeedTypeCheck)
 }
 
 const telemetryPath = `changefeed.alter`
+
+func alterChangefeedTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (matched bool, header colinfo.ResultColumns, _ error) {
+	alterChangefeedStmt, ok := stmt.(*tree.AlterChangefeed)
+	if !ok {
+		return false, nil, nil
+	}
+	toCheck := []exprutil.ToTypeCheck{
+		exprutil.Ints{alterChangefeedStmt.Jobs},
+	}
+	for _, cmd := range alterChangefeedStmt.Cmds {
+		switch v := cmd.(type) {
+		case *tree.AlterChangefeedSetOptions:
+			toCheck = append(toCheck, &exprutil.KVOptions{
+				KVOptions:  v.Options,
+				Validation: changefeedvalidators.AlterOptionValidations,
+			})
+		}
+	}
+	if err := exprutil.TypeCheck(ctx, "ALTER CHANGEFED", p.SemaCtx(), toCheck...); err != nil {
+		return false, nil, err
+	}
+	return true, alterChangefeedHeader, nil
+}
+
+var alterChangefeedHeader = colinfo.ResultColumns{
+	{Name: "job_id", Typ: types.Int},
+	{Name: "job_description", Typ: types.String},
+}
 
 // alterChangefeedPlanHook implements sql.PlanHookFn.
 func alterChangefeedPlanHook(
@@ -50,10 +81,6 @@ func alterChangefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	header := colinfo.ResultColumns{
-		{Name: "job_id", Typ: types.Int},
-		{Name: "job_description", Typ: types.String},
-	}
 	lockForUpdate := false
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -88,17 +115,19 @@ func alterChangefeedPlanHook(
 		if err != nil {
 			return err
 		}
-		newOptions, newSinkURI, err := generateNewOpts(ctx, p, alterChangefeedStmt.Cmds, prevOpts, prevDetails.SinkURI)
+		exprEval := p.ExprEvaluator("ALTER CHANGEFEED")
+		newOptions, newSinkURI, err := generateNewOpts(
+			ctx, exprEval, alterChangefeedStmt.Cmds, prevOpts, prevDetails.SinkURI,
+		)
 		if err != nil {
 			return err
 		}
 
-		newTargets, newProgress, newStatementTime, originalSpecs, err := generateNewTargets(ctx,
-			p,
+		newTargets, newProgress, newStatementTime, originalSpecs, err := generateNewTargets(
+			ctx, exprEval, p,
 			alterChangefeedStmt.Cmds,
 			newOptions.AsMap(), // TODO: Remove .AsMap()
-			prevDetails,
-			job.Progress(),
+			prevDetails, job.Progress(),
 		)
 		if err != nil {
 			return err
@@ -185,7 +214,7 @@ func alterChangefeedPlanHook(
 		}
 	}
 
-	return fn, header, nil, false, nil
+	return fn, alterChangefeedHeader, nil, false, nil
 }
 
 func getTargetDesc(
@@ -220,7 +249,7 @@ func getTargetDesc(
 
 func generateNewOpts(
 	ctx context.Context,
-	p sql.PlanHookState,
+	exprEval exprutil.Evaluator,
 	alterCmds tree.AlterChangefeedCmds,
 	prevOpts map[string]string,
 	prevSinkURI string,
@@ -232,12 +261,9 @@ func generateNewOpts(
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedSetOptions:
-			optsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedvalidators.AlterOptionValidations)
-			if err != nil {
-				return null, ``, err
-			}
-
-			opts, err := optsFn()
+			opts, err := exprEval.KVOptions(
+				ctx, v.Options, changefeedvalidators.AlterOptionValidations,
+			)
 			if err != nil {
 				return null, ``, err
 			}
@@ -296,6 +322,7 @@ func generateNewOpts(
 
 func generateNewTargets(
 	ctx context.Context,
+	exprEval exprutil.Evaluator,
 	p sql.PlanHookState,
 	alterCmds tree.AlterChangefeedCmds,
 	opts map[string]string,
@@ -403,11 +430,9 @@ func generateNewTargets(
 	for _, cmd := range alterCmds {
 		switch v := cmd.(type) {
 		case *tree.AlterChangefeedAddTarget:
-			targetOptsFn, err := p.TypeAsStringOpts(ctx, v.Options, changefeedvalidators.AlterTargetOptionValidations)
-			if err != nil {
-				return nil, nil, hlc.Timestamp{}, nil, err
-			}
-			targetOpts, err := targetOptsFn()
+			targetOpts, err := exprEval.KVOptions(
+				ctx, v.Options, changefeedvalidators.AlterTargetOptionValidations,
+			)
 			if err != nil {
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}

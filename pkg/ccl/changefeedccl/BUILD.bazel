@@ -78,6 +78,7 @@ go_library(
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/exprutil",
         "//pkg/sql/flowinfra",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
