@@ -23,7 +23,7 @@ import {
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
-import { toDateRange } from "../../timeScaleDropdown";
+import { toRoundedDateRange } from "../../timeScaleDropdown";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   yield put(sqlStatsActions.request(action.payload));
@@ -50,7 +50,7 @@ export function* updateSQLStatsTimeScaleSaga(
       value: ts,
     }),
   );
-  const [start, end] = toDateRange(ts);
+  const [start, end] = toRoundedDateRange(ts);
   const req = new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),

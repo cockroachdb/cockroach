@@ -67,7 +67,7 @@ import {
   timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleToString,
-  toDateRange,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -113,7 +113,7 @@ interface TState {
 function statementsRequestFromProps(
   props: TransactionDetailsProps,
 ): protos.cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(props.timeScale);
   return new protos.cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),

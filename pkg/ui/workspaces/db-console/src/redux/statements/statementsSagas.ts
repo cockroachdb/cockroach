@@ -41,7 +41,7 @@ import {
   createStatementDiagnosticsAlertLocalSetting,
   cancelStatementDiagnosticsAlertLocalSetting,
 } from "src/redux/alerts";
-import { TimeScale, toDateRange } from "@cockroachlabs/cluster-ui";
+import { TimeScale, toRoundedDateRange } from "@cockroachlabs/cluster-ui";
 import Long from "long";
 import { setTimeScale } from "src/redux/timeScale";
 
@@ -157,7 +157,7 @@ export function* setCombinedStatementsTimeScaleSaga(
   const ts = action.payload;
 
   yield put(setTimeScale(ts));
-  const [start, end] = toDateRange(ts);
+  const [start, end] = toRoundedDateRange(ts);
   const req = new CombinedStatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),

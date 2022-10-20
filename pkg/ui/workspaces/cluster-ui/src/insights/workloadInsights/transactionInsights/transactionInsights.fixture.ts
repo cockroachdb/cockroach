@@ -66,4 +66,5 @@ export const transactionInsightsPropsFixture: TransactionInsightsViewProps = {
   refreshTransactionInsights: () => {},
   onSortChange: () => {},
   onFiltersChange: () => {},
+  setTimeScale: () => {},
 };
