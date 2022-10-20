@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -82,7 +83,14 @@ var (
 	)
 )
 
-const backupProcessorName = "backupDataProcessor"
+const (
+	backupProcessorName = "backupDataProcessor"
+
+	// minimumWorkerCount is the minimum number of workers we will try to start.
+	// If we can't reserve memory for at least this many workers, the backup
+	// processors will fail.
+	minimumWorkerCount = 2
+)
 
 // TODO(pbardea): It would be nice if we could add some DistSQL processor tests
 // we would probably want to have a mock cloudStorage object that we could
@@ -318,17 +326,16 @@ func runBackupProcessor(
 
 	// Start start a group of goroutines which each pull spans off of `todo` and
 	// send export requests. Any spans that encounter write intent errors during
-	// Export are put back on the todo queue for later processing. Any returned
-	// SSTs are put on a  `returnedSpansChan` to be routed to a buffered sink that
-	// merges them until they are large enough to flush.
-	//
-	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
-	//  *2). See #49798.
-	numSenders := int(kvserver.ExportRequestsLimit.Get(&clusterSettings.SV)) * 2
+	// Export are put back on the todo queue for later processing.
+	numSenders, release, err := reserveWorkerMemory(ctx, clusterSettings, memAcc)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "starting %d backup export workers", numSenders)
+	defer release()
+
 	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
 		readTime := spec.BackupEndTime.GoTime()
-		// TODO(ssd): We should consider reserving memory for the in-memory buffers used by
-		// the internal storage provider's Writer.
 		sink := makeFileSSTSink(sinkConf, storage)
 		defer func() {
 			if err := sink.flush(ctx); err != nil {
@@ -563,6 +570,36 @@ func recordExportStats(
 		exportStats.DataSize += int64(len(f.SST))
 	}
 	sp.RecordStructured(&exportStats)
+}
+
+// reserveWorkerMemory returns the number of workers after reserving the appropriate
+// amount of memory for each worker.
+func reserveWorkerMemory(
+	ctx context.Context, settings *cluster.Settings, memAcc *mon.BoundAccount,
+) (int, func(), error) {
+	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
+	//  *2). See #49798.
+	maxWorkerCount := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
+	// We assume that each worker needs at least enough memory to hold onto
+	// 1 buffer used by the external storage.
+	perWorkerMemory := cloud.WriteChunkSize.Get(&settings.SV)
+	// TODO(ssd): We could also add the size of the SST we might be holding here.
+	// Previously we would reserve a fixed-size buffer, but we left the possibly
+	// in-flight SSTs unaccounted for.
+	// perWorkerMemory = perWorkerMemory + batcheval.ExportRequestTargetFileSize.Get(&settings.SV)
+	if err := memAcc.Grow(ctx, minimumWorkerCount*perWorkerMemory); err != nil {
+		return 0, nil, errors.Wrapf(err, "could not reserve memory for minimum number of backup workers (%d * %d)", minimumWorkerCount, perWorkerMemory)
+	}
+
+	workerCount := minimumWorkerCount
+	for i := 0; i < (maxWorkerCount - minimumWorkerCount); i++ {
+		if err := memAcc.Grow(ctx, perWorkerMemory); err != nil {
+			log.Warningf(ctx, "backup worker count restricted by memory limit")
+			break
+		}
+		workerCount++
+	}
+	return workerCount, func() { memAcc.Shrink(ctx, int64(workerCount)*perWorkerMemory) }, nil
 }
 
 func logClose(ctx context.Context, c io.Closer, desc string) {
