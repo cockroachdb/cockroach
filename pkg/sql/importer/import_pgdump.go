@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -51,14 +52,12 @@ func createTempImportDatabase(ctx context.Context, p sql.JobExecContext) (descpb
 	if err != nil {
 		return 0, err
 	}
-	// TODO(adityamaru): Figure out how to create the database descriptor with
-	// privileges for only the node user. Currently, root and admin have ALL
-	// privileges on the database descriptor. This is enforced by
-	// `ValidateSuperuserPrivileges` when writing the descriptor to store.
-	// I tried moving the database descriptor to OFFLINE instead of mucking with
-	// privileges, but this prevents us from running any DDL statements on this
-	// database.
-	tempDBDesc := dbdesc.NewInitial(id, ImportTempPgdumpDB, username.NodeUserName())
+	// Only the node user owns the privileges of the temp database.
+	// Note that the superusers can still see this DB, but don't have privilege.
+	// TODO(janexing): is this what we want, or we disallow anyone but the node to
+	// see this DB?
+	tempDBDesc := dbdesc.NewInitialWithoutSuperuser(id, ImportTempPgdumpDB, username.NodeUserName())
+	tempDBDesc.TempDBFromImportPgdump = true
 	return tempDBDesc.GetID(), p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
 		ctx context.Context, txn *kv.Txn, col *descs.Collection,
 	) error {
@@ -129,6 +128,8 @@ func bufferDDLPostgresStatement(
 	handler *PostgresDDLHandler,
 ) error {
 	switch stmt := postgresStmt.(type) {
+	case *tree.CreateRole:
+		handler.BufferedDDLStmts = append(handler.BufferedDDLStmts, formatPostgresStatement(stmt))
 	case *tree.CreateDatabase:
 		// If we have previously seen a `CREATE DATABASE` statement then we error
 		// out.
@@ -331,6 +332,32 @@ func bufferDDLPostgresStatement(
 	case *tree.CreateType:
 		return errors.New("IMPORT PGDUMP does not support user defined types; please" +
 			" remove all CREATE TYPE statements and their usages from the dump file")
+	case *tree.Grant:
+		for _, db := range stmt.Targets.Databases {
+			if err := checkCatalogName(db, tree.Name(handler.dumpDatabaseName)); err != nil {
+				return err
+			}
+		}
+		for _, schema := range stmt.Targets.Schemas {
+			if schema.ExplicitCatalog {
+				if err := checkCatalogName(schema.CatalogName, tree.Name(handler.dumpDatabaseName)); err != nil {
+					return err
+				}
+				schema.CatalogName = ImportTempPgdumpDB
+			}
+		}
+		for _, table := range stmt.Targets.Tables.TablePatterns {
+			explicitCatalog, _ := table.GetExplicitCatalog()
+			if explicitCatalog != "" {
+				if err := checkCatalogName(explicitCatalog, tree.Name(handler.dumpDatabaseName)); err != nil {
+					return err
+				}
+				if err := table.SetExplicitCatalog(ImportTempPgdumpDB); err != nil {
+					return err
+				}
+			}
+		}
+		handler.BufferedDDLStmts = append(handler.BufferedDDLStmts, formatPostgresStatement(stmt))
 	case error:
 		if !errors.Is(stmt, errCopyDone) {
 			return stmt
@@ -416,12 +443,11 @@ func runDDLStmtsFromDumpFile(
 	return nil
 }
 
-func MoveObjectsInTempDatabaseToState(
-	ctx context.Context,
-	tempDatabaseID descpb.ID,
-	state descpb.DescriptorState,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
+// RevokeSuperUserPrivilegesOnObjects revokes the privileges for superusers that
+// were applied on objects by default. The objects should only be accessible by
+// the node user.
+func RevokeSuperUserPrivilegesOnObjects(
+	ctx context.Context, tempDatabaseID descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
 ) ([]*tabledesc.Mutable, []*schemadesc.Mutable, error) {
 	importedTables := make([]*tabledesc.Mutable, 0)
 	importedSchemas := make([]*schemadesc.Mutable, 0)
@@ -434,9 +460,8 @@ func MoveObjectsInTempDatabaseToState(
 	if !ok {
 		if err != nil {
 			return nil, nil, err
-		} else {
-			return nil, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", tempDatabaseID))
 		}
+		return nil, nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", tempDatabaseID))
 	}
 	tableDescs, err := descsCol.GetAllTableDescriptorsInDatabase(ctx, txn, db)
 	if err != nil {
@@ -452,10 +477,11 @@ func MoveObjectsInTempDatabaseToState(
 		if err != nil {
 			return nil, nil, err
 		}
-		mutTableDesc.State = state
-		if state == descpb.DescriptorState_OFFLINE {
-			mutTableDesc.OfflineReason = "importing"
-		}
+
+		mutTableDesc.InProcessImportPgdump = true
+		mutTableDesc.Privileges.Revoke(username.RootUserName(), privilege.List{privilege.ALL}, privilege.Table, false)
+		mutTableDesc.Privileges.Revoke(username.AdminRoleName(), privilege.List{privilege.ALL}, privilege.Table, false)
+
 		importedTables = append(importedTables, mutTableDesc)
 		if err := descsCol.WriteDesc(ctx, false /* kvTrace */, mutTableDesc, txn); err != nil {
 			return nil, nil, err
@@ -474,10 +500,9 @@ func MoveObjectsInTempDatabaseToState(
 		if err != nil {
 			return nil, nil, err
 		}
-		mutSchemaDesc.State = state
-		if state == descpb.DescriptorState_OFFLINE {
-			mutSchemaDesc.OfflineReason = "importing"
-		}
+		mutSchemaDesc.InProcessImportPgdump = true
+		mutSchemaDesc.Privileges.Revoke(username.RootUserName(), privilege.List{privilege.ALL}, privilege.Schema, false)
+		mutSchemaDesc.Privileges.Revoke(username.AdminRoleName(), privilege.List{privilege.ALL}, privilege.Schema, false)
 		importedSchemas = append(importedSchemas, mutSchemaDesc)
 		if err := descsCol.WriteDesc(ctx, false /* kvTrace */, mutSchemaDesc, txn); err != nil {
 			return nil, nil, err
@@ -528,7 +553,7 @@ func ProcessDDLStatements(
 
 		// Moved all tables, schemas, sequences in the temporary database to an
 		// OFFLINE state.
-		tableDescs, schemaDescs, err = MoveObjectsInTempDatabaseToState(ctx, tempDescDBID, descpb.DescriptorState_OFFLINE, txn, descsCol)
+		tableDescs, schemaDescs, err = RevokeSuperUserPrivilegesOnObjects(ctx, tempDescDBID, txn, descsCol)
 		if err != nil {
 			return errors.Wrap(err, "moving objects in temp database to offline state")
 		}

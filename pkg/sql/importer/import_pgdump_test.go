@@ -27,15 +27,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+type userWithTablePrivilege struct {
+	grantee     string
+	catalogName string
+	schemaName  string
+	tableName   string
+	privilege   string
+}
 
 // TestParseDDLStatementsFromDumpFile tests that DDL statements in a dump file
 // are correctly parsed, and the database name for fully-qualified objects is
@@ -187,6 +198,210 @@ func TestParseDDLStatementsFromDumpFile(t *testing.T) {
 	}
 }
 
+// TestPrivilegeOnTempDB tests that the temporary database created to store the
+// newly created schemas is only accessible to the node user, and not visible
+// to any superusers.
+func TestPrivilegeOnTempDB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	kvDB := execCfg.DB
+	p, cleanup := sql.NewInternalPlanner("importPgdump",
+		kvDB.NewTxn(ctx, "TestParseDDLStatementsFromDumpFile"),
+		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		sessiondatapb.SessionData{
+			Database:   importer.ImportTempPgdumpDB,
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		})
+	defer cleanup()
+	execCtx := p.(sql.JobExecContext)
+
+	data := `
+		CREATE DATABASE jojo;
+    CREATE TABLE yaroyaro (x int);
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	_, _, err := importer.ProcessDDLStatements(ctx, &evalCtx, execCtx, srv.URL,
+		roachpb.IOFileFormat{PgDump: roachpb.PgDumpOptions{
+			MaxRowSize: importer.DefaultScanBuffer,
+		}}, importer.DefaultScanBuffer,
+		0, /* parentID*/
+	)
+
+	require.NoError(t, err)
+
+	ief := execCfg.InternalExecutorFactory
+	err = ief.DescsTxnWithExecutor(
+		ctx,
+		execCfg.DB,
+		nil, /* sessionData */
+		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) error {
+			previlegesOnTempDBFromNode, err := ie.QueryBufferedEx(
+				ctx,
+				"check privilege on temp db",
+				txn,
+				sessiondata.InternalExecutorOverride{
+					User:     username.NodeUserName(),
+					Database: importer.ImportTempPgdumpDB,
+				},
+				fmt.Sprintf(`SHOW GRANTS ON DATABASE %s`, importer.ImportTempPgdumpDB),
+			)
+			if err != nil {
+				return err
+			}
+
+			// Only public has the CONNECT privilege.
+			require.Equal(t, 1, len(previlegesOnTempDBFromNode))
+			require.Equal(t, `('crdb_temp_pgdump_import', 'public', 'CONNECT', false)`, previlegesOnTempDBFromNode[0].String())
+
+			// Remove the database at the end of the test.
+			_, err = ie.ExecEx(
+				ctx,
+				"remove temp db from import pgdump",
+				txn,
+				sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+				fmt.Sprintf(`DROP DATABASE %s CASCADE`, importer.ImportTempPgdumpDB),
+			)
+			return err
+		})
+	require.NoError(t, err)
+
+}
+
+// TestIngestionIntoTable tests that the newly created tables can be inserted.
+func TestIngestionIntoTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	baseDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	tc := testcluster.StartTestCluster(
+		t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: baseDir}})
+	defer tc.Stopper().Stop(ctx)
+
+	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	kvDB := execCfg.DB
+	p, cleanup := sql.NewInternalPlanner("importPgdump",
+		kvDB.NewTxn(ctx, "TestParseDDLStatementsFromDumpFile"),
+		username.RootUserName(), &sql.MemoryMetrics{}, &execCfg,
+		sessiondatapb.SessionData{
+			Database:   importer.ImportTempPgdumpDB,
+			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
+		})
+	defer cleanup()
+	execCtx := p.(sql.JobExecContext)
+
+	var ddlStmts string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(ddlStmts))
+		}
+	}))
+	defer srv.Close()
+
+	tests := []struct {
+		name        string
+		ddlStmts    string
+		insertStmts []string
+		queryStmt   string
+		queryResult string
+	}{
+		{
+			name: "simple insert",
+			ddlStmts: `
+		CREATE DATABASE jojo;
+    CREATE TABLE yaroyaro (x int);
+`,
+			insertStmts: []string{`INSERT INTO yaroyaro VALUES (1), (2), (3)`},
+			queryStmt:   `SELECT * FROM yaroyaro`,
+			queryResult: `[[1] [2] [3]]`,
+		},
+	}
+
+	for _, test := range tests {
+		ddlStmts = test.ddlStmts
+		_, _, err := importer.ProcessDDLStatements(ctx, &evalCtx, execCtx, srv.URL,
+			roachpb.IOFileFormat{PgDump: roachpb.PgDumpOptions{
+				MaxRowSize: importer.DefaultScanBuffer,
+			}}, importer.DefaultScanBuffer,
+			0, /* parentID*/
+		)
+
+		require.NoError(t, err)
+
+		ief := execCfg.InternalExecutorFactory
+		err = ief.DescsTxnWithExecutor(
+			ctx,
+			execCfg.DB,
+			nil, /* sessionData */
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) error {
+				var res []tree.Datums
+				var err error
+
+				for _, insertStmt := range test.insertStmts {
+					_, err = ie.ExecEx(
+						ctx,
+						"check privilege on temp db",
+						txn,
+						sessiondata.InternalExecutorOverride{
+							User:     username.NodeUserName(),
+							Database: importer.ImportTempPgdumpDB,
+						},
+						insertStmt,
+					)
+					if err != nil {
+						return errors.Wrapf(err, "running %q", insertStmt)
+					}
+				}
+
+				res, err = ie.QueryBufferedEx(
+					ctx,
+					"check privilege on temp db",
+					txn,
+					sessiondata.InternalExecutorOverride{
+						User:     username.NodeUserName(),
+						Database: importer.ImportTempPgdumpDB,
+					},
+					test.queryStmt,
+				)
+				if err != nil {
+					return err
+				}
+
+				require.Less(t, 0, len(res))
+				require.Equal(t, test.queryResult, fmt.Sprintf("%s", res))
+
+				// Remove the database at the end of the test.
+				_, err = ie.ExecEx(
+					ctx,
+					"remove temp db from import pgdump",
+					txn,
+					sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+					fmt.Sprintf(`DROP DATABASE %s CASCADE`, importer.ImportTempPgdumpDB),
+				)
+				return err
+			})
+		require.NoError(t, err)
+
+	}
+
+}
+
 func TestProcessDDLStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -278,10 +493,61 @@ func TestProcessDDLStatements(t *testing.T) {
 			expectedTables:  []string{"sbr"},
 			expectedSchemas: []string{"jojo"},
 		},
+		{
+			name: "create role and grant",
+			data: `
+		CREATE DATABASE jojo;
+		CREATE ROLE johnny;
+		CREATE TABLE sbr (id INT, horse STRING);
+    GRANT ALL ON TABLE sbr TO johnny;
+`,
+			expectedTables: []string{"sbr"},
+			expectedPrivileges: []userWithTablePrivilege{
+				{
+					grantee:     `'johnny'`,
+					catalogName: importer.ImportTempPgdumpDB,
+					schemaName:  "public",
+					tableName:   "sbr",
+					privilege:   "ALL",
+				},
+			},
+		},
 	}
 
 	for _, test := range tests {
 		data = test.data
+
+		var testPrivilegeKnobs []func(ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn)
+		for _, ep := range test.expectedPrivileges {
+			testPrivilegeKnobs = append(testPrivilegeKnobs, func(ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn) {
+				query := fmt.Sprintf(
+					`SELECT grantee FROM information_schema.table_privileges where 
+                table_catalog='%s' AND
+                table_schema='%s' AND
+                table_name='%s' AND 
+                privilege_type='%s'
+                `,
+					ep.catalogName,
+					ep.schemaName,
+					ep.tableName,
+					ep.privilege,
+				)
+				res, err := ie.QueryBufferedEx(
+					ctx,
+					fmt.Sprintf("%s, check table privilege", test.name),
+					txn,
+					sessiondata.InternalExecutorOverride{
+						User:     username.NodeUserName(),
+						Database: importer.ImportTempPgdumpDB,
+					},
+					query,
+				)
+				require.NoError(t, err)
+				require.Equal(t, 1, len(res))
+				require.Equal(t, ep.grantee, res[0][0].String())
+			})
+		}
+
 		tables, schemas, err := importer.ProcessDDLStatements(ctx, &evalCtx, execCtx, srv.URL,
 			roachpb.IOFileFormat{PgDump: roachpb.PgDumpOptions{
 				MaxRowSize: importer.DefaultScanBuffer,
@@ -303,24 +569,33 @@ func TestProcessDDLStatements(t *testing.T) {
 
 		for i, table := range tables {
 			require.Equal(t, table.GetName(), test.expectedTables[i])
-			require.True(t, table.Offline())
 			require.Equal(t, tempImportDBID, table.GetParentID())
 		}
 
 		for i, schema := range schemas {
 			require.Equal(t, schema.GetName(), test.expectedSchemas[i])
-			require.True(t, schema.Offline())
 			require.Equal(t, tempImportDBID, schema.GetParentID())
 		}
 
-		// For test purposes move all objects to PUBLIC so that we can drop the
-		// database.
 		ief := execCfg.InternalExecutorFactory
-		err = ief.DescsTxn(ctx, execCfg.DB, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			_, _, err = importer.MoveObjectsInTempDatabaseToState(ctx, tempImportDBID, descpb.DescriptorState_PUBLIC, txn, descsCol)
-			return err
-		})
+		err = ief.DescsTxnWithExecutor(
+			ctx,
+			execCfg.DB,
+			nil, /* sessionData */
+			func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) error {
+				for _, testPrivilegeKnob := range testPrivilegeKnobs {
+					testPrivilegeKnob(ctx, ie, txn)
+				}
+				// Remove the database at the end of the test.
+				_, err := ie.ExecEx(
+					ctx,
+					"remove temp db from import pgdump",
+					txn,
+					sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+					fmt.Sprintf(`DROP DATABASE %s CASCADE`, importer.ImportTempPgdumpDB),
+				)
+				return err
+			})
 		require.NoError(t, err)
-		tdb.Exec(t, fmt.Sprintf(`DROP DATABASE %s CASCADE`, importer.ImportTempPgdumpDB))
 	}
 }

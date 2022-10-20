@@ -300,14 +300,16 @@ func maybeFillInDescriptor(
 		objectType = privilege.Table
 	}
 
-	fixedPrivileges := catprivilege.MaybeFixPrivileges(
-		&desc.Privileges,
-		desc.GetParentID(),
-		parentSchemaID,
-		objectType,
-		desc.GetName(),
-	)
-	set(catalog.UpgradedPrivileges, fixedPrivileges)
+	if !desc.InProcessImportPgdump {
+		fixedPrivileges := catprivilege.MaybeFixPrivileges(
+			&desc.Privileges,
+			desc.GetParentID(),
+			parentSchemaID,
+			objectType,
+			desc.GetName(),
+		)
+		set(catalog.UpgradedPrivileges, fixedPrivileges)
+	}
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
 	return changes, nil

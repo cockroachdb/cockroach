@@ -150,6 +150,14 @@ func (desc *immutable) NewBuilder() catalog.DescriptorBuilder {
 	return b
 }
 
+// IsTempDatabaseFromImportPgdump returns true if this is the temporary database
+// created in the process of IMPORT PGDUMP, and ONLY the node user of the IMPORT
+// PGDUMP has access to it. Note that root and admin won't necessary have
+// access to it.
+func (desc *immutable) IsTempDatabaseFromImportPgdump() bool {
+	return desc.TempDBFromImportPgdump
+}
+
 // NewBuilder implements the catalog.Descriptor interface.
 //
 // It overrides the wrapper's implementation to deal with the fact that

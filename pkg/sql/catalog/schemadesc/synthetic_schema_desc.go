@@ -168,6 +168,10 @@ func (p synthetic) ContainsUserDefinedTypes() bool {
 	return false
 }
 
+func (p synthetic) IsInProcessImportPgdump() bool {
+	return false
+}
+
 // GetResolvedFuncDefinition implements the SchemaDescriptor interface.
 func (p synthetic) GetResolvedFuncDefinition(name string) (*tree.ResolvedFunctionDefinition, bool) {
 	return nil, false
