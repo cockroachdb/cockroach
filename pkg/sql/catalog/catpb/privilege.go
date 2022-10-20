@@ -104,6 +104,15 @@ func (p *PrivilegeDescriptor) RemoveUser(user username.SQLUsername) {
 	p.Users = append(p.Users[:idx], p.Users[idx+1:]...)
 }
 
+// NewCustomPrivilegeDescriptorWithoutSuperuser returns a privilege descriptor
+// for only the given user. The root and admin role are not given the privilege.
+func NewCustomPrivilegeDescriptorWithoutSuperuser(owner username.SQLUsername) *PrivilegeDescriptor {
+	return &PrivilegeDescriptor{
+		OwnerProto: owner.EncodeProto(),
+		Version:    Version21_2,
+	}
+}
+
 // NewCustomSuperuserPrivilegeDescriptor returns a privilege descriptor for the root user
 // and the admin role with specified privileges.
 func NewCustomSuperuserPrivilegeDescriptor(
@@ -181,6 +190,17 @@ func NewBasePrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor
 // Here we also add the CONNECT privilege for the database.
 func NewBaseDatabasePrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor {
 	p := NewBasePrivilegeDescriptor(owner)
+	p.Grant(username.PublicRoleName(), privilege.List{privilege.CONNECT}, false /* withGrantOption */)
+	return p
+}
+
+// NewBaseDatabasePrivilegeDescriptorWithoutSuperuser is the same as
+// NewBaseDatabasePrivilegeDescriptor except that the root user
+// and the admin role are not given the privilege.
+func NewBaseDatabasePrivilegeDescriptorWithoutSuperuser(
+	owner username.SQLUsername,
+) *PrivilegeDescriptor {
+	p := NewCustomPrivilegeDescriptorWithoutSuperuser(owner)
 	p.Grant(username.PublicRoleName(), privilege.List{privilege.CONNECT}, false /* withGrantOption */)
 	return p
 }
@@ -381,9 +401,12 @@ func (p PrivilegeDescriptor) Validate(
 	objectType privilege.ObjectType,
 	objectName string,
 	allowedSuperuserPrivileges privilege.List,
+	skipSuperuserPrivilegeCheck bool,
 ) error {
-	if err := p.ValidateSuperuserPrivileges(parentID, objectType, objectName, allowedSuperuserPrivileges); err != nil {
-		return errors.HandleAsAssertionFailure(err)
+	if !skipSuperuserPrivilegeCheck {
+		if err := p.ValidateSuperuserPrivileges(parentID, objectType, objectName, allowedSuperuserPrivileges); err != nil {
+			return errors.HandleAsAssertionFailure(err)
+		}
 	}
 
 	if p.Version >= OwnerVersion {

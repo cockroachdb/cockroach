@@ -1172,7 +1172,13 @@ message TableDescriptor {
   // This field is non zero if this table is offline during an import.
   optional int64 import_start_wall_time = 54 [(gogoproto.nullable) = false, (gogoproto.customname) = "ImportStartWallTime"];
 
-  // Next ID: 55
+  // InProcessImportPgdump is only set true if this table is still waiting for
+  // ingestion to finish in the process of IMPORT PGDUMP, and ONLY the node user
+  // of the Import Pgdump job has access to it. Note that root and admin won't
+  // necessarily have access to it.
+  optional bool in_process_import_pgdump = 55 [(gogoproto.nullable) = false];
+
+  // Next ID: 56
 }
 
 // SurvivalGoal is the survival goal for a database.
@@ -1259,7 +1265,13 @@ message DatabaseDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 12;
 
-  // Next field is 13.
+  // TempDBFromImportPgdump is only set true if this is the temporary database
+  // created in the process of IMPORT PGDUMP, and ONLY the node user of the Import
+  // Pgdump has access to it. Note that root and admin won't necessarily have
+  // access to it.
+  optional bool temp_dB_from_import_pgdump = 13 [(gogoproto.nullable) = false];
+
+  // Next field is 14.
 }
 
 // SuperRegion stores a super region configuration.
@@ -1507,7 +1519,13 @@ message SchemaDescriptor {
   // functions contains all UDFs created in this schema.
   map<string, Function> functions = 13 [(gogoproto.nullable) = false];
 
-  // Next field is 14.
+  // InProcessImportPgdump is only set true if this schema is still waiting for
+  // ingestion to finish in the process of IMPORT PGDUMP, and ONLY the node user
+  // of the Import Pgdump job has access to it. Note that root and admin won't
+  // necessarily have access to it.
+  optional bool in_process_import_pgdump = 14 [(gogoproto.nullable) = false];
+
+  // Next field is 15.
 }
 
 // FunctionDescriptor represent a User Defined Function (UDF).

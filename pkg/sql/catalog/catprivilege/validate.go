@@ -24,23 +24,29 @@ import (
 func Validate(
 	p catpb.PrivilegeDescriptor, objectNameKey catalog.NameKey, objectType privilege.ObjectType,
 ) error {
+
+	var skipSuperuserPrivilegeCheck bool
+	switch t := objectNameKey.(type) {
+	case catalog.DatabaseDescriptor:
+		if t.IsTempDatabaseFromImportPgdump() {
+			skipSuperuserPrivilegeCheck = true
+		}
+	case catalog.TableDescriptor:
+		if t.IsInProcessImportPgdump() {
+			skipSuperuserPrivilegeCheck = true
+		}
+	case catalog.SchemaDescriptor:
+		if t.IsInProcessImportPgdump() {
+			skipSuperuserPrivilegeCheck = true
+		}
+	}
+
 	return p.Validate(
 		objectNameKey.GetParentID(),
 		objectType,
 		objectNameKey.GetName(),
 		allowedSuperuserPrivileges(objectNameKey),
-	)
-}
-
-// ValidateSuperuserPrivileges validates superuser privileges.
-func ValidateSuperuserPrivileges(
-	p catpb.PrivilegeDescriptor, objectNameKey catalog.NameKey, objectType privilege.ObjectType,
-) error {
-	return p.ValidateSuperuserPrivileges(
-		objectNameKey.GetParentID(),
-		objectType,
-		objectNameKey.GetName(),
-		allowedSuperuserPrivileges(objectNameKey),
+		skipSuperuserPrivilegeCheck,
 	)
 }
 

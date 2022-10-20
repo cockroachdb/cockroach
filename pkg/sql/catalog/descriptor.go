@@ -277,6 +277,11 @@ type DatabaseDescriptor interface {
 	// HasPublicSchemaWithDescriptor returns true iff the database has a public
 	// schema which itself has a descriptor.
 	HasPublicSchemaWithDescriptor() bool
+	// IsTempDatabaseFromImportPgdump returns true if this is the temporary database
+	// created in the process of IMPORT PGDUMP, and ONLY the node user of the IMPORT
+	// PGDUMP has access to it. Note that root and admin won't necessary have
+	// access to it.
+	IsTempDatabaseFromImportPgdump() bool
 }
 
 // TableDescriptor is an interface around the table descriptor types.
@@ -736,6 +741,11 @@ type TableDescriptor interface {
 	// GetInProgressImportStartTime returns the start wall time of the in progress import,
 	// if it exists.
 	GetInProgressImportStartTime() int64
+	// IsInProcessImportPgdump is true if this table is still waiting for
+	// ingestion to finish in the process of IMPORT PGDUMP, and ONLY the node user
+	// of the Import Pgdump job has access to it. Note that root and admin won't
+	// necessarily have access to it.
+	IsInProcessImportPgdump() bool
 }
 
 // MutableTableDescriptor is both a MutableDescriptor and a TableDescriptor.

@@ -124,14 +124,16 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 		)
 	}
 
-	privsChanged := catprivilege.MaybeFixPrivileges(
-		&ddb.maybeModified.Privileges,
-		descpb.InvalidID,
-		descpb.InvalidID,
-		privilege.Database,
-		ddb.maybeModified.GetName())
-	if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
-		ddb.changes.Add(catalog.UpgradedPrivileges)
+	if !ddb.original.TempDBFromImportPgdump {
+		privsChanged := catprivilege.MaybeFixPrivileges(
+			&ddb.maybeModified.Privileges,
+			descpb.InvalidID,
+			descpb.InvalidID,
+			privilege.Database,
+			ddb.maybeModified.GetName())
+		if privsChanged || removedIncompatibleDatabasePrivs || createdDefaultPrivileges {
+			ddb.changes.Add(catalog.UpgradedPrivileges)
+		}
 	}
 	if maybeRemoveDroppedSelfEntryFromSchemas(ddb.maybeModified) {
 		ddb.changes.Add(catalog.RemovedSelfEntryInSchemas)
@@ -299,6 +301,22 @@ func NewInitial(
 		id,
 		name,
 		catpb.NewBaseDatabasePrivilegeDescriptor(owner),
+		catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE),
+		options...,
+	)
+}
+
+// NewInitialWithoutSuperuser is the same as NewInitial except that the root user
+// and the admin role are not given the privilege.
+// TODO(janexing): rather than creating an individual function, is it better to
+// have a withoutSuperuser bool param in NewInitial?
+func NewInitialWithoutSuperuser(
+	id descpb.ID, name string, owner username.SQLUsername, options ...NewInitialOption,
+) *Mutable {
+	return newInitialWithPrivileges(
+		id,
+		name,
+		catpb.NewBaseDatabasePrivilegeDescriptorWithoutSuperuser(owner),
 		catprivilege.MakeDefaultPrivilegeDescriptor(catpb.DefaultPrivilegeDescriptor_DATABASE),
 		options...,
 	)

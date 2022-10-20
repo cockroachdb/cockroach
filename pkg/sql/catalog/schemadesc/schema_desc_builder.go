@@ -101,15 +101,17 @@ func (sdb *schemaDescriptorBuilder) RunPostDeserializationChanges() (err error) 
 		sdb.maybeModified.ModificationTime = sdb.mvccTimestamp
 		sdb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
-	privsChanged := catprivilege.MaybeFixPrivileges(
-		&sdb.maybeModified.Privileges,
-		sdb.maybeModified.GetParentID(),
-		descpb.InvalidID,
-		privilege.Schema,
-		sdb.maybeModified.GetName(),
-	)
-	if privsChanged {
-		sdb.changes.Add(catalog.UpgradedPrivileges)
+	if !sdb.original.InProcessImportPgdump {
+		privsChanged := catprivilege.MaybeFixPrivileges(
+			&sdb.maybeModified.Privileges,
+			sdb.maybeModified.GetParentID(),
+			descpb.InvalidID,
+			privilege.Schema,
+			sdb.maybeModified.GetName(),
+		)
+		if privsChanged {
+			sdb.changes.Add(catalog.UpgradedPrivileges)
+		}
 	}
 	return nil
 }

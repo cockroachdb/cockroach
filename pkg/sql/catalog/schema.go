@@ -45,6 +45,12 @@ type SchemaDescriptor interface {
 	// ForEachFunctionOverload iterates through all function overloads within the
 	// schema and calls fn on each overload.
 	ForEachFunctionOverload(fn func(overload descpb.SchemaDescriptor_FunctionOverload) error) error
+
+	// IsInProcessImportPgdump is true if this schema is still waiting for
+	// ingestion to finish in the process of IMPORT PGDUMP, and ONLY the node user
+	// of the Import Pgdump job has access to it. Note that root and admin won't
+	// necessarily have access to it.
+	IsInProcessImportPgdump() bool
 }
 
 // ResolvedSchemaKind is an enum that represents what kind of schema

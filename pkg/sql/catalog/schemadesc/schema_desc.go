@@ -319,6 +319,14 @@ func (desc *immutable) HasConcurrentSchemaChanges() bool {
 		desc.DeclarativeSchemaChangerState.JobID != catpb.InvalidJobID
 }
 
+// IsInProcessImportPgdump is true if this schema is still waiting for
+// ingestion to finish in the process of IMPORT PGDUMP, and ONLY the node user
+// of the Import Pgdump job has access to it. Note that root and admin won't
+// necessarily have access to it.
+func (desc *immutable) IsInProcessImportPgdump() bool {
+	return desc.InProcessImportPgdump
+}
+
 // MaybeIncrementVersion implements the MutableDescriptor interface.
 func (desc *Mutable) MaybeIncrementVersion() {
 	// Already incremented, no-op.

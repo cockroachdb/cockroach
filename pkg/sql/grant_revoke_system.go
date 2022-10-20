@@ -376,7 +376,13 @@ func (p *planner) synthesizePrivilegeDescriptorFromSystemPrivilegesTable(
 
 	// We use InvalidID to skip checks on the root/admin roles having
 	// privileges.
-	if err := privileges.Validate(descpb.InvalidID, privilegeObjectType, privilegeObjectPath, privilege.GetValidPrivilegesForObject(privilegeObjectType)); err != nil {
+	if err := privileges.Validate(
+		descpb.InvalidID,
+		privilegeObjectType,
+		privilegeObjectPath,
+		privilege.GetValidPrivilegesForObject(privilegeObjectType),
+		false, /* skipSuperuserPrivilegeCheck */
+	); err != nil {
 		return nil, err
 	}
 	return privileges, err

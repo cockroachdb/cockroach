@@ -293,15 +293,6 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 				)
 			}
 
-			// Ensure superusers have exactly the allowed privilege set.
-			// Postgres does not actually enforce this, instead of checking that
-			// superusers have all the privileges, Postgres allows superusers to
-			// bypass privilege checks.
-			err = catprivilege.ValidateSuperuserPrivileges(*privileges, descriptor, objType)
-			if err != nil {
-				return err
-			}
-
 			// Validate privilege descriptors directly as the db/table level Validate
 			// may fix up the descriptor.
 			err = catprivilege.Validate(*privileges, descriptor, objType)

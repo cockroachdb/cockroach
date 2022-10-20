@@ -275,6 +275,14 @@ func (desc *TableDescriptor) Persistence() tree.Persistence {
 	return tree.PersistencePermanent
 }
 
+// IsInProcessImportPgdump is true if this table is still waiting for
+// ingestion to finish in the process of IMPORT PGDUMP, and ONLY the node user
+// of the Import Pgdump job has access to it. Note that root and admin won't
+// necessarily have access to it.
+func (desc *TableDescriptor) IsInProcessImportPgdump() bool {
+	return desc.InProcessImportPgdump
+}
+
 // ForEachPublicIndex is exported to provide low-overhead access to the set of
 // public indexes in a table descriptor for use in backup planning.
 //

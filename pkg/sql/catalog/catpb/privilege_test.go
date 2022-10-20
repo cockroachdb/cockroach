@@ -269,7 +269,13 @@ func TestPrivilegeValidate(t *testing.T) {
 	descriptor := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
 	validate := func() error {
 		id := catid.DescID(bootstrap.TestingMinUserDescID())
-		return descriptor.Validate(id, privilege.Table, "whatever", catpb.DefaultSuperuserPrivileges)
+		return descriptor.Validate(
+			id,
+			privilege.Table,
+			"whatever",
+			catpb.DefaultSuperuserPrivileges,
+			false, /* skipSuperuserPrivilegeCheck */
+		)
 	}
 
 	if err := validate(); err != nil {
@@ -320,7 +326,13 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 		for _, priv := range tc.validPrivileges {
 			privDesc := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
 			privDesc.Grant(testUser, privilege.List{priv}, false)
-			err := privDesc.Validate(id, tc.objectType, "whatever", catpb.DefaultSuperuserPrivileges)
+			err := privDesc.Validate(
+				id,
+				tc.objectType,
+				"whatever",
+				catpb.DefaultSuperuserPrivileges,
+				false, /* skipSuperuserPrivilegeCheck */
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -337,7 +349,13 @@ func TestValidPrivilegesForObjects(t *testing.T) {
 		for _, priv := range invalidPrivileges {
 			privDesc := catpb.NewBasePrivilegeDescriptor(username.AdminRoleName())
 			privDesc.Grant(testUser, privilege.List{priv}, false)
-			err := privDesc.Validate(id, tc.objectType, "whatever", catpb.DefaultSuperuserPrivileges)
+			err := privDesc.Validate(
+				id,
+				tc.objectType,
+				"whatever",
+				catpb.DefaultSuperuserPrivileges,
+				false, /* skipSuperuserPrivilegeCheck */
+			)
 			if err == nil {
 				t.Fatalf("unexpected success, %s should not be a valid privilege for a %s",
 					priv, tc.objectType)
@@ -352,7 +370,13 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	testUser := username.TestUserName()
 
 	validate := func(descriptor *catpb.PrivilegeDescriptor) error {
-		return descriptor.Validate(keys.SystemDatabaseID, privilege.Table, "whatever", privilege.ReadData)
+		return descriptor.Validate(
+			keys.SystemDatabaseID,
+			privilege.Table,
+			"whatever",
+			privilege.ReadData,
+			false, /* skipSuperuserPrivilegeCheck */
+		)
 	}
 
 	rootWrongPrivilegesErr := "user root must have exactly SELECT " +
@@ -429,7 +453,13 @@ func TestValidateOwnership(t *testing.T) {
 	// Use a non-system id.
 	id := catid.DescID(bootstrap.TestingMinUserDescID())
 	validate := func(privs catpb.PrivilegeDescriptor) error {
-		return privs.Validate(id, privilege.Table, "whatever", catpb.DefaultSuperuserPrivileges)
+		return privs.Validate(
+			id,
+			privilege.Table,
+			"whatever",
+			catpb.DefaultSuperuserPrivileges,
+			false, /* skipSuperuserPrivilegeCheck */
+		)
 	}
 
 	// A privilege descriptor with a version before OwnerVersion can have
