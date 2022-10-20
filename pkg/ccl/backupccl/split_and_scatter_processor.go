@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/splitpurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -96,7 +97,7 @@ func (s dbSplitAndScatterer) split(
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
-	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
+	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime, splitpurpose.SplitPurposeBackup); err != nil {
 		return errors.Wrapf(err, "splitting key %s", newSplitKey)
 	}
 

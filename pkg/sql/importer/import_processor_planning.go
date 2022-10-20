@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/splitpurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -352,7 +353,7 @@ func presplitTableBoundaries(
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
 		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime, splitpurpose.SplitPurposeImport); err != nil {
 				return err
 			}
 		}

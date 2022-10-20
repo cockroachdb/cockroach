@@ -435,6 +435,7 @@ go_library(
         "//pkg/sql/sessioninit",
         "//pkg/sql/sessionphase",
         "//pkg/sql/span",
+        "//pkg/sql/splitpurpose",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlfsm",
         "//pkg/sql/sqlinstance",

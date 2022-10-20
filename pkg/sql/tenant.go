@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/splitpurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -306,7 +307,7 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64, name string) e
 	// the span configs infrastructure, in `system.span_configurations`.
 	expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, key := range splits {
-		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime); err != nil {
+		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime, splitpurpose.SplitPurposeCreateTenant); err != nil {
 			return err
 		}
 	}
