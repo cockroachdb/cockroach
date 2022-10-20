@@ -16,7 +16,10 @@ var liquibaseBlocklists = blocklistsForVersion{
 	{"v21.2", "liquibaseBlocklist21_2", liquibaseBlocklist21_2, "liquibaseIgnorelist21_2", liquibaseIgnorelist21_2},
 	{"v22.1", "liquibaseBlocklist22_1", liquibaseBlocklist22_1, "liquibaseIgnorelist21_2", liquibaseIgnorelist22_1},
 	{"v22.2", "liquibaseBlocklist22_2", liquibaseBlocklist22_2, "liquibaseIgnorelist21_2", liquibaseIgnorelist22_2},
+	{"v23.1", "liquibaseBlocklist23_1", liquibaseBlocklist23_1, "liquibaseIgnorelist23_1", liquibaseIgnorelist23_1},
 }
+
+var liquibaseBlocklist23_1 = liquibaseBlocklist22_2
 
 var liquibaseBlocklist22_2 = liquibaseBlocklist22_1
 
@@ -33,6 +36,8 @@ var liquibaseBlocklist21_2 = blocklist{
 var liquibaseBlocklist21_1 = liquibaseBlocklist20_2
 
 var liquibaseBlocklist20_2 = blocklist{}
+
+var liquibaseIgnorelist23_1 = liquibaseIgnorelist22_2
 
 var liquibaseIgnorelist22_2 = liquibaseIgnorelist22_1
 
