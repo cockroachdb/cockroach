@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
@@ -132,6 +133,12 @@ func (a tenantAuthorizer) authBatch(tenID roachpb.TenantID, args *roachpb.BatchR
 	// Consult reqMethodAllowlist to determine whether each request in the batch
 	// is permitted. If not, reject the entire batch.
 	for _, ru := range args.Requests {
+		adminSplitRequest := ru.GetAdminSplit()
+		if adminSplitRequest != nil && adminSplitRequest.Reason == roachpb.AdminSplitRequest_Manual {
+			if tenID != roachpb.SystemTenantID {
+				return authError(errorutil.UnsupportedWithMultiTenancyMessage)
+			}
+		}
 		if !reqAllowed(ru.GetInner()) {
 			return authErrorf("request [%s] not permitted", args.Summary())
 		}

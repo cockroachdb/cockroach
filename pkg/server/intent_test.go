@@ -117,7 +117,7 @@ func TestIntentResolution(t *testing.T) {
 				Knobs: base.TestingKnobs{Store: &storeKnobs}})
 			defer s.Stopper().Stop(context.Background())
 			// Split the Range. This should not have any asynchronous intents.
-			if err := kvDB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 				t.Fatal(err)
 			}
 

@@ -120,7 +120,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 func setupMultipleRanges(ctx context.Context, db *kv.DB, splitAt ...string) error {
 	// Split the keyspace at the given keys.
 	for _, key := range splitAt {
-		if err := db.AdminSplit(ctx, key /* splitKey */, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(ctx, key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 			return err
 		}
 	}
@@ -1173,7 +1173,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tds := db.NonTransactionalSender()
 
-	if err := db.AdminSplit(ctx, "m", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(ctx, "m", hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -1326,7 +1326,7 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			tds := db.NonTransactionalSender()
 
 			for _, sk := range tc.splitKeys {
-				if err := db.AdminSplit(ctx, sk, hlc.MaxTimestamp /* expirationTime */); err != nil {
+				if err := db.AdminSplit(ctx, sk, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1473,7 +1473,7 @@ func TestParallelSender(t *testing.T) {
 	// Split into multiple ranges.
 	splitKeys := []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"}
 	for _, key := range splitKeys {
-		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1518,7 +1518,7 @@ func initReverseScanTestEnv(s serverutils.TestServerInterface, t *testing.T) *kv
 	// ["", "b"),["b", "e") ,["e", "g") and ["g", "\xff\xff").
 	for _, key := range []string{"b", "e", "g"} {
 		// Split the keyspace at the given key.
-		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1619,7 +1619,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Split first using the default client and scan to make sure that
 	// the range descriptor cache reflects the split.
 	for _, key := range []string{"b", "f"} {
-		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := db.AdminSplit(context.Background(), key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -1676,7 +1676,7 @@ func TestReverseScanWithSplitAndMerge(t *testing.T) {
 
 	// Case 1: An encounter with a range split.
 	// Split the range ["b", "e") at "c".
-	if err := db.AdminSplit(context.Background(), "c", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(context.Background(), "c", hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3538,7 +3538,7 @@ func BenchmarkReturnOnRangeBoundary(b *testing.B) {
 
 	for r := 0; r < Ranges; r++ {
 		rangeKey := string(rune('a' + r))
-		require.NoError(b, db.AdminSplit(ctx, rangeKey, hlc.MaxTimestamp))
+		require.NoError(b, db.AdminSplit(ctx, rangeKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion))
 
 		for k := 0; k < KeysPerRange; k++ {
 			key := fmt.Sprintf("%s%d", rangeKey, k)

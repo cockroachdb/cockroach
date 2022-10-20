@@ -56,7 +56,7 @@ func TestLogSplits(t *testing.T) {
 	initialSplits := countSplits()
 
 	// Generate an explicit split event.
-	if err := kvDB.AdminSplit(ctx, "splitkey", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "splitkey", hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 
@@ -178,10 +178,10 @@ func TestLogMerges(t *testing.T) {
 	}
 
 	// Create two ranges, then merge them.
-	if err := kvDB.AdminSplit(ctx, "a", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "a", hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
-	if err := kvDB.AdminSplit(ctx, "b", hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := kvDB.AdminSplit(ctx, "b", hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.AdminMerge(ctx, "a"); err != nil {

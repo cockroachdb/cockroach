@@ -109,7 +109,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	for _, splitRKey := range splitKeys {
 		splitKey := roachpb.Key(splitRKey)
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -156,7 +156,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 			<-txnChannel
 		}
 		log.Infof(ctx, "starting split at key %q...", splitKey)
-		if pErr := s.DB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); pErr != nil {
+		if pErr := s.DB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); pErr != nil {
 			t.Error(pErr)
 		}
 		log.Infof(ctx, "split at key %q complete", splitKey)
@@ -251,11 +251,11 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 
 	splitKey := roachpb.Key("aa")
 	log.Infof(ctx, "starting split at key %q...", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 	log.Infof(ctx, "split at key %q first time complete", splitKey)
-	if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -280,7 +280,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	descKey := keys.RangeDescriptorKey(splitKey)
 
 	// Splitting range.
-	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 
@@ -300,7 +300,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	}
 
 	// Splitting range.
-	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := s.DB.AdminSplit(ctx, splitKey.AsRawKey(), hlc.MaxTimestamp, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		t.Fatal(err)
 	}
 
@@ -330,27 +330,27 @@ func TestSplitPredicates(t *testing.T) {
 	expire := hlc.MaxTimestamp
 
 	// Setup a known-span range [c, g) for some simple single predicate checks.
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("b"), expire))
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("g"), expire))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("b"), expire, roachpb.AdminSplitRequest_Ingestion))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("g"), expire, roachpb.AdminSplitRequest_Ingestion))
 	// c is below split key f, and is in [b, g).
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("f"), expire, roachpb.Key("c")))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("f"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("c")))
 	// e is above split key d, and is in [b, f).
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("d"), expire, roachpb.Key("e")))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("d"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("e")))
 	// b is above split key c, and is in [b, d) although just barely.
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("c"), expire, roachpb.Key("b")))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("c"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("b")))
 
 	// Setup another known span [g, n) and test rejections with it.
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("n"), expire))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("n"), expire, roachpb.AdminSplitRequest_Ingestion))
 
 	// Reject split at h that wanted b to be in range [g, n).
-	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("b")))
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("b")))
 	// Reject split at h that wanted i, j, and z to be in range [g, n).
-	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("z")))
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("z")))
 	// Reject split at h that wanted i, j, and n to be in range [g, n).
-	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("n")))
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("i"), roachpb.Key("j"), roachpb.Key("n")))
 	// Reject split at h that wanted i, n and j to be in range [g, n).
-	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("n"), roachpb.Key("j")))
+	require.Error(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("i"), roachpb.Key("n"), roachpb.Key("j")))
 
 	// Allow split at h that wanted i, k and j to be in range [g, n).
-	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.Key("i"), roachpb.Key("k"), roachpb.Key("j")))
+	require.NoError(t, s.DB.AdminSplit(ctx, roachpb.Key("h"), expire, roachpb.AdminSplitRequest_Ingestion, roachpb.Key("i"), roachpb.Key("k"), roachpb.Key("j")))
 }

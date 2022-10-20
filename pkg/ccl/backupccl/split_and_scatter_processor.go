@@ -96,7 +96,7 @@ func (s dbSplitAndScatterer) split(
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
-	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime); err != nil {
+	if err := s.db.AdminSplit(ctx, newSplitKey, expirationTime, roachpb.AdminSplitRequest_Ingestion); err != nil {
 		return errors.Wrapf(err, "splitting key %s", newSplitKey)
 	}
 

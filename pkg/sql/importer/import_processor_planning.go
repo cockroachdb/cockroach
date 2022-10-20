@@ -352,7 +352,7 @@ func presplitTableBoundaries(
 		// TODO(ajwerner): Consider passing in the wrapped descriptors.
 		tblDesc := tabledesc.NewBuilder(tbl.Desc).BuildImmutableTable()
 		for _, span := range tblDesc.AllIndexSpans(cfg.Codec) {
-			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+			if err := cfg.DB.AdminSplit(ctx, span.Key, expirationTime, roachpb.AdminSplitRequest_Ingestion); err != nil {
 				return err
 			}
 		}
