@@ -163,7 +163,12 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyC := roachpb.Key("c")
 	splitKey := roachpb.Key("b")
-	if err := s.DB.AdminSplit(ctx, splitKey /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */); err != nil {
+	if err := s.DB.AdminSplit(
+		ctx,
+		splitKey,
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_Ingestion,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -302,7 +307,12 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyC := roachpb.Key("c")
 	splitKey := roachpb.Key("b")
-	require.NoError(t, s.DB.AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	require.NoError(t, s.DB.AdminSplit(
+		ctx,
+		splitKey,
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_Ingestion,
+	))
 	require.NoError(t, txn.Put(ctx, keyA, "1"))
 
 	{
@@ -947,7 +957,12 @@ func TestWTOBitTerminatedOnErrorResponses(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	// Split to ensure batch requests get split through the distsender.
-	require.NoError(t, db.AdminSplit(ctx, keyB /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */))
+	require.NoError(t, db.AdminSplit(
+		ctx,
+		keyB,             /* splitKey */
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_Ingestion,
+	))
 
 	// Write a key that the txn-al CPut below doesn't expect, failing the batch
 	// request.
@@ -2675,7 +2690,12 @@ func TestPutsInStagingTxn(t *testing.T) {
 		})
 	defer s.Stopper().Stop(ctx)
 
-	require.NoError(t, db.AdminSplit(ctx, keyB /* splitKey */, hlc.MaxTimestamp /* expirationTimestamp */))
+	require.NoError(t, db.AdminSplit(
+		ctx,
+		keyB,             /* splitKey */
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_Ingestion,
+	))
 
 	txn := db.NewTxn(ctx, "test")
 

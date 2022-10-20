@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,6 +35,7 @@ type splitNode struct {
 	rows           planNode
 	run            splitRun
 	expirationTime hlc.Timestamp
+	reason         roachpb.AdminSplitRequest_Reason
 }
 
 // splitRun contains the run-time state of splitNode during local execution.
@@ -60,7 +62,7 @@ func (n *splitNode) Next(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := params.ExecCfg().DB.AdminSplit(params.ctx, rowKey, n.expirationTime); err != nil {
+	if err := params.ExecCfg().DB.AdminSplit(params.ctx, rowKey, n.expirationTime, n.reason); err != nil {
 		return false, err
 	}
 
