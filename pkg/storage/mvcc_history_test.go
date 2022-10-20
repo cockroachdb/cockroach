@@ -1070,11 +1070,15 @@ func cmdDelete(e *evalCtx) error {
 	localTs := hlc.ClockTimestamp(e.getTsWithName("localTs"))
 	resolve, resolveStatus := e.getResolve()
 	return e.withWriter("del", func(rw storage.ReadWriter) error {
-		deletedKey, err := storage.MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
+		foundKey, err := storage.MVCCDelete(e.ctx, rw, e.ms, key, ts, localTs, txn)
+		if err == nil || errors.HasType(err, &roachpb.WriteTooOldError{}) {
+			// We want to output foundKey even if a WriteTooOldError is returned,
+			// since the error may be swallowed/deferred during evaluation.
+			e.results.buf.Printf("del: %v: found key %v\n", key, foundKey)
+		}
 		if err != nil {
 			return err
 		}
-		e.results.buf.Printf("del: %v: found key %v\n", key, deletedKey)
 		if resolve {
 			return e.resolveIntent(rw, key, txn, resolveStatus, hlc.ClockTimestamp{})
 		}
