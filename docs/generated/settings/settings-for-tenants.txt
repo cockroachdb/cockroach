@@ -282,7 +282,6 @@ sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; s
 sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job
 sql.ttl.default_delete_rate_limit	integer	0	default delete rate limit for all TTL jobs. Use 0 to signify no rate limit.
-sql.ttl.default_range_concurrency	integer	1	default amount of ranges to process at once during a TTL delete
 sql.ttl.default_select_batch_size	integer	500	default amount of rows to select in a single query during a TTL job
 sql.ttl.job.enabled	boolean	true	whether the TTL job is enabled
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored
