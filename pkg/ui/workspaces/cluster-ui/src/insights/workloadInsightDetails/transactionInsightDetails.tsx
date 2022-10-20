@@ -43,6 +43,8 @@ import { commonStyles } from "src/common";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import { CockroachCloudContext } from "../../contexts";
 import { InsightsError } from "../insightsErrorComponent";
+import { TransactionDetailsLink } from "../workloadInsights/util";
+import { TimeScale } from "../../timeScaleDropdown";
 
 const tableCx = classNames.bind(insightTableStyles);
 
@@ -55,6 +57,7 @@ export interface TransactionInsightDetailsDispatchProps {
   refreshTransactionInsightDetails: (
     req: TransactionInsightEventDetailsRequest,
   ) => void;
+  setTimeScale: (ts: TimeScale) => void;
 }
 
 export type TransactionInsightDetailsProps =
@@ -152,7 +155,11 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
               <SummaryCard>
                 <SummaryCardItem
                   label="Transaction Fingerprint ID"
-                  value={String(insightDetails.fingerprintID)}
+                  value={TransactionDetailsLink(
+                    insightDetails.fingerprintID,
+                    insightDetails.startTime,
+                    this.props.setTimeScale,
+                  )}
                 />
               </SummaryCard>
             </Col>

@@ -32,6 +32,11 @@ import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import insightTableStyles from "src/insightsTable/insightsTable.module.scss";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
+import {
+  StatementDetailsLink,
+  TransactionDetailsLink,
+} from "../workloadInsights/util";
+import { TimeScale } from "../../timeScaleDropdown";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
@@ -114,11 +119,12 @@ const insightsTableData = (
 
 export interface StatementInsightDetailsOverviewTabProps {
   insightEventDetails: StatementInsightEvent;
+  setTimeScale: (ts: TimeScale) => void;
 }
 
 export const StatementInsightDetailsOverviewTab: React.FC<
   StatementInsightDetailsOverviewTabProps
-> = ({ insightEventDetails }) => {
+> = ({ insightEventDetails, setTimeScale }) => {
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
@@ -187,7 +193,11 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             />
             <SummaryCardItem
               label="Transaction Fingerprint ID"
-              value={String(insightDetails.transactionFingerprintID)}
+              value={TransactionDetailsLink(
+                insightDetails.transactionFingerprintID,
+                insightDetails.startTime,
+                setTimeScale,
+              )}
             />
             <SummaryCardItem
               label="Transaction Execution ID"
@@ -195,7 +205,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             />
             <SummaryCardItem
               label="Statement Fingerprint ID"
-              value={String(insightDetails.statementFingerprintID)}
+              value={StatementDetailsLink(insightDetails, setTimeScale)}
             />
           </SummaryCard>
         </Col>

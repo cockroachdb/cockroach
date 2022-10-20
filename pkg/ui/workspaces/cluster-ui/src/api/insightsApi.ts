@@ -74,6 +74,7 @@ const txnContentionQuery = `SELECT *
                                                max(collection_ts)       AS collection_ts,
                                                sum(contention_duration) AS total_contention_duration
                                         FROM crdb_internal.transaction_contention_events tce
+                                        WHERE waiting_txn_fingerprint_id != '\x0000000000000000'
                                         GROUP BY waiting_txn_id, waiting_txn_fingerprint_id),
                                        (SELECT txn_id FROM crdb_internal.cluster_execution_insights)
                                   WHERE total_contention_duration > threshold
@@ -570,6 +571,7 @@ type ExecutionInsightsResponseRow = {
   session_id: string;
   txn_id: string;
   txn_fingerprint_id: string; // hex string
+  implicit_txn: boolean;
   stmt_id: string;
   stmt_fingerprint_id: string; // hex string
   query: string;
@@ -608,6 +610,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
     return {
       transactionID: row.txn_id,
       transactionFingerprintID: row.txn_fingerprint_id,
+      implicitTxn: row.implicit_txn,
       query: row.query,
       startTime: start,
       endTime: end,
@@ -651,6 +654,7 @@ const statementInsightsQuery: InsightQuery<
       session_id,
       txn_id,
       encode(txn_fingerprint_id, 'hex')  AS txn_fingerprint_id,
+      implicit_txn,
       stmt_id,
       encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
       query AS non_prettified_query,

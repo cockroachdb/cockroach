@@ -21,7 +21,6 @@ import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
 import {
   calculateActiveFilters,
-  defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
@@ -48,6 +47,7 @@ import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../../../columnsSelector/columnsSelector";
 import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
+import { TimeScale } from "../../../timeScaleDropdown";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -66,6 +66,7 @@ export type StatementInsightsViewDispatchProps = {
   onSortChange: (ss: SortSetting) => void;
   refreshStatementInsights: () => void;
   onColumnsChange: (selectedColumns: string[]) => void;
+  setTimeScale: (ts: TimeScale) => void;
 };
 
 export type StatementInsightsViewProps = StatementInsightsViewStateProps &
@@ -101,6 +102,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     onFiltersChange,
     onSortChange,
     onColumnsChange,
+    setTimeScale,
     selectedColumnNames,
     dropDownSelect,
   } = props;
@@ -194,7 +196,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     resetPagination();
   };
 
-  const defaultColumns = makeStatementInsightsColumns();
+  const defaultColumns = makeStatementInsightsColumns(setTimeScale);
 
   const visibleColumns = defaultColumns.filter(x =>
     isSelected(x, selectedColumnNames),
