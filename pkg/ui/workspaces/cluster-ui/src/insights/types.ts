@@ -89,6 +89,7 @@ export type StatementInsightEvent = {
   application: string;
   insights: Insight[];
   indexRecommendations: string[];
+  planGist: string;
 };
 
 export type Insight = {
