@@ -374,6 +374,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │     TableID: 104
     │       │
     │       ├── • RemoveDroppedIndexPartialPredicate
+    │       │     IndexID: 11
+    │       │     TableID: 104
+    │       │
+    │       ├── • RemoveDroppedIndexPartialPredicate
     │       │     IndexID: 12
     │       │     TableID: 104
     │       │
@@ -487,22 +491,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │     IndexID: 10
     │       │     TableID: 104
     │       │
-    │       ├── • RemoveDroppedIndexPartialPredicate
-    │       │     IndexID: 11
-    │       │     TableID: 104
-    │       │
-    │       ├── • CreateGCJobForIndex
-    │       │     IndexID: 12
-    │       │     StatementForDropJob:
-    │       │       Rollback: true
-    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
-    │       │         KEY USING COLUMNS (a)
-    │       │     TableID: 104
-    │       │
-    │       ├── • MakeIndexAbsent
-    │       │     IndexID: 12
-    │       │     TableID: 104
-    │       │
     │       ├── • LogEvent
     │       │     Element:
     │       │       SecondaryIndex:
@@ -532,6 +520,18 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 9 of 15;
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 11
+    │       │     TableID: 104
+    │       │
+    │       ├── • CreateGCJobForIndex
+    │       │     IndexID: 12
+    │       │     StatementForDropJob:
+    │       │       Rollback: true
+    │       │       Statement: removed temporary index; ALTER TABLE defaultdb.public.t ALTER PRIMARY
+    │       │         KEY USING COLUMNS (a)
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeIndexAbsent
+    │       │     IndexID: 12
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor
