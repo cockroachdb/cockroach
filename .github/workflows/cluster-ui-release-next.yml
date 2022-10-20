@@ -1,0 +1,45 @@
+name: Publish Cluster UI Pre-release
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
+      - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
+
+jobs:
+  publish_cluster_ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pkg/ui/workspaces/cluster-ui
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - name: Bazel Cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/bazel
+        key: ${{ runner.os }}-bazel-cache
+
+    - name: Setup NodeJS
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16
+        cache: 'yarn'
+        cache-dependency-path: pkg/ui/workspaces/cluster-ui/yarn.lock
+      env:
+        NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+    - name: Build Cluster UI
+      run: |
+        yarn install --frozen-lockfile
+        bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
+
+    - name: Publish prerelease version
+      run: |
+        echo "yarn version --prerelease --preid prerelease"
+        echo "yarn publish --access public --tag next"
