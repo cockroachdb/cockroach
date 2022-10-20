@@ -369,6 +369,10 @@ func startTenantInternal(
 		return nil, nil, nil, "", "", err
 	}
 
+	if baseCfg.ReadyFn != nil {
+		baseCfg.ReadyFn(false /* waitForInit */)
+	}
+
 	return s, authServer, drainServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
 }
 

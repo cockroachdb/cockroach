@@ -493,66 +493,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
 	// and thus before Start() completes.
-	serverCfg.ReadyFn = func(waitForInit bool) {
-		// Inform the user if the network settings are suspicious. We need
-		// to do that after starting to listen because we need to know
-		// which advertise address NewServer() has decided.
-		hintServerCmdFlags(ctx, cmd)
-
-		// If another process was waiting on the PID (e.g. using a FIFO),
-		// this is when we can tell them the node has started listening.
-		if startCtx.pidFile != "" {
-			log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
-			if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-				log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
-			}
-		}
-
-		// If the invoker has requested an URL update, do it now that
-		// the server is ready to accept SQL connections.
-		// (Note: as stated above, ReadyFn is called after the server
-		// has started listening on its socket, but possibly before
-		// the cluster has been initialized and can start processing requests.
-		// This is OK for SQL clients, as the connection will be accepted
-		// by the network listener and will just wait/suspend until
-		// the cluster initializes, at which point it will be picked up
-		// and let the client go through, transparently.)
-		if startCtx.listeningURLFile != "" {
-			log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
-			// (Re-)compute the client connection URL. We cannot do this
-			// earlier (e.g. above, in the runStart function) because
-			// at this time the address and port have not been resolved yet.
-			clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
-			pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
-			if err != nil {
-				log.Errorf(ctx, "failed computing the URL: %v", err)
-				return
-			}
-
-			if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
-				log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
-			}
-		}
-
-		if waitForInit {
-			log.Ops.Shout(ctx, severity.INFO,
-				"initial startup completed.\n"+
-					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
-					"Client connections will be accepted after this completes successfully.\n"+
-					"Check the log file(s) for progress. ")
-		}
-
-		// Ensure the configuration logging is written to disk in case a
-		// process is waiting for the sdnotify readiness to read important
-		// information from there.
-		log.Flush()
-
-		// Signal readiness. This unblocks the process when running with
-		// --background or under systemd.
-		if err := sdnotify.Ready(); err != nil {
-			log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
-		}
-	}
+	serverCfg.ReadyFn = func(waitForInit bool) { reportReadinessExternally(ctx, cmd, waitForInit) }
 
 	// DelayedBootstrapFn will be called if the bootstrap process is
 	// taking a bit long.
@@ -1364,5 +1305,70 @@ func initGEOS(ctx context.Context) {
 			log.SafeManaged(err))
 	} else {
 		log.Ops.Infof(ctx, "GEOS loaded from directory %s", log.SafeManaged(loc))
+	}
+}
+
+// reportReadinessExternally reports when the server has finished initializing
+// and is ready to receive requests. This is useful for other processes on the
+// same machine (e.g. a process manager, a test) that are waiting for a signal
+// that they can start monitoring or using the server process.
+func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForInit bool) {
+	// Inform the user if the network settings are suspicious. We need
+	// to do that after starting to listen because we need to know
+	// which advertise address NewServer() has decided.
+	hintServerCmdFlags(ctx, cmd)
+
+	// If another process was waiting on the PID (e.g. using a FIFO),
+	// this is when we can tell them the node has started listening.
+	if startCtx.pidFile != "" {
+		log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
+		if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+			log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
+		}
+	}
+
+	// If the invoker has requested an URL update, do it now that
+	// the server is ready to accept SQL connections.
+	// (Note: as stated above, ReadyFn is called after the server
+	// has started listening on its socket, but possibly before
+	// the cluster has been initialized and can start processing requests.
+	// This is OK for SQL clients, as the connection will be accepted
+	// by the network listener and will just wait/suspend until
+	// the cluster initializes, at which point it will be picked up
+	// and let the client go through, transparently.)
+	if startCtx.listeningURLFile != "" {
+		log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+		// (Re-)compute the client connection URL. We cannot do this
+		// earlier (e.g. above, in the runStart function) because
+		// at this time the address and port have not been resolved yet.
+		clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
+		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
+		if err != nil {
+			log.Errorf(ctx, "failed computing the URL: %v", err)
+			return
+		}
+
+		if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
+			log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
+		}
+	}
+
+	if waitForInit {
+		log.Ops.Shout(ctx, severity.INFO,
+			"initial startup completed.\n"+
+				"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
+				"Client connections will be accepted after this completes successfully.\n"+
+				"Check the log file(s) for progress. ")
+	}
+
+	// Ensure the configuration logging is written to disk in case a
+	// process is waiting for the sdnotify readiness to read important
+	// information from there.
+	log.Flush()
+
+	// Signal readiness. This unblocks the process when running with
+	// --background or under systemd.
+	if err := sdnotify.Ready(); err != nil {
+		log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
 }

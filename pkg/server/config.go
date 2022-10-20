@@ -137,6 +137,17 @@ type BaseConfig struct {
 	// AmbientCtx is used to annotate contexts used inside the server.
 	AmbientCtx log.AmbientContext
 
+	// ReadyFn is called when the server has started listening on its
+	// sockets.
+	//
+	// The bool parameter is true if the server is not bootstrapped yet, will not
+	// bootstrap itself and will be waiting for an `init` command or accept
+	// bootstrapping from a joined node.
+	//
+	// This method is invoked from the main start goroutine, so it should not
+	// do nontrivial work.
+	ReadyFn func(waitForInit bool)
+
 	// Maximum allowed clock offset for the cluster. If observed clock
 	// offsets exceed this limit, inconsistency may result, and servers
 	// will panic to minimize the likelihood of inconsistent data.
@@ -351,17 +362,6 @@ type KVConfig struct {
 	// to cluster metadata, such as DDL statements and range rebalancing
 	// actions.
 	EventLogEnabled bool
-
-	// ReadyFn is called when the server has started listening on its
-	// sockets.
-	//
-	// The bool parameter is true if the server is not bootstrapped yet, will not
-	// bootstrap itself and will be waiting for an `init` command or accept
-	// bootstrapping from a joined node.
-	//
-	// This method is invoked from the main start goroutine, so it should not
-	// do nontrivial work.
-	ReadyFn func(waitForInit bool)
 
 	// DelayedBootstrapFn is called if the bootstrap process does not complete
 	// in a timely fashion, typically 30s after the server starts listening.
