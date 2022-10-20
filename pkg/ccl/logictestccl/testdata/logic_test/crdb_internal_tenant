@@ -390,7 +390,7 @@ test  {}
 statement ok
 CREATE TABLE foo (a INT PRIMARY KEY, INDEX idx(a)); INSERT INTO foo VALUES(1)
 
-statement error unsupported in multi-tenancy mode
+statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmSplit\] not permitted
 ALTER TABLE foo SPLIT AT VALUES(2)
 
 # Make sure that the cluster id isn't unset.

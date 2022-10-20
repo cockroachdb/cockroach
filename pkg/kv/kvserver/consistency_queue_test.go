@@ -480,7 +480,12 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		// Split off a range so that we get away from the timeseries writes, which
 		// pollute the stats with ContainsEstimates=true. Note that the split clears
 		// the right hand side (which is what we operate on) from that flag.
-		require.NoError(t, db0.AdminSplit(ctx, key, hlc.MaxTimestamp /* expirationTime */))
+		require.NoError(t, db0.AdminSplit(
+			ctx,
+			key,              /* splitKey */
+			hlc.MaxTimestamp, /* expirationTime */
+			roachpb.AdminSplitRequest_INGESTION,
+		))
 
 		delta := computeDelta(db0)
 

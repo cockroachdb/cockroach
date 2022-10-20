@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/splitpurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -323,7 +324,7 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 	span := table.IndexSpan(d.codec, indexToBackfill.GetID())
 	const backfillSplitExpiration = time.Hour
 	expirationTime := d.txn.DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
-	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
+	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime, splitpurpose.SplitPurposeSchema)
 }
 
 // GetResumeSpans implements the scexec.BackfillerTracker interface.
