@@ -12,8 +12,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
-	"net/url"
 	"os"
 	"os/signal"
 
@@ -21,8 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -30,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
-	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/pebble/vfs"
@@ -224,6 +219,10 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	initGEOS(ctx)
 
+	// ReadyFn will be called when the server has started listening on
+	// its network sockets, but perhaps before it has done bootstrapping
+	serverCfg.ReadyFn = func(_ bool) { reportReadinessExternally(ctx, cmd, false /* waitForInit */) }
+
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
 	log.Ops.Info(ctx, "starting cockroach SQL node")
@@ -241,60 +240,9 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Inform the user if the network settings are suspicious. We need
-	// to do that after starting to listen because we need to know
-	// which advertise address NewServer() has decided.
-	hintServerCmdFlags(ctx, cmd)
-
-	// If another process was waiting on the PID (e.g. using a FIFO),
-	// this is when we can tell them the node has started listening.
-	if startCtx.pidFile != "" {
-		log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
-		if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-			log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
-		}
-	}
-
-	// If the invoker has requested an URL update, do it now that
-	// the server is ready to accept SQL connections.
-	// (Note: as stated above, ReadyFn is called after the server
-	// has started listening on its socket, but possibly before
-	// the cluster has been initialized and can start processing requests.
-	// This is OK for SQL clients, as the connection will be accepted
-	// by the network listener and will just wait/suspend until
-	// the cluster initializes, at which point it will be picked up
-	// and let the client go through, transparently.)
-	if startCtx.listeningURLFile != "" {
-		log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
-		// (Re-)compute the client connection URL. We cannot do this
-		// earlier (e.g. above, in the runStart function) because
-		// at this time the address and port have not been resolved yet.
-		clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
-		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
-		if err != nil {
-			log.Errorf(ctx, "failed computing the URL: %v", err)
-			return err
-		}
-
-		if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
-			log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
-		}
-	}
-
-	// Ensure the configuration logging is written to disk in case a
-	// process is waiting for the sdnotify readiness to read important
-	// information from there.
-	log.Flush()
-
 	// When the start up completes, so can the start up span
 	// defined above.
 	defer startupSpan.Finish()
-
-	// Signal readiness. This unblocks the process when running with
-	// --background or under systemd.
-	if err := sdnotify.Ready(); err != nil {
-		log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
-	}
 
 	// Start up the diagnostics reporting loop.
 	// We don't do this in (*server.SQLServer).preStart() because we don't
