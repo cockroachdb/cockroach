@@ -89,3 +89,41 @@ export const fetchData = <P extends ProtoBuilder<P>, T extends ProtoBuilder<T>>(
     })
     .then(buffer => RespBuilder.decode(new Uint8Array(buffer)));
 };
+
+/**
+ * fetchDataJSON makes a request for /api/v2 which uses content type JSON.
+ * @param path relative path for requested resource.
+ * @param reqPayload request payload object.
+ */
+export function fetchDataJSON<ResponseType, RequestType>(
+  path: string,
+  reqPayload?: RequestType,
+): Promise<ResponseType> {
+  const params: RequestInit = {
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Cockroach-API-Session": "cookie",
+    },
+    credentials: "same-origin",
+  };
+
+  if (reqPayload) {
+    params.method = "POST";
+    params.body = JSON.stringify(reqPayload);
+  }
+
+  const basePath = getBasePath();
+
+  return fetch(`${basePath}${path}`, params).then(response => {
+    if (!response.ok) {
+      throw new RequestError(
+        response.statusText,
+        response.status,
+        response.statusText,
+      );
+    }
+
+    return response.json();
+  });
+}
