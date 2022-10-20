@@ -175,7 +175,8 @@
 /pkg/kv/                     @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
 
-/pkg/storage/                @cockroachdb/storage
+/pkg/ccl/storageccl/engineccl   @cockroachdb/storage
+/pkg/storage/                   @cockroachdb/storage
 
 /pkg/ui/                     @cockroachdb/cluster-ui-prs
 /pkg/ui/embedded.go          @cockroachdb/cluster-ui-prs
@@ -200,7 +201,6 @@
 /pkg/ccl/baseccl/            @cockroachdb/cli-prs
 /pkg/ccl/buildccl/           @cockroachdb/dev-inf
 /pkg/ccl/cliccl/             @cockroachdb/cli-prs
-/pkg/ccl/cmdccl/enc_utils/   @cockroachdb/storage
 /pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
 /pkg/ccl/gssapiccl/          @cockroachdb/unowned
 /pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity
