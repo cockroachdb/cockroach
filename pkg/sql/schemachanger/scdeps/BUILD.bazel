@@ -40,6 +40,7 @@ go_library(
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
+        "//pkg/sql/oppurpose",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/sqlutil",

@@ -1020,7 +1020,7 @@ func TestTxnReadWithinUncertaintyIntervalAfterRangeMerge(t *testing.T) {
 		require.NoError(t, tc.Server(0).DB().AdminMerge(ctx, keyA))
 
 		if alsoSplit {
-			require.NoError(t, tc.Server(0).DB().AdminSplit(ctx, keyC, hlc.MaxTimestamp))
+			require.NoError(t, tc.Server(0).DB().AdminSplit(ctx, keyC, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION))
 		}
 
 		// Try and read the transaction from the context of a new transaction. This
@@ -4007,7 +4007,7 @@ func TestChangeReplicasLeaveAtomicRacesWithMerge(t *testing.T) {
 		err = db.AdminMerge(ctx, lhs)
 		require.NoError(t, err)
 		if resplit {
-			require.NoError(t, db.AdminSplit(ctx, rhs, hlc.Timestamp{WallTime: math.MaxInt64}))
+			require.NoError(t, db.AdminSplit(ctx, rhs, hlc.Timestamp{WallTime: math.MaxInt64}, roachpb.AdminSplitRequest_INGESTION))
 			err = tc.WaitForSplitAndInitialization(rhs)
 			require.NoError(t, err)
 		}

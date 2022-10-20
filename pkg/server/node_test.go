@@ -545,7 +545,12 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 
 	// Split the range.
-	if err := ts.db.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := ts.db.AdminSplit(
+		context.Background(),
+		splitKey,
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_INGESTION,
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -719,7 +724,12 @@ func TestGetTenantWeights(t *testing.T) {
 	// relevant store(s).
 	const otherTenantID = 5
 	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(otherTenantID))
-	require.NoError(t, s.DB().AdminSplit(ctx, prefix, hlc.MaxTimestamp))
+	require.NoError(t, s.DB().AdminSplit(
+		ctx,
+		prefix,           /* splitKey */
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_INGESTION,
+	))
 	// The range can have replicas on multiple stores, so wait for the split to
 	// be applied everywhere.
 	stores := s.GetStores().(*kvserver.Stores)
