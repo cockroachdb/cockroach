@@ -129,9 +129,9 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
            │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
            └── 6 Mutation operations
+                ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
-                ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

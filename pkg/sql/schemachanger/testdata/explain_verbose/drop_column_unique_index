@@ -624,6 +624,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
         │
         └── • 6 Mutation operations
             │
+            ├── • RemoveColumnDefaultExpression
+            │     ColumnID: 3
+            │     TableID: 106
+            │
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
@@ -640,10 +644,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t.test DROP pi;
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     IndexID: 1
-            │     TableID: 106
-            │
-            ├── • RemoveColumnDefaultExpression
-            │     ColumnID: 3
             │     TableID: 106
             │
             ├── • MakeDeleteOnlyColumnAbsent

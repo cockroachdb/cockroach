@@ -110,6 +110,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │     Name: crdb_internal_column_2_name_placeholder
             │     TableID: 106
             │
+            ├── • RemoveColumnDefaultExpression
+            │     ColumnID: 2
+            │     TableID: 106
+            │
+            ├── • UpdateBackReferencesInSequences
+            │     BackReferencedColumnID: 2
+            │     BackReferencedTableID: 106
+            │     SequenceIDs:
+            │     - 107
+            │
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
@@ -141,16 +151,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             ├── • MakeIndexAbsent
             │     IndexID: 3
             │     TableID: 106
-            │
-            ├── • RemoveColumnDefaultExpression
-            │     ColumnID: 2
-            │     TableID: 106
-            │
-            ├── • UpdateBackReferencesInSequences
-            │     BackReferencedColumnID: 2
-            │     BackReferencedTableID: 106
-            │     SequenceIDs:
-            │     - 107
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2

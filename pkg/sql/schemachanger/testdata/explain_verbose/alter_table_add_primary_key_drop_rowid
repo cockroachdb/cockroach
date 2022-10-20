@@ -968,6 +968,10 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
         │
         └── • 6 Mutation operations
             │
+            ├── • RemoveColumnDefaultExpression
+            │     ColumnID: 2
+            │     TableID: 104
+            │
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
@@ -985,10 +989,6 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     IndexID: 2
-            │     TableID: 104
-            │
-            ├── • RemoveColumnDefaultExpression
-            │     ColumnID: 2
             │     TableID: 104
             │
             ├── • MakeDeleteOnlyColumnAbsent

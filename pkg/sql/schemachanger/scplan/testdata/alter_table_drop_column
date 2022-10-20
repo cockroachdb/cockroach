@@ -470,6 +470,14 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
     [[ColumnType:{DescID: 107, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
+    *scop.RemoveDroppedColumnType
+      ColumnID: 2
+      TableID: 107
+    *scop.UpdateTableBackReferencesInTypes
+      BackReferencedTableID: 107
+      TypeIDs:
+      - 104
+      - 105
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
@@ -487,14 +495,6 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 9 MutationType ops
           SubWorkID: 1
       IndexID: 1
       TableID: 107
-    *scop.RemoveDroppedColumnType
-      ColumnID: 2
-      TableID: 107
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 107
-      TypeIDs:
-      - 104
-      - 105
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 2
       EventBase:
@@ -1423,6 +1423,14 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
     [[ColumnDefaultExpression:{DescID: 107, ColumnID: 3, ReferencedSequenceIDs: [106]}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 107
+    *scop.UpdateBackReferencesInSequences
+      BackReferencedColumnID: 3
+      BackReferencedTableID: 107
+      SequenceIDs:
+      - 106
     *scop.CreateGCJobForIndex
       IndexID: 1
       StatementForDropJob:
@@ -1440,14 +1448,6 @@ PostCommitNonRevertiblePhase stage 3 of 3 with 10 MutationType ops
           SubWorkID: 1
       IndexID: 1
       TableID: 107
-    *scop.RemoveColumnDefaultExpression
-      ColumnID: 3
-      TableID: 107
-    *scop.UpdateBackReferencesInSequences
-      BackReferencedColumnID: 3
-      BackReferencedTableID: 107
-      SequenceIDs:
-      - 106
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
       EventBase:

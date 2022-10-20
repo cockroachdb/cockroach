@@ -573,6 +573,9 @@ PostCommitNonRevertiblePhase stage 4 of 4 with 6 MutationType ops
     [[ColumnDefaultExpression:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
   ops:
+    *scop.RemoveColumnDefaultExpression
+      ColumnID: 3
+      TableID: 104
     *scop.CreateGCJobForIndex
       IndexID: 3
       StatementForDropJob:
@@ -589,9 +592,6 @@ PostCommitNonRevertiblePhase stage 4 of 4 with 6 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       IndexID: 3
-      TableID: 104
-    *scop.RemoveColumnDefaultExpression
-      ColumnID: 3
       TableID: 104
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 3
