@@ -52,6 +52,16 @@ const (
 	usingExistingData // skips import
 )
 
+// rampDuration returns the default durations passed to the `ramp`
+// option when running a tpcc workload in these tests.
+func rampDuration(isLocal bool) time.Duration {
+	if isLocal {
+		return 30 * time.Second
+	}
+
+	return 5 * time.Minute
+}
+
 type tpccOptions struct {
 	Warehouses         int
 	ExtraRunArgs       string
@@ -234,13 +244,11 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		ep = &cep
 	}
 
-	rampDuration := 5 * time.Minute
 	if c.IsLocal() {
 		opts.Warehouses = 1
 		if opts.Duration > time.Minute {
 			opts.Duration = time.Minute
 		}
-		rampDuration = 30 * time.Second
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	m := c.NewMonitor(ctx, crdbNodes)
@@ -255,7 +263,7 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 				statsPrefix = fmt.Sprintf("workload_%d.", i)
 			}
 			t.WorkerStatus(fmt.Sprintf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
-				i, opts.Warehouses, rampDuration, opts.Duration, pgURLs[i], time.Minute))
+				i, opts.Warehouses, rampDuration(c.IsLocal()), opts.Duration, pgURLs[i], time.Minute))
 			cmd := fmt.Sprintf(
 				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/%sstats.json "+
 					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
@@ -432,6 +440,8 @@ func registerTPCC(r registry.Registry) {
 				t.Fatal(err)
 			}
 
+			waitForWorkloadToRampUp := sleepStep(rampDuration(c.IsLocal()))
+
 			newVersionUpgradeTest(c,
 				uploadAndStartFromCheckpointFixture(crdbNodes, oldV),
 				waitForUpgradeStep(crdbNodes), // let predecessor version settle (gossip etc)
@@ -450,6 +460,15 @@ func registerTPCC(r registry.Registry) {
 				uploadVersionStep(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
 				// Now start running TPCC in the background.
 				tpccBackgroundStepper.launch,
+				// Wait for the workload to ramp up before attemping to
+				// upgrade the cluster version. If we start the migrations
+				// immediately after launching the tpcc workload above, they
+				// could finish "too quickly", before the workload had a
+				// chance to pick up the pace (starting all the workers, range
+				// merge/splits, compactions, etc). By waiting here, we
+				// increase the concurrency exposed to the upgrade migrations,
+				// and increase the chances of exposing bugs (such as #83079).
+				waitForWorkloadToRampUp,
 				// While tpcc is running in the background, bump the cluster
 				// version manually. We do this over allowing automatic upgrades
 				// to get a better idea of what errors come back here, if any.
@@ -1161,7 +1180,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		time.Sleep(restartWait)
 
 		// Set up the load generation configuration.
-		rampDur := 5 * time.Minute
+		rampDur := rampDuration(c.IsLocal())
 		loadDur := 10 * time.Minute
 		loadDone := make(chan time.Time, numLoadGroups)
 
