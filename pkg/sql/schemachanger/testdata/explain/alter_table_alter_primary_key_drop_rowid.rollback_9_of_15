@@ -56,6 +56,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":5,"TableID":104}
       │         ├── SetIndexName {"IndexID":5,"Name":"crdb_internal_in...","TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":11,"TableID":104}
       │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":12,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
       │         ├── RefreshStats {"TableID":104}
@@ -71,12 +72,11 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":10,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":10,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":11,"TableID":104}
-      │         ├── CreateGCJobForIndex {"IndexID":12,"TableID":104}
-      │         ├── MakeIndexAbsent {"IndexID":12,"TableID":104}
       │         ├── LogEvent {"TargetStatus":1}
       │         ├── CreateGCJobForIndex {"IndexID":11,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":12,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":12,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase

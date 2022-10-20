@@ -62,9 +62,9 @@ Schema change plan for rolling back ALTER TABLE ‹db›.public.‹tbl› ADD CO
            │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 2}
            │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
            └── 6 Mutation operations
+                ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":106}
-                ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

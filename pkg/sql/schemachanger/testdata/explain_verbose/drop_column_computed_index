@@ -611,10 +611,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 1
-    │       │     TableID: 104
-    │       │
     │       ├── • MakeDeleteOnlyColumnAbsent
     │       │     ColumnID: 3
     │       │     EventBase:
@@ -625,6 +621,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN j CASCADE;
     │       │       TargetMetadata:
     │       │         SourceElementID: 1
     │       │         SubWorkID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 1
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor

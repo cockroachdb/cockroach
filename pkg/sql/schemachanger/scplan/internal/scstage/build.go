@@ -118,8 +118,8 @@ func buildStages(bc buildContext) (stages []Stage) {
 		// Generate a stage builder which can make progress.
 		sb := bc.makeStageBuilder(bs)
 		// We allow mixing of revertible and non-revertible operations if there
-		// are no remaining operations which can fail. That being said, we want
-		// to not want to build such a stage as PostCommit but rather as
+		// are no remaining operations which can fail. That being said, we do not
+		// want to build such a stage as PostCommit but rather as
 		// PostCommitNonRevertible. This condition is used to determine whether
 		// the phase needs to be advanced due to the presence of non-revertible
 		// operations.
@@ -462,7 +462,7 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 		if !sb.isUnmetInboundDep(de) {
 			return nil
 		}
-		if de.Kind() != scgraph.SameStagePrecedence || sb.hasUnmeetableOutboundDeps(de.From()) {
+		if (de.Kind() != scgraph.SameStagePrecedence && de.Kind() != scgraph.Precedence) || sb.hasUnmeetableOutboundDeps(de.From()) {
 			ret = true
 			return iterutil.StopIteration()
 		}

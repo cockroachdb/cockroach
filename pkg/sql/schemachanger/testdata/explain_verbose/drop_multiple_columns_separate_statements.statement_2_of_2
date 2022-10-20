@@ -563,10 +563,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │     IndexID: 4
     │       │     TableID: 104
     │       │
-    │       ├── • MakeWriteOnlyIndexDeleteOnly
-    │       │     IndexID: 1
-    │       │     TableID: 104
-    │       │
     │       ├── • MakeDeleteOnlyColumnAbsent
     │       │     ColumnID: 4
     │       │     EventBase:
@@ -577,6 +573,10 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │       │       TargetMetadata:
     │       │         SourceElementID: 1
     │       │         SubWorkID: 1
+    │       │     TableID: 104
+    │       │
+    │       ├── • MakeWriteOnlyIndexDeleteOnly
+    │       │     IndexID: 1
     │       │     TableID: 104
     │       │
     │       ├── • SetJobStateOnDescriptor
@@ -697,6 +697,14 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
         │
         └── • 8 Mutation operations
             │
+            ├── • RemoveColumnDefaultExpression
+            │     ColumnID: 3
+            │     TableID: 104
+            │
+            ├── • RemoveColumnOnUpdateExpression
+            │     ColumnID: 3
+            │     TableID: 104
+            │
             ├── • CreateGCJobForIndex
             │     IndexID: 1
             │     StatementForDropJob:
@@ -713,14 +721,6 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     IndexID: 1
-            │     TableID: 104
-            │
-            ├── • RemoveColumnDefaultExpression
-            │     ColumnID: 3
-            │     TableID: 104
-            │
-            ├── • RemoveColumnOnUpdateExpression
-            │     ColumnID: 3
             │     TableID: 104
             │
             ├── • MakeDeleteOnlyColumnAbsent
