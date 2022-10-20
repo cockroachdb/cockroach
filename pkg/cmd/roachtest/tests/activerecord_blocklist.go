@@ -16,6 +16,7 @@ var activeRecordBlocklists = blocklistsForVersion{
 	{"v21.2", "activeRecordBlockList21_2", activeRecordBlockList21_2, "activeRecordIgnoreList21_2", activeRecordIgnoreList21_2},
 	{"v22.1", "activeRecordBlockList22_1", activeRecordBlockList22_1, "activeRecordIgnoreList22_1", activeRecordIgnoreList22_1},
 	{"v22.2", "activeRecordBlockList22_2", activeRecordBlockList22_2, "activeRecordIgnoreList22_2", activeRecordIgnoreList22_2},
+	{"v23.1", "activeRecordBlockList23_1", activeRecordBlockList23_1, "activeRecordIgnoreList23_1", activeRecordIgnoreList23_1},
 }
 
 // These are lists of known activerecord test errors and failures.
@@ -29,6 +30,8 @@ var activeRecordBlocklists = blocklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var activeRecordBlockList23_1 = blocklist{}
+
 var activeRecordBlockList22_2 = blocklist{}
 
 var activeRecordBlockList22_1 = blocklist{}
@@ -38,6 +41,8 @@ var activeRecordBlockList21_2 = blocklist{}
 var activeRecordBlockList21_1 = blocklist{}
 
 var activeRecordBlockList20_2 = blocklist{}
+
+var activeRecordIgnoreList23_1 = activeRecordIgnoreList22_2
 
 var activeRecordIgnoreList22_2 = activeRecordIgnoreList22_1
 

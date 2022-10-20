@@ -13,7 +13,10 @@ package tests
 var jasyncsqlBlocklists = blocklistsForVersion{
 	{"v22.1", "jasyncsqlBlocklist22_1", jasyncBlocklist22_1, "jasyncsqlIgnoreList22_1", jasyncsqlIgnoreList22_1},
 	{"v22.2", "jasyncsqlBlocklist22_2", jasyncBlocklist22_2, "jasyncsqlIgnoreList22_2", jasyncsqlIgnoreList22_2},
+	{"v23.1", "jasyncsqlBlocklist23_1", jasyncBlocklist23_1, "jasyncsqlIgnoreList23_1", jasyncsqlIgnoreList23_1},
 }
+
+var jasyncBlocklist23_1 = jasyncBlocklist22_2
 
 var jasyncBlocklist22_2 = jasyncBlocklist22_1
 
@@ -74,6 +77,8 @@ var jasyncBlocklist22_1 = blocklist{
 	"com.github.aysnc.sql.db.integration.pool.SuspendingPoolSpec.transactions should commit simple inserts , prepared statements":                                   "unknown",
 	"com.github.aysnc.sql.db.integration.pool.SuspendingPoolSpec.transactions with pool should commit simple inserts , prepared statements":                         "unknown",
 }
+
+var jasyncsqlIgnoreList23_1 = jasyncsqlIgnoreList22_2
 
 var jasyncsqlIgnoreList22_2 = jasyncsqlIgnoreList22_1
 
