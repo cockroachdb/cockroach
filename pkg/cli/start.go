@@ -552,22 +552,72 @@ If problems persist, please see %s.`
 
 	initGEOS(ctx)
 
+	const serverType redact.SafeString = "node"
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
-	log.Ops.Info(ctx, "starting cockroach node")
 
 	// Run the rest of the startup process in a goroutine separate from
 	// the main goroutine to avoid preventing proper handling of signals
 	// if we get stuck on something during initialization (#10138).
-	var serverStatusMu serverStatus
-	var s serverStartupInterface
-	serverStartupErrC := make(chan error, 1)
 
 	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
 		return server.NewServer(serverCfg, stopper)
 	}
 
-	const isStorageClusterNode = true
+	maybeRunInitialSQL := func(ctx context.Context, s serverStartupInterface) error {
+		// Run SQL for new clusters.
+		//
+		// TODO(knz): If/when we want auto-creation of an initial admin user,
+		// this can be achieved here.
+		return runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */)
+	}
+
+	getS, srvStatus, serverStartupErrC := createAndStartServerAsync(ctx,
+		tBegin, &serverCfg, stopper, startupSpan, newServerFn, maybeRunInitialSQL, serverType)
+
+	return waitForShutdown(
+		// NB: we delay the access to s, as it is assigned
+		// asynchronously in a goroutine above.
+		getS,
+		stopper, serverStartupErrC, signalCh,
+		srvStatus)
+}
+
+// createAndStartServerAsync starts an async goroutine which instantiates
+// the server and starts it.
+// We run it in a separate goroutine because the instantiation&start
+// could block, and we want to retain the option to start shutting down
+// the process (e.g. via Ctrl+C on the terminal) even in that case.
+// The shutdown logic thus starts running asynchronously, via waitForShutdown,
+// concurrently with createAndStartServerAsync.
+//
+// The arguments are as follows:
+// - tBegin: time when startup began; used to report statistics at the end of startup.
+// - serverCfg: the server configuration.
+// - stopper: the stopper used to start all the async tasks. This is the stopper
+//   used by the shutdown logic.
+// - startupSpan: the tracing span for the context that was started earlier
+//   during startup. It needs to be finalized when the async goroutine completes.
+// - newServerFn: a constructor function for the server object.
+// - maybeRunInitialSQL: a callback that will be called after the server has
+//   initialized, but before it starts accepting clients.
+// - serverType: a title used for the type of server. This is used
+//   when reporting the startup messages on the terminal & logs.
+func createAndStartServerAsync(
+	ctx context.Context,
+	tBegin time.Time,
+	serverCfg *server.Config,
+	stopper *stop.Stopper,
+	startupSpan *tracing.Span,
+	newServerFn newServerFn,
+	maybeRunInitialSQL func(context.Context, serverStartupInterface) error,
+	serverType redact.SafeString,
+) (getS func() serverShutdownInterface, srvStatus *serverStatus, serverStartupErrC <-chan error) {
+	var serverStatusMu serverStatus
+	var s serverStartupInterface
+	startupErrC := make(chan error, 1)
+
+	log.Ops.Infof(ctx, "starting cockroach %s", serverType)
 
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
@@ -598,7 +648,7 @@ If problems persist, please see %s.`
 		if err := func() error {
 			// Instantiate the server.
 			var err error
-			s, err = newServerFn(ctx, serverCfg, stopper)
+			s, err = newServerFn(ctx, *serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
 			}
@@ -647,17 +697,8 @@ If problems persist, please see %s.`
 			}
 			initialStart := s.InitialStart()
 
-			if isStorageClusterNode {
-				// Run SQL for new clusters.
-				//
-				// TODO(knz): If/when we want auto-creation of an initial admin user,
-				// this can be achieved here.
-				//
-				// TODO(knz): It's unfortunate that this conditional is piercing the
-				// veil of the serverStartupInterface type, but the alternative
-				// (extracting all the dependencies of runInitialSQL into the interface)
-				// is objectively worse.
-				if err := runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
+			if maybeRunInitialSQL != nil {
+				if err := maybeRunInitialSQL(ctx, s); err != nil {
 					return err
 				}
 			}
@@ -669,19 +710,17 @@ If problems persist, please see %s.`
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
-			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
-				isStorageClusterNode, initialStart, s.LogicalClusterID())
+			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
+				serverType, initialStart, s.LogicalClusterID())
 		}(); err != nil {
-			serverStartupErrC <- err
+			startupErrC <- err
 		}
 	}()
 
-	return waitForShutdown(
-		// NB: we delay the access to s, as it is assigned
-		// asynchronously in a goroutine above.
-		func() serverShutdownInterface { return s },
-		stopper, serverStartupErrC, signalCh,
-		&serverStatusMu)
+	getS = func() serverShutdownInterface { return s }
+	serverStartupErrC = startupErrC
+	srvStatus = &serverStatusMu
+	return getS, srvStatus, serverStartupErrC
 }
 
 // serverStatus coordinates the async goroutine that starts the server
@@ -748,8 +787,8 @@ type serverShutdownInterface interface {
 func waitForShutdown(
 	getS func() serverShutdownInterface,
 	stopper *stop.Stopper,
-	serverStartupErrC chan error,
-	signalCh chan os.Signal,
+	serverStartupErrC <-chan error,
+	signalCh <-chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
 	// The remainder of the main function executes concurrently with the
@@ -1018,17 +1057,13 @@ func reportServerInfo(
 	startTime time.Time,
 	serverCfg *server.Config,
 	st *cluster.Settings,
-	isHostNode, initialStart bool,
+	serverType redact.SafeString,
+	initialStart bool,
 	tenantClusterID uuid.UUID,
 ) error {
-	srvS := redact.SafeString("SQL server")
-	if isHostNode {
-		srvS = "node"
-	}
-
 	var buf redact.StringBuilder
 	info := build.GetInfo()
-	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", srvS, timeutil.Now(), timeutil.Since(startTime).Seconds())
+	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", serverType, timeutil.Now(), timeutil.Since(startTime).Seconds())
 	buf.Printf("build:\t%s %s @ %s (%s)\n",
 		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
 	buf.Printf("webui:\t%s\n", log.SafeManaged(serverCfg.AdminURL()))
@@ -1091,7 +1126,7 @@ func reportServerInfo(
 		buf.Printf("tenant clusterID:\t%s\n", log.SafeManaged(tenantClusterID))
 	}
 	nodeID := serverCfg.BaseConfig.IDContainer.Get()
-	if isHostNode {
+	if !serverCfg.SQLConfig.TenantID.IsSet() {
 		if initialStart {
 			if nodeID == kvserver.FirstNodeID {
 				buf.Printf("status:\tinitialized new cluster\n")
@@ -1126,7 +1161,7 @@ func reportServerInfo(
 		return err
 	}
 	msgS := msg.ToString()
-	log.Ops.Infof(ctx, "%s startup completed:\n%s", srvS, msgS)
+	log.Ops.Infof(ctx, "%s startup completed:\n%s", serverType, msgS)
 	if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
 		fmt.Print(msgS.StripMarkers())
 	}

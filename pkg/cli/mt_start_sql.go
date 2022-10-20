@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -223,9 +224,11 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// its network sockets, but perhaps before it has done bootstrapping
 	serverCfg.ReadyFn = func(_ bool) { reportReadinessExternally(ctx, cmd, false /* waitForInit */) }
 
+	const serverType redact.SafeString = "SQL server"
+
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
-	log.Ops.Info(ctx, "starting cockroach SQL node")
+	log.Ops.Infof(ctx, "starting cockroach %s", serverType)
 
 	sqlServer, err := server.StartTenant(
 		ctx,
@@ -252,7 +255,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	// Report the server identifiers and other server details
 	// in the same format as 'cockroach start'.
-	if err := reportServerInfo(ctx, tBegin, &serverCfg, st, false /* isHostNode */, false /* initialStart */, tenantClusterID); err != nil {
+	if err := reportServerInfo(ctx, tBegin, &serverCfg, st, serverType, false /* initialStart */, tenantClusterID); err != nil {
 		return err
 	}
 
