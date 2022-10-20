@@ -2266,7 +2266,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	if sc.execCfg.Codec.ForSystemTenant() {
 		expirationTime := sc.db.Clock().Now().Add(time.Hour.Nanoseconds(), 0)
 		for _, span := range addingSpans {
-			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime); err != nil {
+			if err := sc.db.AdminSplit(ctx, span.Key, expirationTime, roachpb.AdminSplitRequestIngestion); err != nil {
 				return err
 			}
 		}

@@ -55,6 +55,20 @@ const (
 	MaxUserPriority UserPriority = 1000
 )
 
+// AdminSplitRequestReason is a mapping of SQL split reasons to KV AdminSplitRequest_Permissions
+type AdminSplitRequestReason AdminSplitRequest_Permission
+
+const (
+	// AdminSplitRequestManual is a manual SPLIT AT request.
+	AdminSplitRequestManual = AdminSplitRequestReason(AdminSplitRequest_Checked)
+	// AdminSplitRequestTestUnchecked is a test request that should not be permission checked.
+	AdminSplitRequestTestUnchecked = AdminSplitRequestReason(AdminSplitRequest_Unchecked)
+	// AdminSplitRequestIngestion is a split request due to an ingestion process.
+	AdminSplitRequestIngestion = AdminSplitRequestReason(AdminSplitRequest_Unchecked)
+	// AdminSplitRequestSchema is a split request from the schema changer.
+	AdminSplitRequestSchema = AdminSplitRequestReason(AdminSplitRequest_Unchecked)
+)
+
 // SupportsBatch determines whether the methods in the provided batch
 // are supported by the ReadConsistencyType, returning an error if not.
 func (rc ReadConsistencyType) SupportsBatch(ba *BatchRequest) error {

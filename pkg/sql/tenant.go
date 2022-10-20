@@ -306,7 +306,7 @@ func (p *planner) CreateTenant(ctx context.Context, tenID uint64, name string) e
 	// the span configs infrastructure, in `system.span_configurations`.
 	expTime := p.ExecCfg().Clock.Now().Add(time.Hour.Nanoseconds(), 0)
 	for _, key := range splits {
-		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime); err != nil {
+		if err := p.ExecCfg().DB.AdminSplit(ctx, key, expTime, roachpb.AdminSplitRequestIngestion); err != nil {
 			return err
 		}
 	}
