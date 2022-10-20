@@ -85,6 +85,13 @@
         letter-spacing: 0.1px;
         margin-bottom: 0;
       }
+      a {
+        color: $colors--link;
+        &:hover {
+          color: $colors--link;
+          text-decoration: underline;
+        }
+      }
     }
   }
 }

@@ -73,7 +73,7 @@ import {
   timeScale1hMinOptions,
   TimeScaleDropdown,
   timeScaleToString,
-  toDateRange,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 
 import { commonStyles } from "../common";
@@ -153,7 +153,7 @@ export type StatementsPageProps = StatementsPageDispatchProps &
 function statementsRequestFromProps(
   props: StatementsPageProps,
 ): cockroach.server.serverpb.StatementsRequest {
-  const [start, end] = toDateRange(props.timeScale);
+  const [start, end] = toRoundedDateRange(props.timeScale);
   return new cockroach.server.serverpb.StatementsRequest({
     combined: true,
     start: Long.fromNumber(start.unix()),
