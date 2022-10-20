@@ -334,12 +334,6 @@ type KVConfig struct {
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
 
-	// Enables linearizable behavior of operations on this node by making sure
-	// that no commit timestamp is reported back to the client until all other
-	// node clocks have necessarily passed it.
-	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
-	Linearizable bool
-
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
@@ -437,6 +431,15 @@ type SQLConfig struct {
 	//
 	// Only applies when the SQL server is deployed individually.
 	TenantKVAddrs []string
+
+	// The following values can only be set via environment variables and are
+	// for testing only. They are not meant to be set by the end user.
+
+	// Enables linearizable behavior of operations on this node by making sure
+	// that no commit timestamp is reported back to the client until all other
+	// node clocks have necessarily passed it.
+	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
+	Linearizable bool
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
