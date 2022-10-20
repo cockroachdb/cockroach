@@ -63,11 +63,29 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 		}
 	}()
 
+	// Drop the control and perturb if they exist.
+	err := h.execStmt("DROP TABLE IF EXISTS control")
+	if err != nil {
+		fmt.Println("FAILED ON FIRST DROP")
+		h.logStatements()
+		return err
+	}
+	err = h.execStmt("DROP TABLE IF EXISTS perturb")
+	if err != nil {
+		fmt.Println("FAILED ON SECOND DROP")
+		h.logStatements()
+		return err
+	}
+
 	stmt := smither.Generate()
 
-	// First, run the statement without cost perturbation.
-	controlRows, err := h.runQuery(stmt)
+	// First, run the statement without cost perturbation and save the results
+	// to the control table.
+	err = h.execStmt(fmt.Sprintf("CREATE TABLE control AS (%s)", stmt))
 	if err != nil {
+		fmt.Println("FAILED ON FIRST CREATE")
+		fmt.Println(err)
+		h.logStatements()
 		// Skip statements that fail with an error.
 		//nolint:returnerrcheck
 		return nil
@@ -86,8 +104,9 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 		return h.makeError(err, "failed to perturb costs")
 	}
 
-	// Then, rerun the statement with cost perturbation.
-	perturbRows, err2 := h.runQuery(stmt)
+	// Then, rerun the statement with cost perturbation and save the results to
+	// the perturb table.
+	err2 := h.execStmt(fmt.Sprintf("CREATE TABLE perturb AS (%s)", stmt))
 	if err2 != nil {
 		// If the perturbed plan fails with an internal error while the normal plan
 		// succeeds, we'd like to know, so consider this a test failure.
@@ -106,20 +125,34 @@ func runCostFuzzQuery(smither *sqlsmith.Smither, rnd *rand.Rand, h queryComparis
 		return nil
 	}
 
-	if diff := unsortedMatricesDiff(controlRows, perturbRows); diff != "" {
+	// The contents of control and perturb should identical.
+	diff1, err := h.runQuery("SELECT * FROM control EXCEPT ALL SELECT * FROM perturb")
+	if err != nil {
+		return err
+	}
+	diff2, err := h.runQuery("SELECT * FROM perturb EXCEPT ALL SELECT * FROM control")
+	if err != nil {
+		return err
+	}
+	if len(diff1) > 0 || len(diff2) > 0 {
 		// We have a mismatch in the perturbed vs control query outputs.
 		h.logStatements()
 		h.logVerboseOutput()
+		var diff1Str strings.Builder
+		for i := range diff1 {
+			diff1Str.WriteString(strings.Join(diff1[i], ","))
+			diff1Str.WriteByte('\n')
+		}
+		var diff2Str strings.Builder
+		for i := range diff2 {
+			diff2Str.WriteString(strings.Join(diff2[i], ","))
+			diff2Str.WriteByte('\n')
+		}
 		return h.makeError(errors.Newf(
-			"expected unperturbed and perturbed results to be equal\n%s\nsql: %s\n",
-			diff, stmt,
+			"expected unperturbed and perturbed results to be equal\ndiff1:\n%s\ndiff2:\n%s\nsql: %s\n",
+			diff1Str.String(), diff2Str.String(), stmt,
 		), "")
 	}
-
-	// TODO(michae2): If we run into the "-0 flake" described in PR #79551 then
-	// we'll need some other strategy for comparison besides diffing the printed
-	// results. One idea is to CREATE TABLE AS SELECT with both queries, and then
-	// EXCEPT ALL the table contents. But this might be very slow.
 
 	// Finally, disable cost perturbation for the next statement.
 	resetSeedStmt := "RESET testing_optimizer_random_seed"

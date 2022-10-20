@@ -99,6 +99,7 @@ type Smither struct {
 	disableInsertSelect        bool
 	disableDivision            bool
 	disableDecimals            bool
+	disableUntypedNulls        bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte

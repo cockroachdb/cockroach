@@ -183,6 +183,11 @@ func makeConstExpr(s *Smither, typ *types.T, refs colRefs) tree.TypedExpr {
 		}
 		expr = tree.NewTypedCastExpr(expr, typ)
 	}
+	// TODO: VOID?
+	exprTypFam := expr.ResolvedType().Family()
+	if s.disableUntypedNulls && (exprTypFam == types.UnknownFamily || exprTypFam == types.VoidFamily) {
+		expr = tree.NewTypedCastExpr(expr, typ)
+	}
 	return expr
 }
 
