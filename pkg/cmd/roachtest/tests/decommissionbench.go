@@ -1003,11 +1003,11 @@ func runSingleDecommission(
 		atomic.StoreUint32(targetLogicalNodeAtomic, uint32(newLogicalNodeID))
 
 		tickByName(upreplicateMetric)
-		h.t.Status("waiting for replica counts to balance across nodes")
 		{
 			dbNode := h.c.Conn(ctx, h.t.L(), pinnedNode)
 			defer dbNode.Close()
 
+			h.t.Status("waiting for new node to become active")
 			for {
 				var membership string
 				select {
@@ -1034,6 +1034,29 @@ func runSingleDecommission(
 				return err
 			}
 
+			// Before checking for balance, ensure we have started upreplication to
+			// the new node.
+			h.t.Status("waiting for new node to have >1 replicas")
+			for {
+				var count int
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				default:
+					if err := dbNode.QueryRow(
+						"SELECT count(*) FROM crdb_internal.ranges WHERE array_position(replicas, $1) IS NOT NULL",
+						newLogicalNodeID,
+					).Scan(&count); err != nil {
+						return err
+					}
+				}
+
+				if count > 1 {
+					break
+				}
+			}
+
+			h.t.Status("waiting for replica counts to balance across nodes")
 			if err := waitForRebalance(
 				ctx, h.t.L(), dbNode, float64(totalRanges)/3.0, 60, /* stableSeconds */
 			); err != nil {
