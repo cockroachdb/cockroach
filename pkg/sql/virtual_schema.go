@@ -747,7 +747,7 @@ func NewVirtualSchemaHolder(
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
 			version := st.Version.ActiveVersionOrEmpty(ctx)
-			if err := descbuilder.ValidateSelf(td, version); err != nil {
+			if err := descbuilder.ValidateSelf(td, version, nil /* sd */); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

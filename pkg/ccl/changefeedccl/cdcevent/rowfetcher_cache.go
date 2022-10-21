@@ -80,7 +80,7 @@ func newRowFetcherCache(
 	return &rowFetcherCache{
 		codec:           codec,
 		leaseMgr:        leaseMgr,
-		collection:      cf.NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* monitor */),
+		collection:      cf.NewCollection(ctx, nil /* sds */, nil /* monitor */),
 		db:              db,
 		fetchers:        cache.NewUnorderedCache(DefaultCacheConfig),
 		watchedFamilies: watchedFamilies,

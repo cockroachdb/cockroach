@@ -328,7 +328,7 @@ func newInternalPlanner(
 	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {
-		params.collection = execCfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sds), nil /* monitor */)
+		params.collection = execCfg.CollectionFactory.NewCollection(ctx, sds, nil /* monitor */)
 	}
 
 	var ts time.Time

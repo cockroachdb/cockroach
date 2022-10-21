@@ -88,7 +88,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 	mutDesc.Families = []descpb.ColumnFamilyDescriptor{
 		{ID: primary, Name: "primary", ColumnIDs: mutDesc.PublicColumnIDs(), ColumnNames: columnNames},
 	}
-	return mutDesc, descbuilder.ValidateSelf(mutDesc, clusterversion.TestingClusterVersion)
+	return mutDesc, descbuilder.ValidateSelf(mutDesc, clusterversion.TestingClusterVersion, nil /* sd */)
 }
 
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {

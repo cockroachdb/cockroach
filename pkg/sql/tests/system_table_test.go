@@ -218,7 +218,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		if err != nil {
 			t.Fatalf("test: %+v, err: %v", test, err)
 		}
-		require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion))
+		require.NoError(t, descbuilder.ValidateSelf(gen, clusterversion.TestingClusterVersion, nil /* sd */))
 
 		if desc.TableDesc().Equal(gen.TableDesc()) {
 			return

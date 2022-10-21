@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -245,7 +246,7 @@ func (q *byIDLookupContext) lookupVirtual(
 func (q *byIDLookupContext) lookupTemporary(
 	id descpb.ID,
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
-	td := q.tc.temporary.getSchemaByID(id)
+	td := q.tc.temporary().getSchemaByID(id)
 	if td == nil {
 		return nil, catalog.NoValidation, nil
 	}
@@ -434,7 +435,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		if !isSchema || !isTemporarySchema(name) {
 			return continueLookups, descpb.InvalidID, nil
 		}
-		avoidFurtherLookups, td := tc.temporary.getSchemaByName(ctx, parentID, name)
+		avoidFurtherLookups, td := tc.temporary().getSchemaByName(parentID, name)
 		if td != nil {
 			return haltLookups, td.GetID(), nil
 		}
@@ -551,6 +552,9 @@ func (tc *Collection) finalizeDescriptors(
 		}
 	}
 	// Ensure that all descriptors are sufficiently validated.
+	if tc.stored.ValidationMode() == sessiondatapb.DescriptorValidationOff {
+		return nil
+	}
 	requiredLevel := validate.MutableRead
 	if !flags.RequireMutable && !flags.AvoidLeased {
 		requiredLevel = validate.ImmutableRead

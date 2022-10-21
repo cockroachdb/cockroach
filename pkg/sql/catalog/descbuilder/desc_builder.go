@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -174,6 +176,14 @@ func BuildMutable(
 }
 
 // ValidateSelf validates that the descriptor is internally consistent.
-func ValidateSelf(desc catalog.Descriptor, version clusterversion.ClusterVersion) error {
+//
+// When the optional session data is provided and the descriptor validation mode
+// session var is set to 'off', no validation is performed.
+func ValidateSelf(
+	desc catalog.Descriptor, version clusterversion.ClusterVersion, sd *sessiondata.SessionData,
+) error {
+	if sd != nil && sd.DescriptorValidationMode == sessiondatapb.DescriptorValidationOff {
+		return nil
+	}
 	return validate.Self(version, desc)
 }

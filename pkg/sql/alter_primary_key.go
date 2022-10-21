@@ -544,7 +544,7 @@ func (p *planner) AlterPrimaryKey(
 	}
 	tableDesc.AddPrimaryKeySwapMutation(swapArgs)
 
-	if err := descbuilder.ValidateSelf(tableDesc, version); err != nil {
+	if err := descbuilder.ValidateSelf(tableDesc, version, p.SessionData()); err != nil {
 		return err
 	}
 

@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -148,10 +150,13 @@ type direct struct {
 var _ Direct = &direct{}
 
 // MakeDirect returns an implementation of Direct.
-func MakeDirect(codec keys.SQLCodec, version clusterversion.ClusterVersion) Direct {
+func MakeDirect(
+	codec keys.SQLCodec, sds *sessiondata.Stack, version clusterversion.ClusterVersion,
+) Direct {
 	return &direct{
 		StoredCatalog: StoredCatalog{
 			CatalogReader: NewUncachedCatalogReader(codec),
+			sds:           sds,
 		},
 		version: version,
 	}
@@ -178,10 +183,12 @@ func (d *direct) MustGetDescriptorsByID(
 	if err != nil {
 		return nil, err
 	}
-	vd := d.NewValidationDereferencer(txn)
-	ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
-	if err := ve.CombinedError(); err != nil {
-		return nil, err
+	if d.ValidationMode() != sessiondatapb.DescriptorValidationOff {
+		vd := d.NewValidationDereferencer(txn)
+		ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
+		if err := ve.CombinedError(); err != nil {
+			return nil, err
+		}
 	}
 	return descs, nil
 }

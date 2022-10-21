@@ -155,7 +155,9 @@ func (pt *partitioningTest) parse() error {
 			return err
 		}
 		pt.parsed.tableDesc = mutDesc
-		if err := descbuilder.ValidateSelf(pt.parsed.tableDesc, clusterversion.TestingClusterVersion); err != nil {
+		if err := descbuilder.ValidateSelf(
+			pt.parsed.tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+		); err != nil {
 			return err
 		}
 	}

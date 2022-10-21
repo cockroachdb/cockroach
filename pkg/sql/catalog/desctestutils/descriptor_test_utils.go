@@ -35,7 +35,7 @@ func TestingGetDatabaseDescriptorWithVersion(
 ) catalog.DatabaseDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
-	direct := catkv.MakeDirect(codec, version)
+	direct := catkv.MakeDirect(codec, nil /* sds */, version)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		id, err := direct.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, database)
 		if err != nil {
@@ -73,7 +73,7 @@ func TestingGetSchemaDescriptorWithVersion(
 ) catalog.SchemaDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
-	direct := catkv.MakeDirect(codec, version)
+	direct := catkv.MakeDirect(codec, nil /* sds */, version)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		schemaID, err := direct.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schemaName)
 		if err != nil {
@@ -169,7 +169,7 @@ func testingGetObjectDescriptor(
 	object string,
 ) (desc catalog.Descriptor) {
 	ctx := context.Background()
-	direct := catkv.MakeDirect(codec, version)
+	direct := catkv.MakeDirect(codec, nil /* sds */, version)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		dbID, err := direct.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, database)
 		if err != nil {

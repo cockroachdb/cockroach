@@ -418,7 +418,7 @@ func TestPrimaryKeyUnspecified(t *testing.T) {
 	}
 	desc.SetPrimaryIndex(descpb.IndexDescriptor{})
 
-	err = descbuilder.ValidateSelf(desc, clusterversion.TestingClusterVersion)
+	err = descbuilder.ValidateSelf(desc, clusterversion.TestingClusterVersion, nil /* sd */)
 	if !testutils.IsError(err, tabledesc.ErrMissingPrimaryKey.Error()) {
 		t.Fatalf("unexpected error: %v", err)
 	}

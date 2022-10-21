@@ -267,7 +267,7 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// TODO(postamar): give the eval.Context a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
-	descsCol := cf.NewCollection(ctx, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
+	descsCol := cf.NewCollection(ctx, evalCtx.SessionDataStack, nil /* monitor */)
 	err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)

@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -58,19 +60,29 @@ type StoredCatalog struct {
 	// above.
 	allSchemasForDatabase map[descpb.ID]map[descpb.ID]string
 
+	// sds is used to access session variable values.
+	sds *sessiondata.Stack
+
 	// memAcc is the actual account of an injected, upstream monitor
 	// to track memory usage of StoredCatalog.
 	memAcc *mon.BoundAccount
 }
 
 // MakeStoredCatalog returns a new instance of StoredCatalog.
-func MakeStoredCatalog(cr CatalogReader, monitor *mon.BytesMonitor) StoredCatalog {
-	sd := StoredCatalog{CatalogReader: cr}
+func MakeStoredCatalog(
+	cr CatalogReader, sds *sessiondata.Stack, monitor *mon.BytesMonitor,
+) StoredCatalog {
+	sc := StoredCatalog{CatalogReader: cr, sds: sds}
 	if monitor != nil {
 		memAcc := monitor.MakeBoundAccount()
-		sd.memAcc = &memAcc
+		sc.memAcc = &memAcc
 	}
-	return sd
+	return sc
+}
+
+// SetSessionDataStack sets a session data stack for this StoredCatalog.
+func (sc *StoredCatalog) SetSessionDataStack(sds *sessiondata.Stack) {
+	sc.sds = sds
 }
 
 // Reset zeroes the object for re-use in a new transaction.
@@ -85,8 +97,18 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 		CatalogReader: old.CatalogReader,
 		cache:         old.cache,
 		nameIndex:     old.nameIndex,
+		sds:           old.sds,
 		memAcc:        old.memAcc,
 	}
+}
+
+// ValidationMode returns the validation mode currently in force.
+func (sc *StoredCatalog) ValidationMode() sessiondatapb.DescriptorValidationMode {
+	if sc.sds == nil {
+		// Return default value, 'on'.
+		return 0
+	}
+	return sc.sds.Top().DescriptorValidationMode
 }
 
 // ensure adds a descriptor to the StoredCatalog layer.
@@ -396,10 +418,12 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 			if desc == nil {
 				continue
 			}
-			if err = validate.Self(version, desc); err != nil {
-				return nil, err
+			if c.sc.ValidationMode() != sessiondatapb.DescriptorValidationOff {
+				if err = validate.Self(version, desc); err != nil {
+					return nil, err
+				}
+				c.sc.UpdateValidationLevel(desc, catalog.ValidationLevelSelfOnly)
 			}
-			c.sc.UpdateValidationLevel(desc, catalog.ValidationLevelSelfOnly)
 			ret[fallbackRetIndexes[j]] = desc
 		}
 	}

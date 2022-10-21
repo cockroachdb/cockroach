@@ -118,7 +118,7 @@ func NewBareBonesCollectionFactory(
 
 // NewCollection constructs a new Collection.
 func (cf *CollectionFactory) NewCollection(
-	ctx context.Context, temporarySchemaProvider TemporarySchemaProvider, monitor *mon.BytesMonitor,
+	ctx context.Context, sds *sessiondata.Stack, monitor *mon.BytesMonitor,
 ) *Collection {
 	if monitor == nil {
 		// If an upstream monitor is not provided, the default, unlimited monitor will be used.
@@ -126,5 +126,5 @@ func (cf *CollectionFactory) NewCollection(
 		monitor = cf.defaultMonitor
 	}
 	return newCollection(ctx, cf.leaseMgr, cf.settings, cf.codec, cf.hydrated, cf.systemDatabase,
-		cf.virtualSchemas, temporarySchemaProvider, monitor)
+		cf.virtualSchemas, sds, monitor)
 }

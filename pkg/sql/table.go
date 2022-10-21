@@ -304,7 +304,7 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if err := descbuilder.ValidateSelf(tableDesc, version); err != nil {
+	if err := descbuilder.ValidateSelf(tableDesc, version, p.SessionData()); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "table descriptor is not valid\n%v\n", tableDesc)
 	}
 

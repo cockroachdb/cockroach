@@ -82,7 +82,9 @@ func writeMutation(
 ) {
 	tableDesc.Mutations = append(tableDesc.Mutations, m)
 	tableDesc.Version++
-	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); err != nil {
+	if err := descbuilder.ValidateSelf(
+		tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := kvDB.Put(

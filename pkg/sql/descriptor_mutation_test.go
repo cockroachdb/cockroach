@@ -87,7 +87,11 @@ func (mt mutationTest) makeMutationsActive(ctx context.Context) {
 	}
 	mt.tableDesc.Mutations = nil
 	mt.tableDesc.Version++
-	if err := descbuilder.ValidateSelf(mt.tableDesc, clusterversion.TestingClusterVersion); err != nil {
+	if err := descbuilder.ValidateSelf(
+		mt.tableDesc,
+		clusterversion.TestingClusterVersion,
+		nil, /* sd */
+	); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -147,7 +151,9 @@ func (mt mutationTest) writeMutation(ctx context.Context, m descpb.DescriptorMut
 	}
 	mt.tableDesc.Mutations = append(mt.tableDesc.Mutations, m)
 	mt.tableDesc.Version++
-	if err := descbuilder.ValidateSelf(mt.tableDesc, clusterversion.TestingClusterVersion); err != nil {
+	if err := descbuilder.ValidateSelf(
+		mt.tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); err != nil {
 		mt.Fatal(err)
 	}
 	if err := mt.kvDB.Put(
@@ -450,21 +456,29 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// Check that a mutation can only be inserted with an explicit mutation state, and direction.
 	tableDesc = mTest.tableDesc
 	tableDesc.Mutations = []descpb.DescriptorMutation{{}}
-	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
+	if err := descbuilder.ValidateSelf(
+		tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, and no column/index descriptor") {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Column{Column: &tableDesc.Columns[len(tableDesc.Columns)-1]}}}
 	tableDesc.Columns = tableDesc.Columns[:len(tableDesc.Columns)-1]
-	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(
+		tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); !testutils.IsError(err, `mutation in state UNKNOWN, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_DELETE_ONLY
-	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(
+		tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); !testutils.IsError(err, `mutation in state DELETE_ONLY, direction NONE, col "i", id 3`) {
 		t.Fatal(err)
 	}
 	tableDesc.Mutations[0].State = descpb.DescriptorMutation_UNKNOWN
 	tableDesc.Mutations[0].Direction = descpb.DescriptorMutation_DROP
-	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
+	if err := descbuilder.ValidateSelf(
+		tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); !testutils.IsError(err, `mutation in state UNKNOWN, direction DROP, col "i", id 3`) {
 		t.Fatal(err)
 	}
 }
@@ -651,7 +665,9 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	index := tableDesc.PublicNonPrimaryIndexes()[len(tableDesc.PublicNonPrimaryIndexes())-1]
 	tableDesc.Mutations = []descpb.DescriptorMutation{{Descriptor_: &descpb.DescriptorMutation_Index{Index: index.IndexDesc()}}}
 	tableDesc.RemovePublicNonPrimaryIndex(index.Ordinal())
-	if err := descbuilder.ValidateSelf(tableDesc, clusterversion.TestingClusterVersion); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
+	if err := descbuilder.ValidateSelf(
+		tableDesc, clusterversion.TestingClusterVersion, nil, /* sd */
+	); !testutils.IsError(err, "mutation in state UNKNOWN, direction NONE, index foo, id 2") {
 		t.Fatal(err)
 	}
 }

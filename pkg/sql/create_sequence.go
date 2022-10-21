@@ -334,7 +334,11 @@ func NewSequenceTableDesc(
 	}
 
 	version := settings.Version.ActiveVersion(ctx)
-	if err := descbuilder.ValidateSelf(&desc, version); err != nil {
+	var sd *sessiondata.SessionData
+	if p != nil {
+		sd = p.SessionData()
+	}
+	if err := descbuilder.ValidateSelf(&desc, version, sd); err != nil {
 		return nil, err
 	}
 	return &desc, nil

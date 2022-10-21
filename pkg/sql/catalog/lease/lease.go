@@ -127,7 +127,7 @@ func (m *Manager) WaitForOneVersion(
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sc := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+			sc := catkv.MakeDirect(m.storage.codec, nil /* sds */, m.storage.settings.Version.ActiveVersion(ctx))
 			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
 			// performing validation while waiting for leases to drain.
 			// Validation is somewhat expensive but more importantly, is not
@@ -919,7 +919,7 @@ func (m *Manager) resolveName(
 			return err
 		}
 		var err error
-		direct := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
+		direct := catkv.MakeDirect(m.storage.codec, nil /* sds */, m.storage.settings.Version.ActiveVersion(ctx))
 		id, err = direct.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return err
 	}); err != nil {

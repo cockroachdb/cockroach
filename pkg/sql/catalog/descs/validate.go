@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/errors"
 )
 
 // Validate returns any descriptor validation errors after validating using the
@@ -30,6 +32,9 @@ func (tc *Collection) Validate(
 	targetLevel catalog.ValidationLevel,
 	descriptors ...catalog.Descriptor,
 ) (err error) {
+	if tc.stored.ValidationMode() == sessiondatapb.DescriptorValidationOff {
+		return nil
+	}
 	vd := tc.newValidationDereferencer(txn)
 	version := tc.settings.Version.ActiveVersion(ctx)
 	return validate.Validate(
@@ -48,7 +53,7 @@ func (tc *Collection) Validate(
 // be one version behind, in which case it's possible (and legitimate) that
 // those are missing back-references which would cause validation to fail.
 func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) (err error) {
-	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+	if !tc.validateOnWrite() {
 		return nil
 	}
 	var descs []catalog.Descriptor
@@ -60,6 +65,20 @@ func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *k
 		return nil
 	}
 	return tc.Validate(ctx, txn, catalog.ValidationWriteTelemetry, validate.Write, descs...)
+}
+
+func (tc *Collection) validateOnWrite() bool {
+	if tc.skipValidationOnWrite {
+		return false
+	}
+	switch tc.stored.ValidationMode() {
+	case sessiondatapb.DescriptorValidationOn:
+		return true
+	case sessiondatapb.DescriptorValidationOff, sessiondatapb.DescriptorValidationReadOnly:
+		return false
+	default:
+		panic(errors.AssertionFailedf("unknown descriptor_validation value %q", tc.stored.ValidationMode()))
+	}
 }
 
 func (tc *Collection) newValidationDereferencer(txn *kv.Txn) validate.ValidationDereferencer {

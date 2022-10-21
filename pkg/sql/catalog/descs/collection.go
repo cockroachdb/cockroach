@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -48,7 +48,7 @@ func newCollection(
 	hydrated *hydrateddesc.Cache,
 	systemDatabase *catkv.SystemDatabaseCache,
 	virtualSchemas catalog.VirtualSchemas,
-	temporarySchemaProvider TemporarySchemaProvider,
+	sds *sessiondata.Stack,
 	monitor *mon.BytesMonitor,
 ) *Collection {
 	v := settings.Version.ActiveVersion(ctx)
@@ -60,8 +60,8 @@ func newCollection(
 		virtual:     makeVirtualDescriptors(virtualSchemas),
 		leased:      makeLeasedDescriptors(leaseMgr),
 		uncommitted: makeUncommittedDescriptors(monitor),
-		stored:      catkv.MakeStoredCatalog(cr, monitor),
-		temporary:   makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
+		stored:      catkv.MakeStoredCatalog(cr, sds, monitor),
+		sds:         sds,
 	}
 }
 
@@ -111,8 +111,8 @@ type Collection struct {
 	// non-public schema elements during a schema change).
 	synthetic syntheticDescriptors
 
-	// temporary contains logic to access temporary schema descriptors.
-	temporary temporaryDescriptors
+	// sds is used to access temporary schema descriptors and session vars.
+	sds *sessiondata.Stack
 
 	// hydrated is node-level cache of table descriptors which utilize
 	// user-defined types.
@@ -255,22 +255,13 @@ func (tc *Collection) AddUncommittedDescriptor(
 	return tc.uncommitted.upsert(ctx, desc)
 }
 
-// ValidateOnWriteEnabled is the cluster setting used to enable or disable
-// validating descriptors prior to writing.
-var ValidateOnWriteEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.catalog.descs.validate_on_write.enabled",
-	"set to true to validate descriptors prior to writing, false to disable; default is true",
-	true, /* defaultValue */
-)
-
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
 // collection as an uncommitted descriptor, and writes it into b.
 func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+	if tc.validateOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
 			return err
 		}
@@ -588,11 +579,13 @@ func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
 }
 
-// SetTemporaryDescriptors is used in the context of the internal executor
-// to override the temporary descriptors during temporary object
-// cleanup.
-func (tc *Collection) SetTemporaryDescriptors(provider TemporarySchemaProvider) {
-	tc.temporary = makeTemporaryDescriptors(tc.settings, tc.codec(), provider)
+// SetSessionDataStack sets a session data stack for this Collection.
+// This is used for looking up:
+// - temporary descriptors,
+// - collection-specific session data variables.
+func (tc *Collection) SetSessionDataStack(sds *sessiondata.Stack) {
+	tc.sds = sds
+	tc.stored.SetSessionDataStack(sds)
 }
 
 // Direct exports the catkv.Direct interface.
@@ -600,7 +593,7 @@ type Direct = catkv.Direct
 
 // Direct provides direct access to the underlying KV-storage.
 func (tc *Collection) Direct() Direct {
-	return catkv.MakeDirect(tc.codec(), tc.version)
+	return catkv.MakeDirect(tc.codec(), tc.sds, tc.version)
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.

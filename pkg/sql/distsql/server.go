@@ -488,7 +488,7 @@ func (ds *ServerImpl) newFlowContext(
 		// If we weren't passed a descs.Collection, then make a new one. We are
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
-		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
+		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, evalCtx.SessionDataStack, nil /* monitor */)
 		flowCtx.IsDescriptorsCleanupRequired = true
 		flowCtx.EvalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
 		evalCtx.CatalogBuiltins = &flowCtx.EvalCatalogBuiltins

@@ -813,9 +813,7 @@ func (ie *InternalExecutor) execInternal(
 	// If the caller has injected a mapping to temp schemas, install it, and
 	// leave it installed for the rest of the transaction.
 	if ie.extraTxnState != nil && sd.DatabaseIDToTempSchemaID != nil {
-		ie.extraTxnState.descCollection.SetTemporaryDescriptors(
-			descs.NewTemporarySchemaProvider(sessiondata.NewStack(sd)),
-		)
+		ie.extraTxnState.descCollection.SetSessionDataStack(sessiondata.NewStack(sd))
 	}
 
 	// The returned span is finished by this function in all error paths, but if
@@ -1408,10 +1406,7 @@ func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
 		var deletedDescs catalog.DescriptorIDSet
 		if err := run(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 			withNewVersion, deletedDescs = nil, catalog.DescriptorIDSet{}
-			descsCol := cf.NewCollection(
-				ctx, nil, /* temporarySchemaProvider */
-				ief.monitor,
-			)
+			descsCol := cf.NewCollection(ctx, nil /* sds */, ief.monitor)
 			defer descsCol.ReleaseAll(ctx)
 			ie, commitTxnFn := ief.newInternalExecutorWithTxn(sd, &cf.GetClusterSettings().SV, txn, descsCol)
 			if err := f(ctx, txn, descsCol, ie); err != nil {
