@@ -43,6 +43,10 @@ type pebbleIterator struct {
 	// Filter to use if masking is enabled.
 	maskFilter mvccWallTimeIntervalRangeKeyMask
 
+	// Buffer used to store MVCCRangeKeyVersions returned by RangeKeys(). Lazily
+	// initialized the first time an iterator's RangeKeys() method is called.
+	mvccRangeKeyVersions []MVCCRangeKeyVersion
+
 	// True if the iterator's underlying reader supports range keys.
 	//
 	// TODO(erikgrinaker): Remove after 22.2.
@@ -710,7 +714,11 @@ func (p *pebbleIterator) RangeKeys() MVCCRangeKeyStack {
 	rangeKeys := p.iter.RangeKeys()
 	stack := MVCCRangeKeyStack{
 		Bounds:   p.RangeBounds(),
-		Versions: make(MVCCRangeKeyVersions, 0, len(rangeKeys)),
+		Versions: p.mvccRangeKeyVersions[:0],
+	}
+	if cap(stack.Versions) < len(rangeKeys) {
+		stack.Versions = make(MVCCRangeKeyVersions, 0, len(rangeKeys))
+		p.mvccRangeKeyVersions = stack.Versions
 	}
 
 	for _, rangeKey := range rangeKeys {
