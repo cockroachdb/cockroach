@@ -18,6 +18,7 @@ func Example_cert() {
 	c.RunWithCAArgs([]string{"cert", "create-client", "Ομηρος"})
 	c.RunWithCAArgs([]string{"cert", "create-client", "0foo"})
 	c.RunWithCAArgs([]string{"cert", "create-client", ",foo"})
+	c.RunWithCAArgs([]string{"cert", "create-client", "--disable-username-validation", ",foo"})
 
 	// Output:
 	// cert create-client foo
@@ -26,4 +27,7 @@ func Example_cert() {
 	// cert create-client ,foo
 	// ERROR: failed to generate client certificate and key: username is invalid
 	// HINT: Usernames are case insensitive, must start with a letter, digit or underscore, may contain letters, digits, dashes, periods, or underscores, and must not exceed 63 characters.
+	// cert create-client --disable-username-validation ,foo
+	// warning: the specified identity ",foo" is not a valid SQL username.
+	// Before it can be used to log in, an identity map rule will need to be set on the server.
 }

@@ -791,6 +791,13 @@ system tenant.`,
 		Description: `Also write the key in pkcs8 format to <certs-dir>/client.<username>.key.pk8.`,
 	}
 
+	DisableUsernameValidation = FlagInfo{
+		Name: "disable-username-validation",
+		Description: `Do not validate that the provided identity has a valid structure for
+a SQL identifier. If passed, and the identity is not a valid SQL identifier, the generated
+certificate can only be used if an identity map has been configured server-side.`,
+	}
+
 	Password = FlagInfo{
 		Name:        "password",
 		Description: `Prompt for the new user's password.`,
