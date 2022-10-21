@@ -817,7 +817,7 @@ func (v *validator) checkAtomicCommitted(
 			}
 
 			// NB: we allow writeTS to change here, since that will be caught by
-			// validation below anyway, and we can produce better errors then since
+			// validation below anyway, and then we can produce better errors since
 			// read timestamps will be filled in.
 			if writeTS.IsEmpty() {
 				writeTS = o.Timestamp

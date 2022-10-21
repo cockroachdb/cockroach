@@ -127,6 +127,8 @@ func (e *Engine) Iterate(
 		}
 		if iter.RangeKeyChanged() {
 			key, endKey := iter.RangeBounds()
+			e.b, key = e.b.Copy(key, 0 /* extraCap */)
+			e.b, endKey = e.b.Copy(endKey, 0 /* extraCap */)
 			for _, rk := range iter.RangeKeys() {
 				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
