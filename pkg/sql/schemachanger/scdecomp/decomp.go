@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -189,6 +190,9 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 				LogicalRepresentation:  typ.GetMemberLogicalRepresentation(ord),
 			})
 		}
+	case descpb.TypeDescriptor_COMPOSITE:
+		name := tree.Name(typ.GetName())
+		panic(scerrors.NotImplementedErrorf(&name, "composite types not supported in new schema changer"))
 	default:
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}

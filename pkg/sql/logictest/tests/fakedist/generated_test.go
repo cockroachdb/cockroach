@@ -394,6 +394,13 @@ func TestLogic_collatedstring_uniqueindex2(
 	runLogicTest(t, "collatedstring_uniqueindex2")
 }
 
+func TestLogic_composite_types(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "composite_types")
+}
+
 func TestLogic_computed(
 	t *testing.T,
 ) {
