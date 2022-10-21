@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 

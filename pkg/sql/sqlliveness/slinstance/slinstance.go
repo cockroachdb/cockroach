@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/logtags"
 )
 
 var (
@@ -240,6 +241,8 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	defer func() {
 		log.Warning(ctx, "exiting heartbeat loop")
 	}()
+	// Operations below retry endlessly after the stopper started quiescing if we
+	// don't cancel their ctx.
 	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 	t := timeutil.NewTimer()
@@ -334,9 +337,11 @@ func (l *Instance) Start(ctx context.Context) {
 	if l.mu.started {
 		return
 	}
-	log.Infof(ctx, "starting SQL liveness instance")
-	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
 	l.mu.started = true
+	log.Infof(ctx, "starting SQL liveness instance")
+	// Detach from ctx's cancelation.
+	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	_ = l.stopper.RunAsyncTask(taskCtx, "slinstance", l.heartbeatLoop)
 }
 
 // Session returns a live session id. For each Sqlliveness instance the
