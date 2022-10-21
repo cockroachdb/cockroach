@@ -1742,6 +1742,11 @@ func doRestorePlan(
 		}
 	}
 
+	backupCodec, _, err := makeBackupCodec(mainBackupManifests[0])
+	if err != nil {
+		return err
+	}
+
 	// wasOffline tracks which tables were in an offline or adding state at some
 	// point in the incremental chain, meaning their spans would be seeing
 	// non-transactional bulk-writes. If that backup exported those spans, then it
@@ -1763,7 +1768,7 @@ func doRestorePlan(
 			if err := catalog.ForEachNonDropIndex(
 				tabledesc.NewBuilder(table).BuildImmutable().(catalog.TableDescriptor),
 				func(index catalog.Index) error {
-					if index.Adding() && spans.ContainsKey(p.ExecCfg().Codec.IndexPrefix(uint32(table.ID), uint32(index.GetID()))) {
+					if index.Adding() && spans.ContainsKey(backupCodec.IndexPrefix(uint32(table.ID), uint32(index.GetID()))) {
 						k := tableAndIndex{tableID: table.ID, indexID: index.GetID()}
 						if _, ok := wasOffline[k]; !ok {
 							wasOffline[k] = m.EndTime
@@ -1785,8 +1790,7 @@ func doRestorePlan(
 				"use SHOW BACKUP to find correct targets")
 	}
 
-	if err := checkMissingIntroducedSpans(sqlDescs, mainBackupManifests, endTime,
-		p.ExecCfg().Codec); err != nil {
+	if err := checkMissingIntroducedSpans(sqlDescs, mainBackupManifests, endTime, backupCodec); err != nil {
 		return err
 	}
 

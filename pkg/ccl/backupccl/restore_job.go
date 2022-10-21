@@ -1264,21 +1264,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	defer func() {
 		mem.Shrink(ctx, memSize)
 	}()
-	// backupCodec is the codec that was used to encode the keys in the backup. It
-	// is the tenant in which the backup was taken.
-	backupCodec := keys.SystemSQLCodec
-	backupTenantID := roachpb.SystemTenantID
 
-	if len(sqlDescs) != 0 {
-		if len(latestBackupManifest.Spans) != 0 && !latestBackupManifest.HasTenants() {
-			// If there are no tenant targets, then the entire keyspace covered by
-			// Spans must lie in 1 tenant.
-			_, backupTenantID, err = keys.DecodeTenantPrefix(latestBackupManifest.Spans[0].Key)
-			if err != nil {
-				return err
-			}
-			backupCodec = keys.MakeSQLCodec(backupTenantID)
-		}
+	backupCodec, backupTenantID, err := makeBackupCodec(latestBackupManifest)
+	if err != nil {
+		return err
 	}
 
 	lastBackupIndex, err := getBackupIndexAtTime(backupManifests, details.EndTime)
