@@ -58,7 +58,7 @@ func TestReader(t *testing.T) {
 		tDB.Exec(t, schema)
 		tableID := getTableID(t, tDB, dbName, "sql_instances")
 		slStorage := slstorage.NewFakeStorage()
-		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, tableID, slStorage)
+		storage := instancestorage.NewTestingStorage(s.DB(), keys.SystemSQLCodec, tableID, slStorage, s.ClusterSettings())
 		reader := instancestorage.NewTestingReader(storage, slStorage, s.RangeFeedFactory().(*rangefeed.Factory), keys.SystemSQLCodec, tableID, s.Clock(), s.Stopper())
 		return storage, slStorage, s.Clock(), reader
 	}

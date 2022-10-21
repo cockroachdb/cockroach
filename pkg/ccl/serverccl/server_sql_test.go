@@ -15,6 +15,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -22,8 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -233,6 +237,47 @@ func TestTenantRowIDs(t *testing.T) {
 		rowCount++
 	}
 	require.Equal(t, numRows, rowCount)
+}
+
+// TestTenantInstanceIDReclaimLoop confirms that the sql_instances reclaim loop
+// has been started.
+func TestTenantInstanceIDReclaimLoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: settings,
+			// Don't use a default test tenant. We will explicitly create one.
+			DisableDefaultTestTenant: true,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	clusterSettings := tc.Server(0).ClusterSettings()
+	instancestorage.ReclaimLoopInterval.Override(ctx, &clusterSettings.SV, 250*time.Millisecond)
+	instancestorage.PreallocatedCount.Override(ctx, &clusterSettings.SV, 5)
+
+	_, db := serverutils.StartTenant(
+		t,
+		tc.Server(0),
+		base.TestTenantArgs{TenantID: serverutils.TestTenantID(), Settings: settings},
+	)
+	defer db.Close()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	var rowCount int64
+	testutils.SucceedsSoon(t, func() error {
+		sqlDB.QueryRow(t, `SELECT count(*) FROM system.sql_instances WHERE addr IS NULL`).Scan(&rowCount)
+		// We set PreallocatedCount to 5. When the tenant gets started, it drops
+		// to 4. Eventually this will be 5 if the reclaim loop runs.
+		if rowCount == 5 {
+			return nil
+		}
+		return fmt.Errorf("waiting for preallocated rows")
+	})
 }
 
 // TestNoInflightTracesVirtualTableOnTenant verifies that internal inflight traces table
