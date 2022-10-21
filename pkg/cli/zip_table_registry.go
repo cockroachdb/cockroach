@@ -806,7 +806,15 @@ var zipSystemTables = DebugZipTableRegistry{
 		// `descriptor` column can contain customer-supplied default values
 		// for columns, e.g. `column_name STRING DEFAULT 'some value'`
 		nonSensitiveCols: NonSensitiveColumns{"id"},
-		customQueryUnredacted: `SELECT *, to_hex(descriptor) AS hex_descriptor
+		customQueryUnredacted: `SELECT
+				id,
+				descriptor,
+				to_hex(descriptor) AS hex_descriptor
+			FROM system.descriptor`,
+		customQueryRedacted: `SELECT
+				id,
+				crdb_internal.redact_descriptor(descriptor) AS descriptor,
+				to_hex(crdb_internal.redact_descriptor(descriptor)) AS hex_descriptor
 			FROM system.descriptor`,
 	},
 	"system.eventlog": {
@@ -846,6 +854,10 @@ var zipSystemTables = DebugZipTableRegistry{
 		customQueryUnredacted: `SELECT *, 
 			to_hex(payload) AS hex_payload, 
 			to_hex(progress) AS hex_progress 
+			FROM system.jobs`,
+		customQueryRedacted: `SELECT *,
+			NULL AS hex_payload,
+			to_hex(progress) AS hex_progress
 			FROM system.jobs`,
 	},
 	"system.lease": {

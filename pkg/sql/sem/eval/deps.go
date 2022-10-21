@@ -132,6 +132,10 @@ type CatalogBuiltins interface {
 
 	// PGRelationIsUpdatable returns the update events the relation supports.
 	PGRelationIsUpdatable(ctx context.Context, oid *tree.DOid) (*tree.DInt, error)
+
+	// RedactDescriptor expects an encoded protobuf descriptor, decodes it,
+	// redacts its expressions, and re-encodes it.
+	RedactDescriptor(ctx context.Context, encodedDescriptor []byte) ([]byte, error)
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
