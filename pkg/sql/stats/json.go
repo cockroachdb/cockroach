@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/errors"
 )
 
 // JSONStatistic is a struct used for JSON marshaling and unmarshaling statistics.
@@ -113,11 +112,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(
 	// If the serialized column type is user defined, then it needs to be
 	// hydrated before use.
 	if h.ColumnType.UserDefined() {
-		resolver := semaCtx.GetTypeResolver()
-		if resolver == nil {
-			return errors.AssertionFailedf("attempt to resolve user defined type with nil TypeResolver")
-		}
-		typ, err := resolver.ResolveTypeByOID(ctx, h.ColumnType.Oid())
+		typ, err := tree.ResolveTypeByOID(ctx, h.ColumnType.Oid(), semaCtx.GetTypeResolver())
 		if err != nil {
 			return err
 		}

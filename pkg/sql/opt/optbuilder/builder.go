@@ -497,7 +497,7 @@ type optTrackingTypeResolver struct {
 func (o *optTrackingTypeResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	typ, err := o.res.ResolveType(ctx, name)
+	typ, err := tree.ResolveTypeByName(ctx, name, o.res)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +509,7 @@ func (o *optTrackingTypeResolver) ResolveType(
 func (o *optTrackingTypeResolver) ResolveTypeByOID(
 	ctx context.Context, oid oid.Oid,
 ) (*types.T, error) {
-	typ, err := o.res.ResolveTypeByOID(ctx, oid)
+	typ, err := tree.ResolveTypeByOID(ctx, oid, o.res)
 	if err != nil {
 		return nil, err
 	}
