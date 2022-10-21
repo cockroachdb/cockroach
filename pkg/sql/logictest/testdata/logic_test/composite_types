@@ -1,0 +1,238 @@
+statement ok
+CREATE TYPE t AS (a INT, b INT)
+
+statement ok
+DROP TYPE t
+
+statement ok
+CREATE TYPE t AS (a INT, b INT)
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement error pq: type "test.public.t" already exists
+CREATE TABLE t (x INT)
+
+statement error pq: type "test.public.t" already exists
+CREATE TYPE t AS (a INT)
+
+statement ok
+CREATE TABLE torename (x INT)
+
+statement error pq: type "test.public.t" already exists
+ALTER TABLE torename RENAME TO t
+
+query TII
+SELECT (1, 2)::t, ((1, 2)::t).a, ((1, 2)::t).b
+----
+(1,2)  1  2
+
+statement error could not identify column \"foo\"
+SELECT ((1, 2)::t).foo
+
+statement ok
+CREATE TABLE tab (a t)
+
+statement ok
+INSERT INTO tab VALUES (NULL), ((1, 2))
+
+statement ok
+INSERT INTO tab VALUES ((1, NULL))
+
+# TODO(jordan): this should work fine, but is blocked behind a type-system issue:
+# see #93349.
+statement error VALUES types tuple{int, unknown} and tuple{int, int} cannot be matched
+INSERT INTO tab VALUES ((1, 2)), ((1, NULL))
+
+query TII rowsort
+SELECT a, (a).a, (a).b FROM tab
+----
+NULL   NULL  NULL
+(1,2)  1     2
+(1,)   1     NULL
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Test arrays of composite types.
+statement ok
+CREATE TABLE atyp(a t[])
+
+query TT
+SHOW CREATE TABLE atyp
+----
+atyp  CREATE TABLE public.atyp (
+        a T[] NULL,
+        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+        CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
+      )
+
+statement ok
+INSERT INTO atyp VALUES(ARRAY[(1, 2), (3, 4), NULL, (5, NULL)])
+
+query T
+SELECT * FROM atyp
+----
+{"(1,2)","(3,4)",NULL,"(5,)"}
+
+statement ok
+DROP TABLE atyp
+
+# Nested types not supported. #91779
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t2 AS (t1 t, t2 t)
+
+# Uncomment the below when #91779 is resolved.
+
+#statement ok
+#CREATE TABLE tab2 (a t2)
+#
+#query TTT
+#SELECT ((1, 2), (3, 4))::t2, (((1, 2), (3, 4))::t2).t1, (((1, 2), (3, 4))::t2).t2
+#----
+#("(1,2)","(3,4)")  (1,2)  (3,4)
+#
+#query II
+#SELECT ((((1, 2), (3, 4))::t2).t1).a, ((((1, 2), (3, 4))::t2).t1).b
+#----
+#1  2
+#
+## TODO(jordan): this syntax works in Postgres.
+#query error syntax error
+#SELECT (((1, 2), (3, 4))::t2).t1.a
+#
+#statement ok
+#INSERT INTO tab2 VALUES(((1, 2), (3, 4)))
+#
+#query TTII
+#SELECT a, (a).t1, ((a).t1).a, ((a).t1).b FROM tab2
+#----
+#("(1,2)","(3,4)")  (1,2)  1  2
+#
+## Can't drop type t because tab, tab2, and t2 depend on it
+#statement error cannot drop type \"t\" because other objects .* still depend on it
+#DROP TYPE t
+#
+## Can't drop type t2 because tab2 depends on it
+#statement error cannot drop type \"t2\" because other objects .* still depend on it
+#DROP TYPE t2
+#
+#statement ok
+#DROP TABLE tab2
+
+statement ok
+DROP TABLE tab
+
+query TTTT
+SELECT database_name, schema_name, descriptor_name, create_statement FROM crdb_internal.create_type_statements
+----
+test  public  t   CREATE TYPE public.t AS (a INT8, b INT8)
+
+## Can't drop type t because t2 depends on it
+#statement error cannot drop type \"t\" because other objects .* still depend on it
+#DROP TYPE t
+#
+#statement ok
+#DROP TYPE t2
+
+statement ok
+DROP TYPE t
+
+# An empty type is valid.
+statement ok
+CREATE TYPE t AS ()
+
+statement ok
+DROP TYPE t
+
+# Composite types which reference other types of UDTs are not yet supported.
+statement ok
+CREATE TYPE e AS ENUM ('a', 'b', 'c')
+
+# We'll use tab to check the implicit table alias type.
+statement ok
+CREATE TABLE tab (a INT, b INT)
+
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t AS (e e)
+
+# This should fail - we shouldn't persist implicit table types.
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t AS (a tab)
+
+statement error composite types that reference user-defined types not yet supported
+CREATE TYPE t AS (a pg_catalog.pg_class)
+
+# Test that if an composite type value is being used by a default expression or
+# computed column, we disallow dropping it.
+subtest drop_used_composite_type_values
+
+statement ok
+CREATE TYPE t AS (a INT, b TEXT)
+
+statement ok
+CREATE TABLE a (a INT DEFAULT (((1, 'hi')::t).a))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Re-enable when #91972 is resolved.
+#statement ok
+#ALTER TABLE a ALTER COLUMN a SET DEFAULT 3
+#
+#statement ok
+#DROP TYPE t;
+#CREATE TYPE t AS (a INT, b TEXT);
+
+statement ok
+DROP TABLE a;
+CREATE TABLE a (a INT ON UPDATE (((1, 'hi')::t).a))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Re-enable when #91972 is resolved.
+#statement ok
+#ALTER TABLE a ALTER COLUMN a SET ON UPDATE 3
+#
+#statement ok
+#DROP TYPE t;
+#CREATE TYPE t AS (a INT, b TEXT);
+
+statement ok
+DROP TABLE a;
+CREATE TABLE a (a INT AS (((1, 'hi')::t).a) STORED)
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Re-enable when #91972 is resolved.
+#statement ok
+#ALTER TABLE a ALTER COLUMN a DROP STORED
+#
+#statement ok
+#DROP TYPE t;
+#CREATE TYPE t AS (a INT, b TEXT);
+
+statement ok
+DROP TABLE a;
+CREATE TABLE a (a INT, INDEX (a) WHERE a > (((1, 'hi')::t).a))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+statement ok
+DROP TABLE a;
+DROP TYPE t;
+CREATE TYPE t AS (a INT, b TEXT);
+CREATE TABLE a (a INT CHECK (a > (((1, 'hi')::t).a)))
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+statement ok
+ALTER TABLE a DROP CONSTRAINT check_a
+
+statement ok
+DROP TYPE t;
+DROP TABLE a

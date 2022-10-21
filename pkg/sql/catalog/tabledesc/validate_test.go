@@ -258,6 +258,7 @@ var validationMap = []struct {
 			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
+			"Composite":                     {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{
@@ -2833,6 +2834,29 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				ParentID:                1,
 				UnexposedParentSchemaID: keys.PublicSchemaID,
 				DependsOn:               []descpb.ID{100},
+			},
+		},
+		// Composite types.
+		{ // 17
+			err: `referenced type ID 500: referenced descriptor not found`,
+			desc: descpb.TableDescriptor{
+				Name:                    "foo",
+				ID:                      51,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				PrimaryIndex: descpb.IndexDescriptor{
+					ID:             1,
+					Name:           "bar",
+					KeyColumnIDs:   []descpb.ColumnID{1},
+					KeyColumnNames: []string{"a"},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{
+						Name: "a",
+						ID:   1,
+						Type: types.MakeCompositeType(catid.TypeIDToOID(500), catid.TypeIDToOID(100500), nil, nil),
+					},
+				},
 			},
 		},
 	}

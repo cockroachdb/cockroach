@@ -249,6 +249,43 @@ func (p *planner) removeBackRefsFromAllTypesInTable(
 	return p.removeTypeBackReferences(ctx, typeIDs, desc.ID, jobDesc)
 }
 
+func (p *planner) addBackRefsFromAllTypesInType(ctx context.Context, desc *typedesc.Mutable) error {
+	typeIDs, err := desc.GetIDClosure()
+	if err != nil {
+		return err
+	}
+	for id := range typeIDs {
+		if id == desc.ID {
+			// Don't add a self back reference.
+			continue
+		}
+		jobDesc := fmt.Sprintf("updating type back reference %d for type %d", id, desc.ID)
+		if err := p.addTypeBackReference(ctx, id, desc.ID, jobDesc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *planner) removeBackRefsFromAllTypesInType(
+	ctx context.Context, desc *typedesc.Mutable,
+) error {
+	typeIDMap, err := desc.GetIDClosure()
+	if err != nil {
+		return err
+	}
+	typeIDs := catalog.DescriptorIDSet{}
+	for id := range typeIDMap {
+		if id == desc.ID {
+			// Don't add a self back reference.
+			continue
+		}
+		typeIDs.Add(id)
+	}
+	jobDesc := fmt.Sprintf("updating type back references %v for type %d", typeIDs, desc.ID)
+	return p.removeTypeBackReferences(ctx, typeIDs.Ordered(), desc.ID, jobDesc)
+}
+
 // dropTypeImpl does the work of dropping a type and everything that depends on it.
 func (p *planner) dropTypeImpl(
 	ctx context.Context, typeDesc *typedesc.Mutable, jobDesc string, queueJob bool,
@@ -275,6 +312,9 @@ func (p *planner) dropTypeImpl(
 		return err
 	}
 
+	if err := p.removeBackRefsFromAllTypesInType(ctx, typeDesc); err != nil {
+		return err
+	}
 	// Write updated type descriptor.
 	if queueJob {
 		return p.writeTypeSchemaChange(ctx, typeDesc, jobDesc)
