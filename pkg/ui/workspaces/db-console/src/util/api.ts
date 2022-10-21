@@ -23,8 +23,6 @@ import TakeTracingSnapshotRequest = cockroach.server.serverpb.TakeTracingSnapsho
 
 export type DatabasesRequestMessage =
   protos.cockroach.server.serverpb.DatabasesRequest;
-export type DatabasesResponseMessage =
-  protos.cockroach.server.serverpb.DatabasesResponse;
 
 export type DatabaseDetailsRequestMessage =
   protos.cockroach.server.serverpb.DatabaseDetailsRequest;
@@ -395,19 +393,6 @@ export type APIRequestFn<TReq, TResponse> = (
 
 const serverpb = protos.cockroach.server.serverpb;
 const tspb = protos.cockroach.ts.tspb;
-
-// getDatabaseList gets a list of all database names
-export function getDatabaseList(
-  _req: DatabasesRequestMessage,
-  timeout?: moment.Duration,
-): Promise<DatabasesResponseMessage> {
-  return timeoutFetch(
-    serverpb.DatabasesResponse,
-    `${API_PREFIX}/databases`,
-    null,
-    timeout,
-  );
-}
 
 // getDatabaseDetails gets details for a specific database
 export function getDatabaseDetails(
