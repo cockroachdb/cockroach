@@ -62,14 +62,14 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created     time.Time
-	codec       io.WriteCloser
-	rawSize     int
-	numMessages int
-	buf         bytes.Buffer
-	alloc       kvevent.Alloc
-	oldestMVCC  hlc.Timestamp
-	pw          *parquetWriterWrapper
+	created      time.Time
+	codec        io.WriteCloser
+	rawSize      int
+	numMessages  int
+	buf          bytes.Buffer
+	alloc        kvevent.Alloc
+	oldestMVCC   hlc.Timestamp
+	parquetCodec *parquetFileWriter
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -636,10 +636,10 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
-	if file.pw != nil {
+	if file.parquetCodec != nil {
 		// The order of getting size and close is important - we should get size
 		// after Close, as Close adds more data to buffer.
-		if err := file.pw.parquetWriter.Close(); err != nil {
+		if err := file.parquetCodec.parquetWriter.Close(); err != nil {
 			return err
 		}
 		file.rawSize = len(file.buf.Bytes())

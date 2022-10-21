@@ -324,13 +324,14 @@ func (s errorWrapperSink) EmitRow(
 func (s errorWrapperSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 
 	if sinkWithEncoder, ok := s.wrapped.(SinkWithEncoder); ok {
-		if err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc); err != nil {
+		if err := sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc); err != nil {
 			return changefeedbase.MarkRetryableError(err)
 		}
 	} else {
@@ -613,6 +614,7 @@ type SinkWithEncoder interface {
 	EncodeAndEmitRow(
 		ctx context.Context,
 		updatedRow cdcevent.Row,
+		prevRow cdcevent.Row,
 		topic TopicDescriptor,
 		updated, mvcc hlc.Timestamp,
 		alloc kvevent.Alloc,

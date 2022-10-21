@@ -333,6 +333,7 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		return c.encodeForParquet(
 			ctx,
 			updatedRow,
+			prevRow,
 			topic,
 			schemaTimestamp,
 			mvccTimestamp,
@@ -384,6 +385,7 @@ func (c *kvEventToRowConsumer) Close() error {
 func (c *kvEventToRowConsumer) encodeForParquet(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
@@ -393,7 +395,7 @@ func (c *kvEventToRowConsumer) encodeForParquet(
 		return errors.AssertionFailedf("Expected a SinkWithEncoder for parquet format, found %T", c.sink)
 	}
 	if err := sinkWithEncoder.EncodeAndEmitRow(
-		ctx, updatedRow, topic, updated, mvcc, alloc,
+		ctx, updatedRow, prevRow, topic, updated, mvcc, alloc,
 	); err != nil {
 		return err
 	}

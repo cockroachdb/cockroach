@@ -531,12 +531,13 @@ func (s *notifyFlushSink) Flush(ctx context.Context) error {
 func (s *notifyFlushSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
 	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
-		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, topic, updated, mvcc, alloc)
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc)
 	}
 	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
 }
@@ -924,6 +925,32 @@ func (f *cloudFeedFactory) Feed(
 		)
 	}
 
+	parquetPossible := true
+
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			parquetPossible = false
+			break
+		}
+		for o := range changefeedbase.InitialScanOnlyUnsupportedOptions {
+			if o == string(opt.Key) {
+				parquetPossible = false
+				break
+			}
+		}
+	}
+
+	if parquetPossible {
+		TestingSetIncludeParquetMetadata()
+		createStmt.Options = append(
+			createStmt.Options,
+			tree.KVOption{
+				Key:   changefeedbase.OptFormat,
+				Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
+			},
+		)
+	}
+
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
 	sinkURI := `experimental-nodelocal://0/` + feedDir
@@ -1137,13 +1164,27 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 		return err
 	}
 
-	keyCols, ok := fr.MetaData()["pkeys"]
+	primaryKeyColumnsString, ok := fr.MetaData()["primaryKeyNames"]
 	if !ok {
-		return err
+		return errors.Errorf("Did not find primary key column names in metadata of parquet file during testing")
 	}
-	keyColsSet := make(map[string]struct{})
-	for _, key := range strings.Split(keyCols, ",") {
-		keyColsSet[key] = struct{}{}
+
+	columnsNamesString, ok := fr.MetaData()["columnNames"]
+	if !ok {
+		return errors.Errorf("Did not find column names in metadata of parquet file during testing")
+	}
+	columns := strings.Split(columnsNamesString, ",")
+	primaryKeys := strings.Split(primaryKeyColumnsString, ",")
+
+	columnNameSet := make(map[string]struct{})
+	primaryKeyColumnSet := make(map[string]struct{})
+
+	for _, key := range primaryKeys[:len(primaryKeys)-1] {
+		primaryKeyColumnSet[key] = struct{}{}
+	}
+
+	for _, key := range columns[:len(columns)-1] {
+		columnNameSet[key] = struct{}{}
 	}
 
 	for {
@@ -1162,25 +1203,45 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 
 		// Holds the list of values of primary keys.
 		key := make([]interface{}, 0)
+		isDeleted := false
 
 		for k, v := range row {
+			if k == parquetCrdbEventTypeColName {
+				if v == int32(parquetEventDelete) {
+					isDeleted = true
+				}
+				continue
+			}
 			value[k], err = c.decodeParquetValueAsJSON(v)
 			if err != nil {
 				return err
 			}
 
-			if _, ok := keyColsSet[k]; ok {
+			if _, ok := primaryKeyColumnSet[k]; ok {
 				key = append(key, value[k])
 			}
 		}
 
+		for col := range columnNameSet {
+			if _, ok := value[col]; !ok {
+				value[col] = nil
+			}
+		}
+
+		valueWithAfter := make(map[string]interface{})
+		if isDeleted {
+			valueWithAfter["after"] = nil
+		} else {
+			valueWithAfter["after"] = value
+		}
+
 		// Sorts the keys
-		jsonValue, err := gojson.Marshal(value)
+		jsonValue, err := reformatJSON(valueWithAfter)
 		if err != nil {
 			return err
 		}
 
-		jsonKey, err := gojson.Marshal(key)
+		jsonKey, err := reformatJSON(key)
 		if err != nil {
 			return err
 		}
@@ -1189,6 +1250,10 @@ func (c *cloudFeed) appendParquetTestFeedMessages(path string, topic string) err
 			Topic: topic,
 			Value: jsonValue,
 			Key:   jsonKey,
+		}
+
+		if isNew := c.markSeen(m); !isNew {
+			continue
 		}
 
 		c.rows = append(c.rows, m)

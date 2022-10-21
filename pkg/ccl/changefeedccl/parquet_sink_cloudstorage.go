@@ -23,10 +23,22 @@ import (
 	"github.com/fraugster/parquet-go/parquetschema"
 )
 
-// This variable is used to make sure that we add primary keys of the table to
-// the metadata of the parquet file only under testing (The primary keys are
-// used to convert the parquet data into JSON)
+// This variable controls whether we add primary keys of the table to the
+// metadata of the parquet file. Currently, this will be true only under
+// testing.
+// TODO(cdc): We should consider including this metadata during production also
 var includeParquetTestMetadata = false
+
+// This is an extra column that will be added to every parquet file which tells
+// us about the type of event that generated a particular row. The types are
+// defined below.
+const parquetCrdbEventTypeColName string = "__crdb_event_type__"
+
+const (
+	parquetEventInsert = iota
+	parquetEventUpdate
+	parquetEventDelete
+)
 
 // We need a separate sink for parquet format because the parquet encoder has to
 // write metadata to the parquet file (buffer) after each flush. This means that the
@@ -49,7 +61,7 @@ type parquetCloudStorageSink struct {
 	wrapped *cloudStorageSink
 }
 
-type parquetWriterWrapper struct {
+type parquetFileWriter struct {
 	parquetWriter  *goparquet.FileWriter
 	schema         *parquetschema.SchemaDefinition
 	parquetColumns []pqexporter.ParquetColumn
@@ -57,89 +69,81 @@ type parquetWriterWrapper struct {
 }
 
 func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parquetCloudStorageSink {
-	pqcs := &parquetCloudStorageSink{}
-
-	pqcs.wrapped = baseCloudStorageSink
-
-	return pqcs
+	return &parquetCloudStorageSink{wrapped: baseCloudStorageSink}
 }
 
 // EmitRow does not do anything. It must not be called. It is present so that
 // parquetCloudStorageSink implements the Sink interface.
-func (pqcs *parquetCloudStorageSink) EmitRow(
+func (parquetSink *parquetCloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	return errors.Errorf("Emit Row should not be called for parquet format")
+	return errors.AssertionFailedf("Emit Row should not be called for parquet format")
 }
 
 // Close implements the Sink interface.
-func (pqcs *parquetCloudStorageSink) Close() error {
-	return pqcs.wrapped.Close()
+func (parquetSink *parquetCloudStorageSink) Close() error {
+	return parquetSink.wrapped.Close()
 }
 
 // Dial implements the Sink interface.
-func (pqcs *parquetCloudStorageSink) Dial() error {
-	return pqcs.wrapped.Dial()
+func (parquetSink *parquetCloudStorageSink) Dial() error {
+	return parquetSink.wrapped.Dial()
 }
 
 // EmitResolvedTimestamp does not do anything as of now. It is there to
 // implement Sink interface.
-func (pqcs *parquetCloudStorageSink) EmitResolvedTimestamp(
+func (parquetSink *parquetCloudStorageSink) EmitResolvedTimestamp(
 	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
 ) error {
-	return errors.Errorf("parquet format does not support emitting resolved timestamp")
+	return errors.AssertionFailedf("Parquet format does not support emitting resolved timestamp")
 }
 
 // Flush implements the Sink interface.
-func (pqcs *parquetCloudStorageSink) Flush(ctx context.Context) error {
-	return pqcs.wrapped.Flush(ctx)
+func (parquetSink *parquetCloudStorageSink) Flush(ctx context.Context) error {
+	return parquetSink.wrapped.Flush(ctx)
 }
 
 // EncodeAndEmitRow links the buffer in the cloud storage sync file and the
 // parquet writer (see parquetCloudStorageSink). It also takes care of encoding
 // and emitting row event to cloud storage. Implements the SinkWithEncoder
 // interface.
-func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
+func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	ctx context.Context,
 	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
 	topic TopicDescriptor,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
 ) error {
-	s := pqcs.wrapped
-	var pqww *parquetWriterWrapper
+	s := parquetSink.wrapped
 	file, err := s.getOrCreateFile(topic, mvcc)
-	file.alloc.Merge(&alloc)
 	if err != nil {
 		return err
 	}
+	file.alloc.Merge(&alloc)
 
-	if file.pw == nil {
+	if file.parquetCodec == nil {
 		var err error
-		pqww, err = makeparquetWriterWrapper(ctx, updatedRow, &file.buf)
+		file.parquetCodec, err = makeParquetWriterWrapper(ctx, updatedRow, &file.buf)
 		if err != nil {
 			return err
 		}
-		file.pw = pqww
-	} else {
-		pqww = file.pw
 	}
 
-	i := -1
-	parquetRow := make(map[string]interface{}, pqww.numCols)
+	colOrd := -1
+	parquetRow := make(map[string]interface{}, file.parquetCodec.numCols)
 	if err := updatedRow.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		i++
-		// Omit NULL columns from parquet row (cannot think of any other way of
-		// encoding NULL values)
+		colOrd++
+		// Omit NULL columns from parquet row
 		if d == tree.DNull {
 			parquetRow[col.Name] = nil
 			return nil
 		}
-		encodeFn, err := pqww.parquetColumns[i].GetEncoder()
+		encodeFn, err := file.parquetCodec.parquetColumns[colOrd].GetEncoder()
 		if err != nil {
 			return err
 		}
@@ -156,14 +160,22 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 		return err
 	}
 
-	if err = pqww.parquetWriter.AddData(parquetRow); err != nil {
+	if updatedRow.IsDeleted() {
+		parquetRow[parquetCrdbEventTypeColName] = int32(parquetEventDelete)
+	} else if prevRow.IsInitialized() && !prevRow.IsDeleted() {
+		parquetRow[parquetCrdbEventTypeColName] = int32(parquetEventUpdate)
+	} else {
+		parquetRow[parquetCrdbEventTypeColName] = int32(parquetEventInsert)
+	}
+
+	if err = file.parquetCodec.parquetWriter.AddData(parquetRow); err != nil {
 		return err
 	}
 
-	if pqww.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
+	if file.parquetCodec.parquetWriter.CurrentRowGroupSize() > s.targetMaxFileSize {
 		s.metrics.recordSizeBasedFlush()
 
-		if err = pqww.parquetWriter.Close(); err != nil {
+		if err = file.parquetCodec.parquetWriter.Close(); err != nil {
 			return err
 		}
 		if err := s.flushTopicVersions(ctx, file.topic, file.schemaID); err != nil {
@@ -172,12 +184,11 @@ func (pqcs *parquetCloudStorageSink) EncodeAndEmitRow(
 	}
 
 	return nil
-
 }
 
-func makeparquetWriterWrapper(
+func makeParquetWriterWrapper(
 	ctx context.Context, row cdcevent.Row, buf *bytes.Buffer,
-) (*parquetWriterWrapper, error) {
+) (*parquetFileWriter, error) {
 	parquetColumns, err := getParquetColumnTypes(ctx, row)
 	if err != nil {
 		return nil, err
@@ -191,16 +202,11 @@ func makeparquetWriterWrapper(
 	// parquet files. There are plenty things we can include there, including crdb
 	// native column types, OIDs for those column types, etc
 	if includeParquetTestMetadata {
-		keyCols := make(map[string]string)
-		colNames := ""
-		if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-			colNames += col.Name + ","
-			return nil
-		}); err != nil {
+		metadata, err := getMetadataForParquetFile(ctx, row)
+		if err != nil {
 			return nil, err
 		}
-		keyCols["pkeys"] = colNames
-		parquetWriterOptions = append(parquetWriterOptions, goparquet.WithMetaData(keyCols))
+		parquetWriterOptions = append(parquetWriterOptions, goparquet.WithMetaData(metadata))
 	}
 
 	// TODO(cdc): Determine if we should parquet's builtin compressor or rely on
@@ -211,13 +217,34 @@ func makeparquetWriterWrapper(
 		parquetWriterOptions...,
 	)
 
-	pqww := &parquetWriterWrapper{
+	pqww := &parquetFileWriter{
 		pqw,
 		schema,
 		parquetColumns,
 		len(parquetColumns),
 	}
 	return pqww, nil
+}
+
+func getMetadataForParquetFile(ctx context.Context, row cdcevent.Row) (map[string]string, error) {
+	metadata := make(map[string]string)
+	primaryKeyColNames := ""
+	columnNames := ""
+	if err := row.ForEachKeyColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		primaryKeyColNames += col.Name + ","
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	metadata["primaryKeyNames"] = primaryKeyColNames
+	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		columnNames += col.Name + ","
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	metadata["columnNames"] = columnNames
+	return metadata, nil
 }
 
 func getParquetColumnTypes(
@@ -234,7 +261,7 @@ func getParquetColumnTypes(
 		return nil, err
 	}
 
-	parquetColumns := make([]pqexporter.ParquetColumn, len(typs))
+	parquetColumns := make([]pqexporter.ParquetColumn, len(typs)+1)
 	const nullable = true
 
 	for i := 0; i < len(typs); i++ {
@@ -248,6 +275,14 @@ func getParquetColumnTypes(
 			return nil, err
 		}
 		parquetColumns[i] = parquetCol
+	}
+
+	// Add the extra column which will store the type of event that generated that
+	// particular row.
+	var err error
+	parquetColumns[len(typs)], err = pqexporter.NewParquetColumn(types.Int4, parquetCrdbEventTypeColName, false)
+	if err != nil {
+		return nil, err
 	}
 
 	return parquetColumns, nil

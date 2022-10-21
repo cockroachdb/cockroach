@@ -912,15 +912,27 @@ func (s StatementOptions) ValidateForCreateChangefeed() error {
 	if err != nil {
 		return err
 	}
-	if scanType == OnlyInitialScan {
+	validateInitialScanUnsupportedOptions := func(errMsg string) error {
 		for o := range InitialScanOnlyUnsupportedOptions {
 			if _, ok := s.m[o]; ok {
-				return errors.Newf(`cannot specify both %s and %s`, OptInitialScanOnly, o)
+				return errors.Newf(`cannot specify both %s and %s`, errMsg, o)
 			}
 		}
+		return nil
+	}
+	if scanType == OnlyInitialScan {
+		if err := validateInitialScanUnsupportedOptions(string(OnlyInitialScan)); err != nil {
+			return err
+		}
 	} else {
-		if s.m[OptFormat] == string(OptFormatCSV) || s.m[OptFormat] == string(OptFormatParquet) {
+		if s.m[OptFormat] == string(OptFormatCSV) {
 			return errors.Newf(`%s=%s is only usable with %s`, OptFormat, OptFormatCSV, OptInitialScanOnly)
+		}
+	}
+	// Right now parquet does not support any of these options
+	if s.m[OptFormat] == string(OptFormatParquet) {
+		if err := validateInitialScanUnsupportedOptions(string(OptFormatParquet)); err != nil {
+			return err
 		}
 	}
 	return nil
