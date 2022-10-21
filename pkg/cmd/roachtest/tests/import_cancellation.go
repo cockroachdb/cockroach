@@ -140,6 +140,17 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 	wg.Wait()
 
+	// Before running the TPCH workload, lift the GC TTL back up. Otherwise the
+	// long-running analytical queries can fail due to reading at a timestamp
+	// that becomes GC'd.
+	for tbl := range tablesToNumFiles {
+		stmt := fmt.Sprintf(`ALTER TABLE csv.%s CONFIGURE ZONE USING gc.ttlseconds = $1`, tbl)
+		_, err = conn.ExecContext(ctx, stmt, 60*60*4 /* 4 hours */)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	// Run the TPCH workload. Note that the TPCH workload asserts equality for
 	// query results. If the import cancellations corrupted table data, running
 	// the TPCH workload should observe it.
