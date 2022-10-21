@@ -34,7 +34,6 @@ message UserLoginResponse {
 // is empty because the current session is identified by an HTTP cookie on the
 // incoming request.
 message UserLogoutRequest {
-	// No information needed.
 }
 
 message UserLogoutResponse {
