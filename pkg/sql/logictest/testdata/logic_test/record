@@ -59,7 +59,7 @@ t      d  e  d  e
 (1,2)  1  2  1  2
 
 # You can't use a table type as a column type.
-statement error value type tuple\{int AS d, string AS e\} cannot be used for table columns
+statement error cannot use table record type as table column
 CREATE TABLE fail (a implicit_col)
 
 # REGTYPE works, and returns the type ID.
@@ -146,7 +146,7 @@ CREATE TABLE fail (b INT, INDEX((b + (((1,'a')::b).a))))
 statement error cannot modify table record type
 CREATE INDEX ON a((a + (((1,'a')::b).a)))
 
-statement error value type tuple{int AS a, e AS e} cannot be used for table columns
+statement error cannot use table record type as table column
 CREATE VIEW v AS SELECT (1,'a')::b
 
 statement error cannot modify table record type "b"
