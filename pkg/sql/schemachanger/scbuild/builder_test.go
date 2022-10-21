@@ -114,6 +114,7 @@ func run(
 	tdb *sqlutils.SQLRunner,
 	withDependencies func(*testing.T, serverutils.TestServerInterface, *sqlutils.SQLRunner, func(scbuild.Dependencies)),
 ) string {
+	sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 	switch d.Cmd {
 	case "setup":
 		stmts, err := parser.Parse(d.Input)

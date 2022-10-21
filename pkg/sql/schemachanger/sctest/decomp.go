@@ -57,6 +57,7 @@ func runDecomposeTest(
 ) string {
 	switch d.Cmd {
 	case "setup":
+		sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 		stmts, err := parser.Parse(d.Input)
 		require.NoError(t, err)
 		require.NotEmpty(t, stmts, "missing statement(s) for setup command")
