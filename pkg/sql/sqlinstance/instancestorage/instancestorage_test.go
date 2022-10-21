@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -405,6 +407,118 @@ func TestConcurrentCreateAndRelease(t *testing.T) {
 		step(t)
 	}
 	wg.Wait()
+}
+
+func TestIDAllocator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	clock := hlc.NewClock(timeutil.NewTestTimeSource(), base.DefaultMaxClockOffset)
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	dbName := t.Name()
+	tDB.Exec(t, `CREATE DATABASE "`+dbName+`"`)
+	schema := strings.Replace(systemschema.SQLInstancesTableSchema,
+		`CREATE TABLE system.sql_instances`,
+		`CREATE TABLE "`+dbName+`".sql_instances`, 1)
+	tDB.Exec(t, schema)
+	tableID := getTableID(t, tDB, dbName, "sql_instances")
+	slStorage := slstorage.NewFakeStorage()
+	storage := instancestorage.NewTestingStorage(kvDB, keys.SystemSQLCodec, tableID, slStorage)
+
+	// Use a custom time source for testing.
+	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	ts := timeutil.NewManualTime(t0)
+
+	const expiration = 5 * time.Minute
+	sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
+
+	err := storage.StartIDAllocator(ctx, s.Stopper(), ts, func() hlc.Timestamp {
+		return sessionExpiry
+	})
+	require.NoError(t, err)
+
+	// Ensure that instance rows are generated right away.
+	var instances []sqlinstance.InstanceInfo
+	testutils.SucceedsSoon(t, func() error {
+		instances, err = storage.GetAllInstancesDataForTest(ctx)
+		if err != nil {
+			return err
+		}
+		sortInstances(instances)
+		if len(instances) == 0 {
+			return errors.New("instances have not been generated yet")
+		}
+		return nil
+	})
+
+	oldLen := len(instances)
+	require.Equal(t, 10, oldLen)
+	for id, instance := range instances {
+		require.Equal(t, base.SQLInstanceID(id+1), instance.InstanceID)
+		require.Empty(t, instance.InstanceAddr)
+		require.Empty(t, instance.SessionID)
+		require.Empty(t, instance.Locality)
+	}
+
+	// Consume two rows.
+	instanceIDs := [...]base.SQLInstanceID{1, 2}
+	addresses := [...]string{"addr1", "addr2"}
+	sessionIDs := [...]sqlliveness.SessionID{"session1", "session2"}
+	localities := [...]roachpb.Locality{
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
+		{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
+	}
+	for i, id := range instanceIDs {
+		require.NoError(t, slStorage.Insert(ctx, sessionIDs[i], sessionExpiry))
+		require.NoError(t, storage.CreateInstanceDataForTest(
+			ctx,
+			id,
+			addresses[i],
+			sessionIDs[i],
+			sessionExpiry,
+			localities[i],
+		))
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		// Wait for timer to be updated.
+		if len(ts.Timers()) == 1 && ts.Timers()[0] == ts.Now().Add(instancestorage.AllocateLoopFrequency) {
+			return nil
+		}
+		return errors.New("waiting for timer to be updated")
+	})
+
+	// Advance the clock, and ensure that more rows are added.
+	ts.Advance(time.Minute)
+	testutils.SucceedsSoon(t, func() error {
+		instances, err = storage.GetAllInstancesDataForTest(ctx)
+		if err != nil {
+			return err
+		}
+		sortInstances(instances)
+		if len(instances) > oldLen {
+			return nil
+		}
+		return errors.New("more instances have not been generated yet")
+	})
+
+	require.Equal(t, oldLen+2, len(instances))
+	for i, instance := range instances {
+		require.Equal(t, base.SQLInstanceID(i+1), instance.InstanceID)
+		switch i {
+		case 0, 1:
+			require.Equal(t, addresses[i], instance.InstanceAddr)
+			require.Equal(t, sessionIDs[i], instance.SessionID)
+			require.Equal(t, localities[i], instance.Locality)
+		default:
+			require.Empty(t, instance.InstanceAddr)
+			require.Empty(t, instance.SessionID)
+			require.Empty(t, instance.Locality)
+		}
+	}
 }
 
 func getTableID(

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher/systemconfigwatchertest"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -233,6 +234,33 @@ func TestTenantRowIDs(t *testing.T) {
 		rowCount++
 	}
 	require.Equal(t, numRows, rowCount)
+}
+
+// TestTenantIDAllocator confirms that the sql_instances ID allocator has been
+// started.
+func TestTenantIDAllocator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	_, db := serverutils.StartTenant(
+		t,
+		tc.Server(0),
+		base.TestTenantArgs{TenantID: serverutils.TestTenantID()},
+	)
+	defer db.Close()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	var rowCount int64
+	testutils.SucceedsSoon(t, func() error {
+		sqlDB.QueryRow(t, `SELECT count(*) FROM system.sql_instances WHERE addr IS NULL`).Scan(&rowCount)
+		if rowCount > 0 {
+			return nil
+		}
+		return fmt.Errorf("waiting for preallocated rows")
+	})
 }
 
 // TestNoInflightTracesVirtualTableOnTenant verifies that internal inflight traces table

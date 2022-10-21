@@ -34,6 +34,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -42,14 +43,16 @@ go_test(
     name = "instancestorage_test",
     srcs = [
         "instancereader_test.go",
+        "instancestorage_internal_test.go",
         "instancestorage_test.go",
         "main_test.go",
     ],
     args = ["-test.timeout=295s"],
+    embed = [":instancestorage"],
     deps = [
-        ":instancestorage",
         "//pkg/base",
         "//pkg/keys",
+        "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
