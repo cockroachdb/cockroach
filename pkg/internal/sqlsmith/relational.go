@@ -280,7 +280,8 @@ func makeAndedJoinCond(
 		v := available[0]
 		available = available[1:]
 		var expr *tree.ComparisonExpr
-		useEQ := cond == nil || onlyEqualityPreds || s.coin()
+		_, expressionsAreComparable := tree.CmpOps[treecmp.LT].LookupImpl(v[0].ResolvedType(), v[1].ResolvedType())
+		useEQ := cond == nil || onlyEqualityPreds || !expressionsAreComparable || s.coin()
 		if useEQ {
 			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), v[0], v[1])
 		} else {
