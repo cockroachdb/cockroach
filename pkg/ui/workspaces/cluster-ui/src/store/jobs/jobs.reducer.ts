@@ -45,8 +45,6 @@ const JobsSlice = createSlice({
     },
     refresh: (_, action: PayloadAction<JobsRequest>) => {},
     request: (_, action: PayloadAction<JobsRequest>) => {},
-    reset: (_, action: PayloadAction<JobsRequest>) => {},
-    updateFilteredJobs: (_, action: PayloadAction<JobsRequest>) => {},
   },
 });
 
