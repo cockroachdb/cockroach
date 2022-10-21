@@ -599,9 +599,10 @@ func init() {
 			cliflagcfg.DurationFlag(f, &certCtx.certificateLifetime, cliflags.CertificateLifetime)
 		}
 
-		// PKCS8 key format is only available for the client cert command.
 		if cmd == createClientCertCmd {
+			// PKCS8 key format is only available for the client cert command.
 			cliflagcfg.BoolFlag(f, &certCtx.generatePKCS8Key, cliflags.GeneratePKCS8Key)
+			cliflagcfg.BoolFlag(f, &certCtx.disableUsernameValidation, cliflags.DisableUsernameValidation)
 		}
 	}
 

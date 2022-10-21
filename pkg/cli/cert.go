@@ -165,9 +165,22 @@ Creation fails if the CA expiration time is before the desired certificate expir
 // TODO(marc): there is currently no way to specify which CA cert to use if more
 // than one if present.
 func runCreateClientCert(cmd *cobra.Command, args []string) error {
-	username, err := username.MakeSQLUsernameFromUserInput(args[0], username.PurposeCreation)
+	user, err := username.MakeSQLUsernameFromUserInput(args[0], username.PurposeCreation)
 	if err != nil {
-		return errors.Wrap(err, "failed to generate client certificate and key")
+		const genError = "failed to generate client certificate and key"
+		if _, err := username.MakeSQLUsernameFromUserInput(args[0], username.PurposeValidation); err != nil {
+			return errors.Wrap(err, genError)
+		}
+		if certCtx.disableUsernameValidation {
+			// The username is not valid SQL structure, but we're still OK
+			// minting a TLS certificate for it. Simply inform the user they
+			// will need extra work to use it with SQL.
+			fmt.Fprintf(stderr, "warning: the specified identity %q is not a valid SQL username.\n"+
+				"Before it can be used to log in, an identity map rule will need to be set on the server.",
+				args[0])
+		} else {
+			return errors.Wrap(err, genError)
+		}
 	}
 
 	return errors.Wrap(
@@ -177,7 +190,7 @@ func runCreateClientCert(cmd *cobra.Command, args []string) error {
 			certCtx.keySize,
 			certCtx.certificateLifetime,
 			certCtx.overwriteFiles,
-			username,
+			user,
 			certCtx.tenantScope,
 			certCtx.generatePKCS8Key),
 		"failed to generate client certificate and key")
