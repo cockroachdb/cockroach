@@ -194,10 +194,13 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	return s, nil
 }
 
-// extendSession adds the ttl to the session's expiration.
+// extendSession updates the session record with a new expiration time.
 //
-// Returns false if the session record is not found, meaning that someone
+// Returns false if the session record is not found, meaning that someone else
 // deleted it.
+//
+// extendSession keeps retrying on error until ctx is canceled. Thus, an error
+// is only ever returned when the ctx is canceled.
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 
@@ -208,6 +211,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	var err error
 	var found bool
+	// Retry until success or until the context is canceled.
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		if found, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
@@ -218,6 +222,9 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 		break
 	}
 	if err != nil {
+		if ctx.Err() == nil {
+			log.Fatalf(ctx, "expected canceled ctx on err: %s", err)
+		}
 		return false, err
 	}
 
