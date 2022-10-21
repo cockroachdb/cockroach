@@ -209,6 +209,7 @@ go_test(
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/clusterversion",
         "//pkg/gossip",
+        "//pkg/internal/sqlsmith",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobstest",
