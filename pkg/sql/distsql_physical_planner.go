@@ -123,9 +123,9 @@ type DistSQLPlanner struct {
 	// rpcCtx is used to construct the spanResolver upon SetSQLInstanceInfo.
 	rpcCtx *rpc.Context
 
-	// sqlInstanceProvider has information about SQL instances in a non-system
+	// sqlAddressResolver has information about SQL instances in a non-system
 	// tenant environment.
-	sqlInstanceProvider sqlinstance.Provider
+	sqlAddressResolver sqlinstance.AddressResolver
 
 	// codec allows the DistSQLPlanner to determine whether it is creating plans
 	// for a system tenant or non-system tenant.
@@ -174,7 +174,7 @@ func NewDistSQLPlanner(
 	connHealthCheckerSystem func(roachpb.NodeID, rpc.ConnectionClass) error, // will only be used by the system tenant
 	podNodeDialer *nodedialer.Dialer,
 	codec keys.SQLCodec,
-	sqlInstanceProvider sqlinstance.Provider,
+	sqlAddressResolver sqlinstance.AddressResolver,
 	clock *hlc.Clock,
 ) *DistSQLPlanner {
 	dsp := &DistSQLPlanner{
@@ -190,12 +190,12 @@ func NewDistSQLPlanner(
 			connHealth:  connHealthCheckerSystem,
 			isAvailable: isAvailable,
 		},
-		distSender:          distSender,
-		nodeDescs:           nodeDescs,
-		rpcCtx:              rpcCtx,
-		sqlInstanceProvider: sqlInstanceProvider,
-		codec:               codec,
-		clock:               clock,
+		distSender:         distSender,
+		nodeDescs:          nodeDescs,
+		rpcCtx:             rpcCtx,
+		sqlAddressResolver: sqlAddressResolver,
+		codec:              codec,
+		clock:              clock,
 	}
 
 	dsp.parallelLocalScansSem = quotapool.NewIntPool("parallel local scans concurrency",
@@ -1297,12 +1297,12 @@ func (dsp *DistSQLPlanner) makeSQLInstanceIDForKVNodeIDTenantResolver(
 	hasLocalitySet bool,
 	_ error,
 ) {
-	if dsp.sqlInstanceProvider == nil {
+	if dsp.sqlAddressResolver == nil {
 		return nil, nil, false, errors.AssertionFailedf("sql instance provider not available in multi-tenant environment")
 	}
 	// GetAllInstances only returns healthy instances.
 	// TODO(yuzefovich): confirm that all instances are of compatible version.
-	instances, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	instances, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, nil, false, err
 	}
