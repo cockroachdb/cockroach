@@ -20,9 +20,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
+
+func alterBackupTypeCheck(
+	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
+) (ok bool, _ colinfo.ResultColumns, _ error) {
+	alterBackupStmt, ok := stmt.(*tree.AlterBackup)
+	if !ok {
+		return false, nil, nil
+	}
+	if err := exprutil.TypeCheck(
+		ctx, "ALTER BACKUP", p.SemaCtx(),
+		exprutil.Strings{
+			alterBackupStmt.Backup,
+			alterBackupStmt.Subdir,
+		},
+	); err != nil {
+		return false, nil, err
+	}
+	return true, nil, nil
+}
 
 func alterBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
@@ -41,30 +61,31 @@ func alterBackupPlanHook(
 		return nil, nil, nil, false, err
 	}
 
-	fromFn, err := p.TypeAsString(ctx, alterBackupStmt.Backup, "ALTER BACKUP")
+	exprEval := p.ExprEvaluator("ALTER BACKUP")
+	backup, err := exprEval.String(ctx, alterBackupStmt.Backup)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
-	subdirFn := func() (string, error) { return "", nil }
+	var subdir string
 	if alterBackupStmt.Subdir != nil {
-		subdirFn, err = p.TypeAsString(ctx, alterBackupStmt.Subdir, "ALTER BACKUP")
+		subdir, err = exprEval.String(ctx, alterBackupStmt.Subdir)
 		if err != nil {
 			return nil, nil, nil, false, err
 		}
 	}
 
-	var newKmsFn func() ([]string, error)
-	var oldKmsFn func() ([]string, error)
+	var newKms []string
+	var oldKms []string
 
 	for _, cmd := range alterBackupStmt.Cmds {
 		switch v := cmd.(type) {
 		case *tree.AlterBackupKMS:
-			newKmsFn, err = p.TypeAsStringArray(ctx, tree.Exprs(v.KMSInfo.NewKMSURI), "ALTER BACKUP")
+			newKms, err = exprEval.StringArray(ctx, tree.Exprs(v.KMSInfo.NewKMSURI))
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
-			oldKmsFn, err = p.TypeAsStringArray(ctx, tree.Exprs(v.KMSInfo.OldKMSURI), "ALTER BACKUP")
+			oldKms, err = exprEval.StringArray(ctx, tree.Exprs(v.KMSInfo.OldKMSURI))
 			if err != nil {
 				return nil, nil, nil, false, err
 			}
@@ -72,15 +93,6 @@ func alterBackupPlanHook(
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
-		backup, err := fromFn()
-		if err != nil {
-			return err
-		}
-
-		subdir, err := subdirFn()
-		if err != nil {
-			return err
-		}
 
 		if subdir != "" {
 			if strings.EqualFold(subdir, "LATEST") {
@@ -105,18 +117,6 @@ func alterBackupPlanHook(
 			if backup, err = appendPaths(backup, subdir); err != nil {
 				return err
 			}
-		}
-
-		var newKms []string
-		newKms, err = newKmsFn()
-		if err != nil {
-			return err
-		}
-
-		var oldKms []string
-		oldKms, err = oldKmsFn()
-		if err != nil {
-			return err
 		}
 
 		return doAlterBackupPlan(ctx, alterBackupStmt, p, backup, newKms, oldKms)
@@ -213,5 +213,9 @@ func doAlterBackupPlan(
 }
 
 func init() {
-	sql.AddPlanHook("alter backup", alterBackupPlanHook)
+	sql.AddPlanHook(
+		"alter backup",
+		alterBackupPlanHook,
+		alterBackupTypeCheck,
+	)
 }
