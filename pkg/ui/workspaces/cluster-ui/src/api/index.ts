@@ -14,3 +14,4 @@ export * from "./statementsApi";
 export * from "./basePath";
 export * from "./nodesApi";
 export * from "./sqlApi";
+export * from "./databasesApi";

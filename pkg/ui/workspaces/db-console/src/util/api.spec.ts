@@ -18,8 +18,10 @@ import fetchMock from "./fetch-mock";
 import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
 import * as api from "./api";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Severity = cockroach.util.log.Severity;
+import { buildSQLApiDatabasesResponse } from "src/util/fakeApi";
 
 describe("rest api", function() {
   describe("databases request", function() {
@@ -29,47 +31,46 @@ describe("rest api", function() {
       this.timeout(1000);
       // Mock out the fetch query to /databases
       fetchMock.mock({
-        matcher: api.API_PREFIX + "/databases",
-        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-Cockroach-API-Session": "cookie",
+        },
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          assert.isUndefined(requestObj.body);
-          const encodedResponse = protos.cockroach.server.serverpb.DatabasesResponse.encode(
-            {
-              databases: ["system", "test"],
-            },
-          ).finish();
+          expect(JSON.parse(requestObj.body.toString())).toEqual(
+            clusterUiApi.databasesRequest,
+          );
           return {
-            body: api.toArrayBuffer(encodedResponse),
+            body: JSON.stringify(
+              buildSQLApiDatabasesResponse(["system", "test"]),
+            ),
           };
         },
       });
-
-      return api
-        .getDatabaseList(
-          new protos.cockroach.server.serverpb.DatabasesRequest(),
-        )
-        .then(result => {
-          assert.lengthOf(fetchMock.calls(api.API_PREFIX + "/databases"), 1);
-          assert.lengthOf(result.databases, 2);
-        });
+      return clusterUiApi.getDatabasesList().then(result => {
+        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(result.databases.length).toBe(2);
+      });
     });
 
     it("correctly handles an error", function(done) {
       this.timeout(1000);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: api.API_PREFIX + "/databases",
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          assert.isUndefined(requestObj.body);
+          expect(JSON.parse(requestObj.body.toString())).toEqual(
+            clusterUiApi.databasesRequest,
+          );
           return { throws: new Error() };
         },
       });
 
-      api
-        .getDatabaseList(
-          new protos.cockroach.server.serverpb.DatabasesRequest(),
-        )
+      clusterUiApi
+        .getDatabasesList()
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -83,19 +84,18 @@ describe("rest api", function() {
       this.timeout(1000);
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: api.API_PREFIX + "/databases",
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          assert.isUndefined(requestObj.body);
+          expect(JSON.parse(requestObj.body.toString())).toEqual(
+            clusterUiApi.databasesRequest,
+          );
           return new Promise<any>(() => {});
         },
       });
 
-      api
-        .getDatabaseList(
-          new protos.cockroach.server.serverpb.DatabasesRequest(),
-          moment.duration(0),
-        )
+      clusterUiApi
+        .getDatabasesList(moment.duration(0))
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
