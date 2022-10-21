@@ -114,12 +114,12 @@ type Instance struct {
 	ttl           func() time.Duration
 	hb            func() time.Duration
 	testKnobs     sqlliveness.TestingKnobs
-	startErr      error
 	mu            struct {
-		started bool
 		syncutil.Mutex
-		blockCh chan struct{}
-		s       *session
+		started  bool
+		startErr error
+		blockCh  chan struct{}
+		s        *session
 	}
 }
 
@@ -252,7 +252,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 					func() {
 						l.mu.Lock()
 						defer l.mu.Unlock()
-						l.startErr = err
+						l.mu.startErr = err
 						// There was an unrecoverable error when trying to
 						// create the session. Notify all calls to Session that
 						// the session failed.
@@ -364,7 +364,7 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 			func() {
 				l.mu.Lock()
 				defer l.mu.Unlock()
-				err = l.startErr
+				err = l.mu.startErr
 			}()
 			if err != nil {
 				return nil, err
