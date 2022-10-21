@@ -1,0 +1,44 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+
+go_library(
+    name = "redact",
+    srcs = ["redact.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/redact",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/parser",
+        "//pkg/sql/schemachanger/scpb",
+        "//pkg/sql/sem/tree",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "redact_test",
+    srcs = [
+        "main_test.go",
+        "redact_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    deps = [
+        ":redact",
+        "//pkg/base",
+        "//pkg/keys",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

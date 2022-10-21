@@ -427,12 +427,17 @@ func fromZipDir(
 		last := len(fields) - 1
 		payloadBytes, err := hx.DecodeString(fields[last-1])
 		if err != nil {
+			// TODO(postamar): remove this check once payload redaction is improved
+			if fields[last-1] == "NULL" {
+				return nil
+			}
 			return errors.Wrapf(err, "job %d: failed to decode hex payload", id)
 		}
 		md.Payload = &jobspb.Payload{}
 		if err := protoutil.Unmarshal(payloadBytes, md.Payload); err != nil {
 			return errors.Wrap(err, "failed unmarshalling job payload")
 		}
+
 		progressBytes, err := hx.DecodeString(fields[last])
 		if err != nil {
 			return errors.Wrapf(err, "job %d: failed to decode hex progress", id)

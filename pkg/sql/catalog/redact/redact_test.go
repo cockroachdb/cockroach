@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schematelemetry_test
+package redact_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,7 +43,7 @@ func TestRedactQueries(t *testing.T) {
 			kvDB, keys.SystemSQLCodec, "defaultdb", "public", "view",
 		)
 		mut := tabledesc.NewBuilder(view.TableDesc()).BuildCreatedMutableTable()
-		require.Empty(t, schematelemetry.Redact(mut))
+		require.Empty(t, redact.Redact(mut.DescriptorProto()))
 		require.Equal(t, `SELECT k, v FROM defaultdb.public.kv WHERE v != '_'`, mut.ViewQuery)
 	})
 
@@ -52,7 +52,7 @@ func TestRedactQueries(t *testing.T) {
 			kvDB, keys.SystemSQLCodec, "defaultdb", "public", "ctas",
 		)
 		mut := tabledesc.NewBuilder(ctas.TableDesc()).BuildCreatedMutableTable()
-		require.Empty(t, schematelemetry.Redact(mut))
+		require.Empty(t, redact.Redact(mut.DescriptorProto()))
 		require.Equal(t, `SELECT k, v FROM defaultdb.public.kv WHERE v != '_'`, mut.CreateQuery)
 	})
 }

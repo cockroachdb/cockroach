@@ -8,14 +8,13 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package schematelemetry
+// Package redact contains utilities to redact sensitive fields from
+// descriptors.
+package redact
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -23,12 +22,12 @@ import (
 )
 
 // Redact will redact the descriptor in place.
-func Redact(mut catalog.MutableDescriptor) []error {
-	switch d := mut.(type) {
-	case *tabledesc.Mutable:
-		return redactTableDescriptor(d.TableDesc())
-	case *typedesc.Mutable:
-		redactTypeDescriptor(d.TypeDesc())
+func Redact(descProto *descpb.Descriptor) []error {
+	switch d := descProto.Union.(type) {
+	case *descpb.Descriptor_Table:
+		return redactTableDescriptor(d.Table)
+	case *descpb.Descriptor_Type:
+		redactTypeDescriptor(d.Type)
 	}
 	return nil
 }
