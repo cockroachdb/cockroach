@@ -292,6 +292,10 @@ type Column interface {
 	// HasDefault returns true iff the column has a default expression set.
 	HasDefault() bool
 
+	// HasNullDefault returns true if the column has a default expression and
+	// that expression is NULL.
+	HasNullDefault() bool
+
 	// GetDefaultExpr returns the column default expression if it exists,
 	// empty string otherwise.
 	GetDefaultExpr() string
@@ -808,7 +812,7 @@ func ColumnNeedsBackfill(col Column) bool {
 	//  - computed columns
 	//  - non-nullable columns (note: if a non-nullable column doesn't have a
 	//    default value, the backfill will fail unless the table is empty).
-	if col.ColumnDesc().HasNullDefault() {
+	if col.HasNullDefault() {
 		return false
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
