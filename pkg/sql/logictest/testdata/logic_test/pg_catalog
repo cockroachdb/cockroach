@@ -715,22 +715,23 @@ attrelid    relname            attname                   atttypid  attstattarget
 110         t1                 m                         20        0              8       14      0         -1
 110         t1                 n                         20        0              8       15      0         -1
 3687884466  t1_pkey            p                         701       0              8       1       0         -1
-3687884465  t1_a_key           a                         20        0              8       2       0         -1
-3687884464  index_key          b                         20        0              8       3       0         -1
-3687884464  index_key          c                         20        0              8       4       0         -1
+3687884465  t1_a_key           a                         20        0              8       1       0         -1
+3687884464  index_key          b                         20        0              8       1       0         -1
+3687884464  index_key          c                         20        0              8       2       0         -1
 111         t1_m_seq           value                     20        0              8       1       0         -1
 112         t1_n_seq           value                     20        0              8       1       0         -1
 113         t2                 t1_id                     20        0              8       1       0         -1
 113         t2                 rowid                     20        0              8       2       0         -1
-2955071325  t2_pkey            rowid                     20        0              8       2       0         -1
+2955071325  t2_pkey            rowid                     20        0              8       1       0         -1
 2955071326  t2_t1_id_idx       t1_id                     20        0              8       1       0         -1
 114         t3                 a                         20        0              8       1       0         -1
 114         t3                 b                         20        0              8       2       0         -1
 114         t3                 c                         25        0              -1      3       0         -1
 114         t3                 rowid                     20        0              8       4       0         -1
-2695335054  t3_pkey            rowid                     20        0              8       4       0         -1
+2695335054  t3_pkey            rowid                     20        0              8       1       0         -1
 2695335053  t3_a_b_idx         a                         20        0              8       1       0         -1
 2695335053  t3_a_b_idx         b                         20        0              8       2       0         -1
+2695335053  t3_a_b_idx         c                         25        0              -1      3       0         -1
 115         v1                 p                         701       0              8       1       0         -1
 115         v1                 a                         20        0              8       2       0         -1
 115         v1                 b                         20        0              8       3       0         -1
@@ -739,26 +740,26 @@ attrelid    relname            attname                   atttypid  attstattarget
 116         t4                 b                         701       0              8       2       0         -1
 116         t4                 c                         25        0              -1      3       0         -1
 116         t4                 rowid                     20        0              8       4       0         -1
-3214807592  t4_pkey            rowid                     20        0              8       4       0         -1
+3214807592  t4_pkey            rowid                     20        0              8       1       0         -1
 117         t5                 a                         20        0              8       1       0         -1
 117         t5                 b                         701       0              8       2       0         -1
 117         t5                 c                         25        0              -1      3       0         -1
 117         t5                 rowid                     20        0              8       4       0         -1
-1869730585  t5_pkey            rowid                     20        0              8       4       0         -1
+1869730585  t5_pkey            rowid                     20        0              8       1       0         -1
 120         t6                 a                         20        0              8       1       0         -1
 120         t6                 b                         20        0              8       2       0         -1
 120         t6                 c                         25        0              -1      3       0         -1
 120         t6                 m                         100118    0              -1      4       0         -1
 120         t6                 rowid                     20        0              8       6       0         -1
-2129466852  t6_pkey            rowid                     20        0              8       6       0         -1
-2129466855  t6_expr_idx        crdb_internal_idx_expr    20        0              8       5       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      7       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr    20        0              8       5       0         -1
-2129466848  t6_expr_key        crdb_internal_idx_expr_1  25        0              -1      7       0         -1
-2129466850  t6_expr_idx1       crdb_internal_idx_expr_2  16        0              1       8       0         -1
+2129466852  t6_pkey            rowid                     20        0              8       1       0         -1
+2129466855  t6_expr_idx        crdb_internal_idx_expr    20        0              8       1       0         -1
+2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1  25        0              -1      1       0         -1
+2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr    20        0              8       2       0         -1
+2129466848  t6_expr_key        crdb_internal_idx_expr_1  25        0              -1      1       0         -1
+2129466850  t6_expr_idx1       crdb_internal_idx_expr_2  16        0              1       1       0         -1
 121         mv1                ?column?                  20        0              8       1       0         -1
 121         mv1                rowid                     20        0              8       2       0         -1
-784389845   mv1_pkey           rowid                     20        0              8       2       0         -1
+784389845   mv1_pkey           rowid                     20        0              8       1       0         -1
 
 query TTIBTTBBTT colnames,rowsort
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -800,6 +801,7 @@ t3                 rowid                     -1         NULL      NULL        NU
 t3_pkey            rowid                     -1         NULL      NULL        NULL      true        true       ·            ·
 t3_a_b_idx         a                         -1         NULL      NULL        NULL      false       false      ·            ·
 t3_a_b_idx         b                         -1         NULL      NULL        NULL      false       false      ·            ·
+t3_a_b_idx         c                         -1         NULL      NULL        NULL      false       true       ·            ·
 v1                 p                         -1         NULL      NULL        NULL      false       false      ·            ·
 v1                 a                         -1         NULL      NULL        NULL      false       false      ·            ·
 v1                 b                         -1         NULL      NULL        NULL      false       false      ·            ·
@@ -869,6 +871,7 @@ t3                 rowid                     false         true        0        
 t3_pkey            rowid                     false         true        0            NULL    NULL        NULL
 t3_a_b_idx         a                         false         true        0            NULL    NULL        NULL
 t3_a_b_idx         b                         false         true        0            NULL    NULL        NULL
+t3_a_b_idx         c                         false         true        0            NULL    NULL        NULL
 v1                 p                         false         true        0            NULL    NULL        NULL
 v1                 a                         false         true        0            NULL    NULL        NULL
 v1                 b                         false         true        0            NULL    NULL        NULL
@@ -958,6 +961,7 @@ t6_expr_expr1_idx  crdb_internal_idx_expr_1  text      3403232968    default
 t6                 c                         text      3403232968    default
 t5                 c                         text      3403232968    default
 t4                 c                         text      3403232968    default
+t3_a_b_idx         c                         text      3403232968    default
 t3                 c                         text      3403232968    default
 t1                 j                         char      3403232968    default
 t1                 i                         _varchar  3403232968    default
@@ -6058,3 +6062,38 @@ COMMIT;
 
 statement ok
 DROP TABLE t;
+
+## Check key columns for indexes PG_Attribute
+statement ok
+CREATE TABLE t1(x int, y int primary key);
+
+statement ok
+CREATE TABLE t2(x int, y int);
+
+statement ok
+CREATE TABLE t3(x int, y int);
+
+statement ok
+CREATE INDEX t3idx ON t3(x) include(y);
+
+query IT colnames
+select attnum, attname from pg_attribute a join pg_class c on c.oid = a.attrelid where c.relname = 't1_pkey'
+order by attnum;
+----
+attnum  attname
+1       y
+
+query IT colnames
+select attnum, attname from pg_attribute a join pg_class c on c.oid = a.attrelid where c.relname = 't2_pkey'
+order by attnum;
+----
+attnum  attname
+1       rowid
+
+query IT colnames
+select attnum, attname from pg_attribute a join pg_class c on c.oid = a.attrelid where c.relname = 't3idx'
+order by attnum;
+----
+attnum  attname
+1       x
+2       y
