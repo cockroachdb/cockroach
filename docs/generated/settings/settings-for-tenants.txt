@@ -11,6 +11,7 @@ bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attem
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads
 bulkio.stream_ingestion.minimum_flush_interval	duration	5s	the minimum timestamp between flushes; flushes may still occur if internal buffers fill up
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds
+cloudstorage.azure.concurrent_upload_buffers	integer	1	controls the number of concurrent buffers that will be used by the Azure client when uploading chunks.Each buffer can buffer up to cloudstorage.write_chunk.size of memory during an upload
 cloudstorage.http.custom_ca	string		custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage
 cloudstorage.timeout	duration	10m0s	the timeout for import/export storage operations
 cluster.organization	string		organization name

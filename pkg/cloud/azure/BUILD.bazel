@@ -10,6 +10,7 @@ go_library(
         "//pkg/cloud",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
+        "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/contextutil",
         "//pkg/util/ioctx",
