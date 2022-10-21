@@ -130,6 +130,7 @@ statement_timeout                                     0
 stub_catalog_tables                                   on
 synchronize_seqscans                                  on
 synchronous_commit                                    on
+system_identity                                       root
 testing_optimizer_cost_perturbation                   0
 testing_optimizer_disable_rule_probability            0
 testing_optimizer_random_seed                         0
