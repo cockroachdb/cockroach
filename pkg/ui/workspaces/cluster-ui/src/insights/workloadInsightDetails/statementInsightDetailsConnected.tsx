@@ -11,10 +11,12 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   StatementInsightDetails,
+  StatementInsightDetailsDispatchProps,
   StatementInsightDetailsStateProps,
 } from "./statementInsightDetails";
 import { AppState } from "src/store";
 import {
+  actions as statementInsights,
   selectStatementInsightDetails,
   selectStatementInsightsError,
 } from "src/store/insights/statementInsights";
@@ -33,8 +35,17 @@ const mapStateToProps = (
   };
 };
 
+const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
+  refreshStatementInsights: statementInsights.refresh,
+};
+
 export const StatementInsightDetailsConnected = withRouter(
-  connect<StatementInsightDetailsStateProps, RouteComponentProps>(
+  connect<
+    StatementInsightDetailsStateProps,
+    StatementInsightDetailsDispatchProps,
+    RouteComponentProps
+  >(
     mapStateToProps,
+    mapDispatchToProps,
   )(StatementInsightDetails),
 );

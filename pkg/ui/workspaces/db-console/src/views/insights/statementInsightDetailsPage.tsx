@@ -10,10 +10,12 @@
 import {
   StatementInsightDetails,
   StatementInsightDetailsStateProps,
+  StatementInsightDetailsDispatchProps,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { AdminUIState } from "src/redux/state";
+import { refreshStatementInsights } from "src/redux/apiReducers";
 import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
 
 const mapStateToProps = (
@@ -28,9 +30,18 @@ const mapStateToProps = (
   };
 };
 
+const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
+  refreshStatementInsights: refreshStatementInsights,
+};
+
 const StatementInsightDetailsPage = withRouter(
-  connect<StatementInsightDetailsStateProps, RouteComponentProps>(
+  connect<
+    StatementInsightDetailsStateProps,
+    StatementInsightDetailsDispatchProps,
+    RouteComponentProps
+  >(
     mapStateToProps,
+    mapDispatchToProps,
   )(StatementInsightDetails),
 );
 
