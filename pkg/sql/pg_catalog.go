@@ -467,11 +467,27 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 		// Columns for each index.
 		columnIdxMap := catalog.ColumnIDToOrdinalMap(table.PublicColumns())
 		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+			idxID := h.IndexOid(table.GetID(), index.GetID())
+
 			for i := 0; i < index.NumKeyColumns(); i++ {
 				colID := index.GetKeyColumnID(i)
-				idxID := h.IndexOid(table.GetID(), index.GetID())
 				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
-				if err := addColumn(column, idxID, uint32(column.GetPGAttributeNum())); err != nil {
+				// The attnum for columns in an index is the order it appears in the
+				// index definition and is not related to the attnum the column has in
+				// the table.
+				if err := addColumn(column, idxID, uint32(i+1)); err != nil {
+					return err
+				}
+			}
+			// pg_attribute only includes stored columns for secondary indexes, not
+			// for primary indexes
+			for i := 0; i < index.NumSecondaryStoredColumns(); i++ {
+				colID := index.GetStoredColumnID(i)
+				column := table.PublicColumns()[columnIdxMap.GetDefault(colID)]
+				// The attnum for columns in an index is the order it appears in the
+				// index definition and is not related to the attnum the column has in
+				// the table.
+				if err := addColumn(column, idxID, uint32(i+1+index.NumKeyColumns())); err != nil {
 					return err
 				}
 			}
