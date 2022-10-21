@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // registers cloud storage providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -65,8 +66,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -855,6 +859,143 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 	}
 
 	cdcTest(t, testFn)
+}
+
+func TestChangefeedRandomExpressions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderStress(t)
+	skip.UnderRace(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		rng, _ := randutil.NewTestRand()
+		tblName := "seed"
+		defer s.DB.Close()
+
+		sqlDB.ExecMultiple(t, sqlsmith.Setups[tblName](rng)...)
+
+		// TODO: PopulateTableWithRandData doesn't work with enums
+		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _enum")
+
+		// TODO: known issue now, https://github.com/cockroachdb/cockroach/issues/90411
+		// Dropping this because sqlsmith generates too many failing expressions otherwise.
+		sqlDB.Exec(t, "ALTER TABLE seed DROP COLUMN _bool")
+
+		for rows := 0; rows < 100; {
+			var err error
+			var newRows int
+			if newRows, err = randgen.PopulateTableWithRandData(rng, s.DB, tblName, 200); err != nil {
+				t.Fatal(err)
+			}
+			rows += newRows
+		}
+
+		sqlDB.Exec(t, `DELETE FROM seed WHERE rowid NOT IN (SELECT rowid FROM seed LIMIT 100)`)
+
+		// Put the enums back. enum_range('hi'::greeting)[rowid%7] will give nulls when rowid%7=0 or 6.
+		sqlDB.Exec(t, `ALTER TABLE seed ADD COLUMN _enum greeting`)
+		sqlDB.Exec(t, `UPDATE seed SET _enum = enum_range('hi'::greeting)[rowid%7]`)
+
+		queryGen, err := sqlsmith.NewSmither(s.DB, rng,
+			sqlsmith.DisableWith(),
+			sqlsmith.DisableMutations(),
+			sqlsmith.DisableLimits(),
+			sqlsmith.DisableAggregateFuncs(),
+			sqlsmith.DisableWindowFuncs(),
+			sqlsmith.DisableJoins(),
+			sqlsmith.DisableLimits(),
+			sqlsmith.DisableIndexHints(),
+			sqlsmith.SetScalarComplexity(0.5),
+			sqlsmith.SetComplexity(0.5),
+		)
+		require.NoError(t, err)
+		defer queryGen.Close()
+		for i := 0; i < 1000; i++ {
+			query := queryGen.Generate()
+			query = regexp.MustCompile(`tab_\d+`).ReplaceAllString(query, "seed")
+			query = strings.ReplaceAll(query, "@[0]", "")
+			query = strings.ReplaceAll(query, "seed.", "")
+			where, ok := getWhereClause(query)
+			if !ok {
+				continue
+			}
+			if strings.EqualFold(where, "true") {
+				// too easy
+				continue
+			}
+			if strings.Contains(where, "EXISTS") || strings.Contains(where, "SELECT") {
+				// https://github.com/cockroachdb/cockroach/issues/90416
+				continue
+			}
+			if strings.Contains(where, " % ") {
+				// https://github.com/cockroachdb/cockroach/issues/90421
+				continue
+			}
+			if strings.Contains(where, "internal_mvcc_timestamp") || strings.Contains(where, "tableoid") {
+				// https://github.com/cockroachdb/cockroach/issues/90442
+				continue
+			}
+			// Most remaining errors here are cases where the regular SQL optimizer is lazier than ours.
+			// For example, WHERE (1/0 > 3) or true won't error in a regular query, but will in changefeed expressions.
+			// I don't think that's really a bug, but I also don't know how to statically detect it here.
+			if strings.Contains(strings.ToLower(where), "or true") || strings.Contains(strings.ToLower(where), "and false") {
+				continue
+			}
+			query = "SELECT array_to_string(IFNULL(array_agg(distinct rowid),'{}'),'|') FROM seed WHERE " + where
+			rows := s.DB.QueryRow(query)
+			var expectedRowIDsStr string
+			if err := rows.Scan(&expectedRowIDsStr); err != nil {
+				t.Logf("Skipping query %s because error %s", query, err)
+				continue
+			}
+			expectedRowIDs := strings.Split(expectedRowIDsStr, "|")
+			if expectedRowIDsStr == "" {
+				t.Logf("Skipping predicate %s because it returned no rows", where)
+				continue
+			}
+			createStmt := `CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT rowid FROM seed WHERE ` + where
+			t.Logf("Expecting statement %s to emit %d events", createStmt, len(expectedRowIDs))
+			seedFeed, err := f.Feed(createStmt)
+			defer closeFeedIgnoreError(t, seedFeed)
+			if err != nil {
+				t.Logf("Test tolerating create changefeed error: %s", err.Error())
+				continue
+			}
+			assertedPayloads := make([]string, len(expectedRowIDs))
+			for i, id := range expectedRowIDs {
+				assertedPayloads[i] = fmt.Sprintf(`seed: [%s]->{"rowid": %s}`, id, id)
+			}
+			err = assertPayloadsBaseErr(context.Background(), seedFeed, assertedPayloads, false, false)
+			if err != nil && (strings.Contains(err.Error(), "expected\n") || strings.Contains(err.Error(), "ordering guarantee")) {
+				t.Error(err)
+			} else if err != nil {
+				t.Logf("Test tolerating running changefeed error: %s", err.Error())
+			}
+		}
+
+	}
+
+	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+}
+
+func getWhereClause(query string) (string, bool) {
+	var p parser.Parser
+	stmts, err := p.Parse(query)
+	if err != nil {
+		return "", false
+	}
+	if len(stmts) != 1 {
+		return "", false
+	}
+	selectStmt, ok := stmts[0].AST.(*tree.Select).Select.(*tree.SelectClause)
+	if !ok {
+		return "", false
+	}
+	if selectStmt.Where == nil {
+		return "", false
+	}
+	return selectStmt.Where.Expr.String(), true
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
