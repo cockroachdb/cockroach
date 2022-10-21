@@ -843,8 +843,9 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 			RemoteAddr: args.RemoteAddr,
 		},
 		LocalOnlySessionData: sessiondatapb.LocalOnlySessionData{
-			ResultsBufferSize: args.ConnResultsBufferSize,
-			IsSuperuser:       args.IsSuperuser,
+			ResultsBufferSize:   args.ConnResultsBufferSize,
+			IsSuperuser:         args.IsSuperuser,
+			SystemIdentityProto: args.SystemIdentity.EncodeProto(),
 		},
 	}
 	if len(args.CustomOptionSessionDefaults) > 0 {
