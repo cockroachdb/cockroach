@@ -6,6 +6,7 @@
 <tr><td><code>admission.epoch_lifo.epoch_closing_delta_duration</code></td><td>duration</td><td><code>5ms</code></td><td>the delta duration before closing an epoch, for epoch-LIFO admission control ordering</td></tr>
 <tr><td><code>admission.epoch_lifo.epoch_duration</code></td><td>duration</td><td><code>100ms</code></td><td>the duration of an epoch, for epoch-LIFO admission control ordering</td></tr>
 <tr><td><code>admission.epoch_lifo.queue_delay_threshold_to_switch_to_lifo</code></td><td>duration</td><td><code>105ms</code></td><td>the queue delay encountered by a (tenant,priority) for switching to epoch-LIFO ordering</td></tr>
+<tr><td><code>admission.kv.bulk_only.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when both admission.kv.enabled and this is true, only throttle bulk work</td></tr>
 <tr><td><code>admission.kv.enabled</code></td><td>boolean</td><td><code>true</code></td><td>when true, work performed by the KV layer is subject to admission control</td></tr>
 <tr><td><code>admission.kv.stores.tenant_weights.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, tenant weights are enabled for KV-stores admission control</td></tr>
 <tr><td><code>admission.kv.tenant_weights.enabled</code></td><td>boolean</td><td><code>false</code></td><td>when true, tenant weights are enabled for KV admission control</td></tr>

@@ -51,6 +51,16 @@ var KVAdmissionControlEnabled = settings.RegisterBoolSetting(
 	"when true, work performed by the KV layer is subject to admission control",
 	true).WithPublic()
 
+// KVBulkOnlyAdmissionControlEnabled controls whether user (normal and above
+// priority) work is subject to admission control. If it is set to true, then
+// user work will not be throttled by admission control but bulk work still will
+// be.
+var KVBulkOnlyAdmissionControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"admission.kv.bulk_only.enabled",
+	"when both admission.kv.enabled and this is true, only throttle bulk work",
+	false).WithPublic()
+
 // SQLKVResponseAdmissionControlEnabled controls whether response processing
 // in SQL, for KV requests, is enabled.
 var SQLKVResponseAdmissionControlEnabled = settings.RegisterBoolSetting(
