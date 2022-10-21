@@ -11,26 +11,11 @@
 package descpb
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-	"github.com/cockroachdb/errors"
 )
-
-// HasNullDefault checks that the column descriptor has a default of NULL.
-func (desc *ColumnDescriptor) HasNullDefault() bool {
-	if !desc.HasDefault() {
-		return false
-	}
-	defaultExpr, err := parser.ParseExpr(*desc.DefaultExpr)
-	if err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err,
-			"failed to parse default expression %s", *desc.DefaultExpr))
-	}
-	return defaultExpr == tree.DNull
-}
 
 // HasDefault returns true if the column has a default value.
 func (desc *ColumnDescriptor) HasDefault() bool {
