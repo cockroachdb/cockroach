@@ -40,6 +40,8 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
 
   .dropdown-content-wrapper {
     padding: 18px 20px 22px 16px;
+    overflow-y: scroll;
+    max-height: 580px;
 
     .filter-label {
       height: 16px;
