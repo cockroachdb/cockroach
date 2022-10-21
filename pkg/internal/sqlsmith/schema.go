@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -222,29 +221,25 @@ FROM
 				members = append(members, string(tree.MustBeDString(d)))
 			}
 		}
-		// Try to construct type information from the resulting row.
-		switch {
-		case len(members) > 0:
-			typ := types.MakeEnum(catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
-			typ.TypeMeta = types.UserDefinedTypeMetadata{
-				Name: &types.UserDefinedTypeName{
-					Schema: scName,
-					Name:   name,
-				},
-				EnumData: &types.EnumMetadata{
-					LogicalRepresentations: members,
-					// The physical representations don't matter in this case, but the
-					// enum related code in tree expects that the length of
-					// PhysicalRepresentations is equal to the length of LogicalRepresentations.
-					PhysicalRepresentations: make([][]byte, len(members)),
-					IsMemberReadOnly:        make([]bool, len(members)),
-				},
-			}
-			key := tree.MakeSchemaQualifiedTypeName(scName, name)
-			udtMapping[key] = typ
-		default:
-			return nil, errors.Newf("unsupported SQLSmith type kind: %s", string(membersRaw))
+		// Construct type information from the resulting row. Note that the UDT
+		// may have no members (e.g., `CREATE TYPE t AS ENUM ()`).
+		typ := types.MakeEnum(catid.TypeIDToOID(descpb.ID(id)), 0 /* arrayTypeID */)
+		typ.TypeMeta = types.UserDefinedTypeMetadata{
+			Name: &types.UserDefinedTypeName{
+				Schema: scName,
+				Name:   name,
+			},
+			EnumData: &types.EnumMetadata{
+				LogicalRepresentations: members,
+				// The physical representations don't matter in this case, but the
+				// enum related code in tree expects that the length of
+				// PhysicalRepresentations is equal to the length of LogicalRepresentations.
+				PhysicalRepresentations: make([][]byte, len(members)),
+				IsMemberReadOnly:        make([]bool, len(members)),
+			},
 		}
+		key := tree.MakeSchemaQualifiedTypeName(scName, name)
+		udtMapping[key] = typ
 	}
 	var udts []*types.T
 	for _, t := range udtMapping {
