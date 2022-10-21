@@ -67,12 +67,12 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	if dsp.sqlInstanceProvider == nil {
+	if dsp.sqlAddressResolver == nil {
 		return nil, nil, errors.New("sql instance provider not available in multi-tenant environment")
 	}
 	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* planner */, nil, /* txn */
 		DistributionTypeAlways)
-	pods, err := dsp.sqlInstanceProvider.GetAllInstances(ctx)
+	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
