@@ -16,11 +16,14 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 )
 
 // FakeStorage implements the instanceprovider.storage interface.
@@ -29,7 +32,6 @@ type FakeStorage struct {
 		syncutil.Mutex
 		instances     map[base.SQLInstanceID]sqlinstance.InstanceInfo
 		instanceIDCtr base.SQLInstanceID
-		started       bool
 	}
 }
 
@@ -70,30 +72,72 @@ func (f *FakeStorage) ReleaseInstanceID(_ context.Context, id base.SQLInstanceID
 	return nil
 }
 
-// GetInstanceDataForTest returns instance data directly from raw storage
-// for testing purposes.
+// CreateInstanceDataForTest creates a new entry in the sql_instances system
+// table for testing purposes.
+func (s *Storage) CreateInstanceDataForTest(
+	ctx context.Context,
+	instanceID base.SQLInstanceID,
+	addr string,
+	sessionID sqlliveness.SessionID,
+	sessionExpiration hlc.Timestamp,
+	locality roachpb.Locality,
+) error {
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		// Set the transaction deadline to the session expiration to ensure
+		// transaction commits before the session expires.
+		err := txn.UpdateDeadline(ctx, sessionExpiration)
+		if err != nil {
+			return err
+		}
+		row, err := s.rowcodec.encodeRow(instanceID, addr, sessionID, locality, s.codec, s.tableID)
+		if err != nil {
+			return err
+		}
+		b := txn.NewBatch()
+		b.Put(row.Key, row.Value)
+		return txn.CommitInBatch(ctx, b)
+	})
+}
+
+// GetInstanceDataForTest returns instance data directly from raw storage for
+// testing purposes.
 func (s *Storage) GetInstanceDataForTest(
 	ctx context.Context, instanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
-	i, err := s.getInstanceData(ctx, instanceID)
+	k := makeInstanceKey(s.codec, s.tableID, instanceID)
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	row, err := s.db.Get(ctx, k)
 	if err != nil {
-		return sqlinstance.InstanceInfo{}, err
+		return sqlinstance.InstanceInfo{}, errors.Wrapf(err, "could not fetch instance %d", instanceID)
+	}
+	if row.Value == nil {
+		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
+	}
+	_, addr, sessionID, locality, _, _, err := s.rowcodec.decodeRow(row)
+	if err != nil {
+		return sqlinstance.InstanceInfo{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
 	instanceInfo := sqlinstance.InstanceInfo{
-		InstanceID:   i.instanceID,
-		InstanceAddr: i.addr,
-		SessionID:    i.sessionID,
-		Locality:     i.locality,
+		InstanceID:   instanceID,
+		InstanceAddr: addr,
+		SessionID:    sessionID,
+		Locality:     locality,
 	}
 	return instanceInfo, nil
 }
 
-// GetAllInstancesDataForTest returns all instance data from raw storage
-// for testing purposes.
+// GetAllInstancesDataForTest returns all instance data from raw storage for
+// testing purposes.
 func (s *Storage) GetAllInstancesDataForTest(
 	ctx context.Context,
-) (instances []sqlinstance.InstanceInfo, _ error) {
-	rows, err := s.getAllInstancesData(ctx)
+) (instances []sqlinstance.InstanceInfo, err error) {
+	var rows []instancerow
+	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		rows, err = s.getGlobalInstanceRows(ctx, txn)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
