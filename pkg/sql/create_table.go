@@ -1407,9 +1407,10 @@ func NewTableDesc(
 							d.Name,
 							t.SQLString(),
 						)
-						if t, terr := vt.ResolveTypeByOID(
+						if t, terr := tree.ResolveTypeByOID(
 							ctx,
 							catid.TypeIDToOID(regionConfig.RegionEnumID()),
+							vt,
 						); terr == nil {
 							if n.Locality.RegionalByRowColumn != tree.RegionalByRowRegionNotSpecifiedName {
 								// In this case, someone used REGIONAL BY ROW AS <col> where

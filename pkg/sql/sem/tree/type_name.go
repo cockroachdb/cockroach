@@ -142,6 +142,58 @@ var _ ResolvableTypeReference = &OIDTypeReference{}
 var _ NodeFormatter = &UnresolvedName{}
 var _ NodeFormatter = &ArrayTypeReference{}
 
+// specialResolutionTypes is a list of special pre-constructed types which
+// should be resolved directly without using a TypeReferenceResolver instance.
+//
+// In exceptional cases it's possible for some of these special pre-constructed
+// types to appear at execution time despite the assurances to the contrary that
+// may be found in the commentary accompanying their definition. For instance
+// `CASE WHEN NULL THEN NULL ELSE NULL END` can get serialized as
+// `CAST(NULL AS anyenum)`. Despite being valid, this would result in an error
+// in a distributed setting where a TypeReferenceResolver isn't available.
+var specialResolutionTypes = []*types.T{
+	types.AnyEnum,
+	// TODO(?): add more special pre-constructed types
+}
+
+// ResolveTypeByName resolves the type by name using the provided resolver.
+//
+// Prefer this function to a TypeReferenceResolver method call in order to
+// bypass the resolver for certain special pre-constructed types.
+func ResolveTypeByName(
+	ctx context.Context, name *UnresolvedObjectName, resolver TypeReferenceResolver,
+) (*types.T, error) {
+	for _, typ := range specialResolutionTypes {
+		if name.Object() == typ.Name() {
+			return typ, nil
+		}
+	}
+	if resolver == nil {
+		// If we don't have a resolver, we can't actually resolve this
+		// name into a type.
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", name)
+	}
+	return resolver.ResolveType(ctx, name)
+}
+
+// ResolveTypeByOID resolves the type by OID using the provided resolver.
+//
+// Prefer this function to a TypeReferenceResolver method call in order to
+// bypass the resolver for certain special pre-constructed types.
+func ResolveTypeByOID(
+	ctx context.Context, oid oid.Oid, resolver TypeReferenceResolver,
+) (*types.T, error) {
+	for _, typ := range specialResolutionTypes {
+		if oid == typ.Oid() {
+			return typ, nil
+		}
+	}
+	if resolver == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "type resolver unavailable to resolve type OID %d", oid)
+	}
+	return resolver.ResolveTypeByOID(ctx, oid)
+}
+
 // ResolveType converts a ResolvableTypeReference into a *types.T.
 func ResolveType(
 	ctx context.Context, ref ResolvableTypeReference, resolver TypeReferenceResolver,
@@ -156,17 +208,9 @@ func ResolveType(
 		}
 		return types.MakeArray(typ), nil
 	case *UnresolvedObjectName:
-		if resolver == nil {
-			// If we don't have a resolver, we can't actually resolve this
-			// name into a type.
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type %q does not exist", t)
-		}
-		return resolver.ResolveType(ctx, t)
+		return ResolveTypeByName(ctx, t, resolver)
 	case *OIDTypeReference:
-		if resolver == nil {
-			return nil, pgerror.Newf(pgcode.UndefinedObject, "type resolver unavailable to resolve type OID %d", t.OID)
-		}
-		return resolver.ResolveTypeByOID(ctx, t.OID)
+		return ResolveTypeByOID(ctx, t.OID, resolver)
 	default:
 		return nil, errors.AssertionFailedf("unknown resolvable type reference type %s", t)
 	}

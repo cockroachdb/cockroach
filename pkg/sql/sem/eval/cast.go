@@ -933,7 +933,7 @@ func performIntToOidCast(
 		if typ, ok := types.OidToType[o]; ok {
 			name = typ.PGName()
 		} else if types.IsOIDUserDefinedType(o) {
-			typ, err := res.ResolveTypeByOID(ctx, o)
+			typ, err := tree.ResolveTypeByOID(ctx, o, res)
 			if err != nil {
 				return nil, err
 			}

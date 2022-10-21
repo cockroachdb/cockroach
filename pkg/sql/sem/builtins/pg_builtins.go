@@ -990,7 +990,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					// If the type wasn't statically known, try looking it up as a user
 					// defined type.
 					var err error
-					typ, err = evalCtx.Planner.ResolveTypeByOID(ctx, oid)
+					typ, err = tree.ResolveTypeByOID(ctx, oid, evalCtx.Planner)
 					if err != nil {
 						// If the error is a descriptor does not exist error, then swallow it.
 						unknown := tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg))
