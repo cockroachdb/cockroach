@@ -2258,7 +2258,7 @@ func restoreCreateDefaultPrimaryRegionEnums(
 		return nil, nil, err
 	}
 	regionEnum.ArrayTypeID = regionEnumArrayID
-	regionArrayEnum, err := sql.CreateEnumArrayTypeDesc(
+	regionArrayEnum, err := sql.CreateUserDefinedArrayTypeDesc(
 		p.RunParams(ctx),
 		regionEnum,
 		db,

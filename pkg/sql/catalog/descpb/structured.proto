@@ -1367,6 +1367,8 @@ message TypeDescriptor {
     // kind of TypeDescriptor is *never* persisted to disk! If you are here,
     // thinking about using or persisting this value, you should *not* do that!
     TABLE_IMPLICIT_RECORD_TYPE = 3;
+    // Represents a user-defined composite type.
+    COMPOSITE = 4;
     // Add more entries as we support more user defined types.
   }
   optional Kind kind = 5 [(gogoproto.nullable) = false];
@@ -1440,7 +1442,21 @@ message TypeDescriptor {
   // descriptor being changed as part of a declarative schema change.
   optional cockroach.sql.schemachanger.scpb.DescriptorState declarative_schema_changer_state = 17;
 
-  // Next field is 18.
+  message Composite {
+    option (gogoproto.equal) = true;
+    // TupleContents returns a slice containing the type of each tuple field. This
+    // is nil for non-TUPLE types.
+    repeated sql.sem.types.T tuple_contents = 1;
+
+    // TupleLabels returns a slice containing the labels of each tuple field. This
+    // is nil for non-TUPLE types, or if the TUPLE type does not specify labels.
+    repeated string tuple_labels = 2;
+  }
+
+  // composite is the list of fields if this is a composite type.
+  optional Composite composite = 18;
+
+  // Next field is 19.
 }
 
 // SchemaDescriptor represents a physical schema and is stored in a structured
