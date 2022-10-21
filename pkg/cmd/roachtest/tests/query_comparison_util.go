@@ -169,9 +169,13 @@ func runOneRoundQueryComparison(
 	}
 	logStmt(setUnconstrainedStmt)
 
+	isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
+	if isMultiRegion {
+		setupMultiRegionDatabase(t, conn, logStmt)
+	}
+
 	// Initialize a smither that generates only INSERT and UPDATE statements with
 	// the InsUpdOnly option.
-	isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
 	mutatingSmither := newMutatingSmither(conn, rnd, t, true /* disableDelete */, isMultiRegion)
 	defer mutatingSmither.Close()
 
@@ -193,6 +197,7 @@ func runOneRoundQueryComparison(
 	t.Status("running ", qct.name)
 	until := time.After(roundTimeout)
 	done := ctx.Done()
+
 	for i := 1; ; i++ {
 		select {
 		case <-until:
@@ -208,7 +213,6 @@ func runOneRoundQueryComparison(
 			t.Status("running ", qct.name, ": ", i, " initial mutations completed")
 			// Initialize a new mutating smither that generates INSERT, UPDATE and
 			// DELETE statements with the MutationsOnly option.
-			isMultiRegion := qct.setupName == sqlsmith.SeedMultiRegionSetupName
 			mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */, isMultiRegion)
 			defer mutatingSmither.Close()
 		}
