@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+
 	// Imported to allow locality-related table mutations
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
@@ -189,7 +190,7 @@ func assertPayloadsBase(
 
 	require.NoError(t,
 		withTimeout(f, timeout,
-			func(ctx context.Context) error {
+			func(ctx context.Context) (err error) {
 				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
 			},
 		))
@@ -661,6 +662,14 @@ func closeFeed(t testing.TB, f cdctest.TestFeed) {
 	t.Helper()
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func closeFeedIgnoreError(t testing.TB, f cdctest.TestFeed) {
+	defer func() { recover() }()
+	t.Helper()
+	if err := f.Close(); err != nil {
+		t.Log(err)
 	}
 }
 
