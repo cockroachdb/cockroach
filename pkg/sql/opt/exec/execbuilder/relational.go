@@ -2081,10 +2081,6 @@ func (b *Builder) filterSuggestionError(
 }
 
 func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err error) {
-	if join.LocalityOptimized {
-		// Locality optimized joins are considered local in phase 1.
-		return nil
-	}
 	lookupTableMeta := join.Memo().Metadata().TableMeta(join.Table)
 	lookupTable := lookupTableMeta.Table
 
@@ -2110,9 +2106,10 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	}
 
 	homeRegion := ""
-	if lookupTable.IsGlobalTable() {
+	if lookupTable.IsGlobalTable() || join.LocalityOptimized {
 		// HomeRegion() does not automatically fill in the home region of a global
 		// table as the gateway region, so let's manually set it here.
+		// Locality optimized joins are considered local in phase 1.
 		homeRegion = gatewayRegion
 	} else {
 		homeRegion, _ = lookupTable.HomeRegion()

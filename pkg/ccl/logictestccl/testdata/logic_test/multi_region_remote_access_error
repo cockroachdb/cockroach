@@ -268,10 +268,10 @@ statement error pq: Query has no home region\. Try adding a filter on p\.crdb_re
 SELECT * FROM parent p, child c WHERE p_id = c_p_id AND
 p.crdb_region = c.crdb_region LIMIT 1
 
-# Locality optimized lookup join should not error out in phase 1.
-query TTT retry
+# Locality optimized join is not allowed if the input is a full scan of an RBR
+# table.
+statement error pq: Query has no home region. Try adding a filter on c\.crdb_region and/or on key column \(c\.c_id\)\.
 SELECT * FROM parent p, child c WHERE p_id = c_p_id LIMIT 1
-----
 
 # Locality optimized lookup join should not error out in phase 1.
 query TT retry
@@ -527,6 +527,11 @@ inner-join (lookup messages_global [as=g3])
 
 statement ok
 ALTER TABLE messages_rbt SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+
+# Regression test for issue #88788
+# A full scan on an RBT table should error out lookup join.
+statement error pq: Query has no home region\. The home region \('us-east-1'\) of table 'messages_rbt' does not match the home region \('ap-southeast-2'\) of lookup table 'messages_rbr'\.
+SELECT * FROM messages_rbr rbr, messages_rbt rbt WHERE rbr.account_id = rbt.account_id LIMIT 1
 
 # Select from REGIONAL BY TABLE should indicate the gateway region to use.
 statement error pq: Query is not running in its home region. Try running the query from region 'us-east-1'.
