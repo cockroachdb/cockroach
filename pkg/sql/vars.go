@@ -984,6 +984,17 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`system_identity`: {
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().SystemIdentity().Normalized(), nil
+		},
+		GetFromSessionData: func(sd *sessiondata.SessionData) string {
+			return sd.SystemIdentity().Normalized()
+		},
+		GlobalDefault: func(_ *settings.Values) string { return "" },
+	},
+
+	// CockroachDB extension.
 	`large_full_scan_rows`: {
 		GetStringVal: makeFloatGetStringValFn(`large_full_scan_rows`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
