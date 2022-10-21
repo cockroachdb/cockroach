@@ -1332,6 +1332,9 @@ ALTER ROLE testuser CREATELOGIN
 user testuser
 
 statement ok
+ALTER USER testuser PASSWORD NULL
+
+statement ok
 CREATE USER testuser3 WITH PASSWORD 'abc'
 
 statement ok
@@ -1381,6 +1384,12 @@ user root
 statement ok
 ALTER USER testuser NOCREATELOGIN
 
+# Verify default setting for sql.auth.change_own_password.enabled.
+query B
+SHOW CLUSTER SETTING sql.auth.change_own_password.enabled
+----
+false
+
 user testuser
 
 statement error user testuser does not have CREATELOGIN privilege
@@ -1391,6 +1400,13 @@ CREATE ROLE testuser6
 
 statement error user testuser does not have CREATELOGIN privilege
 CREATE USER testuser5 WITH PASSWORD 'abc'
+
+# Verify that testuser cannot change its own password.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser PASSWORD 'xyz'
+
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER CURRENT_USER PASSWORD '123'
 
 statement error user testuser does not have CREATELOGIN privilege
 ALTER USER testuser2 WITH PASSWORD 'abc'
@@ -1426,6 +1442,51 @@ statement error user testuser does not have CREATELOGIN privilege
 CREATE ROLE otherrole4 LOGIN
 
 user root
+
+subtest change_own_password
+
+statement ok
+SET CLUSTER SETTING sql.auth.change_own_password.enabled = true
+
+user testuser
+
+# Verify that testuser can change its own password now.
+statement ok
+ALTER USER testuser PASSWORD 'xyz'
+
+statement ok
+ALTER USER CURRENT_USER PASSWORD '123'
+
+# Verify that testuser cannot *remove* its own password.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser PASSWORD NULL
+
+# testuser still cannot change another user's password.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+# Verify that testuser cannot modify other role options of itself.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser PASSWORD 'abc' VALID UNTIL '4044-10-31'
+
+user root
+
+statement ok
+SET ROLE testuser
+
+# Changing users with SET ROLE should allow self-password change.
+statement ok
+ALTER USER testuser PASSWORD 'cat'
+
+# Changing users with SET ROLE should still mean that changing other users
+# is disallowed.
+statement error user testuser does not have CREATELOGIN privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+statement ok
+RESET ROLE
+
+subtest end
 
 # Verify that root is allowed to edit some other role that has ADMIN.
 statement ok
