@@ -17,8 +17,14 @@ import {
 } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
 import { InsightExecEnum, TransactionInsightEvent } from "src/insights";
-import { InsightCell, insightsTableTitles, QueriesCell } from "../util";
+import {
+  InsightCell,
+  insightsTableTitles,
+  QueriesCell,
+  TransactionDetailsLink,
+} from "../util";
 import { Link } from "react-router-dom";
+import { TimeScale } from "../../../timeScaleDropdown";
 
 interface TransactionInsightsTable {
   data: TransactionInsightEvent[];
@@ -26,9 +32,12 @@ interface TransactionInsightsTable {
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;
   renderNoResult?: React.ReactNode;
+  setTimeScale: (ts: TimeScale) => void;
 }
 
-export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionInsightEvent>[] {
+export function makeTransactionInsightsColumns(
+  setTimeScale: (ts: TimeScale) => void,
+): ColumnDescriptor<TransactionInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {
@@ -44,7 +53,12 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionIn
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: TransactionInsightEvent) => String(item.fingerprintID),
+      cell: (item: TransactionInsightEvent) =>
+        TransactionDetailsLink(
+          item.fingerprintID,
+          item.startTime,
+          setTimeScale,
+        ),
       sort: (item: TransactionInsightEvent) => item.fingerprintID,
     },
     {
@@ -90,7 +104,7 @@ export function makeTransactionInsightsColumns(): ColumnDescriptor<TransactionIn
 export const TransactionInsightsTable: React.FC<
   TransactionInsightsTable
 > = props => {
-  const columns = makeTransactionInsightsColumns();
+  const columns = makeTransactionInsightsColumns(props.setTimeScale);
   return (
     <SortedTable columns={columns} className="statements-table" {...props} />
   );

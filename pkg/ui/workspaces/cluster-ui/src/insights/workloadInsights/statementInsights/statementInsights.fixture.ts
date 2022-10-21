@@ -20,6 +20,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       statementFingerprintID: "abc",
       transactionFingerprintID: "defg",
       transactionID: "f72f37ea-b3a0-451f-80b8-dfb27d0bc2a5",
+      implicitTxn: true,
       query:
         "SELECT IFNULL(a, b) FROM (SELECT (SELECT code FROM promo_codes WHERE code > $1 ORDER BY code LIMIT _) AS a, (SELECT code FROM promo_codes ORDER BY code LIMIT _) AS b)",
       startTime: moment.utc("2022.08.10"),
@@ -47,6 +48,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       statementFingerprintID: "938x3",
       transactionFingerprintID: "1971x3",
       transactionID: "e72f37ea-b3a0-451f-80b8-dfb27d0bc2a5",
+      implicitTxn: true,
       query: "INSERT INTO vehicles VALUES ($1, $2, __more1_10__)",
       startTime: moment.utc("2022.08.10"),
       endTime: moment.utc("2022.08.10 00:00:00.25"),
@@ -73,6 +75,7 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
       statementFingerprintID: "hisas",
       transactionFingerprintID: "3anc",
       transactionID: "f72f37ea-b3a0-451f-80b8-dfb27d0bc2a0",
+      implicitTxn: true,
       query:
         "UPSERT INTO vehicle_location_histories VALUES ($1, $2, now(), $3, $4)",
       startTime: moment.utc("2022.08.10"),
@@ -107,4 +110,5 @@ export const statementInsightsPropsFixture: StatementInsightsViewProps = {
   refreshStatementInsights: () => {},
   onSortChange: () => {},
   onFiltersChange: () => {},
+  setTimeScale: () => {},
 };

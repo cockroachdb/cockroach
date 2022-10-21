@@ -20,6 +20,9 @@ import {
   selectTransactionInsightDetailsError,
   actions,
 } from "src/store/insightDetails/transactionInsightDetails";
+import { TimeScale } from "../../timeScaleDropdown";
+import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { Dispatch } from "redux";
 
 const mapStateToProps = (
   state: AppState,
@@ -33,9 +36,18 @@ const mapStateToProps = (
   };
 };
 
-const mapDispatchToProps = {
+const mapDispatchToProps = (
+  dispatch: Dispatch,
+): TransactionInsightDetailsDispatchProps => ({
   refreshTransactionInsightDetails: actions.refresh,
-};
+  setTimeScale: (ts: TimeScale) => {
+    dispatch(
+      sqlStatsActions.updateTimeScale({
+        ts: ts,
+      }),
+    );
+  },
+});
 
 export const TransactionInsightDetailsConnected = withRouter(
   connect<
