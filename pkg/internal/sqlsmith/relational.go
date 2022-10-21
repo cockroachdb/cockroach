@@ -174,6 +174,9 @@ var joinTypes = []string{
 }
 
 func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	if s.disableJoins {
+		return nil, nil, false
+	}
 	left, leftRefs, ok := makeTableExpr(s, refs, true)
 	if !ok {
 		return nil, nil, false
@@ -182,6 +185,7 @@ func makeJoinExpr(s *Smither, refs colRefs, forJoin bool) (tree.TableExpr, colRe
 	if !ok {
 		return nil, nil, false
 	}
+
 	maxJoinType := len(joinTypes)
 	if s.disableCrossJoins {
 		maxJoinType = len(joinTypes) - 1
@@ -280,7 +284,8 @@ func makeAndedJoinCond(
 		v := available[0]
 		available = available[1:]
 		var expr *tree.ComparisonExpr
-		useEQ := cond == nil || onlyEqualityPreds || s.coin()
+		_, expressionsAreComparable := tree.CmpOps[treecmp.LT].LookupImpl(v[0].ResolvedType(), v[1].ResolvedType())
+		useEQ := cond == nil || onlyEqualityPreds || !expressionsAreComparable || s.coin()
 		if useEQ {
 			expr = tree.NewTypedComparisonExpr(treecmp.MakeComparisonOperator(treecmp.EQ), v[0], v[1])
 		} else {

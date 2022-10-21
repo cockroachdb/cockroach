@@ -93,6 +93,7 @@ type Smither struct {
 	unlikelyConstantPredicate  bool
 	favorCommonData            bool
 	unlikelyRandomNulls        bool
+	disableJoins               bool
 	disableCrossJoins          bool
 	disableIndexHints          bool
 	lowProbWhereWithJoinTables bool
@@ -416,6 +417,11 @@ var FavorCommonData = simpleOption("favor common data", func(s *Smither) {
 // values much less likely than generation of random non-null data.
 var UnlikelyRandomNulls = simpleOption("unlikely random nulls", func(s *Smither) {
 	s.unlikelyRandomNulls = true
+})
+
+// DisableJoins causes the Smither to disable joins.
+var DisableJoins = simpleOption("disable joins", func(s *Smither) {
+	s.disableJoins = true
 })
 
 // DisableCrossJoins causes the Smither to disable cross joins.
