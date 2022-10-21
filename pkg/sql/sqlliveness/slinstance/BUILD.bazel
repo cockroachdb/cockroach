@@ -25,17 +25,15 @@ go_library(
 go_test(
     name = "slinstance_test",
     size = "small",
-    srcs = [
-        "helpers_test.go",
-        "slinstance_test.go",
-    ],
+    srcs = ["slinstance_test.go"],
     args = ["-test.timeout=55s"],
-    embed = [":slinstance"],
     deps = [
+        ":slinstance",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
+        "//pkg/testutils",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",

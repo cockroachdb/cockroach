@@ -12,6 +12,7 @@ package slinstance_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -85,9 +87,14 @@ func TestSQLInstance(t *testing.T) {
 	require.True(t, a)
 	require.NotEqual(t, s2.ID(), s3.ID())
 
-	// Force next call to Session to fail.
+	// Stop the stopper and check that the heartbeat loop eventually terminates
+	// and causes further Session() calls to fail.
 	stopper.Stop(ctx)
-	sqlInstance.ClearSessionForTest(ctx)
-	_, err = sqlInstance.Session(ctx)
-	require.Error(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		_, err := sqlInstance.Session(ctx)
+		if err == nil {
+			return errors.New("session still working")
+		}
+		return nil
+	})
 }
