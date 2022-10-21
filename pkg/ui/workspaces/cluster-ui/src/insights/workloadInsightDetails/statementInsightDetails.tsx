@@ -26,6 +26,7 @@ import classNames from "classnames/bind";
 import { commonStyles } from "src/common";
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
+import { TimeScale } from "../../timeScaleDropdown";
 
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
@@ -42,12 +43,24 @@ export interface StatementInsightDetailsStateProps {
   isTenant?: boolean;
 }
 
+export interface StatementInsightDetailsDispatchProps {
+  setTimeScale: (ts: TimeScale) => void;
+}
+
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
+  StatementInsightDetailsDispatchProps &
   RouteComponentProps<unknown>;
 
 export const StatementInsightDetails: React.FC<
   StatementInsightDetailsProps
-> = ({ history, insightEventDetails, insightError, match, isTenant }) => {
+> = ({
+  history,
+  insightEventDetails,
+  insightError,
+  match,
+  isTenant,
+  setTimeScale,
+}) => {
   const [explain, setExplain] = useState<string>(null);
 
   const prevPage = (): void => history.goBack();
@@ -111,6 +124,7 @@ export const StatementInsightDetails: React.FC<
             <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
               <StatementInsightDetailsOverviewTab
                 insightEventDetails={insightEventDetails}
+                setTimeScale={setTimeScale}
               />
             </Tabs.TabPane>
             {!isTenant && (
