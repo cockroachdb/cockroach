@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -502,11 +501,11 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 			defer cleanup()
 
 			tdb := sqlutils.MakeSQLRunner(db)
-			descs.ValidateOnWriteEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+			tdb.Exec(t, `SET descriptor_validation = read_only`)
 			for _, op := range tc.before {
 				tdb.Exec(t, op)
 			}
-			descs.ValidateOnWriteEnabled.Override(ctx, &s.ClusterSettings().SV, true)
+			tdb.Exec(t, `SET descriptor_validation = on`)
 			_, err := db.Exec(tc.op)
 			if tc.expErrRE == "" {
 				require.NoError(t, err)
@@ -869,8 +868,7 @@ func TestDescriptorRepairIdGeneration(t *testing.T) {
   }
 }`
 
-	// Required so test doesn't fail due to namespace validation failures.
-	descs.ValidateOnWriteEnabled.Override(ctx, &s.ClusterSettings().SV, false)
+	tdb.Exec(t, `SET descriptor_validation = read_only`)
 
 	// Inserting a descriptor with an ID too high should fail.
 	tdb.ExpectErr(t, "descriptor ID 1234 must be less than the descriptor ID sequence value", q, false /* force */, d)

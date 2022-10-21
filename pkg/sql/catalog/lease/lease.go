@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -127,7 +126,6 @@ func (m *Manager) WaitForOneVersion(
 ) (desc catalog.Descriptor, _ error) {
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		if err := m.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			sc := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
 			// Use the lower-level MaybeGetDescriptorByIDUnvalidated to avoid
 			// performing validation while waiting for leases to drain.
 			// Validation is somewhat expensive but more importantly, is not
@@ -135,7 +133,7 @@ func (m *Manager) WaitForOneVersion(
 			// descriptors can be removed or made invalid. For instance, the
 			// descriptor could be a type or a schema which is dropped by a subsequent
 			// concurrent schema change.
-			desc, err = sc.MaybeGetDescriptorByIDUnvalidated(ctx, txn, id)
+			desc, err = m.storage.makeDirect(ctx).MaybeGetDescriptorByIDUnvalidated(ctx, txn, id)
 			if err != nil {
 				return err
 			}
@@ -918,8 +916,7 @@ func (m *Manager) resolveName(
 			return err
 		}
 		var err error
-		direct := catkv.MakeDirect(m.storage.codec, m.storage.settings.Version.ActiveVersion(ctx))
-		id, err = direct.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
+		id, err = m.storage.makeDirect(ctx).LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return err
 	}); err != nil {
 		return id, err

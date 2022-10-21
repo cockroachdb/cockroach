@@ -298,10 +298,12 @@ message LocalOnlySessionData {
   // TransactionSessionTimeout is the duration a transaction is permitted to
   // run before the transaction is canceled. If set to 0, there is no timeout.
   int64 transaction_timeout = 81 [(gogoproto.casttype) = "time.Duration"];
-
   // SystemIdentityProto is the original name of the client presented to pgwire
   // before it was mapped to a SQL identifier.
   string system_identity_proto = 82 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+  // DescriptorValidationMode indicates whether to validate the descriptors at
+  // read and write time, at read time only, or never.
+  int64 descriptor_validation_mode = 83 [(gogoproto.casttype) = "DescriptorValidationMode"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
