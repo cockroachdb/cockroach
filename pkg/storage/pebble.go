@@ -853,7 +853,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	logCtx = logtags.AddTag(logCtx, "s", storeIDContainer)
 	logCtx = logtags.AddTag(logCtx, "pebble", nil)
 
-	if cfg.Opts.Logger == nil {
+	// If no logger was passed, the previous call to `EnsureDefaults` on
+	// `cfg.Opts` will set the logger to pebble's `DefaultLogger`. In
+	// crdb, we want pebble-related logs to go to the storage channel,
+	// so we update the logger here accordingly.
+	if cfg.Opts.Logger == nil || cfg.Opts.Logger == pebble.DefaultLogger {
 		cfg.Opts.Logger = pebbleLogger{
 			ctx:   logCtx,
 			depth: 1,
