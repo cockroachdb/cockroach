@@ -10,6 +10,15 @@
 
 package kvserverpb
 
+import "github.com/cockroachdb/cockroach/pkg/clusterversion"
+
+func init() {
+	// In the real world, when the field below was deprecated, we'd have
+	// introduced something like clusterversion.NoReferenceToUsingAppliedStateKey
+	// and would refer to that instead, but this is only a demonstration.
+	clusterversion.Refer(clusterversion.Start22_2, ReplicaState{}.DeprecatedUsingAppliedStateKey)
+}
+
 // RangeLogEventReason specifies the reason why a range-log event happened.
 type RangeLogEventReason string
 

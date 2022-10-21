@@ -90,9 +90,8 @@ message ReplicaState {
   // (#72222). Once that's done, we should be able to stop sending the replica
   // state as part of the snapshot in the subsequent release.
   //
-  // TODO(irfansharif): Remove this field in the release after the one where we
-  // stop consulting the protobuf copy of the replica state when applying a
-  // snapshot.
+  // This field can be removed together with
+  // clusterversion.NoReferenceToUsingAppliedStateKey.
   bool deprecated_using_applied_state_key = 11;
   // Version tells us which migrations can be assumed to have run against this
   // particular replica. When we introduce backwards incompatible changes to the
