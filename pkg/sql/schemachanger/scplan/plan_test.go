@@ -58,6 +58,7 @@ func TestPlanDataDriven(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 		run := func(t *testing.T, d *datadriven.TestData) string {
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
 			switch d.Cmd {
 			case "setup":
 				stmts, err := parser.Parse(d.Input)
