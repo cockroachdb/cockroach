@@ -1,0 +1,113 @@
+statement ok
+CREATE TYPE t AS (a INT, b INT)
+
+statement ok
+DROP TYPE t
+
+statement ok
+CREATE TYPE t AS (a INT, b INT)
+
+statement error pq: relation "t" does not exist
+SELECT * FROM t
+
+statement error pq: type "test.public.t" already exists
+CREATE TABLE t (x INT)
+
+statement error pq: type "test.public.t" already exists
+CREATE TYPE t AS (a INT)
+
+statement ok
+CREATE TABLE torename (x INT)
+
+statement error pq: type "test.public.t" already exists
+ALTER TABLE torename RENAME TO t
+
+query TII
+SELECT (1, 2)::t, ((1, 2)::t).a, ((1, 2)::t).b
+----
+(1,2)  1  2
+
+statement error could not identify column \"foo\"
+SELECT ((1, 2)::t).foo
+
+statement ok
+CREATE TABLE tab (a t)
+
+statement ok
+INSERT INTO tab VALUES (NULL), ((1, 2))
+
+statement ok
+INSERT INTO tab VALUES ((1, NULL))
+
+# TODO(jordan): this should work fine.
+statement error VALUES types tuple{int, unknown} and tuple{int, int} cannot be matched
+INSERT INTO tab VALUES ((1, 2)), ((1, NULL))
+
+query TII rowsort
+SELECT a, (a).a, (a).b FROM tab
+----
+NULL   NULL  NULL
+(1,2)  1     2
+(1,)   1     NULL
+
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Nested types.
+statement ok
+CREATE TYPE t2 AS (t1 t, t2 t)
+
+statement ok
+CREATE TABLE tab2 (a t2)
+
+query TTT
+SELECT ((1, 2), (3, 4))::t2, (((1, 2), (3, 4))::t2).t1, (((1, 2), (3, 4))::t2).t2
+----
+("(1,2)","(3,4)")  (1,2)  (3,4)
+
+query II
+SELECT ((((1, 2), (3, 4))::t2).t1).a, ((((1, 2), (3, 4))::t2).t1).b
+----
+1  2
+
+# TODO(jordan): this syntax works in Postgres.
+query error syntax error
+SELECT (((1, 2), (3, 4))::t2).t1.a
+
+statement ok
+INSERT INTO tab2 VALUES(((1, 2), (3, 4)))
+
+query TTII
+SELECT a, (a).t1, ((a).t1).a, ((a).t1).b FROM tab2
+----
+("(1,2)","(3,4)")  (1,2)  1  2
+
+# Can't drop type t because tab, tab2, and t2 depend on it
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+# Can't drop type t2 because tab2 depends on it
+statement error cannot drop type \"t2\" because other objects .* still depend on it
+DROP TYPE t2
+
+statement ok
+DROP TABLE tab2
+
+statement ok
+DROP TABLE tab
+
+query TTTT
+SELECT database_name, schema_name, descriptor_name, create_statement FROM crdb_internal.create_type_statements
+----
+test  public  t   CREATE TYPE public.t AS (a INT8, b INT8)
+test  public  t2  CREATE TYPE public.t2 AS (t1 T, t2 T)
+
+# Can't drop type t because t2 depends on it
+statement error cannot drop type \"t\" because other objects .* still depend on it
+DROP TYPE t
+
+statement ok
+DROP TYPE t2
+
+statement ok
+DROP TYPE t

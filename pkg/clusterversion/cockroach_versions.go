@@ -520,7 +520,6 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     V23_1TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
 	},
-
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.

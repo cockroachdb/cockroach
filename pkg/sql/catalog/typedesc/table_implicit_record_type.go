@@ -81,7 +81,8 @@ func CreateImplicitRecordTypeFromTableDesc(
 		Name: &types.UserDefinedTypeName{
 			Name: descriptor.GetName(),
 		},
-		Version: uint32(descriptor.GetVersion()),
+		Version:            uint32(descriptor.GetVersion()),
+		ImplicitRecordType: true,
 	}
 
 	tablePrivs := descriptor.GetPrivileges()

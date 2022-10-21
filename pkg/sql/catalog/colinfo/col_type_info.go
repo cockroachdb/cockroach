@@ -106,7 +106,15 @@ func ValidateColumnDefType(t *types.T) error {
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily:
-		// These types are OK.
+	// These types are OK.
+
+	case types.TupleFamily:
+		if !t.UserDefined() {
+			return pgerror.New(pgcode.InvalidTableDefinition, "cannot use anonymous record type as table column")
+		}
+		if t.TypeMeta.ImplicitRecordType {
+			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
+		}
 
 	default:
 		return pgerror.Newf(pgcode.InvalidTableDefinition,

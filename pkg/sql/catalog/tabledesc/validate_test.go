@@ -258,6 +258,7 @@ var validationMap = []struct {
 			"OfflineReason":                 {status: thisFieldReferencesNoObjects},
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
+			"Composite":                     {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

@@ -545,6 +545,18 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if desc.GetArrayTypeID() != descpb.InvalidID {
 			vea.Report(errors.AssertionFailedf("ALIAS type desc has array type ID %d", desc.GetArrayTypeID()))
 		}
+	case descpb.TypeDescriptor_COMPOSITE:
+		if desc.Composite == nil {
+			vea.Report(errors.AssertionFailedf("COMPOSITE type desc has nil composite type"))
+		}
+		if len(desc.Composite.TupleLabels) == 0 {
+			vea.Report(errors.AssertionFailedf("COMPOSITE type desc has inequal length labels and contents: %d != %d",
+				len(desc.Composite.TupleLabels), len(desc.Composite.TupleContents)))
+		}
+		if len(desc.Composite.TupleLabels) != len(desc.Composite.TupleContents) {
+			vea.Report(errors.AssertionFailedf("COMPOSITE type desc has inequal length labels and contents: %d != %d",
+				len(desc.Composite.TupleLabels), len(desc.Composite.TupleContents)))
+		}
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		vea.Report(errors.AssertionFailedf("invalid type descriptor: kind %s should never be serialized or validated", desc.Kind.String()))
 	default:
@@ -657,6 +669,17 @@ func (desc *immutable) ValidateForwardReferences(
 			vea.Report(errors.AssertionFailedf("aliased type %q (%d) is dropped", typ.GetName(), typ.GetID()))
 		}
 	}
+
+	if desc.GetKind() == descpb.TypeDescriptor_COMPOSITE {
+		if ids, err := desc.GetIDClosure(); err != nil {
+			vea.Report(err)
+		} else {
+			for id := range ids {
+				vea.Report(catalog.ValidateOutboundTypeRef(id, vdg))
+			}
+		}
+
+	}
 }
 
 // ValidateBackReferences implements the catalog.Descriptor interface.
@@ -686,7 +709,7 @@ func (desc *immutable) ValidateBackReferences(
 			continue
 		}
 		switch depDesc.DescriptorType() {
-		case catalog.Table, catalog.Function:
+		case catalog.Table, catalog.Function, catalog.Type:
 			if depDesc.Dropped() {
 				vea.Report(errors.AssertionFailedf(
 					"referencing %s %d was dropped without dependency unlinking", depDesc.DescriptorType(), id))
@@ -804,6 +827,14 @@ func (desc *immutable) MakeTypesT(
 			return nil, err
 		}
 		return desc.Alias, nil
+	case descpb.TypeDescriptor_COMPOSITE:
+		typ := types.MakeCompositeType(catid.TypeIDToOID(desc.GetID()), catid.TypeIDToOID(desc.ArrayTypeID),
+			desc.Composite.TupleContents, desc.Composite.TupleLabels)
+		// Hydrate the composite type and return it.
+		if err := desc.HydrateTypeInfoWithName(ctx, typ, name, res); err != nil {
+			return nil, err
+		}
+		return typ, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown type kind %s", t.String())
 	}
@@ -925,6 +956,12 @@ func (desc *immutable) HydrateTypeInfoWithName(
 				}
 			default:
 				return errors.AssertionFailedf("unhandled alias type family %s", typ.Family())
+			}
+		}
+	case descpb.TypeDescriptor_COMPOSITE:
+		for _, t := range desc.Composite.TupleContents {
+			if err := EnsureTypeIsHydrated(ctx, t, res); err != nil {
+				return err
 			}
 		}
 	default:
@@ -1069,7 +1106,8 @@ func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 	ret := make(map[descpb.ID]struct{})
 	// Collect the descriptor's own ID.
 	ret[desc.ID] = struct{}{}
-	if desc.Kind == descpb.TypeDescriptor_ALIAS {
+	switch desc.Kind {
+	case descpb.TypeDescriptor_ALIAS:
 		// If this descriptor is an alias for another type, then get collect the
 		// closure for alias.
 		children, err := GetTypeDescriptorClosure(desc.Alias)
@@ -1079,7 +1117,17 @@ func (desc *immutable) GetIDClosure() (map[descpb.ID]struct{}, error) {
 		for id := range children {
 			ret[id] = struct{}{}
 		}
-	} else {
+	case descpb.TypeDescriptor_COMPOSITE:
+		for _, t := range desc.Composite.TupleContents {
+			children, err := GetTypeDescriptorClosure(t)
+			if err != nil {
+				return nil, err
+			}
+			for id := range children {
+				ret[id] = struct{}{}
+			}
+		}
+	default:
 		// Otherwise, take the array type ID.
 		ret[desc.ArrayTypeID] = struct{}{}
 	}
