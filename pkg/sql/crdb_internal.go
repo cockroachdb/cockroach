@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -2444,8 +2445,10 @@ CREATE TABLE crdb_internal.builtin_functions (
 }
 
 func writeCreateTypeDescRow(
+	ctx context.Context,
 	db catalog.DatabaseDescriptor,
 	sc string,
+	resolver tree.TypeReferenceResolver,
 	typeDesc catalog.TypeDescriptor,
 	addRow func(...tree.Datum) error,
 ) (written bool, err error) {
@@ -2482,6 +2485,36 @@ func writeCreateTypeDescRow(
 		// Multi-region enums are created implicitly, so we don't have create
 		// statements for them.
 		return false, nil
+	case descpb.TypeDescriptor_COMPOSITE:
+		name, err := tree.NewUnresolvedObjectName(2, [3]string{typeDesc.GetName(), sc}, 0)
+		if err != nil {
+			return false, err
+		}
+		composite := typeDesc.TypeDesc().Composite
+		typeList := make([]tree.CompositeTypeElem, len(composite.TupleContents))
+		for i := range composite.TupleContents {
+			if err := typedesc.EnsureTypeIsHydrated(
+				ctx, composite.TupleContents[i], resolver.(catalog.TypeDescriptorResolver),
+			); err != nil {
+				return false, err
+			}
+			typeList[i].Type = composite.TupleContents[i]
+			typeList[i].Label = tree.Name(composite.TupleLabels[i])
+		}
+		node := &tree.CreateType{
+			Variety:           tree.Composite,
+			TypeName:          name,
+			CompositeTypeList: typeList,
+		}
+		return true, addRow(
+			tree.NewDInt(tree.DInt(db.GetID())),       // database_id
+			tree.NewDString(db.GetName()),             // database_name
+			tree.NewDString(sc),                       // schema_name
+			tree.NewDInt(tree.DInt(typeDesc.GetID())), // descriptor_id
+			tree.NewDString(typeDesc.GetName()),       // descriptor_name
+			tree.NewDString(tree.AsString(node)),      // create_statement
+			tree.DNull,                                // enum_members
+		)
 	case descpb.TypeDescriptor_ALIAS:
 		// Alias types are created implicitly, so we don't have create
 		// statements for them.
@@ -2507,7 +2540,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 `,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTypeDesc(ctx, p, db, func(db catalog.DatabaseDescriptor, sc string, typeDesc catalog.TypeDescriptor) error {
-			_, err := writeCreateTypeDescRow(db, sc, typeDesc, addRow)
+			_, err := writeCreateTypeDescRow(ctx, db, sc, p.semaCtx.TypeResolver, typeDesc, addRow)
 			return err
 		})
 	},
@@ -2525,7 +2558,7 @@ CREATE TABLE crdb_internal.create_type_statements (
 				if err != nil || typDesc == nil {
 					return false, err
 				}
-				return writeCreateTypeDescRow(db, scName, typDesc, addRow)
+				return writeCreateTypeDescRow(ctx, db, scName, p.semaCtx.TypeResolver, typDesc, addRow)
 			},
 		},
 	},

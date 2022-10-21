@@ -317,6 +317,10 @@ const (
 	// TenantNames adds a name column to system.tenants.
 	TenantNames
 
+	// UserDefinedCompositeTypes adds the ability to create user-defined composite
+	// types.
+	UserDefinedCompositeTypes
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -519,7 +523,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
 	},
-
+	{
+		Key:     UserDefinedCompositeTypes,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
