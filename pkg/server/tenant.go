@@ -623,7 +623,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		}
 	}
 
-	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceProvider, instanceID)
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceReader, instanceID)
 
 	// Start the cost controller for this secondary tenant.
 	if err := s.costController.Start(
@@ -922,7 +922,7 @@ func makeTenantSQLServerArgs(
 }
 
 func makeNextLiveInstanceIDFn(
-	sqlInstanceProvider sqlinstance.Provider, instanceID base.SQLInstanceID,
+	sqlInstanceProvider sqlinstance.AddressResolver, instanceID base.SQLInstanceID,
 ) multitenant.NextLiveInstanceIDFn {
 	return func(ctx context.Context) base.SQLInstanceID {
 		instances, err := sqlInstanceProvider.GetAllInstances(ctx)
