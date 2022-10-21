@@ -22,8 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -334,7 +335,12 @@ func NewSequenceTableDesc(
 	}
 
 	version := settings.Version.ActiveVersion(ctx)
-	if err := descbuilder.ValidateSelf(&desc, version); err != nil {
+	var sd *sessiondata.SessionData
+	if p != nil {
+		sd = p.SessionData()
+	}
+	dvmp := catsessiondata.NewDescriptorSessionDataProvider(sd)
+	if err := descs.ValidateSelf(&desc, version, dvmp); err != nil {
 		return nil, err
 	}
 	return &desc, nil

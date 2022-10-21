@@ -20,8 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -304,7 +305,8 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if err := descbuilder.ValidateSelf(tableDesc, version); err != nil {
+	dvmp := catsessiondata.NewDescriptorSessionDataProvider(p.SessionData())
+	if err := descs.ValidateSelf(tableDesc, version, dvmp); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "table descriptor is not valid\n%v\n", tableDesc)
 	}
 
