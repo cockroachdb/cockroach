@@ -378,7 +378,7 @@ func CheckSSTConflicts(
 		extRangeKeysChanged := extHasRange && !extPrevRangeKeys.Bounds.Equal(extRangeKeys.Bounds)
 		extKeyChanged := !extPrevKey.Equal(extIter.UnsafeKey())
 		if extKeyChanged {
-			extPrevKey = extIter.Key()
+			extIter.UnsafeKey().CloneInto(&extPrevKey)
 		}
 		// Case where SST and engine both have range keys at the current iterator
 		// points. The SST range keys must be newer than engine range keys.
@@ -757,7 +757,7 @@ func CheckSSTConflicts(
 				sstIter.SeekGE(sstPrevKey)
 				sstOK, sstErr = sstIter.Valid()
 			} else {
-				extPrevKey := extIter.Key()
+				extIter.UnsafeKey().CloneInto(&extPrevKey)
 				if extHasPoint {
 					extIter.NextKey()
 				} else {
