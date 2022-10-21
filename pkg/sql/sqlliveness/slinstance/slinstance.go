@@ -252,6 +252,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			l.clearSession(ctx)
 			return
 		case <-t.C:
 			t.Read = true
