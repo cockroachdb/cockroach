@@ -3,6 +3,7 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 load("//build:STRINGER.bzl", "stringer")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "descpb",
@@ -23,7 +24,6 @@ go_library(
     deps = [
         "//pkg/keys",
         "//pkg/sql/catalog/catpb",
-        "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/protoreflect",
@@ -93,6 +93,11 @@ stringer(
     name = "gen-formatversion-stringer",
     src = "structured.go",
     typ = "FormatVersion",
+)
+
+disallowed_imports_test(
+    "catalog",
+    disallowed_list = ["//pkg/sql/parser"],
 )
 
 get_x_data(name = "get_x_data")
