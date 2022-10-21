@@ -19,7 +19,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// FakeStorage implements the sqlliveness.Storage interface.
+// FakeStorage implements the sqlliveness.Reader interface, and the
+// slinstace.Writer interface.
 type FakeStorage struct {
 	mu struct {
 		syncutil.Mutex
@@ -34,7 +35,7 @@ func NewFakeStorage() *FakeStorage {
 	return fs
 }
 
-// IsAlive implements the sqlliveness.Storage interface.
+// IsAlive implements the sqlliveness.Reader interface.
 func (s *FakeStorage) IsAlive(
 	_ context.Context, sid sqlliveness.SessionID,
 ) (alive bool, err error) {
@@ -44,7 +45,7 @@ func (s *FakeStorage) IsAlive(
 	return ok, nil
 }
 
-// Insert implements the sqlliveness.Storage interface.
+// Insert implements the slinstance.Writer interface.
 func (s *FakeStorage) Insert(
 	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) error {
@@ -57,7 +58,7 @@ func (s *FakeStorage) Insert(
 	return nil
 }
 
-// Update implements the sqlliveness.Storage interface.
+// Update implements the slinstance.Storage interface.
 func (s *FakeStorage) Update(
 	_ context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (bool, error) {
