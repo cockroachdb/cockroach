@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import moment from "moment";
 import React from "react";
@@ -18,19 +18,38 @@ import { Delayed } from "src/delayed";
 import { Dropdown, DropdownOption } from "src/dropdown";
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
-import { SortSetting } from "src/sortedtable";
-import { syncHistory } from "src/util";
-
-import { JobTable } from "./jobTable";
-import { statusOptions, showOptions, typeOptions } from "../util";
+import { ISortedTablePagination, SortSetting } from "src/sortedtable";
+import ColumnsSelector, {
+  SelectOption,
+} from "src/columnsSelector/columnsSelector";
+import { Pagination, ResultsPerPageLabel } from "src/pagination";
+import { isSelectedColumn } from "src/columnsSelector/utils";
+import { DATE_FORMAT_24_UTC, syncHistory, TimestampToMoment } from "src/util";
+import { jobsColumnLabels, JobsTable, makeJobsColumns } from "./jobsTable";
+import {
+  defaultRequestOptions,
+  showOptions,
+  statusOptions,
+  typeOptions,
+} from "../util";
 
 import { commonStyles } from "src/common";
+import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "../jobs.module.scss";
 import classNames from "classnames/bind";
 
 const cx = classNames.bind(styles);
+const sortableTableCx = classNames.bind(sortableTableStyles);
 
+type ITimestamp = google.protobuf.ITimestamp;
 type JobType = cockroach.sql.jobs.jobspb.Type;
+type Job = cockroach.server.serverpb.IJobResponse;
+
+export const DEFAULT_JOBS_REQUEST = new cockroach.server.serverpb.JobsRequest({
+  limit: defaultRequestOptions.limit,
+  status: defaultRequestOptions.status,
+  type: defaultRequestOptions.type,
+});
 
 export interface JobsPageStateProps {
   sort: SortSetting;
@@ -40,6 +59,7 @@ export interface JobsPageStateProps {
   jobs: JobsResponse;
   jobsError: Error | null;
   jobsLoading: boolean;
+  columns: string[];
 }
 
 export interface JobsPageDispatchProps {
@@ -47,20 +67,29 @@ export interface JobsPageDispatchProps {
   setStatus: (value: string) => void;
   setShow: (value: string) => void;
   setType: (value: JobType) => void;
+  onColumnsChange: (selectedColumns: string[]) => void;
   refreshJobs: (req: JobsRequest) => void;
-  onFilterChange?: (req: JobsRequest) => void;
+}
+
+interface PageState {
+  pagination: ISortedTablePagination;
 }
 
 export type JobsPageProps = JobsPageStateProps &
   JobsPageDispatchProps &
   RouteComponentProps;
 
-export class JobsPage extends React.Component<JobsPageProps> {
+export class JobsPage extends React.Component<JobsPageProps, PageState> {
   refreshDataInterval: NodeJS.Timeout;
 
   constructor(props: JobsPageProps) {
     super(props);
-
+    this.state = {
+      pagination: {
+        pageSize: 20,
+        current: 1,
+      },
+    };
     const { history } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
 
@@ -97,14 +126,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
   }
 
   refresh(): void {
-    const jobsRequest = new cockroach.server.serverpb.JobsRequest({
-      status: this.props.status,
-      type: this.props.type,
-      limit: parseInt(this.props.show, 10),
-    });
-    this.props.onFilterChange
-      ? this.props.onFilterChange(jobsRequest)
-      : this.props.refreshJobs(jobsRequest);
+    this.props.refreshJobs(DEFAULT_JOBS_REQUEST);
   }
 
   componentDidMount(): void {
@@ -118,9 +140,25 @@ export class JobsPage extends React.Component<JobsPageProps> {
     clearInterval(this.refreshDataInterval);
   }
 
+  onChangePage = (current: number): void => {
+    const { pagination } = this.state;
+    this.setState({ pagination: { ...pagination, current } });
+  };
+
+  resetPagination = (): void => {
+    this.setState((prevState: PageState) => {
+      return {
+        pagination: {
+          current: 1,
+          pageSize: prevState.pagination.pageSize,
+        },
+      };
+    });
+  };
+
   onStatusSelected = (item: string): void => {
     this.props.setStatus(item);
-
+    this.resetPagination();
     syncHistory(
       {
         status: item,
@@ -134,7 +172,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
   onTypeSelected = (item: string): void => {
     const type = parseInt(item, 10);
     this.props.setType(type);
-
+    this.resetPagination();
     syncHistory(
       {
         type: type.toString(),
@@ -145,9 +183,9 @@ export class JobsPage extends React.Component<JobsPageProps> {
 
   typeMenuItems: DropdownOption[] = typeOptions;
 
-  onShowSelected = (item: string): void => {
+  onShowSelected = (item: string) => {
     this.props.setShow(item);
-
+    this.resetPagination();
     syncHistory(
       {
         show: item,
@@ -172,11 +210,69 @@ export class JobsPage extends React.Component<JobsPageProps> {
     );
   };
 
+  formatJobsRetentionMessage = (earliestRetainedTime: ITimestamp): string => {
+    return `Since ${TimestampToMoment(earliestRetainedTime).format(
+      DATE_FORMAT_24_UTC,
+    )}`;
+  };
+
+  getFilteredJobs = (): Job[] => {
+    const { jobs, status, type, show } = this.props;
+    if (jobs) {
+      const filtered = jobs.jobs.filter(
+        job =>
+          (job.status === status || status === "") &&
+          (typeOptions.find(
+            option => option["key"].replace("_", " ") === job.type,
+          )?.value === type.toString() ||
+            type === 0),
+      );
+      const limit = parseInt(show, 10);
+      if (limit !== 0) {
+        return filtered.slice(0, limit);
+      }
+      return filtered;
+    }
+    return [];
+  };
+
   render(): React.ReactElement {
-    const isLoading = !this.props.jobs || this.props.jobsLoading;
-    const error = this.props.jobs && this.props.jobsError;
+    const {
+      jobs,
+      jobsLoading,
+      jobsError,
+      sort,
+      status,
+      type,
+      show,
+      columns: columnsToDisplay,
+      onColumnsChange,
+    } = this.props;
+    const isLoading = !jobs || jobsLoading;
+    const error = jobs && jobsError;
+    const { pagination } = this.state;
+    const filteredJobs = this.getFilteredJobs();
+    const columns = makeJobsColumns();
+    // Iterate over all available columns and create list of SelectOptions with initial selection
+    // values based on stored user selections in local storage and default column configs.
+    // Columns that are set to alwaysShow are filtered from the list.
+    const tableColumns = columns
+      .filter(c => !c.alwaysShow)
+      .map(
+        (c): SelectOption => ({
+          label: jobsColumnLabels[c.name],
+          value: c.name,
+          isSelected: isSelectedColumn(columnsToDisplay, c),
+        }),
+      );
+
+    // List of all columns that will be displayed based on the column selection.
+    const displayColumns = columns.filter(c =>
+      isSelectedColumn(this.props.columns, c),
+    );
+
     return (
-      <div className={cx("jobs-page")}>
+      <div>
         <Helmet title="Jobs" />
         <h3 className={commonStyles("base-heading")}>Jobs</h3>
         <div>
@@ -188,9 +284,9 @@ export class JobsPage extends React.Component<JobsPageProps> {
               >
                 Status:{" "}
                 {
-                  statusOptions.find(
-                    option => option["value"] === this.props.status,
-                  )["name"]
+                  statusOptions.find(option => option["value"] === status)[
+                    "name"
+                  ]
                 }
               </Dropdown>
             </PageConfigItem>
@@ -202,7 +298,7 @@ export class JobsPage extends React.Component<JobsPageProps> {
                 Type:{" "}
                 {
                   typeOptions.find(
-                    option => option["value"] === this.props.type.toString(),
+                    option => option["value"] === type.toString(),
                   )["name"]
                 }
               </Dropdown>
@@ -213,40 +309,71 @@ export class JobsPage extends React.Component<JobsPageProps> {
                 onChange={this.onShowSelected}
               >
                 Show:{" "}
-                {
-                  showOptions.find(
-                    option => option["value"] === this.props.show,
-                  )["name"]
-                }
+                {showOptions.find(option => option["value"] === show)["name"]}
               </Dropdown>
             </PageConfigItem>
           </PageConfig>
         </div>
-        <section className={cx("section")}>
-          <Loading
-            loading={isLoading}
-            page={"jobs"}
-            error={error}
-            render={() => (
-              <JobTable
-                isUsedFilter={
-                  this.props.status.length > 0 || this.props.type > 0
-                }
-                jobs={this.props.jobs}
-                setSort={this.changeSortSetting}
-                sort={this.props.sort}
+        <div className={cx("table-area")}>
+          <Loading loading={isLoading} page={"jobs"} error={error}>
+            <div>
+              <section className={sortableTableCx("cl-table-container")}>
+                <div className={sortableTableCx("cl-table-statistic")}>
+                  <ColumnsSelector
+                    options={tableColumns}
+                    onSubmitColumns={onColumnsChange}
+                  />
+                  <div className={cx("jobs-table-summary")}>
+                    <h4 className={cx("cl-count-title")}>
+                      <ResultsPerPageLabel
+                        pagination={{
+                          ...pagination,
+                          total: filteredJobs.length,
+                        }}
+                        pageName="jobs"
+                      />
+                      {jobs?.earliest_retained_time && (
+                        <>
+                          <span
+                            className={cx(
+                              "jobs-table-summary__retention-divider",
+                            )}
+                          >
+                            |
+                          </span>
+                          {this.formatJobsRetentionMessage(
+                            jobs?.earliest_retained_time,
+                          )}
+                        </>
+                      )}
+                    </h4>
+                  </div>
+                </div>
+                <JobsTable
+                  jobs={filteredJobs}
+                  sortSetting={sort}
+                  onChangeSortSetting={this.changeSortSetting}
+                  visibleColumns={displayColumns}
+                  pagination={pagination}
+                />
+              </section>
+              <Pagination
+                pageSize={pagination.pageSize}
+                current={pagination.current}
+                total={filteredJobs.length}
+                onChange={this.onChangePage}
               />
-            )}
-          />
+            </div>
+          </Loading>
           {isLoading && !error && (
             <Delayed delay={moment.duration(2, "s")}>
               <InlineAlert
                 intent="info"
-                title="If the Jobs table contains a large amount of data, this page might take a while to load. To reduce the amount of data, try filtering the table."
+                title="If the Jobs table contains a large amount of data, this page might take a while to load."
               />
             </Delayed>
           )}
-        </section>
+        </div>
       </div>
     );
   }

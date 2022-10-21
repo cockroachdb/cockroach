@@ -27,10 +27,12 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
     status: "",
     show: "50",
     type: 0,
+    columns: [],
     setSort: () => {},
     setStatus: () => {},
     setShow: () => {},
     setType: () => {},
+    onColumnsChange: () => {},
     jobs: {
       jobs: jobs,
       earliest_retained_time: earliestRetainedTime,
@@ -62,7 +64,7 @@ describe("Jobs", () => {
   });
 
   it("renders expected jobs table columns", () => {
-    const { getByText } = render(
+    const { getAllByText } = render(
       <MemoryRouter>
         <JobsPage {...getMockJobsPageProps(allJobsFixture)} />
       </MemoryRouter>,
@@ -78,7 +80,7 @@ describe("Jobs", () => {
     ];
 
     for (const columnTitle of expectedColumnTitles) {
-      getByText(columnTitle);
+      getAllByText(columnTitle);
     }
   });
 
@@ -89,7 +91,7 @@ describe("Jobs", () => {
       </MemoryRouter>,
     );
     const expectedText = [
-      "No jobs to show",
+      "No jobs found.",
       "The jobs page provides details about backup/restore jobs, schema changes, user-created table statistics, automatic table statistics jobs and changefeeds.",
     ];
 

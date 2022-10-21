@@ -10,5 +10,5 @@
 
 export * from "./jobDescriptionCell";
 export * from "./jobsPage";
-export * from "./jobTable";
+export * from "./jobsTable";
 export * from "./jobsPageConnected";

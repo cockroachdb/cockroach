@@ -539,8 +539,7 @@ export function getHealth(
   );
 }
 
-export const jobsTimeoutErrorMessage =
-  "Unable to retrieve the Jobs table. To reduce the amount of data, try filtering the table.";
+export const jobsTimeoutErrorMessage = "Unable to retrieve the Jobs table.";
 
 export function getJobs(
   req: JobsRequestMessage,
