@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -1372,7 +1373,8 @@ type leaseTransferTest struct {
 	replica0Desc, replica1Desc roachpb.ReplicaDescriptor
 	leftKey                    roachpb.Key
 	filterMu                   syncutil.Mutex
-	filter                     func(filterArgs kvserverbase.FilterArgs) *roachpb.Error
+	evalFilter                 kvserverbase.ReplicaCommandFilter
+	propFilter                 kvserverbase.ReplicaProposalFilter
 	waitForTransferBlocked     atomic.Value
 	transferBlocked            chan struct{}
 	manualClock                *hlc.HybridManualClock
@@ -1384,12 +1386,22 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 		manualClock: hlc.NewHybridManualClock(),
 	}
 
-	testingEvalFilter := func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+	testingEvalFilter := func(args kvserverbase.FilterArgs) *roachpb.Error {
 		l.filterMu.Lock()
-		filterCopy := l.filter
+		filterCopy := l.evalFilter
 		l.filterMu.Unlock()
 		if filterCopy != nil {
-			return filterCopy(filterArgs)
+			return filterCopy(args)
+		}
+		return nil
+	}
+
+	testingProposalFilter := func(args kvserverbase.ProposalFilterArgs) *roachpb.Error {
+		l.filterMu.Lock()
+		filterCopy := l.propFilter
+		l.filterMu.Unlock()
+		if filterCopy != nil {
+			return filterCopy(args)
 		}
 		return nil
 	}
@@ -1413,6 +1425,7 @@ func setupLeaseTransferTest(t *testing.T) *leaseTransferTest {
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 							TestingEvalFilter: testingEvalFilter,
 						},
+						TestingProposalFilter:                testingProposalFilter,
 						LeaseTransferBlockedOnExtensionEvent: leaseTransferBlockedOnExtensionEvent,
 					},
 					Server: &server.TestingKnobs{
@@ -1487,10 +1500,10 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 	l.filterMu.Lock()
 	defer l.filterMu.Unlock()
 	if !setTo {
-		l.filter = nil
+		l.evalFilter = nil
 		return
 	}
-	l.filter = func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
+	l.evalFilter = func(filterArgs kvserverbase.FilterArgs) *roachpb.Error {
 		if filterArgs.Sid != l.tc.Target(1).StoreID {
 			return nil
 		}
@@ -1502,7 +1515,7 @@ func (l *leaseTransferTest) setFilter(setTo bool, extensionSem chan struct{}) {
 			// Notify the main thread that the extension is in progress and wait for
 			// the signal to proceed.
 			l.filterMu.Lock()
-			l.filter = nil
+			l.evalFilter = nil
 			l.filterMu.Unlock()
 			extensionSem <- struct{}{}
 			log.Infof(filterArgs.Ctx, "filter blocking request: %s", llReq)
@@ -1772,6 +1785,74 @@ func TestLeaseExpirationBasedDrainTransferWithExtension(t *testing.T) {
 	if err := <-renewalErrCh; err != nil {
 		t.Errorf("unexpected error from lease renewal: %+v", err)
 	}
+}
+
+// TestLeaseExpirationBasedDrainTransferWithProscribed verifies that a draining
+// store reacquires proscribed leases for ranges before transferring those
+// leases away.
+func TestLeaseExpirationBasedDrainTransferWithProscribed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	l := setupLeaseTransferTest(t)
+	defer l.tc.Stopper().Stop(ctx)
+	// Ensure that replica1 has the lease.
+	if err := l.replica0.AdminTransferLease(ctx, l.replica1Desc.StoreID, false /* bypassSafetyChecks */); err != nil {
+		t.Fatal(err)
+	}
+	l.checkHasLease(t, 1)
+
+	var failedOnce sync.Once
+	failedCh := make(chan struct{})
+	failLeaseTransfers := func(fail bool) {
+		l.filterMu.Lock()
+		defer l.filterMu.Unlock()
+		if !fail {
+			l.propFilter = nil
+			return
+		}
+		l.propFilter = func(filterArgs kvserverbase.ProposalFilterArgs) *roachpb.Error {
+			if filterArgs.Req.IsSingleTransferLeaseRequest() {
+				target := filterArgs.Req.Requests[0].GetTransferLease().Lease.Replica
+				if target == l.replica0Desc {
+					failedOnce.Do(func() { close(failedCh) })
+					return roachpb.NewError(kvserver.NewLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(
+						target, raftutil.ReplicaStateProbe))
+				}
+			}
+			return nil
+		}
+	}
+
+	// Fail lease transfers on the target range after the previous lease has been
+	// revoked (after evaluation, during raft proposal). In doing so, we leave the
+	// range with a PROSCRIBED lease.
+	failLeaseTransfers(true /* fail */)
+
+	// Drain node 1.
+	drainedCh := make(chan struct{})
+	go func() {
+		l.tc.GetFirstStoreFromServer(t, 1).SetDraining(true, nil /* reporter */, false /* verbose */)
+		close(drainedCh)
+	}()
+
+	// Wait until the lease transfer has failed at least once.
+	<-failedCh
+
+	// The drain should be unable to succeed.
+	select {
+	case <-drainedCh:
+		t.Fatalf("drain unexpectedly succeeded")
+	case <-time.After(10 * time.Millisecond):
+	}
+
+	// Stop failing lease transfers.
+	failLeaseTransfers(false /* fail */)
+
+	// The drain should succeed.
+	<-drainedCh
+	l.checkHasLease(t, 0)
 }
 
 // TestLeaseExpirationBelowFutureTimeRequest tests two cases where a
