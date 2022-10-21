@@ -43,50 +43,6 @@ type AddressResolver interface {
 	GetAllInstances(context.Context) ([]InstanceInfo, error)
 }
 
-// Provider is a wrapper around sqlinstance subsystem for external consumption.
-type Provider interface {
-	AddressResolver
-	// Instance returns the instance ID and sqlliveness.SessionID for the
-	// current SQL instance.
-	Instance(context.Context) (base.SQLInstanceID, sqlliveness.SessionID, error)
-	// Start starts the instanceprovider and initializes the current SQL instance.
-	// This will block until the underlying instance data reader has been started.
-	Start(context.Context) error
-}
-
-// fakeSQLProvider implements the sqlinstance.Provider interface as a
-// placeholder for an instance provider, when an instance provider must be
-// instantiated for a non-SQL instance. It starts a Reader to provide the
-// AddressResolver interface, but otherwise throws unsupported errors.
-type fakeSQLProvider struct{}
-
-// NewFakeSQLProvider returns a new placeholder instance Provider.
-func NewFakeSQLProvider() Provider {
-	return &fakeSQLProvider{}
-}
-
-// Start implements the sqlinstance.Provider interface.
-func (p *fakeSQLProvider) Start(ctx context.Context) error {
-	return nil
-}
-
-// Instance implements the sqlinstance.Provider interface.
-func (p *fakeSQLProvider) Instance(
-	ctx context.Context,
-) (_ base.SQLInstanceID, _ sqlliveness.SessionID, err error) {
-	return base.SQLInstanceID(0), "", NotASQLInstanceError
-}
-
-// GetInstance implements the AddressResolver interface.
-func (p *fakeSQLProvider) GetInstance(context.Context, base.SQLInstanceID) (InstanceInfo, error) {
-	return InstanceInfo{}, NotASQLInstanceError
-}
-
-// GetAllInstances implements the AddressResolver interface.
-func (p *fakeSQLProvider) GetAllInstances(context.Context) ([]InstanceInfo, error) {
-	return nil, NotASQLInstanceError
-}
-
 // NonExistentInstanceError can be returned if a SQL instance does not exist.
 var NonExistentInstanceError = errors.Errorf("non existent SQL instance")
 
