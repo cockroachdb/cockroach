@@ -496,14 +496,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			return nil, errors.AssertionFailedf("non-system codec used for SQL pod")
 		}
 
-		cfg.sqlInstanceStorage = instancestorage.NewStorage(cfg.db, codec, cfg.sqlLivenessProvider)
+		cfg.sqlInstanceStorage = instancestorage.NewStorage(
+			cfg.db, codec, cfg.sqlLivenessProvider.CachedReader(), cfg.Settings)
 		cfg.sqlInstanceReader = instancestorage.NewReader(
 			cfg.sqlInstanceStorage,
 			cfg.sqlLivenessProvider.CachedReader(),
 			cfg.rangeFeedFactory,
 			codec, cfg.clock, cfg.stopper)
 
-		// In a multi-tenant environment, use the sqlInstanceProvider to resolve
+		// In a multi-tenant environment, use the sqlInstanceReader to resolve
 		// SQL pod addresses.
 		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, error) {
 			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
@@ -1317,7 +1318,13 @@ func (s *SQLServer) preStart(
 		if err != nil {
 			return err
 		}
-		// Allocate our instance ID.
+		// Start instance ID reclaim loop.
+		if err := s.sqlInstanceStorage.RunInstanceIDReclaimLoop(
+			ctx, stopper, timeutil.DefaultTimeSource{}, session.Expiration,
+		); err != nil {
+			return err
+		}
+		// Acquire our instance ID.
 		instanceID, err := s.sqlInstanceStorage.CreateInstance(
 			ctx, session.ID(), session.Expiration(), s.cfg.AdvertiseAddr, s.distSQLServer.Locality)
 		if err != nil {
