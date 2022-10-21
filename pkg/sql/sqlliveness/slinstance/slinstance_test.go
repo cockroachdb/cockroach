@@ -85,9 +85,9 @@ func TestSQLInstance(t *testing.T) {
 	require.True(t, a)
 	require.NotEqual(t, s2.ID(), s3.ID())
 
-	// Force next call to Session to fail.
+	// Stop the stopper and check that the heartbeat loop terminates
+	// and causes further Session() calls to fail.
 	stopper.Stop(ctx)
-	sqlInstance.ClearSessionForTest(ctx)
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
 }
