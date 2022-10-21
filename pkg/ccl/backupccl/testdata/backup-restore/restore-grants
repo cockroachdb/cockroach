@@ -3,9 +3,13 @@
 # the restoring descriptors reference may not be the same users as they
 # referenced in the backed up cluster.
 
+# TODO(DisasterRecovery): this test currently hangs when run within a tenant
+# (see https://github.com/cockroachdb/cockroach/issues/90444), and should be refactored
+# to run smoothly in a tenant.
+
 # We allow implicit access to non-admin users so that we can test
 # with nodelocal.
-new-server name=s1 allow-implicit-access
+new-server name=s1 allow-implicit-access disable-tenant
 ----
 
 # TODO(ssd): We reset the closed timestamp configurables to avoid schema
@@ -159,7 +163,7 @@ BACKUP INTO 'nodelocal://0/test/'
 # above.
 subtest cluster-restore
 
-new-server name=s2 share-io-dir=s1 allow-implicit-access
+new-server name=s2 share-io-dir=s1 allow-implicit-access disable-tenant
 ----
 
 exec-sql

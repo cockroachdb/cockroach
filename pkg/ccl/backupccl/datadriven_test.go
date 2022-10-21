@@ -142,7 +142,7 @@ func (d *datadrivenTestState) addServer(t *testing.T, cfg serverCfg) error {
 	var cleanup func()
 	params := base.TestClusterArgs{}
 	params.ServerArgs.ExternalIODirConfig = cfg.ioConf
-	params.ServerArgs.DisableDefaultTestTenant = true
+	params.ServerArgs.DisableDefaultTestTenant = cfg.disableTenant
 	params.ServerArgs.Knobs = base.TestingKnobs{
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
