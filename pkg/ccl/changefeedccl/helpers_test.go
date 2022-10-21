@@ -189,7 +189,7 @@ func assertPayloadsBase(
 
 	require.NoError(t,
 		withTimeout(f, timeout,
-			func(ctx context.Context) error {
+			func(ctx context.Context) (err error) {
 				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
 			},
 		))
@@ -661,6 +661,18 @@ func closeFeed(t testing.TB, f cdctest.TestFeed) {
 	t.Helper()
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func closeFeedIgnoreError(t testing.TB, f cdctest.TestFeed) {
+	defer func() {
+		if e := recover(); e != nil {
+			t.Log(e)
+		}
+	}()
+	t.Helper()
+	if err := f.Close(); err != nil {
+		t.Log(err)
 	}
 }
 
