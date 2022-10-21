@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 import { ArrowLeft } from "@cockroachlabs/icons";
@@ -45,6 +45,7 @@ export interface StatementInsightDetailsStateProps {
 
 export interface StatementInsightDetailsDispatchProps {
   setTimeScale: (ts: TimeScale) => void;
+  refreshStatementInsights: () => void;
 }
 
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
@@ -60,6 +61,7 @@ export const StatementInsightDetails: React.FC<
   match,
   isTenant,
   setTimeScale,
+  refreshStatementInsights,
 }) => {
   const [explain, setExplain] = useState<string>(null);
 
@@ -82,6 +84,12 @@ export const StatementInsightDetails: React.FC<
   };
 
   const executionID = getMatchParamByName(match, "id");
+
+  useEffect(() => {
+    if (insightEventDetails == null) {
+      refreshStatementInsights();
+    }
+  }, [insightEventDetails, refreshStatementInsights]);
 
   return (
     <div>

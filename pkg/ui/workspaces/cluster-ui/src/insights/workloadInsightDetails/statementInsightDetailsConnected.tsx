@@ -17,6 +17,7 @@ import {
 } from "./statementInsightDetails";
 import { AppState } from "src/store";
 import {
+  actions as statementInsights,
   selectStatementInsightDetails,
   selectStatementInsightsError,
 } from "src/store/insights/statementInsights";
@@ -40,6 +41,7 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementInsightDetailsDispatchProps => ({
+  refreshStatementInsights: statementInsights.refresh,
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
