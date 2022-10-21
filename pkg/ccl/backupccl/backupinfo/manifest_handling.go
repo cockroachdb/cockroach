@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1391,4 +1392,19 @@ func getBackupManifests(
 	}
 
 	return manifests, memMu.total, nil
+}
+
+// MakeBackupCodec returns the codec that was used to encode the keys in the backup.
+func MakeBackupCodec(manifest backuppb.BackupManifest) (keys.SQLCodec, error) {
+	backupCodec := keys.SystemSQLCodec
+	if len(manifest.Spans) != 0 && !manifest.HasTenants() {
+		// If there are no tenant targets, then the entire keyspace covered by
+		// Spans must lie in 1 tenant.
+		_, backupTenantID, err := keys.DecodeTenantPrefix(manifest.Spans[0].Key)
+		if err != nil {
+			return backupCodec, err
+		}
+		backupCodec = keys.MakeSQLCodec(backupTenantID)
+	}
+	return backupCodec, nil
 }
