@@ -128,7 +128,7 @@ func TestValidate(t *testing.T) {
 		seq         kvnemesisutil.Seq
 	}
 
-	kv := func(key string, ts int, seq kvnemesisutil.Seq /* only for value, i.e. no semantics */) seqKV {
+	kv := func(key string, ts int, seq kvnemesisutil.Seq) seqKV {
 		return seqKV{
 			key: roachpb.Key(key),
 			ts:  hlc.Timestamp{WallTime: int64(ts)},
@@ -140,6 +140,14 @@ func TestValidate(t *testing.T) {
 		r := kv(key, ts, seq)
 		r.val = nil
 		return r
+	}
+	rd := func(key, endKey string, ts int, seq kvnemesisutil.Seq) seqKV {
+		return seqKV{
+			key:    roachpb.Key(key),
+			endKey: roachpb.Key(endKey),
+			ts:     hlc.Timestamp{WallTime: int64(ts)},
+			seq:    seq,
+		}
 	}
 	kvs := func(kvs ...seqKV) []seqKV {
 		return kvs
@@ -1651,6 +1659,55 @@ func TestValidate(t *testing.T) {
 			},
 			kvs: kvs(kv(`a`, t1, s1), tombstone(`a`, t3, s3), kv(`d`, t2, s2), tombstone(`d`, t3, s3)),
 		},
+		{
+			name: "single mvcc rangedel",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(`a`, `b`, s1), t1)),
+			},
+			kvs: kvs(rd(`a`, `b`, t1, s1)),
+		},
+		{
+			name: "single mvcc rangedel after put",
+			steps: []Step{
+				step(withResultTS(put(`a`, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(`a`, `b`, s2), t2)),
+			},
+			kvs: kvs(kv(`a`, t1, s1), rd(`a`, `b`, t2, s2)),
+		},
+		{
+			name: "single mvcc rangedel before put",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(`a`, `b`, s1), t1)),
+				step(withResultTS(put(`a`, s2), t2)),
+			},
+			kvs: kvs(rd(`a`, `b`, t1, s1), kv(`a`, t2, s2)),
+		},
+		{
+			name: "two overlapping rangedels",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(`a`, `c`, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(`b`, `d`, s2), t2)),
+			},
+			// Note: you see rangedel fragmentation in action here, which has to
+			// happen. Even if we decided to hand pebble overlapping rangedels, it
+			// would fragment them for us, and we'd get what you see below back when
+			// we read.
+			kvs: kvs(
+				rd(`a`, `b`, t1, s1),
+				rd(`b`, `c`, t1, s1),
+				rd(`b`, `c`, t2, s2),
+				rd(`c`, `d`, t2, s2),
+			),
+		},
+		{
+			name: "batch of two overlapping rangedels",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(`a`, `c`, s1), t1)),
+				step(withResultTS(delRangeUsingTombstone(`b`, `d`, s2), t2)),
+			},
+			// Note: first rangedel gets shortened.
+			kvs: kvs(rd(`a`, `c`, t1, s1), rd(`b`, `d`, t2, s2)),
+		},
 	}
 
 	// TODO(tbg): try to find a way to iterate through the tests in a way that allows Goland to link
@@ -1662,25 +1719,21 @@ func TestValidate(t *testing.T) {
 			e, err := MakeEngine()
 			require.NoError(t, err)
 			defer e.Close()
-			for _, kv := range test.kvs {
-				e.Put(storage.MVCCKey{Key: kv.key, Timestamp: kv.ts}, kv.val)
-			}
-
-			tr := &SeqTracker{}
-			for _, kv := range test.kvs {
-				tr.Add(kv.key, kv.endKey, kv.ts, kv.seq)
-			}
 
 			var buf strings.Builder
 			for _, step := range test.steps {
 				fmt.Fprintln(&buf, strings.TrimSpace(step.String()))
 			}
+
+			tr := &SeqTracker{}
 			for _, kv := range test.kvs {
+				tr.Add(kv.key, kv.endKey, kv.ts, kv.seq)
 				if len(kv.endKey) == 0 {
 					k := storage.MVCCKey{
 						Key:       kv.key,
 						Timestamp: kv.ts,
 					}
+					e.Put(k, kv.val)
 					fmt.Fprintln(&buf, k, "@", kv.seq, mustGetStringValue(kv.val))
 				} else {
 					k := storage.MVCCRangeKey{
@@ -1688,6 +1741,7 @@ func TestValidate(t *testing.T) {
 						EndKey:    kv.endKey,
 						Timestamp: kv.ts,
 					}
+					e.DeleteRange(kv.key, kv.endKey, kv.ts)
 					fmt.Fprintln(&buf, k, "@", kv.seq, mustGetStringValue(kv.val))
 				}
 			}

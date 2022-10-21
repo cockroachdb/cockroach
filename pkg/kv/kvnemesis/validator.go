@@ -276,7 +276,7 @@ func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
 		}
 		seq, ok := tr.Lookup(key, endKey, ts)
 		if !ok {
-			err = errors.AssertionFailedf("no seqno found for [%s,) @ %s", key, endKey, ts)
+			err = errors.AssertionFailedf("no seqno found for [%s,%s) @ %s", key, endKey, ts)
 			return
 		}
 		v := tsSpanVal{
@@ -455,24 +455,15 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			// The resulting atomic unit would emit two MVCC range deletions. [a,b)
 			// and [b\x00, c).
 			//
-			// The code here handles this and it is unit tested.
-			//
-			// TODO(tbg): if a ranged write "lost" a part, we wouldn't detect this.
-			// Say there are point writes at keys a and c and we're running a range
-			// deletion covering [a-z), but we only see range deletions for [a,b) and
-			// [b\x00, z) come out of MVCC. Validation will pass because there is no
-			// value at `b` (and never was), but the behaviour is unexpected. We could
-			// catch this (admittedly unlikely) behavior if we emitted special
-			// observed writes for the gaps as well, which would fail validation
-			// unless they got shadowed within their atomic unit.
+			// The code here handles this, and it is unit tested.
 			svs, _ := v.tryConsumeRangedWrite(t.Seq, t.Key, t.EndKey)
 			var unobserved roachpb.SpanGroup
 			unobserved.Add(roachpb.Span{Key: t.Key, EndKey: t.EndKey})
 			for _, sv := range svs {
 				unobserved.Sub(sv.Span)
 				write := &observedWrite{
-					Key:       t.Key,
-					EndKey:    t.EndKey,
+					Key:       sv.Key,
+					EndKey:    sv.EndKey,
 					Seq:       t.Seq,
 					Timestamp: sv.Timestamp,
 				}
@@ -754,11 +745,11 @@ func (v *validator) checkAtomicCommitted(
 	batch := v.kvs.kvs.NewIndexedBatch()
 	defer func() { _ = batch.Close() }()
 
-	// type span struct {
-	// 	key, endKey string
-	// }
-	//lastWriteIdxByKey := make(map[span]int, len(txnObservations))
-
+	var failure string
+	// writeTS is populated with the timestamp of the materialized observed writes
+	// (if there are any). We'll use it below to maintain the "view" of prefixes
+	// of atomic unit.
+	var writeTS hlc.Timestamp
 	// First, hide all of our writes from the view. Remember the index of the last
 	// ('most recent') write to each key so that we can check below whether any
 	// shadowed writes erroneously materialized. Recall that writes can be ranged
@@ -767,17 +758,6 @@ func (v *validator) checkAtomicCommitted(
 	// DefaultConfig) which means in effect we'll only ever see ranged operations
 	// alone in an atomic unit. This code still handles these cases, and they are
 	// unit tested.
-
-	// get the timestamp here for a committed operation and make sure they're all
-	// equal and then we can simplify the building of the batch.
-
-	var failure string
-
-	// writeTS is populated with the timestamp of the materialized observed writes
-	// (if there are any). We'll use it below to maintain the "view" of prefixes
-	// of atomic unit.
-	var writeTS hlc.Timestamp
-
 	lastWritesByIdx := map[int]struct{}{}
 	var lastWrites roachpb.SpanGroup
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
@@ -813,6 +793,7 @@ func (v *validator) checkAtomicCommitted(
 				g.Add(lastWrites.Slice()...)
 				lastWrite = !g.Sub(sp) // if subtracting did nothing, it's a most recent write
 				if !lastWrite {
+					_ = 5
 					// Otherwise, add it back in, which should restore the old set. If it
 					// didn't, there was partial overlap, which shouldn't be possible.
 					g.Add(sp)
@@ -1105,7 +1086,12 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 	var validTimes disjointTimeSpans
 	end := hlc.MaxTimestamp
 
-	iter := b.NewIter(nil)
+	iter := b.NewIter(&pebble.IterOptions{
+		KeyTypes: storage.IterKeyTypePointsAndRanges,
+		RangeKeyMasking: pebble.RangeKeyMasking{
+			Suffix: storage.EncodeMVCCTimestampSuffix(hlc.MaxTimestamp),
+		},
+	})
 	defer func() { _ = iter.Close() }()
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key}))
 	for ; iter.Valid(); iter.Next() {
@@ -1167,6 +1153,12 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 	defer func() { _ = iter.Close() }()
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: span.Key}))
 	for ; iter.Valid(); iter.Next() {
+		// TODO is this correct?
+		if hasPoint, _ := iter.HasPointAndRange(); !hasPoint {
+			// We're on an MVCC range deletion and don't have a point, so
+			// just nudge the iterator along.
+			continue
+		}
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
 			panic(err)
@@ -1204,7 +1196,11 @@ func printObserved(observedOps ...observedOp) string {
 			opCode := "w"
 			if o.isDelete() {
 				if o.IsDeleteRange {
-					opCode = "dr.d"
+					if len(o.EndKey) == 0 {
+						opCode = "dr.d"
+					} else {
+						opCode = "rd" // mvcc range del
+					}
 				} else {
 					opCode = "d"
 				}
@@ -1213,8 +1209,13 @@ func printObserved(observedOps ...observedOp) string {
 			if o.Timestamp.IsSet() {
 				ts = o.Timestamp.String()
 			}
-			fmt.Fprintf(&buf, "[%s]%s:%s->%s@%s",
-				opCode, o.Key, ts, mustGetStringValue(o.Value.RawBytes), o.Seq)
+			if len(o.EndKey) == 0 {
+				fmt.Fprintf(&buf, "[%s]%s:%s->%s@%s",
+					opCode, o.Key, ts, mustGetStringValue(o.Value.RawBytes), o.Seq)
+			} else {
+				fmt.Fprintf(&buf, "[%s][%s,%s):%s->%s@%s",
+					opCode, o.Key, o.EndKey, ts, mustGetStringValue(o.Value.RawBytes), o.Seq)
+			}
 		case *observedRead:
 			fmt.Fprintf(&buf, "[r]%s:", o.Key)
 			validTimes := o.ValidTimes

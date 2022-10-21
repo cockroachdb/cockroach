@@ -708,6 +708,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if hasReady = raftGroup.HasReady(); hasReady {
 			rd = raftGroup.Ready()
 		}
+		// 2 reasons why an entry in the raft log does not immediately come out for application:
+		// - not (known) committed (HardState.Commit < ent.Index)
+		//     - if you get an entry that is committed, leader will include the committed index
+		//		   example: leader has 1,2,..100 committed, you have entry 1 only. Leader will send you 2,3,4,5,6 commit=6
+		// - we apply max 64 mb per ready
+
 		// We unquiesce if we have a Ready (= there's work to do). We also have
 		// to unquiesce if we just flushed some proposals but there isn't a
 		// Ready, which can happen if the proposals got dropped (raft does this
