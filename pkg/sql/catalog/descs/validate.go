@@ -30,6 +30,9 @@ func (tc *Collection) Validate(
 	targetLevel catalog.ValidationLevel,
 	descriptors ...catalog.Descriptor,
 ) (err error) {
+	if !tc.validationModeProvider.ValidateDescriptorsOnRead() && !tc.validationModeProvider.ValidateDescriptorsOnWrite() {
+		return nil
+	}
 	vd := tc.newValidationDereferencer(txn)
 	version := tc.settings.Version.ActiveVersion(ctx)
 	return validate.Validate(
@@ -48,7 +51,7 @@ func (tc *Collection) Validate(
 // be one version behind, in which case it's possible (and legitimate) that
 // those are missing back-references which would cause validation to fail.
 func (tc *Collection) ValidateUncommittedDescriptors(ctx context.Context, txn *kv.Txn) (err error) {
-	if tc.skipValidationOnWrite || !ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+	if tc.skipValidationOnWrite || !tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		return nil
 	}
 	var descs []catalog.Descriptor
@@ -114,4 +117,17 @@ func (c collectionBackedDereferencer) DereferenceDescriptorIDs(
 ) (ret []descpb.ID, _ error) {
 	// TODO(postamar): namespace operations in general should go through Collection
 	return c.sd.DereferenceDescriptorIDs(ctx, reqs)
+}
+
+// ValidateSelf validates that the descriptor is internally consistent.
+// Validation may be skipped depending on mode.
+func ValidateSelf(
+	desc catalog.Descriptor,
+	version clusterversion.ClusterVersion,
+	dvmp DescriptorValidationModeProvider,
+) error {
+	if !dvmp.ValidateDescriptorsOnRead() && !dvmp.ValidateDescriptorsOnWrite() {
+		return nil
+	}
+	return validate.Self(version, desc)
 }

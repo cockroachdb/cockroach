@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -35,35 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
-
-// newCollection constructs a Collection.
-func newCollection(
-	ctx context.Context,
-	leaseMgr *lease.Manager,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	hydrated *hydrateddesc.Cache,
-	systemDatabase *catkv.SystemDatabaseCache,
-	virtualSchemas catalog.VirtualSchemas,
-	temporarySchemaProvider TemporarySchemaProvider,
-	monitor *mon.BytesMonitor,
-) *Collection {
-	v := settings.Version.ActiveVersion(ctx)
-	cr := catkv.NewCatalogReader(codec, v, systemDatabase)
-	return &Collection{
-		settings:    settings,
-		version:     v,
-		hydrated:    hydrated,
-		virtual:     makeVirtualDescriptors(virtualSchemas),
-		leased:      makeLeasedDescriptors(leaseMgr),
-		uncommitted: makeUncommittedDescriptors(monitor),
-		stored:      catkv.MakeStoredCatalog(cr, monitor),
-		temporary:   makeTemporaryDescriptors(settings, codec, temporarySchemaProvider),
-	}
-}
 
 // Collection is a collection of descriptors held by a single session that
 // serves SQL requests, or a background job using descriptors. The
@@ -111,8 +83,12 @@ type Collection struct {
 	// non-public schema elements during a schema change).
 	synthetic syntheticDescriptors
 
-	// temporary contains logic to access temporary schema descriptors.
-	temporary temporaryDescriptors
+	// temporarySchemaProvider is used to access temporary schema descriptors.
+	temporarySchemaProvider TemporarySchemaProvider
+
+	// validationModeProvider is used to access the session var which determines
+	// the descriptor validation mode: 'on', 'off' or 'read_only'.
+	validationModeProvider DescriptorValidationModeProvider
 
 	// hydrated is node-level cache of table descriptors which utilize
 	// user-defined types.
@@ -255,22 +231,13 @@ func (tc *Collection) AddUncommittedDescriptor(
 	return tc.uncommitted.upsert(ctx, desc)
 }
 
-// ValidateOnWriteEnabled is the cluster setting used to enable or disable
-// validating descriptors prior to writing.
-var ValidateOnWriteEnabled = settings.RegisterBoolSetting(
-	settings.TenantWritable,
-	"sql.catalog.descs.validate_on_write.enabled",
-	"set to true to validate descriptors prior to writing, false to disable; default is true",
-	true, /* defaultValue */
-)
-
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
 // collection as an uncommitted descriptor, and writes it into b.
 func (tc *Collection) WriteDescToBatch(
 	ctx context.Context, kvTrace bool, desc catalog.MutableDescriptor, b *kv.Batch,
 ) error {
 	desc.MaybeIncrementVersion()
-	if !tc.skipValidationOnWrite && ValidateOnWriteEnabled.Get(&tc.settings.SV) {
+	if !tc.skipValidationOnWrite && tc.validationModeProvider.ValidateDescriptorsOnWrite() {
 		if err := validate.Self(tc.version, desc); err != nil {
 			return err
 		}
@@ -588,11 +555,12 @@ func (tc *Collection) SetSession(session sqlliveness.Session) {
 	tc.sqlLivenessSession = session
 }
 
-// SetTemporaryDescriptors is used in the context of the internal executor
-// to override the temporary descriptors during temporary object
-// cleanup.
-func (tc *Collection) SetTemporaryDescriptors(provider TemporarySchemaProvider) {
-	tc.temporary = makeTemporaryDescriptors(tc.settings, tc.codec(), provider)
+// SetDescriptorSessionDataProvider sets a DescriptorSessionDataProvider for
+// this Collection.
+func (tc *Collection) SetDescriptorSessionDataProvider(dsdp DescriptorSessionDataProvider) {
+	tc.stored.DescriptorValidationModeProvider = dsdp
+	tc.temporarySchemaProvider = dsdp
+	tc.validationModeProvider = dsdp
 }
 
 // Direct exports the catkv.Direct interface.
@@ -600,7 +568,7 @@ type Direct = catkv.Direct
 
 // Direct provides direct access to the underlying KV-storage.
 func (tc *Collection) Direct() Direct {
-	return catkv.MakeDirect(tc.codec(), tc.version)
+	return catkv.MakeDirect(tc.codec(), tc.version, tc.validationModeProvider)
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.

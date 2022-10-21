@@ -1,0 +1,17 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "catsessiondata",
+    srcs = ["descriptor_session_data_provider.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+    ],
+)
+
+get_x_data(name = "get_x_data")

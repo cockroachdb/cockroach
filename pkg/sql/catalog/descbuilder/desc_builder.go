@@ -11,13 +11,11 @@
 package descbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -171,9 +169,4 @@ func BuildMutable(
 		m.FunctionDescriptor = *fn
 	}
 	return ret, nil
-}
-
-// ValidateSelf validates that the descriptor is internally consistent.
-func ValidateSelf(desc catalog.Descriptor, version clusterversion.ClusterVersion) error {
-	return validate.Self(version, desc)
 }

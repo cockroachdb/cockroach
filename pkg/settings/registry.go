@@ -150,6 +150,7 @@ var retiredSettings = map[string]struct{}{
 	"sql.ttl.default_range_concurrency": {},
 
 	// removed as of 23.1.
+	"sql.catalog.descs.validate_on_write.enabled": {},
 	"sql.distsql.max_running_flows":               {},
 	"sql.distsql.flow_scheduler_queueing.enabled": {},
 }
