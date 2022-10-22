@@ -83,7 +83,8 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		t.Fatal(err)
 	}
 
-	rng, seed := randutil.NewPseudoRand()
+	seed := int64(1666467482296309000)
+	rng := randutil.NewTestRandWithSeed(seed)
 
 	tablesToNumFiles := map[string]int{
 		"region":   1,
@@ -93,7 +94,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		"partsupp": 8,
 		"customer": 8,
 		"orders":   8,
-		"lineitem": 8,
+		"lineitem": 2,
 	}
 	for tbl := range tablesToNumFiles {
 		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
