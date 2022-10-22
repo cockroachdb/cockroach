@@ -344,13 +344,13 @@ func runBackupProcessor(
 						}
 
 						req := &roachpb.ExportRequest{
-							RequestHeader:                       roachpb.RequestHeaderFromSpan(span.span),
-							ResumeKeyTS:                         span.firstKeyTS,
-							StartTime:                           span.start,
-							EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
-							MVCCFilter:                          spec.MVCCFilter,
-							TargetFileSize:                      batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-							SplitMidKey:                         splitMidKey,
+							RequestHeader:             roachpb.RequestHeaderFromSpan(span.span),
+							ResumeKeyTS:               span.firstKeyTS,
+							StartTime:                 span.start,
+							MVCCFilter:                spec.MVCCFilter,
+							TargetFileSize:            batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
+							MaxAllowedFileSizeOverage: batcheval.ExportRequestMaxAllowedFileSizeOverage.Get(&clusterSettings.SV),
+							SplitMidKey:               splitMidKey,
 						}
 
 						// If we're doing re-attempts but are not yet in the priority regime,
@@ -389,10 +389,14 @@ func runBackupProcessor(
 							header.WaitPolicy = lock.WaitPolicy_Error
 						}
 
-						// We set the DistSender response target bytes field to a sentinel
-						// value. The sentinel value of 1 forces the ExportRequest to paginate
-						// after creating a single SST.
-						header.TargetBytes = 1
+						// We set the DistSender response target bytes field to the target
+						// file size that controls how large each SST constructed as part of
+						// the ExportRequest should be. If an ExportRequest to a range
+						// generates an SST that is smaller than the target file size, then
+						// subsequent ExportRequests to other ranges can use the remaining
+						// target bytes to generate SSTs. Thus, the ExportResponse returned
+						// by DistSender may have more than one SST.
+						header.TargetBytes = batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV)
 						admissionHeader := roachpb.AdmissionHeader{
 							// Export requests are currently assigned BulkNormalPri.
 							//
@@ -482,10 +486,6 @@ func runBackupProcessor(
 						var completedSpans int32
 						if resp.ResumeSpan == nil {
 							completedSpans = 1
-						}
-
-						if len(resp.Files) > 1 {
-							log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
 						}
 
 						for i, file := range resp.Files {
