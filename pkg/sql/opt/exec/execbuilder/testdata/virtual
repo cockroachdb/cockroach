@@ -213,3 +213,51 @@ vectorized: true
     └── • virtual table
           table: cluster_database_privileges@cluster_database_privileges_database_name_idx
           spans: [/'t' - /'t']
+
+# Test that the partial indexes in crdb_internal.tables are used only when the
+# partial predicate constraints are satisfied.
+
+query T
+EXPLAIN SELECT * FROM crdb_internal.tables WHERE database_name = 'foo';
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: database_name = 'foo'
+│
+└── • virtual table
+      table: tables@primary
+
+query T
+EXPLAIN SELECT * FROM crdb_internal.tables WHERE parent_id = 1;
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: parent_id = 1
+│
+└── • virtual table
+      table: tables@primary
+
+
+query T
+EXPLAIN SELECT * FROM crdb_internal.tables WHERE database_name = 'foo' AND drop_time IS NULL;
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  table: tables@tables_database_name_idx (partial index)
+  spans: [/'foo' - /'foo']
+
+query T
+EXPLAIN SELECT * FROM crdb_internal.tables WHERE parent_id = 1 AND drop_time IS NULL;
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  table: tables@tables_parent_id_idx (partial index)
+  spans: [/1 - /1]
