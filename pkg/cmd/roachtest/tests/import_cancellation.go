@@ -83,7 +83,8 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		t.Fatal(err)
 	}
 
-	rng, seed := randutil.NewPseudoRand()
+	seed := int64(1666467482296309000)
+	rng := randutil.NewTestRandWithSeed(seed)
 
 	tablesToNumFiles := map[string]int{
 		"region":   1,
@@ -93,7 +94,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		"partsupp": 8,
 		"customer": 8,
 		"orders":   8,
-		"lineitem": 8,
+		"lineitem": 2,
 	}
 	for tbl := range tablesToNumFiles {
 		fixtureURL := fmt.Sprintf("gs://cockroach-fixtures/tpch-csv/schema/%s.sql?AUTH=implicit", tbl)
@@ -298,6 +299,16 @@ func (t *importCancellationTest) runImportSequence(
 	if len(filesToImport) != 0 {
 		t.Fatalf("Expected zero remaining %q files after final attempt, but %d remaining.",
 			tableName, len(filesToImport))
+	}
+
+	// Kick off a stats collection job for the table. This serves a dual purpose.
+	// Up-to-date statistics on the table helps the optimizer during the query
+	// phase of the test. The stats job also requires scanning a large swath of
+	// the keyspace, which results in greater test coverage.
+	stmt := fmt.Sprintf(`CREATE STATISTICS %s_stats FROM csv.%s`, tableName, tableName)
+	_, err := conn.ExecContext(ctx, stmt)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
