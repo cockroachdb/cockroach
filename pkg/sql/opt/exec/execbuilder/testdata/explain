@@ -386,8 +386,12 @@ vectorized: true
         │       └── • virtual table
         │             table: table_row_statistics@primary
         │
-        └── • virtual table
-              table: tables@primary
+        └── • filter
+            │ filter: drop_time IS NULL
+            │
+            └── • virtual table
+                  table: tables@tables_database_name_idx
+                  spans: [/'test' - /'test']
 
 
 query T
@@ -444,8 +448,12 @@ vectorized: true
         │       └── • virtual table
         │             table: table_row_statistics@primary
         │
-        └── • virtual table
-              table: tables@primary
+        └── • filter
+            │ filter: drop_time IS NULL
+            │
+            └── • virtual table
+                  table: tables@tables_database_name_idx
+                  spans: [/'test' - /'test']
 
 query T
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
