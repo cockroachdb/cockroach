@@ -387,7 +387,8 @@ vectorized: true
         │             table: table_row_statistics@primary
         │
         └── • virtual table
-              table: tables@primary
+              table: tables@tables_database_name_idx (partial index)
+              spans: [/'test' - /'test']
 
 
 query T
@@ -445,7 +446,8 @@ vectorized: true
         │             table: table_row_statistics@primary
         │
         └── • virtual table
-              table: tables@primary
+              table: tables@tables_database_name_idx (partial index)
+              spans: [/'test' - /'test']
 
 query T
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
