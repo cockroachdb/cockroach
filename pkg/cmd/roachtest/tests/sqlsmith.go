@@ -124,35 +124,7 @@ func registerSQLSmith(r registry.Registry) {
 		}
 
 		if settingName == "multi-region" {
-			regionsSet := make(map[string]struct{})
-			var region, zone string
-			rows, err := conn.Query("SHOW REGIONS FROM CLUSTER")
-			if err != nil {
-				t.Fatal(err)
-			}
-			for rows.Next() {
-				if err := rows.Scan(&region, &zone); err != nil {
-					t.Fatal(err)
-				}
-				regionsSet[region] = struct{}{}
-			}
-
-			var regionList []string
-			for region := range regionsSet {
-				regionList = append(regionList, region)
-			}
-
-			if len(regionList) == 0 {
-				t.Fatal(errors.New("no regions, cannot run multi-region config"))
-			}
-
-			if _, err := conn.Exec(
-				fmt.Sprintf(`ALTER DATABASE defaultdb SET PRIMARY REGION "%s";
-ALTER TABLE seed_mr_table SET LOCALITY REGIONAL BY ROW;
-INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
-			); err != nil {
-				t.Fatal(err)
-			}
+			setupMultiRegionDatabase(t, conn, logStmt)
 		}
 
 		const timeout = time.Minute
@@ -339,4 +311,39 @@ INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0]),
 	settings["multi-region"] = sqlsmith.Settings["multi-region"]
 	register("tpcc", "ddl-nodrop")
 	register("seed-multi-region", "multi-region")
+}
+
+// setupMultiRegionDatabase is used to set up a multi-region database.
+func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, logStmt func(string)) {
+	t.Helper()
+	regionsSet := make(map[string]struct{})
+	var region, zone string
+	rows, err := conn.Query("SHOW REGIONS FROM CLUSTER")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		if err := rows.Scan(&region, &zone); err != nil {
+			t.Fatal(err)
+		}
+		regionsSet[region] = struct{}{}
+	}
+
+	var regionList []string
+	for region := range regionsSet {
+		regionList = append(regionList, region)
+	}
+
+	if len(regionList) == 0 {
+		t.Fatal(errors.New("no regions, cannot run multi-region config"))
+	}
+
+	stmt := fmt.Sprintf(`ALTER DATABASE defaultdb SET PRIMARY REGION "%s";
+ALTER TABLE seed_mr_table SET LOCALITY REGIONAL BY ROW;
+INSERT INTO seed_mr_table DEFAULT VALUES;`, regionList[0])
+	if _, err := conn.Exec(stmt); err != nil {
+		t.Fatal(err)
+	} else {
+		logStmt(stmt)
+	}
 }
