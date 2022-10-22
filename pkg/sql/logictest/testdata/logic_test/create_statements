@@ -1725,7 +1725,9 @@ CREATE TABLE crdb_internal.tables (
    audit_mode STRING NOT NULL,
    schema_name STRING NOT NULL,
    parent_schema_id INT8 NOT NULL,
-   locality STRING NULL
+   locality STRING NULL,
+   INDEX tables_parent_id_idx (parent_id ASC) STORING (table_id, name, database_name, version, mod_time, mod_time_logical, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name, parent_schema_id, locality) WHERE drop_time IS NULL,
+   INDEX tables_database_name_idx (database_name ASC) STORING (table_id, parent_id, name, version, mod_time, mod_time_logical, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name, parent_schema_id, locality) WHERE drop_time IS NULL
 )  CREATE TABLE crdb_internal.tables (
    table_id INT8 NOT NULL,
    parent_id INT8 NOT NULL,
@@ -1742,7 +1744,9 @@ CREATE TABLE crdb_internal.tables (
    audit_mode STRING NOT NULL,
    schema_name STRING NOT NULL,
    parent_schema_id INT8 NOT NULL,
-   locality STRING NULL
+   locality STRING NULL,
+   INDEX tables_parent_id_idx (parent_id ASC) STORING (table_id, name, database_name, version, mod_time, mod_time_logical, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name, parent_schema_id, locality) WHERE drop_time IS NULL,
+   INDEX tables_database_name_idx (database_name ASC) STORING (table_id, parent_id, name, version, mod_time, mod_time_logical, format_version, state, sc_lease_node_id, sc_lease_expiration_time, drop_time, audit_mode, schema_name, parent_schema_id, locality) WHERE drop_time IS NULL
 )  {}  {}
 CREATE VIEW crdb_internal.tenant_usage_details (
   tenant_id,
