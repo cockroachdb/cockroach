@@ -174,6 +174,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 
 	// Virtual tables never use SERIAL so we need not process SERIAL
 	// types here.
+	semaCtx := tree.MakeSemaContext()
 	mutDesc, err := NewTableDesc(
 		ctx,
 		nil, /* txn */
@@ -187,7 +188,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		startTime, /* creationTime */
 		nil,
 		nil,                        /* affected */
-		nil,                        /* semaCtx */
+		&semaCtx,                   /* semaCtx */
 		nil,                        /* evalCtx */
 		&sessiondata.SessionData{}, /* sessionData */
 		tree.PersistencePermanent,
