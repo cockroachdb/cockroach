@@ -353,5 +353,3 @@ DROP SCHEMA db1.sc1 CASCADE;
 statement ok
 use db1;
 REASSIGN OWNED BY testuser TO testuser2;
-
-
