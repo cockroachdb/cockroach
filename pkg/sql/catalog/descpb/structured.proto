@@ -900,20 +900,7 @@ message TableDescriptor {
   optional PrivilegeDescriptor privileges = 13;
   // Columns or indexes being added or deleted in a FIFO order.
   repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
-  // The schema update lease. A single goroutine across a cockroach cluster
-  // can own it, and will execute pending schema changes for this table.
-  // Since the execution of a pending schema change is through transactions,
-  // it is legal for more than one goroutine to attempt to execute it. This
-  // lease reduces write contention on the schema change.
-  message SchemaChangeLease {
-    option (gogoproto.equal) = true;
-    optional uint32 node_id = 1 [(gogoproto.nullable) = false,
-        (gogoproto.customname) = "NodeID",
-        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-    // Nanoseconds since the Unix epoch.
-    optional int64 expiration_time = 2 [(gogoproto.nullable) = false];
-  }
-  optional SchemaChangeLease lease = 15 [deprecated = true];
+  reserved  15;
   // An id for the next group of mutations to be applied together.
   optional uint32 next_mutation_id = 16 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextMutationID", (gogoproto.casttype) = "MutationID"];

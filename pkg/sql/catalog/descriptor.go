@@ -334,8 +334,6 @@ type TableDescriptor interface {
 	// IsView is true.
 	GetViewQuery() string
 
-	// GetLease returns this table's schema change lease.
-	GetLease() *descpb.TableDescriptor_SchemaChangeLease
 	// GetDropTime returns the timestamp at which the table is truncated or
 	// dropped. It's represented as the current time in nanoseconds since the
 	// epoch.
