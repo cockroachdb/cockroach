@@ -77,6 +77,13 @@ func (k MVCCKey) Clone() MVCCKey {
 	return k
 }
 
+// CloneInto copies the key into the provided destination MVCCKey, reusing and
+// overwriting its key slice.
+func (k MVCCKey) CloneInto(dst *MVCCKey) {
+	dst.Key = append(dst.Key[:0], k.Key...)
+	dst.Timestamp = k.Timestamp
+}
+
 // Compare returns -1 if this key is less than the given key, 0 if they're
 // equal, or 1 if this is greater. Comparison is by key,timestamp, where larger
 // timestamps sort before smaller ones except empty ones which sort first (like
