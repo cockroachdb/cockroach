@@ -271,6 +271,10 @@ var certCtx struct {
 	// scoped to. By creating a tenant-scoped certicate, the usage of that certificate
 	// is restricted to a specific tenant.
 	tenantScope []roachpb.TenantID
+
+	// disableUsernameValidation removes the username syntax check on
+	// the input.
+	disableUsernameValidation bool
 }
 
 func setCertContextDefaults() {
@@ -282,6 +286,7 @@ func setCertContextDefaults() {
 	certCtx.allowCAKeyReuse = false
 	certCtx.overwriteFiles = false
 	certCtx.generatePKCS8Key = false
+	certCtx.disableUsernameValidation = false
 	certCtx.certPrincipalMap = nil
 	certCtx.tenantScope = []roachpb.TenantID{roachpb.SystemTenantID}
 }

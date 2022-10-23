@@ -107,9 +107,9 @@ subtest end
 # system identity and get a remapping.
 subtest password_remapped_user_ok
 
-connect user=will_be_carl database=mydb password=oggod
+connect user=will_be_carl database=mydb password=oggod show_system_identity
 ----
-ok mydb
+ok mydb will_be_carl
 
 authlog 7
 .*client_connection_end
@@ -149,9 +149,9 @@ subtest end
 # database username.
 subtest cert_with_principal_not_in_users
 
-connect user=testuser2 database=mydb force_certs
+connect user=testuser2 database=mydb force_certs show_system_identity
 ----
-ok mydb
+ok mydb testuser2
 
 authlog 6
 .*client_connection_end
