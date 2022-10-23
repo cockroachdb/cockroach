@@ -567,7 +567,7 @@ func makeTenantSQLServerArgs(
 
 	// Create the EventServer. It will be made operational later, after the
 	// cluster ID is known, with a SetResourceInfo() call.
-	obsServer := obs.NewEventServer(
+	eventsServer := obs.NewEventServer(
 		baseCfg.AmbientCtx,
 		timeutil.DefaultTimeSource{},
 		stopper,
@@ -576,7 +576,7 @@ func makeTenantSQLServerArgs(
 		10*1<<20,                               // maxBufferSizeBytes - 10MB
 		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
 	)
-	obspb.RegisterObsServer(grpcServer.Server, obsServer)
+	obspb.RegisterObsServer(grpcServer.Server, eventsServer)
 
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -624,7 +624,7 @@ func makeTenantSQLServerArgs(
 		costController:           costController,
 		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
-		eventsServer:             obsServer,
+		eventsServer:             eventsServer,
 	}, nil
 }
 
