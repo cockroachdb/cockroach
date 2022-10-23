@@ -158,3 +158,64 @@ func setupTestCliState() *cliState {
 	c.ins = noLineEditor
 	return c
 }
+
+func TestGetSetArgs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	td := []struct {
+		input    string
+		ok       bool
+		option   string
+		hasValue bool
+		value    string
+	}{
+		// Missing option.
+		{``, false, ``, false, ``},
+		// Invalid syntax in value.
+		{`a  a"b`, false, ``, false, ``},
+		// Missing option.
+		{`    `, false, ``, false, ``},
+		// Standalone option, also supporting various characters in the option.
+		{`a`, true, `a`, false, ``},
+		{`a.b`, true, `a.b`, false, ``},
+		{`a_b`, true, `a_b`, false, ``},
+		{`a-b`, true, `a-b`, false, ``},
+		{`a123`, true, `a123`, false, ``},
+		// Invalid character in option.
+		{`a/b`, false, ``, false, ``},
+		// Optional spaces.
+		{`a   `, true, `a`, false, ``},
+		{`  a   `, true, `a`, false, ``},
+		// Simple values surrounded by spaces.
+		{`a b`, true, `a`, true, `b`},
+		{`a b    `, true, `a`, true, `b`},
+		{`   a b    `, true, `a`, true, `b`},
+		{`a    b`, true, `a`, true, `b`},
+		{`a    b     `, true, `a`, true, `b`},
+		// Quoted value.
+		{`a "b c"`, true, `a`, true, `"b c"`},
+		{`a   "b c"  `, true, `a`, true, `"b c"`},
+		{`a   "b\"c"  `, true, `a`, true, `"b\"c"`},
+		{`a "" `, true, `a`, true, `""`},
+		// Non-quoted value.
+		{`a   b.c  `, true, `a`, true, `b.c`},
+		// Equal sign with optional spaces.
+		{` a=    b`, true, `a`, true, `b`},
+		{` a=    b`, true, `a`, true, `b`},
+		{` a    =    b`, true, `a`, true, `b`},
+		{` a    =    b   `, true, `a`, true, `b`},
+		{` a     =b`, true, `a`, true, `b`},
+		{` a     =b  `, true, `a`, true, `b`},
+		{` a     ="b c"  `, true, `a`, true, `"b c"`},
+		{` a "=b"`, true, `a`, true, `"=b"`},
+	}
+
+	for _, tc := range td {
+		ok, option, hasValue, value := getSetArgs(tc.input)
+		if ok != tc.ok || option != tc.option || hasValue != tc.hasValue || value != tc.value {
+			t.Errorf("%s: expected (%v,%v,%v,%v), got (%v,%v,%v,%v)", tc.input,
+				tc.ok, tc.option, tc.hasValue, tc.value,
+				ok, option, hasValue, value)
+		}
+	}
+}
