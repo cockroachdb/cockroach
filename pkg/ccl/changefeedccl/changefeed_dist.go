@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -306,6 +307,7 @@ func startDistChangefeed(
 		evalCtxCopy := *evalCtx
 		// p is the physical plan, recv is the distsqlreceiver
 		dsp.Run(ctx, planCtx, noTxn, p, recv, &evalCtxCopy, finishedSetupFn)
+		log.Infof(ctx, "DSP: returning w/ err=%s", resultRows.Err())
 		return resultRows.Err()
 	}
 

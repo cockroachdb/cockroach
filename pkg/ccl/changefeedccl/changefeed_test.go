@@ -65,6 +65,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -3553,9 +3555,9 @@ func TestChangefeedRetryableError(t *testing.T) {
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			switch atomic.LoadInt64(&failEmit) {
 			case 1:
-				return changefeedbase.MarkRetryableError(fmt.Errorf("synthetic retryable error"))
+				return errors.New("synthetic retryable error")
 			case 2:
-				return fmt.Errorf("synthetic terminal error")
+				return changefeedbase.WithTerminalError(errors.New("synthetic terminal error"))
 			default:
 				return nil
 			}
@@ -5438,8 +5440,9 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	opts := makeOptions()
 	defer addCloudStorageOptions(t, &opts)()
 	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
-
+	defer testingUseFastRetry()()
 	const numNodes = 3
+
 	perServerKnobs := make(map[int]base.TestServerArgs, numNodes)
 	for i := 0; i < numNodes; i++ {
 		perServerKnobs[i] = base.TestServerArgs{
@@ -5488,10 +5491,18 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 			// Configure changefeed to emit fatal error on the specified node.
 			distSQLKnobs := perServerKnobs[n].Knobs.DistSQL.(*execinfra.TestingKnobs)
 			var numEmitted int32
+			nodeToFail := n
 			distSQLKnobs.Changefeed.(*TestingKnobs).BeforeEmitRow = func(ctx context.Context) error {
 				// Emit few rows before returning an error.
 				if atomic.AddInt32(&numEmitted, 1) > 10 {
-					err := errors.Newf("synthetic fatal error from node %d", n)
+					// Mark error as terminal, but make it a bit more
+					// interesting by wrapping it few times.
+					err := errors.Wrap(
+						changefeedbase.WithTerminalError(
+							pgerror.Wrapf(
+								errors.Newf("synthetic fatal error from node %d", nodeToFail),
+								pgcode.Io, "something happened with IO")),
+						"while doing something")
 					log.Errorf(ctx, "BeforeEmitRow returning error %s", err)
 					return err
 				}
@@ -6205,7 +6216,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error='pause'`)
@@ -6248,7 +6259,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR bar WITH on_error = 'fail'`)
@@ -6268,7 +6279,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR quux`)
@@ -7358,7 +7369,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
-			return errors.Errorf("should fail")
+			return changefeedbase.WithTerminalError(errors.New("should fail"))
 		}
 
 		beforeCreate := timeutil.Now()

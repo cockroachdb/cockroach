@@ -98,8 +98,7 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	bf := func() kvevent.Buffer {
-		return kvevent.NewErrorWrapperEventBuffer(
-			kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics))
+		return kvevent.NewMemBuffer(cfg.MM.MakeBoundAccount(), &cfg.Settings.SV, cfg.Metrics)
 	}
 
 	f := newKVFeed(
@@ -115,7 +114,7 @@ func Run(ctx context.Context, cfg Config) error {
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(cfg.SchemaFeed.Run)
 	g.GoCtx(f.run)
-	err := g.Wait()
+	err := changefeedbase.CategorizeError(g.Wait())
 
 	// NB: The higher layers of the changefeed should detect the boundary and the
 	// policy and tear everything down. Returning before the higher layers tear down
