@@ -743,6 +743,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 
+	// The following initialization is mirrored in NewTenantServer().
+	// Please keep them in sync.
+
 	// Instantiate the API privilege checker.
 	//
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).

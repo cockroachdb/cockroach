@@ -154,71 +154,23 @@ func NewTenantServer(
 	if err != nil {
 		return nil, err
 	}
-	closedSessionCache := sql.NewClosedSessionCache(
-		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
-	args.closedSessionCache = closedSessionCache
 
-	// Add the server tags to the startup context.
+	// The following initialization mirrors that of NewServer().
+	// Please keep them in sync.
+	// Instantiate the API privilege checker.
 	//
-	// We use args.BaseConfig here instead of baseCfg directly because
-	// makeTenantSQLArgs defines its own AmbientCtx instance and it's
-	// defined by-value.
-	ctx = args.BaseConfig.AmbientCtx.AnnotateCtx(ctx)
-
-	// The tenantStatusServer needs access to the sqlServer,
-	// but we also need the same object to set up the sqlServer.
-	// So construct the tenant status server with a nil sqlServer,
-	// and then assign it once an SQL server gets created. We are
-	// going to assume that the tenant status server won't require
-	// the SQL server object.
-	sStatus := newTenantStatusServer(
-		baseCfg.AmbientCtx, nil,
-		args.sessionRegistry, args.closedSessionCache, args.flowScheduler, baseCfg.Settings, nil,
-		args.rpcContext, args.stopper,
-	)
-
-	args.sqlStatusServer = sStatus
-	sqlServer, err := newSQLServer(ctx, args)
-	if err != nil {
-		return nil, err
-	}
+	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{
-		ie: sqlServer.execCfg.InternalExecutor,
-		st: args.Settings,
-		makePlanner: func(opName string) (interface{}, func()) {
-			txn := args.db.NewTxn(ctx, "check-system-privilege")
-			return sql.NewInternalPlanner(
-				opName,
-				txn,
-				username.RootUserName(),
-				&sql.MemoryMetrics{},
-				sqlServer.execCfg,
-				sessiondatapb.SessionData{},
-			)
-		},
-	}
-	sStatus.privilegeChecker = adminAuthzCheck
-	sStatus.sqlServer = sqlServer
-
-	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, sqlServer)
-
-	sAdmin := newTenantAdminServer(baseCfg.AmbientCtx, sqlServer, sStatus, drainServer)
-
-	sAuth := newAuthenticationServer(baseCfg.Config, sqlServer)
-
-	// Register and start gRPC service on pod. This is separate from the
-	// gRPC + Gateway services configured below.
-	for _, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth} {
-		gw.RegisterService(args.grpcServer)
+		ie:          args.circularInternalExecutor,
+		st:          args.Settings,
+		makePlanner: nil,
 	}
 
-	debugServer := debug.NewServer(
-		baseCfg.AmbientCtx,
-		args.Settings,
-		sqlServer.pgServer.HBADebugFn(),
-		sqlServer.execCfg.SQLStatusServer,
-	)
+	// Instantiate the admin API server.
+	sAdmin := newTenantAdminServer(baseCfg.AmbientCtx)
 
+	// Instantiate the HTTP server.
+	// These callbacks help us avoid a dependency on gossip in httpServer.
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return roachpb.NodeID(0), false, errors.New("tenants cannot proxy to KV Nodes")
 	}
@@ -227,7 +179,102 @@ func NewTenantServer(
 	}
 	sHTTP := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
-	sw := &SQLServerWrapper{
+	// This is where we would be instantiating the SQL session registry
+	// in NewServer().
+	// This is currently performed in makeTenantSQLServerArgs().
+
+	// Instantiate the cache of closed SQL sessions.
+	closedSessionCache := sql.NewClosedSessionCache(
+		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+	args.closedSessionCache = closedSessionCache
+
+	// Instantiate the status API server.
+	// The tenantStatusServer needs access to the sqlServer,
+	// but we also need the same object to set up the sqlServer.
+	// So construct the tenant status server with a nil sqlServer,
+	// and then assign it once an SQL server gets created. We are
+	// going to assume that the tenant status server won't require
+	// the SQL server object until later.
+	sStatus := newTenantStatusServer(
+		baseCfg.AmbientCtx,
+		adminAuthzCheck,
+		args.sessionRegistry,
+		args.closedSessionCache,
+		args.flowScheduler,
+		baseCfg.Settings,
+		args.rpcContext,
+		args.stopper,
+	)
+	args.sqlStatusServer = sStatus
+	// Connect the admin server to the status service.
+	//
+	// TODO(knz): This would not be necessary if we could use the
+	// adminServer directly.
+	sAdmin.status = sStatus
+
+	// This is the location in NewServer() where we would be configuring
+	// the path to the special file that blocks background jobs.
+	// This should probably done here.
+	// See: https://github.com/cockroachdb/cockroach/issues/90524
+
+	// This is the location in NewServer() where we would be creating
+	// the eventsServer. This is currently performed in
+	// makeTenantSQLServerArgs().
+
+	// Instantiate the SQL server proper.
+	sqlServer, err := newSQLServer(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	// Tell the authz server how to connect to SQL.
+	adminAuthzCheck.makePlanner = func(opName string) (interface{}, func()) {
+		// This is a hack to get around a Go package dependency cycle. See comment
+		// in sql/jobs/registry.go on planHookMaker.
+		txn := args.db.NewTxn(ctx, "check-system-privilege")
+		return sql.NewInternalPlanner(
+			opName,
+			txn,
+			username.RootUserName(),
+			&sql.MemoryMetrics{},
+			sqlServer.execCfg,
+			sessiondatapb.SessionData{},
+		)
+	}
+
+	// Create the authentication RPC server (login/logout).
+	sAuth := newAuthenticationServer(baseCfg.Config, sqlServer)
+
+	// Connect the various servers to RPC.
+	for _, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth} {
+		gw.RegisterService(args.grpc.Server)
+	}
+
+	// Tell the status/admin servers how to access SQL structures.
+	//
+	// TODO(knz): If/when we want to support statement diagnostic requests
+	// in secondary tenants, this is where we would call setStmtDiagnosticsRequester(),
+	// like in NewServer().
+	sStatus.baseStatusServer.sqlServer = sqlServer
+	sAdmin.sqlServer = sqlServer
+
+	// Create the debug API server.
+	debugServer := debug.NewServer(
+		baseCfg.AmbientCtx,
+		args.Settings,
+		sqlServer.pgServer.HBADebugFn(),
+		sqlServer.execCfg.SQLStatusServer,
+	)
+
+	// Create a drain server.
+	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, sqlServer)
+	// Connect the admin server to the drain service.
+	//
+	// TODO(knz): This would not be necessary if we could use the
+	// adminServer directly.
+	sAdmin.drain = drainServer
+
+	return &SQLServerWrapper{
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
@@ -254,8 +301,7 @@ func NewTenantServer(
 
 		externalStorageBuilder: args.externalStorageBuilder,
 		costController:         args.costController,
-	}
-	return sw, nil
+	}, nil
 }
 
 // PreStart starts the server on the specified port(s) and
@@ -574,6 +620,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 
 	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceProvider, instanceID)
+
+	// Start the cost controller for this secondary tenant.
 	if err := s.costController.Start(
 		workersCtx, s.stopper, instanceID, s.sqlServer.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
