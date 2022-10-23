@@ -444,6 +444,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						forceCerts = true
 					}
 
+					// Whether to display the system identity as well (to test remappings).
+					showSystemIdentity := false
+					if td.HasArg("show_system_identity") {
+						showSystemIdentity = true
+					}
+
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
 					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
@@ -516,11 +522,20 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						return "", err
 					}
 					row := dbSQL.QueryRow("SELECT current_catalog")
-					var dbName string
-					if err := row.Scan(&dbName); err != nil {
+					var result string
+					if err := row.Scan(&result); err != nil {
 						return "", err
 					}
-					return "ok " + dbName, nil
+					if showSystemIdentity {
+						row := dbSQL.QueryRow(`SHOW system_identity`)
+						var name string
+						if err := row.Scan(&name); err != nil {
+							t.Fatal(err)
+						}
+						result += " " + name
+					}
+
+					return "ok " + result, nil
 
 				default:
 					td.Fatalf(t, "unknown command: %s", td.Cmd)

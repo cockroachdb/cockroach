@@ -126,6 +126,7 @@ func (c *conn) handleAuthentication(
 	} else {
 		systemIdentity = c.sessionArgs.User
 	}
+	c.sessionArgs.SystemIdentity = systemIdentity
 
 	// Delegate to the AuthMethod's MapRole to choose the actual
 	// database user that a successful authentication will result in.
