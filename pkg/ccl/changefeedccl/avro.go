@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -408,8 +409,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 			func(d tree.Datum, _ interface{}) (interface{}, error) {
 				date := *d.(*tree.DDate)
 				if !date.IsFinite() {
-					return nil, errors.Errorf(
-						`infinite date not yet supported with avro`)
+					return nil, changefeedbase.WithTerminalError(errors.Errorf(
+						`infinite date not yet supported with avro`))
 				}
 				// The avro library requires us to return this as a time.Time.
 				return date.ToTime()
@@ -498,8 +499,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 	case types.DecimalFamily:
 		if typ.Precision() == 0 {
-			return nil, errors.Errorf(
-				`decimal with no precision not yet supported with avro`)
+			return nil, changefeedbase.WithTerminalError(errors.Errorf(
+				`decimal with no precision not yet supported with avro`))
 		}
 
 		width := int(typ.Width())
@@ -595,8 +596,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 	case types.ArrayFamily:
 		itemSchema, err := typeToAvroSchema(typ.ArrayContents())
 		if err != nil {
-			return nil, errors.Wrapf(err, `could not create item schema for %s`,
-				typ)
+			return nil, changefeedbase.WithTerminalError(
+				errors.Wrapf(err, `could not create item schema for %s`, typ))
 		}
 		itemUnionKey := avroUnionKey(itemSchema.SchemaType.([]avroSchemaType)[1])
 
@@ -676,8 +677,8 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 		)
 
 	default:
-		return nil, errors.Errorf(`type %s not yet supported with avro`,
-			typ.SQLString())
+		return nil, changefeedbase.WithTerminalError(
+			errors.Errorf(`type %s not yet supported with avro`, typ.SQLString()))
 	}
 
 	return schema, nil
@@ -688,7 +689,7 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 func columnToAvroSchema(col cdcevent.ResultColumn) (*avroSchemaField, error) {
 	schema, err := typeToAvroSchema(col.Typ)
 	if err != nil {
-		return nil, errors.Wrapf(err, "column %s", col.Name)
+		return nil, changefeedbase.WithTerminalError(errors.Wrapf(err, "column %s", col.Name))
 	}
 	schema.Name = SQLNameToAvroName(col.Name)
 	schema.Metadata = col.SQLStringNotHumanReadable()
@@ -790,7 +791,7 @@ func (r *avroDataRecord) rowFromTextual(buf []byte) (rowenc.EncDatumRow, error) 
 		return nil, err
 	}
 	if len(newBuf) > 0 {
-		return nil, errors.New(`only one row was expected`)
+		return nil, changefeedbase.WithTerminalError(errors.New(`only one row was expected`))
 	}
 	return r.rowFromNative(native)
 }
@@ -811,7 +812,7 @@ func (r *avroDataRecord) RowFromBinary(buf []byte) (rowenc.EncDatumRow, error) {
 		return nil, err
 	}
 	if len(newBuf) > 0 {
-		return nil, errors.New(`only one row was expected`)
+		return nil, changefeedbase.WithTerminalError(errors.New(`only one row was expected`))
 	}
 	return r.rowFromNative(native)
 }
@@ -826,7 +827,8 @@ func (r *avroDataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error
 	if err := it.Datum(func(d tree.Datum, col cdcevent.ResultColumn) (err error) {
 		fieldIdx, ok := r.fieldIdxByName[col.Name]
 		if !ok {
-			return errors.AssertionFailedf("could not find avro field for column %s", col.Name)
+			return changefeedbase.WithTerminalError(
+				errors.AssertionFailedf("could not find avro field for column %s", col.Name))
 		}
 		r.native[col.Name], err = r.Fields[fieldIdx].encodeFn(d)
 		return err
@@ -840,11 +842,12 @@ func (r *avroDataRecord) nativeFromRow(it cdcevent.Iterator) (interface{}, error
 func (r *avroDataRecord) rowFromNative(native interface{}) (rowenc.EncDatumRow, error) {
 	avroDatums, ok := native.(map[string]interface{})
 	if !ok {
-		return nil, errors.Errorf(`unknown avro native type: %T`, native)
+		return nil, changefeedbase.WithTerminalError(
+			errors.Errorf(`unknown avro native type: %T`, native))
 	}
 	if len(r.Fields) != len(avroDatums) {
-		return nil, errors.Errorf(
-			`expected row with %d columns got %d`, len(r.Fields), len(avroDatums))
+		return nil, changefeedbase.WithTerminalError(errors.Errorf(
+			`expected row with %d columns got %d`, len(r.Fields), len(avroDatums)))
 	}
 
 	row := make(rowenc.EncDatumRow, len(r.Fields))
@@ -978,7 +981,8 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 			delete(meta, `updated`)
 			ts, ok := u.(hlc.Timestamp)
 			if !ok {
-				return nil, errors.Errorf(`unknown metadata timestamp type: %T`, u)
+				return nil, changefeedbase.WithTerminalError(
+					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
 			native[`updated`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
 		}
@@ -989,13 +993,14 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 			delete(meta, `resolved`)
 			ts, ok := u.(hlc.Timestamp)
 			if !ok {
-				return nil, errors.Errorf(`unknown metadata timestamp type: %T`, u)
+				return nil, changefeedbase.WithTerminalError(
+					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
 			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
 		}
 	}
 	for k := range meta {
-		return nil, errors.AssertionFailedf(`unhandled meta key: %s`, k)
+		return nil, changefeedbase.WithTerminalError(errors.AssertionFailedf(`unhandled meta key: %s`, k))
 	}
 	return r.codec.BinaryFromNative(buf, native)
 }
@@ -1016,10 +1021,12 @@ func (r *avroDataRecord) refreshTypeMetadata(row cdcevent.Row) error {
 // precision is set) this is roundtripable without information loss.
 func decimalToRat(dec apd.Decimal, scale int32) (big.Rat, error) {
 	if dec.Form != apd.Finite {
-		return big.Rat{}, errors.Errorf(`cannot convert %s form decimal`, dec.Form)
+		return big.Rat{}, changefeedbase.WithTerminalError(
+			errors.Errorf(`cannot convert %s form decimal`, dec.Form))
 	}
 	if scale > 0 && scale != -dec.Exponent {
-		return big.Rat{}, errors.Errorf(`%s will not roundtrip at scale %d`, &dec, scale)
+		return big.Rat{}, changefeedbase.WithTerminalError(
+			errors.Errorf(`%s will not roundtrip at scale %d`, &dec, scale))
 	}
 	var r big.Rat
 	if dec.Exponent >= 0 {

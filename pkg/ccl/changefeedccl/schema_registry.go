@@ -199,7 +199,7 @@ func (r *confluentSchemaRegistry) doWithRetry(ctx context.Context, fn func() err
 		}
 		log.VInfof(ctx, 2, "retrying schema registry operation: %s", err.Error())
 	}
-	return changefeedbase.MarkRetryableError(err)
+	return err
 }
 
 func gracefulClose(ctx context.Context, toClose io.ReadCloser) {
