@@ -249,7 +249,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.spec.User(), ca.spec.JobID, ca.sliMetrics)
 
 	if err != nil {
-		err = changefeedbase.MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -261,8 +260,6 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	if b, ok := ca.sink.(*bufferSink); ok {
 		ca.changedRowBuf = &b.buf
 	}
-
-	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	// If the initial scan was disabled the highwater would've already been forwarded
 	needsInitialScan := ca.frontier.Frontier().IsEmpty()
@@ -483,7 +480,6 @@ func (ca *changeAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMet
 					err = nil
 				}
 			} else {
-
 				select {
 				// If the poller errored first, that's the
 				// interesting one, so overwrite `err`.
@@ -920,7 +916,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		cf.spec.User(), cf.spec.JobID, sli)
 
 	if err != nil {
-		err = changefeedbase.MarkRetryableError(err)
 		cf.MoveToDraining(err)
 		return
 	}
@@ -928,8 +923,6 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 	if b, ok := cf.sink.(*bufferSink); ok {
 		cf.resolvedBuf = &b.buf
 	}
-
-	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
@@ -999,9 +992,8 @@ func (cf *changeFrontier) close() {
 			cf.closeMetrics()
 		}
 		if cf.sink != nil {
-			if err := cf.sink.Close(); err != nil {
-				log.Warningf(cf.Ctx(), `error closing sink. goroutines may have leaked: %v`, err)
-			}
+			// Best effort: context is often cancel by now, so we expect to see an error
+			_ = cf.sink.Close()
 		}
 		cf.memAcc.Close(cf.Ctx())
 		cf.MemMonitor.Stop(cf.Ctx())
@@ -1042,8 +1034,11 @@ func (cf *changeFrontier) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 
 				// Detect whether this boundary should be used to kill or restart the
 				// changefeed.
-				if cf.frontier.boundaryType == jobspb.ResolvedSpan_RESTART {
-					err = changefeedbase.MarkRetryableError(err)
+				if cf.frontier.boundaryType == jobspb.ResolvedSpan_EXIT {
+					err = changefeedbase.WithTerminalError(errors.Wrapf(err,
+						"shut down due to schema change and %s=%q",
+						changefeedbase.OptSchemaChangePolicy,
+						changefeedbase.OptSchemaChangePolicyStop))
 				}
 			}
 
@@ -1288,7 +1283,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 	if cf.knobs.RaiseRetryableError != nil {
 		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(errors.New("cf.knobs.RaiseRetryableError"))
+			return false, err
 		}
 	}
 

@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -71,7 +72,8 @@ func (e *Evaluator) MatchesFilter(
 ) (_ bool, err error) {
 	defer func() {
 		if pan := recover(); pan != nil {
-			err = errors.Newf("error while evaluating WHERE clause: %s", pan)
+			err = changefeedbase.WithTerminalError(
+				errors.Newf("error while evaluating WHERE clause: %s", pan))
 		}
 	}()
 	if e.where == nil {
@@ -94,7 +96,8 @@ func (e *Evaluator) Projection(
 ) (_ cdcevent.Row, err error) {
 	defer func() {
 		if pan := recover(); pan != nil {
-			err = errors.Newf("error while evaluating SELECT clause: %s", pan)
+			err = changefeedbase.WithTerminalError(
+				errors.Newf("error while evaluating SELECT clause: %s", pan))
 		}
 	}()
 	if len(e.selectors) == 0 {
@@ -112,7 +115,8 @@ func (e *Evaluator) Projection(
 func (e *Evaluator) initSelectClause(ctx context.Context, sc *tree.SelectClause) (err error) {
 	defer func() {
 		if pan := recover(); pan != nil {
-			err = errors.Newf("error while validating CHANGEFEED expression: %s", pan)
+			err = changefeedbase.WithTerminalError(
+				errors.Newf("error while validating CHANGEFEED expression: %s", pan))
 		}
 	}()
 	if len(sc.Exprs) == 0 { // Shouldn't happen, but be defensive.
