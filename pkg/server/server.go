@@ -743,6 +743,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	lateBoundServer := &Server{}
 
+	// The following initialization is mirrored in NewTenantServer().
+	// Please keep them in sync.
+
 	// Instantiate the API privilege checker.
 	//
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
@@ -1038,6 +1041,8 @@ func (li listenerInfo) Iter() map[string]string {
 
 // Start calls PreStart() and AcceptClient() in sequence.
 // This is suitable for use e.g. in tests.
+// This mirrors the implementation of (*SQLServerWrapper).Start.
+// TODO(knz): Find a way to implement this method only once for both.
 func (s *Server) Start(ctx context.Context) error {
 	if err := s.PreStart(ctx); err != nil {
 		return err
@@ -1540,7 +1545,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
 			graphiteOnce.Do(func() {
-				s.node.startGraphiteStatsExporter(s.st)
+				startGraphiteStatsExporter(workersCtx, s.stopper, s.recorder, s.st)
 			})
 		}
 	})
@@ -1551,6 +1556,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// traffic may access it).
 	//
 	// See https://github.com/cockroachdb/cockroach/issues/73897.
+	//
+	// TODO(knz,arul): This mechanism could probably be removed now.
+	// The PTS Cache is a thing from the past when secondary tenants
+	// couldn’t use protected timestamps. We started using span configs
+	// (in both the system and secondary tenants) to store PTS
+	// information in 22.1, at which point the PTS cache was only kept
+	// around to migrate between the old and new subsystems.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
 		return err
 	}
@@ -1736,6 +1748,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 }
 
 // AcceptClients starts listening for incoming SQL clients over the network.
+// This mirrors the implementation of (*SQLServerWrapper).AcceptClients.
+// TODO(knz): Find a way to implement this method only once for both.
 func (s *Server) AcceptClients(ctx context.Context) error {
 	workersCtx := s.AnnotateCtx(context.Background())
 
