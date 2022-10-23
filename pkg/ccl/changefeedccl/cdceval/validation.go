@@ -12,6 +12,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -47,7 +48,8 @@ func NormalizeAndValidateSelectForTarget(
 ) (n NormalizedSelectClause, _ jobspb.ChangefeedTargetSpecification, retErr error) {
 	defer func() {
 		if pan := recover(); pan != nil {
-			retErr = errors.Newf("low-level error while normalizing expression, probably syntax is unsupported in CREATE CHANGEFEED: %s", pan)
+			retErr = changefeedbase.WithTerminalError(
+				errors.Newf("expression currently unsupported in CREATE CHANGEFEED: %s", pan))
 		}
 	}()
 	execCtx.SemaCtx()

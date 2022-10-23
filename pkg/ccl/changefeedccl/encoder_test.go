@@ -410,9 +410,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		enc, err := getEncoder(opts, targets)
 		require.NoError(t, err)
 		_, err = enc.EncodeKey(context.Background(), rowInsert)
-		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
-			`contacting confluent schema registry: Post "%s/subjects/foo-key/versions": x509: certificate signed by unknown authority`,
-			opts.SchemaRegistryURI))
+		require.Regexp(t, "x509", err)
 
 		wrongCert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
@@ -425,9 +423,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 		enc, err = getEncoder(opts, targets)
 		require.NoError(t, err)
 		_, err = enc.EncodeKey(context.Background(), rowInsert)
-		require.EqualError(t, err, fmt.Sprintf("retryable changefeed error: "+
-			`contacting confluent schema registry: Post "%s/subjects/foo-key/versions": x509: certificate signed by unknown authority`,
-			opts.SchemaRegistryURI))
+		require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
 	})
 }
 
