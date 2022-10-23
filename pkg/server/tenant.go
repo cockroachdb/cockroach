@@ -285,6 +285,11 @@ func startTenantInternal(
 
 	httpServer.handleHealth(gwMux)
 
+	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
+	if err := startPurgeOldSessions(ctx, authServer); err != nil {
+		return nil, nil, nil, "", "", err
+	}
+
 	// TODO(knz): Add support for the APIv2 tree here.
 	if err := httpServer.setupRoutes(ctx,
 		authServer,      /* authnServer */
