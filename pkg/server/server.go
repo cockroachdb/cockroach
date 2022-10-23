@@ -938,11 +938,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		kvMemoryMonitor:        kvMemoryMonitor,
 	}
 
-	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err = startPurgeOldSessions(ctx, sAuth); err != nil {
-		return nil, err
-	}
-
 	return lateBoundServer, err
 }
 
@@ -1591,6 +1586,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// count it as a KV operation since it grooms cluster-wide data, not
 	// something associated to SQL tenants.
 	s.startSystemLogsGC(ctx)
+
+	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
+	if err = startPurgeOldSessions(ctx, s.authentication); err != nil {
+		return err
+	}
 
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
