@@ -8,7 +8,6 @@ go_library(
         "blocking_buffer.go",
         "chan_buffer.go",
         "chunked_event_queue.go",
-        "err_buffer.go",
         "event.go",
         "metrics.go",
         "throttling_buffer.go",

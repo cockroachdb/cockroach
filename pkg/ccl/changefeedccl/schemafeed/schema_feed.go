@@ -559,7 +559,7 @@ func (tf *schemaFeed) validateDescriptor(
 			shouldFilter, err := tf.filter.shouldFilter(ctx, e, tf.targets)
 			log.VEventf(ctx, 1, "validate shouldFilter %v %v", formatEvent(e), shouldFilter)
 			if err != nil {
-				return err
+				return changefeedbase.WithTerminalError(err)
 			}
 			if !shouldFilter {
 				// Only sort the tail of the events from earliestTsBeingIngested.
