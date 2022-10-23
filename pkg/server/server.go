@@ -96,7 +96,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/getsentry/sentry-go"
+	sentry "github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
 )
 
@@ -138,9 +138,9 @@ type Server struct {
 	migrationServer *migrationServer
 	tsDB            *ts.DB
 	tsServer        *ts.Server
-	// The Obserability Server, used by the Observability Service to subscribe to
+	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
-	obsServer     *obs.EventsServer
+	eventsServer  *obs.EventsServer
 	raftTransport *kvserver.RaftTransport
 	stopper       *stop.Stopper
 
@@ -154,7 +154,7 @@ type Server struct {
 
 	sqlServer *SQLServer
 
-	// Created in NewServer but initialized (made usable) in `(*Server).Start`.
+	// Created in NewServer but initialized (made usable) in `(*Server).PreStart`.
 	externalStorageBuilder *externalStorageBuilder
 
 	storeGrantCoords *admission.StoreGrantCoordinators
@@ -480,7 +480,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
-	// need an InternalExecutor, but the InternalExecutor needs an xecutorConfig,
+	// need an InternalExecutor, but the InternalExecutor needs an executorConfig,
 	// which in turn needs many things. That's why everybody that needs an
 	// InternalExecutor uses this one instance.
 	internalExecutor := &sql.InternalExecutor{}
@@ -742,12 +742,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	lateBoundServer := &Server{}
+
+	// Instantiate the API privilege checker.
+	//
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
-	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor, st: st, makePlanner: nil}
+	adminAuthzCheck := &adminPrivilegeChecker{
+		ie:          internalExecutor,
+		st:          st,
+		makePlanner: nil,
+	}
+
+	// Instantiate the admin API server.
 	sAdmin := newAdminServer(
 		lateBoundServer, cfg.Settings, adminAuthzCheck, internalExecutor,
 	)
 
+	// Instantiate the HTTP server.
 	// These callbacks help us avoid a dependency on gossip in httpServer.
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return parseNodeID(g, s)
@@ -757,10 +767,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	sHTTP := newHTTPServer(cfg.BaseConfig, rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
+	// Instantiate the SQL session registry.
 	sessionRegistry := sql.NewSessionRegistry()
+
+	// Instantiate the cache of closed SQL sessions.
 	closedSessionCache := sql.NewClosedSessionCache(cfg.Settings, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+
+	// Instantiate the flow scheduler for distSQL execution.
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
+	// Instantiate the status API server.
 	sStatus := newStatusServer(
 		cfg.AmbientCtx,
 		st,
@@ -781,6 +797,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 	)
 
+	// Configure the path to the file that blocks starting background jobs.
 	var jobAdoptionStopFile string
 	for _, spec := range cfg.Stores.Specs {
 		if !spec.InMemory && spec.Path != "" {
@@ -789,6 +806,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		}
 	}
 
+	// Instantiate the KV prober.
 	kvProber := kvprober.NewProber(kvprober.Opts{
 		Tracer:                  cfg.AmbientCtx.Tracer,
 		DB:                      db,
@@ -812,7 +830,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		eventsServer.TestingKnobs = knobs.(obs.EventServerTestingKnobs)
 	}
 
+	// The settings cache writer is responsible for persisting
+	// the cluster settings on KV nodes across restarts.
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
+
+	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer:        serverpb.MakeOptionalNodesStatusServer(sStatus),
@@ -862,6 +884,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, err
 	}
 
+	// Tell the authz server how to connect to SQL.
 	adminAuthzCheck.makePlanner = func(opName string) (interface{}, func()) {
 		// This is a hack to get around a Go package dependency cycle. See comment
 		// in sql/jobs/registry.go on planHookMaker.
@@ -876,7 +899,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		)
 	}
 
+	// Create the authentication RPC server (login/logout).
 	sAuth := newAuthenticationServer(cfg.Config, sqlServer)
+
+	// Connect the various servers to RPC.
 	for i, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth, &sTS} {
 		if reflect.ValueOf(gw).IsNil() {
 			return nil, errors.Errorf("%d: nil", i)
@@ -884,11 +910,23 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		gw.RegisterService(grpcServer.Server)
 	}
 
-	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
-	sStatus.baseStatusServer.sqlServer = sqlServer
-	debugServer := debug.NewServer(cfg.BaseConfig.AmbientCtx, st, sqlServer.pgServer.HBADebugFn(), sStatus)
+	// Tell the node event logger (join, restart) how to populate SQL entries
+	// into system.eventlog.
 	node.InitLogger(sqlServer.execCfg)
 
+	// Tell the status server how to access SQL structures.
+	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
+	sStatus.baseStatusServer.sqlServer = sqlServer
+
+	// Create the debug API server.
+	debugServer := debug.NewServer(
+		cfg.BaseConfig.AmbientCtx,
+		st,
+		sqlServer.pgServer.HBADebugFn(),
+		sqlServer.execCfg.SQLStatusServer,
+	)
+
+	// Create a drain server.
 	drain := newDrainServer(cfg.BaseConfig, stopper, grpcServer, sqlServer)
 	drain.setNode(node, nodeLiveness)
 
@@ -924,7 +962,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		authentication:         sAuth,
 		tsDB:                   tsDB,
 		tsServer:               &sTS,
-		obsServer:              eventsServer,
+		eventsServer:           eventsServer,
 		raftTransport:          raftTransport,
 		stopper:                stopper,
 		debug:                  debugServer,
@@ -1170,10 +1208,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
 	s.migrationServer = migrationServer // only for testing via TestServer
 
-	// Register the Obserability Server, used by the Observability Service to
+	// Register the Observability Server, used by the Observability Service to
 	// subscribe to CRDB data. Note that the server will reject RPCs until
 	// SetResourceInfo is called later.
-	obspb.RegisterObsServer(s.grpc.Server, s.obsServer)
+	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -1225,11 +1263,13 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Connect the various RPC handlers to the gRPC gateway.
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, s.tsServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
 			return err
 		}
 	}
+
 	// Handle /health early. This is necessary for orchestration.  Note
 	// that /health is not authenticated, on purpose. This is both
 	// because it needs to be available before the cluster is up and can
@@ -1261,6 +1301,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 				return errors.Wrapf(err, "failed to write %s", file)
 			}
 		}
+		// TODO(knz): Do we really want to write the listener files
+		// in _every_ store directory? Not just the first one?
 	}
 
 	if s.cfg.DelayedBootstrapFn != nil {
@@ -1309,9 +1351,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := state.validate(); err != nil {
 		return errors.Wrap(err, "invalid init state")
 	}
-
-	// Enable the Obs Server.
-	s.obsServer.SetResourceInfo(state.clusterID, int32(state.nodeID), build.BinaryVersion())
 
 	// Apply any cached initial settings (and start the gossip listener) as early
 	// as possible, to avoid spending time with stale settings.
@@ -1404,12 +1443,14 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	})
 
+	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
 		ctx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
 	); err != nil {
 		return err
 	}
 
+	// Check that the HLC clock is only moving forward.
 	hlcUpperBoundExists, err := s.checkHLCUpperBoundExistsAndEnsureMonotonicity(ctx, initialStart)
 	if err != nil {
 		return err
@@ -1461,6 +1502,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	}
 	s.replicationReporter.Start(ctx, s.stopper)
 
+	// Configure the Sentry reporter to add some additional context to reports.
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTags(map[string]string{
 			"cluster":         s.StorageClusterID().String(),
@@ -1493,6 +1535,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Export statistics to graphite, if enabled by configuration.
 	var graphiteOnce sync.Once
 	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
@@ -1509,6 +1552,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//
 	// See https://github.com/cockroachdb/cockroach/issues/73897.
 	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
+		// TODO(knz,arul): This mechanism could probably be removed now.
+		// The PTS Cache is a thing from the past when secondary tenants
+		// couldn’t use protected timestamps. We started using span configs
+		// (in both the system and secondary tenants) to store PTS
+		// information in 22.1, at which point the PTS cache was only kept
+		// around to migrate between the old and new subsystems.
 		return err
 	}
 
@@ -1539,6 +1588,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// was done prior to start and record any actions appropriately.
 	logPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores)
 
+	// Report server listen addresses to logs.
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), log.SafeManaged(s.cfg.HTTPAddr), log.SafeManaged(s.cfg.HTTPAdvertiseAddr))
 	rpcConnType := redact.SafeString("grpc/postgres")
@@ -1627,6 +1677,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent(ctx)
 
+	// Start the SQL subsystem.
 	if err := s.sqlServer.preStart(
 		workersCtx,
 		s.stopper,
@@ -1638,15 +1689,23 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Enable the Obs Server.
+	s.eventsServer.SetResourceInfo(state.clusterID, int32(state.nodeID), build.BinaryVersion())
+
+	// Connect the enginers to the disk stats map constructor.
 	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
+	// Register the engines debug endpoints.
 	if err := s.debug.RegisterEngines(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines with debug server")
 	}
+
+	// Register the ctc debug endpoints.
 	s.debug.RegisterClosedTimestampSideTransport(s.ctSender, s.node.storeCfg.ClosedTimestampReceiver)
 
+	// Start the closed timestamp loop.
 	s.ctSender.Run(ctx, state.nodeID)
 
 	// Attempt to upgrade cluster version now that the sql server has been
