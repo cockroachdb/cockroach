@@ -1175,20 +1175,21 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer    serverpb.SQLStatusServer
-	TenantStatusServer serverpb.TenantStatusServer
-	RegionsServer      serverpb.RegionsServer
-	MetricsRecorder    nodeStatusGenerator
-	SessionRegistry    *SessionRegistry
-	ClosedSessionCache *ClosedSessionCache
-	SQLLiveness        sqlliveness.Liveness
-	JobRegistry        *jobs.Registry
-	VirtualSchemas     *VirtualSchemaHolder
-	DistSQLPlanner     *DistSQLPlanner
-	TableStatsCache    *stats.TableStatisticsCache
-	StatsRefresher     *stats.Refresher
-	InternalExecutor   *InternalExecutor
-	QueryCache         *querycache.C
+	SQLStatusServer       serverpb.SQLStatusServer
+	TenantStatusServer    serverpb.TenantStatusServer
+	RegionsServer         serverpb.RegionsServer
+	MetricsRecorder       nodeStatusGenerator
+	SessionRegistry       *SessionRegistry
+	ClosedSessionCache    *ClosedSessionCache
+	RecentStatementsCache *RecentStatementsCache
+	SQLLiveness           sqlliveness.Liveness
+	JobRegistry           *jobs.Registry
+	VirtualSchemas        *VirtualSchemaHolder
+	DistSQLPlanner        *DistSQLPlanner
+	TableStatsCache       *stats.TableStatisticsCache
+	StatsRefresher        *stats.Refresher
+	InternalExecutor      *InternalExecutor
+	QueryCache            *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -1919,6 +1920,14 @@ const (
 
 	// Execution phase.
 	executing queryPhase = 1
+
+	cancelled queryPhase = 2
+
+	timedOut queryPhase = 3
+
+	completed queryPhase = 4
+
+	failed queryPhase = 5
 )
 
 // queryMeta stores metadata about a query. Stored as reference in

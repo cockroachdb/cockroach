@@ -296,6 +296,9 @@ type sqlServerArgs struct {
 	// Used to store closed sessions.
 	closedSessionCache *sql.ClosedSessionCache
 
+	// Used to store recent statements.
+	recentStatementsCache *sql.RecentStatementsCache
+
 	// Used to track the DistSQL flows scheduled on this node but initiated on
 	// behalf of other nodes.
 	flowScheduler *flowinfra.FlowScheduler
@@ -778,6 +781,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RegionsServer:             cfg.regionsServer,
 		SessionRegistry:           cfg.sessionRegistry,
 		ClosedSessionCache:        cfg.closedSessionCache,
+		RecentStatementsCache:     cfg.recentStatementsCache,
 		ContentionRegistry:        contentionRegistry,
 		SQLLiveness:               cfg.sqlLivenessProvider,
 		JobRegistry:               jobRegistry,

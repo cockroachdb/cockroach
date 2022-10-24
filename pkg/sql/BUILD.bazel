@@ -160,6 +160,7 @@ go_library(
         "privileged_accessor.go",
         "project_set.go",
         "reassign_owned_by.go",
+        "recent_statements_cache.go",
         "recursive_cte.go",
         "refresh_materialized_view.go",
         "region_util.go",
