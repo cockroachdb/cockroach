@@ -342,54 +342,6 @@ func (c *CustomFuncs) canGenerateLookupJoins(
 	return false
 }
 
-// getOnClauseLookupRelStrictKeyCols collects the ON clause columns from the
-// lookup table which are equated with columns in another relation. If they
-// contain a strict key on lookupTableScanPrivate, the key columns and entire
-// set of equijoin columns are returned.
-func (c *CustomFuncs) getOnClauseLookupRelStrictKeyCols(
-	on memo.FiltersExpr, lookupTableScanPrivate *memo.ScanPrivate,
-) (lookupKeyCols, lookupCols opt.ColSet, ok bool) {
-	md := c.e.mem.Metadata()
-	funcDeps := memo.MakeTableFuncDep(md, lookupTableScanPrivate.Table)
-
-	// If there is no strict key, no need to proceed further.
-	_, ok = funcDeps.StrictKey()
-	if !ok {
-		return opt.ColSet{}, opt.ColSet{}, false
-	}
-
-	var lookupTableColID opt.ColumnID
-	for _, filtersItem := range on {
-		eqExpr, ok := filtersItem.Condition.(*memo.EqExpr)
-		if !ok {
-			continue
-		}
-		leftVariable, ok := eqExpr.Left.(*memo.VariableExpr)
-		if !ok {
-			continue
-		}
-		rightVariable, ok := eqExpr.Right.(*memo.VariableExpr)
-		if !ok {
-			continue
-		}
-		if md.ColumnMeta(leftVariable.Col).Table == lookupTableScanPrivate.Table {
-			lookupTableColID = leftVariable.Col
-			if md.ColumnMeta(rightVariable.Col).Table == lookupTableScanPrivate.Table {
-				continue
-			}
-		} else if md.ColumnMeta(rightVariable.Col).Table == lookupTableScanPrivate.Table {
-			lookupTableColID = rightVariable.Col
-		} else {
-			continue
-		}
-		lookupCols.Add(lookupTableColID)
-	}
-	if funcDeps.ColsAreStrictKey(lookupCols) {
-		return funcDeps.ReduceCols(lookupCols), lookupCols, true
-	}
-	return opt.ColSet{}, opt.ColSet{}, false
-}
-
 // generateLookupJoinsImpl is the general implementation for generating lookup
 // joins. The rightCols argument must be the columns output by the right side of
 // matched join expression. projectedVirtualCols is the set of virtual columns
@@ -430,8 +382,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	computedColFilters := c.computedColFilters(scanPrivate, on, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
-	onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, lookupIsKey :=
-		c.getOnClauseLookupRelStrictKeyCols(on, scanPrivate)
+	onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey :=
+		c.GetEquijoinStrictKeyCols(on, scanPrivate, input)
 
 	var pkCols opt.ColList
 	var newScanPrivate *memo.ScanPrivate
@@ -449,13 +401,12 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
-		var fkFilters memo.FiltersExpr
+		var derivedfkOnFilters memo.FiltersExpr
 		if lookupIsKey {
-			fkFilters = c.ForeignKeyConstraintFilters(
-				input, scanPrivate, indexCols, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols)
+			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
+				input, scanPrivate, indexCols, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
-		allOnFilters := append(onFilters, fkFilters...)
-		lookupConstraint, foundEqualityCols := cb.Build(index, allOnFilters, optionalFilters)
+		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
