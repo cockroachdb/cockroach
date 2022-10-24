@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -49,11 +48,6 @@ var errSequenceOperators = unimplemented.NewWithIssue(42508,
 func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
-	return nil, errors.WithStack(errSequenceOperators)
-}
-
-// ParseQualifiedTableName is part of the eval.DatabaseCatalog interface.
-func (so *DummySequenceOperators) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
@@ -344,11 +338,6 @@ func (ep *DummyEvalPlanner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 	_ context.Context,
 ) error {
 	return errors.WithStack(errEvalPlanner)
-}
-
-// ParseQualifiedTableName is part of the eval.DatabaseCatalog interface.
-func (ep *DummyEvalPlanner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
-	return parser.ParseQualifiedTableName(sql)
 }
 
 // SchemaExists is part of the eval.DatabaseCatalog interface.
