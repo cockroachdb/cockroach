@@ -3151,10 +3151,8 @@ func (s *Store) RangeFeed(
 
 	ctx := repl.AnnotateCtx(stream.Context())
 	tenID, _ := repl.TenantID()
-	if pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args); pacer != nil {
-		ctx = kvadmission.ContextWithPacer(ctx, pacer)
-	}
-	return repl.RangeFeed(ctx, args, stream)
+	pacer := s.cfg.KVAdmissionController.AdmitRangefeedRequest(tenID, args)
+	return repl.RangeFeed(ctx, args, stream, pacer)
 }
 
 // updateReplicationGauges counts a number of simple replication statistics for
