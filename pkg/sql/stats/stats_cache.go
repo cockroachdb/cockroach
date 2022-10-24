@@ -179,6 +179,7 @@ func (sc *TableStatisticsCache) Start(
 		[]roachpb.Span{statsTableSpan},
 		sc.ClientDB.Clock().Now(),
 		handleEvent,
+		rangefeed.WithSystemTablePriority(),
 	)
 	return err
 }

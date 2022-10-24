@@ -21,6 +21,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/limit",

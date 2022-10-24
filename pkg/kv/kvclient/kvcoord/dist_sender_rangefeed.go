@@ -86,6 +86,7 @@ func maxConcurrentCatchupScans(sv *settings.Values) int {
 
 type rangeFeedConfig struct {
 	useMuxRangeFeed bool
+	overSystemTable bool
 }
 
 // RangeFeedOption configures a RangeFeed.
@@ -101,6 +102,14 @@ func (o optionFunc) set(c *rangeFeedConfig) { o(c) }
 func WithMuxRangeFeed() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.useMuxRangeFeed = true
+	})
+}
+
+// WithSystemTablePriority is used for system-internal rangefeeds, it uses a
+// higher admission priority during catch up scans.
+func WithSystemTablePriority() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.overSystemTable = true
 	})
 }
 
@@ -196,7 +205,7 @@ func (ds *DistSender) RangeFeedSpans(
 				// Spawn a child goroutine to process this feed.
 				g.GoCtx(func(ctx context.Context) error {
 					return ds.partialRangeFeed(ctx, rr, eventProducer, sri.rs, sri.startAfter,
-						sri.token, withDiff, &catchupSem, rangeCh, eventCh)
+						sri.token, withDiff, &catchupSem, rangeCh, eventCh, cfg)
 				})
 			case <-ctx.Done():
 				return ctx.Err()
@@ -372,6 +381,7 @@ func (ds *DistSender) partialRangeFeed(
 	catchupSem *limit.ConcurrentRequestLimiter,
 	rangeCh chan<- singleRangeInfo,
 	eventCh chan<- RangeFeedMessage,
+	cfg rangeFeedConfig,
 ) error {
 	// Bound the partial rangefeed to the partial span.
 	span := rs.AsRawSpanWithNoLocals()
@@ -408,7 +418,7 @@ func (ds *DistSender) partialRangeFeed(
 		// Establish a RangeFeed for a single Range.
 		maxTS, err := ds.singleRangeFeed(
 			ctx, span, startAfter, withDiff, token.Desc(),
-			catchupSem, eventCh, streamProducerFactory, active.onRangeEvent)
+			catchupSem, eventCh, streamProducerFactory, active.onRangeEvent, cfg)
 
 		// Forward the timestamp in case we end up sending it again.
 		startAfter.Forward(maxTS)
@@ -496,11 +506,16 @@ func (ds *DistSender) singleRangeFeed(
 	eventCh chan<- RangeFeedMessage,
 	streamProducerFactory rangeFeedEventProducerFactory,
 	onRangeEvent onRangeEventCb,
+	cfg rangeFeedConfig,
 ) (hlc.Timestamp, error) {
 	// Ensure context is cancelled on all errors, to prevent gRPC stream leaks.
 	ctx, cancelFeed := context.WithCancel(ctx)
 	defer cancelFeed()
 
+	admissionPri := admissionpb.BulkNormalPri
+	if cfg.overSystemTable {
+		admissionPri = admissionpb.NormalPri
+	}
 	args := roachpb.RangeFeedRequest{
 		Span: span,
 		Header: roachpb.Header{
@@ -511,7 +526,7 @@ func (ds *DistSender) singleRangeFeed(
 		AdmissionHeader: roachpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
-			Priority:                 int32(admissionpb.BulkNormalPri),
+			Priority:                 int32(admissionPri),
 			CreateTime:               timeutil.Now().UnixNano(),
 			Source:                   roachpb.AdmissionHeader_FROM_SQL,
 			NoMemoryReservedAtSource: true,

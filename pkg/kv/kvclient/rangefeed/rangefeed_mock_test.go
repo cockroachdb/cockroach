@@ -54,6 +54,7 @@ func (m *mockClient) RangeFeed(
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
 	return m.rangefeed(ctx, spans, startFrom, withDiff, eventC)
 }
@@ -364,7 +365,7 @@ func TestBackoffOnRangefeedFailure(t *testing.T) {
 		Times(3).
 		Return(errors.New("rangefeed failed"))
 	db.EXPECT().RangeFeed(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- kvcoord.RangeFeedMessage) {
+		Do(func(context.Context, []roachpb.Span, hlc.Timestamp, bool, chan<- kvcoord.RangeFeedMessage, ...kvcoord.RangeFeedOption) {
 			cancel()
 		}).
 		Return(nil)

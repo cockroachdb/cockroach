@@ -63,6 +63,12 @@ type scanConfig struct {
 
 	// configures retry behavior
 	retryBehavior ScanRetryBehavior
+
+	// overSystemTable indicates whether this rangefeed is over a system table
+	// (used internally for CRDB's own functioning) and therefore should be
+	// treated with a more appropriate admission pri (NormalPri instead of
+	// BulkNormalPri).
+	overSystemTable bool
 }
 
 type optionFunc func(*config)
@@ -285,5 +291,14 @@ func WithScanRetryBehavior(b ScanRetryBehavior) Option {
 func WithPProfLabel(key, value string) Option {
 	return optionFunc(func(c *config) {
 		c.extraPProfLabels = append(c.extraPProfLabels, key, value)
+	})
+}
+
+// WithSystemTablePriority communicates that the rangefeed is over a system
+// table and thus operates at a higher priority (this primarily affects
+// admission control).
+func WithSystemTablePriority() Option {
+	return optionFunc(func(c *config) {
+		c.overSystemTable = true
 	})
 }

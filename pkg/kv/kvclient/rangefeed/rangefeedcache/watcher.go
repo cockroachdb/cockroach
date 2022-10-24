@@ -292,6 +292,10 @@ func (s *Watcher) Run(ctx context.Context) error {
 			case frontierBumpedCh <- struct{}{}:
 			}
 		}),
+		// TODO(irfansharif): Consider making this configurable on the Watcher
+		// type. As of 2022-11 all uses of this type are system-internal ones
+		// where a higher admission-pri makes sense.
+		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithDiff(s.withPrevValue),
 		rangefeed.WithRowTimestampInInitialScan(true),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
