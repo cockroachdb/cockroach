@@ -49,6 +49,7 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/duration",
         "//pkg/util/encoding",
+        "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/timeutil/pgdate",

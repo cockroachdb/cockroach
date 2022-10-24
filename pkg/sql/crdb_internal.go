@@ -460,17 +460,6 @@ CREATE TABLE crdb_internal.tables (
 			}
 
 			addDesc := func(table catalog.TableDescriptor, dbName tree.Datum, scName string) error {
-				leaseNodeDatum := tree.DNull
-				leaseExpDatum := tree.DNull
-				if lease := table.GetLease(); lease != nil {
-					leaseNodeDatum = tree.NewDInt(tree.DInt(int64(lease.NodeID)))
-					leaseExpDatum, err = tree.MakeDTimestamp(
-						timeutil.Unix(0, lease.ExpirationTime), time.Nanosecond,
-					)
-					if err != nil {
-						return err
-					}
-				}
 				dropTimeDatum := tree.DNull
 				if dropTime := table.GetDropTime(); dropTime != 0 {
 					dropTimeDatum, err = tree.MakeDTimestamp(
@@ -499,8 +488,8 @@ CREATE TABLE crdb_internal.tables (
 					eval.TimestampToDecimalDatum(table.GetModificationTime()),
 					tree.NewDString(table.GetFormatVersion().String()),
 					tree.NewDString(table.GetState().String()),
-					leaseNodeDatum,
-					leaseExpDatum,
+					tree.DNull, // deprecated leaseNode
+					tree.DNull, // deprecated leaseExp
 					dropTimeDatum,
 					tree.NewDString(table.GetAuditMode().String()),
 					tree.NewDString(scName),

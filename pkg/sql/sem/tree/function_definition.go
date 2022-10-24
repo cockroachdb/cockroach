@@ -48,6 +48,16 @@ type ResolvedFunctionDefinition struct {
 	Overloads []QualifiedOverload
 }
 
+type qualifiedOverloads []QualifiedOverload
+
+func (qo qualifiedOverloads) len() int {
+	return len(qo)
+}
+
+func (qo qualifiedOverloads) get(i int) overloadImpl {
+	return qo[i].Overload
+}
+
 // QualifiedOverload is a wrapper of Overload prefixed with a schema name.
 // It indicates that the overload is defined with the specified schema.
 type QualifiedOverload struct {

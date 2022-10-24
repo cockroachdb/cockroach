@@ -51,8 +51,8 @@ func (s schemaTelemetryExecutor) OnDrop(
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-) error {
-	return errScheduleUndroppable
+) (int, error) {
+	return 0, errScheduleUndroppable
 }
 
 var errScheduleUndroppable = errors.New("SQL schema telemetry schedule cannot be dropped")

@@ -81,12 +81,12 @@ func TestNormRuleProps(t *testing.T) {
 // switched. Patterns like CommuteConst rely on this being possible.
 func TestRuleBinaryAssumption(t *testing.T) {
 	fn := func(op opt.Operator) {
-		for _, overload := range tree.BinOps[opt.BinaryOpReverseMap[op]] {
-			binOp := overload.(*tree.BinOp)
+		_ = tree.BinOps[opt.BinaryOpReverseMap[op]].ForEachBinOp(func(binOp *tree.BinOp) error {
 			if !memo.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
 				t.Errorf("could not find inverse for overload: %+v", op)
 			}
-		}
+			return nil
+		})
 	}
 
 	// Only include commutative binary operators.

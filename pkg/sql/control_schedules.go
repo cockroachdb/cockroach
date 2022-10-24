@@ -173,16 +173,18 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
 					params.ExecCfg().ProtectedTimestampProvider, params.ExecCfg().InternalExecutor)
-				if err := controller.OnDrop(
+				additionalDroppedSchedules, err := controller.OnDrop(
 					params.ctx,
 					scheduleControllerEnv,
 					scheduledjobs.ProdJobSchedulerEnv,
 					schedule,
 					params.p.Txn(),
 					params.p.Descriptors(),
-				); err != nil {
+				)
+				if err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
+				n.numRows += additionalDroppedSchedules
 			}
 			err = DeleteSchedule(params.ctx, params.ExecCfg(), params.p.txn, schedule.ScheduleID())
 		default:

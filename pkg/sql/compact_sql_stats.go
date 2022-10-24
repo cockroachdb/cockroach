@@ -167,8 +167,8 @@ func (e *scheduledSQLStatsCompactionExecutor) OnDrop(
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
-) error {
-	return persistedsqlstats.ErrScheduleUndroppable
+) (int, error) {
+	return 0, persistedsqlstats.ErrScheduleUndroppable
 }
 
 // ExecuteJob implements the jobs.ScheduledJobExecutor interface.
