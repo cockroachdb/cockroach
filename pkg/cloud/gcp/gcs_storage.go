@@ -198,6 +198,7 @@ func makeGCSStorage(
 		return nil, errors.Wrap(err, "failed to create google cloud client")
 	}
 	g.SetRetry(gcs.WithErrorFunc(shouldRetry))
+	g.SetRetry(gcs.WithPolicy(gcs.RetryAlways))
 	bucket := g.Bucket(conf.Bucket)
 	if conf.BillingProject != `` {
 		bucket = bucket.UserProject(conf.BillingProject)
