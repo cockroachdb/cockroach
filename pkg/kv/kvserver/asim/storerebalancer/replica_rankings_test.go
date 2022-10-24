@@ -19,7 +19,7 @@ import (
 )
 
 func TestHottestRanges(t *testing.T) {
-	s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 6, 2: 6, 3: 6}, 3)
+	s := state.NewTestStateReplCounts(map[state.StoreID]int{1: 6, 2: 6, 3: 6}, 3, 1000)
 	// Set the QPS to be a testing rate to be rangeID * 100 for each range.
 	// NB: Normally the subsequent lease transfer would erase the QPS, however
 	// here the testing rate remains constants despite resets of actual counts.
