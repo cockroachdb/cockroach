@@ -17,11 +17,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesciter"
 )
 
@@ -43,7 +43,7 @@ var rangeDescPageSize = settings.RegisterIntSetting(
 // Liveness is the subset of the interface satisfied by CRDB's node liveness
 // component that the reporter relies on.
 type Liveness interface {
-	IsLive(roachpb.NodeID) (bool, error)
+	GetIsLiveMap() livenesspb.IsLiveMap
 }
 
 // Reporter is used to figure out whether ranges backing specific spans conform
@@ -51,9 +51,30 @@ type Liveness interface {
 // the spanconfig.Reporter interface.
 type Reporter struct {
 	dep struct {
+		// NB: The data dependencies in the implementation are:
+		//
+		// i.   point-in-time view over gossip-backed node liveness;
+		// ii.  point-in-time view of range descriptors (done transactionally);
+		// iii. the store resolver resolving store IDs to store descriptors;
+		// iv.  view over what span configs apply to what keyspans;
+		//
+		// TODO(irfansharif): For (iii) and (iv) we might not have a
+		// point-in-time snapshot of the data.
+		// - For (iii) it's possible that as we iterate through the set of range
+		//   descriptors, a few of which refer to some store S, we're racing
+		//   against that newly-added store's info not yet being available
+		//   through gossip. This is exceedingly unlikely, but if we see it
+		//   happen, we can expose some snapshot of the StoreResolver state like
+		//   we have for liveness.
+		// - For (iv) too we're not grabbing a read lock over the backing
+		//   spanconfig.KVSubscriber while reading off each span config, so it's
+		//   possible we generate the report for two range descriptors with span
+		//   configs from different points in time. If this too becomes a
+		//   problem, we can explicitly generate a snapshot like we do for
+		//   liveness.
 		Liveness
-		constraint.StoreResolver
 		rangedesciter.Iterator
+		constraint.StoreResolver
 		spanconfig.StoreReader
 	}
 
@@ -86,96 +107,111 @@ func New(
 // TODO(irfansharif): Support the equivalent of "critical localities", perhaps
 // through a different API than the one below since it's not quite
 // span-oriented.
+//
+// TODO(irfansharif): Once wired up the SQL code or exposed through an endpoint,
+// write an end-to-end test using actual SQL and zone configs. Set configs on a
+// table, disable replication, see conformance report. Enable repl, change
+// configs, repeat. Do this for tenants as well.
 
 // SpanConfigConformance implements the spanconfig.Reporter interface.
 func (r *Reporter) SpanConfigConformance(
 	ctx context.Context, spans []roachpb.Span,
 ) (roachpb.SpanConfigConformanceReport, error) {
-	// XXX: Actually use the spans parameter. Update the rangedesc.Iterator
-	// interfaces to take in a keyspan and bound meta{1,2} search just to
-	// segments that would possibly overlap with that keyspan. Until this
-	// keyspan scoping is done, we can't let this be used in tenants.
-	_ = spans
-
-	// XXX: Write an end-to-end test using actual SQL and zone configs. Set configs
-	// on a table, disable replication, see conformance. Enable repl, change
-	// configs, etc. Use tenants as well for this mode. Do this for tenants as well.
-	// Do this after some form of this API is exposed through SQL/an endpoint.
-
-	// XXX: Can we improve the SpanConfigConformanceReport proto type? Perhaps
-	// include some {meta,}data about the span config being violated as well? Or
-	// include the span config directly and provide helper libraries to compute
-	// human-readable "why is this in violation" text.
-	// - Only include range ID + replica descriptors + keys?
-	// - Type to represent exactly which constraint exactly is being violated?
-	// - Segment over/under replicated by what replica type (voter/non-voter)
-	//   exactly is over/under replicated?
-
 	report := roachpb.SpanConfigConformanceReport{}
-	if err := r.dep.Iterate(ctx, int(rangeDescPageSize.Get(&r.settings.SV)), func() {
-		report = roachpb.SpanConfigConformanceReport{} // init
-	}, func(descriptors ...roachpb.RangeDescriptor) error {
-		for _, desc := range descriptors {
-			conf, err := r.dep.StoreReader.GetSpanConfigForKey(ctx, desc.StartKey)
-			if err != nil {
-				return err
-			}
+	unavailableNodes := make(map[roachpb.NodeID]struct{})
 
-			status := desc.Replicas().ReplicationStatus(
-				func(rDesc roachpb.ReplicaDescriptor) bool {
-					isLive, err := r.dep.Liveness.IsLive(rDesc.NodeID)
+	isLiveMap := r.dep.Liveness.GetIsLiveMap()
+	for _, span := range spans {
+		if err := r.dep.Iterate(ctx, int(rangeDescPageSize.Get(&r.settings.SV)),
+			func() { report = roachpb.SpanConfigConformanceReport{} /* init */ },
+			span,
+			func(descriptors ...roachpb.RangeDescriptor) error {
+				for _, desc := range descriptors {
+					conf, err := r.dep.StoreReader.GetSpanConfigForKey(ctx, desc.StartKey)
 					if err != nil {
-						// As of 2022-10, this error only appears if we're
-						// asking for the liveness of a node ID that doesn't
-						// exist, which should never happen. Shout loudly
-						// and declare things as non-live.
-						log.Errorf(ctx, "programming error: unexpected err: %v", err)
-						return false
+						return err
 					}
-					return isLive
-				}, int(conf.GetNumVoters()), int(conf.GetNumNonVoters()))
-			if !status.Available {
-				report.Unavailable = append(report.Unavailable, desc)
-			}
-			if status.UnderReplicated || status.UnderReplicatedNonVoters {
-				report.UnderReplicated = append(report.UnderReplicated, desc)
-			}
-			if status.OverReplicated || status.OverReplicatedNonVoters {
-				report.OverReplicated = append(report.OverReplicated, desc)
-			}
 
-			// Compute constraint violations for the overall (affecting voters
-			// and non-voters alike) and voter constraints.
-			overall := constraint.AnalyzeConstraints(
-				r.dep.StoreResolver,
-				desc.Replicas().Descriptors(),
-				conf.NumReplicas, conf.Constraints)
-			for i, c := range overall.Constraints {
-				if c.NumReplicas == 0 {
-					c.NumReplicas = conf.NumReplicas
+					status := desc.Replicas().ReplicationStatus(
+						func(rDesc roachpb.ReplicaDescriptor) bool {
+							isLive := isLiveMap[rDesc.NodeID].IsLive
+							if !isLive {
+								unavailableNodes[rDesc.NodeID] = struct{}{}
+							}
+							return isLive
+						}, int(conf.GetNumVoters()), int(conf.GetNumNonVoters()))
+					if !status.Available {
+						report.Unavailable = append(report.Unavailable,
+							roachpb.ConformanceReportedRange{
+								RangeDescriptor: desc,
+								Config:          conf,
+							})
+					}
+					if status.UnderReplicated || status.UnderReplicatedNonVoters {
+						report.UnderReplicated = append(report.UnderReplicated,
+							roachpb.ConformanceReportedRange{
+								RangeDescriptor: desc,
+								Config:          conf,
+							})
+					}
+					if status.OverReplicated || status.OverReplicatedNonVoters {
+						report.OverReplicated = append(report.OverReplicated,
+							roachpb.ConformanceReportedRange{
+								RangeDescriptor: desc,
+								Config:          conf,
+							})
+					}
+
+					// Compute constraint violations for the overall (affecting voters
+					// and non-voters alike) and voter constraints.
+					overall := constraint.AnalyzeConstraints(
+						r.dep.StoreResolver,
+						desc.Replicas().Descriptors(),
+						conf.NumReplicas, conf.Constraints)
+					for i, c := range overall.Constraints {
+						if c.NumReplicas == 0 {
+							// NB: This is a weird artifact of
+							// constraint.NumReplicas, which if set to zero is
+							// used to imply that the constraint will applies to
+							// all replicas. Setting it explicitly makes the
+							// code below less fragile.
+							c.NumReplicas = conf.NumReplicas
+						}
+						if len(overall.SatisfiedBy[i]) < int(c.NumReplicas) {
+							report.ViolatingConstraints = append(report.ViolatingConstraints,
+								roachpb.ConformanceReportedRange{
+									RangeDescriptor: desc,
+									Config:          conf,
+								})
+							break
+						}
+					}
+					voters := constraint.AnalyzeConstraints(
+						r.dep.StoreResolver,
+						desc.Replicas().Voters().Descriptors(),
+						conf.GetNumVoters(), conf.VoterConstraints)
+					for i, c := range voters.Constraints {
+						if c.NumReplicas == 0 {
+							c.NumReplicas = conf.GetNumVoters()
+						}
+						if len(voters.SatisfiedBy[i]) < int(c.NumReplicas) {
+							report.ViolatingConstraints = append(report.ViolatingConstraints,
+								roachpb.ConformanceReportedRange{
+									RangeDescriptor: desc,
+									Config:          conf,
+								})
+							break
+						}
+					}
 				}
-				if len(overall.SatisfiedBy[i]) < int(c.NumReplicas) {
-					report.ViolatingConstraints = append(report.ViolatingConstraints, desc)
-					break
-				}
-			}
-			voters := constraint.AnalyzeConstraints(
-				r.dep.StoreResolver,
-				desc.Replicas().Voters().Descriptors(),
-				conf.GetNumVoters(), conf.VoterConstraints)
-			for i, c := range voters.Constraints {
-				if c.NumReplicas == 0 {
-					c.NumReplicas = conf.GetNumVoters()
-				}
-				if len(voters.SatisfiedBy[i]) < int(c.NumReplicas) {
-					report.ViolatingConstraints = append(report.ViolatingConstraints, desc)
-					break
-				}
-			}
+				return nil
+			}); err != nil {
+			return roachpb.SpanConfigConformanceReport{}, err
 		}
-		return nil
-	}); err != nil {
-		return roachpb.SpanConfigConformanceReport{}, err
+	}
+
+	for nid := range unavailableNodes {
+		report.UnavailableNodeIDs = append(report.UnavailableNodeIDs, int32(nid))
 	}
 	return report, nil
 }

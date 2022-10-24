@@ -17,7 +17,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -156,6 +158,9 @@ func TestDataDriven(t *testing.T) {
 					}
 					spans = append(spans, spanconfigtestutils.ParseSpan(t, line))
 				}
+				if len(spans) == 0 {
+					spans = append(spans, keys.EverythingSpan)
+				}
 				report, err := reporter.SpanConfigConformance(ctx, spans)
 				require.NoError(t, err)
 				printRangeDesc := func(r roachpb.RangeDescriptor) string {
@@ -176,13 +181,14 @@ func TestDataDriven(t *testing.T) {
 					buf.WriteString("]")
 					return buf.String()
 				}
-				printList := func(tag string, descs []roachpb.RangeDescriptor) string {
+				printList := func(tag string, ranges []roachpb.ConformanceReportedRange) string {
 					var buf strings.Builder
-					for i, desc := range descs {
+					for i, r := range ranges {
 						if i == 0 {
 							buf.WriteString(fmt.Sprintf("%s:\n", tag))
 						}
-						buf.WriteString(fmt.Sprintf("  %s\n", printRangeDesc(desc)))
+						buf.WriteString(fmt.Sprintf("  %s applying %s\n", printRangeDesc(r.RangeDescriptor),
+							spanconfigtestutils.PrintSpanConfigDiffedAgainstDefaults(r.Config)))
 					}
 					return buf.String()
 				}
@@ -231,11 +237,15 @@ func newMockCluster(
 	}
 }
 
-// IsLive implements spanconfigreporter.Liveness.
-func (s *mockCluster) IsLive(id roachpb.NodeID) (bool, error) {
-	live, found := s.liveness[id]
-	require.True(s.t, found, "undeclared node n%d", id)
-	return live, nil
+// GetIsLiveMap implements spanconfigreporter.Liveness.
+func (s *mockCluster) GetIsLiveMap() livenesspb.IsLiveMap {
+	isLiveMap := livenesspb.IsLiveMap{}
+	for nid, isLive := range s.liveness {
+		isLiveMap[nid] = livenesspb.IsLiveMapEntry{
+			IsLive: isLive,
+		}
+	}
+	return isLiveMap
 }
 
 // GetStoreDescriptor implements constraint.StoreResolver.
@@ -251,7 +261,7 @@ func (s *mockCluster) GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.Store
 
 // Iterate implements rangedesciter.Iterator.
 func (s *mockCluster) Iterate(
-	_ context.Context, _ int, _ func(), fn func(...roachpb.RangeDescriptor) error,
+	_ context.Context, _ int, _ func(), _ roachpb.Span, fn func(...roachpb.RangeDescriptor) error,
 ) error {
 	var descs []roachpb.RangeDescriptor
 	for _, d := range s.ranges {

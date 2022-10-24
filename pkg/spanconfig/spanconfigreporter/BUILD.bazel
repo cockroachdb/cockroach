@@ -11,11 +11,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/spanconfig",
-        "//pkg/util/log",
         "//pkg/util/rangedesciter",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -31,7 +31,9 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":spanconfigreporter",
+        "//pkg/keys",
         "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

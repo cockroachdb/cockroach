@@ -223,7 +223,7 @@ func calcRangeCounter(
 			// needed{Voters,NonVoters} - we don't care about the
 			// under/over-replication determinations from the report because
 			// it's too magic. We'll do our own determination below.
-			0, 0)
+			0, -1)
 		unavailable = !status.Available
 		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
 		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
