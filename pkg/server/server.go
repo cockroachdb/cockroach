@@ -699,7 +699,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	lateBoundServer := &Server{}
 	// TODO(tbg): give adminServer only what it needs (and avoid circular deps).
 	adminAuthzCheck := &adminPrivilegeChecker{ie: internalExecutor}
-	sAdmin := newAdminServer(lateBoundServer, adminAuthzCheck, internalExecutor)
+	sAdmin := newAdminServer(
+		lateBoundServer, cfg.Settings, adminAuthzCheck, internalExecutor,
+	)
 
 	// These callbacks help us avoid a dependency on gossip in httpServer.
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
@@ -948,11 +950,11 @@ func (s *Server) Start(ctx context.Context) error {
 // underinitialized services. This is avoided with some additional
 // complexity that can be summarized as follows:
 //
-// - before blocking trying to connect to the Gossip network, we already open
-//   the admin UI (so that its diagnostics are available)
-// - we also allow our Gossip and our connection health Ping service
-// - everything else returns Unavailable errors (which are retryable)
-// - once the node has started, unlock all RPCs.
+//   - before blocking trying to connect to the Gossip network, we already open
+//     the admin UI (so that its diagnostics are available)
+//   - we also allow our Gossip and our connection health Ping service
+//   - everything else returns Unavailable errors (which are retryable)
+//   - once the node has started, unlock all RPCs.
 //
 // The passed context can be used to trace the server startup. The context
 // should represent the general startup operation.
