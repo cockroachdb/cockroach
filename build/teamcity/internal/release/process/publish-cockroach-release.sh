@@ -105,7 +105,12 @@ curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 cp -r licenses build/deploy/
 
+# Try to remove the base image before building. This should prevent platform mismatch.
+docker rmi registry.access.redhat.com/ubi8/ubi-minimal || true
+# Explicitly use amd64 as a platform to prevent using a worng image
 docker build \
+  --pull \
+  --platform linux/amd64 \
   --label version=$version \
   --no-cache \
   --tag=${dockerhub_repository}:{"$build_name",latest,latest-"${release_branch}"} \

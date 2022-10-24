@@ -56,6 +56,7 @@ sed \
 cat build/deploy-redhat/Dockerfile
 
 docker build --no-cache \
+  --pull \
   --label release=$rhel_release \
   --tag=${rhel_repository}:${build_name} \
   build/deploy-redhat
