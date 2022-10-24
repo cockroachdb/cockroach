@@ -122,6 +122,9 @@ var ScanRequestLimit = settings.RegisterIntSetting(
 )
 
 // ScanRequestSize is the target size of the scan request response.
+//
+// TODO(cdc,yevgeniy,irfansharif): 16 MiB is too large for "elastic" work such
+// as this; reduce the default. Evaluate this as part of #90089.
 var ScanRequestSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.backfill.scan_request_size",

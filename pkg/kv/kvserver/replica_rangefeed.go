@@ -135,21 +135,22 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *kvadmission.Pacer,
 ) *roachpb.Error {
-	return r.rangeFeedWithRangeID(ctx, r.RangeID, args, stream)
+	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer)
 }
 
 func (r *Replica) rangeFeedWithRangeID(
-	ctx context.Context,
 	_forStacks roachpb.RangeID,
 	args *roachpb.RangeFeedRequest,
 	stream roachpb.RangeFeedEventSink,
+	pacer *kvadmission.Pacer,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",
 			docs.URL(`change-data-capture.html#enable-rangefeeds-to-reduce-latency`))
 	}
+	ctx := r.AnnotateCtx(stream.Context())
 
 	rSpan, err := keys.SpanAddr(args.Span)
 	if err != nil {
@@ -225,7 +226,7 @@ func (r *Replica) rangeFeedWithRangeID(
 			// Assert that we still hold the raftMu when this is called to ensure
 			// that the catchUpIter reads from the current snapshot.
 			r.raftMu.AssertHeld()
-			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease, kvadmission.PacerFromContext(ctx))
+			return rangefeed.NewCatchUpIterator(r.Engine(), span, startTime, iterSemRelease, pacer)
 		}
 	}
 	p := r.registerWithRangefeedRaftMuLocked(

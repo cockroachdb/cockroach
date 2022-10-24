@@ -52,7 +52,8 @@ var elasticCPUDurationPerExportRequest = settings.RegisterDurationSetting(
 )
 
 // elasticCPUDurationPerRangefeedScanUnit controls how many CPU tokens are
-// allotted for each unit of work during rangefeed catchup scans.
+// allotted for each unit of work during rangefeed catchup scans. Only takes
+// effect if kvadmission.rangefeed_catchup_scan_elastic_control.enabled is set.
 var elasticCPUDurationPerRangefeedScanUnit = settings.RegisterDurationSetting(
 	settings.SystemOnly,
 	"kvadmission.elastic_cpu.duration_per_rangefeed_scan_unit",
@@ -71,6 +72,15 @@ var elasticCPUDurationPerRangefeedScanUnit = settings.RegisterDurationSetting(
 	},
 )
 
+// rangefeedCatchupScanElasticControlEnabled determines whether rangefeed catch
+// up scans integrate with elastic CPU control.
+var rangefeedCatchupScanElasticControlEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.rangefeed_catchup_scan_elastic_control.enabled",
+	"determines whether rangefeed catchup scans integrate with the elastic CPU control",
+	true,
+)
+
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
@@ -83,8 +93,9 @@ type Controller interface {
 	// executing.
 	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
 	// AdmitRangefeedRequest must be called before serving rangefeed requests.
-	// It returns a Pacer that's used within rangefeed catchup scans (typically
-	// CPU-intensive and affects scheduling latencies negatively).
+	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
+	// catchup scans (typically CPU-intensive and affecting scheduling
+	// latencies).
 	AdmitRangefeedRequest(roachpb.TenantID, *roachpb.RangeFeedRequest) *Pacer
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
@@ -292,10 +303,9 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 func (n *controllerImpl) AdmitRangefeedRequest(
 	tenantID roachpb.TenantID, request *roachpb.RangeFeedRequest,
 ) *Pacer {
-	// TODO(irfansharif): We need to version gate/be defensive when integrating
-	// rangefeeds since admission headers will not be fully set on older version
-	// nodes. See EnableRangefeedElasticCPUControl in cockroach_versions.go.
-	// Consider a cluster setting too.
+	if !rangefeedCatchupScanElasticControlEnabled.Get(&n.settings.SV) {
+		return nil
+	}
 
 	return &Pacer{
 		unit: elasticCPUDurationPerRangefeedScanUnit.Get(&n.settings.SV),
@@ -468,24 +478,4 @@ func (p *Pacer) Close() {
 
 	p.wq.AdmittedWorkDone(p.cur)
 	p.cur = nil
-}
-
-type pacerKey struct{}
-
-// ContextWithPacer returns a Context wrapping the supplied Pacer, if any.
-func ContextWithPacer(ctx context.Context, h *Pacer) context.Context {
-	if h == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, pacerKey{}, h)
-}
-
-// PacerFromContext returns the Pacer contained in the Context, if any.
-func PacerFromContext(ctx context.Context) *Pacer {
-	val := ctx.Value(pacerKey{})
-	h, ok := val.(*Pacer)
-	if !ok {
-		return nil
-	}
-	return h
 }
