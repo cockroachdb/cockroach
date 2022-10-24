@@ -449,13 +449,12 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
-		var fkFilters memo.FiltersExpr
+		var derivedfkOnFilters memo.FiltersExpr
 		if lookupIsKey {
-			fkFilters = c.ForeignKeyConstraintFilters(
+			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input, scanPrivate, indexCols, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols)
 		}
-		allOnFilters := append(onFilters, fkFilters...)
-		lookupConstraint, foundEqualityCols := cb.Build(index, allOnFilters, optionalFilters)
+		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.

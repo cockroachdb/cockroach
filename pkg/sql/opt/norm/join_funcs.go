@@ -685,6 +685,14 @@ func (c *CustomFuncs) ForeignKeyConstraintFilters(
 				// to build a new one.
 				continue
 			}
+			// If the lookup table's ScanPrivate does not include the join column for
+			// the predicate we want to build, then don't build the predicate.
+			if !pkTableScanPrivate.Cols.Contains(pkColID) {
+				nextFK = true
+				break
+			}
+			// If the left table column is not included in the Select or Project, it
+			// would be incorrect to build a predicate on this column.
 			if selectExpr != nil && !selectExpr.Relational().OutputCols.Contains(inputColID) {
 				nextFK = true
 				break
@@ -712,4 +720,111 @@ func (c *CustomFuncs) ForeignKeyConstraintFilters(
 		}
 	}
 	return nil
+}
+
+// AddDerivedOnClauseConditionsFromFKContraints examines any strict keys from
+// the left and right relations and for each key which is a strict subset of the
+// referencing columns in a PK/FK constraint, and also has equijoin predicates
+// on the strict key columns, new equijoin predicates are built involving the
+// missing PK/FK constraints columns and appended to a copy of the ON clause.
+func (c *CustomFuncs) AddDerivedOnClauseConditionsFromFKContraints(
+	on memo.FiltersExpr, leftPossibleScan, rightPossibleScan memo.RelExpr,
+) memo.FiltersExpr {
+
+	if projectExpr, ok := leftPossibleScan.(*memo.ProjectExpr); ok {
+		leftPossibleScan = projectExpr.Input
+	}
+
+	if projectExpr, ok := rightPossibleScan.(*memo.ProjectExpr); ok {
+		rightPossibleScan = projectExpr.Input
+	}
+
+	if selectExpr, ok := leftPossibleScan.(*memo.SelectExpr); ok {
+		leftPossibleScan = selectExpr.Input
+	}
+
+	if selectExpr, ok := rightPossibleScan.(*memo.SelectExpr); ok {
+		rightPossibleScan = selectExpr.Input
+	}
+
+	leftScan, ok := leftPossibleScan.(*memo.ScanExpr)
+	if !ok {
+		return on
+	}
+	rightScan, ok := rightPossibleScan.(*memo.ScanExpr)
+	if !ok {
+		return on
+	}
+	leftUniqueKeyCols, leftjoinCols, okLeft := c.findAdditionalJoinColsFromFKContraints(leftScan, on)
+	rightUniqueKeyCols, rightjoinCols, okRight := c.findAdditionalJoinColsFromFKContraints(rightScan, on)
+
+	if !okLeft && !okRight {
+		return on
+	}
+	newOn := make(memo.FiltersExpr, len(on))
+	copy(newOn, on)
+	if okLeft {
+		// Pass `leftScan.Cols` to ForeignKeyConstraintFilters because we want to
+		// allow derivation of join terms on columns in any index. It may be a waste
+		// of CPU to enumerate each index and do this call for every index as the
+		// main caller of this function is only determining the scan columns to
+		// include. The same applies to the 2nd call below and `rightScan.Cols`.
+		fkFiltersFromLeftUniqueIndex := c.ForeignKeyConstraintFilters(
+			rightScan, &leftScan.ScanPrivate, leftScan.Cols, leftUniqueKeyCols, leftjoinCols)
+		if len(fkFiltersFromLeftUniqueIndex) > 0 {
+			newOn = append(newOn, fkFiltersFromLeftUniqueIndex...)
+		}
+	}
+	if okRight {
+		fkFiltersFromRightUniqueIndex := c.ForeignKeyConstraintFilters(
+			leftScan, &rightScan.ScanPrivate, rightScan.Cols, rightUniqueKeyCols, rightjoinCols)
+		if len(fkFiltersFromRightUniqueIndex) > 0 {
+			newOn = append(newOn, fkFiltersFromRightUniqueIndex...)
+		}
+	}
+	return newOn
+}
+
+func (c *CustomFuncs) findAdditionalJoinColsFromFKContraints(
+	lookupTable *memo.ScanExpr, on memo.FiltersExpr,
+) (keyCols, joinCols opt.ColSet, ok bool) {
+	md := c.mem.Metadata()
+	funcDeps := memo.MakeTableFuncDep(md, lookupTable.Table)
+
+	// If there is no strict key, no need to proceed further.
+	_, ok = funcDeps.StrictKey()
+	if !ok {
+		return opt.ColSet{}, opt.ColSet{}, false
+	}
+
+	var lookupTableColID opt.ColumnID
+	for _, filtersItem := range on {
+		eqExpr, ok := filtersItem.Condition.(*memo.EqExpr)
+		if !ok {
+			continue
+		}
+		leftVariable, ok := eqExpr.Left.(*memo.VariableExpr)
+		if !ok {
+			continue
+		}
+		rightVariable, ok := eqExpr.Right.(*memo.VariableExpr)
+		if !ok {
+			continue
+		}
+		if md.ColumnMeta(leftVariable.Col).Table == lookupTable.Table {
+			lookupTableColID = leftVariable.Col
+			if md.ColumnMeta(rightVariable.Col).Table == lookupTable.Table {
+				continue
+			}
+		} else if md.ColumnMeta(rightVariable.Col).Table == lookupTable.Table {
+			lookupTableColID = rightVariable.Col
+		} else {
+			continue
+		}
+		joinCols.Add(lookupTableColID)
+	}
+	if funcDeps.ColsAreStrictKey(joinCols) {
+		return funcDeps.ReduceCols(joinCols), joinCols, true
+	}
+	return opt.ColSet{}, opt.ColSet{}, false
 }

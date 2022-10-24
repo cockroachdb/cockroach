@@ -153,7 +153,9 @@
 )
 
 # PruneJoinLeftCols discards columns on the left side of a join that are never
-# used.
+# used. AddDerivedOnClauseConditionsFromFKContraints builds equijoin predicates
+# which might be added during optimization, if any, to ensure those columns are
+# not pruned away.
 [PruneJoinLeftCols, Normalize]
 (Project
     $input:(Join $left:* $right:* $on:* $private:*)
@@ -163,7 +165,13 @@
             $left
             $needed:(UnionCols4
                 (OuterCols $right)
-                (FilterOuterCols $on)
+                (FilterOuterCols
+                    (AddDerivedOnClauseConditionsFromFKContraints
+                        $on
+                        $left
+                        $right
+                    )
+                )
                 (ProjectionOuterCols $projections)
                 $passthrough
             )
@@ -182,7 +190,9 @@
 )
 
 # PruneJoinRightCols discards columns on the right side of a join that are never
-# used.
+# used. AddDerivedOnClauseConditionsFromFKContraints builds equijoin predicates
+# which might be added during optimization, if any, to ensure those columns are
+# not pruned away.
 #
 # The PruneCols property should prevent this rule (which pushes Project below
 # Join) from cycling with the TryDecorrelateProject rule (which pushes Join
@@ -195,7 +205,13 @@
         (CanPruneCols
             $right
             $needed:(UnionCols3
-                (FilterOuterCols $on)
+                (FilterOuterCols
+                    (AddDerivedOnClauseConditionsFromFKContraints
+                        $on
+                        $left
+                        $right
+                    )
+                )
                 (ProjectionOuterCols $projections)
                 $passthrough
             )

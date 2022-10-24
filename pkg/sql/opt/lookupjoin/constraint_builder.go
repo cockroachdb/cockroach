@@ -139,10 +139,14 @@ func (b *ConstraintBuilder) Init(
 // The constraint returned may be unconstrained if no constraint could be built.
 // foundEqualityCols indicates whether any equality conditions were used to
 // constrain the index columns; this can be used to decide whether to build a
-// lookup join.
+// lookup join. `derivedFkOnFilters` is a set of extra equijoin predicates,
+// derived from a foreign key constraint, to add to the explicit ON clause,
+// but which should not be used in calculating join selectivity estimates.
 func (b *ConstraintBuilder) Build(
-	index cat.Index, onFilters, optionalFilters memo.FiltersExpr,
+	index cat.Index, onFilters, optionalFilters, derivedFkOnFilters memo.FiltersExpr,
 ) (_ Constraint, foundEqualityCols bool) {
+	onFilters = append(onFilters, derivedFkOnFilters...)
+
 	// Extract the equality columns from onFilters. We cannot use the results of
 	// the extraction in Init because onFilters may be reduced by the caller
 	// after Init due to partial index implication. If the filters are reduced,
@@ -189,6 +193,25 @@ func (b *ConstraintBuilder) Build(
 
 	keyCols := make(opt.ColList, 0, numIndexKeyCols)
 	var derivedEquivCols opt.ColSet
+	// Don't change the selectivity estimate of this join vs. other joins which
+	// don't use derivedFkOnFilters. Add column IDs from these filters to the set
+	// of columns to ignore for join selectivity estimation. The alternative would
+	// be to derive these filters for all joins, but it's not clear that this
+	// would always be better given that some joins like hash join would have more
+	// terms to evaluate. Also, that approach may cause selectivity
+	// underestimation, so would require more effort to make sure correlations
+	// between columns are accurately captured.
+	for _, filtersItem := range derivedFkOnFilters {
+		if eqExpr, ok := filtersItem.Condition.(*memo.EqExpr); ok {
+			leftVariable, leftOk := eqExpr.Left.(*memo.VariableExpr)
+			rightVariable, rightOk := eqExpr.Right.(*memo.VariableExpr)
+			if leftOk && rightOk {
+				derivedEquivCols.Add(leftVariable.Col)
+				derivedEquivCols.Add(rightVariable.Col)
+			}
+		}
+	}
+
 	rightSideCols := make(opt.ColList, 0, numIndexKeyCols)
 	var inputProjections memo.ProjectionsExpr
 	var lookupExpr memo.FiltersExpr

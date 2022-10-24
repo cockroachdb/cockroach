@@ -86,3 +86,152 @@ statement error could not produce a query plan conforming to the LOOKUP JOIN hin
 EXPLAIN SELECT *
 FROM child
 INNER LOOKUP JOIN parent ON p_int = c_int AND p_text LIKE '%foo%'
+
+subtest implicit_crdb_region_column
+
+statement ok
+CREATE TABLE parent_rbr (
+  p_id INT PRIMARY KEY,
+  p_data STRING,
+  p_int INT
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child_rbr (
+  c_id INT PRIMARY KEY,
+  c_p_id INT,
+  c_int INT,
+  c_int2 INT,
+  FOREIGN KEY (c_p_id, crdb_region) REFERENCES parent_rbr (p_id, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO parent_rbr VALUES (1, 'foo', 1);
+
+statement ok
+INSERT INTO parent_rbr (crdb_region, p_id, p_data, p_int) VALUES ('us-east-1', 2, 'bar', 2);
+
+statement ok
+INSERT INTO child_rbr VALUES (1, 1, 1, 0);
+
+statement ok
+INSERT INTO child_rbr (crdb_region, c_id, c_p_id, c_int, c_int2) VALUES ('us-east-1', 2, 2, 2, 0);
+
+# A 'crdb_region = crdb_region' condition should be derived for this join.
+query T
+EXPLAIN SELECT *
+FROM child_rbr
+INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: parent_rbr@parent_rbr_pkey
+│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality cols are key
+│
+└── • scan
+      missing stats
+      table: child_rbr@child_rbr_pkey
+      spans: FULL SCAN
+
+query IIIIITI
+SELECT *
+FROM child_rbr
+INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id
+----
+1  1  1  0  1  foo  1
+2  2  2  0  2  bar  2
+
+# A 'crdb_region = crdb_region' condition should be derived for this join with
+# selection filter.
+query T
+EXPLAIN SELECT *
+FROM child_rbr
+INNER JOIN parent_rbr ON c_p_id = p_id WHERE c_int = 1
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: parent_rbr@parent_rbr_pkey
+│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality cols are key
+│
+└── • filter
+    │ filter: c_int = 1
+    │
+    └── • scan
+          missing stats
+          table: child_rbr@child_rbr_pkey
+          spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
+
+query IIIIITI
+SELECT *
+FROM child_rbr
+INNER JOIN parent_rbr ON c_p_id = p_id WHERE c_int = 1
+----
+1  1  1  0  1  foo  1
+
+# A 'crdb_region = crdb_region' condition should be derived for this join with
+# a projection and selection before the join.
+query T
+EXPLAIN SELECT *
+FROM child_rbr
+INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id AND c_int + c_int2 = p_int WHERE c_int2 > -1
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: parent_rbr@parent_rbr_pkey
+│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality cols are key
+│ pred: column14 = p_int
+│
+└── • render
+    │
+    └── • filter
+        │ filter: c_int2 > -1
+        │
+        └── • scan
+              missing stats
+              table: child_rbr@child_rbr_pkey
+              spans: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'us-east-1']
+
+query IIIIITI
+SELECT *
+FROM child_rbr
+INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id AND c_int + c_int2 = p_int WHERE c_int2 > -1
+----
+1  1  1  0  1  foo  1
+2  2  2  0  2  bar  2
+
+# A 'crdb_region = crdb_region' condition should be derived for this join with
+# selection filter on child_rbr.crdb_region. Is it worthwhile to compute TC and
+# generate parent_rbr.crdb_region = 'ap-southeast-2'?
+query T
+EXPLAIN SELECT *
+FROM child_rbr
+INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id WHERE child_rbr.crdb_region = 'ap-southeast-2'
+----
+distribution: local
+vectorized: true
+·
+• lookup join
+│ table: parent_rbr@parent_rbr_pkey
+│ equality: (crdb_region, c_p_id) = (crdb_region,p_id)
+│ equality cols are key
+│
+└── • scan
+      missing stats
+      table: child_rbr@child_rbr_pkey
+      spans: [/'ap-southeast-2' - /'ap-southeast-2']
+
+query IIIIITI
+SELECT *
+FROM child_rbr
+INNER LOOKUP JOIN parent_rbr ON c_p_id = p_id WHERE child_rbr.crdb_region = 'ap-southeast-2'
+----
+1  1  1  0  1  foo  1
