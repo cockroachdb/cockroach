@@ -55,30 +55,34 @@ export type TransactionContentionEventsResponse =
   TransactionContentionEventState[];
 
 // txnContentionQuery selects all relevant transaction contention events.
-const txnContentionQuery = `SELECT *
-                            FROM (SELECT waiting_txn_id,
-                                         encode(
-                                           waiting_txn_fingerprint_id, 'hex'
-                                           )                       AS waiting_txn_fingerprint_id,
-                                         collection_ts,
-                                         total_contention_duration AS contention_duration,
-                                         row_number()                 over (
-                 PARTITION BY waiting_txn_fingerprint_id
-                 ORDER BY
-                     collection_ts DESC
-                 ) AS rank, threshold
-                                  FROM (SELECT "sql.insights.latency_threshold" :: INTERVAL AS threshold
-                                        FROM
-                                          [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-                                       (SELECT waiting_txn_id,
-                                               waiting_txn_fingerprint_id,
-                                               max(collection_ts)       AS collection_ts,
-                                               sum(contention_duration) AS total_contention_duration
-                                        FROM crdb_internal.transaction_contention_events
-                                        WHERE encode(waiting_txn_fingerprint_id, 'hex') != '0000000000000000'
-                                        GROUP BY waiting_txn_id, waiting_txn_fingerprint_id)
-                                  WHERE total_contention_duration > threshold)
-                            WHERE rank = 1`;
+const txnContentionQuery = `
+SELECT * FROM
+(
+  SELECT
+    waiting_txn_id,
+    encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
+    collection_ts,
+    total_contention_duration AS contention_duration,
+    row_number() OVER ( PARTITION BY waiting_txn_fingerprint_id ORDER BY collection_ts DESC ) AS rank,
+    threshold
+  FROM
+    (
+      SELECT "sql.insights.latency_threshold"::INTERVAL AS threshold
+      FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+    ),
+    (
+      SELECT
+        waiting_txn_id,
+        waiting_txn_fingerprint_id,
+        max(collection_ts) AS collection_ts,
+        sum(contention_duration) AS total_contention_duration
+      FROM crdb_internal.transaction_contention_events
+      WHERE encode(waiting_txn_fingerprint_id, 'hex') != '0000000000000000'
+      GROUP BY waiting_txn_id, waiting_txn_fingerprint_id
+    )
+  WHERE total_contention_duration > threshold
+)
+WHERE rank = 1`;
 
 type TransactionContentionResponseColumns = {
   waiting_txn_id: string;
@@ -123,17 +127,14 @@ type TxnStmtFingerprintsResponseColumns = {
 };
 
 // txnStmtFingerprintsQuery selects all statement fingerprints for each recorded transaction fingerprint.
-const txnStmtFingerprintsQuery = (
-  txn_fingerprint_ids: string[] | string,
-) => `SELECT DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS transaction_fingerprint_id,
-                                          app_name,
-                                          ARRAY(
-                                            SELECT jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs')
-                                            ) AS query_ids
-      FROM crdb_internal.transaction_statistics
-      WHERE app_name != '${INTERNAL_SQL_API_APP}'
-        AND encode(fingerprint_id, 'hex') = ANY (string_to_array('${txn_fingerprint_ids}'
-        , ','))`;
+const txnStmtFingerprintsQuery = (txn_fingerprint_ids: string[] | string) => `
+SELECT
+  DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS transaction_fingerprint_id,
+  app_name,
+  ARRAY( SELECT jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs' )) AS query_ids
+FROM crdb_internal.transaction_statistics
+WHERE app_name != '${INTERNAL_SQL_API_APP}'
+  AND encode(fingerprint_id, 'hex') = ANY (string_to_array('${txn_fingerprint_ids}', ','))`;
 
 function txnStmtFingerprintsResultsToEventState(
   response: SqlExecutionResponse<TxnStmtFingerprintsResponseColumns>,
@@ -163,13 +164,12 @@ type FingerprintStmtsResponseColumns = {
 };
 
 // fingerprintStmtsQuery selects all statement queries for each recorded statement fingerprint.
-const fingerprintStmtsQuery = (
-  stmt_fingerprint_ids: string[],
-) => `SELECT DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
-                                          prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
-      FROM crdb_internal.statement_statistics
-      WHERE encode(fingerprint_id, 'hex') = ANY (string_to_array('${stmt_fingerprint_ids}'
-        , ','))`;
+const fingerprintStmtsQuery = (stmt_fingerprint_ids: string[]) => `
+SELECT
+  DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
+  prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
+FROM crdb_internal.statement_statistics
+WHERE encode(fingerprint_id, 'hex') = ANY (string_to_array('${stmt_fingerprint_ids}', ','))`;
 
 function fingerprintStmtsResultsToEventState(
   response: SqlExecutionResponse<FingerprintStmtsResponseColumns>,
@@ -312,30 +312,29 @@ export type TransactionContentionEventDetailsResponse =
   TransactionContentionEventDetailsState;
 
 // txnContentionDetailsQuery selects information about a specific transaction contention event.
-const txnContentionDetailsQuery = (id: string) => `SELECT collection_ts,
-                                                          blocking_txn_id,
-                                                          encode(
-                                                            blocking_txn_fingerprint_id, 'hex'
-                                                            ) AS blocking_txn_fingerprint_id,
-                                                          waiting_txn_id,
-                                                          encode(
-                                                            waiting_txn_fingerprint_id, 'hex'
-                                                            ) AS waiting_txn_fingerprint_id,
-                                                          contention_duration,
-                                                          crdb_internal.pretty_key(contending_key, 0) AS key,
-                                                          database_name,
-                                                          schema_name,
-                                                          table_name,
-                                                          index_name,
-                                                          threshold
-                                                   FROM (SELECT "sql.insights.latency_threshold" :: INTERVAL AS threshold
-                                                         FROM
-                                                           [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-                                                        crdb_internal.transaction_contention_events AS tce
-                                                          LEFT OUTER JOIN crdb_internal.ranges AS ranges
-                                                                          ON tce.contending_key BETWEEN ranges.start_key
-                                                                            AND ranges.end_key
-                                                   WHERE waiting_txn_id = '${id}'
+const txnContentionDetailsQuery = (id: string) => `
+SELECT
+  collection_ts,
+  blocking_txn_id,
+  encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
+  waiting_txn_id,
+  encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
+  contention_duration,
+  crdb_internal.pretty_key(contending_key, 0) AS key,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  threshold
+FROM
+  (
+    SELECT "sql.insights.latency_threshold"::INTERVAL AS threshold
+    FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+  ),
+  crdb_internal.transaction_contention_events AS tce
+  LEFT OUTER JOIN crdb_internal.ranges AS ranges
+    ON tce.contending_key BETWEEN ranges.start_key AND ranges.end_key
+  WHERE waiting_txn_id = '${id}'
 `;
 
 type TxnContentionDetailsResponseColumns = {
@@ -673,7 +672,7 @@ const statementInsightsQuery: InsightQuery<
       problem,
       causes,
       plan_gist,
-      row_number()                          OVER (
+      row_number()    OVER (
         PARTITION BY txn_fingerprint_id
         ORDER BY end_time DESC
       ) AS rank
