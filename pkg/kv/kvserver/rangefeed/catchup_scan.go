@@ -13,6 +13,7 @@ package rangefeed
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -154,11 +156,21 @@ func (i *CatchUpIterator) CatchUpScan(
 	var lastKey roachpb.Key
 	var meta enginepb.MVCCMetadata
 	i.SeekGE(storage.MVCCKey{Key: i.span.Key})
+
+	every := log.Every(100 * time.Millisecond)
 	for {
 		if ok, err := i.Valid(); err != nil {
 			return err
 		} else if !ok {
 			break
+		}
+
+		if err := i.pacer.Pace(ctx); err != nil {
+			// We're unable to pace things automatically -- shout loudly
+			// semi-infrequently but don't fail the rangefeed itself.
+			if every.ShouldLog() {
+				log.Errorf(ctx, "automatic pacing: %v", err)
+			}
 		}
 
 		// Emit any new MVCC range tombstones when their start key is encountered.
@@ -329,10 +341,6 @@ func (i *CatchUpIterator) CatchUpScan(
 			} else {
 				i.Next()
 			}
-		}
-
-		if err := i.pacer.Pace(ctx); err != nil {
-			return errors.Wrap(err, "automatic pacing: %v")
 		}
 	}
 

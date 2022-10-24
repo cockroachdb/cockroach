@@ -231,6 +231,7 @@ func (s *SQLWatcher) watchForDescriptorUpdates(
 		[]roachpb.Span{descriptorTableSpan},
 		startTS,
 		handleEvent,
+		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithDiff(true),
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
 			onFrontierAdvance(ctx, descriptorsRangefeed, resolvedTS)
@@ -290,6 +291,7 @@ func (s *SQLWatcher) watchForZoneConfigUpdates(
 		[]roachpb.Span{zoneTableSpan},
 		startTS,
 		handleEvent,
+		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
 			onFrontierAdvance(ctx, zonesRangefeed, resolvedTS)
 		}),
@@ -385,6 +387,7 @@ func (s *SQLWatcher) watchForProtectedTimestampUpdates(
 		[]roachpb.Span{ptsRecordsTableSpan},
 		startTS,
 		handleEvent,
+		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithOnFrontierAdvance(func(ctx context.Context, resolvedTS hlc.Timestamp) {
 			onFrontierAdvance(ctx, protectedTimestampRangefeed, resolvedTS)
 		}),
