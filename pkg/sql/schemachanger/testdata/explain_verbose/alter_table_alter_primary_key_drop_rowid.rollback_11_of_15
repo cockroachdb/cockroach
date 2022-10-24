@@ -360,6 +360,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
     │       │     IndexID: 10
     │       │     TableID: 104
     │       │
+    │       ├── • RemoveDroppedIndexPartialPredicate
+    │       │     IndexID: 11
+    │       │     TableID: 104
+    │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 12
     │       │     TableID: 104
@@ -452,10 +456,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 11 of 15;
     │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 9
-    │       │     TableID: 104
-    │       │
-    │       ├── • RemoveDroppedIndexPartialPredicate
-    │       │     IndexID: 11
     │       │     TableID: 104
     │       │
     │       ├── • LogEvent

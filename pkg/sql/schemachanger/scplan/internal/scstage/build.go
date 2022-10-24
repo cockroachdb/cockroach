@@ -118,8 +118,8 @@ func buildStages(bc buildContext) (stages []Stage) {
 		// Generate a stage builder which can make progress.
 		sb := bc.makeStageBuilder(bs)
 		// We allow mixing of revertible and non-revertible operations if there
-		// are no remaining operations which can fail. That being said, we want
-		// to not want to build such a stage as PostCommit but rather as
+		// are no remaining operations which can fail. That being said, we do not
+		// want to build such a stage as PostCommit but rather as
 		// PostCommitNonRevertible. This condition is used to determine whether
 		// the phase needs to be advanced due to the presence of non-revertible
 		// operations.
@@ -348,7 +348,7 @@ func (sb stageBuilder) nextTargetState(t currentTargetState) currentTargetState 
 	return sb.makeCurrentTargetState(t.e.To())
 }
 
-// hasUnmeetableOutboundDeps returns true iff the candidate node has inbound
+// hasUnmetInboundDeps returns true iff the candidate node has inbound
 // dependencies which aren't yet met.
 //
 // In plain english: we can only schedule this node in this stage if all the
@@ -408,8 +408,8 @@ func (sb stageBuilder) isUnmetInboundDep(de *scgraph.DepEdge) bool {
 // hasUnmeetableOutboundDeps returns true iff the candidate node has outbound
 // dependencies which cannot possibly be met.
 // This is the case when, among all the nodes transitively connected to or from
-// it via same-stage dependency edges, there is at least one which cannot (for
-// whatever reason) be scheduled in this stage.
+// it via same-stage precedence (or just precedence) dependency edges, there is
+// at least one which cannot (for whatever reason) be scheduled in this stage.
 // This function recursively visits this set of connected nodes.
 //
 // In plain english: we can only schedule this node in this stage if we are able
@@ -432,7 +432,7 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 	// Mark this node as having been visited in this traversal.
 	sb.visited[n] = sb.visitEpoch
 	// Do some sanity checks.
-	if _, isFulfilling := sb.bs.fulfilled[n]; isFulfilling {
+	if _, isFulfilled := sb.bs.fulfilled[n]; isFulfilled {
 		// This should never happen.
 		panic(errors.AssertionFailedf("%s should not yet be scheduled for this stage",
 			screl.NodeString(n)))
@@ -462,11 +462,30 @@ func (sb stageBuilder) hasUnmeetableOutboundDeps(n *screl.Node) (ret bool) {
 		if !sb.isUnmetInboundDep(de) {
 			return nil
 		}
-		if de.Kind() != scgraph.SameStagePrecedence || sb.hasUnmeetableOutboundDeps(de.From()) {
+		// At this point, `de` is an unmet inbound dep edge.
+		// The only way `n` can still be scheduled in this stage is thus to hope that
+		// `de.from` can be scheduled in this stage later AND `de` is a same-stage
+		// precedence (or just precedence since precedence subsumes same-stage precedence).
+		// Otherwise, we can conclude `n` is not schedulable in this stage.
+		if sb.hasUnmeetableOutboundDeps(de.From()) {
+			// `de.from` itself has unmeetable outbound deps and hence unschedulable :(
 			ret = true
 			return iterutil.StopIteration()
 		}
-		return nil
+		switch de.Kind() {
+		case scgraph.PreviousTransactionPrecedence, scgraph.PreviousStagePrecedence:
+			// `de.from` might be schedulable but the dep edge requires `n` to be scheduled
+			// at a different transaction/stage, so even if `de.from` is indeed schedulable
+			// in this stage, `n` cannot be scheduled in the same stage due to this dep edge.
+			ret = true
+			return iterutil.StopIteration()
+		case scgraph.Precedence, scgraph.SameStagePrecedence:
+			// `de.from` might be schedulable and, if indeed is, the dep edge types allow
+			// us to schedule `n` in the same stage as `de.from`. Hope remains!
+			return nil
+		default:
+			panic(errors.AssertionFailedf("unknown dep edge kind %q", de.Kind()))
+		}
 	})
 	if ret {
 		return true

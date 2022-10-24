@@ -172,6 +172,16 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
         │
         └── • 10 Mutation operations
             │
+            ├── • RemoveColumnDefaultExpression
+            │     ColumnID: 2
+            │     TableID: 106
+            │
+            ├── • UpdateBackReferencesInSequences
+            │     BackReferencedColumnID: 2
+            │     BackReferencedTableID: 106
+            │     SequenceIDs:
+            │     - 107
+            │
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
@@ -203,16 +213,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 6 of 7;
             ├── • MakeIndexAbsent
             │     IndexID: 3
             │     TableID: 106
-            │
-            ├── • RemoveColumnDefaultExpression
-            │     ColumnID: 2
-            │     TableID: 106
-            │
-            ├── • UpdateBackReferencesInSequences
-            │     BackReferencedColumnID: 2
-            │     BackReferencedTableID: 106
-            │     SequenceIDs:
-            │     - 107
             │
             ├── • MakeDeleteOnlyColumnAbsent
             │     ColumnID: 2
