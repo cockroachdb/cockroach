@@ -10,6 +10,8 @@ package ingest
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -165,18 +167,123 @@ func TestEventIngestionIntegration(t *testing.T) {
 	// Wait for the ingester to connect.
 	<-connected
 
-	// Perform a schema change and check that we get an event.
-	_, err = sqlDB.Exec("create table t()")
-	require.NoError(t, err)
+	t.Run("cluster_events", func(t *testing.T) {
+		// Perform a schema change and check that we get an event.
+		_, err = sqlDB.Exec("create table t()")
+		require.NoError(t, err)
 
-	// Wait for an event to be ingested.
-	testutils.SucceedsSoon(t, func() error {
-		r := pool.QueryRow(ctx, "select count(1) from cluster_events where event_type='create_table'")
-		var count int
-		require.NoError(t, r.Scan(&count))
-		if count < 1 {
-			return errors.Newf("no events yet")
-		}
-		return nil
+		// Wait for an event to be ingested.
+		testutils.SucceedsSoon(t, func() error {
+			r := pool.QueryRow(ctx, "select count(1) from cluster_events where event_type='create_table'")
+			var count int
+			require.NoError(t, r.Scan(&count))
+			if count < 1 {
+				return errors.Newf("no events yet")
+			}
+			return nil
+		})
 	})
+
+	t.Run("execution_insights", func(t *testing.T) {
+		// Generate an execution insight and check that we get an event.
+		_, err = sqlDB.Exec("set application_name = $1", t.Name())
+		_, err = sqlDB.Exec("set cluster setting sql.insights.latency_threshold = '100ms'", t.Name())
+		_, err = sqlDB.Exec("select pg_sleep(0.2)")
+		require.NoError(t, err)
+
+		foo, err := sql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+
+		// Wait for an event to be ingested.
+		testutils.SucceedsSoon(t, func() error {
+			r := pool.QueryRow(ctx, "select count(*) from execution_insights where app_name=$1", t.Name())
+			var count int
+			if err = r.Scan(&count); err != nil {
+				return err
+			}
+			if count < 1 {
+				return errors.Newf("no events yet")
+			}
+
+			var expected, actual insightRow
+
+			s := sqlDB.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "crdb_internal.cluster_execution_insights"), t.Name())
+			require.NoError(t, s.Scan(expected.fields()...))
+
+			// TODO(todd): Yuck. It would be nice if Scan could skip fields or something.
+			var timestamp time.Time
+			var id string
+
+			r = foo.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "execution_insights"), t.Name())
+			var fields []interface{}
+			fields = append(fields, &timestamp)
+			fields = append(fields, &id)
+			fields = append(fields, actual.fields()...)
+			require.NoError(t, r.Scan(fields...))
+			require.Equal(t, expected, actual)
+
+			return nil
+		})
+	})
+}
+
+// TODO(todd): Use the insight proto instead?
+type insightRow struct {
+	sessionID                string
+	transactionID            string
+	transactionFingerprintID []byte
+	statementID              string
+	statementFingerprintID   []byte
+	problem                  string
+	causes                   []uint8 // Huh?
+	query                    string
+	status                   string
+	startTime                time.Time
+	endTime                  time.Time
+	fullScan                 bool
+	userName                 string
+	appName                  string
+	databaseName             string
+	planGist                 string
+	rowsRead                 int64
+	rowsWritten              int64
+	priority                 string
+	retries                  int64
+	lastRetryReason          sql.NullString
+	execNodeIDs              []uint8 // Huh?
+	contention               sql.NullString
+	contentionEvents         sql.NullString
+	indexRecommendations     []uint8 // Huh?
+	implicitTransaction      bool
+}
+
+func (r *insightRow) fields() []interface{} {
+	return []interface{}{
+		&r.sessionID,
+		&r.transactionID,
+		&r.transactionFingerprintID,
+		&r.statementID,
+		&r.statementFingerprintID,
+		&r.problem,
+		&r.causes,
+		&r.query,
+		&r.status,
+		&r.startTime,
+		&r.endTime,
+		&r.fullScan,
+		&r.userName,
+		&r.appName,
+		&r.databaseName,
+		&r.planGist,
+		&r.rowsRead,
+		&r.rowsWritten,
+		&r.priority,
+		&r.retries,
+		&r.lastRetryReason,
+		&r.execNodeIDs,
+		&r.contention,
+		&r.contentionEvents,
+		&r.indexRecommendations,
+		&r.implicitTransaction,
+	}
 }

@@ -14,6 +14,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -167,7 +168,7 @@ type Provider interface {
 }
 
 // New builds a new Provider.
-func New(st *cluster.Settings, metrics Metrics) Provider {
+func New(st *cluster.Settings, metrics Metrics, eventsExporter obs.EventsExporter) Provider {
 	store := newStore(st)
 
 	return &defaultProvider{
@@ -178,6 +179,7 @@ func New(st *cluster.Settings, metrics Metrics) Provider {
 				newAnomalyDetector(st, metrics),
 			}}, &compositeSink{sinks: []sink{
 				store,
+				&obsSink{exporter: eventsExporter},
 			}}),
 		),
 	}

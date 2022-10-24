@@ -25,6 +25,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -329,6 +330,7 @@ func MakeServer(
 	parentMemoryMonitor *mon.BytesMonitor,
 	histogramWindow time.Duration,
 	executorConfig *sql.ExecutorConfig,
+	eventExporter obs.EventsExporter,
 ) *Server {
 	server := &Server{
 		AmbientCtx: ambientCtx,
@@ -348,7 +350,7 @@ func MakeServer(
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.StartNoReserved(context.Background(), parentMemoryMonitor)
-	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
+	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool, eventExporter)
 
 	// TODO(knz,ben): Use a cluster setting for this.
 	server.trustClientProvidedRemoteAddr.Set(trustClientProvidedRemoteAddrOverride)

@@ -1006,6 +1006,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		rootSQLMemoryMonitor,
 		cfg.HistogramWindowInterval(),
 		execCfg,
+		cfg.eventsServer,
 	)
 
 	distSQLServer.ServerConfig.SQLStatsController = pgServer.SQLServer.GetSQLStatsController()

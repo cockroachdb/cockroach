@@ -15,6 +15,9 @@ const (
 	// EventlogEvent represents general events about the cluster that historically
 	// have been persisted inside CRDB in the system.eventlog table.
 	EventlogEvent EventType = "eventlog"
+
+	// TODO(todd): Comment this.
+	ExecutionInsightEvent EventType = "execution_insight"
 )
 
 // EventlogEventTypeAttribute represents the key of the attribute containing
