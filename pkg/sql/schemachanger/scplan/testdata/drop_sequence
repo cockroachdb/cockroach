@@ -201,15 +201,15 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [ObjectParent:{DescID: 104, ReferencedDescID: 101}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Owner:{DescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [Sequence:{DescID: 104}, ABSENT]
@@ -217,11 +217,11 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 104}, TXN_DROPPED]
   to:   [Sequence:{DescID: 104}, DROPPED]

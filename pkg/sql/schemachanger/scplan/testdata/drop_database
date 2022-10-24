@@ -96,7 +96,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       DescriptorID: 116
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 117
-PreCommitPhase stage 1 of 1 with 68 MutationType ops
+PreCommitPhase stage 1 of 1 with 98 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -133,26 +133,26 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[Table:{DescID: 110}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 110, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
@@ -168,26 +168,26 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[TableComment:{DescID: 109, Comment: t1 is good}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108]}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> ABSENT
     [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
@@ -195,13 +195,13 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -210,16 +210,16 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 112}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 112, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 112, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 112, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 112, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -228,16 +228,16 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 113}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -246,16 +246,16 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[UserPrivileges:{DescID: 114, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 114}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 114, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 114, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -279,19 +279,19 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
     [[UserPrivileges:{DescID: 117, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 117}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 117, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 117, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 117, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 117, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
   ops:
@@ -437,6 +437,50 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
         DescriptorID: 110
         Name: t1
         SchemaID: 105
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -449,30 +493,239 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
         DescriptorID: 109
         Name: t1
         SchemaID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
         DescriptorID: 111
         Name: v1
         SchemaID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+      TableID: 111
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+      TableID: 111
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 8
+          SubWorkID: 1
+      TableID: 111
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
         DescriptorID: 112
         Name: v2
         SchemaID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
+      TableID: 112
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
+      TableID: 112
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
+      TableID: 112
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 9
+          SubWorkID: 1
+      TableID: 112
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
         DescriptorID: 113
         Name: v3
         SchemaID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 113
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 113
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
         DescriptorID: 114
         Name: v4
         SchemaID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 114
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 114
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 114
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 10
+          SubWorkID: 1
+      TableID: 114
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -491,6 +744,83 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
         DescriptorID: 117
         Name: v5
         SchemaID: 106
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 1
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 2
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967295
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 4294967294
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 12
+          SubWorkID: 1
+      TableID: 117
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 3
+          SubWorkID: 1
+      TableID: 110
+    *scop.MakeDeleteOnlyColumnAbsent
+      ColumnID: 3
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: DROP DATABASE ‹db1› CASCADE
+        StatementTag: DROP DATABASE
+        TargetMetadata:
+          SourceElementID: 6
+          SubWorkID: 1
+      TableID: 109
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -553,60 +883,28 @@ PreCommitPhase stage 1 of 1 with 68 MutationType ops
       - 117
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 59 MutationType ops
+      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 29 MutationType ops
         pending
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE ‹db1› CASCADE
         statementtag: DROP DATABASE
-PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 1 with 44 MutationType ops
   transitions:
     [[Database:{DescID: 104}, ABSENT], DROPPED] -> ABSENT
     [[Schema:{DescID: 105}, ABSENT], DROPPED] -> ABSENT
     [[Schema:{DescID: 106}, ABSENT], DROPPED] -> ABSENT
     [[Sequence:{DescID: 107}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 110}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 110, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[Sequence:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
     [[Table:{DescID: 109}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 109, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 111}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 111, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 112}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 112, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 113}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 113, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[View:{DescID: 114}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
     [[EnumType:{DescID: 115}, ABSENT], DROPPED] -> ABSENT
     [[AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, ABSENT], DROPPED] -> ABSENT
     [[View:{DescID: 117}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 117, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
   ops:
     *scop.LogEvent
       Element:
@@ -692,61 +990,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TableID: 110
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 3
-          SubWorkID: 1
-      TableID: 110
     *scop.LogEvent
       Element:
         Sequence:
@@ -781,61 +1024,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       StatementForDropJob:
         Statement: DROP DATABASE db1 CASCADE
       TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TableID: 109
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 6
-          SubWorkID: 1
-      TableID: 109
     *scop.LogEvent
       Element:
         View:
@@ -857,39 +1045,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 111
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
-      TableID: 111
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
-      TableID: 111
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 8
-          SubWorkID: 1
-      TableID: 111
     *scop.LogEvent
       Element:
         View:
@@ -911,50 +1066,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 112
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
-      TableID: 112
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
-      TableID: 112
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
-      TableID: 112
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 9
-          SubWorkID: 1
-      TableID: 112
     *scop.LogEvent
       Element:
         View:
@@ -981,50 +1092,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 113
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 113
     *scop.LogEvent
       Element:
         View:
@@ -1047,50 +1114,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 114
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 114
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 114
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 114
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 10
-          SubWorkID: 1
-      TableID: 114
     *scop.LogEvent
       Element:
         EnumType:
@@ -1159,61 +1182,6 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 74 MutationType ops
       TargetStatus: 1
     *scop.DeleteDescriptor
       DescriptorID: 117
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 1
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-      TableID: 117
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 2
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-      TableID: 117
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 3
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-      TableID: 117
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967295
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-      TableID: 117
-    *scop.MakeDeleteOnlyColumnAbsent
-      ColumnID: 4294967294
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: DROP DATABASE ‹db1› CASCADE
-        StatementTag: DROP DATABASE
-        TargetMetadata:
-          SourceElementID: 12
-          SubWorkID: 1
-      TableID: 117
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
       JobID: 1
@@ -1284,27 +1252,27 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [Namespace:{DescID: 116, Name: _typ, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [ObjectParent:{DescID: 116, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [Owner:{DescID: 116}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [UserPrivileges:{DescID: 116, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [UserPrivileges:{DescID: 116, Name: public}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
   to:   [UserPrivileges:{DescID: 116, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, TXN_DROPPED]
   to:   [AliasType:{DescID: 116, ReferencedTypeIDs: [115 116]}, DROPPED]
@@ -1844,15 +1812,15 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [DatabaseComment:{DescID: 104, Comment: db1 is good}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [DatabaseRoleSetting:{DescID: 104, Name: __placeholder_role_name__}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 104, Name: db1, ReferencedDescID: 0}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT]
@@ -1908,7 +1876,7 @@ DROP DATABASE db1 CASCADE
   rule: descriptor drop right before removing dependent with attr ref
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [Owner:{DescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT]
@@ -1920,15 +1888,15 @@ DROP DATABASE db1 CASCADE
   rule: descriptor drop right before removing dependent with attr ref
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: public}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, DROPPED]
   to:   [UserPrivileges:{DescID: 104, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Database:{DescID: 104}, TXN_DROPPED]
   to:   [Database:{DescID: 104}, DROPPED]
@@ -1940,31 +1908,31 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [EnumTypeValue:{DescID: 115, Name: a}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [Namespace:{DescID: 115, Name: typ, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [ObjectParent:{DescID: 115, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [Owner:{DescID: 115}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [UserPrivileges:{DescID: 115, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [UserPrivileges:{DescID: 115, Name: public}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, DROPPED]
   to:   [UserPrivileges:{DescID: 115, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [EnumType:{DescID: 115}, TXN_DROPPED]
   to:   [EnumType:{DescID: 115}, DROPPED]
@@ -2060,7 +2028,7 @@ DROP DATABASE db1 CASCADE
   rule: index no longer public before dependents
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [Namespace:{DescID: 105, Name: public, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT]
@@ -2072,7 +2040,7 @@ DROP DATABASE db1 CASCADE
   rule: descriptor drop right before removing dependent with attr ref
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [Owner:{DescID: 105}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [Schema:{DescID: 105}, ABSENT]
@@ -2080,19 +2048,19 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [SchemaParent:{DescID: 105, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: public}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 105}, DROPPED]
   to:   [UserPrivileges:{DescID: 105, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 105}, TXN_DROPPED]
   to:   [Schema:{DescID: 105}, DROPPED]
@@ -2100,7 +2068,7 @@ DROP DATABASE db1 CASCADE
   rule: descriptor TXN_DROPPED before DROPPED
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [Namespace:{DescID: 106, Name: sc1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT]
@@ -2140,7 +2108,7 @@ DROP DATABASE db1 CASCADE
   rule: descriptor drop right before removing dependent with attr ref
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [Owner:{DescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [Schema:{DescID: 106}, ABSENT]
@@ -2148,19 +2116,19 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [SchemaComment:{DescID: 106, Comment: sc1 is good}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [SchemaParent:{DescID: 106, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [UserPrivileges:{DescID: 106, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 106}, DROPPED]
   to:   [UserPrivileges:{DescID: 106, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Schema:{DescID: 106}, TXN_DROPPED]
   to:   [Schema:{DescID: 106}, DROPPED]
@@ -2172,15 +2140,15 @@ DROP DATABASE db1 CASCADE
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [Namespace:{DescID: 107, Name: sq1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [Owner:{DescID: 107}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [Sequence:{DescID: 107}, ABSENT]
@@ -2188,11 +2156,11 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [UserPrivileges:{DescID: 107, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 107}, DROPPED]
   to:   [UserPrivileges:{DescID: 107, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 107}, TXN_DROPPED]
   to:   [Sequence:{DescID: 107}, DROPPED]
@@ -2204,15 +2172,15 @@ DROP DATABASE db1 CASCADE
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [Namespace:{DescID: 108, Name: sq1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [ObjectParent:{DescID: 108, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [Sequence:{DescID: 108}, ABSENT]
@@ -2220,115 +2188,91 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Sequence:{DescID: 108}, TXN_DROPPED]
   to:   [Sequence:{DescID: 108}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 109}, ABSENT]
-  to:   [Column:{DescID: 109, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 109}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 109, ColumnID: 3, ReferencedSequenceIDs: [108]}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnFamily:{DescID: 109, Name: primary, ColumnFamilyID: 0}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnName:{DescID: 109, Name: id, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnName:{DescID: 109, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 2, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [Namespace:{DescID: 109, Name: t1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [ObjectParent:{DescID: 109, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [Owner:{DescID: 109}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [Table:{DescID: 109}, ABSENT]
@@ -2336,119 +2280,95 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [TableComment:{DescID: 109, Comment: t1 is good}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [UserPrivileges:{DescID: 109, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, DROPPED]
   to:   [UserPrivileges:{DescID: 109, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 109}, TXN_DROPPED]
   to:   [Table:{DescID: 109}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 110}, ABSENT]
-  to:   [Column:{DescID: 110, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [Table:{DescID: 110}, ABSENT]
-  to:   [PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnDefaultExpression:{DescID: 110, ColumnID: 3, ReferencedSequenceIDs: [107]}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnFamily:{DescID: 110, Name: primary, ColumnFamilyID: 0}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnName:{DescID: 110, Name: id, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnName:{DescID: 110, Name: name, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnName:{DescID: 110, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnName:{DescID: 110, Name: val, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 1, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 2, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [Namespace:{DescID: 110, Name: t1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [ObjectParent:{DescID: 110, ReferencedDescID: 105}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [Owner:{DescID: 110}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [Table:{DescID: 110}, ABSENT]
@@ -2456,71 +2376,59 @@ DROP DATABASE db1 CASCADE
   rule: descriptor DROPPED in transaction before removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [UserPrivileges:{DescID: 110, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, DROPPED]
   to:   [UserPrivileges:{DescID: 110, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [Table:{DescID: 110}, TXN_DROPPED]
   to:   [Table:{DescID: 110}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [View:{DescID: 111}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 111}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 111}, ABSENT]
-  to:   [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnName:{DescID: 111, Name: name, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnName:{DescID: 111, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [Namespace:{DescID: 111, Name: v1, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [ObjectParent:{DescID: 111, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [Owner:{DescID: 111}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [UserPrivileges:{DescID: 111, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [UserPrivileges:{DescID: 111, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 111}, DROPPED]
   to:   [View:{DescID: 111}, ABSENT]
@@ -2530,73 +2438,57 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 111}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [View:{DescID: 112}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 112}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 112}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 112}, ABSENT]
-  to:   [Column:{DescID: 112, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnName:{DescID: 112, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnName:{DescID: 112, Name: n1, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnName:{DescID: 112, Name: n2, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnName:{DescID: 112, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ColumnType:{DescID: 112, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [Namespace:{DescID: 112, Name: v2, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [ObjectParent:{DescID: 112, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [Owner:{DescID: 112}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [UserPrivileges:{DescID: 112, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [UserPrivileges:{DescID: 112, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 112}, DROPPED]
   to:   [View:{DescID: 112}, ABSENT]
@@ -2606,73 +2498,57 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 112}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [View:{DescID: 113}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 113}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 113}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 113}, ABSENT]
-  to:   [Column:{DescID: 113, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnName:{DescID: 113, Name: n1, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnName:{DescID: 113, Name: name, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnName:{DescID: 113, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [Namespace:{DescID: 113, Name: v3, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [ObjectParent:{DescID: 113, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [Owner:{DescID: 113}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [UserPrivileges:{DescID: 113, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [UserPrivileges:{DescID: 113, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 113}, DROPPED]
   to:   [View:{DescID: 113}, ABSENT]
@@ -2682,73 +2558,57 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 113}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [View:{DescID: 114}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 114}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 114}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 114}, ABSENT]
-  to:   [Column:{DescID: 114, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnName:{DescID: 114, Name: n1, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnName:{DescID: 114, Name: n2, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnName:{DescID: 114, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [Namespace:{DescID: 114, Name: v4, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [ObjectParent:{DescID: 114, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [Owner:{DescID: 114}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [UserPrivileges:{DescID: 114, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [UserPrivileges:{DescID: 114, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 114}, DROPPED]
   to:   [View:{DescID: 114}, ABSENT]
@@ -2758,85 +2618,65 @@ DROP DATABASE db1 CASCADE
   to:   [View:{DescID: 114}, DROPPED]
   kind: PreviousStagePrecedence
   rule: descriptor TXN_DROPPED before DROPPED
-- from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 117}, ABSENT]
-  to:   [Column:{DescID: 117, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnName:{DescID: 117, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnName:{DescID: 117, Name: k, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnName:{DescID: 117, Name: n1, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnName:{DescID: 117, Name: n2, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnName:{DescID: 117, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ColumnType:{DescID: 117, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [Namespace:{DescID: 117, Name: v5, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [ObjectParent:{DescID: 117, ReferencedDescID: 106}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [Owner:{DescID: 117}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [UserPrivileges:{DescID: 117, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [UserPrivileges:{DescID: 117, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 117}, DROPPED]
   to:   [View:{DescID: 117}, ABSENT]
