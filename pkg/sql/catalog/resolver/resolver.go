@@ -791,6 +791,9 @@ func findTableContainingIndex(
 	}
 
 	lflags := tree.ObjectLookupFlags{
+		CommonLookupFlags: tree.CommonLookupFlags{
+			IncludeOffline: true,
+		},
 		DesiredObjectKind:    tree.TableObject,
 		DesiredTableDescKind: tree.ResolveAnyTableKind,
 	}
@@ -799,7 +802,7 @@ func findTableContainingIndex(
 		if err != nil {
 			return false, nil, nil, err
 		}
-		if candidateTbl == nil || !(candidateTbl.IsTable() || candidateTbl.MaterializedView()) {
+		if candidateTbl == nil || !(candidateTbl.IsTable() || candidateTbl.MaterializedView()) || candidateTbl.Offline() {
 			continue
 		}
 
