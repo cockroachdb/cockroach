@@ -1119,6 +1119,7 @@ func TestShowLastQueryStatisticsUnknown(t *testing.T) {
 //     min(sqlliveness.Session expiry, lease descriptor expiration).
 func TestTransactionDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	var mu struct {
