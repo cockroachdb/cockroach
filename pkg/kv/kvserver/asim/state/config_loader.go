@@ -129,7 +129,7 @@ func LoadConfig(c ClusterInfo) State {
 				// NewTestState().
 				r, ok := s.Range(1)
 				if ok && len(r.Replicas()) < 3 {
-					s.addReplica(1, store.StoreID())
+					s.AddReplica(1, store.StoreID())
 				}
 			}
 		}

@@ -3,38 +3,29 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "asim",
-    srcs = [
-        "asim.go",
-        "metrics_tracker.go",
-        "pacer.go",
-    ],
+    srcs = ["asim.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/gossip",
+        "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/op",
         "//pkg/kv/kvserver/asim/queue",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/storerebalancer",
         "//pkg/kv/kvserver/asim/workload",
-        "//pkg/roachpb",
-        "//pkg/util/encoding/csv",
-        "//pkg/util/log",
-        "//pkg/util/shuffle",
     ],
 )
 
 go_test(
     name = "asim_test",
-    srcs = [
-        "asim_test.go",
-        "metrics_tracker_test.go",
-        "pacer_test.go",
-    ],
+    srcs = ["asim_test.go"],
     args = ["-test.timeout=295s"],
-    embed = [":asim"],
     deps = [
+        ":asim",
         "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
         "//pkg/kv/kvserver/asim/workload",
         "//pkg/testutils/skip",

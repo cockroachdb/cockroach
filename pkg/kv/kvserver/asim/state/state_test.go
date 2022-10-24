@@ -11,6 +11,7 @@
 package state
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -53,10 +54,12 @@ func TestRangeSplit(t *testing.T) {
 	// The end key of the lhs should be the start key of the rhs.
 	require.Equal(t, lhs.Descriptor().EndKey, rhs.Descriptor().StartKey)
 	// The lhs inherits the pre-split replicas.
-	require.Equal(t, repl1, lhs.Replicas()[s1.StoreID()])
+	lhsRepl, ok := lhs.Replica(s1.StoreID())
+	require.True(t, ok)
+	require.Equal(t, repl1, lhsRepl)
 	// The rhs should have a replica added to it as well. It should hold the
 	// lease if the lhs replica does.
-	newRepl, ok := rhs.Replicas()[s1.StoreID()]
+	newRepl, ok := rhs.Replica(s1.StoreID())
 	require.True(t, ok)
 	require.Equal(t, repl1.HoldsLease(), newRepl.HoldsLease())
 	// Assert that the lhs now has half the previous load counters.
@@ -232,8 +235,8 @@ func TestAddReplica(t *testing.T) {
 	require.Equal(t, ReplicaID(1), r2repl1.ReplicaID())
 	require.Equal(t, ReplicaID(2), r2repl2.ReplicaID())
 
-	require.Len(t, s1.Replicas(), 2)
-	require.Len(t, s2.Replicas(), 1)
+	require.Len(t, s.Replicas(s1.StoreID()), 2)
+	require.Len(t, s.Replicas(s2.StoreID()), 1)
 }
 
 // TestWorkloadApply asserts that applying workload on a key, will be reflected
@@ -271,7 +274,8 @@ func TestWorkloadApply(t *testing.T) {
 	require.Equal(t, float64(10000), s.ReplicaLoad(r3.RangeID(), s3.StoreID()).Load().WritesPerSecond)
 
 	expectedLoad := roachpb.StoreCapacity{WritesPerSecond: 100, LeaseCount: 1, RangeCount: 1}
-	_ = s.StoreDescriptors()
+	// Force an update of the store descriptors capacity.
+	_ = s.StoreDescriptors(1, 2, 3)
 	sc1 := s1.Descriptor().Capacity
 	sc2 := s2.Descriptor().Capacity
 	sc3 := s3.Descriptor().Capacity
@@ -331,5 +335,61 @@ func TestKeyTranslation(t *testing.T) {
 			rkey,
 			mappedKey,
 		)
+	}
+}
+
+// TestNewStateDeterministic asserts that the state returned from the new state
+// utility functions is deterministic.
+func TestNewStateDeterministic(t *testing.T) {
+
+	testCases := []struct {
+		desc       string
+		newStateFn func() State
+	}{
+		{
+			desc:       "even distribution",
+			newStateFn: func() State { return NewTestStateEvenDistribution(7, 1400, 3, 10000) },
+		},
+		{
+			desc:       "skewed distribution",
+			newStateFn: func() State { return NewTestStateSkewedDistribution(7, 1400, 3, 10000) },
+		},
+		{
+			desc:       "replica distribution raw ",
+			newStateFn: func() State { return NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000) },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			ref := tc.newStateFn()
+			for i := 0; i < 5; i++ {
+				require.Equal(t, ref.Ranges(), tc.newStateFn().Ranges())
+			}
+		})
+	}
+}
+
+// TestSplitRangeDeterministic asserts that range splits are deterministic.
+func TestSplitRangeDeterministic(t *testing.T) {
+	run := func() (State, func(key Key) (Range, Range, bool)) {
+		s := NewTestStateReplDistribution([]float64{0.2, 0.2, 0.2, 0.2, 0.2}, 5, 3, 10000)
+		return s, func(key Key) (Range, Range, bool) {
+			return s.SplitRange(key)
+		}
+	}
+	stateA, runA := run()
+	stateB, runB := run()
+
+	// Check that the states are initially equal.
+	require.Equal(t, stateA.Ranges(), stateB.Ranges(), "initial states for testing splits are not equal")
+	rand := rand.New(rand.NewSource(42))
+	for i := 1; i < 10000; i++ {
+		splitKey := rand.Intn(10000)
+		lhsA, rhsA, okA := runA(Key(splitKey))
+		lhsB, rhsB, okB := runB(Key(splitKey))
+		require.Equal(t, okA, okB, "ok not equal, failed after %d splits", i)
+		require.Equal(t, lhsA, lhsB, "lhs not equal, failed after %d splits", i)
+		require.Equal(t, rhsA, rhsB, "rhs not equal, failed after %d splits", i)
 	}
 }

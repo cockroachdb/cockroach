@@ -99,6 +99,7 @@ func newStoreRebalancerControl(
 		allocator,
 		getRaftStatusFn,
 	)
+	sr.AddLogTag("s", storeID)
 
 	return &storeRebalancerControl{
 		sr:       sr,
@@ -128,18 +129,25 @@ func (src *storeRebalancerControl) makeRebalanceContext(
 	allStoresList, _, _ := src.allocator.StorePool.GetStoreList(storepool.StoreFilterSuspect)
 	options := src.scorerOptions()
 
-	store, ok := state.Store(src.storeID)
-	if !ok {
+	// Find the store descriptor for the local store.
+	var localDesc *roachpb.StoreDescriptor
+	for i := range allStoresList.Stores {
+		if allStoresList.Stores[i].StoreID == roachpb.StoreID(src.storeID) {
+			localDesc = &allStoresList.Stores[i]
+			break
+		}
+	}
+
+	// The local descriptor doesn't yet exist, return nil instead.
+	if localDesc == nil {
 		return nil
 	}
-	localDesc := store.Descriptor()
 
 	return kvserver.NewRebalanceContext(
-		&localDesc,
+		localDesc,
 		options,
 		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
 		allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean),
-		allStoresList.ToMap(),
 		allStoresList,
 		hottestRanges(state, src.storeID),
 		[]kvserver.CandidateReplica{},
@@ -160,6 +168,12 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Ti
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
+	src.sr.AddLogTag("tick", tick)
+	ctx = src.sr.ResetAndAnnotateCtx(ctx)
+	// LBRebalancing is disabled, return.
+	if src.settings.LBRebalancingMode == int64(kvserver.LBRebalancingOff) {
+		return
+	}
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
 		src.phaseSleep(ctx, tick, state)
@@ -188,6 +202,12 @@ func (src *storeRebalancerControl) phasePrologue(
 	ctx context.Context, tick time.Time, s state.State,
 ) {
 	rctx := src.makeRebalanceContext(s)
+	// If the local descriptor hasn't been gosipped yet, there's nothing we can
+	// do, return early and sleep.
+	if rctx == nil {
+		src.phaseEpilogue(ctx, tick)
+		return
+	}
 	if !src.sr.ShouldRebalanceStore(ctx, rctx) {
 		src.phaseEpilogue(ctx, tick)
 		return
@@ -212,6 +232,15 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance() bool {
 	}
 
 	if err == nil {
+		// Update the storepooll state to reflect the transfer success.
+		// Normally this is done by the replicate queue upon a successful
+		// TransferLease call, however since the simulator implements its own
+		// transfer lease call, it is updated here instead.
+		src.allocator.StorePool.UpdateLocalStoresAfterLeaseTransfer(
+			src.rebalancerState.rctx.LocalDesc.StoreID,
+			src.rebalancerState.pendingTransferTarget.StoreID,
+			src.rebalancerState.pendingTransfer.QPS(),
+		)
 		// The transfer has completed without error, update the local
 		// state to reflect it's success.
 		src.sr.PostLeaseRebalance(

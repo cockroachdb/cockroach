@@ -76,7 +76,9 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 	qps := 0.0
 	if rl.QPS != nil {
-		qps, _ = rl.QPS.AverageRatePerSecond()
+		if recordedQPS, dur := rl.QPS.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+			qps = recordedQPS
+		}
 	}
 
 	return allocator.RangeUsageInfo{
@@ -121,12 +123,9 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 	// the following missing fields: capacity, available, used, l0sublevels,
 	// bytesperreplica, writesperreplica.
 	capacity := roachpb.StoreCapacity{}
-	store, ok := state.Store(storeID)
-	if !ok {
-		return capacity
-	}
-
-	for rangeID, replicaID := range store.Replicas() {
+	for _, repl := range state.Replicas(storeID) {
+		rangeID := repl.Range()
+		replicaID := repl.ReplicaID()
 		rng, _ := state.Range(rangeID)
 		if rng.Leaseholder() == replicaID {
 			// TODO(kvoli): We currently only consider load on the leaseholder
@@ -147,20 +146,24 @@ func Capacity(state State, storeID StoreID) roachpb.StoreCapacity {
 
 // StoreUsageInfo contains the load on a single store.
 type StoreUsageInfo struct {
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
+	WriteKeys          int64
+	WriteBytes         int64
+	ReadKeys           int64
+	ReadBytes          int64
+	Replicas           int64
+	Leases             int64
+	LeaseTransfers     int64
+	Rebalances         int64
+	RebalanceSentBytes int64
+	RebalanceRcvdBytes int64
+	RangeSplits        int64
 }
 
 // ClusterUsageInfo contains the load and state of the cluster. Using this we
 // can answer questions such as how balanced the load is, and how much data got
 // rebalanced.
 type ClusterUsageInfo struct {
-	LeaseTransfers  int64
-	Rebalances      int64
-	BytesRebalanced int64
-	StoreUsage      map[StoreID]*StoreUsageInfo
+	StoreUsage map[StoreID]*StoreUsageInfo
 }
 
 func newClusterUsageInfo() *ClusterUsageInfo {
@@ -169,15 +172,20 @@ func newClusterUsageInfo() *ClusterUsageInfo {
 	}
 }
 
+func (u *ClusterUsageInfo) storeRef(storeID StoreID) *StoreUsageInfo {
+	var s *StoreUsageInfo
+	var ok bool
+	if s, ok = u.StoreUsage[storeID]; !ok {
+		s = &StoreUsageInfo{}
+		u.StoreUsage[storeID] = s
+	}
+	return s
+}
+
 // ApplyLoad applies the load event on the right stores.
 func (u *ClusterUsageInfo) ApplyLoad(r *rng, le workload.LoadEvent) {
 	for _, rep := range r.replicas {
-		s, ok := u.StoreUsage[rep.storeID]
-		if !ok {
-			// First time we see this store ID, add it.
-			s = &StoreUsageInfo{}
-			u.StoreUsage[rep.storeID] = s
-		}
+		s := u.storeRef(rep.storeID)
 		// Writes are added to all replicas, reads are added to the leaseholder
 		// only.
 		// Note that the accounting here is different from ReplicaLoadCounter above:
@@ -192,4 +200,24 @@ func (u *ClusterUsageInfo) ApplyLoad(r *rng, le workload.LoadEvent) {
 			s.ReadKeys += le.Reads
 		}
 	}
+}
+
+// AggregateUsageInfo sums all the store usage references within the cluster
+// usage tracker, into a single store usage struct.
+func (u *ClusterUsageInfo) AggregateUsageInfo() StoreUsageInfo {
+	ret := StoreUsageInfo{}
+	for _, su := range u.StoreUsage {
+		ret.WriteKeys += su.WriteKeys
+		ret.WriteBytes += su.WriteBytes
+		ret.ReadKeys += su.ReadKeys
+		ret.ReadBytes += su.ReadBytes
+		ret.Replicas += su.Replicas
+		ret.Leases += su.Leases
+		ret.LeaseTransfers += su.LeaseTransfers
+		ret.Rebalances += su.Rebalances
+		ret.RebalanceSentBytes += su.RebalanceSentBytes
+		ret.RebalanceRcvdBytes += su.RebalanceRcvdBytes
+		ret.RangeSplits += su.RangeSplits
+	}
+	return ret
 }

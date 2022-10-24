@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,17 +36,10 @@ func TestSplitQueue(t *testing.T) {
 
 	testingState := func(
 		replicaCounts map[state.StoreID]int,
-		replicationFactor int32,
+		replicationFactor int,
 		leaseholder state.StoreID,
 	) state.State {
-		s := state.NewTestStateReplCounts(replicaCounts, int(replicationFactor))
-		spanConfig := roachpb.SpanConfig{
-			NumVoters:   replicationFactor,
-			NumReplicas: replicationFactor,
-		}
-		for _, r := range s.Ranges() {
-			s.SetSpanConfig(r.RangeID(), spanConfig)
-		}
+		s := state.NewTestStateReplCounts(replicaCounts, replicationFactor, int(endKey))
 		s.TransferLease(state.RangeID(2 /* The interesting range */), leaseholder)
 		return s
 	}
@@ -148,6 +140,7 @@ func TestSplitQueue(t *testing.T) {
 				testSettings.RangeSplitDelayFn(),
 				tc.splitThreshold,
 				start,
+				testSettings,
 			)
 
 			results := make([]map[int64]int64, 0, 1)

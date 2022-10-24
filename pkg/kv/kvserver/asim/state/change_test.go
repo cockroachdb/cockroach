@@ -28,6 +28,7 @@ func testMakeReplicaChange(add, remove StoreID, rangeKey Key) func(s State) Chan
 		change.Add = add
 		change.Remove = remove
 		change.RangeID = rng.RangeID()
+		change.Author = 1
 		return &change
 	}
 }
@@ -39,6 +40,7 @@ func testMakeRangeSplitChange(splitKey Key) func(s State) Change {
 		change.Wait = testingDelay
 		change.RangeID = rng.RangeID()
 		change.SplitKey = splitKey
+		change.Author = 1
 		return &change
 	}
 }
@@ -49,16 +51,19 @@ func testMakeLeaseTransferChange(rangeKey Key, target StoreID) func(s State) Cha
 			Wait:           testingDelay,
 			TransferTarget: target,
 			RangeID:        s.RangeFor(rangeKey).RangeID(),
+			Author:         1,
 		}
 	}
 }
 
 func testMakeReplicaState(replCounts map[StoreID]int) (State, Range) {
-	state := NewTestStateReplCounts(replCounts, 3 /* replsPerRange */)
-	// The first range has ID 1, this is the initial range in the keyspace.
-	// We split that and use the rhs, range 2.
+	numReplicas := 0
+	for _, count := range replCounts {
+		numReplicas += count
+	}
+
+	state := NewTestStateReplCounts(replCounts, numReplicas, 50 /* keyspace */)
 	rng, _ := state.Range(RangeID(2))
-	state.TransferLease(rng.RangeID(), 1)
 	return state, rng
 }
 
@@ -67,12 +72,12 @@ func testGetAllReplLocations(
 ) (map[int64][]int, map[int64][]int) {
 	rmapView := make(map[int64][]int)
 	storeView := make(map[int64][]int)
-	for rangeID, rng := range state.Ranges() {
-		if _, ok := excludedRanges[rangeID]; ok {
+	for _, rng := range state.Ranges() {
+		if _, ok := excludedRanges[rng.RangeID()]; ok {
 			continue
 		}
 		rmap, stores := testGetReplLocations(state, rng)
-		start, _, _ := state.RangeSpan(rangeID)
+		start, _, _ := state.RangeSpan(rng.RangeID())
 		rmapView[int64(start)] = rmap
 		storeView[int64(start)] = stores
 	}
@@ -81,12 +86,12 @@ func testGetAllReplLocations(
 
 func testGetLHLocations(state State, excludedRanges map[RangeID]bool) map[int64]int {
 	leases := make(map[int64]int)
-	for rangeID := range state.Ranges() {
-		if _, ok := excludedRanges[rangeID]; ok {
+	for _, rng := range state.Ranges() {
+		if _, ok := excludedRanges[rng.RangeID()]; ok {
 			continue
 		}
-		startKey, _, _ := state.RangeSpan(rangeID)
-		lh, _ := state.LeaseholderStore(rangeID)
+		startKey, _, _ := state.RangeSpan(rng.RangeID())
+		lh, _ := state.LeaseholderStore(rng.RangeID())
 		leases[int64(startKey)] = int(lh.StoreID())
 	}
 	return leases
@@ -95,14 +100,14 @@ func testGetLHLocations(state State, excludedRanges map[RangeID]bool) map[int64]
 func testGetReplLocations(state State, r Range) ([]int, []int) {
 	storeView := []int{}
 	for _, store := range state.Stores() {
-		if _, ok := store.Replicas()[r.RangeID()]; ok {
+		if _, ok := store.Replica(r.RangeID()); ok {
 			storeView = append(storeView, int(store.StoreID()))
 		}
 	}
 
 	rmapView := []int{}
-	for storeID := range r.Replicas() {
-		rmapView = append(rmapView, int(storeID))
+	for _, replica := range r.Replicas() {
+		rmapView = append(rmapView, int(replica.StoreID()))
 	}
 
 	sort.Ints(rmapView)
@@ -185,9 +190,9 @@ func TestReplicaChange(t *testing.T) {
 			change.Apply(state)
 			replLocations, _ := testGetReplLocations(state, r)
 			leaseholder := -1
-			for storeID, repl := range r.Replicas() {
+			for _, repl := range r.Replicas() {
 				if repl.HoldsLease() {
-					leaseholder = int(storeID)
+					leaseholder = int(repl.StoreID())
 				}
 			}
 			require.Equal(t, tc.expectedReplicas, replLocations)
