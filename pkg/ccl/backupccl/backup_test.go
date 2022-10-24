@@ -642,6 +642,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 				tc.Servers[0].DB(),
 				nil, /* limiters */
+				cloud.NilMetrics,
 			)
 			require.NoError(t, err)
 			defer store.Close()
@@ -8096,6 +8097,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 

@@ -1270,7 +1270,8 @@ func ingestWithRetry(
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
-	resumerSpan := tracing.SpanFromContext(ctx)
+	ctx, sp := tracing.ChildSpan(ctx, "importer.ingestWithRetry")
+	defer sp.Finish()
 
 	// We retry on pretty generic failures -- any rpc error. If a worker node were
 	// to restart, it would produce this kind of error, but there may be other
@@ -1285,15 +1286,8 @@ func ingestWithRetry(
 	// import.
 	var res roachpb.BulkOpSummary
 	var err error
-	var retryCount int32
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		for {
-			retryCount++
-			resumerSpan.RecordStructured(&roachpb.RetryTracingEvent{
-				Operation:     "importResumer.ingestWithRetry",
-				AttemptNumber: retryCount,
-				RetryError:    tracing.RedactAndTruncateError(err),
-			})
 			res, err = distImport(ctx, execCtx, job, tables, typeDescs, from, format, walltime,
 				testingKnobs, procsPerNode)
 			// Replanning errors should not count towards retry limits.

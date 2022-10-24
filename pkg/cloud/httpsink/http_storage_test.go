@@ -176,6 +176,7 @@ func TestPutHttp(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
+			cloud.NilMetrics,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -309,7 +310,8 @@ func TestHttpGetWithCancelledContext(t *testing.T) {
 	testSettings := cluster.MakeTestingClusterSettings()
 
 	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: s.URL}}
-	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := MakeHTTPStorage(context.Background(),
+		cloud.ExternalStorageContext{Settings: testSettings}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
@@ -334,6 +336,7 @@ func TestCanDisableHttp(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.Nil(t, s)
 	require.Error(t, err)
@@ -357,6 +360,7 @@ func TestCanDisableOutbound(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
+			cloud.NilMetrics,
 		)
 		require.Nil(t, s)
 		require.Error(t, err)
@@ -391,6 +395,7 @@ func TestExternalStorageCanUseHTTPProxy(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 	stream, err := s.ReadFile(context.Background(), "file")
@@ -441,7 +446,8 @@ func TestExhaustRetries(t *testing.T) {
 	cloud.HTTPRetryOptions.MaxRetries = 10
 
 	conf := cloudpb.ExternalStorage{HttpPath: cloudpb.ExternalStorage_Http{BaseUri: "http://does.not.matter"}}
-	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings}, conf)
+	store, err := MakeHTTPStorage(context.Background(), cloud.ExternalStorageContext{Settings: testSettings,
+		MetricsRecorder: cloud.NilMetrics}, conf)
 	require.NoError(t, err)
 	defer func() {
 		require.NoError(t, store.Close())
