@@ -86,6 +86,7 @@ import (
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"go.etcd.io/etcd/raft/v3"
 	"golang.org/x/time/rate"
 )
@@ -3392,7 +3393,7 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 // ComputeMetricsPeriodically computes metrics that need to be computed
 // periodically along with the regular metrics
 func (s *Store) ComputeMetricsPeriodically(
-	ctx context.Context, prevMetrics *storage.Metrics, tick int,
+	ctx context.Context, prevMetrics *storage.MetricsForInterval, tick int,
 ) (m storage.Metrics, err error) {
 	m, err = s.computeMetrics(ctx)
 	if err != nil {
@@ -3401,8 +3402,33 @@ func (s *Store) ComputeMetricsPeriodically(
 	wt := m.Flush.WriteThroughput
 
 	if prevMetrics != nil {
-		wt.Subtract(prevMetrics.Flush.WriteThroughput)
+		// The following code is subtracting previous and current metrics from the
+		// storage engine in order to expose windowed metrics. This calculation is
+		// done on each tick and is required since the metrics exposed by the
+		// storage engine are cumulative. However, the metrics returned from this
+		// function are intended to be over an interval.
+
+		// Subtract the cumulative Flush WriteThroughput from the previous
+		// cumulative value producing a delta that represent the change between the
+		// two points in time.
+		wt.Subtract(prevMetrics.FlushWriteThroughput)
+
+		// Here the current cumulative WAL Fsync latency is subtracted from the
+		// previous cumulative value producing a delta that represent the change
+		// between the two points in time. Since the prometheus.Histogram does not
+		// expose any of the data it collects, the current metrics need to be
+		// written to an intermediate struct to facilitate the calculation.
+		prevFsync := prevMetrics.WALFsyncLatency
+		windowFsyncLatency := &prometheusgo.Metric{}
+		err := m.LogWriter.FsyncLatency.Write(windowFsyncLatency)
+		if err != nil {
+			return m, err
+		}
+		windowFsyncLatency = subtractPrometheusMetrics(windowFsyncLatency, prevFsync)
+
+		s.metrics.FsyncLatency.Update(m.LogWriter.FsyncLatency, windowFsyncLatency.Histogram)
 	}
+
 	flushUtil := 0.0
 	if wt.WorkDuration > 0 {
 		flushUtil = float64(wt.WorkDuration) / float64(wt.WorkDuration+wt.IdleDuration)
@@ -3431,6 +3457,24 @@ func (s *Store) ComputeMetricsPeriodically(
 		log.StructuredEvent(ctx, &e)
 	}
 	return m, nil
+}
+
+func subtractPrometheusMetrics(
+	curFsync *prometheusgo.Metric, prevFsync prometheusgo.Metric,
+) *prometheusgo.Metric {
+	prevBuckets := prevFsync.Histogram.GetBucket()
+	curBuckets := curFsync.Histogram.GetBucket()
+
+	*curFsync.Histogram.SampleCount -= prevFsync.Histogram.GetSampleCount()
+	*curFsync.Histogram.SampleSum -= prevFsync.Histogram.GetSampleSum()
+
+	for idx, v := range prevBuckets {
+		if *curBuckets[idx].UpperBound != *v.UpperBound {
+			panic("Bucket Upperbounds don't match")
+		}
+		*curBuckets[idx].CumulativeCount -= *v.CumulativeCount
+	}
+	return curFsync
 }
 
 // ComputeMetrics immediately computes the current value of store metrics which
