@@ -26,7 +26,7 @@ go_library(
         "@com_github_azure_azure_storage_blob_go//azblob",
         "@com_github_azure_go_autorest_autorest//azure",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//types",
+        "@io_opentelemetry_go_otel//attribute",
     ],
 )
 
