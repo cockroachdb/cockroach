@@ -48,6 +48,10 @@ func (r *Replica) executeReadOnlyBatch(
 		return nil, g, nil, roachpb.NewError(err)
 	}
 
+	if fn := r.store.TestingKnobs().PreStorageSnapshotButChecksCompleteInterceptor; fn != nil {
+		fn(r)
+	}
+
 	// Compute the transaction's local uncertainty limit using observed
 	// timestamps, which can help avoid uncertainty restarts.
 	ui := uncertainty.ComputeInterval(&ba.Header, st, r.Clock().MaxOffset())
@@ -76,7 +80,7 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	defer rw.Close()
 
-	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ba, st); err != nil {
+	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ctx, ba, st); err != nil {
 		return nil, g, nil, roachpb.NewError(err)
 	}
 	// TODO(nvanbenschoten): once all replicated intents are pulled into the
