@@ -281,7 +281,7 @@ func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
 		}
 		seq, ok := tr.Lookup(key, endKey, ts)
 		if !ok {
-			err = errors.AssertionFailedf("no seqno found for [%s,%s) @ %s", key, endKey, ts)
+			err = errors.AssertionFailedf("no seqno found for [%s,%s) @ %s, tracker is %v", key, endKey, ts, tr)
 			return
 		}
 		v := tsSpanVal{
@@ -1088,30 +1088,72 @@ func mustGetStringValue(value []byte) string {
 }
 
 func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTimeSpans {
-	var validTimes disjointTimeSpans
-	end := hlc.MaxTimestamp
-
+	var hist []storage.MVCCValue
 	iter := b.NewIter(&pebble.IterOptions{
 		KeyTypes: storage.IterKeyTypePointsAndRanges,
-		RangeKeyMasking: pebble.RangeKeyMasking{
-			Suffix: storage.EncodeMVCCTimestampSuffix(hlc.MaxTimestamp),
-		},
 	})
 	defer func() { _ = iter.Close() }()
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key}))
+
 	for ; iter.Valid(); iter.Next() {
 		mvccKey, err := storage.DecodeMVCCKey(iter.Key())
 		if err != nil {
 			panic(err)
 		}
+
+		hasPoint, hasRange := iter.HasPointAndRange()
+		if hasRange && iter.RangeKeyChanged() {
+			k, ek := iter.RangeBounds()
+			sp := roachpb.Span{Key: k, EndKey: ek}
+			if !sp.ContainsKey(key) {
+				// If we see a range key that doesn't even contain the key,
+				// we've moved off the key (recall that we seeked to the key
+				// initially).
+				break
+			}
+			// Range key contains the key. Emit a point deletion on the key
+			// at the tombstone's timestamp for each active range key.
+			for _, rk := range iter.RangeKeys() {
+				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
+				if err != nil {
+					panic(err)
+				}
+				hist = append(hist, storage.MVCCValue{Value: roachpb.Value{Timestamp: ts}})
+			}
+		}
+
+		if !hasPoint {
+			continue
+		}
+
 		if !mvccKey.Key.Equal(key) {
 			break
 		}
-		if mustGetStringValue(iter.Value()) == mustGetStringValue(value) {
-			validTimes = append(validTimes, timeSpan{Start: mvccKey.Timestamp, End: end})
+
+		// Handle a point key - put it into `hist`.
+		v, err := storage.DecodeMVCCValue(iter.Value())
+		if err != nil {
+			panic(err)
 		}
-		end = mvccKey.Timestamp
+		v.Value.Timestamp = mvccKey.Timestamp
+		hist = append(hist, v)
 	}
+	// The slice isn't sorted due to MVCC rangedels. Sort in descending order.
+	sort.Slice(hist, func(i, j int) bool {
+		return hist[j].Value.Timestamp.Less(hist[i].Value.Timestamp)
+	})
+
+	sv := mustGetStringValue(value)
+	var validTimes disjointTimeSpans
+	end := hlc.MaxTimestamp
+	for i := range hist {
+		v := hist[i].Value
+		if mustGetStringValue(v.RawBytes) == sv {
+			validTimes = append(validTimes, timeSpan{Start: v.Timestamp, End: end})
+		}
+		end = v.Timestamp
+	}
+
 	if len(value) == 0 {
 		validTimes = append(disjointTimeSpans{{Start: hlc.MinTimestamp, End: end}}, validTimes...)
 	}

@@ -75,6 +75,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	startTs := firstDB.Clock().Now()
 	eventC := make(chan kvcoord.RangeFeedMessage, 128)
 	w.g.GoCtx(func(ctx context.Context) error {
+		time.Sleep(3 * time.Second)
 		ts := startTs
 		for i := 0; ; i = (i + 1) % len(dbs) {
 			w.mu.Lock()
@@ -256,8 +257,8 @@ func (w *Watcher) handleValue(
 	// Additionally, ensure that deletion tombstones and missing keys are
 	// normalized as the nil slice, so that they can be matched properly
 	// between the RangeFeed and the Engine.
-	if len(getPrevV.RawBytes) == 0 {
-		getPrevV.RawBytes = nil
+	if len(prevV.RawBytes) == 0 {
+		prevV.RawBytes = nil
 	}
 	prevValueMismatch := !reflect.DeepEqual(prevV, getPrevV)
 	var engineContents string

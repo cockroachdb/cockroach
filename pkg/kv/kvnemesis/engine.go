@@ -113,6 +113,13 @@ func (e *Engine) Put(key storage.MVCCKey, value []byte) {
 }
 
 func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp, val []byte) {
+	mvccV, err := storage.DecodeMVCCValue(val)
+	if err != nil {
+		panic(err)
+	}
+	if mvccV.Seq == 0 {
+		panic("zero seq")
+	}
 	suffix := storage.EncodeMVCCTimestampSuffix(ts)
 	if err := e.kvs.RangeKeySet(from, to, suffix, val, nil); err != nil {
 		panic(err)
@@ -144,12 +151,14 @@ func (e *Engine) Iterate(
 			e.b, key = e.b.Copy(key, 0 /* extraCap */)
 			e.b, endKey = e.b.Copy(endKey, 0 /* extraCap */)
 			for _, rk := range iter.RangeKeys() {
-				mvccV, err := storage.DecodeMVCCValue(iter.Value())
+				mvccV, err := storage.DecodeMVCCValue(rk.Value)
 				if err != nil {
 					fn(nil, nil, hlc.Timestamp{}, nil, err)
 					continue
 				}
-				fmt.Println(mvccV.Seq)
+				if mvccV.Seq == 0 {
+					fmt.Println("zero seq in iter: ", mvccV.Seq)
+				}
 				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					fn(nil, nil, hlc.Timestamp{}, nil, err)

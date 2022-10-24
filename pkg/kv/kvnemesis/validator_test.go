@@ -1755,6 +1755,18 @@ func TestValidate(t *testing.T) {
 				rd(`b`, `d`, t1, s2),
 			),
 		},
+		{
+			name: "read before rangedel",
+			steps: []Step{
+				step(withResultTS(put(`b`, s1), t1)),
+				step(withReadResultTS(get(`b`), v1, t2)),
+				step(withResultTS(delRangeUsingTombstone(`a`, `c`, s3), t3)),
+			},
+			kvs: kvs(
+				kv(`b`, t1, s1),
+				rd(`a`, `c`, t3, s3),
+			),
+		},
 	}
 
 	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))

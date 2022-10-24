@@ -12,6 +12,10 @@
 package kvnemesis
 
 import (
+	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,6 +36,25 @@ type keyTS struct {
 	ts          hlc.Timestamp
 }
 
+func (tr *SeqTracker) String() string {
+	tr.Lock()
+	defer tr.Unlock()
+
+	var sl []keyTS
+	for k := range tr.seen {
+		sl = append(sl, k)
+	}
+	sort.Slice(sl, func(i, j int) bool {
+		return fmt.Sprintf("%v", sl[i]) < fmt.Sprintf("%v", sl[j])
+	})
+
+	var buf strings.Builder
+	for _, el := range sl {
+		fmt.Fprintf(&buf, "%s %s -> %s\n", roachpb.Span{Key: roachpb.Key(el.key), EndKey: roachpb.Key(el.endKey)}, el.ts, tr.seen[el])
+	}
+	return buf.String()
+}
+
 // Add associates key@ts with the provided Seq.
 func (tr *SeqTracker) Add(key, endKey roachpb.Key, ts hlc.Timestamp, seq kvnemesisutil.Seq) {
 	tr.Lock()
@@ -48,6 +71,18 @@ func (tr *SeqTracker) Add(key, endKey roachpb.Key, ts hlc.Timestamp, seq kvnemes
 func (tr *SeqTracker) Lookup(key, endKey roachpb.Key, ts hlc.Timestamp) (kvnemesisutil.Seq, bool) {
 	tr.Lock()
 	defer tr.Unlock()
-	seq, ok := tr.seen[keyTS{key: string(key), endKey: string(endKey), ts: ts}]
-	return seq, ok
+	// Rangedels can be split, but the tracker will always see the pre-split
+	// value (since it's reported by the operation's BatchRequest). So this
+	// method checks whether the input span is contained in any span seen
+	// by the tracker.
+	for kts := range tr.seen {
+		if kts.ts != ts {
+			continue
+		}
+		cur := roachpb.Span{Key: roachpb.Key(kts.key), EndKey: roachpb.Key(kts.endKey)}
+		if cur.Contains(roachpb.Span{Key: key, EndKey: endKey}) {
+			return tr.seen[kts], true
+		}
+	}
+	return 0, false
 }

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -179,6 +180,21 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
 	}
+}
+
+// Seq returns the Seq associated with the Operation, if any.
+//
+// TODO(tbg): remove - unused
+func (op Operation) Seq() (roachpb.Span, kvnemesisutil.Seq, bool) {
+	switch o := op.GetValue().(type) {
+	case *PutOperation:
+		return roachpb.Span{Key: o.Key}, o.Seq, true
+	case *DeleteOperation:
+		return roachpb.Span{Key: o.Key}, o.Seq, true
+	case *DeleteRangeOperation:
+		return roachpb.Span{Key: o.Key, EndKey: o.EndKey}, o.Seq, true
+	}
+	return roachpb.Span{}, 0, false
 }
 
 func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {

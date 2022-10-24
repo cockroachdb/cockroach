@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -51,7 +52,7 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
 			seq := kvnemesisutil.Seq(vh.Seq)
 			if len(endKey) > 0 {
-				fmt.Println("hi")
+				fmt.Printf("XXX rangefeed intercept ranged write [%s,%s), seq %s\n", key, endKey, seq)
 			}
 			if seq > 0 {
 				tr.Add(key, endKey, ts, seq)
@@ -87,7 +88,15 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	config.Ops.DB.DeleteRangeUsingTombstone = 1
 	config.Ops.ClosureTxn = ClosureTxnConfig{}
 	config.NumNodes, config.NumReplicas = 1, 1
-	rng, seed := randutil.NewTestRand()
+
+	var seed int64 = 6578717420559460636
+	var rng *rand.Rand
+	if seed > 0 {
+		rng = rand.New(rand.NewSource(seed))
+		rand.Seed(seed)
+	} else {
+		rng, seed = randutil.NewTestRand()
+	}
 	t.Logf("seed: %d", seed)
 	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}
 	const concurrency = 1 // HACK
