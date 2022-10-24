@@ -142,7 +142,14 @@ func (p *scanRequestScanner) exportSpan(
 		r.ScanFormat = roachpb.BATCH_RESPONSE
 		b.Header.TargetBytes = targetBytesPerScan
 		b.AdmissionHeader = roachpb.AdmissionHeader{
-			Priority:                 int32(admissionpb.BulkNormalPri),
+			// TODO(irfansharif): Make this configurable if we want system table
+			// scanners or support "high priority" changefeeds to run at higher
+			// priorities. We use higher AC priorities for system-internal
+			// rangefeeds listening in on system table changes.
+			Priority: int32(admissionpb.BulkNormalPri),
+			// We specify a creation time for each batch (as opposed to at the
+			// txn level) -- this way later batches from earlier txns don't just
+			// out compete batches from newer txns.
 			CreateTime:               start.UnixNano(),
 			Source:                   roachpb.AdmissionHeader_FROM_SQL,
 			NoMemoryReservedAtSource: true,
