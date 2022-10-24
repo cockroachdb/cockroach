@@ -197,6 +197,14 @@ func (ld *leasedDescriptors) maybeUpdateDeadline(
 	// and session expiration. The sqlliveness.Session will only be set in the
 	// multi-tenant environment for controlling transactions associated with ephemeral
 	// SQL pods.
+	//
+	// TODO(andrei,ajwerner): Using the session expiration here makes no sense at
+	// the moment. This was done with the mistaken impression that it'll do
+	// something for transactions that use the unique_rowid() function, but it
+	// doesn't (since that function cares about wall time, not the transaction's
+	// commit timestamp). We've left this code in place, though, because we intend
+	// to tie descriptor leases to sessions, at which point using the session
+	// expiration as the deadline will serve a purpose.
 	var deadline hlc.Timestamp
 	if session != nil {
 		if expiration, txnTS := session.Expiration(), txn.ReadTimestamp(); txnTS.Less(expiration) {

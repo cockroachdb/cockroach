@@ -581,13 +581,45 @@ update uniq_hidden_pk
  ├── update-mapping:
  │    └── k:15 => uniq_hidden_pk.a:1
  ├── input binding: &1
- ├── inner-join (cross)
+ ├── distinct-on
  │    ├── columns: uniq_hidden_pk.a:8 uniq_hidden_pk.b:9 uniq_hidden_pk.c:10 uniq_hidden_pk.d:11 uniq_hidden_pk.rowid:12!null uniq_hidden_pk.crdb_internal_mvcc_timestamp:13 uniq_hidden_pk.tableoid:14 k:15 v:16 w:17!null x:18 y:19 other.rowid:20!null other.crdb_internal_mvcc_timestamp:21 other.tableoid:22
- │    ├── scan uniq_hidden_pk
- │    │    └── columns: uniq_hidden_pk.a:8 uniq_hidden_pk.b:9 uniq_hidden_pk.c:10 uniq_hidden_pk.d:11 uniq_hidden_pk.rowid:12!null uniq_hidden_pk.crdb_internal_mvcc_timestamp:13 uniq_hidden_pk.tableoid:14
- │    ├── scan other
- │    │    └── columns: k:15 v:16 w:17!null x:18 y:19 other.rowid:20!null other.crdb_internal_mvcc_timestamp:21 other.tableoid:22
- │    └── filters (true)
+ │    ├── grouping columns: uniq_hidden_pk.rowid:12!null
+ │    ├── inner-join (cross)
+ │    │    ├── columns: uniq_hidden_pk.a:8 uniq_hidden_pk.b:9 uniq_hidden_pk.c:10 uniq_hidden_pk.d:11 uniq_hidden_pk.rowid:12!null uniq_hidden_pk.crdb_internal_mvcc_timestamp:13 uniq_hidden_pk.tableoid:14 k:15 v:16 w:17!null x:18 y:19 other.rowid:20!null other.crdb_internal_mvcc_timestamp:21 other.tableoid:22
+ │    │    ├── scan uniq_hidden_pk
+ │    │    │    └── columns: uniq_hidden_pk.a:8 uniq_hidden_pk.b:9 uniq_hidden_pk.c:10 uniq_hidden_pk.d:11 uniq_hidden_pk.rowid:12!null uniq_hidden_pk.crdb_internal_mvcc_timestamp:13 uniq_hidden_pk.tableoid:14
+ │    │    ├── scan other
+ │    │    │    └── columns: k:15 v:16 w:17!null x:18 y:19 other.rowid:20!null other.crdb_internal_mvcc_timestamp:21 other.tableoid:22
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── first-agg [as=uniq_hidden_pk.a:8]
+ │         │    └── uniq_hidden_pk.a:8
+ │         ├── first-agg [as=uniq_hidden_pk.b:9]
+ │         │    └── uniq_hidden_pk.b:9
+ │         ├── first-agg [as=uniq_hidden_pk.c:10]
+ │         │    └── uniq_hidden_pk.c:10
+ │         ├── first-agg [as=uniq_hidden_pk.d:11]
+ │         │    └── uniq_hidden_pk.d:11
+ │         ├── first-agg [as=uniq_hidden_pk.crdb_internal_mvcc_timestamp:13]
+ │         │    └── uniq_hidden_pk.crdb_internal_mvcc_timestamp:13
+ │         ├── first-agg [as=uniq_hidden_pk.tableoid:14]
+ │         │    └── uniq_hidden_pk.tableoid:14
+ │         ├── first-agg [as=k:15]
+ │         │    └── k:15
+ │         ├── first-agg [as=v:16]
+ │         │    └── v:16
+ │         ├── first-agg [as=w:17]
+ │         │    └── w:17
+ │         ├── first-agg [as=x:18]
+ │         │    └── x:18
+ │         ├── first-agg [as=y:19]
+ │         │    └── y:19
+ │         ├── first-agg [as=other.rowid:20]
+ │         │    └── other.rowid:20
+ │         ├── first-agg [as=other.crdb_internal_mvcc_timestamp:21]
+ │         │    └── other.crdb_internal_mvcc_timestamp:21
+ │         └── first-agg [as=other.tableoid:22]
+ │              └── other.tableoid:22
  └── unique-checks
       ├── unique-checks-item: uniq_hidden_pk(a,b,d)
       │    └── project
@@ -1081,13 +1113,41 @@ update uniq_partial_hidden_pk
  ├── update-mapping:
  │    └── k:11 => uniq_partial_hidden_pk.a:1
  ├── input binding: &1
- ├── inner-join (cross)
+ ├── distinct-on
  │    ├── columns: uniq_partial_hidden_pk.a:6 uniq_partial_hidden_pk.b:7 uniq_partial_hidden_pk.rowid:8!null uniq_partial_hidden_pk.crdb_internal_mvcc_timestamp:9 uniq_partial_hidden_pk.tableoid:10 k:11 v:12 w:13!null x:14 y:15 other.rowid:16!null other.crdb_internal_mvcc_timestamp:17 other.tableoid:18
- │    ├── scan uniq_partial_hidden_pk
- │    │    └── columns: uniq_partial_hidden_pk.a:6 uniq_partial_hidden_pk.b:7 uniq_partial_hidden_pk.rowid:8!null uniq_partial_hidden_pk.crdb_internal_mvcc_timestamp:9 uniq_partial_hidden_pk.tableoid:10
- │    ├── scan other
- │    │    └── columns: k:11 v:12 w:13!null x:14 y:15 other.rowid:16!null other.crdb_internal_mvcc_timestamp:17 other.tableoid:18
- │    └── filters (true)
+ │    ├── grouping columns: uniq_partial_hidden_pk.rowid:8!null
+ │    ├── inner-join (cross)
+ │    │    ├── columns: uniq_partial_hidden_pk.a:6 uniq_partial_hidden_pk.b:7 uniq_partial_hidden_pk.rowid:8!null uniq_partial_hidden_pk.crdb_internal_mvcc_timestamp:9 uniq_partial_hidden_pk.tableoid:10 k:11 v:12 w:13!null x:14 y:15 other.rowid:16!null other.crdb_internal_mvcc_timestamp:17 other.tableoid:18
+ │    │    ├── scan uniq_partial_hidden_pk
+ │    │    │    └── columns: uniq_partial_hidden_pk.a:6 uniq_partial_hidden_pk.b:7 uniq_partial_hidden_pk.rowid:8!null uniq_partial_hidden_pk.crdb_internal_mvcc_timestamp:9 uniq_partial_hidden_pk.tableoid:10
+ │    │    ├── scan other
+ │    │    │    └── columns: k:11 v:12 w:13!null x:14 y:15 other.rowid:16!null other.crdb_internal_mvcc_timestamp:17 other.tableoid:18
+ │    │    └── filters (true)
+ │    └── aggregations
+ │         ├── first-agg [as=uniq_partial_hidden_pk.a:6]
+ │         │    └── uniq_partial_hidden_pk.a:6
+ │         ├── first-agg [as=uniq_partial_hidden_pk.b:7]
+ │         │    └── uniq_partial_hidden_pk.b:7
+ │         ├── first-agg [as=uniq_partial_hidden_pk.crdb_internal_mvcc_timestamp:9]
+ │         │    └── uniq_partial_hidden_pk.crdb_internal_mvcc_timestamp:9
+ │         ├── first-agg [as=uniq_partial_hidden_pk.tableoid:10]
+ │         │    └── uniq_partial_hidden_pk.tableoid:10
+ │         ├── first-agg [as=k:11]
+ │         │    └── k:11
+ │         ├── first-agg [as=v:12]
+ │         │    └── v:12
+ │         ├── first-agg [as=w:13]
+ │         │    └── w:13
+ │         ├── first-agg [as=x:14]
+ │         │    └── x:14
+ │         ├── first-agg [as=y:15]
+ │         │    └── y:15
+ │         ├── first-agg [as=other.rowid:16]
+ │         │    └── other.rowid:16
+ │         ├── first-agg [as=other.crdb_internal_mvcc_timestamp:17]
+ │         │    └── other.crdb_internal_mvcc_timestamp:17
+ │         └── first-agg [as=other.tableoid:18]
+ │              └── other.tableoid:18
  └── unique-checks
       └── unique-checks-item: uniq_partial_hidden_pk(a)
            └── project
