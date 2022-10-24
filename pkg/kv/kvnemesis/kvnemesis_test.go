@@ -77,11 +77,17 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
-	config := NewDefaultConfig()
+	config := GeneratorConfig{}
+	config.Ops.DB.PutExisting = 1
+	config.Ops.DB.PutMissing = 1
+	config.Ops.DB.DeleteRangeUsingTombstone = 1
+	config.Ops.ClosureTxn = ClosureTxnConfig{}
 	config.NumNodes, config.NumReplicas = 1, 1
-	rng, _ := randutil.NewTestRand()
+	rng, seed := randutil.NewTestRand()
+	t.Logf("seed: %d", seed)
 	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}
-	failures, err := RunNemesis(ctx, rng, env, config, numSteps, db)
+	const concurrency = 1 // HACK
+	failures, err := RunNemesis(ctx, rng, env, config, numSteps, concurrency, db)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
@@ -114,7 +120,8 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	config.NumNodes, config.NumReplicas = numNodes, 3
 	rng, _ := randutil.NewTestRand()
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: t}
-	failures, err := RunNemesis(ctx, rng, env, config, numSteps, dbs...)
+	const concurrency = 5
+	failures, err := RunNemesis(ctx, rng, env, config, numSteps, concurrency, dbs...)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {

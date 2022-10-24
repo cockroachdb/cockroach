@@ -43,13 +43,13 @@ func RunNemesis(
 	rng *rand.Rand,
 	env *Env,
 	config GeneratorConfig,
+	concurrency int,
 	numSteps int,
 	dbs ...*kv.DB,
 ) ([]error, error) {
 	if env.L != nil {
 		ctx = context.WithValue(ctx, loggerKey{}, env.L)
 	}
-	const concurrency = 5
 	if numSteps <= 0 {
 		return nil, fmt.Errorf("numSteps must be >0, got %v", numSteps)
 	}
