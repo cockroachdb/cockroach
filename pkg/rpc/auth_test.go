@@ -221,6 +221,11 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 		}}
 	}
+	makeSpanConfigConformanceReq := func(
+		span roachpb.Span,
+	) *roachpb.SpanConfigConformanceRequest {
+		return &roachpb.SpanConfigConformanceRequest{Spans: []roachpb.Span{span}}
+	}
 
 	const noError = ""
 	for method, tests := range map[string][]struct {
@@ -698,6 +703,36 @@ func TestTenantAuthRequest(t *testing.T) {
 					},
 				}, true),
 				expErr: `secondary tenants cannot target the entire keyspace`,
+			},
+		},
+		"/cockroach.roachpb.Internal/SpanConfigConformance": {
+			{
+				req:    &roachpb.SpanConfigConformanceRequest{},
+				expErr: noError,
+			},
+			{
+				req:    makeSpanConfigConformanceReq(makeSpan("a", "b")),
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeSpanConfigConformanceReq(makeSpan(prefix(5, "a"), prefix(5, "b"))),
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeSpanConfigConformanceReq(makeSpan(prefix(10, "a"), prefix(10, "b"))),
+				expErr: noError,
+			},
+			{
+				req:    makeSpanConfigConformanceReq(makeSpan(prefix(50, "a"), prefix(50, "b"))),
+				expErr: `requested key span /Tenant/50{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeSpanConfigConformanceReq(makeSpan("a", prefix(10, "b"))),
+				expErr: `requested key span {a-/Tenant/10b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req:    makeSpanConfigConformanceReq(makeSpan(prefix(10, "a"), prefix(20, "b"))),
+				expErr: `requested key span /Tenant/{10a-20b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
 			},
 		},
 		"/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply": {
