@@ -37,7 +37,7 @@ add synthetic descriptor #107:
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
-## PreCommitPhase stage 1 of 1 with 6 MutationType ops
+## PreCommitPhase stage 1 of 1 with 11 MutationType ops
 delete object namespace entry {104 106 t} -> 107
 upsert descriptor #107
   ...
@@ -75,7 +75,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 1 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 4 MutationType ops
 upsert descriptor #107
   ...
      createAsOfTime:
