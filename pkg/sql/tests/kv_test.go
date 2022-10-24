@@ -34,7 +34,7 @@ type kvInterface interface {
 	Delete(rows, run int) error
 	Scan(rows, run int) error
 
-	prep(rows int, initData bool) error
+	prep(rows int) error
 	done()
 }
 
@@ -122,10 +122,10 @@ func (kv *kvNative) Scan(rows, run int) error {
 	return err
 }
 
-func (kv *kvNative) prep(rows int, initData bool) error {
+func (kv *kvNative) prep(rows int) error {
 	kv.epoch++
 	kv.prefix = fmt.Sprintf("%d/", kv.epoch)
-	if !initData {
+	if rows == 0 {
 		return nil
 	}
 	err := kv.db.Txn(context.Background(), func(ctx context.Context, txn *kv2.Txn) error {
@@ -209,8 +209,18 @@ func (kv *kvSQL) Delete(rows, run int) error {
 		fmt.Fprintf(&kv.buf, `'%08d'`, j+firstRow)
 	}
 	kv.buf.WriteString(`)`)
-	_, err := kv.db.Exec(kv.buf.String())
-	return err
+	res, err := kv.db.Exec(kv.buf.String())
+	if err != nil {
+		return err
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected != int64(rows) {
+		return errors.Errorf("expected %d rows affected, found %d", rows, rowsAffected)
+	}
+	return nil
 }
 
 func (kv *kvSQL) Scan(count, run int) error {
@@ -232,7 +242,7 @@ func (kv *kvSQL) Scan(count, run int) error {
 	return nil
 }
 
-func (kv *kvSQL) prep(rows int, initData bool) error {
+func (kv *kvSQL) prep(rows int) error {
 	if _, err := kv.db.Exec(`DROP TABLE IF EXISTS bench.kv`); err != nil {
 		return err
 	}
@@ -246,7 +256,7 @@ CREATE TABLE IF NOT EXISTS bench.kv (
 	if _, err := kv.db.Exec(schema); err != nil {
 		return err
 	}
-	if !initData {
+	if rows == 0 {
 		return nil
 	}
 	defer kv.buf.Reset()
@@ -307,7 +317,21 @@ func BenchmarkKV(b *testing.B) {
 							kv := kvFn(b)
 							defer kv.done()
 
-							if err := kv.prep(rows, i != 0 /* Insert */ && i != 2 /* Delete */); err != nil {
+							var prepRows int
+							switch i {
+							case 0: // Insert
+								prepRows = 0
+							case 1: // Update
+								prepRows = rows
+							case 2: // Delete
+								prepRows = rows * b.N
+							case 3: // Scan
+								prepRows = rows
+							default:
+								b.Fatal("unexpected op")
+							}
+
+							if err := kv.prep(prepRows); err != nil {
 								b.Fatal(err)
 							}
 							b.ResetTimer()
@@ -398,7 +422,7 @@ func BenchmarkKVAndStorageUsingSQL(b *testing.B) {
 			// more keys, resulting in more files in the engine, which makes it
 			// slower.
 			rowsToInit := b.N * rowsToUpdate
-			if err := kv.prep(rowsToInit, true); err != nil {
+			if err := kv.prep(rowsToInit); err != nil {
 				b.Fatal(err)
 			}
 			b.ResetTimer()
