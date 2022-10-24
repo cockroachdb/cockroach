@@ -388,6 +388,10 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 14 of 15;
         │
         └── • 6 Mutation operations
             │
+            ├── • RemoveColumnDefaultExpression
+            │     ColumnID: 2
+            │     TableID: 106
+            │
             ├── • CreateGCJobForIndex
             │     IndexID: 2
             │     StatementForDropJob:
@@ -406,10 +410,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 14 of 15;
             │         SourceElementID: 1
             │         SubWorkID: 1
             │     IndexID: 2
-            │     TableID: 106
-            │
-            ├── • RemoveColumnDefaultExpression
-            │     ColumnID: 2
             │     TableID: 106
             │
             ├── • MakeDeleteOnlyColumnAbsent

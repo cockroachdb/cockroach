@@ -56,7 +56,7 @@ func fetchCorpusToTmpDir(
 		}
 	}
 	err = c.RunE(ctx, c.Node(1),
-		fmt.Sprintf(" gsutil cp gs://cockroach-corpus/corpus-release-%s/corpus %s",
+		fmt.Sprintf(" gsutil cp gs://cockroach-corpus/corpus-%s/corpus %s",
 			versionNumber,
 			corpusFilePath))
 	if err != nil {
@@ -123,9 +123,9 @@ func runDeclSchemaChangeCompatMixedVersions(
 		binaryVersion string
 		corpusVersion string
 	}{
-		{"backwards compatibility", predecessorVersion, fmt.Sprintf("%d.%d-mixed", buildVersion.Major(), buildVersion.Minor())},
-		{"forwards compatibility", "", versionRegex.FindStringSubmatch(predecessorVersion)[0]},
-		{"same version", "", versionRegex.FindStringSubmatch(buildVersion.String())[0]},
+		{"backwards compatibility", predecessorVersion, fmt.Sprintf("mixed-release-%d.%d", buildVersion.Major(), buildVersion.Minor())},
+		{"forwards compatibility", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(predecessorVersion)[0])},
+		{"same version", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(buildVersion.String())[0])},
 	}
 	for _, test := range compatTests {
 		binaryName := uploadVersion(ctx, t, c, c.All(), test.binaryVersion)

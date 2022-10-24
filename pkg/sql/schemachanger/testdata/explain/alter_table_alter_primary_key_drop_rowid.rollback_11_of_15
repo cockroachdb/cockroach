@@ -58,6 +58,7 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":6,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":8,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":10,"TableID":104}
+      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":11,"TableID":104}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":12,"TableID":104}
       │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":12,"TableID":104}
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":104}
@@ -70,7 +71,6 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
       │         ├── LogEvent {"TargetStatus":1}
       │         ├── CreateGCJobForIndex {"IndexID":9,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":9,"TableID":104}
-      │         ├── RemoveDroppedIndexPartialPredicate {"IndexID":11,"TableID":104}
       │         ├── LogEvent {"TargetStatus":1}
       │         ├── CreateGCJobForIndex {"IndexID":11,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":11,"TableID":104}

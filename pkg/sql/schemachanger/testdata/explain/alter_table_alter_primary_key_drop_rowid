@@ -324,9 +324,9 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PR
            │    ├── PUBLIC                → ABSENT           ColumnType:{DescID: 104, ColumnFamilyID: 0, ColumnID: 3}
            │    └── PUBLIC                → ABSENT           ColumnDefaultExpression:{DescID: 104, ColumnID: 3}
            └── 6 Mutation operations
+                ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":5,"TableID":104}
-                ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":104}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}
