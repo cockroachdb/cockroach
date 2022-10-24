@@ -91,6 +91,7 @@ func checkMetadata(
 		tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 		tc.Servers[0].DB(),
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	if err != nil {
 		t.Fatal(err)

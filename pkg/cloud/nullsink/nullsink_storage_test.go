@@ -43,6 +43,7 @@ func TestNullSinkReadAndWrite(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	if err != nil {
 		t.Fatal(err)

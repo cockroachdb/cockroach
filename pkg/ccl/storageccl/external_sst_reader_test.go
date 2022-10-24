@@ -127,6 +127,7 @@ func TestNewExternalSSTReader(t *testing.T) {
 			tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 			tc.Servers[0].DB(),
 			nil, /* limiters */
+			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
 		fileStores[i].Store = store

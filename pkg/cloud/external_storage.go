@@ -157,6 +157,7 @@ type ExternalStorageContext struct {
 	DB                      *kv.DB
 	Options                 []ExternalStorageOption
 	Limiters                Limiters
+	MetricsRecorder         MetricsRecorder
 }
 
 // ExternalStorageOptions holds dependencies and values that can be

@@ -884,6 +884,7 @@ func externalStorageFactory(
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 }
 

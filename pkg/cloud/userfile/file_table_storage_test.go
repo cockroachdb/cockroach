@@ -69,7 +69,8 @@ func TestPutUserFileTable(t *testing.T) {
 		userfileURL := url.URL{Scheme: "userfile", Host: qualifiedTableName, Path: ""}
 
 		store, err := cloud.ExternalStorageFromURI(ctx, userfileURL.String()+"/",
-			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), ie, ief, kvDB, nil)
+			base.ExternalIODirConfig{}, cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
+			username.RootUserName(), ie, ief, kvDB, nil, cloud.NilMetrics)
 		require.NoError(t, err)
 		defer store.Close()
 
@@ -117,13 +118,15 @@ func TestUserScoping(t *testing.T) {
 
 	// Write file as user1.
 	fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, ief, kvDB, nil)
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user1, ie, ief, kvDB, nil,
+		cloud.NilMetrics)
 	require.NoError(t, err)
 	require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte("aaa"))))
 
 	// Attempt to read/write file as user2 and expect to fail.
 	fileTableSystem2, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, ie, ief, kvDB, nil)
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, user2, ie, ief, kvDB, nil,
+		cloud.NilMetrics)
 	require.NoError(t, err)
 	_, err = fileTableSystem2.ReadFile(ctx, filename)
 	require.Error(t, err)
@@ -131,7 +134,8 @@ func TestUserScoping(t *testing.T) {
 
 	// Read file as root and expect to succeed.
 	fileTableSystem3, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), ie, ief, kvDB, nil)
+		cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.RootUserName(), ie, ief, kvDB,
+		nil, cloud.NilMetrics)
 	require.NoError(t, err)
 	_, err = fileTableSystem3.ReadFile(ctx, filename)
 	require.NoError(t, err)

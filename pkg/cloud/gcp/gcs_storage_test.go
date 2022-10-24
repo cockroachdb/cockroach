@@ -374,6 +374,7 @@ func TestFileDoesNotExist(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
+			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
@@ -393,6 +394,7 @@ func TestFileDoesNotExist(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
+			cloud.NilMetrics,
 		)
 		require.NoError(t, err)
 		_, err = s.ReadFile(context.Background(), "")
@@ -430,6 +432,7 @@ func TestCompressedGCS(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 	s2, err := cloud.MakeExternalStorage(ctx, conf2, base.ExternalIODirConfig{}, testSettings,
@@ -438,6 +441,7 @@ func TestCompressedGCS(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 

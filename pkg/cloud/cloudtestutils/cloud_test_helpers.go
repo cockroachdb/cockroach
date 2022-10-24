@@ -118,7 +118,7 @@ func storeFromURI(
 	}
 	// Setup a sink for the given args.
 	s, err := cloud.MakeExternalStorage(ctx, conf, base.ExternalIODirConfig{}, testSettings,
-		clientFactory, ie, ief, kvDB, nil)
+		clientFactory, ie, ief, kvDB, nil, cloud.NilMetrics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func CheckExportStore(
 	// Setup a sink for the given args.
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
 	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
-		ie, ief, kvDB, nil)
+		ie, ief, kvDB, nil, cloud.NilMetrics)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,6 +504,7 @@ func uploadData(
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 	require.NoError(t, cloud.WriteFile(ctx, s, basename, bytes.NewReader(data)))
@@ -549,6 +550,7 @@ func CheckAntagonisticRead(
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 	defer s.Close()
@@ -581,7 +583,8 @@ func CheckNoPermission(
 	}
 
 	clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
-	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, ief, kvDB, nil)
+	s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory, ie, ief, kvDB,
+		nil, cloud.NilMetrics)
 	if err != nil {
 		t.Fatal(err)
 	}

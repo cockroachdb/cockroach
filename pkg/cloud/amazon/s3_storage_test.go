@@ -51,6 +51,7 @@ func makeS3Storage(
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	if err != nil {
 		return nil, err
@@ -86,6 +87,7 @@ func TestPutS3(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
+			nil, /* metrics */
 		)
 		require.EqualError(t, err, fmt.Sprintf(
 			`%s is set to '%s', but %s is not set`,
@@ -448,6 +450,7 @@ func TestS3BucketDoesNotExist(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	if err != nil {
 		t.Fatal(err)
