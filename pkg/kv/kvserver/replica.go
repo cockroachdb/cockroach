@@ -1465,10 +1465,26 @@ func (r *Replica) checkExecutionCanProceedBeforeStorageSnapshot(
 // iterator. An error indicates that the request's timestamp is below the
 // Replica's GC threshold.
 func (r *Replica) checkExecutionCanProceedAfterStorageSnapshot(
-	ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus,
+	ctx context.Context, ba *roachpb.BatchRequest, st kvserverpb.LeaseStatus,
 ) error {
+	rSpan, err := keys.Range(ba.Requests)
+	if err != nil {
+		return err
+	}
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	// Ensure the request is entirely contained within the range's key bounds
+	// (even) after the storage engine has been pinned by the iterator. Given we
+	// perform this check before acquiring a storage snapshot, this is only ever
+	// meaningful in the context of follower reads. This is because latches on
+	// followers don't provide the synchronization with concurrent splits like
+	// they do on leaseholders.
+	if err := r.checkSpanInRangeRLocked(ctx, rSpan); err != nil {
+		return err
+	}
+
 	// NB: For read-only requests, the GC threshold check is performed after the
 	// state of the storage engine has been pinned by the iterator. This is
 	// because GC requests don't acquire latches at the timestamp they are garbage
@@ -1494,7 +1510,7 @@ func (r *Replica) checkExecutionCanProceedRWOrAdmin(
 	if err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
-	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ba, st); err != nil {
+	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ctx, ba, st); err != nil {
 		return kvserverpb.LeaseStatus{}, err
 	}
 	return st, nil
