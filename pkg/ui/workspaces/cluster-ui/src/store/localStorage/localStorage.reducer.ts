@@ -25,6 +25,8 @@ export type LocalStorageState = {
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
   "showColumns/SessionsPage": string;
+  "showColumns/StatementInsightsPage": string;
+  "showColumns/JobsPage": string;
   "timeScale/SQLActivity": TimeScale;
   "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
@@ -119,6 +121,11 @@ const initialState: LocalStorageState = {
     JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
   "showColumns/SessionsPage":
     JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
+  "showColumns/StatementInsightsPage":
+    JSON.parse(localStorage.getItem("showColumns/StatementInsightsPage")) ||
+    null,
+  "showColumns/JobsPage":
+    JSON.parse(localStorage.getItem("showColumns/JobsPage")) || null,
   "showSetting/JobsPage":
     JSON.parse(localStorage.getItem("showSetting/JobsPage")) ||
     defaultJobShowSetting,

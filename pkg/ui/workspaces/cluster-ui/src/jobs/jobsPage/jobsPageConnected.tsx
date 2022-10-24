@@ -18,6 +18,7 @@ import {
   selectSortSetting,
   selectTypeSetting,
   selectStatusSetting,
+  selectColumns,
 } from "../../store/jobs/jobs.selectors";
 import {
   JobsPageStateProps,
@@ -38,6 +39,7 @@ const mapStateToProps = (
   const status = selectStatusSetting(state);
   const show = selectShowSetting(state);
   const type = selectTypeSetting(state);
+  const columns = selectColumns(state);
   const jobsState = selectJobsState(state);
   const jobs = jobsState ? jobsState.data : null;
   const jobsLoading = jobsState ? jobsState.inFlight : false;
@@ -47,6 +49,7 @@ const mapStateToProps = (
     status,
     show,
     type,
+    columns,
     jobs,
     jobsLoading,
     jobsError,
@@ -86,9 +89,14 @@ const mapDispatchToProps = (dispatch: Dispatch): JobsPageDispatchProps => ({
       }),
     );
   },
+  onColumnsChange: (selectedColumns: string[]) =>
+    dispatch(
+      localStorageActions.update({
+        key: "showColumns/JobsPage",
+        value: selectedColumns.length === 0 ? " " : selectedColumns.join(","),
+      }),
+    ),
   refreshJobs: (req: JobsRequest) => dispatch(jobsActions.refresh(req)),
-  onFilterChange: (req: JobsRequest) =>
-    dispatch(jobsActions.updateFilteredJobs(req)),
 });
 
 export const JobsPageConnected = withRouter(
