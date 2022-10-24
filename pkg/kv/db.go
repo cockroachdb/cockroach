@@ -912,6 +912,11 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // is marked as poisoned and all future ops fail fast until the retry. The
 // callback may return either nil or the retryable error. Txn is responsible for
 // resetting the transaction and retrying the callback.
+//
+// TODO(irfansharif): Audit uses of this since API since it bypasses AC. Make
+// the other variant (TxnWithAdmissionControl) the default, or maybe rename this
+// to be more explicit (TxnWithoutAdmissionControl) so new callers have to be
+// conscious about what they want.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	return db.TxnWithAdmissionControl(
 		ctx, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri, retryable)
