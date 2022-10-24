@@ -1263,6 +1263,46 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
+func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id INT PRIMARY KEY, a STRING, b STRING, c STRING, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c WITH schema_change_policy='stop'`)
+
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+		})
+
+		// Adding a column with a backfill to the default column family does not stop the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams ADD COLUMN d STRING DEFAULT 'default'`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (1, 'a1', 'b1', 'c1', 'd1')`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [1]->{"after": {"b": "b1", "c": "c1"}}`,
+		})
+
+		// Adding a column with a backfill to a non-target column family does not stop the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams ADD COLUMN e STRING DEFAULT 'default' FAMILY id_a`)
+		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (2, 'a2', 'b2', 'c2', 'd2', 'e2')`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [2]->{"after": {"b": "b2", "c": "c2"}}`,
+		})
+
+		// Check that adding a column to a watched family stops the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams ADD COLUMN f INT DEFAULT 0 FAMILY b_and_c`)
+		if _, err := cf.Next(); !testutils.IsError(err, `schema change occurred at`) {
+			t.Errorf(`expected "schema change occurred at ..." got: %+v`, err.Error())
+		}
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedExternalIODisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

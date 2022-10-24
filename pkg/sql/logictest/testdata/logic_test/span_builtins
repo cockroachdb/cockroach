@@ -14,3 +14,10 @@ query T
 select crdb_internal.tenant_span(2)
 ----
 {"\\xfe8a","\\xfe8b"}
+
+
+# Keys that don't have a valid tenant prefix are returned verbatim.
+query T
+SELECT encode(crdb_internal.trim_tenant_prefix('\xfe8828a09b'), 'hex');
+----
+fe8828a09b

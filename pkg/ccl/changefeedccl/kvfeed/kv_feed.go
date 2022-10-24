@@ -109,7 +109,7 @@ func Run(ctx context.Context, cfg Config) error {
 		cfg.InitialHighWater, cfg.EndTime,
 		cfg.Codec,
 		cfg.SchemaFeed,
-		sc, pff, bf, cfg.UseMux, cfg.Knobs)
+		sc, pff, bf, cfg.UseMux, cfg.Targets, cfg.Knobs)
 	f.onBackfillCallback = cfg.OnBackfillCallback
 
 	g := ctxgroup.WithContext(ctx)
@@ -184,6 +184,8 @@ type kvFeed struct {
 
 	useMux bool
 
+	targets changefeedbase.Targets
+
 	// These dependencies are made available for test injection.
 	bufferFactory func() kvevent.Buffer
 	tableFeed     schemafeed.SchemaFeed
@@ -209,6 +211,7 @@ func newKVFeed(
 	pff physicalFeedFactory,
 	bf func() kvevent.Buffer,
 	useMux bool,
+	targets changefeedbase.Targets,
 	knobs TestingKnobs,
 ) *kvFeed {
 	return &kvFeed{
@@ -228,6 +231,7 @@ func newKVFeed(
 		physicalFeed:        pff,
 		bufferFactory:       bf,
 		useMux:              useMux,
+		targets:             targets,
 		knobs:               knobs,
 	}
 }
@@ -309,7 +313,7 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 		// If is no change in the primary key columns, then a primary key change
 		// should not trigger a failure in the `stop` policy because this change is
 		// effectively invisible to consumers.
-		primaryIndexChange, noColumnChanges := isPrimaryKeyChange(events)
+		primaryIndexChange, noColumnChanges := isPrimaryKeyChange(events, f.targets)
 		if primaryIndexChange && (noColumnChanges ||
 			f.schemaChangePolicy != changefeedbase.OptSchemaChangePolicyStop) {
 			boundaryType = jobspb.ResolvedSpan_RESTART
@@ -333,11 +337,11 @@ func (f *kvFeed) run(ctx context.Context) (err error) {
 }
 
 func isPrimaryKeyChange(
-	events []schemafeed.TableEvent,
+	events []schemafeed.TableEvent, targets changefeedbase.Targets,
 ) (isPrimaryIndexChange, hasNoColumnChanges bool) {
 	hasNoColumnChanges = true
 	for _, ev := range events {
-		if ok, noColumnChange := schemafeed.IsPrimaryIndexChange(ev); ok {
+		if ok, noColumnChange := schemafeed.IsPrimaryIndexChange(ev, targets); ok {
 			isPrimaryIndexChange = true
 			hasNoColumnChanges = hasNoColumnChanges && noColumnChange
 		}

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -146,7 +147,7 @@ func TestTableEventIsPrimaryIndexChange(t *testing.T) {
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got, _ := IsPrimaryIndexChange(c.e)
+			got, _ := IsPrimaryIndexChange(c.e, changefeedbase.Targets{})
 			require.Equalf(t, c.exp, got, "event %v", c.e)
 		})
 	}

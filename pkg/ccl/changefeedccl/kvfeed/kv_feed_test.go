@@ -128,6 +128,7 @@ func TestKVFeed(t *testing.T) {
 			keys.SystemSQLCodec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			util.ConstantWithMetamorphicTestBool("use_mux", true),
+			changefeedbase.Targets{},
 			TestingKnobs{})
 		ctx, cancel := context.WithCancel(context.Background())
 		g := ctxgroup.WithContext(ctx)
