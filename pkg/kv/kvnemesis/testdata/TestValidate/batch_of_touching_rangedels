@@ -2,7 +2,7 @@ echo
 ----
 {
   b := &Batch{}
-  b.DelRangeUsingTombstone(ctx, "a", "c" /* @s1 */)
+  b.DelRangeUsingTombstone(ctx, "a", "b" /* @s1 */)
   b.DelRangeUsingTombstone(ctx, "b", "d" /* @s2 */)
   db0.Run(ctx, b) // @0.000000001,0 <nil>
 }

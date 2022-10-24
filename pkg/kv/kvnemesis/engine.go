@@ -90,17 +90,9 @@ func (e *Engine) Put(key storage.MVCCKey, value []byte) {
 	}
 }
 
-// Delete writes a tombstone value for a given key/timestamp. This is
-// equivalent to a Put with an empty value.
-func (e *Engine) Delete(key storage.MVCCKey) {
-	if err := e.kvs.Set(storage.EncodeMVCCKey(key), nil, nil); err != nil {
-		panic(err)
-	}
-}
-
-func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp) {
+func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp, val []byte) {
 	suffix := storage.EncodeMVCCTimestampSuffix(ts)
-	if err := e.kvs.RangeKeySet(from, to, suffix, nil, nil); err != nil {
+	if err := e.kvs.RangeKeySet(from, to, suffix, val, nil); err != nil {
 		panic(err)
 	}
 }
@@ -130,12 +122,18 @@ func (e *Engine) Iterate(
 			e.b, key = e.b.Copy(key, 0 /* extraCap */)
 			e.b, endKey = e.b.Copy(endKey, 0 /* extraCap */)
 			for _, rk := range iter.RangeKeys() {
+				mvccV, err := storage.DecodeMVCCValue(iter.Value())
+				if err != nil {
+					fn(nil, nil, hlc.Timestamp{}, nil, err)
+					continue
+				}
+				fmt.Println(mvccV.Seq)
 				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					fn(nil, nil, hlc.Timestamp{}, nil, err)
-				} else {
-					fn(key, endKey, ts, rk.Value, nil)
+					continue
 				}
+				fn(key, endKey, ts, rk.Value, nil)
 			}
 		}
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -90,6 +91,20 @@ func withDeleteRangeResult(op Operation, ts int, keys ...[]byte) Operation {
 	return op
 }
 
+type seqKV struct {
+	key, endKey roachpb.Key
+	val         []byte // contains seq
+	ts          hlc.Timestamp
+}
+
+func (kv *seqKV) seq() kvnemesisutil.Seq {
+	mvccV, err := storage.DecodeMVCCValue(kv.val)
+	if err != nil {
+		panic(err)
+	}
+	return kvnemesisutil.Seq(mvccV.Seq)
+}
+
 func TestValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -121,24 +136,28 @@ func TestValidate(t *testing.T) {
 		v3 = vi(s3)
 	)
 
-	type seqKV struct {
-		key, endKey roachpb.Key
-		val         []byte
-		ts          hlc.Timestamp
-		seq         kvnemesisutil.Seq
+	valWithSeq := func(seq kvnemesisutil.Seq, v roachpb.Value) []byte {
+		sl, err := storage.EncodeMVCCValue(storage.MVCCValue{
+			MVCCValueHeader: enginepb.MVCCValueHeader{
+				Seq: int32(seq),
+			},
+			Value: v,
+		})
+		if err != nil {
+			panic(err)
+		}
+		return sl
 	}
-
 	kv := func(key string, ts int, seq kvnemesisutil.Seq) seqKV {
 		return seqKV{
 			key: roachpb.Key(key),
 			ts:  hlc.Timestamp{WallTime: int64(ts)},
-			val: roachpb.MakeValueFromString(PutOperation{Seq: seq}.Value()).RawBytes,
-			seq: seq,
+			val: valWithSeq(seq, roachpb.MakeValueFromString(PutOperation{Seq: seq}.Value())),
 		}
 	}
 	tombstone := func(key string, ts int, seq kvnemesisutil.Seq) seqKV {
 		r := kv(key, ts, seq)
-		r.val = nil
+		r.val = valWithSeq(seq, roachpb.Value{})
 		return r
 	}
 	rd := func(key, endKey string, ts int, seq kvnemesisutil.Seq) seqKV {
@@ -146,7 +165,7 @@ func TestValidate(t *testing.T) {
 			key:    roachpb.Key(key),
 			endKey: roachpb.Key(endKey),
 			ts:     hlc.Timestamp{WallTime: int64(ts)},
-			seq:    seq,
+			val:    valWithSeq(seq, roachpb.Value{}),
 		}
 	}
 	kvs := func(kvs ...seqKV) []seqKV {
@@ -1700,18 +1719,44 @@ func TestValidate(t *testing.T) {
 			),
 		},
 		{
-			name: "batch of two overlapping rangedels",
-			steps: []Step{
-				step(withResultTS(delRangeUsingTombstone(`a`, `c`, s1), t1)),
-				step(withResultTS(delRangeUsingTombstone(`b`, `d`, s2), t2)),
+			name: "batch of touching rangedels",
+			steps: []Step{step(withResultTS(batch(
+				delRangeUsingTombstone(`a`, `b`, s1),
+				delRangeUsingTombstone(`b`, `d`, s2),
+			), t1)),
 			},
-			// Note: first rangedel gets shortened.
-			kvs: kvs(rd(`a`, `c`, t1, s1), rd(`b`, `d`, t2, s2)),
+			// Note that the tombstones aren't merged. In fact, our use of sequence numbers
+			// embedded in MVCCValueHeader implies that pebble can never merge adjacent
+			// tombstones from the same batch/txn.
+			kvs: kvs(
+				rd(`a`, `b`, t1, s1),
+				rd(`b`, `d`, t1, s2),
+			),
+		},
+		{
+			// Note also that self-overlapping batches or rangedels in txns aren't
+			// allowed today, so this particular example exists in this unit test but
+			// not in real CRDB. But we can have "touching" rangedels today, see
+			// above.
+			name: "batch of two overlapping rangedels",
+			steps: []Step{step(withResultTS(batch(
+				delRangeUsingTombstone(`a`, `c`, s1),
+				delRangeUsingTombstone(`b`, `d`, s2),
+			), t1)),
+			},
+			// Note that the tombstones aren't merged. In fact, our use of sequence numbers
+			// embedded in MVCCValueHeader implies that pebble can never merge adjacent
+			// tombstones from the same batch/txn.
+			// Note also that self-overlapping batches or rangedels in txns aren't
+			// allowed today, so this particular example exists in this unit test but
+			// not in real CRDB. But we can have "touching" rangedels today.
+			kvs: kvs(
+				rd(`a`, `b`, t1, s1),
+				rd(`b`, `d`, t1, s2),
+			),
 		},
 	}
 
-	// TODO(tbg): try to find a way to iterate through the tests in a way that allows Goland to link
-	// back to the failing case. I think it looks for the loop with `t.Run` in it...
 	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))
 	defer w.Check(t)
 	for _, test := range tests {
@@ -1727,22 +1772,29 @@ func TestValidate(t *testing.T) {
 
 			tr := &SeqTracker{}
 			for _, kv := range test.kvs {
-				tr.Add(kv.key, kv.endKey, kv.ts, kv.seq)
+				seq := kv.seq()
+				tr.Add(kv.key, kv.endKey, kv.ts, seq)
+				// NB: we go a little beyond what is truly necesary by embedding the
+				// sequence numbers (inside kv.val) unconditionally, as they would be in
+				// a real run. But we *do* need to embed them in `e.DeleteRange`, for
+				// otherwise pebble might start merging adjacent MVCC range dels (since
+				// they could have the same timestamp and empty value, where the seqno
+				// would really produce unique values).
 				if len(kv.endKey) == 0 {
 					k := storage.MVCCKey{
 						Key:       kv.key,
 						Timestamp: kv.ts,
 					}
 					e.Put(k, kv.val)
-					fmt.Fprintln(&buf, k, "@", kv.seq, mustGetStringValue(kv.val))
+					fmt.Fprintln(&buf, k, "@", seq, mustGetStringValue(kv.val))
 				} else {
 					k := storage.MVCCRangeKey{
 						StartKey:  kv.key,
 						EndKey:    kv.endKey,
 						Timestamp: kv.ts,
 					}
-					e.DeleteRange(kv.key, kv.endKey, kv.ts)
-					fmt.Fprintln(&buf, k, "@", kv.seq, mustGetStringValue(kv.val))
+					e.DeleteRange(kv.key, kv.endKey, kv.ts, kv.val)
+					fmt.Fprintln(&buf, k, "@", seq, mustGetStringValue(kv.val))
 				}
 			}
 

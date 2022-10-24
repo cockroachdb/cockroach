@@ -73,10 +73,15 @@ func Validate(steps []Step, kvs *Engine, dt *SeqTracker) []error {
 	var extraKVs []observedOp
 	for seq, svs := range v.kvBySeq {
 		for _, sv := range svs {
+			mvccV, err := storage.DecodeMVCCValue(sv.Value)
+			if err != nil {
+				v.failures = append(v.failures, err)
+				continue
+			}
 			kv := &observedWrite{
 				Key:       sv.Key,
 				EndKey:    sv.EndKey,
-				Value:     roachpb.Value{RawBytes: sv.Value},
+				Value:     mvccV.Value,
 				Timestamp: sv.Timestamp,
 				Seq:       seq,
 			}
