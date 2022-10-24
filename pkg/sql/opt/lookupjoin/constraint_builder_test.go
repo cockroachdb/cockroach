@@ -143,7 +143,8 @@ func TestLookupConstraints(t *testing.T) {
 				var cb lookupjoin.ConstraintBuilder
 				cb.Init(&f, md, f.EvalContext(), rightTable, leftCols, rightCols)
 
-				lookupConstraint, _ := cb.Build(index, filters, optionalFilters)
+				lookupConstraint, _ := cb.Build(index, filters, optionalFilters,
+					memo.FiltersExpr{} /* derivedFkOnFilters */)
 				var b strings.Builder
 				if lookupConstraint.IsUnconstrained() {
 					b.WriteString("lookup join not possible")
