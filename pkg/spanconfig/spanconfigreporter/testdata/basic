@@ -45,7 +45,7 @@ n6: dead
 report 
 ----
 under replicated:
-  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6]
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying range default
 
 liveness
 n4: dead
@@ -54,9 +54,9 @@ n4: dead
 report 
 ----
 unavailable:
-  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6]
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying range default
 under replicated:
-  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6]
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying range default
 
 liveness
 n4: live
@@ -76,7 +76,7 @@ r2: voters=[n1,n3,n5,n6]
 report
 ----
 over replicated:
-  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5, (n6,s6):6]
+  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5, (n6,s6):6] applying range default
 
 # It should also work when we don't have enough replicas.
 allocate
@@ -86,7 +86,7 @@ r2: voters=[n1]
 report
 ----
 under replicated:
-  r2:{b-c} [(n1,s1):1]
+  r2:{b-c} [(n1,s1):1] applying range default
 
 allocate
 r2: voters=[n1,n3,n5]
@@ -109,9 +109,9 @@ configure
 report
 ----
 under replicated:
-  r3:{c-d} [(n1,s1):1, (n3,s3):3, (n5,s5):5]
+  r3:{c-d} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying range system
 over replicated:
-  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6]
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying num_replicas=1
 
 configure
 [a,d): num_replicas=3
@@ -135,7 +135,7 @@ r2: voters=[n1,n3,n5]
 report
 ----
 under replicated:
-  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5]
+  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying num_replicas=6 num_voters=3
 
 allocate
 r2: voters=[n1,n2,n3,n4,n5,n6]
@@ -145,9 +145,9 @@ r2: voters=[n1,n2,n3,n4,n5,n6]
 report
 ----
 under replicated:
-  r2:{b-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5):5, (n6,s6):6]
+  r2:{b-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5):5, (n6,s6):6] applying num_replicas=6 num_voters=3
 over replicated:
-  r2:{b-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5):5, (n6,s6):6]
+  r2:{b-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5):5, (n6,s6):6] applying num_replicas=6 num_voters=3
 
 allocate
 r2: voters=[n1,n3,n5] non-voters=[n2,n4,n6]
@@ -178,7 +178,7 @@ configure
 report
 ----
 violating constraints:
-  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5]
+  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying constraints=[+region=us-central:2]
 
 allocate
 r2: voters=[n1,n3,n4]

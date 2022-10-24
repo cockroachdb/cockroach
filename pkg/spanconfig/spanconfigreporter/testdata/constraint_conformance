@@ -24,7 +24,7 @@ r1: voters=[n1,n2,n4]
 report
 ----
 violating constraints:
-  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n4,s4):4]
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n4,s4):4] applying constraints=[+region=us-west:3]
 
 # Pin replicas to two specific DCs. A conforming replica placement should show
 # up as such.
@@ -53,7 +53,7 @@ r1: voters=[n1] non-voters=[n3]
 report
 ----
 violating constraints:
-  r1:{a-b} [(n1,s1):1, (n3,s3):3NON_VOTER]
+  r1:{a-b} [(n1,s1):1, (n3,s3):3NON_VOTER] applying num_replicas=2 num_voters=1 constraints=[+dc=dc-a:1 +dc=dc-d:1] voter_constraints=[+dc=dc-a:1]
 
 allocate
 r1: voters=[n1] non-voters=[n4]
@@ -76,7 +76,7 @@ r1: voters=[n1,n3,n5]
 report
 ----
 violating constraints:
-  r1:{a-b} [(n1,s1):1, (n3,s3):3, (n5,s5):5]
+  r1:{a-b} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying constraints=[-region=us-west]
 
 allocate
 r1: voters=[n4,n5,n6]
