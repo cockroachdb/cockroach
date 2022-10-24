@@ -74,8 +74,9 @@ func (dbc *dbAdapter) RangeFeed(
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
-	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC)
+	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC, opts...)
 }
 
 // concurrentBoundAccount is a thread safe bound account.
