@@ -154,7 +154,13 @@ func (filter tableEventFilter) shouldFilter(
 				if err != nil {
 					return false, err
 				}
-				shouldFilter = sf
+				shouldFilter = sf && shouldFilter
+			} else if filterEvent == tableEventAddColumnNoBackfill || filterEvent == tableEventAddColumnWithBackfill {
+				sf, err := shouldFilterAddColumnEvent(e, targets)
+				if err != nil {
+					return false, err
+				}
+				shouldFilter = sf && shouldFilter
 			} else {
 				shouldFilter = false
 			}
@@ -169,12 +175,20 @@ func (filter tableEventFilter) shouldFilter(
 
 // shouldFilterDropColumnEvent decides if we should filter out a drop column event.
 func shouldFilterDropColumnEvent(e TableEvent, targets changefeedbase.Targets) (bool, error) {
-	if watched, err := droppedColumnIsWatched(e, targets); err != nil {
+	watched, err := droppedColumnIsWatched(e, targets)
+	if err != nil {
 		return false, err
-	} else if watched {
-		return false, nil
 	}
-	return true, nil
+	return !watched, nil
+}
+
+// shouldFilterAddColumnEvent decides if we should filter out an add column event.
+func shouldFilterAddColumnEvent(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	watched, err := addedColumnIsWatched(e, targets)
+	if err != nil {
+		return false, err
+	}
+	return !watched, nil
 }
 
 // Returns true if the changefeed targets a column which has a drop mutation inside the table event.
@@ -207,6 +221,48 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 	}
 
 	return false, nil
+}
+
+// Returns true if the changefeed targets a column to be added will be added to a watched column family.
+func addedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, error) {
+	// If no column families are specified, then all columns are targeted.
+	specifiedColumnFamiliesForTable := targets.GetSpecifiedColumnFamilies(e.Before.GetID())
+	if len(specifiedColumnFamiliesForTable) == 0 {
+		return true, nil
+	}
+
+	if len(e.Before.VisibleColumns()) >= len(e.After.VisibleColumns()) {
+		return false, nil
+	}
+
+	var beforeCols util.FastIntSet
+	for _, col := range e.Before.VisibleColumns() {
+		beforeCols.Add(int(col.GetID()))
+	}
+	var addedCols util.FastIntSet
+	for _, col := range e.After.VisibleColumns() {
+		colID := int(col.GetID())
+		if !beforeCols.Contains(colID) {
+			addedCols.Add(colID)
+		}
+	}
+
+	res := false
+	if err := e.Before.ForeachFamily(func(family *descpb.ColumnFamilyDescriptor) error {
+		if _, ok := specifiedColumnFamiliesForTable[family.Name]; ok {
+			for _, colID := range family.ColumnIDs {
+				if addedCols.Contains(int(colID)) {
+					res = true
+					return nil
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+
+	return res, nil
 }
 
 func hasNewVisibleColumnDropBackfillMutation(e TableEvent) (res bool) {
@@ -279,8 +335,11 @@ func regionalByRowChanged(e TableEvent) bool {
 	return e.Before.IsLocalityRegionalByRow() != e.After.IsLocalityRegionalByRow()
 }
 
-func hasNewPrimaryIndexWithNoVisibleColumnChanges(e TableEvent) bool {
+func hasNewPrimaryIndexWithNoVisibleColumnChanges(
+	e TableEvent, targets changefeedbase.Targets,
+) bool {
 	before, after := e.Before.GetPrimaryIndex(), e.After.GetPrimaryIndex()
+	// Check if there is a change in the primary key.
 	if before.GetID() == after.GetID() ||
 		before.NumKeyColumns() != after.NumKeyColumns() {
 		return false
@@ -290,13 +349,36 @@ func hasNewPrimaryIndexWithNoVisibleColumnChanges(e TableEvent) bool {
 			return false
 		}
 	}
+
+	// Check other columns.
+	targetFamilies := targets.GetSpecifiedColumnFamilies(e.Before.GetID())
+	hasSpecificColumnTargets := len(targetFamilies) > 0
 	collectPublicStoredColumns := func(
 		idx catalog.Index, tab catalog.TableDescriptor,
 	) (cols catalog.TableColSet) {
+
+		// Generate a set of watched columns if the targets contains specific columns.
+		var targetedCols util.FastIntSet
+		if hasSpecificColumnTargets {
+			err := tab.ForeachFamily(func(fam *descpb.ColumnFamilyDescriptor) error {
+				if _, ok := targetFamilies[fam.Name]; ok {
+					for _, colID := range fam.ColumnIDs {
+						targetedCols.Add(int(colID))
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		for i, n := 0, idx.NumPrimaryStoredColumns(); i < n; i++ {
 			colID := idx.GetStoredColumnID(i)
 			col, _ := tab.FindColumnWithID(colID)
-			if col.Public() {
+
+			// If specific columns are targeted, then only consider the column if it is targeted.
+			if col.Public() && (!hasSpecificColumnTargets || targetedCols.Contains(int(col.GetID()))) {
 				cols.Add(colID)
 			}
 		}
@@ -310,17 +392,23 @@ func hasNewPrimaryIndexWithNoVisibleColumnChanges(e TableEvent) bool {
 
 // IsPrimaryIndexChange returns true if the event corresponds to a change
 // in the primary index. It also returns whether the primary index change
-// corresponds to any change in the visible column set or key ordering.
+// corresponds to any change in the visible column set or key ordering
+// stored by the primary key .
 // This is useful because when the declarative schema changer drops a column,
 // it does so by adding a new primary index with the column excluded and
 // then swaps to the new primary index. The column logically disappears
 // before the index swap occurs. We want to detect the case of this index
 // swap and not stop changefeeds which are programmed to stop upon schema
 // changes.
-func IsPrimaryIndexChange(e TableEvent) (isPrimaryIndexChange, noVisibleOrderOrColumnChanges bool) {
+// If targets is non-empty, then this function will only count columns
+// in target column families when determining if there are no column changes.
+// Otherwise, this function will check for changes across all columns.
+func IsPrimaryIndexChange(
+	e TableEvent, targets changefeedbase.Targets,
+) (isPrimaryIndexChange, noVisibleOrderOrColumnChanges bool) {
 	isPrimaryIndexChange = classifyTableEvent(e).Contains(tableEventPrimaryKeyChange)
 	if isPrimaryIndexChange {
-		noVisibleOrderOrColumnChanges = hasNewPrimaryIndexWithNoVisibleColumnChanges(e)
+		noVisibleOrderOrColumnChanges = hasNewPrimaryIndexWithNoVisibleColumnChanges(e, targets)
 	}
 	return isPrimaryIndexChange, noVisibleOrderOrColumnChanges
 }
