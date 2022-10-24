@@ -8958,6 +8958,11 @@ type ProcessUniqueID int32
 func GenerateUniqueInt(instanceID ProcessUniqueID) tree.DInt {
 	const precision = uint64(10 * time.Microsecond)
 
+	// TODO(andrei): For tenants we need to validate that the current time is
+	// within the validity of the sqlliveness session to which the instanceID is
+	// bound. Without this validation, two different nodes might be calling this
+	// function with the same instanceID at the same time, and both would generate
+	// the same unique int. See #90459.
 	nowNanos := timeutil.Now().UnixNano()
 	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
 	if nowNanos < uniqueIntEpoch {
