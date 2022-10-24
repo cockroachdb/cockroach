@@ -115,6 +115,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/GetSpanConfigs":
 		return a.authGetSpanConfigs(tenID, req.(*roachpb.GetSpanConfigsRequest))
 
+	case "/cockroach.roachpb.Internal/SpanConfigConformance":
+		return a.authSpanConfigConformance(tenID, req.(*roachpb.SpanConfigConformanceRequest))
+
 	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply":
 		return a.authGetAllSystemSpanConfigsThatApply(tenID, req.(*roachpb.GetAllSystemSpanConfigsThatApplyRequest))
 
@@ -335,6 +338,19 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 	return nil
 }
 
+// authSpanConfigConformance authorizes the provided tenant to invoke the
+// SpanConfigConformance RPC with the provided args.
+func (a tenantAuthorizer) authSpanConfigConformance(
+	tenID roachpb.TenantID, args *roachpb.SpanConfigConformanceRequest,
+) error {
+	for _, sp := range args.Spans {
+		if err := validateSpan(tenID, sp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateSpanConfigTarget validates that the tenant is authorized to interact
 // with the supplied span config target. In particular, span targets must be
 // wholly contained within the tenant keyspace and system span config targets
@@ -367,26 +383,26 @@ func validateSpanConfigTarget(
 		return nil
 	}
 
-	validateSpan := func(sp roachpb.Span) error {
-		tenSpan := tenantPrefix(tenID)
-		rSpan, err := keys.SpanAddr(sp)
-		if err != nil {
-			return authError(err.Error())
-		}
-		if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
-			return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
-		}
-		return nil
-	}
-
 	switch spanConfigTarget.Union.(type) {
 	case *roachpb.SpanConfigTarget_Span:
-		return validateSpan(*spanConfigTarget.GetSpan())
+		return validateSpan(tenID, *spanConfigTarget.GetSpan())
 	case *roachpb.SpanConfigTarget_SystemSpanConfigTarget:
 		return validateSystemTarget(*spanConfigTarget.GetSystemSpanConfigTarget())
 	default:
 		return errors.AssertionFailedf("unknown span config target type")
 	}
+}
+
+func validateSpan(tenID roachpb.TenantID, sp roachpb.Span) error {
+	tenSpan := tenantPrefix(tenID)
+	rSpan, err := keys.SpanAddr(sp)
+	if err != nil {
+		return authError(err.Error())
+	}
+	if !tenSpan.ContainsKeyRange(rSpan.Key, rSpan.EndKey) {
+		return authErrorf("requested key span %s not fully contained in tenant keyspace %s", rSpan, tenSpan)
+	}
+	return nil
 }
 
 func contextWithTenant(ctx context.Context, tenID roachpb.TenantID) context.Context {

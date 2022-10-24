@@ -378,7 +378,7 @@ func (d ReplicaSet) HasReplicaOnNode(nodeID NodeID) bool {
 // the replication layer. This is more complicated than just counting the number
 // of replicas due to the existence of joint quorums.
 func (d ReplicaSet) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
-	return d.ReplicationStatus(liveFunc, 0 /* neededVoters */, 0 /* neededNonVoters*/).Available
+	return d.ReplicationStatus(liveFunc, 0 /* neededVoters */, -1 /* neededNonVoters*/).Available
 }
 
 // RangeStatusReport contains info about a range's replication status. Returned
@@ -412,7 +412,8 @@ type RangeStatusReport struct {
 // neededVoters is the replica's desired replication for purposes of determining
 // over/under-replication of voters. If the caller is only interested in
 // availability of voting replicas, 0 can be passed in. neededNonVoters is the
-// counterpart for non-voting replicas.
+// counterpart for non-voting replicas but with -1 as the sentinel value (unlike
+// voters, it's possible to expect 0 non-voters).
 func (d ReplicaSet) ReplicationStatus(
 	liveFunc func(descriptor ReplicaDescriptor) bool, neededVoters int, neededNonVoters int,
 ) RangeStatusReport {
@@ -454,7 +455,7 @@ func (d ReplicaSet) ReplicationStatus(
 	overReplicatedNewGroup := len(votersNewGroup) > neededVoters
 	res.UnderReplicated = underReplicatedOldGroup || underReplicatedNewGroup
 	res.OverReplicated = overReplicatedOldGroup || overReplicatedNewGroup
-	if neededNonVoters == 0 {
+	if neededNonVoters == -1 {
 		return res
 	}
 

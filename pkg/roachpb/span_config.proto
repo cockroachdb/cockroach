@@ -278,14 +278,22 @@ message SpanConfigEntry {
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
 
-// SpanConfigConformanceReport lists out ranges that (i) don't conform to span
-// configs that apply over them, and (ii) are unavailable.
+// SpanConfigConformanceReport reports ranges that (i) don't conform to span
+// configs that apply over them, and (ii) are unavailable. Also included in this
+// report are the IDs of unavailable nodes (possibly contributing to
+// under-replication or range-unavailability).
 message SpanConfigConformanceReport {
-  repeated RangeDescriptor under_replicated = 1 [(gogoproto.nullable) = false];
-  repeated RangeDescriptor over_replicated = 2 [(gogoproto.nullable) = false];
-  repeated RangeDescriptor violating_constraints = 3 [(gogoproto.nullable) = false];
-  repeated RangeDescriptor unavailable = 4 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange under_replicated = 1 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange over_replicated = 2 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange violating_constraints = 3 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange unavailable = 4 [(gogoproto.nullable) = false];
+  repeated int32 unavailable_node_ids = 5 [(gogoproto.customname) = "UnavailableNodeIDs"];
 };
+
+message ConformanceReportedRange {
+  RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+  SpanConfig config = 2 [(gogoproto.nullable) = false];
+}
 
 // GetSpanConfigsRequest is used to fetch the span configurations and system
 // span configurations.
