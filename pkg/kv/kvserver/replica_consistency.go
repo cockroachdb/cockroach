@@ -746,7 +746,7 @@ Checkpoints are very helpful in debugging this issue, so before deleting them,
 please consider alternative actions:
 
 - If the store has enough capacity, hold off deleting the checkpoint until CRDB
-  stuff has diagnosed the issue.
+  staff has diagnosed the issue.
 - Consider backing up the checkpoints before removing them, e.g. by snapshotting
   the disk.
 - If the stores are nearly full, but the cluster has enough capacity, consider
