@@ -53,12 +53,34 @@ func (e *Engine) Close() {
 // Get returns the value for this key with the highest timestamp <= ts. If no
 // such value exists, the returned value's RawBytes is nil.
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
-	iter := e.kvs.NewIter(nil)
+	opts := pebble.IterOptions{
+		KeyTypes: pebble.IterKeyTypePointsAndRanges,
+		// Make MVCC range deletions actually appear to delete points in
+		// this low-level iterator, so we don't have to implement it manually
+		// a second time.
+		RangeKeyMasking: pebble.RangeKeyMasking{
+			Suffix: storage.EncodeMVCCTimestampSuffix(hlc.MaxTimestamp),
+		},
+		OnlyReadGuaranteedDurable: false,
+		UseL6Filters:              false,
+	}
+	iter := e.kvs.NewIter(&opts)
 	defer func() { _ = iter.Close() }()
 	iter.SeekGE(storage.EncodeMVCCKey(storage.MVCCKey{Key: key, Timestamp: ts}))
+	for iter.Valid() {
+		hasPoint, _ := iter.HasPointAndRange()
+		if !hasPoint {
+			iter.Next()
+		} else {
+			break
+		}
+	}
 	if !iter.Valid() {
 		return roachpb.Value{}
 	}
+
+	// We're on the first point the iter is seeing.
+
 	// This use of iter.Key() is safe because it comes entirely before the
 	// deferred iter.Close.
 	mvccKey, err := storage.DecodeMVCCKey(iter.Key())
@@ -157,7 +179,9 @@ func (e *Engine) DebugPrint(indent string) string {
 			v, err := storage.DecodeMVCCValue(value)
 			if err != nil {
 				fmt.Fprintf(&buf, "(err:%s)", err)
-			} else if len(endKey) == 0 {
+				return
+			}
+			if len(endKey) == 0 {
 				fmt.Fprintf(&buf, "%s%s %s -> %s",
 					indent, key, ts, v.Value.PrettyPrint())
 			} else {

@@ -13,6 +13,7 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"testing"
 	"time"
 
@@ -49,6 +50,9 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 		// RangeFeed's APIs.
 		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
 			seq := kvnemesisutil.Seq(vh.Seq)
+			if len(endKey) > 0 {
+				fmt.Println("hi")
+			}
 			if seq > 0 {
 				tr.Add(key, endKey, ts, seq)
 			}
@@ -87,7 +91,8 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	t.Logf("seed: %d", seed)
 	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}
 	const concurrency = 1 // HACK
-	failures, err := RunNemesis(ctx, rng, env, config, numSteps, concurrency, db)
+	numSteps = 5          // HACK
+	failures, err := RunNemesis(ctx, rng, env, config, concurrency, numSteps, db)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {
@@ -121,7 +126,7 @@ func TestKVNemesisMultiNode(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: t}
 	const concurrency = 5
-	failures, err := RunNemesis(ctx, rng, env, config, numSteps, concurrency, dbs...)
+	failures, err := RunNemesis(ctx, rng, env, config, concurrency, numSteps, dbs...)
 	require.NoError(t, err, `%+v`, err)
 
 	for _, failure := range failures {

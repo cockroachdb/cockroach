@@ -3230,6 +3230,9 @@ func MVCCDeleteRangeUsingTombstone(
 	if !value.LocalTimestampNeeded(timestamp) || !rw.ShouldWriteLocalTimestamps(ctx) {
 		value.LocalTimestamp = hlc.ClockTimestamp{}
 	}
+	if seq, ok := kvnemesisutil.FromContext(ctx); ok {
+		value.Seq = int32(seq)
+	}
 	valueRaw, err := EncodeMVCCValue(value)
 	if err != nil {
 		return err
