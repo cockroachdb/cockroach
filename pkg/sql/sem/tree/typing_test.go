@@ -8,12 +8,11 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree_test
+package tree
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -27,18 +26,15 @@ import (
 func TestTypingBinaryAssumptions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	for name, overloads := range tree.BinOps {
-		for i, overload := range overloads {
-			op := overload.(*tree.BinOp)
+	for name, overloads := range BinOps {
+		for i, op := range overloads.overloads {
 
 			// Check for basic ambiguity where two different binary op overloads
 			// both allow equivalent operand types.
-			for i2, overload2 := range overloads {
+			for i2, op2 := range overloads.overloads {
 				if i == i2 {
 					continue
 				}
-
-				op2 := overload2.(*tree.BinOp)
 				if op.LeftType.Equivalent(op2.LeftType) && op.RightType.Equivalent(op2.RightType) {
 					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
 					t.Errorf(format, name, op, op2)
@@ -48,12 +44,11 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 			// Handle ops that allow null operands. Check for ambiguity where
 			// the return type cannot be inferred from the non-null operand.
 			if op.CalledOnNullInput {
-				for i2, overload2 := range overloads {
+				for i2, op2 := range overloads.overloads {
 					if i == i2 {
 						continue
 					}
 
-					op2 := overload2.(*tree.BinOp)
 					if !op2.CalledOnNullInput {
 						continue
 					}

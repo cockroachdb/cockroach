@@ -13,6 +13,7 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
 
 // InferBinaryType infers the return type of a binary expression, given the type
@@ -31,28 +32,25 @@ func InferBinaryType(bin treebin.BinaryOperatorSymbol, leftType, rightType *type
 // If an overload is not found, FindBinaryOverload returns false.
 func FindBinaryOverload(
 	bin treebin.BinaryOperatorSymbol, leftType, rightType *types.T,
-) (_ *BinOp, ok bool) {
+) (ret *BinOp, ok bool) {
 
 	// Find the binary op that matches the type of the expression's left and
 	// right children. No more than one match should ever be found. The
 	// TestTypingBinaryAssumptions test ensures this will be the case even if
 	// new operators or overloads are added.
-	for _, binOverloads := range BinOps[bin] {
-		o := binOverloads.(*BinOp)
-
+	_ = BinOps[bin].ForEachBinOp(func(o *BinOp) error {
 		if leftType.Family() == types.UnknownFamily {
-			if rightType.Equivalent(o.RightType) {
-				return o, true
-			}
+			ok = rightType.Equivalent(o.RightType)
 		} else if rightType.Family() == types.UnknownFamily {
-			if leftType.Equivalent(o.LeftType) {
-				return o, true
-			}
+			ok = leftType.Equivalent(o.LeftType)
 		} else {
-			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return o, true
-			}
+			ok = leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType)
 		}
-	}
-	return nil, false
+		if !ok {
+			return nil
+		}
+		ret = o
+		return iterutil.StopIteration()
+	})
+	return ret, ok
 }

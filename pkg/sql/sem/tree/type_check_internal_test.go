@@ -199,7 +199,7 @@ func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTe
 					idx, test.expectedType, buildExprs(exprs), typ)
 			}
 			if !reflect.DeepEqual(semaCtx.Placeholders.Types, test.expectedPTypes) {
-				t.Errorf("%d: expected placeholder types %v after TypeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), semaCtx.Placeholders.Types)
+				t.Errorf("%d: expected placeholder types %v after typeCheckSameTypedExprs for %v, found %v", idx, test.expectedPTypes, buildExprs(exprs), semaCtx.Placeholders.Types)
 			}
 		}
 	})
@@ -345,7 +345,9 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 				desired = d.desired
 			}
 			forEachPerm(d.exprs, 0, func(exprs []copyableExpr) {
-				if _, _, err := tree.TypeCheckSameTypedExprs(ctx, &semaCtx, desired, buildExprs(exprs)...); !testutils.IsError(err, d.expectedErr) {
+				if _, _, err := tree.TypeCheckSameTypedExprs(
+					ctx, &semaCtx, desired, buildExprs(exprs)...,
+				); !testutils.IsError(err, d.expectedErr) {
 					t.Errorf("%d: expected %s, but found %v", i, d.expectedErr, err)
 				}
 			})

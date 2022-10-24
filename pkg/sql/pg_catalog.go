@@ -2188,7 +2188,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 			if cmpOp == treecmp.In {
 				continue
 			}
-			for _, overload := range overloads {
+			if err := overloads.ForEachCmpOp(func(overload *tree.CmpOp) error {
 				params, returnType := tree.GetParamsAndReturnType(overload)
 				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
 					return err
@@ -2198,22 +2198,25 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 						return err
 					}
 				}
+				return nil
+			}); err != nil {
+				return err
 			}
 		}
 		for binOp, overloads := range tree.BinOps {
-			for _, overload := range overloads {
+			if err := overloads.ForEachBinOp(func(overload *tree.BinOp) error {
 				params, returnType := tree.GetParamsAndReturnType(overload)
-				if err := addOp(binOp.String(), infixKind, params, returnType); err != nil {
-					return err
-				}
+				return addOp(binOp.String(), infixKind, params, returnType)
+			}); err != nil {
+				return err
 			}
 		}
 		for unaryOp, overloads := range tree.UnaryOps {
-			for _, overload := range overloads {
+			if err := overloads.ForEachUnaryOp(func(overload *tree.UnaryOp) error {
 				params, returnType := tree.GetParamsAndReturnType(overload)
-				if err := addOp(unaryOp.String(), prefixKind, params, returnType); err != nil {
-					return err
-				}
+				return addOp(unaryOp.String(), prefixKind, params, returnType)
+			}); err != nil {
+				return err
 			}
 		}
 		return nil

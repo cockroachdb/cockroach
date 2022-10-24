@@ -70,23 +70,19 @@ func TestBinaryAllowsNullArgs(t *testing.T) {
 //     types of its operand.
 func TestTypingUnaryAssumptions(t *testing.T) {
 	for name, overloads := range tree.UnaryOps {
-		for i, overload := range overloads {
-			op := overload.(*tree.UnaryOp)
-
-			// Check for basic ambiguity where two different unary op overloads
-			// both allow equivalent operand types.
-			for i2, overload2 := range overloads {
-				if i == i2 {
-					continue
+		_ = overloads.ForEachUnaryOp(func(op *tree.UnaryOp) error {
+			_ = overloads.ForEachUnaryOp(func(op2 *tree.UnaryOp) error {
+				if op == op2 {
+					return nil
 				}
-
-				op2 := overload2.(*tree.UnaryOp)
 				if op.Typ.Equivalent(op2.Typ) {
 					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
 					t.Errorf(format, name, op, op2)
 				}
-			}
-		}
+				return nil
+			})
+			return nil
+		})
 	}
 }
 
@@ -105,23 +101,21 @@ func TestTypingComparisonAssumptions(t *testing.T) {
 		}
 	}
 	for name, overloads := range tree.CmpOps {
-		for i, overload := range overloads {
-			op := overload.(*tree.CmpOp)
-
-			// Check for basic ambiguity where two different comparison op overloads
-			// both allow equivalent operand types.
-			for i2, overload2 := range overloads {
-				if i == i2 {
-					continue
+		_ = overloads.ForEachCmpOp(func(op *tree.CmpOp) error {
+			_ = overloads.ForEachCmpOp(func(op2 *tree.CmpOp) error {
+				// Check for basic ambiguity where two different comparison op overloads
+				// both allow equivalent operand types.
+				if op == op2 {
+					return nil
 				}
-
-				op2 := overload2.(*tree.CmpOp)
 				if op.LeftType.Equivalent(op2.LeftType) && op.RightType.Equivalent(op2.RightType) {
 					format := "found equivalent operand type ambiguity for %s:\n%+v\n%+v"
 					t.Errorf(format, name, op, op2)
 				}
-			}
-		}
+				return nil
+			})
+			return nil
+		})
 	}
 }
 

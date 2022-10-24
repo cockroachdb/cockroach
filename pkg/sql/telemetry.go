@@ -30,39 +30,39 @@ func init() {
 			panic(errors.AssertionFailedf("missing name for operator %q", op.String()))
 		}
 		opName := tree.UnaryOpName[op]
-		for _, impl := range overloads {
-			o := impl.(*tree.UnaryOp)
+		_ = overloads.ForEachUnaryOp(func(o *tree.UnaryOp) error {
 			c := sqltelemetry.UnaryOpCounter(opName, o.Typ.String())
 			o.OnTypeCheck = func() {
 				telemetry.Inc(c)
 			}
-		}
+			return nil
+		})
 	}
 
 	for op, overloads := range tree.BinOps {
 		opName := treebin.BinaryOpName(op)
-		for _, impl := range overloads {
-			o := impl.(*tree.BinOp)
+		_ = overloads.ForEachBinOp(func(o *tree.BinOp) error {
 			lname := o.LeftType.String()
 			rname := o.RightType.String()
 			c := sqltelemetry.BinOpCounter(opName, lname, rname)
 			o.OnTypeCheck = func() {
 				telemetry.Inc(c)
 			}
-		}
+			return nil
+		})
 	}
 
 	for op, overloads := range tree.CmpOps {
 		opName := treecmp.ComparisonOpName(op)
-		for _, impl := range overloads {
-			o := impl.(*tree.CmpOp)
+		_ = overloads.ForEachCmpOp(func(o *tree.CmpOp) error {
 			lname := o.LeftType.String()
 			rname := o.RightType.String()
 			c := sqltelemetry.CmpOpCounter(opName, lname, rname)
 			o.OnTypeCheck = func() {
 				telemetry.Inc(c)
 			}
-		}
+			return nil
+		})
 	}
 
 	tree.OnTypeCheckIfErr = func() {

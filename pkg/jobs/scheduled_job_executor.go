@@ -69,7 +69,8 @@ type ScheduledJobExecutor interface {
 // when controlling a scheduled job.
 type ScheduledJobController interface {
 	// OnDrop runs before the passed in `schedule` is dropped as part of a `DROP
-	// SCHEDULE` query.
+	// SCHEDULE` query. OnDrop may drop the schedule's dependent schedules and will
+	// return the number of additional schedules it drops.
 	OnDrop(
 		ctx context.Context,
 		scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
@@ -77,7 +78,7 @@ type ScheduledJobController interface {
 		schedule *ScheduledJob,
 		txn *kv.Txn,
 		descsCol *descs.Collection,
-	) error
+	) (int, error)
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

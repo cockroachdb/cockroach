@@ -472,13 +472,13 @@ type operator struct {
 var operators = func() map[oid.Oid][]operator {
 	m := map[oid.Oid][]operator{}
 	for BinaryOperator, overload := range tree.BinOps {
-		for _, ov := range overload {
-			bo := ov.(*tree.BinOp)
+		_ = overload.ForEachBinOp(func(bo *tree.BinOp) error {
 			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
 				BinOp:    bo,
 				Operator: treebin.MakeBinaryOperator(BinaryOperator),
 			})
-		}
+			return nil
+		})
 	}
 	return m
 }()

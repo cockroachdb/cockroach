@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1219,14 +1220,18 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ *types.T) *UnaryExp
 	node := &UnaryExpr{Operator: op, Expr: expr}
 	node.typ = typ
 	innerType := expr.ResolvedType()
-	for _, o := range UnaryOps[op.Symbol] {
-		o := o.(*UnaryOp)
+
+	_ = UnaryOps[op.Symbol].ForEachUnaryOp(func(o *UnaryOp) error {
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
 			node.op = o
-			return node
+			return iterutil.StopIteration()
 		}
+		return nil
+	})
+	if node.op == nil {
+		panic(errors.AssertionFailedf("invalid TypedExpr with unary op %d: %s", op.Symbol, expr))
 	}
-	panic(errors.AssertionFailedf("invalid TypedExpr with unary op %d: %s", op.Symbol, expr))
+	return node
 }
 
 // FuncExpr represents a function call.
