@@ -281,6 +281,7 @@ ALL_TESTS = [
     "//pkg/sql/catalog/catprivilege:catprivilege_test",
     "//pkg/sql/catalog/colinfo:colinfo_test",
     "//pkg/sql/catalog/dbdesc:dbdesc_test",
+    "//pkg/sql/catalog/descpb:descpb_disallowed_imports_test",
     "//pkg/sql/catalog/descpb:descpb_test",
     "//pkg/sql/catalog/descs:descs_test",
     "//pkg/sql/catalog/funcdesc:funcdesc_test",
