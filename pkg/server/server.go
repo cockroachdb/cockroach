@@ -752,6 +752,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	sessionRegistry := sql.NewSessionRegistry()
 	closedSessionCache := sql.NewClosedSessionCache(cfg.Settings, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+	recentStatementsCache := sql.NewRecentStatementsCache(st)
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
 	sStatus := newStatusServer(
@@ -836,6 +837,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		closedSessionCache:       closedSessionCache,
+		recentStatementsCache:    recentStatementsCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
 		collectionFactory:        collectionFactory,

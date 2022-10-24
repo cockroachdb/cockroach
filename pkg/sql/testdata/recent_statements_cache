@@ -1,0 +1,88 @@
+# Initialize a recent statements cache with a capacity of 4 members and a timeToLive of 10
+# seconds.
+init capacity=4
+----
+cache_size: 0
+
+# Add 6 statements with ids ranging from 00 to 05, inclusive. These statements will be
+# part of the same session ID.
+addStatement sessionID=00 stmtID=00
+----
+cache_size: 1
+
+addStatement sessionID=00 stmtID=01
+----
+cache_size: 2
+
+addStatement sessionID=00 stmtID=02
+----
+cache_size: 3
+
+addStatement sessionID=00 stmtID=03
+----
+cache_size: 4
+
+addStatement sessionID=00 stmtID=04
+----
+cache_size: 4
+
+addStatement sessionID=00 stmtID=05
+----
+cache_size: 4
+
+# There have been 6 statements added but the capacity is 4. The statements with
+# id=00 an id=01 should have been evicted.
+show sessionID=00
+----
+sessionID: 00, queryID: 00000000000000000000000000000005, statement: test query
+sessionID: 00, queryID: 00000000000000000000000000000004, statement: test query
+sessionID: 00, queryID: 00000000000000000000000000000003, statement: test query
+sessionID: 00, queryID: 00000000000000000000000000000002, statement: test query
+
+# Clear the cache
+clear
+----
+ok
+
+# The cache should be empty now.
+show sessionID=00
+----
+empty
+
+# Add 6 statements with ids ranging from 00 to 05, inclusive. These statements will be
+# part of different sessionIDs.
+addStatement sessionID=00 stmtID=00
+----
+cache_size: 1
+
+addStatement sessionID=01 stmtID=01
+----
+cache_size: 2
+
+addStatement sessionID=00 stmtID=02
+----
+cache_size: 3
+
+addStatement sessionID=01 stmtID=03
+----
+cache_size: 4
+
+addStatement sessionID=00 stmtID=04
+----
+cache_size: 4
+
+addStatement sessionID=01 stmtID=05
+----
+cache_size: 4
+
+# There have been 6 statements added but the capacity is 4. The first two entries
+# should be evicted.
+show sessionID=00
+----
+sessionID: 00, queryID: 00000000000000000000000000000004, statement: test query
+sessionID: 00, queryID: 00000000000000000000000000000002, statement: test query
+
+show sessionID=01
+----
+sessionID: 01, queryID: 00000000000000000000000000000005, statement: test query
+sessionID: 01, queryID: 00000000000000000000000000000003, statement: test query

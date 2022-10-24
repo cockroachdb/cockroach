@@ -572,6 +572,23 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 	return s.txnIDCache
 }
 
+// addToRecentStatementsCache adds a completed statement to the
+// RecentStatementsCache on the Server ExecutorConfig.
+func (s *Server) addToRecentStatementsCache(
+	sessionID clusterunique.ID, queryID clusterunique.ID, qm *queryMeta,
+) {
+	s.cfg.RecentStatementsCache.add(sessionID, queryID, qm)
+}
+
+// getRecentStatementsForSession gets the completed statements for
+// the given session ID. It returns a list of statement IDs and a list
+// of the corresponding queryMeta.
+func (s *Server) getRecentStatementsForSession(
+	sessionID clusterunique.ID,
+) map[clusterunique.ID]*queryMeta {
+	return s.cfg.RecentStatementsCache.getRecentStatementsForSession(sessionID)
+}
+
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
@@ -3202,6 +3219,33 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		status = serverpb.Session_ACTIVE
 	}
 
+	recentStatements := make([]serverpb.ActiveQuery, 0, len(ex.mu.ActiveQueries))
+	stmtIDToQm := ex.server.getRecentStatementsForSession(ex.sessionID)
+	for stmtID, query := range stmtIDToQm {
+		if query.hidden {
+			continue
+		}
+		ast, err := query.getStatement()
+		if err != nil {
+			continue
+		}
+		sqlNoConstants := truncateSQL(formatStatementHideConstants(ast))
+		sql := truncateSQL(ast.String())
+		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
+		recentStatements = append(recentStatements, serverpb.ActiveQuery{
+			TxnID:          query.txnID,
+			ID:             stmtID.String(),
+			Start:          query.start.UTC(),
+			Sql:            sql,
+			SqlNoConstants: sqlNoConstants,
+			SqlSummary:     formatStatementSummary(ast),
+			IsDistributed:  query.isDistributed,
+			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
+			Progress:       float32(progress),
+			IsFullScan:     query.isFullScan,
+		})
+	}
+
 	// We always use base here as the fields from the SessionData should always
 	// be that of the root session.
 	sd := ex.sessionDataStack.Base()
@@ -3233,6 +3277,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 		Status:                     status,
 		TotalActiveTime:            sessionActiveTime,
+		RecentStatements:           recentStatements,
 	}
 }
 

@@ -3338,6 +3338,87 @@ CREATE USER %s with password 'hunter2';
 	wg.Wait()
 }
 
+func TestRecentStatementCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serverParams, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: serverParams,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	user := "test_user"
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`CREATE USER %s with password 'hunter2';`, user))
+	require.NoError(t, err)
+
+	// Start a session, and run SHOW DATABASES 3 times
+	db1 := getUserConn(t, user, testCluster.Server(0))
+	defer db1.Close()
+	for i := 0; i < 3; i++ {
+		sqlutils.MakeSQLRunner(db1).Exec(t, `SHOW DATABASES`)
+	}
+
+	// Start another session, and run SHOW TABLES 5 times
+	db2 := getUserConn(t, user, testCluster.Server(0))
+	defer db2.Close()
+	for i := 0; i < 5; i++ {
+		sqlutils.MakeSQLRunner(db2).Exec(t, `SHOW TABLES`)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		sessionsResponse := doSessionsRequest(user)
+		allSessions := sessionsResponse.Sessions
+
+		numShowDatabases := 0
+		numShowTables := 0
+		for _, session := range allSessions {
+			for _, qm := range session.RecentStatements {
+				if strings.Contains(qm.SqlSummary, "DATABASES") {
+					numShowDatabases++
+				}
+				if strings.Contains(qm.SqlSummary, "TABLES") {
+					numShowTables++
+				}
+			}
+		}
+
+		expectedShowDatabases := 3
+		expectedShowTables := 5
+		if numShowDatabases != expectedShowDatabases {
+			return errors.Newf("Expected %d SHOW DATABASES statements, got %d\n", expectedShowDatabases, numShowDatabases)
+		}
+		if numShowTables != expectedShowTables {
+			return errors.Newf("Expected %d SHOW TABLES statements, got %d\n", expectedShowTables, numShowTables)
+		}
+		return nil
+	})
+}
+
 func TestTransactionContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
