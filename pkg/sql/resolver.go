@@ -306,9 +306,6 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 			if err != nil {
 				return nil, err
 			}
-			if _, err = p.ResolveTableName(ctx, tn); err != nil {
-				return nil, err
-			}
 
 			if p.SessionData().Database != "" && p.SessionData().Database != string(tn.CatalogName) {
 				// Postgres does not allow cross-database references in these
