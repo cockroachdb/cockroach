@@ -317,9 +317,9 @@ func bazciImpl(cmd *cobra.Command, args []string) (retErr error) {
 	bazelCmd := exec.Command("bazel", args...)
 	bazelCmd.Stdout = os.Stdout
 	bazelCmd.Stderr = os.Stderr
-	err := bazelCmd.Run()
-	if err != nil {
-		fmt.Printf("got error %+v from bazel run\n", err)
+	retErr = bazelCmd.Run()
+	if retErr != nil {
+		fmt.Printf("got error %+v from bazel run\n", retErr)
 	}
 	server.Wait()
 	return
