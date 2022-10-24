@@ -76,7 +76,8 @@ curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.li
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 cp -r licenses build/deploy/
 
-docker build --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
+docker rmi registry.access.redhat.com/ubi8/ubi-minimal || true
+docker build --pull --platform linux/amd64 --no-cache --tag="${gcr_repository}:${build_name}" build/deploy
 docker push "${gcr_repository}:${build_name}"
 tc_end_block "Make and push docker image"
 
