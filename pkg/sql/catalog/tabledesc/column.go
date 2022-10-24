@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -102,19 +101,6 @@ func (w column) IsNullable() bool {
 // HasDefault returns true iff the column has a default expression set.
 func (w column) HasDefault() bool {
 	return w.desc.HasDefault()
-}
-
-// HasNullDefault checks that the column descriptor has a default of NULL.
-func (w column) HasNullDefault() bool {
-	if !w.HasDefault() {
-		return false
-	}
-	// We ignore the error because what are we going to do with it? It means
-	// that the default expressions is not parsable. Somebody with a context
-	// who needs to use it will be in a better place to log it. If it is not
-	// parsable, it is not NULL.
-	defaultExpr, _ := parser.ParseExpr(w.GetDefaultExpr())
-	return defaultExpr == tree.DNull
 }
 
 // GetDefaultExpr returns the column default expression if it exists,
