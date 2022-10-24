@@ -214,9 +214,6 @@ type planner struct {
 	// query.
 	cancelChecker cancelchecker.CancelChecker
 
-	// isPreparing is true if this planner is currently preparing.
-	isPreparing bool
-
 	// curPlan collects the properties of the current plan being prepared. This state
 	// is undefined at the beginning of the planning of each new statement, and cannot
 	// be reused for an old prepared statement after a new statement has been prepared.
@@ -820,7 +817,6 @@ func (p *planner) resetPlanner(
 	p.semaCtx.IntervalStyle = sd.GetIntervalStyle()
 
 	p.autoCommit = false
-	p.isPreparing = false
 
 	p.schemaResolver.txn = txn
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
