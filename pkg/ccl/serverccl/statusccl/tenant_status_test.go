@@ -24,7 +24,9 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -109,6 +111,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("tenant_auth_statement", func(t *testing.T) {
 		testTenantAuthOnStatements(ctx, t, testHelper)
+	})
+
+	t.Run("tenant_hot_ranges", func(t *testing.T) {
+		testTenantHotRanges(ctx, t, testHelper)
 	})
 }
 
@@ -1234,4 +1240,57 @@ func assertEndKeyInRange(
 			endKey == "/Max",
 		fmt.Sprintf("end key %s is outside of the tenant's keyspace (prefix: %v, prefixEnd: %v)",
 			endKey, tenantPrefix.String(), tenantPrefixEnd.String()))
+}
+
+func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+
+	tIDa := security.EmbeddedTenantIDs()[0]
+	tIDb := security.EmbeddedTenantIDs()[1]
+
+	rangeIDs := make(map[roachpb.RangeID]roachpb.TenantID)
+	stores := helper.HostCluster().Server(0).GetStores().(*kvserver.Stores)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		_, _ = s.Capacity(context.Background(), false)
+		s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+			rangeIDs[replica.RangeID], _ = replica.TenantID()
+			return true
+		})
+		return nil
+	})
+
+	t.Run("test tenant hot ranges respects tenant isolation", func(t *testing.T) {
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+
+		for _, r := range resp.Ranges {
+			if tID, ok := rangeIDs[r.RangeID]; ok {
+				if tID.ToUint64() != tIDa {
+					require.Equal(t, tIDa, tID)
+				}
+			}
+		}
+
+		resp, err = tenantB.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+		for _, r := range resp.Ranges {
+			if tID, ok := rangeIDs[r.RangeID]; ok {
+				if tID.ToUint64() != tIDb {
+					require.Equal(t, tIDb, tID)
+				}
+			}
+		}
+	})
+
+	t.Run("forbids requesting hot ranges for another tenant", func(t *testing.T) {
+		// TenantA requests hot ranges for Tenant B.
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{
+			TenantID: roachpb.MakeTenantID(tIDb).String(),
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
 }
