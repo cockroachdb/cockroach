@@ -39,7 +39,7 @@ func TestRegistry(t *testing.T) {
 	t.Run("slow detection", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -74,7 +74,7 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		registry.ObserveStatement(session.ID, s)
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -99,7 +99,7 @@ func TestRegistry(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 0)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -121,7 +121,7 @@ func TestRegistry(t *testing.T) {
 			FingerprintID:    roachpb.StmtFingerprintID(100),
 			LatencyInSeconds: 0.5,
 		}
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		registry.ObserveStatement(session.ID, statement2)
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -146,7 +146,7 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveStatement(otherSession.ID, otherStatement)
 		registry.ObserveTransaction(session.ID, transaction)
@@ -187,7 +187,7 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveStatement(session.ID, siblingStatment)
 		registry.ObserveTransaction(session.ID, transaction)
@@ -218,7 +218,7 @@ func TestRegistry(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
 		slow := 2 * LatencyThreshold.Get(&st.SV).Seconds()
-		r := newRegistry(st, &latencyThresholdDetector{st: st})
+		r := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
 
 		// With the ExecutionInsightsCapacity set to 5, we retain the 5 most recently-seen insights.
 		ExecutionInsightsCapacity.Override(ctx, &st.SV, 5)

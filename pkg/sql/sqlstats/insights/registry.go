@@ -116,11 +116,11 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
+func newRegistry(st *cluster.Settings, detector detector, store *lockingStore) *lockingRegistry {
 	return &lockingRegistry{
 		statements: make(map[clusterunique.ID]*statementBuf),
 		detector:   detector,
 		causes:     &causes{st: st},
-		store:      newStore(st),
+		store:      store,
 	}
 }

@@ -172,6 +172,6 @@ func New(st *cluster.Settings, metrics Metrics) Provider {
 		newRegistry(st, &compositeDetector{detectors: []detector{
 			&latencyThresholdDetector{st: st},
 			newAnomalyDetector(st, metrics),
-		}}),
+		}}, newStore(st)),
 	)
 }
