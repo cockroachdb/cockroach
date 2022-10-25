@@ -1251,9 +1251,9 @@ SELECT description
 
 	// pg_type_is_visible returns true if the input oid corresponds to a type
 	// that is part of the databases on the search path, or NULL if no such type
-	// exists. CockroachDB doesn't support the notion of type visibility, so we
-	// always return true for any type oid that we support, and NULL for those
-	// that we don't.
+	// exists. CockroachDB doesn't support the notion of type visibility for
+	// builtin types, so we  always return true for those. For user-defined types,
+	// we consult pg_type.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_type_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
@@ -1261,16 +1261,26 @@ SELECT description
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				oidArg := tree.MustBeDOid(args[0])
-				isVisible, exists, err := evalCtx.Planner.IsTypeVisible(
-					ctx, evalCtx.SessionData().Database, evalCtx.SessionData().SearchPath, oidArg.Oid,
+				row, err := evalCtx.Planner.QueryRowEx(
+					ctx, "pg_type_is_visible",
+					sessiondata.NoSessionDataOverride,
+					"SELECT n.nspname from pg_type t JOIN pg_namespace n ON p.typnamespace = n.oid WHERE p.oid=$1 LIMIT 1",
+					oidArg.Oid,
 				)
 				if err != nil {
 					return nil, err
 				}
-				if !exists {
+				if row == nil {
 					return tree.DNull, nil
 				}
-				return tree.MakeDBool(tree.DBool(isVisible)), nil
+				foundSchemaName := string(tree.MustBeDString(row[0]))
+				iter := evalCtx.SessionData().SearchPath.Iter()
+				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+					if foundSchemaName == scName {
+						return tree.DBoolTrue, nil
+					}
+				}
+				return tree.DBoolFalse, nil
 			},
 			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
