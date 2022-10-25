@@ -686,12 +686,17 @@ var charts = []sectionDescription{
 				Metrics: []string{"rebalancing.readspersecond"},
 			},
 			{
+
 				Title:   "Bytes Read Per Second",
 				Metrics: []string{"rebalancing.readbytespersecond"},
 			},
 			{
 				Title:   "Bytes Written Per Second",
 				Metrics: []string{"rebalancing.writebytespersecond"},
+			},
+			{
+				Title:   "CPU Nanos Used Per Second",
+				Metrics: []string{"rebalancing.cpunanospersecond"},
 			},
 		},
 	},

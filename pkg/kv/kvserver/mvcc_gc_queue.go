@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -671,6 +672,10 @@ func (mgcq *mvccGCQueue) process(
 ) (processed bool, err error) {
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, conf := repl.DescAndSpanConfig()
+	grunningStart := grunning.Time()
+	defer func() {
+		repl.RecordNanosRunning(grunning.Difference(grunningStart, grunning.Time()).Nanoseconds())
+	}()
 
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
