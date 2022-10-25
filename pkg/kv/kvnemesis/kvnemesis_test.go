@@ -95,7 +95,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	var seed int64 = 5408881829841458374 // easy to set a seed here from a failing invocation
+	var seed int64 = 0 //5408881829841458374 // easy to set a seed here from a failing invocation
 	var rng *rand.Rand
 	if seed > 0 {
 		rng = rand.New(rand.NewSource(seed))
@@ -116,7 +116,41 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	config := NewDefaultConfig()
+	config.Ops.Split = SplitConfig{}
+	config.Ops.Merge = MergeConfig{}
+	config.Ops.ChangeZone = ChangeZoneConfig{}
+	config.Ops.ChangeLease = ChangeLeaseConfig{}
+
+	c := config.Ops.ClosureTxn.TxnBatchOps.Ops
+	c.GetMissing = 0
+	c.GetMissingForUpdate = 0
+	c.GetExisting = 0
+	c.GetExistingForUpdate = 0
+	c.PutMissing = 0
+	c.PutExisting = 0
+	c.Scan = 0
+	c.ScanForUpdate = 0
+	// c.ReverseScan = 0
+	c.ReverseScanForUpdate = 0
+	//c.DeleteMissing = 0
+	//c.DeleteExisting = 0
+	c.DeleteRange = 0
+	c.DeleteRangeUsingTombstone = 0
+	config.Ops.ClosureTxn.TxnClientOps = c
+	//config.Ops.DB = c
+	config.Ops.ClosureTxn.TxnBatchOps.Batch = 0
+	// config.Ops.ClosureTxn.TxnBatchOps.Ops = ClientOperationConfig{}
+	config.Ops.ClosureTxn.CommitInBatch = 0
 	// config.Ops.DB.DeleteRangeUsingTombstone = 0 // HACK
+
+	// config.Ops.DB.ScanForUpdate = 0
+	// config.Ops.DB.ReverseScan = 0
+	// config.Ops.DB.ReverseScanForUpdate = 0
+	// config.Ops.DB.GetExisting = 0
+	// config.Ops.DB.GetMissing = 0
+	// config.Ops.DB.GetExistingForUpdate = 0
+	// config.Ops.DB.GetMissingForUpdate = 0
+
 	config.NumNodes, config.NumReplicas = 1, 1
 
 	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}

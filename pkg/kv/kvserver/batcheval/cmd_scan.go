@@ -101,5 +101,10 @@ func Scan(
 		}
 	}
 	res.Local.EncounteredIntents = scanRes.Intents
+
+	if err := reply.Verify(nil); err != nil { // HACK
+		panic(err)
+	}
+
 	return res, nil
 }

@@ -13,6 +13,8 @@ package batcheval
 import (
 	"context"
 	"fmt"
+	"reflect"
+	"runtime/debug"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -69,6 +71,16 @@ func ReverseScan(
 			return result.Result{}, err
 		}
 		reply.Rows = scanRes.KVs
+		if err := reply.Verify(nil); err != nil { // HACK
+			scanRes2, err2 := storage.MVCCScan(
+				ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
+
+			_ = err2
+			eq := reflect.DeepEqual(scanRes2, scanRes)
+			_ = eq
+			debug.PrintStack()
+			panic(fmt.Sprintf("read ts %s: %s", cArgs.Header.Timestamp, err))
+		}
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))
 	}

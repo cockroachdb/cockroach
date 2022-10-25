@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"runtime/debug"
 	"sort"
 	"sync"
 
@@ -947,6 +948,7 @@ func (p *pebbleMVCCScanner) advanceKey() bool {
 		return false
 	}
 	if p.reverse {
+		debug.PrintStack()
 		return p.prevKey(p.curUnsafeKey.Key)
 	}
 	return p.nextKey()
