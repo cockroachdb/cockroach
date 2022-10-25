@@ -1074,9 +1074,12 @@ func (s *Server) Start(ctx context.Context) error {
 func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
+	// Start a context for the asynchronous network workers.
+	workersCtx := s.AnnotateCtx(context.Background())
+
 	// Start the time sanity checker.
 	s.startTime = timeutil.Now()
-	if err := s.startMonitoringForwardClockJumps(ctx); err != nil {
+	if err := s.startMonitoringForwardClockJumps(workersCtx); err != nil {
 		return err
 	}
 
@@ -1089,9 +1092,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-
-	// Start a context for the asynchronous network workers.
-	workersCtx := s.AnnotateCtx(context.Background())
 
 	// connManager tracks incoming connections accepted via listeners
 	// and automatically closes them when the stopper indicates a
@@ -1344,7 +1344,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// incoming connections.
 	startRPCServer(workersCtx)
 	onInitServerReady()
-	state, initialStart, err := initServer.ServeAndWait(ctx, s.stopper, &s.cfg.Settings.SV)
+	state, initialStart, err := initServer.ServeAndWait(workersCtx, s.stopper, &s.cfg.Settings.SV)
 	if err != nil {
 		return errors.Wrap(err, "during init")
 	}
@@ -1433,7 +1433,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// cluster. Someone has to gossip the ClusterID before Gossip is connected,
 	// but this gossip only happens once the first range has a leaseholder, i.e.
 	// when a quorum of nodes has gone fully operational.
-	_ = s.stopper.RunAsyncTask(ctx, "connect-gossip", func(ctx context.Context) {
+	_ = s.stopper.RunAsyncTask(workersCtx, "connect-gossip", func(ctx context.Context) {
 		log.Ops.Infof(ctx, "connecting to gossip network to verify cluster ID %q", state.clusterID)
 		select {
 		case <-s.gossip.Connected:
@@ -1445,7 +1445,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
-		ctx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+		workersCtx, s.st, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
 	); err != nil {
 		return err
 	}
@@ -1482,7 +1482,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
 
 	if err := s.node.start(
-		ctx,
+		ctx, workersCtx,
 		advAddrU,
 		advSQLAddrU,
 		advHTTPAddrU,
@@ -1500,7 +1500,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err := s.startPersistingHLCUpperBound(ctx, hlcUpperBoundExists); err != nil {
 		return err
 	}
-	s.replicationReporter.Start(ctx, s.stopper)
+	s.replicationReporter.Start(workersCtx, s.stopper)
 
 	// Configure the Sentry reporter to add some additional context to reports.
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
@@ -1524,7 +1524,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	)
 
 	// Begin recording runtime statistics.
-	if err := startSampleEnvironment(s.AnnotateCtx(ctx),
+	if err := startSampleEnvironment(workersCtx,
 		s.ClusterSettings(),
 		s.stopper,
 		s.cfg.GoroutineDumpDirName,
@@ -1551,7 +1551,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// traffic may access it).
 	//
 	// See https://github.com/cockroachdb/cockroach/issues/73897.
-	if err := s.protectedtsProvider.Start(ctx, s.stopper); err != nil {
+	if err := s.protectedtsProvider.Start(workersCtx, s.stopper); err != nil {
 		// TODO(knz,arul): This mechanism could probably be removed now.
 		// The PTS Cache is a thing from the past when secondary tenants
 		// couldn’t use protected timestamps. We started using span configs
@@ -1586,7 +1586,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	// Once all stores are initialized, check if offline storage recovery
 	// was done prior to start and record any actions appropriately.
-	logPendingLossOfQuorumRecoveryEvents(ctx, s.node.stores)
+	logPendingLossOfQuorumRecoveryEvents(workersCtx, s.node.stores)
 
 	// Report server listen addresses to logs.
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
@@ -1605,7 +1605,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Begin the node liveness heartbeat. Add a callback which records the local
 	// store "last up" timestamp for every store whenever the liveness record is
 	// updated.
-	s.nodeLiveness.Start(ctx, liveness.NodeLivenessStartOptions{
+	s.nodeLiveness.Start(workersCtx, liveness.NodeLivenessStartOptions{
 		Engines: s.engines,
 		OnSelfLive: func(ctx context.Context) {
 			now := s.clock.Now()
@@ -1624,7 +1624,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 	if !s.cfg.SpanConfigsDisabled && s.spanConfigSubscriber != nil {
 		if subscriber, ok := s.spanConfigSubscriber.(*spanconfigkvsubscriber.KVSubscriber); ok {
-			if err := subscriber.Start(ctx, s.stopper); err != nil {
+			if err := subscriber.Start(workersCtx, s.stopper); err != nil {
 				return err
 			}
 		}
@@ -1635,10 +1635,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// to make sure this runs only on one node. SQL is used to actually GC. We
 	// count it as a KV operation since it grooms cluster-wide data, not
 	// something associated to SQL tenants.
-	s.startSystemLogsGC(ctx)
+	s.startSystemLogsGC(workersCtx)
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err = startPurgeOldSessions(ctx, s.authentication); err != nil {
+	if err = startPurgeOldSessions(workersCtx, s.authentication); err != nil {
 		return err
 	}
 
@@ -1706,18 +1706,21 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.debug.RegisterClosedTimestampSideTransport(s.ctSender, s.node.storeCfg.ClosedTimestampReceiver)
 
 	// Start the closed timestamp loop.
-	s.ctSender.Run(ctx, state.nodeID)
+	s.ctSender.Run(workersCtx, state.nodeID)
 
 	// Attempt to upgrade cluster version now that the sql server has been
 	// started. At this point we know that all startupmigrations have successfully
 	// been run so it is safe to upgrade to the binary's current version.
+	//
+	// NB: We run this under the startup ctx (not workersCtx) so as to ensure
+	// all the upgrade steps are traced, for use during troubleshooting.
 	s.startAttemptUpgrade(ctx)
 
-	if err := s.node.tenantSettingsWatcher.Start(ctx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
+	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
 	}
 
-	if err := s.kvProber.Start(ctx, s.stopper); err != nil {
+	if err := s.kvProber.Start(workersCtx, s.stopper); err != nil {
 		return errors.Wrapf(err, "failed to start KV prober")
 	}
 
@@ -1726,7 +1729,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// startup fails, and write to range log once the server is running as we need
 	// to run sql statements to update rangelog.
 	publishPendingLossOfQuorumRecoveryEvents(
-		ctx, s.node.execCfg.InternalExecutor, s.node.stores, s.stopper,
+		workersCtx, s.node.execCfg.InternalExecutor, s.node.stores, s.stopper,
 	)
 
 	log.Event(ctx, "server initialized")
