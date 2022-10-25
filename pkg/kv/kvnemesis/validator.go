@@ -351,6 +351,13 @@ func (v *validator) tryConsumeRangedWrite(
 	return consumed, len(consumed) > 0
 }
 
+type bufferingType byte
+
+const (
+	bufferingSingle bufferingType = iota
+	bufferingBatchOrTxn
+)
+
 // processOp turns the result of an operation into its observations (which are
 // later checked against the MVCC history). The boolean parameter indicates
 // whether the operation is its own atomic unit or whether it's happening as
@@ -461,6 +468,10 @@ func (v *validator) processOp(buffering bool, op Operation) {
 			// and [b\x00, c).
 			//
 			// The code here handles this, and it is unit tested.
+			//
+			// TODO if not in a txn, need to allow every part to be in its
+			// own atomic unit, and in that case there must not be any
+			// gaps.
 			svs, _ := v.tryConsumeRangedWrite(t.Seq, t.Key, t.EndKey)
 			var unobserved roachpb.SpanGroup
 			unobserved.Add(roachpb.Span{Key: t.Key, EndKey: t.EndKey})
@@ -676,6 +687,10 @@ func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operati
 // The execution timestamp optOptsTimestamp is always present for operations that
 // succeeded in a "normal" way. However, for ambiguous results, it is not always
 // present. This limitation could be lifted, see checkAtomicAmbiguous.
+//
+// TODO(tbg): execTimestamp can't be well-defined at the moment;
+// DeleteRangeUsingTombstone can be split across ranges, and so will in effect
+// require a merge between multiple execution timestamps.
 func (v *validator) checkAtomicCommitted(
 	atomicType string, txnObservations []observedOp, execTimestamp hlc.Timestamp,
 ) {

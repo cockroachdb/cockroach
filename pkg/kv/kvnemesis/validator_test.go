@@ -1767,6 +1767,19 @@ func TestValidate(t *testing.T) {
 				rd(`a`, `c`, t3, s3),
 			),
 		},
+		{
+			// MVCC range deletions are executed individually when the range
+			// is split, so kvnemesis shouldn't complain if it sees them come
+			// back with pieces at multiple timestamps.
+			name: "rangedel with range split",
+			steps: []Step{
+				step(withResultTS(delRangeUsingTombstone(`a`, `c`, s1), t2)),
+			},
+			kvs: kvs(
+				rd(`a`, `b`, t2, s1),
+				rd(`b`, `c`, t1, s1),
+			),
+		},
 	}
 
 	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))

@@ -10,6 +10,7 @@ go_library(
         "doc.go",
         "engine.go",
         "env.go",
+        "frontier.go",
         "generator.go",
         "kvnemesis.go",
         "operations.go",
@@ -31,6 +32,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
+        "//pkg/storage/enginepb",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
@@ -58,6 +60,7 @@ go_test(
     srcs = [
         "applier_test.go",
         "engine_test.go",
+        "frontier_test.go",
         "generator_test.go",
         "kvnemesis_test.go",
         "main_test.go",

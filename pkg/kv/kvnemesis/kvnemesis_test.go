@@ -51,7 +51,7 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 		// RangeFeed's APIs.
 		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
 			seq := kvnemesisutil.Seq(vh.Seq)
-			if len(endKey) > 0 {
+			if false && len(endKey) > 0 {
 				fmt.Printf("XXX rangefeed intercept ranged write [%s,%s), seq %s\n", key, endKey, seq)
 			}
 			if seq > 0 {
@@ -82,14 +82,10 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
-	config := GeneratorConfig{}
-	config.Ops.DB.PutExisting = 1
-	config.Ops.DB.PutMissing = 1
-	config.Ops.DB.DeleteRangeUsingTombstone = 1
-	config.Ops.ClosureTxn = ClosureTxnConfig{}
+	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = 1, 1
 
-	var seed int64 = 6578717420559460636
+	var seed int64 = 1917325818451959143 // 6578717420559460636
 	var rng *rand.Rand
 	if seed > 0 {
 		rng = rand.New(rand.NewSource(seed))

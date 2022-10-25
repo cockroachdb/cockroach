@@ -1240,6 +1240,14 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	// If there's no transaction and ba spans ranges, possibly re-run as part of
 	// a transaction for consistency. The case where we don't need to re-run is
 	// if the read consistency is not required.
+	//
+	// NB: this check isn't quite right. If we mixed a DeleteRangeUsingTombstone
+	// with a Put, for example, we'd restart with a txn, but
+	// DeleteRangeUsingTombstone does not support txns. Could we instead determine
+	// the read/write timestamp here? But then the write might not be possible at
+	// that timestamp, and we need to start retrying the batch as a kind of
+	// starvable txn (currently the contract is that batches can't return retry
+	// errors).
 	if ba.Txn == nil && ba.IsTransactional() && ba.ReadConsistency == roachpb.CONSISTENT {
 		return nil, roachpb.NewError(&roachpb.OpRequiresTxnError{})
 	}
