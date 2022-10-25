@@ -234,10 +234,6 @@ type sqlServerOptionalKVArgs struct {
 // are only available if the SQL server runs as part of a standalone SQL node.
 type sqlServerOptionalTenantArgs struct {
 	tenantConnect kvtenant.Connector
-
-	// advertiseAddr stores the SQL address that is advertised to other servers
-	// of the same tenant.
-	advertiseAddr string
 }
 
 type sqlServerArgs struct {
@@ -432,8 +428,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if isNotSQLPod {
 		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
 	} else {
+		// The advertised address it not known yet at this point. It will only get
+		// known during PreStart(). We delay its access.
+		getAdvertiseAddr := func() string { return cfg.BaseConfig.AdvertiseAddr }
 		cfg.sqlInstanceProvider = instanceprovider.New(
-			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
+			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, getAdvertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
 		)
 	}
 
