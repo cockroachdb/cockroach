@@ -83,7 +83,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
-	baseCfg := MakeBaseConfig(st, tr)
+	baseCfg := MakeBaseConfig(st, tr, base.DefaultTestStoreSpec)
 	// Test servers start in secure mode by default.
 	baseCfg.Insecure = false
 	// Configure test storage engine.
@@ -112,7 +112,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 }
 
 func makeTestKVConfig() KVConfig {
-	kvCfg := MakeKVConfig(base.DefaultTestStoreSpec)
+	kvCfg := MakeKVConfig()
 	return kvCfg
 }
 
