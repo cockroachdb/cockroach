@@ -15,6 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// TODO(kvoli): This file, along with repicastats/* requires refactoring to
+// avoid consuming unnecessary memory. There are individual locks and locality
+// tracking structs on all replicastats objects that are only needed on one.
+// This is tracked in #87187.
+
 // ReplicaLoad tracks a sliding window of throughput on a replica. By default,
 // there are 6, 5 minute sliding windows.
 type ReplicaLoad struct {
@@ -24,6 +29,8 @@ type ReplicaLoad struct {
 	readKeys      *replicastats.ReplicaStats
 	writeBytes    *replicastats.ReplicaStats
 	readBytes     *replicastats.ReplicaStats
+	raftCPUNanos  *replicastats.ReplicaStats
+	reqCPUNanos   *replicastats.ReplicaStats
 }
 
 // NewReplicaLoad returns a new ReplicaLoad, which may be used to track the
@@ -40,6 +47,8 @@ func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracl
 		readKeys:      replicastats.NewReplicaStats(clock, nil),
 		writeBytes:    replicastats.NewReplicaStats(clock, nil),
 		readBytes:     replicastats.NewReplicaStats(clock, nil),
+		raftCPUNanos:  replicastats.NewReplicaStats(clock, nil),
+		reqCPUNanos:   replicastats.NewReplicaStats(clock, nil),
 	}
 }
 
@@ -52,6 +61,8 @@ func (rl *ReplicaLoad) split(other *ReplicaLoad) {
 	rl.readKeys.SplitRequestCounts(other.readKeys)
 	rl.writeBytes.SplitRequestCounts(other.writeBytes)
 	rl.readBytes.SplitRequestCounts(other.readBytes)
+	rl.raftCPUNanos.SplitRequestCounts(other.raftCPUNanos)
+	rl.reqCPUNanos.SplitRequestCounts(other.reqCPUNanos)
 }
 
 // merge will combine the tracked load in other, into the calling struct.
@@ -62,6 +73,8 @@ func (rl *ReplicaLoad) merge(other *ReplicaLoad) {
 	rl.readKeys.MergeRequestCounts(other.readKeys)
 	rl.writeBytes.MergeRequestCounts(other.writeBytes)
 	rl.readBytes.MergeRequestCounts(other.readBytes)
+	rl.raftCPUNanos.MergeRequestCounts(other.raftCPUNanos)
+	rl.reqCPUNanos.MergeRequestCounts(other.reqCPUNanos)
 }
 
 // reset will clear all recorded history.
@@ -72,4 +85,6 @@ func (rl *ReplicaLoad) reset() {
 	rl.readKeys.ResetRequestCounts()
 	rl.writeBytes.ResetRequestCounts()
 	rl.readBytes.ResetRequestCounts()
+	rl.raftCPUNanos.ResetRequestCounts()
+	rl.reqCPUNanos.ResetRequestCounts()
 }

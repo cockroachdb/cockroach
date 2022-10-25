@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -2050,6 +2051,31 @@ func (r *Replica) GetApproximateDiskBytes(from, to roachpb.Key) (uint64, error) 
 
 func init() {
 	tracing.RegisterTagRemapping("r", "range")
+}
+
+// MeasureReqCPUNanos measures the cpu time spent on this replica processing
+// requests.
+func (r *Replica) MeasureReqCPUNanos(start time.Duration) {
+	r.measureNanosRunning(start, func(dur float64) {
+		r.loadStats.reqCPUNanos.RecordCount(dur, 0 /* nodeID */)
+	})
+}
+
+// MeasureRaftCPUNanos measures the cpu time spent on this replica processing
+// raft work.
+func (r *Replica) MeasureRaftCPUNanos(start time.Duration) {
+	r.measureNanosRunning(start, func(dur float64) {
+		r.loadStats.raftCPUNanos.RecordCount(dur, 0 /* nodeID */)
+	})
+}
+
+// measureNanosRunning measures the difference in cpu time from when this
+// method is called, to when the returned function is called. This difference
+// is recorded against the replica's cpu time attribution.
+func (r *Replica) measureNanosRunning(start time.Duration, f func(float64)) {
+	end := grunning.Time()
+	dur := grunning.Difference(start, end).Nanoseconds()
+	f(float64(dur))
 }
 
 // ReadProtectedTimestampsForTesting is for use only by tests to read and update

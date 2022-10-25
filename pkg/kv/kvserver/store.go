@@ -3212,6 +3212,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		averageWritesPerSecond        float64
 		averageReadBytesPerSecond     float64
 		averageWriteBytesPerSecond    float64
+		averageCPUNanosPerSecond      float64
 
 		rangeCount                int64
 		unavailableRangeCount     int64
@@ -3309,6 +3310,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		if wbps, dur := rep.loadStats.writeBytes.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
 			averageWriteBytesPerSecond += wbps
 		}
+		averageCPUNanosPerSecond += rep.CPUNanosPerSecond()
+
 		locks += metrics.LockTableMetrics.Locks
 		totalLockHoldDurationNanos += metrics.LockTableMetrics.TotalLockHoldDurationNanos
 		locksWithWaitQueues += metrics.LockTableMetrics.LocksWithWaitQueues
@@ -3344,6 +3347,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.AverageReadsPerSecond.Update(averageReadsPerSecond)
 	s.metrics.AverageReadBytesPerSecond.Update(averageReadBytesPerSecond)
 	s.metrics.AverageWriteBytesPerSecond.Update(averageWriteBytesPerSecond)
+	s.metrics.AverageCPUNanosPerSecond.Update(averageCPUNanosPerSecond)
 	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
 
 	s.metrics.RangeCount.Update(rangeCount)
@@ -3547,6 +3551,7 @@ type HotReplicaInfo struct {
 	WriteKeysPerSecond  float64
 	WriteBytesPerSecond float64
 	ReadBytesPerSecond  float64
+	CPUNanosPerSecond   float64
 }
 
 // HottestReplicas returns the hottest replicas on a store, sorted by their
