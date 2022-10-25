@@ -131,6 +131,10 @@ func (r *Replica) SendWithWriteBytes(
 	// Add the range log tag.
 	ctx = r.AnnotateCtx(ctx)
 
+	// Record the CPU time processing the request for this replica. This is
+	// recorded regardless of errors that are encountered.
+	defer r.MeasureReqCPUNanos()()
+
 	// Record summary throughput information about the batch request for
 	// accounting.
 	r.recordBatchRequestLoad(ctx, ba)

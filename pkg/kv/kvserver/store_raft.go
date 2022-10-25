@@ -346,6 +346,10 @@ func (s *Store) withReplicaForRequest(
 func (s *Store) processRaftRequestWithReplica(
 	ctx context.Context, r *Replica, req *kvserverpb.RaftMessageRequest,
 ) *roachpb.Error {
+	// Record the CPU time processing the request for this replica. This is
+	// recorded regardless of errors that are encountered.
+	defer r.MeasureRaftCPUNanos()()
+
 	if verboseRaftLoggingEnabled() {
 		log.Infof(ctx, "incoming raft message:\n%s", raftDescribeMessage(req.Message, raftEntryFormatter))
 	}
@@ -630,6 +634,10 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 		return
 	}
 
+	// Record the CPU time processing the request for this replica. This is
+	// recorded regardless of errors that are encountered.
+	defer r.MeasureRaftCPUNanos()()
+
 	ctx := r.raftCtx
 	stats, err := r.handleRaftReady(ctx, noSnap)
 	maybeFatalOnRaftReadyErr(ctx, err)
@@ -650,9 +658,13 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	if !ok {
 		return false
 	}
+
 	livenessMap, _ := s.livenessMap.Load().(livenesspb.IsLiveMap)
 	ioThresholds := s.ioThresholds.Current()
 
+	// Record the CPU time processing the request for this replica. This is
+	// recorded regardless of errors that are encountered.
+	defer r.MeasureRaftCPUNanos()()
 	start := timeutil.Now()
 	ctx := r.raftCtx
 
