@@ -227,12 +227,14 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
    database_name STRING NOT NULL,
    grantee STRING NOT NULL,
    privilege_type STRING NOT NULL,
-   is_grantable STRING NULL
+   is_grantable STRING NULL,
+   INDEX cluster_database_privileges_database_name_idx (database_name ASC) STORING (grantee, privilege_type, is_grantable)
 )  CREATE TABLE crdb_internal.cluster_database_privileges (
    database_name STRING NOT NULL,
    grantee STRING NOT NULL,
    privilege_type STRING NOT NULL,
-   is_grantable STRING NULL
+   is_grantable STRING NULL,
+   INDEX cluster_database_privileges_database_name_idx (database_name ASC) STORING (grantee, privilege_type, is_grantable)
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_distsql_flows (
    flow_id UUID NOT NULL,
