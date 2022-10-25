@@ -235,10 +235,6 @@ type sqlServerOptionalKVArgs struct {
 // are only available if the SQL server runs as part of a standalone SQL node.
 type sqlServerOptionalTenantArgs struct {
 	tenantConnect kvtenant.Connector
-
-	// advertiseAddr stores the SQL address that is advertised to other servers
-	// of the same tenant.
-	advertiseAddr string
 }
 
 type sqlServerArgs struct {
@@ -440,8 +436,16 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if isNotSQLPod {
 		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
 	} else {
+		// The advertised address it not known yet at this point. It will only get
+		// known during PreStart(). We delay its access.
+		getAdvertiseAddr := func() string {
+			if cfg.BaseConfig.AdvertiseAddr == "" {
+				log.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
+			}
+			return cfg.BaseConfig.AdvertiseAddr
+		}
 		cfg.sqlInstanceProvider = instanceprovider.New(
-			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, cfg.advertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
+			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, getAdvertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
 		)
 	}
 
@@ -703,19 +707,21 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
-	ccopts := clientsecopts.ClientSecurityOptions{
-		Insecure: cfg.Config.Insecure,
-		CertsDir: cfg.Config.SSLCertsDir,
-	}
-	sparams := clientsecopts.ServerParameters{
-		ServerAddr:      cfg.Config.SQLAdvertiseAddr,
-		DefaultPort:     base.DefaultPort,
-		DefaultDatabase: catalogkeys.DefaultDatabaseName,
-	}
-
 	nodeInfo := sql.NodeInfo{
 		AdminURL: cfg.AdminURL,
 		PGURL: func(user *url.Userinfo) (*pgurl.URL, error) {
+			if cfg.Config.SQLAdvertiseAddr == "" {
+				log.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
+			}
+			ccopts := clientsecopts.ClientSecurityOptions{
+				Insecure: cfg.Config.Insecure,
+				CertsDir: cfg.Config.SSLCertsDir,
+			}
+			sparams := clientsecopts.ServerParameters{
+				ServerAddr:      cfg.Config.SQLAdvertiseAddr,
+				DefaultPort:     base.DefaultPort,
+				DefaultDatabase: catalogkeys.DefaultDatabaseName,
+			}
 			return clientsecopts.MakeURLForServer(ccopts, sparams, user)
 		},
 		LogicalClusterID: cfg.rpcContext.LogicalClusterID.Get,
