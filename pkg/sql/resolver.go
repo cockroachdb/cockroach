@@ -138,56 +138,6 @@ func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (foun
 	return found, err
 }
 
-// IsTableVisible is part of the eval.DatabaseCatalog interface.
-func (p *planner) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
-) (isVisible, exists bool, err error) {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), curDB,
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: p.skipDescriptorCache,
-		})
-	if err != nil {
-		return false, false, err
-	}
-	// It is critical that we set ParentID on the flags in order to ensure that
-	// we do not do a very expensive, and ultimately fruitless lookup for an
-	// OID which definitely does not exist. Only OIDs corresponding to relations
-	// in the current database are relevant for this function. If we have already
-	// fetched all the tables in the current database, then we can use that
-	// fact to avoid a KV lookup. The descs layer relies on our setting this
-	// field in the flags to avoid that lookup.
-	flags := p.ObjectLookupFlags(true /* required */, false /* requireMutable */)
-	flags.ParentID = dbDesc.GetID()
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(ctx, p.Txn(), descpb.ID(tableID), flags)
-	if err != nil {
-		// If a "not found" error happened here, we return "not exists" rather than
-		// the error.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
-			errors.Is(err, catalog.ErrDescriptorDropped) ||
-			pgerror.GetPGCode(err) == pgcode.UndefinedTable ||
-			pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-			return false, false, nil //nolint:returnerrcheck
-		}
-		return false, false, err
-	}
-	schemaID := tableDesc.GetParentSchemaID()
-	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), schemaID,
-		tree.SchemaLookupFlags{
-			Required:    true,
-			AvoidLeased: p.skipDescriptorCache})
-	if err != nil {
-		return false, false, err
-	}
-	iter := searchPath.Iter()
-	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-		if schemaDesc.GetName() == scName {
-			return true, true, nil
-		}
-	}
-	return false, true, nil
-}
-
 // IsTypeVisible is part of the eval.DatabaseCatalog interface.
 func (p *planner) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
