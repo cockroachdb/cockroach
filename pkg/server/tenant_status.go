@@ -1228,7 +1228,7 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 
 	shouldRedactContendingKey := false
 	if !isAdmin {
-		if t.privilegeChecker.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if t.privilegeChecker.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			shouldRedactContendingKey = t.privilegeChecker.checkHasGlobalPrivilege(ctx, user, privilege.VIEWACTIVITYREDACTED)
 		}
 		if !shouldRedactContendingKey {

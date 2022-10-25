@@ -32,7 +32,7 @@ func TestSystemPrivilegesMigration(t *testing.T) {
 
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.SystemPrivilegesTable-1),
+		clusterversion.ByKey(clusterversion.V22_2SystemPrivilegesTable-1),
 		false,
 	)
 
@@ -42,7 +42,7 @@ func TestSystemPrivilegesMigration(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.SystemPrivilegesTable - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SystemPrivilegesTable - 1),
 				},
 			},
 		},
@@ -62,7 +62,7 @@ func TestSystemPrivilegesMigration(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		db,
-		clusterversion.SystemPrivilegesTable,
+		clusterversion.V22_2SystemPrivilegesTable,
 		nil,
 		false,
 	)

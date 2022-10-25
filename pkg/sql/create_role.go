@@ -154,7 +154,7 @@ func (n *CreateRoleNode) startExec(params runParams) error {
 	// TODO(richardjcai): move hashedPassword column to system.role_options.
 	stmt := fmt.Sprintf("INSERT INTO %s VALUES ($1, $2, $3)", sessioninit.UsersTableName)
 	args := append(make([]interface{}, 0, 4), n.roleName, hashedPassword, n.isRole)
-	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.AddSystemUserIDColumn) {
+	if params.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2AddSystemUserIDColumn) {
 		stmt = fmt.Sprintf("INSERT INTO %s VALUES ($1, $2, $3, $4)", sessioninit.UsersTableName)
 		roleID, err := descidgen.GenerateUniqueRoleID(params.ctx, params.ExecCfg().DB, params.ExecCfg().Codec)
 		if err != nil {
@@ -205,7 +205,7 @@ func updateRoleOptions(
 	roleName username.SQLUsername,
 	telemetryOp string,
 ) (rowsAffected int, err error) {
-	withID := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.RoleOptionsTableHasIDColumn)
+	withID := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2RoleOptionsTableHasIDColumn)
 	// Get a map of statements to execute for role options and their values.
 	stmts, err := roleOptions.GetSQLStmts(func(o roleoption.Option) {
 		sqltelemetry.IncIAMOptionCounter(telemetryOp, strings.ToLower(o.String()))

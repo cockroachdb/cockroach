@@ -336,7 +336,7 @@ func (b *baseStatusServer) checkCancelPrivilege(
 			// Must have CANCELQUERY privilege to cancel other users'
 			// sessions/queries.
 			hasCancelQuery := false
-			if b.privilegeChecker.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			if b.privilegeChecker.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 				hasCancelQuery = b.privilegeChecker.checkHasGlobalPrivilege(ctx, reqUser, privilege.CANCELQUERY)
 			}
 			if !hasCancelQuery {

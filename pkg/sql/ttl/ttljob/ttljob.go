@@ -246,7 +246,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			jobSpanCount += len(spanPartition.Spans)
 		}
 
-		useDistSQL := execCfg.Settings.Version.IsActive(ctx, clusterversion.TTLDistSQL)
+		useDistSQL := execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2TTLDistSQL)
 		jobRegistry := execCfg.JobRegistry
 		if err := jobRegistry.UpdateJobWithTxn(
 			ctx,

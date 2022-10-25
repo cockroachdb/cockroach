@@ -91,7 +91,7 @@ var MVCCRangeTombstonesEnabled = settings.RegisterBoolSetting(
 // It requires the MVCCRangeTombstones version gate to be active, and the
 // setting storage.mvcc.range_tombstones.enabled to be enabled.
 func CanUseMVCCRangeTombstones(ctx context.Context, st *cluster.Settings) bool {
-	return st.Version.IsActive(ctx, clusterversion.MVCCRangeTombstones) &&
+	return st.Version.IsActive(ctx, clusterversion.V22_2MVCCRangeTombstones) &&
 		MVCCRangeTombstonesEnabled.Get(&st.SV)
 }
 

@@ -322,7 +322,7 @@ func retrieveAuthInfo(
 		return aInfo, err
 	}
 	if !hasAdmin {
-		if settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			if noSQLLogin := aa.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.NOSQLLOGIN, user) == nil; noSQLLogin {
 				aInfo.CanLoginSQL = false
 			}

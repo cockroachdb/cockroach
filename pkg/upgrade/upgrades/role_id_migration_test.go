@@ -42,7 +42,7 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.RoleIDSequence-1),
+		clusterversion.ByKey(clusterversion.V22_2RoleIDSequence-1),
 		false,
 	)
 
@@ -52,7 +52,7 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.RoleIDSequence - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2RoleIDSequence - 1),
 				},
 			},
 		},
@@ -93,7 +93,7 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 	})
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.RoleIDSequence).String())
+		clusterversion.ByKey(clusterversion.V22_2RoleIDSequence).String())
 	require.NoError(t, err)
 
 	tdb.CheckQueryResults(t, `SELECT * FROM system.role_id_seq`, [][]string{
@@ -138,15 +138,15 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		}()
 	}
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.AddSystemUserIDColumn).String())
+		clusterversion.ByKey(clusterversion.V22_2AddSystemUserIDColumn).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.SystemUsersIDColumnIsBackfilled).String())
+		clusterversion.ByKey(clusterversion.V22_2SystemUsersIDColumnIsBackfilled).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.SetSystemUsersUserIDColumnNotNull).String())
+		clusterversion.ByKey(clusterversion.V22_2SetSystemUsersUserIDColumnNotNull).String())
 	require.NoError(t, err)
 
 	tdb.CheckQueryResults(t, `SELECT * FROM system.users WHERE user_id IS NULL`, [][]string{})
