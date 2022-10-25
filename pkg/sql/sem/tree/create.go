@@ -2051,6 +2051,7 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Table)
 
 	if !node.Options.Empty() {
+		ctx.WriteString(" WITH OPTIONS ")
 		ctx.FormatNode(&node.Options)
 	}
 }
@@ -2070,7 +2071,8 @@ type CreateStatsOptions struct {
 	// extreme values of the table or the index specified.
 	UsingExtremes bool
 
-	// WHERE will specify the statistics collection in a range
+	// WHERE will specify statistics collection in a set of rows of the table
+	// or index specified.
 	Where *Where
 }
 
@@ -2081,9 +2083,9 @@ func (o *CreateStatsOptions) Empty() bool {
 
 // Format implements the NodeFormatter interface.
 func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
-	sep := " "
+	sep := ""
 	if o.Throttling != 0 {
-		ctx.WriteString(" THROTTLING ")
+		ctx.WriteString("THROTTLING ")
 		// TODO(knz): Remove all this with ctx.FormatNode()
 		// if/when throttling supports full expressions.
 		if ctx.flags.HasFlags(FmtHideConstants) {
@@ -2099,6 +2101,16 @@ func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 	if o.AsOf.Expr != nil {
 		ctx.WriteString(sep)
 		ctx.FormatNode(&o.AsOf)
+		sep = " "
+	}
+	if o.UsingExtremes {
+		ctx.WriteString(sep)
+		ctx.WriteString("USING EXTREMES")
+		sep = " "
+	}
+	if o.Where != nil {
+		ctx.WriteString(sep)
+		ctx.FormatNode(o.Where)
 		sep = " "
 	}
 }
@@ -2117,6 +2129,23 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 			return errors.New("AS OF specified multiple times")
 		}
 		o.AsOf = other.AsOf
+	}
+	if other.UsingExtremes {
+		if o.UsingExtremes {
+			return errors.New("USING EXTREMES specified multiple times")
+		}
+		o.UsingExtremes = other.UsingExtremes
+	}
+	if other.Where != nil {
+		if other.Where != nil {
+			if o.Where != nil {
+				return errors.New("WHERE specified multiple times")
+			}
+		}
+		o.Where = other.Where
+	}
+	if other.Where != nil && o.UsingExtremes || o.Where != nil && other.UsingExtremes {
+		return errors.New("USING EXTREMES and WHERE may not be specified together")
 	}
 	return nil
 }
