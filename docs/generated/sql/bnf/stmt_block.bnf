@@ -3051,6 +3051,8 @@ routine_body_stmt_list ::=
 
 create_stats_option ::=
 	as_of_clause
+	| 'USING' 'EXTREMES'
+	| where_clause
 
 opt_table_prefix ::=
 	'TABLE'

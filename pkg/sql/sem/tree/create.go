@@ -2070,7 +2070,8 @@ type CreateStatsOptions struct {
 	// extreme values of the table or the index specified.
 	UsingExtremes bool
 
-	// WHERE will specify the statistics collection in a range
+	// WHERE will specify statistics collection in a set of rows of the table
+	// or index specified
 	Where *Where
 }
 
@@ -2101,6 +2102,16 @@ func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&o.AsOf)
 		sep = " "
 	}
+	if o.UsingExtremes {
+		ctx.WriteString(sep)
+		ctx.WriteString("USING EXTREMES")
+		sep = " "
+	}
+	if o.Where != nil {
+		ctx.WriteString(sep)
+		ctx.FormatNode(o.Where)
+		sep = " "
+	}
 }
 
 // CombineWith combines two options, erroring out if the two options contain
@@ -2117,6 +2128,23 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 			return errors.New("AS OF specified multiple times")
 		}
 		o.AsOf = other.AsOf
+	}
+	if other.UsingExtremes {
+		if o.UsingExtremes {
+			return errors.New("USING EXTREMES specified multiple times")
+		}
+		o.UsingExtremes = other.UsingExtremes
+	}
+	if other.Where != nil {
+		if other.Where != nil {
+			if o.Where != nil {
+				return errors.New("WHERE specified multiple times")
+			}
+		}
+		o.Where = other.Where
+	}
+	if other.Where != nil && o.UsingExtremes || o.Where != nil && other.UsingExtremes {
+		return errors.New("USING EXTREMES and WHERE may not be specified together")
 	}
 	return nil
 }

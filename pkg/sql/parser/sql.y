@@ -4724,6 +4724,18 @@ create_stats_option:
       AsOf: $1.asOfClause(),
     }
   }
+| USING EXTREMES
+  {
+    $$.val = &tree.CreateStatsOptions{
+      UsingExtremes: true,
+    }
+  }
+| where_clause
+  {
+    $$.val = &tree.CreateStatsOptions{
+			Where: tree.NewWhere(tree.AstWhere, $1.expr()),
+    }
+  }
 
 // %Help: CREATE CHANGEFEED  - create change data capture
 // %Category: CCL
