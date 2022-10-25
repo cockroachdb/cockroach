@@ -2091,6 +2091,12 @@ func init() {
 	tracing.RegisterTagRemapping("r", "range")
 }
 
+// RecordNanosRunning records the given duration against the replica's cpu time
+// accounting.
+func (r *Replica) RecordNanosRunning(duration int64) {
+	r.loadStats.nanos.RecordCount(float64(duration), 0 /* nodeID */)
+}
+
 // ReadProtectedTimestampsForTesting is for use only by tests to read and update
 // the Replicas' cached protected timestamp state.
 func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err error) {
