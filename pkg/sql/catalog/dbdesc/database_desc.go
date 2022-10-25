@@ -290,6 +290,9 @@ func (desc *immutable) ValidateForwardReferences(
 	vea catalog.ValidationErrorAccumulator, vdg catalog.ValidationDescGetter,
 ) {
 	// Check multi-region enum type.
+	if !desc.IsMultiRegion() {
+		return
+	}
 	if enumID, err := desc.MultiRegionEnumID(); err == nil {
 		report := func(err error) {
 			vea.Report(errors.Wrap(err, "multi-region enum"))

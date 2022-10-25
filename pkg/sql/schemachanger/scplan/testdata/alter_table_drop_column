@@ -217,7 +217,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 24 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -235,19 +235,19 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
@@ -302,90 +302,6 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 19 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      IndexID: 3
-      TableID: 107
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 108
-    *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
-      JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
-  transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
-    [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
-  ops:
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          constraintId: 1
-          indexId: 2
-          isUnique: true
-          tableId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
-    *scop.CreateGCJobForIndex
-      IndexID: 2
-      StatementForDropJob:
-        Statement: removed secondary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
-          v1 CASCADE
-      TableID: 107
-    *scop.MakeIndexAbsent
-      IndexID: 2
-      TableID: 107
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            - 2
-            - 3
-            toId: 107
-          usesRelationIds:
-          - 107
-          usesTypeIds:
-          - 104
-          viewId: 108
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
-    *scop.DeleteDescriptor
-      DescriptorID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
@@ -441,6 +357,85 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 17 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
+    *scop.MakeValidatedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      IndexID: 3
+      TableID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 108
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 2 of 3 with 12 MutationType ops
+  transitions:
+    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+  ops:
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          constraintId: 1
+          indexId: 2
+          isUnique: true
+          tableId: 107
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.CreateGCJobForIndex
+      IndexID: 2
+      StatementForDropJob:
+        Statement: removed secondary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
+          v1 CASCADE
+      TableID: 107
+    *scop.MakeIndexAbsent
+      IndexID: 2
+      TableID: 107
+    *scop.LogEvent
+      Element:
+        View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            - 3
+            toId: 107
+          usesRelationIds:
+          - 107
+          usesTypeIds:
+          - 104
+          viewId: 108
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v1› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.DeleteDescriptor
+      DescriptorID: 108
     *scop.CreateGCJobForIndex
       IndexID: 4
       StatementForDropJob:
@@ -858,85 +853,65 @@ ALTER TABLE defaultdb.foo DROP COLUMN v1 CASCADE;
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [View:{DescID: 108}, ABSENT]
@@ -1165,7 +1140,7 @@ PostCommitPhase stage 7 of 7 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 3
       TableID: 107
-PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 3 with 25 MutationType ops
   transitions:
     [[Column:{DescID: 107, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
     [[IndexColumn:{DescID: 107, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1183,19 +1158,19 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], TXN_DROPPED] -> DROPPED
     [[ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT], PUBLIC] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> DELETE_ONLY
+    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], WRITE_ONLY] -> ABSENT
     [[ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 107, IndexID: 3, ConstraintID: 3, TemporaryIndexID: 4, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
@@ -1250,92 +1225,6 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 20 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.MakeValidatedPrimaryIndexPublic
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      IndexID: 3
-      TableID: 107
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 104
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 105
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 106
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 107
-    *scop.SetJobStateOnDescriptor
-      DescriptorID: 108
-    *scop.UpdateSchemaChangerJob
-      IsNonCancelable: true
-      JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
-  transitions:
-    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
-    [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 2}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 3}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[Column:{DescID: 108, ColumnID: 4294967294}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
-  ops:
-    *scop.LogEvent
-      Element:
-        SecondaryIndex:
-          constraintId: 1
-          indexId: 2
-          isUnique: true
-          tableId: 107
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
-    *scop.CreateGCJobForIndex
-      IndexID: 2
-      StatementForDropJob:
-        Statement: removed secondary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
-          v2 CASCADE
-      TableID: 107
-    *scop.MakeIndexAbsent
-      IndexID: 2
-      TableID: 107
-    *scop.LogEvent
-      Element:
-        View:
-          forwardReferences:
-          - columnIds:
-            - 1
-            - 2
-            - 3
-            toId: 107
-          usesRelationIds:
-          - 107
-          usesTypeIds:
-          - 104
-          viewId: 108
-      EventBase:
-        Authorization:
-          UserName: root
-        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
-        StatementTag: ALTER TABLE
-        TargetMetadata:
-          SourceElementID: 1
-          SubWorkID: 1
-      TargetStatus: 1
-    *scop.DeleteDescriptor
-      DescriptorID: 108
     *scop.MakeDeleteOnlyColumnAbsent
       ColumnID: 1
       EventBase:
@@ -1391,6 +1280,87 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 18 MutationType ops
           SourceElementID: 1
           SubWorkID: 1
       TableID: 108
+    *scop.MakeValidatedPrimaryIndexPublic
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      IndexID: 3
+      TableID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 104
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 105
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 106
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 107
+    *scop.SetJobStateOnDescriptor
+      DescriptorID: 108
+    *scop.UpdateSchemaChangerJob
+      IsNonCancelable: true
+      JobID: 1
+PostCommitNonRevertiblePhase stage 2 of 3 with 13 MutationType ops
+  transitions:
+    [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 2}, ABSENT], VALIDATED] -> DELETE_ONLY
+    [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 1}, ABSENT], DELETE_ONLY] -> ABSENT
+    [[View:{DescID: 108}, ABSENT], DROPPED] -> ABSENT
+    [[TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
+  ops:
+    *scop.LogEvent
+      Element:
+        SecondaryIndex:
+          constraintId: 1
+          indexId: 2
+          isUnique: true
+          tableId: 107
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.CreateGCJobForIndex
+      IndexID: 2
+      StatementForDropJob:
+        Statement: removed secondary index; ALTER TABLE defaultdb.public.foo DROP COLUMN
+          v2 CASCADE
+      TableID: 107
+    *scop.MakeIndexAbsent
+      IndexID: 2
+      TableID: 107
+    *scop.LogEvent
+      Element:
+        View:
+          forwardReferences:
+          - columnIds:
+            - 1
+            - 2
+            - 3
+            toId: 107
+          usesRelationIds:
+          - 107
+          usesTypeIds:
+          - 104
+          viewId: 108
+      EventBase:
+        Authorization:
+          UserName: root
+        Statement: ALTER TABLE ‹defaultdb›.public.‹foo› DROP COLUMN ‹v2› CASCADE
+        StatementTag: ALTER TABLE
+        TargetMetadata:
+          SourceElementID: 1
+          SubWorkID: 1
+      TargetStatus: 1
+    *scop.DeleteDescriptor
+      DescriptorID: 108
     *scop.CreateGCJobForIndex
       IndexID: 4
       StatementForDropJob:
@@ -1831,85 +1801,65 @@ ALTER TABLE defaultdb.foo DROP COLUMN v2 CASCADE;
   to:   [TemporaryIndex:{DescID: 107, IndexID: 4, ConstraintID: 4, SourceIndexID: 1}, TRANSIENT_DELETE_ONLY]
   kind: PreviousTransactionPrecedence
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
-- from: [View:{DescID: 108}, ABSENT]
-  to:   [Column:{DescID: 108, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
-  rule: descriptor removal right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: k, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: tableoid, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: v1, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnName:{DescID: 108, Name: v2, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 3}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967294}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 4294967295}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ColumnType:{DescID: 108, ReferencedTypeIDs: [104 105], ColumnFamilyID: 0, ColumnID: 2}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Namespace:{DescID: 108, Name: fooview, ReferencedDescID: 100}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [ObjectParent:{DescID: 108, ReferencedDescID: 101}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [Owner:{DescID: 108}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Name: admin}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [UserPrivileges:{DescID: 108, Name: root}, ABSENT]
-  kind: SameStagePrecedence
+  kind: Precedence
   rule: descriptor drop right before dependent element removal
 - from: [View:{DescID: 108}, DROPPED]
   to:   [View:{DescID: 108}, ABSENT]

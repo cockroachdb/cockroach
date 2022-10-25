@@ -59,7 +59,7 @@ func init() {
 
 	registerDepRule(
 		"descriptor drop right before dependent element removal",
-		scgraph.SameStagePrecedence,
+		scgraph.Precedence,
 		"descriptor", "dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
@@ -70,20 +70,6 @@ func init() {
 				fromHasPublicStatusIfFromIsTableAndToIsRowLevelTTL(from.target, from.el, to.el),
 			}
 		})
-
-	registerDepRule(
-		"descriptor removal right before dependent element removal",
-		scgraph.SameStagePrecedence,
-		"descriptor", "idx-or-col",
-		func(from, to nodeVars) rel.Clauses {
-			return rel.Clauses{
-				from.typeFilter(IsDescriptor),
-				to.typeFilter(isSubjectTo2VersionInvariant),
-				joinOnDescID(from, to, "desc-id"),
-				statusesToAbsent(from, scpb.Status_ABSENT, to, scpb.Status_ABSENT),
-			}
-		},
-	)
 }
 
 // These rules ensure that cross-referencing simple dependent elements reach
