@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -131,7 +130,19 @@ func getDescriptorsByID(
 		idsForLog := append(make([]descpb.ID, 0, len(ids)), ids...)
 		log.VEventf(ctx, 2, "looking up descriptors for ids %v", idsForLog)
 	}
-	var vls validationLevelMap
+
+	// We want to avoid the allocation in the case that there is exactly one
+	// descriptor to resolve. This is the common case. The array stays on the
+	// stack.
+	var vls []catalog.ValidationLevel
+	switch len(ids) {
+	case 1:
+		//gcassert:noescape
+		var arr [1]catalog.ValidationLevel
+		vls = arr[:]
+	default:
+		vls = make([]catalog.ValidationLevel, len(ids))
+	}
 	{
 		// Look up the descriptors in all layers except the storage layer on a
 		// best-effort basis.
@@ -164,7 +175,7 @@ func getDescriptorsByID(
 					continue
 				}
 				descs[i] = desc
-				vls.set(i, vl)
+				vls[i] = vl
 			}
 		}
 	}
@@ -183,13 +194,13 @@ func getDescriptorsByID(
 		for i, id := range ids {
 			if descs[i] == nil {
 				descs[i] = tc.stored.GetCachedByID(id)
-				vls.set(i, tc.stored.GetValidationLevelByID(id))
+				vls[i] = tc.stored.GetValidationLevelByID(id)
 			}
 		}
 	}
 
 	// At this point, all descriptors are in the slice, finalize and hydrate them.
-	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, &vls); err != nil {
+	if err := tc.finalizeDescriptors(ctx, txn, flags, descs, vls); err != nil {
 		return err
 	}
 	if err := tc.hydrateDescriptors(ctx, txn, flags, descs); err != nil {
@@ -527,7 +538,7 @@ func (tc *Collection) finalizeDescriptors(
 	txn *kv.Txn,
 	flags tree.CommonLookupFlags,
 	descs []catalog.Descriptor,
-	validationLevels *validationLevelMap,
+	validationLevels []catalog.ValidationLevel,
 ) error {
 	// Add the descriptors to the uncommitted layer if we want them to be mutable.
 	if flags.RequireMutable {
@@ -546,7 +557,7 @@ func (tc *Collection) finalizeDescriptors(
 	}
 	var toValidate []catalog.Descriptor
 	for i := range descs {
-		if validationLevels.get(i) < requiredLevel {
+		if validationLevels[i] < requiredLevel {
 			toValidate = append(toValidate, descs[i])
 		}
 	}
@@ -570,19 +581,4 @@ func (tc *Collection) deadlineHolder(txn *kv.Txn) deadlineHolder {
 
 func isTemporarySchema(name string) bool {
 	return strings.HasPrefix(name, catconstants.PgTempSchemaName)
-}
-
-// validationLevelMap is used to map indexes in a slice to their required
-// validation level. This avoids any heap allocations as compared to a
-// slice containing the correspondence between an index to a validation level.
-type validationLevelMap struct {
-	m util.FastIntMap
-}
-
-func (vlm *validationLevelMap) get(idx int) catalog.ValidationLevel {
-	return catalog.ValidationLevel(vlm.m.GetDefault(idx))
-}
-
-func (vlm *validationLevelMap) set(idx int, l catalog.ValidationLevel) {
-	vlm.m.Set(idx, int(l))
 }
