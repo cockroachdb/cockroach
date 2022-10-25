@@ -67,12 +67,12 @@ func TestIngester(t *testing.T) {
 			// We use a fakeDetector claiming *every* statement is slow, so
 			// that we can assert on the generated insights to make sure all
 			// the events came through properly.
+			st := cluster.MakeTestingClusterSettings()
 			provider := newConcurrentBufferIngester(
-				newRegistry(
-					cluster.MakeTestingClusterSettings(), &fakeDetector{
-						stubEnabled: true,
-						stubIsSlow:  true,
-					}),
+				newRegistry(st, &fakeDetector{
+					stubEnabled: true,
+					stubIsSlow:  true,
+				}, newStore(st)),
 			)
 
 			provider.Start(ctx, stopper)
@@ -119,7 +119,8 @@ func TestIngester_Disabled(t *testing.T) {
 	// should something go wrong. Here we peek at the internals of the ingester
 	// to make sure it doesn't hold onto any statement or transaction info if
 	// the underlying registry is currently disabled.
-	ingester := newConcurrentBufferIngester(newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{}))
+	st := cluster.MakeTestingClusterSettings()
+	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st)))
 	writer := ingester.Writer(false /* internal */)
 	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
 	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
@@ -127,7 +128,8 @@ func TestIngester_Disabled(t *testing.T) {
 }
 
 func TestIngester_WriterIgnoresInternalExecutorObservations(t *testing.T) {
-	ingester := newConcurrentBufferIngester(newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{stubEnabled: true}))
+	st := cluster.MakeTestingClusterSettings()
+	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st)))
 	writer := ingester.Writer(true /* internal */)
 	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
 	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
@@ -143,7 +145,8 @@ func TestIngester_DoesNotBlockWhenReceivingManyObservationsAfterShutdown(t *test
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 
-	registry := newRegistry(cluster.MakeTestingClusterSettings(), &fakeDetector{stubEnabled: true})
+	st := cluster.MakeTestingClusterSettings()
+	registry := newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st))
 	ingester := newConcurrentBufferIngester(registry)
 	ingester.Start(ctx, stopper)
 
