@@ -147,13 +147,6 @@ func startTenantInternal(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
 
-	// Initialize gRPC server for use on shared port with pg
-	grpcMain := newGRPCServer(args.rpcContext)
-	grpcMain.setMode(modeOperational)
-	// TODO(harding): Some services (e.g., blob service) don't need to register
-	// a GRPC server. It might be better to use a dummy GRPC service for these.
-	args.grpcServer = grpcMain.Server
-
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
 
@@ -177,7 +170,7 @@ func startTenantInternal(
 	// correctly.
 	baseCfg.Addr = baseCfg.SQLAddr
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
-	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
+	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, args.grpc)
 	if err != nil {
 		return nil, nil, nil, "", "", err
 	}
@@ -249,7 +242,7 @@ func startTenantInternal(
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
-		gw.RegisterService(grpcMain.Server)
+		gw.RegisterService(args.grpcServer)
 	}
 	startRPCServer(background)
 
@@ -260,7 +253,7 @@ func startTenantInternal(
 		args.AmbientCtx,
 		args.rpcContext,
 		s.stopper,
-		grpcMain,
+		args.grpc,
 		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
