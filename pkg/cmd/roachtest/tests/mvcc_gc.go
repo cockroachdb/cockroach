@@ -70,6 +70,8 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	// How many times test repeats generate/cleanup cycles after initial one.
 	const cleanupRuns = 3
+	// How long to wait for data to be GCd during assert loop.
+	const gcRetryTimeout = 7 * time.Minute
 
 	c.Put(ctx, t.Cockroach(), "./cockroach")
 	s := install.MakeClusterSettings()
@@ -129,7 +131,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			t.L().Printf("partially deleted some data using tombstones")
 
-			assertRangesWithGCRetry(ctx, t, c, 5*time.Minute, m, func() error {
+			assertRangesWithGCRetry(ctx, t, c, gcRetryTimeout, m, func() error {
 				totals, rangeCount := collectTableMVCCStatsOrFatal(t, conn, m)
 				return checkRangesHaveNoRangeTombstones(totals, rangeCount)
 			})
@@ -152,7 +154,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal(err)
 		}
 
-		assertRangesWithGCRetry(ctx, t, c, 5*time.Minute, m, func() error {
+		assertRangesWithGCRetry(ctx, t, c, gcRetryTimeout, m, func() error {
 			totals, details := collectStatsAndConsistencyOrFail(t, conn, m)
 			return checkRangesConsistentAndHaveNoData(totals, details)
 		})
