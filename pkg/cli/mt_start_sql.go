@@ -86,8 +86,6 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	ambientCtx := serverCfg.AmbientCtx
 	ctx = ambientCtx.AnnotateCtx(ctx)
 
-	const clusterName = ""
-
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 	if err != nil {
 		return err
@@ -121,16 +119,19 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 
 	initGEOS(ctx)
 
-	sqlServer, err := server.StartTenant(
+	tenantServer, err := server.NewTenantServer(
 		ctx,
 		stopper,
-		clusterName,
 		serverCfg.BaseConfig,
 		serverCfg.SQLConfig,
 	)
 	if err != nil {
 		return err
 	}
+	if err := tenantServer.Start(ctx); err != nil {
+		return err
+	}
+
 	// If another process was waiting on the PID (e.g. using a FIFO),
 	// this is when we can tell them the node has started listening.
 	if startCtx.pidFile != "" {
@@ -155,10 +156,10 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	// We don't do this in (*server.SQLServer).preStart() because we don't
 	// want this overhead and possible interference in tests.
 	if !cluster.TelemetryOptOut() {
-		sqlServer.StartDiagnostics(ctx)
+		tenantServer.StartDiagnostics(ctx)
 	}
 
-	tenantClusterID := sqlServer.LogicalClusterID()
+	tenantClusterID := tenantServer.LogicalClusterID()
 
 	// Report the server identifiers and other server details
 	// in the same format as 'cockroach start'.
@@ -175,7 +176,7 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 	serverStatusMu.started = true
 
 	return waitForShutdown(
-		func() serverShutdownInterface { return sqlServer },
+		func() serverShutdownInterface { return tenantServer },
 		stopper,
 		serverStartupErrC, signalCh,
 		&serverStatusMu)
