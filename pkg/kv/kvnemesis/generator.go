@@ -11,6 +11,9 @@
 package kvnemesis
 
 import (
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -19,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -234,6 +236,14 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRangeUsingTombstone = 0
+	// DeleteRangeUsingTombstone does in principle support batches, but
+	// in kvnemesis we don't let it span ranges non-atomically (as it
+	// is allowed to do in CRDB). So if we allow it in batches, it will
+	// likely doom most batches to fail, i.e. we're better off not adding
+	// it in the first place. We don't mix DeleteRangeUsingTombstone in
+	// CRDB, though we may use multiple in a single batch, so adding
+	// coverage for that would be useful.
+	config.Ops.Batch.Ops.DeleteRangeUsingTombstone = 0
 	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRange = 0
@@ -247,8 +257,12 @@ func NewDefaultConfig() GeneratorConfig {
 	//
 	// TODO(dan): Make this `config.Ops.Batch.Ops.PutExisting = 0` once #46081 is
 	// fixed.
+	// ^--- TODO(tbg): https://github.com/cockroachdb/cockroach/issues/46081 is
+	// mostly addressed, so this could now work, except we added DeleteRangeUsingTombstone
+	// and this will cause hard failures when mixed in with other writes.
 	config.Ops.Batch = BatchOperationConfig{}
 	// TODO(dan): Remove when #45586 is addressed.
+	// ^--- TODO(tbg): this issue is closed so we should be able to re-enable the below.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
 
@@ -530,10 +544,58 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 }
 
 func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
-	// We don't write any new keys to `g.keys` on a DeleteRange operation,
-	// because DelRange(..) only deletes existing keys.
-	key, endKey := randSpan(rng)
+	// Delete a span. We don't want MVCC rangedels to get split along range
+	// boundaries in kvnemesis (since that would violate atomicity, but is
+	// desired behavior in CRDB) so we try our best to not straddle splits. If
+	// we end up doing it anyway, an interceptor will cause the request to fail
+	// (but not kvnemesis).
+	var key, endKey string
+	n := rng.Intn(3)
+	switch {
+	case n == 0 && len(g.historicalSplits) > 0:
+		// Using historical splits gives us a bit of "everything coverage", including
+		// crossing range boundaries (which is supposed to error out anyway but still).
+		key, endKey = randMapKey(rng, g.historicalSplits), randMapKey(rng, g.historicalSplits)
+	case n == 1 && len(g.currentSplits) > 0:
+		key, endKey = randMapKey(rng, g.currentSplits), randMapKey(rng, g.currentSplits)
+	case n == 2 && len(g.keys) > 0:
+		// Delete a specific key (which may no longer be visible, but at least
+		// has nontrivial MVCC history).
+		key = randMapKey(rng, g.keys)
+		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	default:
+		// Delete a random key.
+		key = randKey(rng)
+		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	}
+
+	if endKey < key {
+		endKey, key = key, endKey
+	} else if key == endKey {
+		// This span will always be contained in one range.
+		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	}
+
+	// Fudge the boundaries a bit, some of the time. Note
+	// that if it's a single-point span, this is a no-op.
+	switch rng.Intn(3) {
+	case 0:
+		// Move start key forward.
+		key = randKeyBetween(rng, key, endKey)
+	case 1:
+		// Shorten endKey to something in (key,endKey].
+		endKey = randKeyBetween(rng,
+			uint64ToKey(uint64FromKey(key)+1),
+			uint64ToKey(uint64FromKey(endKey)-1),
+		)
+	default: // noop
+	}
+
 	seq := g.nextSeq()
+	if key >= endKey {
+		s := fmt.Sprintf("%d %d", uint64FromKey(key), uint64FromKey(endKey))
+		panic(s)
+	}
 	return delRangeUsingTombstone(key, endKey, seq)
 }
 
@@ -661,13 +723,29 @@ func makeClosureTxn(
 	}
 }
 
-func randKey(rng *rand.Rand) string {
-	u, err := uuid.NewGenWithReader(rng).NewV4()
+func uint64FromKey(k string) uint64 {
+	k = k[len(GeneratorDataSpan().Key):]
+	_, s, err := encoding.DecodeUnsafeStringAscendingDeepCopy([]byte(k), nil)
 	if err != nil {
 		panic(err)
 	}
+	sl, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return binary.BigEndian.Uint64(sl)
+}
+
+func randKey(rng *rand.Rand) string {
+	return uint64ToKey(rng.Uint64())
+}
+
+func uint64ToKey(n uint64) string {
+	var sl [8]byte
+	binary.BigEndian.PutUint64(sl[:8], n)
+	s := hex.EncodeToString(sl[:8])
 	key := GeneratorDataSpan().Key
-	key = encoding.EncodeStringAscending(key, u.Short())
+	key = encoding.EncodeStringAscending(key, s)
 	return string(key)
 }
 
@@ -680,6 +758,20 @@ func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 		return randKey(rng)
 	}
 	return keys[rng.Intn(len(keys))]
+}
+
+// Returns a key that falls into `[k,ek)`.
+func randKeyBetween(rng *rand.Rand, k, ek string) string {
+	a, b := uint64FromKey(k), uint64FromKey(ek)
+	if b <= a {
+		b = a + 1 // we will return `k`
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			panic(fmt.Sprintf("a=%d b=%d b-a=%d: %v", a, b, int64(b-a), r))
+		}
+	}()
+	return uint64ToKey(a + uint64(rng.Int63n(int64(b-a))))
 }
 
 func randSpan(rng *rand.Rand) (string, string) {

@@ -75,6 +75,20 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	skip.UnderRace(t)
 
 	ctx := context.Background()
+
+	var seed int64 = 5408881829841458374 // easy to set a seed here from a failing invocation
+	var rng *rand.Rand
+	if seed > 0 {
+		rng = rand.New(rand.NewSource(seed))
+		rand.Seed(seed)
+	} else {
+		rng, seed = randutil.NewTestRand()
+	}
+	t.Logf("seed: %d", seed)
+	// TODO(tbg): why doesn't the t.Logf show up under `./dev test --stress` even with `--test-args='-show-logs''?
+	// At least not if the test panics.
+	log.Infof(ctx, "seed: %d", seed)
+
 	tr := &SeqTracker{}
 	tc := testcluster.StartTestCluster(t, 1, testClusterArgs(tr))
 	defer tc.Stopper().Stop(ctx)
@@ -85,18 +99,12 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	config := NewDefaultConfig()
 	config.NumNodes, config.NumReplicas = 1, 1
 
-	var seed int64 = 1917325818451959143 // 6578717420559460636
-	var rng *rand.Rand
-	if seed > 0 {
-		rng = rand.New(rand.NewSource(seed))
-		rand.Seed(seed)
-	} else {
-		rng, seed = randutil.NewTestRand()
-	}
-	t.Logf("seed: %d", seed)
 	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}
+	// NB: when a failure is observed, it can be helpful to try to reproduce it
+	// with concurrency 1, as then determinism is much more likely once a suitable
+	// seed has been identified.
 	const concurrency = 1 // HACK
-	numSteps = 5          // HACK
+	//numSteps = 5          // HACK
 	failures, err := RunNemesis(ctx, rng, env, config, concurrency, numSteps, db)
 	require.NoError(t, err, `%+v`, err)
 

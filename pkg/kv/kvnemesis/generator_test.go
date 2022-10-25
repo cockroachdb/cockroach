@@ -12,6 +12,7 @@ package kvnemesis
 
 import (
 	"context"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -216,5 +217,16 @@ func TestRandStep(t *testing.T) {
 		if trueForEachIntField(&counts, func(count int) bool { return count >= minEachType }) {
 			break
 		}
+	}
+}
+
+func TestRandKeyDecode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for i := 0; i < 10; i++ {
+		rng := rand.New(rand.NewSource(int64(i)))
+		k := randKey(rng)
+		n := uint64FromKey(k)
+		require.Equal(t, k, uint64ToKey(n))
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/petermattis/goid"
 )
 
 // Watcher slurps all changes that happen to some span of kvs using RangeFeed.
@@ -75,7 +77,6 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	startTs := firstDB.Clock().Now()
 	eventC := make(chan kvcoord.RangeFeedMessage, 128)
 	w.g.GoCtx(func(ctx context.Context) error {
-		time.Sleep(3 * time.Second)
 		ts := startTs
 		for i := 0; ; i = (i + 1) % len(dbs) {
 			w.mu.Lock()
@@ -170,11 +171,11 @@ func (w *Watcher) processEvents(
 			case *roachpb.RangeFeedError:
 				return e.Error.GoError()
 			case *roachpb.RangeFeedValue:
-				if err := w.handleValue(ctx, roachpb.Span{Key: e.Key}, e.Value, e.PrevValue); err != nil {
+				if err := w.handleValue(ctx, roachpb.Span{Key: e.Key}, e.Value, &e.PrevValue); err != nil {
 					return err
 				}
 			case *roachpb.RangeFeedDeleteRange:
-				if err := w.handleValue(ctx, e.Span, roachpb.Value{Timestamp: e.Timestamp}, roachpb.Value{}); err != nil {
+				if err := w.handleValue(ctx, e.Span, roachpb.Value{Timestamp: e.Timestamp}, nil /* prevV */); err != nil {
 					return err
 				}
 			case *roachpb.RangeFeedCheckpoint:
@@ -207,13 +208,17 @@ func (w *Watcher) processEvents(
 }
 
 func (w *Watcher) handleValue(
-	ctx context.Context, span roachpb.Span, v, prevV roachpb.Value,
+	ctx context.Context, span roachpb.Span, v roachpb.Value, prevV *roachpb.Value,
 ) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	log.Infof(ctx, `rangefeed %s %s -> %s (prev %s)`,
-		span, v.Timestamp, v.PrettyPrint(), prevV.PrettyPrint())
+	var buf strings.Builder
+	fmt.Fprintf(&buf, `rangefeed %s %s -> %s`, span, v.Timestamp, v.PrettyPrint())
+	if prevV != nil {
+		fmt.Fprintf(&buf, ` (prev %s)`, prevV.PrettyPrint())
+	}
+	log.Infof(ctx, "goid %d %s", goid.Get(), &buf)
 	// TODO(dan): If the exact key+ts is put into kvs more than once, the
 	// Engine will keep the last. This matches our txn semantics (if a key
 	// is written in a transaction more than once, only the last is kept)
@@ -260,7 +265,7 @@ func (w *Watcher) handleValue(
 	if len(prevV.RawBytes) == 0 {
 		prevV.RawBytes = nil
 	}
-	prevValueMismatch := !reflect.DeepEqual(prevV, getPrevV)
+	prevValueMismatch := !reflect.DeepEqual(prevV, &getPrevV)
 	var engineContents string
 	if prevValueMismatch {
 		engineContents = w.mu.kvs.DebugPrint("  ")
@@ -271,7 +276,8 @@ func (w *Watcher) handleValue(
 		s := mustGetStringValue(getPrevV.RawBytes)
 		fmt.Println(s)
 		return errors.Errorf(
-			`expected (%s, %s) previous value %s got from rangefeed: %s`, span, prevTs, getPrevV, prevV)
+			`expected (%s, %s) has previous value %s in kvs, but rangefeed has: %s`,
+			span, prevTs, mustGetStringValue(getPrevV.RawBytes), mustGetStringValue(prevV.RawBytes))
 	}
 	return nil
 }

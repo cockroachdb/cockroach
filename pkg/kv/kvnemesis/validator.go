@@ -67,7 +67,7 @@ func Validate(steps []Step, kvs *Engine, dt *SeqTracker) []error {
 	// timespans for a given transaction can overlap.
 	sort.Slice(steps, func(i, j int) bool { return steps[i].After.Less(steps[j].After) })
 	for _, s := range steps {
-		v.processOp(notBuffering, s.Op)
+		v.processOp(s.Op)
 	}
 
 	var extraKVs []observedOp
@@ -247,6 +247,7 @@ type validator struct {
 	// checkAtomic, which then calls processOp (which might recurse owing to the
 	// existence of txn closures, batches, etc).
 	curObservations []observedOp
+	buffering       bufferingType
 
 	// NB: The Generator carefully ensures that each value written is unique
 	// globally over a run, so there's a 1:1 relationship between a value that was
@@ -301,11 +302,6 @@ func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
 		kvBySeq: kvBySeq,
 	}, nil
 }
-
-const (
-	notBuffering = false
-	isBuffering  = true
-)
 
 func (v *validator) tryConsumeWrite(key roachpb.Key, seq kvnemesisutil.Seq) (tsSpanVal, bool) {
 	svs, ok := v.tryConsumeRangedWrite(seq, key, nil)
@@ -365,170 +361,209 @@ const (
 // itself processOp, with the operation to handle being the batch or txn).
 // Whenever it is `false`, processOp invokes the validator's checkAtomic method
 // for the operation.
-func (v *validator) processOp(buffering bool, op Operation) {
+func (v *validator) processOp(op Operation) {
 	// We don't need an execution timestamp when buffering (the caller will need
 	// an execution timestamp for the combined operation, though). Additionally,
 	// some operations supported by kvnemesis aren't MVCC-aware (splits, etc) and
 	// thus also don't need an execution timestamp.
-	execTimestampStrictlyOptional := buffering
+	execTimestampStrictlyOptional := true // TODO
 	switch t := op.GetValue().(type) {
 	case *GetOperation:
 		v.failIfError(op, t.Result)
-		if !buffering {
-			v.checkAtomic(`get`, t.Result, op)
-		} else {
-			read := &observedRead{
-				Key:   t.Key,
-				Value: roachpb.Value{RawBytes: t.Result.Value},
-			}
-			v.curObservations = append(v.curObservations, read)
+		read := &observedRead{
+			Key:   t.Key,
+			Value: roachpb.Value{RawBytes: t.Result.Value},
+		}
+		v.curObservations = append(v.curObservations, read)
+
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`get`, t.Result)
 		}
 	case *PutOperation:
-		if !buffering {
-			v.checkAtomic(`put`, t.Result, op)
-		} else {
-			// Accumulate all the writes for this transaction.
-			write := &observedWrite{
-				Key:   t.Key,
-				Seq:   t.Seq,
-				Value: roachpb.MakeValueFromString(t.Value()),
-			}
-			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
-				write.Timestamp = sv.Timestamp
-			}
-			v.curObservations = append(v.curObservations, write)
+		// Accumulate all the writes for this transaction.
+		write := &observedWrite{
+			Key:   t.Key,
+			Seq:   t.Seq,
+			Value: roachpb.MakeValueFromString(t.Value()),
+		}
+		if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
+			write.Timestamp = sv.Timestamp
+		}
+		v.curObservations = append(v.curObservations, write)
+
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`put`, t.Result)
 		}
 	case *DeleteOperation:
-		if !buffering {
-			v.checkAtomic(`delete`, t.Result, op)
-		} else {
-			sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
+		sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
+		write := &observedWrite{
+			Key:       t.Key,
+			Seq:       t.Seq,
+			Timestamp: sv.Timestamp,
+		}
+		v.curObservations = append(v.curObservations, write)
+
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`delete`, t.Result)
+		}
+	case *DeleteRangeOperation:
+		// We express DeleteRange as point deletions on all of the keys it claimed
+		// to have deleted and (atomically post-ceding the deletions) a scan that
+		// sees an empty span. If DeleteRange places a tombstone it didn't report,
+		// validation will fail with an unclaimed write. If it fails to delete a
+		// key, the scan will not validate. If it reports that it deleted a key
+		// that didn't have a non-nil value (i.e. didn't get a new tombstone),
+		// then validation will fail with a missing write. If it reports & places
+		// a tombstone that wasn't necessary (i.e. a combination of the above),
+		// validation will succeed. This is arguably incorrect; we had code in
+		// the past that handled this at the expense of additional complexity[^1].
+		// See the `one deleterange after write with spurious deletion` test case
+		// in TestValidate.
+		//
+		// [^1]: https://github.com/cockroachdb/cockroach/pull/68003/files#diff-804b6fefcb2b7ae68fab388e6dcbaf7dbc3937a266b14b79c330b703ea9d0d95R382-R388
+		deleteOps := make([]observedOp, len(t.Result.Keys))
+		for i, key := range t.Result.Keys {
+			sv, _ := v.tryConsumeWrite(key, t.Seq)
 			write := &observedWrite{
-				Key:       t.Key,
+				Key:           key,
+				Seq:           t.Seq,
+				Value:         roachpb.Value{},
+				IsDeleteRange: true, // only for String(), no semantics attached
+				Timestamp:     sv.Timestamp,
+			}
+			deleteOps[i] = write
+		}
+		v.curObservations = append(v.curObservations, deleteOps...)
+		// The span ought to be empty right after the DeleteRange.
+		v.curObservations = append(v.curObservations, &observedScan{
+			Span: roachpb.Span{
+				Key:    t.Key,
+				EndKey: t.EndKey,
+			},
+			IsDeleteRange: true, // just for printing
+			KVs:           nil,
+		})
+
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`deleteRange`, t.Result)
+		}
+	case *DeleteRangeUsingTombstoneOperation:
+		// NB: MVCC range deletions aren't allowed in transactions (and can't be
+		// overwritten in the same non-txn'al batch), so we currently will only
+		// ever see one write to consume. With transactions (or self-overlapping
+		// batches) we could get the following:
+		//
+		//   txn.DelRangeUsingTombstone(a, c)
+		//   txn.Put(b, v)
+		//   txn.Commit
+		//
+		// The resulting atomic unit would emit two MVCC range deletions. [a,b)
+		// and [b\x00, c).
+		//
+		// The code here handles this, and it is unit tested, so that if and when
+		// we do support rangedels in transactions, kvnemesis will be ready.
+		//
+		// However, DeleteRangeUsingTombstone is a ranged non-txnal request type
+		// that will be split in DistSender, and so it is *not* atomic[^1]. An
+		// earlier attempt at letting `kvnemesis` handle this fact by treating each
+		// individual written piece that we see as an atomic unit led to too much
+		// complexity (in particular, we have to validate/tolerate partial
+		// executions). Instead, we *disable* DistSender's splitting of
+		// DeleteRangeUsingTombstone when run with kvnemesis, and attempt to create
+		// only operations for it that respect the likely range splits.
+		//
+		// In theory this code here supports any kind of atomic batched or
+		// transactional MVCC range deletions, assuming the KV API started to
+		// support them as well.
+		//
+		// [^1]: https://github.com/cockroachdb/cockroach/issues/46081
+		svs, _ := v.tryConsumeRangedWrite(t.Seq, t.Key, t.EndKey)
+		var unobserved roachpb.SpanGroup
+		unobserved.Add(roachpb.Span{Key: t.Key, EndKey: t.EndKey})
+		for _, sv := range svs {
+			unobserved.Sub(sv.Span)
+			write := &observedWrite{
+				Key:       sv.Key,
+				EndKey:    sv.EndKey,
 				Seq:       t.Seq,
 				Timestamp: sv.Timestamp,
 			}
 			v.curObservations = append(v.curObservations, write)
 		}
-	case *DeleteRangeOperation:
-		if !buffering {
-			v.checkAtomic(`deleteRange`, t.Result, op)
-		} else {
-			// We express DeleteRange as point deletions on all of the keys it claimed
-			// to have deleted and (atomically post-ceding the deletions) a scan that
-			// sees an empty span. If DeleteRange places a tombstone it didn't report,
-			// validation will fail with an unclaimed write. If it fails to delete a
-			// key, the scan will not validate. If it reports that it deleted a key
-			// that didn't have a non-nil value (i.e. didn't get a new tombstone),
-			// then validation will fail with a missing write. If it reports & places
-			// a tombstone that wasn't necessary (i.e. a combination of the above),
-			// validation will succeed. This is arguably incorrect; we had code in
-			// the past that handled this at the expense of additional complexity[^1].
-			// See the `one deleterange after write with spurious deletion` test case
-			// in TestValidate.
-			//
-			// [^1]: https://github.com/cockroachdb/cockroach/pull/68003/files#diff-804b6fefcb2b7ae68fab388e6dcbaf7dbc3937a266b14b79c330b703ea9d0d95R382-R388
-			deleteOps := make([]observedOp, len(t.Result.Keys))
-			for i, key := range t.Result.Keys {
-				sv, _ := v.tryConsumeWrite(key, t.Seq)
-				write := &observedWrite{
-					Key:           key,
-					Seq:           t.Seq,
-					Value:         roachpb.Value{},
-					IsDeleteRange: true, // only for String(), no semantics attached
-					Timestamp:     sv.Timestamp,
-				}
-				deleteOps[i] = write
+		// Add unmaterialized versions of the write for any gaps. If !atomicAcrossSplits,
+		// the batch might've partially succeeded (and so there might be gaps), but in
+		// this case we ought to have received an error.
+		for _, sp := range unobserved.Slice() {
+			write := &observedWrite{
+				Key:    sp.Key,
+				EndKey: sp.EndKey,
+				Seq:    t.Seq,
 			}
-			v.curObservations = append(v.curObservations, deleteOps...)
-			// The span ought to be empty right after the DeleteRange.
-			v.curObservations = append(v.curObservations, &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
-				IsDeleteRange: true, // just for printing
-				KVs:           nil,
-			})
+			v.curObservations = append(v.curObservations, write)
 		}
-	case *DeleteRangeUsingTombstoneOperation:
-		if !buffering {
-			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result, op)
-		} else {
-			// NB: MVCC range deletions aren't allowed in transactions (and can't be
-			// overwritten in the same non-txn'al batch), so we currently will only
-			// ever see one write to consume. With transactions (or self-overlapping
-			// batches) we could get the following:
-			//
-			//   txn.DelRangeUsingTombstone(a, c)
-			//   txn.Put(b, v)
-			//   txn.Commit
-			//
-			// The resulting atomic unit would emit two MVCC range deletions. [a,b)
-			// and [b\x00, c).
-			//
-			// The code here handles this, and it is unit tested.
-			//
-			// TODO if not in a txn, need to allow every part to be in its
-			// own atomic unit, and in that case there must not be any
-			// gaps.
-			svs, _ := v.tryConsumeRangedWrite(t.Seq, t.Key, t.EndKey)
-			var unobserved roachpb.SpanGroup
-			unobserved.Add(roachpb.Span{Key: t.Key, EndKey: t.EndKey})
-			for _, sv := range svs {
-				unobserved.Sub(sv.Span)
-				write := &observedWrite{
-					Key:       sv.Key,
-					EndKey:    sv.EndKey,
-					Seq:       t.Seq,
-					Timestamp: sv.Timestamp,
-				}
-				v.curObservations = append(v.curObservations, write)
-			}
-			// Add unmaterialized versions of the write for any gaps.
-			for _, sp := range unobserved.Slice() {
-				write := &observedWrite{
-					Key:    sp.Key,
-					EndKey: sp.EndKey,
-					Seq:    t.Seq,
-				}
-				v.curObservations = append(v.curObservations, write)
-			}
-			// The span ought to be empty right after the DeleteRange, even if parts of
-			// the DeleteRange that didn't materialize due to a shadowing operation.
-			v.curObservations = append(v.curObservations, &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
-				KVs: nil,
-			})
+
+		// The span ought to be empty right after the DeleteRange, even if parts of
+		// the DeleteRange that didn't materialize due to a shadowing operation.
+		v.curObservations = append(v.curObservations, &observedScan{
+			Span: roachpb.Span{
+				Key:    t.Key,
+				EndKey: t.EndKey,
+			},
+		})
+
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`deleteRangeUsingTombstone`, t.Result)
 		}
 	case *ScanOperation:
 		v.failIfError(op, t.Result)
-		if !buffering {
+		scan := &observedScan{
+			Span: roachpb.Span{
+				Key:    t.Key,
+				EndKey: t.EndKey,
+			},
+			KVs:     make([]roachpb.KeyValue, len(t.Result.Values)),
+			Reverse: t.Reverse,
+		}
+		for i, kv := range t.Result.Values {
+			scan.KVs[i] = roachpb.KeyValue{
+				Key:   kv.Key,
+				Value: roachpb.Value{RawBytes: kv.Value},
+			}
+		}
+		v.curObservations = append(v.curObservations, scan)
+
+		if v.buffering == bufferingSingle {
 			atomicScanType := `scan`
 			if t.Reverse {
 				atomicScanType = `reverse scan`
 			}
-			v.checkAtomic(atomicScanType, t.Result, op)
-		} else {
-			scan := &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
-				KVs:     make([]roachpb.KeyValue, len(t.Result.Values)),
-				Reverse: t.Reverse,
-			}
-			for i, kv := range t.Result.Values {
-				scan.KVs[i] = roachpb.KeyValue{
-					Key:   kv.Key,
-					Value: roachpb.Value{RawBytes: kv.Value},
-				}
-			}
-			v.curObservations = append(v.curObservations, scan)
+			v.checkAtomic(atomicScanType, t.Result)
 		}
+	case *BatchOperation:
+		if resultIsRetryable(t.Result) {
+			break
+		}
+		v.failIfError(op, t.Result)
+		// Only call checkAtomic if we're in bufferingSingle here. We could have
+		// been a batch inside a txn.
+		wasBuffering := v.buffering
+		v.buffering = bufferingBatchOrTxn
+		for _, op := range t.Ops {
+			v.processOp(op)
+		}
+		if wasBuffering == bufferingSingle {
+			v.checkAtomic(`batch`, t.Result)
+		}
+	case *ClosureTxnOperation:
+		ops := t.Ops
+		if t.CommitInBatch != nil {
+			ops = append(ops, t.CommitInBatch.Ops...)
+		}
+		v.buffering = bufferingBatchOrTxn
+		for _, op := range ops {
+			v.processOp(op)
+		}
+		v.checkAtomic(`txn`, t.Result)
 	case *SplitOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result)
@@ -618,28 +653,12 @@ func (v *validator) processOp(buffering bool, op Operation) {
 	case *ChangeZoneOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result)
-	case *BatchOperation:
-		if !resultIsRetryable(t.Result) {
-			v.failIfError(op, t.Result)
-			if !buffering {
-				v.checkAtomic(`batch`, t.Result, t.Ops...)
-			} else {
-				for _, op := range t.Ops {
-					v.processOp(buffering, op)
-				}
-			}
-		}
-	case *ClosureTxnOperation:
-		ops := t.Ops
-		if t.CommitInBatch != nil {
-			ops = append(ops, t.CommitInBatch.Ops...)
-		}
-		v.checkAtomic(`txn`, t.Result, ops...)
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
 
-	if !execTimestampStrictlyOptional && !buffering && op.Result().Type != ResultType_Error && op.Result().OptionalTimestamp.IsEmpty() {
+	// TODO this condition probably isn't exactly right.
+	if !execTimestampStrictlyOptional && v.buffering == bufferingSingle && op.Result().Type != ResultType_Error && op.Result().OptionalTimestamp.IsEmpty() {
 		_ = true
 		// HACK v.failures = append(v.failures, errors.Errorf("execution timestamp missing for %s", op))
 	}
@@ -648,15 +667,10 @@ func (v *validator) processOp(buffering bool, op Operation) {
 // checkAtomic verifies a set of operations that should be atomic by trying to find
 // a timestamp at which the observed reads and writes of the operations (as executed
 // in the order in which they appear in the arguments) match the MVCC history.
-func (v *validator) checkAtomic(atomicType string, result Result, ops ...Operation) {
-	for _, op := range ops {
-		// NB: we're not really necessarily in a txn, but passing true here means that
-		// we have an atomic unit, which is also the case if we are called here by a
-		// non-transactional Put, for example.
-		v.processOp(isBuffering, op)
-	}
+func (v *validator) checkAtomic(atomicType string, result Result) {
 	observations := v.curObservations
 	v.curObservations = nil
+	v.buffering = bufferingSingle
 
 	// Only known-uncommitted results may come without a timestamp. Whenever we
 	// actually tried to commit, there is a timestamp.

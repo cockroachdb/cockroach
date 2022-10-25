@@ -53,13 +53,21 @@ func (e *Engine) Close() {
 // Get returns the value for this key with the highest timestamp <= ts. If no
 // such value exists, the returned value's RawBytes is nil.
 func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
+	// NB: can't use RangeKeyMasking since rangefeeds during catch-up scans will
+	// emit range deletions out of order and kvnemesis checks the PrevValue field.
+	// If we receive the events
+	// - DelRangeUsingTombstone(k, k.Next()) @ t3
+	// - Put(k, v1) @ t1 Prev=None
+	// - Del(k) @ t2 Prev=v1
+	// and we use RangeKeyMasking here, then when we verify Prev=v2 for the Del we
+	// will see nil due to range key masking, but we're supposed to see v2.
 	opts := pebble.IterOptions{
 		KeyTypes: pebble.IterKeyTypePointsAndRanges,
 		// Make MVCC range deletions actually appear to delete points in
 		// this low-level iterator, so we don't have to implement it manually
 		// a second time.
 		RangeKeyMasking: pebble.RangeKeyMasking{
-			Suffix: storage.EncodeMVCCTimestampSuffix(hlc.MaxTimestamp),
+			Suffix: storage.EncodeMVCCTimestampSuffix(ts),
 		},
 		OnlyReadGuaranteedDurable: false,
 		UseL6Filters:              false,

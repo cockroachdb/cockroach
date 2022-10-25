@@ -1768,9 +1768,13 @@ func TestValidate(t *testing.T) {
 			),
 		},
 		{
-			// MVCC range deletions are executed individually when the range
-			// is split, so kvnemesis shouldn't complain if it sees them come
-			// back with pieces at multiple timestamps.
+			// MVCC range deletions are executed individually when the range is split,
+			// and if this happens kvnemesis will report a failure since the writes
+			// will in all likelihood have non-atomic timestamps.
+			// In an actual run we avoid this by adding a test hook to DistSender to
+			// avoid splitting NVCC rangedels across ranges, instead failing with a
+			// hard error, and the generator attempts - imperfectly - to respect the
+			// split points.
 			name: "rangedel with range split",
 			steps: []Step{
 				step(withResultTS(delRangeUsingTombstone(`a`, `c`, s1), t2)),
