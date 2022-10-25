@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -64,6 +65,24 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store: storeKnobs,
+				KVClient: &kvcoord.ClientTestingKnobs{
+					// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
+					// This does happen in real CRDB, but leads to separate atomic subunits, which
+					// would add complexity to kvnemesis that isn't worth it. Instead, the operation
+					// generator for the most part tries to avoid range-spanning requests, and the
+					// ones that do end up happening get a hard error.
+					OnRangeSpanningNonTxnalBatch: func(ba roachpb.BatchRequest) *roachpb.Error {
+						for _, req := range ba.Requests {
+							if req.GetInner().Method() != roachpb.DeleteRange {
+								continue
+							}
+							if req.GetDeleteRange().UseRangeTombstone == true {
+								return roachpb.NewErrorf("DeleteRangeUsingTombstone can not straddle range boundary")
+							}
+						}
+						return nil
+					},
+				},
 			},
 		},
 	}
