@@ -193,3 +193,23 @@ vectorized: true
   table: pg_class@pg_class_oid_idx
   spans: [/50 - /50]
   limit: 1
+
+# Test that the virtual index is used when looking up database grants
+
+statement ok
+CREATE DATABASE t
+
+query T
+EXPLAIN SHOW GRANTS ON DATABASE t
+----
+distribution: local
+vectorized: true
+·
+• sort
+│ order: +grantee,+privilege_type
+│
+└── • render
+    │
+    └── • virtual table
+          table: cluster_database_privileges@cluster_database_privileges_database_name_idx
+          spans: [/'t' - /'t']
