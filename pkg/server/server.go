@@ -1541,7 +1541,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	graphiteEndpoint.SetOnChange(&s.st.SV, func(context.Context) {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
 			graphiteOnce.Do(func() {
-				s.node.startGraphiteStatsExporter(s.st)
+				startGraphiteStatsExporter(workersCtx, s.stopper, s.recorder, s.st)
 			})
 		}
 	})
