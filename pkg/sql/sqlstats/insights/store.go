@@ -42,6 +42,8 @@ func (s *lockingStore) IterateInsights(
 	})
 }
 
+var _ Reader = &lockingStore{}
+
 func newStore(st *cluster.Settings) *lockingStore {
 	config := cache.Config{
 		Policy: cache.CacheFIFO,

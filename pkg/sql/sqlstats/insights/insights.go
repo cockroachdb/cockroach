@@ -168,10 +168,14 @@ type Provider interface {
 
 // New builds a new Provider.
 func New(st *cluster.Settings, metrics Metrics) Provider {
-	return newConcurrentBufferIngester(
-		newRegistry(st, &compositeDetector{detectors: []detector{
-			&latencyThresholdDetector{st: st},
-			newAnomalyDetector(st, metrics),
-		}}, newStore(st)),
-	)
+	store := newStore(st)
+	return &defaultProvider{
+		store: store,
+		ingester: newConcurrentBufferIngester(
+			newRegistry(st, &compositeDetector{detectors: []detector{
+				&latencyThresholdDetector{st: st},
+				newAnomalyDetector(st, metrics),
+			}}, store),
+		),
+	}
 }

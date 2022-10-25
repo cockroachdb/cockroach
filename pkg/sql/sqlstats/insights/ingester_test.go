@@ -68,29 +68,27 @@ func TestIngester(t *testing.T) {
 			// that we can assert on the generated insights to make sure all
 			// the events came through properly.
 			st := cluster.MakeTestingClusterSettings()
-			provider := newConcurrentBufferIngester(
+			store := newStore(st)
+			ingester := newConcurrentBufferIngester(
 				newRegistry(st, &fakeDetector{
 					stubEnabled: true,
 					stubIsSlow:  true,
-				}, newStore(st)),
+				}, store),
 			)
 
-			provider.Start(ctx, stopper)
-			writer := provider.Writer(false /* internal */)
-			reader := provider.Reader()
-
+			ingester.Start(ctx, stopper)
 			for _, e := range tc.observations {
 				if e.statementID != 0 {
-					writer.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
+					ingester.ObserveStatement(e.SessionID(), &Statement{ID: e.StatementID()})
 				} else {
-					writer.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
+					ingester.ObserveTransaction(e.SessionID(), &Transaction{ID: e.TransactionID()})
 				}
 			}
 
 			// Wait for the insights to come through.
 			require.Eventually(t, func() bool {
 				var numInsights int
-				reader.IterateInsights(ctx, func(context.Context, *Insight) {
+				store.IterateInsights(ctx, func(context.Context, *Insight) {
 					numInsights++
 				})
 				return numInsights == len(tc.insights)
@@ -101,7 +99,7 @@ func TestIngester(t *testing.T) {
 			// long as it can properly match statements with their
 			// transactions.
 			var actual []testEvent
-			reader.IterateInsights(ctx, func(ctx context.Context, insight *Insight) {
+			store.IterateInsights(ctx, func(ctx context.Context, insight *Insight) {
 				actual = append(actual, testEvent{
 					sessionID:     insight.Session.ID.Lo,
 					transactionID: insight.Transaction.ID.ToUint128().Lo,
@@ -121,18 +119,8 @@ func TestIngester_Disabled(t *testing.T) {
 	// the underlying registry is currently disabled.
 	st := cluster.MakeTestingClusterSettings()
 	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{}, newStore(st)))
-	writer := ingester.Writer(false /* internal */)
-	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
-	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
-	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
-}
-
-func TestIngester_WriterIgnoresInternalExecutorObservations(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
-	ingester := newConcurrentBufferIngester(newRegistry(st, &fakeDetector{stubEnabled: true}, newStore(st)))
-	writer := ingester.Writer(true /* internal */)
-	writer.ObserveStatement(clusterunique.ID{}, &Statement{})
-	writer.ObserveTransaction(clusterunique.ID{}, &Transaction{})
+	ingester.ObserveStatement(clusterunique.ID{}, &Statement{})
+	ingester.ObserveTransaction(clusterunique.ID{}, &Transaction{})
 	require.Equal(t, event{}, ingester.guard.eventBuffer[0])
 }
 

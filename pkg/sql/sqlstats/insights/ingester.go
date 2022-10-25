@@ -36,7 +36,7 @@ type concurrentBufferIngester struct {
 	running       uint64
 }
 
-var _ Provider = &concurrentBufferIngester{}
+var _ Writer = &concurrentBufferIngester{}
 
 // concurrentBufferIngester buffers the "events" it sees (via ObserveStatement
 // and ObserveTransaction) and passes them along to the underlying registry
@@ -111,20 +111,6 @@ func (i *concurrentBufferIngester) ingest(events *eventBuffer) {
 	}
 }
 
-func (i *concurrentBufferIngester) Reader() Reader {
-	return i.registry
-}
-
-var nullWriterInstance Writer = &nullWriter{}
-
-func (i *concurrentBufferIngester) Writer(internal bool) Writer {
-	// We ignore statements and transactions run by the internal executor.
-	if internal {
-		return nullWriterInstance
-	}
-	return i
-}
-
 func (i *concurrentBufferIngester) ObserveStatement(
 	sessionID clusterunique.ID, statement *Statement,
 ) {
@@ -178,12 +164,4 @@ func newConcurrentBufferIngester(registry *lockingRegistry) *concurrentBufferIng
 		},
 	)
 	return i
-}
-
-type nullWriter struct{}
-
-func (n *nullWriter) ObserveStatement(_ clusterunique.ID, _ *Statement) {
-}
-
-func (n *nullWriter) ObserveTransaction(_ clusterunique.ID, _ *Transaction) {
 }
