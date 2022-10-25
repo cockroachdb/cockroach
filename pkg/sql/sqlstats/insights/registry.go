@@ -17,24 +17,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // This registry is the central object in the insights subsystem. It observes
 // statement execution to determine which statements are outliers and
 // exposes the set of currently retained insights.
 type lockingRegistry struct {
-	detector detector
-	causes   *causes
-	store    *lockingStore
-
-	// Note that this single mutex places unnecessary constraints on outlier
-	// detection and reporting. We will develop a higher-throughput system
-	// before enabling the insights subsystem by default.
-	mu struct {
-		syncutil.RWMutex
-		statements map[clusterunique.ID]*statementBuf
-	}
+	statements map[clusterunique.ID]*statementBuf
+	detector   detector
+	causes     *causes
+	store      *lockingStore
 }
 
 var _ Writer = &lockingRegistry{}
@@ -44,12 +36,10 @@ func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement
 	if !r.enabled() {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	b, ok := r.mu.statements[sessionID]
+	b, ok := r.statements[sessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
-		r.mu.statements[sessionID] = b
+		r.statements[sessionID] = b
 	}
 	b.append(statement)
 }
@@ -78,7 +68,8 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	if !r.enabled() {
 		return
 	}
-	statements := r.popSessionStatements(sessionID)
+	statements := r.statements[sessionID]
+	delete(r.statements, sessionID)
 	defer statements.release()
 
 	var slowStatements util.FastIntSet
@@ -125,20 +116,11 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func (r *lockingRegistry) popSessionStatements(sessionID clusterunique.ID) *statementBuf {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	statements := r.mu.statements[sessionID]
-	delete(r.mu.statements, sessionID)
-	return statements
-}
-
 func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
-	r := &lockingRegistry{
-		detector: detector,
-		causes:   &causes{st: st},
-		store:    newStore(st),
+	return &lockingRegistry{
+		statements: make(map[clusterunique.ID]*statementBuf),
+		detector:   detector,
+		causes:     &causes{st: st},
+		store:      newStore(st),
 	}
-	r.mu.statements = make(map[clusterunique.ID]*statementBuf)
-	return r
 }
