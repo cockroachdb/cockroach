@@ -1202,13 +1202,8 @@ SELECT description
 					return tree.DNull, nil
 				}
 				foundSchemaName := string(tree.MustBeDString(row[0]))
-				iter := evalCtx.SessionData().SearchPath.Iter()
-				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-					if foundSchemaName == scName {
-						return tree.DBoolTrue, nil
-					}
-				}
-				return tree.DBoolFalse, nil
+				isVisible := evalCtx.SessionData().SearchPath.Contains(foundSchemaName, true /* includeImplicit */)
+				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
 			Info:       "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
@@ -1236,13 +1231,8 @@ SELECT description
 					return tree.DNull, nil
 				}
 				foundSchemaName := string(tree.MustBeDString(row[0]))
-				iter := evalCtx.SessionData().SearchPath.Iter()
-				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-					if foundSchemaName == scName {
-						return tree.DBoolTrue, nil
-					}
-				}
-				return tree.DBoolFalse, nil
+				isVisible := evalCtx.SessionData().SearchPath.Contains(foundSchemaName, true /* includeImplicit */)
+				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
 			Info:       "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
@@ -1274,13 +1264,8 @@ SELECT description
 					return tree.DNull, nil
 				}
 				foundSchemaName := string(tree.MustBeDString(row[0]))
-				iter := evalCtx.SessionData().SearchPath.Iter()
-				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-					if foundSchemaName == scName {
-						return tree.DBoolTrue, nil
-					}
-				}
-				return tree.DBoolFalse, nil
+				isVisible := evalCtx.SessionData().SearchPath.Contains(foundSchemaName, true /* includeImplicit */)
+				return tree.MakeDBool(tree.DBool(isVisible)), nil
 			},
 			Info:       "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,

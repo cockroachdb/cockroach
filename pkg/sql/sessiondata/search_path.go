@@ -167,9 +167,15 @@ func (s SearchPath) GetPathArray() []string {
 }
 
 // Contains returns true iff the SearchPath contains the given string.
-func (s SearchPath) Contains(target string) bool {
-	for _, candidate := range s.GetPathArray() {
-		if candidate == target {
+func (s SearchPath) Contains(target string, includeImplicit bool) bool {
+	var iter SearchPathIter
+	if includeImplicit {
+		iter = s.Iter()
+	} else {
+		iter = s.IterWithoutImplicitPGSchemas()
+	}
+	for candidate, ok := iter.Next(); ok; candidate, ok = iter.Next() {
+		if target == candidate {
 			return true
 		}
 	}
