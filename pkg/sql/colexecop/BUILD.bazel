@@ -13,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/roachpb",
         "//pkg/sql/colexecerror",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra/execopnode",

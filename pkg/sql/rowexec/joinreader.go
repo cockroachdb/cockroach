@@ -1171,13 +1171,15 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 	}
 
 	jr.scanStats = execstats.GetScanStats(jr.Ctx, jr.ExecStatsTrace)
+	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(jr.Ctx, jr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:           optional.MakeUint(uint64(jr.fetcher.GetBytesRead())),
 			TuplesRead:          fis.NumTuples,
 			KVTime:              fis.WaitTime,
-			ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(jr.Ctx, jr.ExecStatsTrace)),
+			ContentionTime:      optional.MakeTimeValue(contentionTime),
+			ContentionEvents:    contentionEvents,
 			BatchRequestsIssued: optional.MakeUint(uint64(jr.fetcher.GetBatchRequestsIssued())),
 		},
 		Output: jr.OutputHelper.Stats(),

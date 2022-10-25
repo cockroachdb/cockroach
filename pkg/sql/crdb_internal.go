@@ -6406,6 +6406,7 @@ CREATE TABLE crdb_internal.%s (
 	last_retry_reason          STRING,
 	exec_node_ids              INT[] NOT NULL,
 	contention                 INTERVAL,
+	contention_events          JSONB,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL
 )`
@@ -6446,33 +6447,32 @@ func populateExecutionInsights(
 
 	response, err := p.extendedEvalCtx.SQLStatusServer.ListExecutionInsights(ctx, request)
 	if err != nil {
-		return
+		return err
 	}
 	for _, insight := range response.Insights {
 		causes := tree.NewDArray(types.String)
 		for _, cause := range insight.Causes {
-			if errProblem := causes.Append(tree.NewDString(cause.String())); err != nil {
-				err = errors.CombineErrors(err, errProblem)
+			if err = causes.Append(tree.NewDString(cause.String())); err != nil {
+				return err
 			}
 		}
 
-		startTimestamp, errTimestamp := tree.MakeDTimestamp(insight.Statement.StartTime, time.Nanosecond)
-		if errTimestamp != nil {
-			err = errors.CombineErrors(err, errTimestamp)
-			return
+		var startTimestamp *tree.DTimestamp
+		startTimestamp, err = tree.MakeDTimestamp(insight.Statement.StartTime, time.Nanosecond)
+		if err != nil {
+			return err
 		}
 
-		endTimestamp, errTimestamp := tree.MakeDTimestamp(insight.Statement.EndTime, time.Nanosecond)
-		if errTimestamp != nil {
-			err = errors.CombineErrors(err, errTimestamp)
-			return
+		var endTimestamp *tree.DTimestamp
+		endTimestamp, err = tree.MakeDTimestamp(insight.Statement.EndTime, time.Nanosecond)
+		if err != nil {
+			return err
 		}
 
 		execNodeIDs := tree.NewDArray(types.Int)
 		for _, nodeID := range insight.Statement.Nodes {
-			if errNodeID := execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); errNodeID != nil {
-				err = errors.CombineErrors(err, errNodeID)
-				return
+			if err = execNodeIDs.Append(tree.NewDInt(tree.DInt(nodeID))); err != nil {
+				return err
 			}
 		}
 
@@ -6489,9 +6489,20 @@ func populateExecutionInsights(
 			)
 		}
 
+		contentionEvents := tree.DNull
+		if len(insight.Statement.ContentionEvents) > 0 {
+			var contentionEventsJSON json.JSON
+			contentionEventsJSON, err = sqlstatsutil.BuildContentionEventsJSON(insight.Statement.ContentionEvents)
+			if err != nil {
+				return err
+			}
+
+			contentionEvents = tree.NewDJSON(contentionEventsJSON)
+		}
+
 		indexRecommendations := tree.NewDArray(types.String)
 		for _, recommendation := range insight.Statement.IndexRecommendations {
-			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
+			if err = indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
 				return err
 			}
 		}
@@ -6520,9 +6531,14 @@ func populateExecutionInsights(
 			autoRetryReason,
 			execNodeIDs,
 			contentionTime,
+			contentionEvents,
 			indexRecommendations,
 			tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 		))
+
+		if err != nil {
+			return err
+		}
 	}
 	return
 }

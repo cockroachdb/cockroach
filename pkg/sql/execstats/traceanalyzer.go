@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -123,6 +124,7 @@ type QueryLevelStats struct {
 	KVTime                time.Duration
 	NetworkMessages       int64
 	ContentionTime        time.Duration
+	ContentionEvents      []roachpb.ContentionEvent
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -156,6 +158,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.KVTime += other.KVTime
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
+	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -234,6 +237,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	}
 	var errs error
 
+	var allContentionEvents []roachpb.ContentionEvent
 	// Process processorStats.
 	for _, stats := range a.processorStats {
 		if stats == nil {
@@ -245,6 +249,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode[instanceID] += int64(stats.KV.BatchRequestsIssued.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
+		allContentionEvents = append(allContentionEvents, stats.KV.ContentionEvents...)
 	}
 
 	// Process streamStats.
@@ -354,6 +359,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 	for _, contentionTime := range a.nodeLevelStats.ContentionTimeGroupedByNode {
 		a.queryLevelStats.ContentionTime += contentionTime
 	}
+
+	a.queryLevelStats.ContentionEvents = allContentionEvents
+
 	return errs
 }
 
