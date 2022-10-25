@@ -55,13 +55,6 @@ const (
 // and is to be used from Context.
 type DatabaseCatalog interface {
 
-	// ResolveTableName expands the given table name and
-	// makes it point to a valid object.
-	// If the database name is not given, it uses the search path to find it, and
-	// sets it on the returned TableName.
-	// It returns the ID of the resolved table, and an error if the table doesn't exist.
-	ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error)
-
 	// SchemaExists looks up the schema with the given name and determines
 	// whether it exists.
 	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)

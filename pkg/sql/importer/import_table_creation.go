@@ -284,13 +284,6 @@ func (so *importSequenceOperators) GetSerialSequenceNameFromColumn(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
-// ResolveTableName implements the eval.DatabaseCatalog interface.
-func (so *importSequenceOperators) ResolveTableName(
-	ctx context.Context, tn *tree.TableName,
-) (tree.ID, error) {
-	return 0, errSequenceOperators
-}
-
 // SchemaExists implements the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,

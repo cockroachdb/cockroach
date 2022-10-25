@@ -51,13 +51,6 @@ func (so *DummySequenceOperators) GetSerialSequenceNameFromColumn(
 	return nil, errors.WithStack(errSequenceOperators)
 }
 
-// ResolveTableName is part of the eval.DatabaseCatalog interface.
-func (so *DummySequenceOperators) ResolveTableName(
-	ctx context.Context, tn *tree.TableName,
-) (tree.ID, error) {
-	return 0, errors.WithStack(errSequenceOperators)
-}
-
 // SchemaExists is part of the eval.DatabaseCatalog interface.
 func (so *DummySequenceOperators) SchemaExists(
 	ctx context.Context, dbName, scName string,
@@ -367,13 +360,6 @@ func (ep *DummyEvalPlanner) HasAnyPrivilege(
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
 	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)
-}
-
-// ResolveTableName is part of the eval.DatabaseCatalog interface.
-func (ep *DummyEvalPlanner) ResolveTableName(
-	ctx context.Context, tn *tree.TableName,
-) (tree.ID, error) {
-	return 0, errors.WithStack(errEvalPlanner)
 }
 
 // GetTypeFromValidSQLSyntax is part of the eval.Planner interface.

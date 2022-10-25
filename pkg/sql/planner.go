@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -584,16 +583,6 @@ func (p *planner) GetTypeFromValidSQLSyntax(sql string) (*types.T, error) {
 		return nil, err
 	}
 	return tree.ResolveType(context.TODO(), ref, p.semaCtx.GetTypeResolver())
-}
-
-// ResolveTableName implements the eval.DatabaseCatalog interface.
-func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
-	_, desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
-	if err != nil {
-		return 0, err
-	}
-	return tree.ID(desc.GetID()), nil
 }
 
 // LookupTableByID looks up a table, by the given descriptor ID. Based on the
