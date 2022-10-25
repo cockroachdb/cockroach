@@ -1182,28 +1182,35 @@ SELECT description
 
 	// pg_function_is_visible returns true if the input oid corresponds to a
 	// builtin function that is part of the databases on the search path.
-	// CockroachDB doesn't have a concept of namespaced functions, so this is
-	// always true if the builtin exists at all, and NULL otherwise.
 	// https://www.postgresql.org/docs/9.6/static/functions-info.html
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				oid := tree.MustBeDOid(args[0])
-				t, err := evalCtx.Planner.QueryRowEx(
+				oidArg := tree.MustBeDOid(args[0])
+				row, err := evalCtx.Planner.QueryRowEx(
 					ctx, "pg_function_is_visible",
 					sessiondata.NoSessionDataOverride,
-					"SELECT * from pg_proc WHERE oid=$1 LIMIT 1", oid.Oid)
+					"SELECT n.nspname from pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid WHERE p.oid=$1 LIMIT 1",
+					oidArg.Oid,
+				)
 				if err != nil {
 					return nil, err
 				}
-				if t != nil {
-					return tree.DBoolTrue, nil
+				if row == nil {
+					return tree.DNull, nil
 				}
-				return tree.DNull, nil
+				foundSchemaName := string(tree.MustBeDString(row[0]))
+				iter := evalCtx.SessionData().SearchPath.Iter()
+				for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
+					if foundSchemaName == scName {
+						return tree.DBoolTrue, nil
+					}
+				}
+				return tree.DBoolFalse, nil
 			},
-			Info:       notUsableInfo,
+			Info:       "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
 			Volatility: volatility.Stable,
 		},
 	),
