@@ -68,13 +68,6 @@ func (so *DummySequenceOperators) SchemaExists(
 	return false, errors.WithStack(errSequenceOperators)
 }
 
-// IsTypeVisible is part of the eval.DatabaseCatalog interface.
-func (so *DummySequenceOperators) IsTypeVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
-) (bool, bool, error) {
-	return false, false, errors.WithStack(errEvalPlanner)
-}
-
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (so *DummySequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
@@ -363,13 +356,6 @@ func (ep *DummyEvalPlanner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 // SchemaExists is part of the eval.DatabaseCatalog interface.
 func (ep *DummyEvalPlanner) SchemaExists(ctx context.Context, dbName, scName string) (bool, error) {
 	return false, errors.WithStack(errEvalPlanner)
-}
-
-// IsTypeVisible is part of the eval.DatabaseCatalog interface.
-func (ep *DummyEvalPlanner) IsTypeVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
-) (bool, bool, error) {
-	return false, false, errors.WithStack(errEvalPlanner)
 }
 
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
