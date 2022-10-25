@@ -495,7 +495,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 
 		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`, ``},
 
-		{`CREATE TYPE a AS (b)`, 27792, ``, ``},
 		{`CREATE TYPE a AS RANGE b`, 27791, ``, ``},
 		{`CREATE TYPE a (b)`, 27793, `base`, ``},
 		{`CREATE TYPE a`, 27793, `shell`, ``},
