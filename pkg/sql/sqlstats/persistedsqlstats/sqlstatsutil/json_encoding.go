@@ -286,6 +286,12 @@ func BuildStmtDetailsMetadataJSON(
 	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
 }
 
+func BuildContentionEventsJSON(
+	events []roachpb.ContentionEvent,
+) (json.JSON, error) {
+	return (*contentionEvents)(&events).encodeJson()
+}
+
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.
 func EncodeUint64ToBytes(id uint64) []byte {
 	result := make([]byte, 0, 8)

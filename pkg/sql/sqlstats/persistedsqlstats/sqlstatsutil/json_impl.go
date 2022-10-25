@@ -12,6 +12,7 @@ package sqlstatsutil
 
 import (
 	"encoding/hex"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
@@ -119,6 +120,45 @@ func (s *aggregatedMetadata) jsonFields() jsonFields {
 		{"stmtType", (*jsonString)(&s.StmtType)},
 		{"vecCount", (*jsonInt)(&s.VecCount)},
 		{"totalCount", (*jsonInt)(&s.TotalCount)},
+	}
+}
+
+type contentionEvents []roachpb.ContentionEvent
+
+func (s *contentionEvents) encodeJson() (json.JSON, error) {
+	builder := json.NewArrayBuilder(len(*s))
+
+	for _, value := range *s {
+		jsVal := (*contentionEvent)(&value).jsonFields()
+		jsObj, err := jsVal.encodeJSON()
+		if err != nil {
+			return nil, err
+		}
+
+		builder.Add(jsObj)
+	}
+
+	return builder.Build(), nil
+}
+
+type contentionEvent roachpb.ContentionEvent
+
+func (s *contentionEvent) jsonFields() jsonFields {
+	var tableId int64 = -1
+	var indexID int64 = -1
+	_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(s.Key)
+	if err == nil {
+		tableId = int64(rawTableID)
+		indexID = int64(rawIndexID)
+	}
+
+	dur := float64(s.Duration) / float64(time.Millisecond)
+	txnId := s.TxnMeta.ID.String()
+	return jsonFields{
+		{"blockingTxnId", (*jsonString)(&txnId)},
+		{"durationMs", (*jsonFloat)(&dur)},
+		{"tableId", (*jsonInt)(&tableId)},
+		{"indexId", (*jsonInt)(&indexID)},
 	}
 }
 

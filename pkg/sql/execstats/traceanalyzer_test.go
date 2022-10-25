@@ -13,6 +13,7 @@ package execstats_test
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"reflect"
 	"testing"
 	"time"
@@ -240,6 +241,7 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 }
 
 func TestQueryLevelStatsAccumulate(t *testing.T) {
+	aEvent := roachpb.ContentionEvent{Duration: 7 * time.Second}
 	a := execstats.QueryLevelStats{
 		NetworkBytesSent:      1,
 		MaxMemUsage:           2,
@@ -249,8 +251,10 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:                5 * time.Second,
 		NetworkMessages:       6,
 		ContentionTime:        7 * time.Second,
+		ContentionEvent:       []roachpb.ContentionEvent{aEvent},
 		MaxDiskUsage:          8,
 	}
+	bEvent := roachpb.ContentionEvent{Duration: 14 * time.Second}
 	b := execstats.QueryLevelStats{
 		NetworkBytesSent:      8,
 		MaxMemUsage:           9,
@@ -260,6 +264,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:                12 * time.Second,
 		NetworkMessages:       13,
 		ContentionTime:        14 * time.Second,
+		ContentionEvent:       []roachpb.ContentionEvent{bEvent},
 		MaxDiskUsage:          15,
 	}
 	expected := execstats.QueryLevelStats{
@@ -271,6 +276,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		KVTime:                17 * time.Second,
 		NetworkMessages:       19,
 		ContentionTime:        21 * time.Second,
+		ContentionEvent:       []roachpb.ContentionEvent{aEvent, bEvent},
 		MaxDiskUsage:          15,
 	}
 
