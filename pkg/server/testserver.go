@@ -895,10 +895,9 @@ func (ts *TestServer) StartTenant(
 			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
 	}
-	sqlServer, authServer, drainServer, addr, httpAddr, err := startTenantInternal(
+	sw, err := NewTenantServer(
 		ctx,
 		stopper,
-		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
 	)
@@ -906,17 +905,21 @@ func (ts *TestServer) StartTenant(
 		return nil, err
 	}
 
+	if err := sw.Start(ctx); err != nil {
+		return nil, err
+	}
+
 	hts := &httpTestServer{}
-	hts.t.authentication = authServer
-	hts.t.sqlServer = sqlServer
+	hts.t.authentication = sw.authServer
+	hts.t.sqlServer = sw.sqlServer
 
 	return &TestTenant{
-		SQLServer:      sqlServer,
+		SQLServer:      sw.sqlServer,
 		Cfg:            &baseCfg,
-		sqlAddr:        addr,
-		httpAddr:       httpAddr,
+		sqlAddr:        sw.pgAddr,
+		httpAddr:       sw.httpAddr,
 		httpTestServer: hts,
-		drain:          drainServer,
+		drain:          sw.drainServer,
 	}, err
 }
 
