@@ -870,7 +870,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
-%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION
+%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
@@ -4723,6 +4723,18 @@ create_stats_option:
   {
     $$.val = &tree.CreateStatsOptions{
       AsOf: $1.asOfClause(),
+    }
+  }
+| USING EXTREMES
+  {
+    $$.val = &tree.CreateStatsOptions{
+      UsingExtremes: true,
+    }
+  }
+| where_clause
+  {
+    $$.val = &tree.CreateStatsOptions{
+      Where: tree.NewWhere(tree.AstWhere, $1.expr()),
     }
   }
 
@@ -15332,6 +15344,7 @@ unreserved_keyword:
 | EXPORT
 | EXTENSION
 | EXTERNAL
+| EXTREMES
 | FAILURE
 | FILES
 | FILTER

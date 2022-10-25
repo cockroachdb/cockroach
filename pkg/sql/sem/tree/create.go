@@ -2066,15 +2066,30 @@ type CreateStatsOptions struct {
 	// Note that the timestamp will be moved up during the operation if it gets
 	// too old (in order to avoid problems with TTL expiration).
 	AsOf AsOfClause
+
+	// UsingExtremes is true when the statistics collection is at
+	// extreme values of the table or the index specified.
+	UsingExtremes bool
+
+	// Where will specify statistics collection in a set of rows of the table
+	// or index specified.
+	Where *Where
 }
 
 // Empty returns true if no options were provided.
 func (o *CreateStatsOptions) Empty() bool {
-	return o.Throttling == 0 && o.AsOf.Expr == nil
+	return o.Throttling == 0 && o.AsOf.Expr == nil && o.Where == nil && !o.UsingExtremes
 }
 
 // Format implements the NodeFormatter interface.
 func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
+	if o.UsingExtremes {
+		ctx.WriteString(" USING EXTREMES")
+	}
+	if o.Where != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(o.Where)
+	}
 	if o.Throttling != 0 {
 		ctx.WriteString(" THROTTLING ")
 		// TODO(knz): Remove all this with ctx.FormatNode()
@@ -2108,6 +2123,21 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 			return errors.New("AS OF specified multiple times")
 		}
 		o.AsOf = other.AsOf
+	}
+	if other.UsingExtremes {
+		if o.UsingExtremes {
+			return errors.New("USING EXTREMES specified multiple times")
+		}
+		o.UsingExtremes = other.UsingExtremes
+	}
+	if other.Where != nil {
+		if o.Where != nil {
+			return errors.New("WHERE specified multiple times")
+		}
+		o.Where = other.Where
+	}
+	if other.Where != nil && o.UsingExtremes || o.Where != nil && other.UsingExtremes {
+		return errors.New("USING EXTREMES and WHERE may not be specified together")
 	}
 	return nil
 }
