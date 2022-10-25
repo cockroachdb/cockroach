@@ -400,7 +400,7 @@ func (s *ColIndexJoin) GetBatchRequestsIssued() int64 {
 }
 
 // GetCumulativeContentionTime is part of the colexecop.KVReader interface.
-func (s *ColIndexJoin) GetCumulativeContentionTime() time.Duration {
+func (s *ColIndexJoin) GetCumulativeContentionTime() (time.Duration, []roachpb.ContentionEvent) {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 
