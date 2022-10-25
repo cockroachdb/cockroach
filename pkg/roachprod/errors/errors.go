@@ -118,14 +118,24 @@ func ClassifyCmdError(err error) Error {
 		return nil
 	}
 
-	if exitErr, ok := asExitError(err); ok {
-		if exitErr.ExitCode() == 255 {
+	if exitCode, ok := GetExitCode(err); ok {
+		if exitCode == 255 {
 			return SSH{errors.Mark(err, ErrSSH255)}
 		}
 		return Cmd{err}
 	}
 
 	return Unclassified{err}
+}
+
+// GetExitCode returns an exit code, true if the error is an instance
+// of an ExitError, or -1, false otherwise
+func GetExitCode(err error) (int, bool) {
+	if exitErr, ok := asExitError(err); ok {
+		return exitErr.ExitCode(), true
+	}
+
+	return -1, false
 }
 
 // Extract the ExitError from err's error tree or (nil, false) if none exists.
