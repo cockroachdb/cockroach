@@ -174,4 +174,3 @@ DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE ((((f) != (g
 DELETE FROM a USING b AS one, c AS two, d AS three, e AS four WHERE (f != g) AND (g = h) RETURNING e -- literals removed
 DELETE FROM _ USING _ AS _, _ AS _, _ AS _, _ AS _ WHERE (_ != _) AND (_ = _) RETURNING _ -- identifiers removed
 
-
