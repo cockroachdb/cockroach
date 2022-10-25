@@ -75,12 +75,6 @@ var statementsBufPool = sync.Pool{
 	},
 }
 
-var insightPool = sync.Pool{
-	New: func() interface{} {
-		return new(Insight)
-	},
-}
-
 func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
@@ -100,12 +94,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
 	for i, s := range *statements {
-		insight := insightPool.Get().(*Insight)
-		*insight = Insight{
-			Session:     Session{ID: sessionID},
-			Transaction: transaction,
-			Statement:   s,
-		}
+		insight := makeInsight(sessionID, transaction, s)
 		if slowStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
@@ -163,10 +152,7 @@ func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
 			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
 		},
 		OnEvicted: func(_, value interface{}) {
-			insight := value.(*Insight)
-			insight.Causes = insight.Causes[:0]
-			*insight = Insight{Causes: insight.Causes}
-			insightPool.Put(insight)
+			releaseInsight(value.(*Insight))
 		},
 	}
 	r := &lockingRegistry{

@@ -10,6 +10,7 @@ go_library(
         "detector.go",
         "ingester.go",
         "insights.go",
+        "pool.go",
         "registry.go",
     ],
     embed = [":insights_go_proto"],
