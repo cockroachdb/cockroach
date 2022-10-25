@@ -43,6 +43,7 @@ func (s *lockingStore) IterateInsights(
 }
 
 var _ Reader = &lockingStore{}
+var _ sink = &lockingStore{}
 
 func newStore(st *cluster.Settings) *lockingStore {
 	config := cache.Config{
