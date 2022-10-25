@@ -39,8 +39,8 @@ func TestUpgradeSeqToBeReferencedByID(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.UpgradeSequenceToBeReferencedByID - 1)
-		v1 = clusterversion.ByKey(clusterversion.UpgradeSequenceToBeReferencedByID)
+		v0 = clusterversion.ByKey(clusterversion.V22_2UpgradeSequenceToBeReferencedByID - 1)
+		v1 = clusterversion.ByKey(clusterversion.V22_2UpgradeSequenceToBeReferencedByID)
 	)
 
 	ctx := context.Background()

@@ -41,7 +41,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.TenantNames - 1),
+						clusterversion.V23_1TenantNames - 1),
 				},
 			},
 		},
@@ -81,7 +81,7 @@ func TestUpdateTenantsTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.TenantNames,
+		clusterversion.V23_1TenantNames,
 		nil,   /* done */
 		false, /* expectError */
 	)

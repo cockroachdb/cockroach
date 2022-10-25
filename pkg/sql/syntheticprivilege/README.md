@@ -347,7 +347,7 @@ on version `clusterversion.SystemPrivilegesTable`.
 				return err
 			}
 			if !hasModify && !hasView {
-				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+				if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 					// We check for EITHER the MODIFYCLUSTERSETTING or VIEWCLUSTERSETTING
 					// role option OR the MODIFYCLUSTERSETTING system cluster privilege.
 					// We return the error for "system cluster privilege" due to

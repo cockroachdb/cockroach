@@ -104,7 +104,7 @@ func TestRemoveGrantMigration(t *testing.T) {
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.RemoveGrantPrivilege - 1), // changed cluster version
+							BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2RemoveGrantPrivilege - 1), // changed cluster version
 						},
 					},
 				},
@@ -116,7 +116,7 @@ func TestRemoveGrantMigration(t *testing.T) {
 			))
 
 			_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-				clusterversion.ByKey(clusterversion.RemoveGrantPrivilege).String())
+				clusterversion.ByKey(clusterversion.V22_2RemoveGrantPrivilege).String())
 			require.NoError(t, err)
 
 			err = sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {

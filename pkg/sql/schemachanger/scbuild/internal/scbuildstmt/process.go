@@ -69,22 +69,22 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so wwe will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, on: true, extraChecks: alterTableIsSupported},
-	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: false, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CreateIndex)(nil)):         {fn: CreateIndex, on: false, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.DropDatabase)(nil)):        {fn: DropDatabase, on: true, minSupportedClusterVersion: clusterversion.V22_1},
-	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.DropOwnedBy)(nil)):         {fn: DropOwnedBy, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	reflect.TypeOf((*tree.DropSchema)(nil)):          {fn: DropSchema, on: true, minSupportedClusterVersion: clusterversion.V22_1},
 	reflect.TypeOf((*tree.DropSequence)(nil)):        {fn: DropSequence, on: true, minSupportedClusterVersion: clusterversion.V22_1},
 	reflect.TypeOf((*tree.DropTable)(nil)):           {fn: DropTable, on: true, minSupportedClusterVersion: clusterversion.V22_1},
 	reflect.TypeOf((*tree.DropType)(nil)):            {fn: DropType, on: true, minSupportedClusterVersion: clusterversion.V22_1},
 	reflect.TypeOf((*tree.DropView)(nil)):            {fn: DropView, on: true, minSupportedClusterVersion: clusterversion.V22_1},
-	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
-	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
-	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
-	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
-	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
-	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.CommentOnDatabase)(nil)):   {fn: CommentOnDatabase, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.CommentOnSchema)(nil)):     {fn: CommentOnSchema, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.CommentOnTable)(nil)):      {fn: CommentOnTable, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.CommentOnColumn)(nil)):     {fn: CommentOnColumn, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.CommentOnIndex)(nil)):      {fn: CommentOnIndex, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
+	reflect.TypeOf((*tree.CommentOnConstraint)(nil)): {fn: CommentOnConstraint, on: true, minSupportedClusterVersion: clusterversion.V22_2Start},
 	// TODO (Xiang): turn on `DROP INDEX` as fully supported.
-	reflect.TypeOf((*tree.DropIndex)(nil)): {fn: DropIndex, on: false, minSupportedClusterVersion: clusterversion.Start22_2},
+	reflect.TypeOf((*tree.DropIndex)(nil)): {fn: DropIndex, on: false, minSupportedClusterVersion: clusterversion.V22_2Start},
 }
 
 func init() {

@@ -2662,7 +2662,7 @@ func (r *restoreResumer) restoreSystemUsers(
 		}
 
 		insertUser := `INSERT INTO system.users ("username", "hashedPassword", "isRole") VALUES ($1, $2, $3)`
-		if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+		if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AddSystemUserIDColumn) {
 			insertUser = `INSERT INTO system.users ("username", "hashedPassword", "isRole", "user_id") VALUES ($1, $2, $3, $4)`
 		}
 		newUsernames := make(map[string]bool)
@@ -2672,7 +2672,7 @@ func (r *restoreResumer) restoreSystemUsers(
 			args[0] = user[0]
 			args[1] = user[1]
 			args[2] = user[2]
-			if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.AddSystemUserIDColumn) {
+			if r.execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AddSystemUserIDColumn) {
 				id, err := descidgen.GenerateUniqueRoleID(ctx, r.execCfg.DB, r.execCfg.Codec)
 				if err != nil {
 					return err

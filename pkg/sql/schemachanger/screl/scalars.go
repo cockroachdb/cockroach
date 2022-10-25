@@ -113,7 +113,7 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
 		return clusterversion.V22_1
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
-		return clusterversion.UseDelRangeInGCJob
+		return clusterversion.V22_2UseDelRangeInGCJob
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))
 	}

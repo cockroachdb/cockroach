@@ -43,7 +43,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 
 	settings := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.RoleOptionsTableHasIDColumn-1),
+		clusterversion.ByKey(clusterversion.V22_2RoleOptionsTableHasIDColumn-1),
 		false,
 	)
 
@@ -53,7 +53,7 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.RoleOptionsTableHasIDColumn - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2RoleOptionsTableHasIDColumn - 1),
 				},
 			},
 		},
@@ -166,15 +166,15 @@ func runTestRoleOptionsMigration(t *testing.T, numUsers int) {
 	})
 
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.RoleOptionsTableHasIDColumn).String())
+		clusterversion.ByKey(clusterversion.V22_2RoleOptionsTableHasIDColumn).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.RoleOptionsIDColumnIsBackfilled).String())
+		clusterversion.ByKey(clusterversion.V22_2RoleOptionsIDColumnIsBackfilled).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.SetRoleOptionsUserIDColumnNotNull).String())
+		clusterversion.ByKey(clusterversion.V22_2SetRoleOptionsUserIDColumnNotNull).String())
 	require.NoError(t, err)
 
 	tdb.CheckQueryResults(t, `SELECT * FROM system.role_options WHERE username = 'testuser' or username = 'testuser_last'`, [][]string{
