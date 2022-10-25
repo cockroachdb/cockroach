@@ -485,8 +485,8 @@ func createTarball(goTestJSONOutputFilePath string) error {
 // EMERGENCY_BALLAST filename.
 func removeEmergencyBallasts() {
 	findCmdArgs := []string{
-		"-name",
 		artifactsDir,
+		"-name",
 		"EMERGENCY_BALLAST",
 		"-delete",
 	}
