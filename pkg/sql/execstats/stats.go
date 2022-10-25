@@ -34,11 +34,13 @@ func ShouldCollectStats(ctx context.Context, collectStats bool) bool {
 // contention time from the given recording or, if the recording is nil, from
 // the tracing span from the context. All contention events found in the trace
 // are included.
-func GetCumulativeContentionTime(ctx context.Context, recording tracingpb.Recording) time.Duration {
+func GetCumulativeContentionTime(ctx context.Context, recording tracingpb.Recording) (time.Duration, []roachpb.ContentionEvent) {
 	var cumulativeContentionTime time.Duration
 	if recording == nil {
 		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	}
+
+	var contentionEvents []roachpb.ContentionEvent
 	var ev roachpb.ContentionEvent
 	for i := range recording {
 		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
@@ -49,9 +51,10 @@ func GetCumulativeContentionTime(ctx context.Context, recording tracingpb.Record
 				return
 			}
 			cumulativeContentionTime += ev.Duration
+			contentionEvents = append(contentionEvents, ev)
 		})
 	}
-	return cumulativeContentionTime
+	return cumulativeContentionTime, contentionEvents
 }
 
 // ScanStats contains statistics on the internal MVCC operators used to satisfy

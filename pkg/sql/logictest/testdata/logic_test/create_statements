@@ -271,6 +271,7 @@ CREATE TABLE crdb_internal.cluster_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
+   contention_events JSONB NULL,
    index_recommendations STRING[] NOT NULL
 )  CREATE TABLE crdb_internal.cluster_execution_insights (
    session_id STRING NOT NULL,
@@ -296,6 +297,7 @@ CREATE TABLE crdb_internal.cluster_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
+   contention_events JSONB NULL,
    index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.cluster_inflight_traces (
@@ -993,6 +995,7 @@ CREATE TABLE crdb_internal.node_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
+   contention_events JSONB NULL,
    index_recommendations STRING[] NOT NULL
 )  CREATE TABLE crdb_internal.node_execution_insights (
    session_id STRING NOT NULL,
@@ -1018,6 +1021,7 @@ CREATE TABLE crdb_internal.node_execution_insights (
    last_retry_reason STRING NULL,
    exec_node_ids INT8[] NOT NULL,
    contention INTERVAL NULL,
+   contention_events JSONB NULL,
    index_recommendations STRING[] NOT NULL
 )  {}  {}
 CREATE TABLE crdb_internal.node_inflight_trace_spans (
