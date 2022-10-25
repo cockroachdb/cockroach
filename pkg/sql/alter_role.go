@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -65,6 +66,13 @@ const (
 	unknown        setVarBehavior = 3
 )
 
+var changeOwnPasswordEnabled = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.auth.change_own_password.enabled",
+	"controls whether a user is allowed to change their own password, even if they have no other privileges",
+	false,
+).WithPublic()
+
 // AlterRole represents a `ALTER ROLE ... [WITH] OPTION` statement.
 // Privileges: CREATEROLE privilege.
 func (p *planner) AlterRole(ctx context.Context, n *tree.AlterRole) (planNode, error) {
@@ -79,14 +87,6 @@ func (p *planner) AlterRoleNode(
 	opName string,
 	kvOptions tree.KVOptions,
 ) (*alterRoleNode, error) {
-	// Note that for Postgres, only superuser can ALTER another superuser.
-	// CockroachDB does not support the superuser role option right now, but we
-	// make it so any member of the ADMIN role can only be edited by another ADMIN
-	// (done in startExec).
-	if err := p.CheckRoleOption(ctx, roleoption.CREATEROLE); err != nil {
-		return nil, err
-	}
-
 	roleOptions, err := roleoption.MakeListFromKVOptions(
 		ctx, kvOptions, p.ExprEvaluator(opName).LazyStringOrNull,
 	)
@@ -94,12 +94,6 @@ func (p *planner) AlterRoleNode(
 		return nil, err
 	}
 	if err := roleOptions.CheckRoleOptionConflicts(); err != nil {
-		return nil, err
-	}
-
-	// Check that the requested combination of password options is
-	// compatible with the user's own CREATELOGIN privilege.
-	if err := p.checkPasswordOptionConstraints(ctx, roleOptions, false /* newUser */); err != nil {
 		return nil, err
 	}
 
@@ -156,6 +150,38 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	if n.roleName.IsAdminRole() {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
 			"cannot edit admin role")
+	}
+
+	needMoreChecks := true
+	if n.roleName == params.p.SessionData().User() && len(n.roleOptions) == 1 && n.roleOptions.Contains(roleoption.
+		PASSWORD) {
+		// Note: This call to GetPassword must happen during execution, not during
+		// planning, since the password might be ea plaecholder argument that needs
+		// to be evaluated at execution time.
+		isNull, _, err := n.roleOptions.GetPassword()
+		if err != nil {
+			return err
+		}
+		// If sql.auth.change_own_password.enabled is set then the user is allowed to
+		// alter their own password to a non-null value without needing CREATEROLE or
+		// CREATELOGIN.
+		if !isNull && changeOwnPasswordEnabled.Get(params.p.execCfg.SV()) {
+			needMoreChecks = false
+		}
+	}
+	if needMoreChecks {
+		// Note that for Postgres, only superuser can ALTER another superuser.
+		// CockroachDB does not support the superuser role option right now, but we
+		// make it so any member of the ADMIN role can only be edited by another ADMIN
+		// (done after checking for existence of the role).
+		if err := params.p.CheckRoleOption(params.ctx, roleoption.CREATEROLE); err != nil {
+			return err
+		}
+		// Check that the requested combination of password options is
+		// compatible with the user's own CREATELOGIN privilege.
+		if err := params.p.checkPasswordOptionConstraints(params.ctx, n.roleOptions, false /* newUser */); err != nil {
+			return err
+		}
 	}
 
 	// Check if role exists.

@@ -1,4 +1,4 @@
-FROM python:3
+FROM python:3.10
 ENV PYTHONUNBUFFERED 1
 
 RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - && \
