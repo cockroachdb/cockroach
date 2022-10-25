@@ -40,7 +40,7 @@ type provider struct {
 	*instancestorage.Reader
 	storage      writer
 	stopper      *stop.Stopper
-	instanceAddr string
+	instanceAddr func() string
 	session      sqlliveness.Instance
 	locality     roachpb.Locality
 	instanceID   base.SQLInstanceID
@@ -55,7 +55,7 @@ func New(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	slProvider sqlliveness.Provider,
-	addr string,
+	advAddr func() string,
 	locality roachpb.Locality,
 	f *rangefeed.Factory,
 	clock *hlc.Clock,
@@ -67,7 +67,7 @@ func New(
 		stopper:      stopper,
 		Reader:       reader,
 		session:      slProvider,
-		instanceAddr: addr,
+		instanceAddr: advAddr,
 		locality:     locality,
 	}
 	return p
@@ -102,7 +102,7 @@ func (p *provider) init(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "constructing session")
 	}
-	instanceID, err := p.storage.CreateInstance(ctx, session.ID(), session.Expiration(), p.instanceAddr, p.locality)
+	instanceID, err := p.storage.CreateInstance(ctx, session.ID(), session.Expiration(), p.instanceAddr(), p.locality)
 	if err != nil {
 		return err
 	}

@@ -164,7 +164,6 @@ func NewTenantServer(
 		return nil, err
 	}
 
-	args.advertiseAddr = baseCfg.AdvertiseAddr
 	// The tenantStatusServer needs access to the sqlServer,
 	// but we also need the same object to set up the sqlServer.
 	// So construct the tenant status server with a nil sqlServer,
