@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -141,16 +142,10 @@ PGSSLCERT=$HOME/certs/client.%s.crt PGSSLKEY=$HOME/certs/client.%s.key PGSSLROOT
 			),
 		)
 
-		// Expected to fail but we should still scan the error to check if
-		// there's an SSH/roachprod error.
-		if err != nil {
-			// install.NonZeroExitCode includes unrelated to SSH errors ("255")
-			// or roachprod errors, so we call t.Fatal if the error is not an
-			// install.NonZeroExitCode error
-			commandError := (*install.NonZeroExitCode)(nil)
-			if !errors.As(err, &commandError) {
-				t.Fatal(err)
-			}
+		// Fatal for a roachprod or SSH error. A roachprod error is when result.Err==nil.
+		// Proceed for any other (command) errors
+		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
+			t.Fatal(err)
 		}
 
 		rawResultsStr := result.Stdout + result.Stderr

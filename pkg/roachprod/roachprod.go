@@ -449,9 +449,12 @@ func IP(
 		}
 	} else {
 		var err error
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) ([]byte, error) {
-			ips[i], err = c.GetInternalIP(ctx, nodes[i])
-			return nil, err
+		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
+			node := nodes[i]
+			res := &install.RunResultDetails{Node: node}
+			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
+			ips[i] = res.Stdout
+			return res, err
 		}); err != nil {
 			return nil, err
 		}
@@ -852,9 +855,12 @@ func PgURL(
 		}
 	} else {
 		var err error
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) ([]byte, error) {
-			ips[i], err = c.GetInternalIP(ctx, nodes[i])
-			return nil, err
+		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
+			node := nodes[i]
+			res := &install.RunResultDetails{Node: node}
+			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
+			ips[i] = res.Stdout
+			return res, err
 		}); err != nil {
 			return nil, err
 		}
@@ -961,8 +967,9 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
 	nodes := c.TargetNodes()
-	failed, err := c.ParallelE(l, description, len(nodes), 0, func(i int) ([]byte, error) {
+	failed, err := c.ParallelE(l, description, len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 		node := nodes[i]
+		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
 		port := c.NodeUIPort(node)
 		scheme := "http"
@@ -973,7 +980,8 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 		outputDir := filepath.Dir(outputFile)
 		file, err := ioutil.TempFile(outputDir, ".pprof")
 		if err != nil {
-			return nil, errors.Wrap(err, "create tmpfile for pprof download")
+			res.Err = errors.Wrap(err, "create tmpfile for pprof download")
+			return res, res.Err
 		}
 
 		defer func() {
@@ -990,31 +998,37 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 		pprofURL := fmt.Sprintf("%s://%s:%d/%s", scheme, host, port, pprofPath)
 		resp, err := httpClient.Get(context.Background(), pprofURL)
 		if err != nil {
-			return nil, err
+			res.Err = err
+			return res, res.Err
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return nil, errors.Newf("unexpected status from pprof endpoint: %s", resp.Status)
+			res.Err = errors.Newf("unexpected status from pprof endpoint: %s", resp.Status)
+			return res, res.Err
 		}
 
 		if _, err := io.Copy(file, resp.Body); err != nil {
-			return nil, err
+			res.Err = err
+			return res, res.Err
 		}
 		if err := file.Sync(); err != nil {
-			return nil, err
+			res.Err = err
+			return res, res.Err
 		}
 		if err := file.Close(); err != nil {
-			return nil, err
+			res.Err = err
+			return res, res.Err
 		}
 		if err := os.Rename(file.Name(), outputFile); err != nil {
-			return nil, err
+			res.Err = err
+			return res, res.Err
 		}
 
 		mu.Lock()
 		outputFiles = append(outputFiles, outputFile)
 		mu.Unlock()
-		return nil, nil
+		return res, nil
 	})
 
 	for _, s := range outputFiles {

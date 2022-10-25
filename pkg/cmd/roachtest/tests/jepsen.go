@@ -108,7 +108,7 @@ func initJepsen(ctx context.Context, t test.Test, c cluster.Cluster) {
 		ctx, t.L(), controller, "sh", "-c",
 		`"sudo DEBIAN_FRONTEND=noninteractive apt-get -qqy install openjdk-8-jre openjdk-8-jre-headless libjna-java gnuplot > /dev/null 2>&1"`,
 	); err != nil {
-		if result.RemoteExitStatus == "100" {
+		if result.RemoteExitStatus == 100 {
 			t.Skip("apt-get failure (#31944)", result.Stdout+result.Stderr)
 		}
 		t.Fatal(err)
