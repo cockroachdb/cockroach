@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -27,6 +26,7 @@ import (
 type lockingRegistry struct {
 	detector detector
 	causes   *causes
+	store    *lockingStore
 
 	// Note that this single mutex places unnecessary constraints on outlier
 	// detection and reporting. We will develop a higher-throughput system
@@ -34,7 +34,6 @@ type lockingRegistry struct {
 	mu struct {
 		syncutil.RWMutex
 		statements map[clusterunique.ID]*statementBuf
-		insights   *cache.OrderedCache
 	}
 }
 
@@ -106,19 +105,14 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				insight.Problem = Problem_FailedExecution
 			}
 		}
-		r.addInsight(s.ID, insight)
+		r.store.AddInsight(insight)
 	}
 }
 
 func (r *lockingRegistry) IterateInsights(
 	ctx context.Context, visitor func(context.Context, *Insight),
 ) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	r.mu.insights.Do(func(_, v interface{}) bool {
-		visitor(ctx, v.(*Insight))
-		return false
-	})
+	r.store.IterateInsights(ctx, visitor)
 }
 
 // TODO(todd):
@@ -139,27 +133,12 @@ func (r *lockingRegistry) popSessionStatements(sessionID clusterunique.ID) *stat
 	return statements
 }
 
-func (r *lockingRegistry) addInsight(id clusterunique.ID, insight *Insight) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.insights.Add(id, insight)
-}
-
 func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
-	config := cache.Config{
-		Policy: cache.CacheFIFO,
-		ShouldEvict: func(size int, key, value interface{}) bool {
-			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
-		},
-		OnEvicted: func(_, value interface{}) {
-			releaseInsight(value.(*Insight))
-		},
-	}
 	r := &lockingRegistry{
 		detector: detector,
 		causes:   &causes{st: st},
+		store:    newStore(st),
 	}
 	r.mu.statements = make(map[clusterunique.ID]*statementBuf)
-	r.mu.insights = cache.NewOrderedCache(config)
 	return r
 }
