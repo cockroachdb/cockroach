@@ -181,3 +181,10 @@ func makeStringSet(vals ...string) map[string]struct{} {
 	}
 	return m
 }
+
+// TestingEnableVolatileFunction allows functions with the given name (lowercase)
+// to be used in expressions if their volatility level would disallow them by default.
+// Used for testing.
+func TestingEnableVolatileFunction(fnName string) {
+	supportedVolatileBuiltinFunctions[fnName] = struct{}{}
+}
