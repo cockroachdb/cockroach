@@ -579,3 +579,114 @@ SELECT 1:::OID >= -2147483649:::INT8
 
 query error OID out of range: -2147483649
 SELECT -2147483649:::INT8 >= 1:::OID
+
+# Test that we can cast index names to a regclass, and vice-versa.
+
+statement ok
+CREATE TABLE table_with_indexes (a INT PRIMARY key, b INT)
+
+query TT
+SELECT relname, oid::regclass::string from pg_class where oid='table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey
+
+statement ok
+CREATE INDEX my_b_index ON table_with_indexes(b)
+
+query TT
+SELECT relname, oid::regclass::string from pg_class where oid='my_b_index'::regclass
+----
+my_b_index  my_b_index
+
+# Test that we can cast table and index names from different schemas.
+
+statement ok
+CREATE SCHEMA other_schema
+
+statement ok
+CREATE TABLE other_schema.table_with_indexes (a INT PRIMARY key, b INT)
+
+statement ok
+CREATE INDEX my_b_index ON other_schema.table_with_indexes(b)
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='other_schema.table_with_indexes'::regclass
+----
+table_with_indexes  table_with_indexes  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='other_schema.table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='other_schema.my_b_index'::regclass
+----
+my_b_index  my_b_index  other_schema
+
+# Changing the search_path should influence what gets resolved while casting.
+
+statement ok
+SET search_path = other_schema, public
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes'::regclass
+----
+table_with_indexes  table_with_indexes  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey  other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='my_b_index'::regclass
+----
+my_b_index  my_b_index  other_schema
+
+statement ok
+SET search_path = public, other_schema
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes'::regclass
+----
+table_with_indexes  table_with_indexes  public
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='table_with_indexes_pkey'::regclass
+----
+table_with_indexes_pkey  table_with_indexes_pkey  public
+
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='my_b_index'::regclass
+----
+my_b_index  my_b_index  public
+
+statement ok
+RESET search_path
+
+# Check that we can cast table names from pg_catalog also.
+query TTT
+SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
+JOIN pg_namespace n ON c.relnamespace = n.oid
+WHERE c.oid='pg_type'::regclass
+----
+pg_type  pg_type  pg_catalog
