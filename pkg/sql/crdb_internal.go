@@ -6406,6 +6406,7 @@ CREATE TABLE crdb_internal.%s (
 	last_retry_reason          STRING,
 	exec_node_ids              INT[] NOT NULL,
 	contention                 INTERVAL,
+	contention_events				   JSONB,
 	index_recommendations      STRING[] NOT NULL,
 	implicit_txn               BOOL NOT NULL
 )`
@@ -6489,6 +6490,16 @@ func populateExecutionInsights(
 			)
 		}
 
+		contentionEvents := tree.DNull
+		if insight.Statement.ContentionEvents != nil && len(insight.Statement.ContentionEvents) > 0 {
+			contentionEventsJSON, err := sqlstatsutil.BuildContentionEventsJSON(insight.Statement.ContentionEvents)
+			if err != nil {
+				return err
+			}
+
+			contentionEvents = tree.NewDJSON(contentionEventsJSON)
+		}
+
 		indexRecommendations := tree.NewDArray(types.String)
 		for _, recommendation := range insight.Statement.IndexRecommendations {
 			if err := indexRecommendations.Append(tree.NewDString(recommendation)); err != nil {
@@ -6520,9 +6531,14 @@ func populateExecutionInsights(
 			autoRetryReason,
 			execNodeIDs,
 			contentionTime,
+			contentionEvents,
 			indexRecommendations,
 			tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 		))
+
+		if err != nil {
+			return err
+		}
 	}
 	return
 }
