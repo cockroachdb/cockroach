@@ -1246,6 +1246,12 @@ func (s *SQLServer) setInstanceID(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// TODO(andrei): Release the instance ID on server shutdown. It is not trivial
+	// to determine where/when exactly to do that, though. Doing it after stopper
+	// quiescing doesn't work. Doing it too soon, for example as part of draining,
+	// is potentially dangerous because the server will continue to use the
+	// instance ID for a while.
+
 	err = s.sqlIDContainer.SetSQLInstanceID(ctx, instanceID)
 	if err != nil {
 		return err
