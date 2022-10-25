@@ -136,54 +136,6 @@ func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (foun
 	return found, err
 }
 
-// IsTableVisible is part of the eval.DatabaseCatalog interface.
-func (p *planner) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
-) (isVisible, exists bool, err error) {
-	tableDesc, err := p.LookupTableByID(ctx, descpb.ID(tableID))
-	if err != nil {
-		// If a "not found" error happened here, we return "not exists" rather than
-		// the error.
-		if errors.Is(err, catalog.ErrDescriptorNotFound) ||
-			errors.Is(err, catalog.ErrDescriptorDropped) ||
-			pgerror.GetPGCode(err) == pgcode.UndefinedTable ||
-			pgerror.GetPGCode(err) == pgcode.UndefinedObject {
-			return false, false, nil //nolint:returnerrcheck
-		}
-		return false, false, err
-	}
-	schemaID := tableDesc.GetParentSchemaID()
-	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), schemaID,
-		tree.SchemaLookupFlags{
-			Required:    true,
-			AvoidLeased: p.skipDescriptorCache})
-	if err != nil {
-		return false, false, err
-	}
-	if schemaDesc.SchemaKind() != catalog.SchemaVirtual {
-		dbID := tableDesc.GetParentID()
-		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: p.skipDescriptorCache})
-		if err != nil {
-			return false, false, err
-		}
-		if dbDesc.GetName() != curDB {
-			// If the table is in a different database, then it's considered to be
-			// "not existing" instead of just "not visible"; this matches PostgreSQL.
-			return false, false, nil
-		}
-	}
-	iter := searchPath.Iter()
-	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
-		if schemaDesc.GetName() == scName {
-			return true, true, nil
-		}
-	}
-	return false, true, nil
-}
-
 // IsTypeVisible is part of the eval.DatabaseCatalog interface.
 func (p *planner) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,

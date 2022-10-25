@@ -99,10 +99,12 @@ SET DATABASE = test;
 query TB rowsort
 SELECT c.relname, pg_table_is_visible(c.oid)
 FROM pg_class c
-WHERE c.relname IN ('is_visible', 'not_visible')
+WHERE c.relname IN ('is_visible', 'not_visible', 'is_visible_pkey', 'not_visible_pkey')
 ----
-is_visible   true
-not_visible  false
+is_visible        true
+is_visible_pkey   true
+not_visible       false
+not_visible_pkey  false
 
 # Looking up a table in a different database should return NULL.
 query B
