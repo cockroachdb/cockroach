@@ -942,6 +942,7 @@ func (f *cloudFeedFactory) Feed(
 
 	if parquetPossible {
 		TestingSetIncludeParquetMetadata()
+		log.Infof(context.Background(), "Using parquet format")
 		createStmt.Options = append(
 			createStmt.Options,
 			tree.KVOption{
@@ -1209,7 +1210,7 @@ func (c *cloudFeed) appendParquetTestFeedMessages(
 
 		for k, v := range row {
 			if k == parquetCrdbEventTypeColName {
-				if v == int32(parquetEventDelete) {
+				if string(v.([]byte)) == parquetEventDelete {
 					isDeleted = true
 				}
 				continue

@@ -35,9 +35,9 @@ var includeParquetTestMetadata = false
 const parquetCrdbEventTypeColName string = "__crdb_event_type__"
 
 const (
-	parquetEventInsert = iota
-	parquetEventUpdate
-	parquetEventDelete
+	parquetEventInsert string = "c"
+	parquetEventUpdate        = "u"
+	parquetEventDelete        = "d"
 )
 
 // We need a separate sink for parquet format because the parquet encoder has to
@@ -161,11 +161,11 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 	}
 
 	if updatedRow.IsDeleted() {
-		parquetRow[parquetCrdbEventTypeColName] = int32(parquetEventDelete)
+		parquetRow[parquetCrdbEventTypeColName] = []byte(parquetEventDelete)
 	} else if prevRow.IsInitialized() && !prevRow.IsDeleted() {
-		parquetRow[parquetCrdbEventTypeColName] = int32(parquetEventUpdate)
+		parquetRow[parquetCrdbEventTypeColName] = []byte(parquetEventUpdate)
 	} else {
-		parquetRow[parquetCrdbEventTypeColName] = int32(parquetEventInsert)
+		parquetRow[parquetCrdbEventTypeColName] = []byte(parquetEventInsert)
 	}
 
 	if err = file.parquetCodec.parquetWriter.AddData(parquetRow); err != nil {
@@ -280,7 +280,7 @@ func getParquetColumnTypes(
 	// Add the extra column which will store the type of event that generated that
 	// particular row.
 	var err error
-	parquetColumns[len(typs)], err = pqexporter.NewParquetColumn(types.Int4, parquetCrdbEventTypeColName, false)
+	parquetColumns[len(typs)], err = pqexporter.NewParquetColumn(types.String, parquetCrdbEventTypeColName, false)
 	if err != nil {
 		return nil, err
 	}
