@@ -1284,6 +1284,10 @@ message HotRangesRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
   int32 page_size = 2 [(gogoproto.nullable) = true];
   string page_token = 3 [(gogoproto.nullable) = true];
+  string tenant_id = 4 [
+    (gogoproto.customname) = "TenantID",
+    (gogoproto.nullable) = true
+  ];
 }
 
 // HotRangesResponse is the payload produced in response

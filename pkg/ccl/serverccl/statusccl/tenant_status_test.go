@@ -24,7 +24,9 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -131,6 +133,10 @@ func TestTenantStatusAPI(t *testing.T) {
 
 	t.Run("tenant_nodes", func(t *testing.T) {
 		testTenantNodes(ctx, t, testHelper, tenantLocalities)
+	})
+
+	t.Run("tenant_hot_ranges", func(t *testing.T) {
+		testTenantHotRanges(ctx, t, testHelper)
 	})
 }
 
@@ -1311,4 +1317,79 @@ func assertEndKeyInRange(
 			endKey == "/Max",
 		fmt.Sprintf("end key %s is outside of the tenant's keyspace (prefix: %v, prefixEnd: %v)",
 			endKey, tenantPrefix.String(), tenantPrefixEnd.String()))
+}
+
+func testTenantHotRanges(_ context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+	tenantB := helper.ControlCluster().TenantStatusSrv(0).(serverpb.TenantStatusServer)
+
+	tIDa := security.EmbeddedTenantIDs()[0]
+	tIDb := security.EmbeddedTenantIDs()[1]
+
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		if err != nil {
+			return err
+		}
+		if len(resp.Ranges) > 1 {
+			return nil
+		}
+		return errors.New("waiting for hot ranges")
+	})
+
+	rangeIDs := make(map[roachpb.RangeID]roachpb.TenantID)
+	stores := helper.HostCluster().Server(0).GetStores().(*kvserver.Stores)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		_, _ = s.Capacity(context.Background(), false)
+		s.VisitReplicas(func(replica *kvserver.Replica) (wantMore bool) {
+			rangeIDs[replica.RangeID], _ = replica.TenantID()
+			return true
+		})
+		return nil
+	})
+
+	t.Run("test http request for hot ranges", func(t *testing.T) {
+		client := helper.TestCluster().TenantHTTPClient(t, 1, false)
+		defer client.Close()
+		grantStmt := `GRANT SYSTEM VIEWCLUSTERMETADATA TO authentic_user_noadmin;`
+		helper.TestCluster().TenantConn(0).Exec(t, grantStmt)
+		req := serverpb.HotRangesRequest{}
+		resp := serverpb.HotRangesResponseV2{}
+		client.PostJSON("/_status/v2/hotranges", &req, &resp)
+		require.NotEmpty(t, resp.Ranges)
+	})
+
+	t.Run("test tenant hot ranges respects tenant isolation", func(t *testing.T) {
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+
+		for _, r := range resp.Ranges {
+			if tID, ok := rangeIDs[r.RangeID]; ok {
+				if tID.ToUint64() != tIDa {
+					require.Equal(t, tIDa, tID)
+				}
+			}
+		}
+
+		resp, err = tenantB.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Ranges)
+		for _, r := range resp.Ranges {
+			if tID, ok := rangeIDs[r.RangeID]; ok {
+				if tID.ToUint64() != tIDb {
+					require.Equal(t, tIDb, tID)
+				}
+			}
+		}
+	})
+
+	t.Run("forbids requesting hot ranges for another tenant", func(t *testing.T) {
+		// TenantA requests hot ranges for Tenant B.
+		resp, err := tenantA.HotRangesV2(context.Background(), &serverpb.HotRangesRequest{
+			TenantID: roachpb.MustMakeTenantID(tIDb).String(),
+		})
+		require.Error(t, err)
+		require.Nil(t, resp)
+	})
 }

@@ -80,6 +80,7 @@ type NodesStatusServer interface {
 type TenantStatusServer interface {
 	TenantRanges(context.Context, *TenantRangesRequest) (*TenantRangesResponse, error)
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
+	HotRangesV2(context.Context, *HotRangesRequest) (*HotRangesResponseV2, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
