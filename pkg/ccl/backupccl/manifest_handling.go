@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1460,4 +1461,21 @@ func newTimestampedFilename(filename string) string {
 	var buffer []byte
 	buffer = encoding.EncodeStringDescending(buffer, timeutil.Now().String())
 	return fmt.Sprintf("%s-%s", filename, hex.EncodeToString(buffer))
+}
+
+// MakeBackupCodec returns the codec and tenantID that was used to encode the keys in the backup.
+func makeBackupCodec(manifest BackupManifest) (keys.SQLCodec, roachpb.TenantID, error) {
+	backupCodec := keys.SystemSQLCodec
+	backupTenantID := roachpb.SystemTenantID
+	if len(manifest.Spans) != 0 && !manifest.HasTenants() {
+		// If there are no tenant targets, then the entire keyspace covered by
+		// Spans must lie in 1 tenant.
+		var err error
+		_, backupTenantID, err = keys.DecodeTenantPrefix(manifest.Spans[0].Key)
+		if err != nil {
+			return backupCodec, backupTenantID, err
+		}
+		backupCodec = keys.MakeSQLCodec(backupTenantID)
+	}
+	return backupCodec, backupTenantID, nil
 }
