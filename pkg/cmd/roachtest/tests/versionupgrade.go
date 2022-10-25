@@ -196,7 +196,7 @@ func (u *versionUpgradeTest) run(ctx context.Context, t test.Test) {
 
 	for i, step := range u.steps {
 		if step != nil {
-			t.Status(fmt.Sprintf("versionUpgrateTest: starting step %d", i+1))
+			t.Status(fmt.Sprintf("versionUpgradeTest: starting step %d", i+1))
 			step(ctx, t, u)
 		}
 	}
