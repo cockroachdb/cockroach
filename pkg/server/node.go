@@ -909,23 +909,28 @@ func (n *Node) GetTenantWeights() kvserver.TenantWeights {
 	return weights
 }
 
-func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
-	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
+func startGraphiteStatsExporter(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	recorder *status.MetricsRecorder,
+	st *cluster.Settings,
+) {
+	ctx = logtags.AddTag(ctx, "graphite stats exporter", nil)
 	pm := metric.MakePrometheusExporter()
 
-	_ = n.stopper.RunAsyncTask(ctx, "graphite-exporter", func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "graphite-exporter", func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		for {
 			timer.Reset(graphiteInterval.Get(&st.SV))
 			select {
-			case <-n.stopper.ShouldQuiesce():
+			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
 				timer.Read = true
 				endpoint := graphiteEndpoint.Get(&st.SV)
 				if endpoint != "" {
-					if err := n.recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
+					if err := recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
 						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
 					}
 				}
