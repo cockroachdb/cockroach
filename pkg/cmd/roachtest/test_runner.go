@@ -50,8 +50,13 @@ import (
 )
 
 var (
-	errTestsFailed               = fmt.Errorf("some tests failed")
-	errClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+	errTestsFailed = fmt.Errorf("some tests failed")
+
+	// reference error used by main.go at the end of a run of tests
+	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+
+	// reference error used when cluster creation fails for a test
+	errClusterProvisioningFailed = fmt.Errorf("cluster could not be created")
 )
 
 // testRunner runs tests.
@@ -310,7 +315,7 @@ func (r *testRunner) Run(
 
 	if r.numClusterErrs > 0 {
 		shout(ctx, l, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
-		return errClusterProvisioningFailed
+		return errSomeClusterProvisioningFailed
 	}
 
 	if len(r.status.fail) > 0 {
@@ -572,6 +577,7 @@ func (r *testRunner) runWorker(
 			wStatus.SetStatus("creating cluster")
 			c, vmCreateOpts, clusterCreateErr = allocateCluster(ctx, testToRun.spec, testToRun.alloc, artifactsRootDir, wStatus)
 			if clusterCreateErr != nil {
+				clusterCreateErr = errors.Mark(clusterCreateErr, errClusterProvisioningFailed)
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
@@ -620,24 +626,13 @@ func (r *testRunner) runWorker(
 			// N.B. cluster creation must have failed...
 			// We don't want to prematurely abort the test suite since it's likely a transient issue.
 			// Instead, let's report an infrastructure issue, mark the test as failed and continue with the next test.
-			// Note, we fake the test name so that all cluster creation errors are posted to the same github issue.
-			oldName := t.spec.Name
-			oldOwner := t.spec.Owner
-			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
-			t.addFailure(clusterCreateErr)
-			issueOutput := "test %s was skipped due to %s"
-			issueOutput = fmt.Sprintf(issueOutput, oldName, t.FailureMsg())
-			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
-			t.spec.Name = "cluster_creation"
-			t.spec.Owner = registry.OwnerDevInf
 
-			if err := github.MaybePost(t, issueOutput); err != nil {
+			// Generate failure reason and mark the test failed to preclude fetching (cluster) artifacts.
+			t.Error(clusterCreateErr)
+			// N.B. issue title is of the form "roachtest: ${t.spec.Name} failed" (see UnitTestFormatter).
+			if err := github.MaybePost(t, t.failureMsg()); err != nil {
 				shout(ctx, l, stdout, "failed to post issue: %s", err)
 			}
-
-			// Restore test name and owner.
-			t.spec.Name = oldName
-			t.spec.Owner = oldOwner
 		} else {
 			c.setTest(t)
 			err = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
@@ -671,7 +666,7 @@ func (r *testRunner) runWorker(
 			shout(ctx, l, stdout, "test returned error: %s: %s", t.Name(), err)
 			// Mark the test as failed if it isn't already.
 			if !t.Failed() {
-				t.addFailure(err)
+				t.Error(err)
 			}
 		} else {
 			msg := "test passed: %s (run %d)"
@@ -687,7 +682,7 @@ func (r *testRunner) runWorker(
 			if err != nil {
 				failureMsg += fmt.Sprintf("%+v", err)
 			} else {
-				failureMsg += t.FailureMsg()
+				failureMsg += t.failureMsg()
 			}
 			if c != nil {
 				if debug {
@@ -808,10 +803,7 @@ func (r *testRunner) runTest(
 		// during the post-flight checks; the test itself runs on a different
 		// goroutine and has similar code to terminate errTestFatal.
 		if err := recover(); err != nil && err != errTestFatal {
-			if _, ok := err.(error); !ok {
-				err = errors.Newf("%v", err)
-			}
-			t.addFailure(err.(error))
+			t.Error(err)
 		}
 
 		t.mu.Lock()
@@ -820,7 +812,7 @@ func (r *testRunner) runTest(
 
 		durationStr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 		if t.Failed() {
-			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.FailureMsg())
+			output := fmt.Sprintf("test artifacts and logs in: %s\n%s", t.ArtifactsDir(), t.failureMsg())
 
 			if teamCity {
 				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']",
@@ -866,7 +858,7 @@ func (r *testRunner) runTest(
 			start:   t.start,
 			end:     t.end,
 			pass:    !t.Failed(),
-			failure: t.FailureMsg(),
+			failure: t.failureMsg(),
 		})
 		r.status.Lock()
 		delete(r.status.running, t)
@@ -1194,14 +1186,15 @@ func (r *testRunner) removeWorker(ctx context.Context, name string) {
 // runHTTPServer starts a server running in the background.
 //
 // httpPort: The port on which to serve the web interface. Pass 0 for allocating
+// bindTo: The host/ip on which to bind. Leave empty to bind on all local ips
 //
 //	a port automatically (which will be printed to stdout).
-func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
+func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer, bindTo string) error {
 	http.HandleFunc("/", r.serveHTTP)
 	// Run an http server in the background.
 	// We handle the case where httpPort is 0, which means we automatically
 	// allocate a port.
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", httpPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", bindTo, httpPort))
 	if err != nil {
 		return err
 	}
@@ -1211,7 +1204,11 @@ func (r *testRunner) runHTTPServer(httpPort int, stdout io.Writer) error {
 			panic(err)
 		}
 	}()
-	fmt.Fprintf(stdout, "HTTP server listening on all network interfaces, port %d.\n", httpPort)
+	bindToDesc := "all network interfaces"
+	if bindTo != "" {
+		bindToDesc = bindTo
+	}
+	fmt.Fprintf(stdout, "HTTP server listening on %s, port %d.\n", bindToDesc, httpPort)
 	return nil
 }
 
