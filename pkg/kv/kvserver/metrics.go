@@ -314,37 +314,37 @@ var (
 	// Metrics used by the rebalancing logic that aren't already captured elsewhere.
 	metaAverageQueriesPerSecond = metric.Metadata{
 		Name:        "rebalancing.queriespersecond",
-		Help:        "Number of kv-level requests received per second by the store, averaged over a large time period as used in rebalancing decisions",
+		Help:        "Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.",
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageWritesPerSecond = metric.Metadata{
 		Name:        "rebalancing.writespersecond",
-		Help:        "Number of keys written (i.e. applied by raft) per second to the store, averaged over a large time period as used in rebalancing decisions",
+		Help:        "Number of keys written (i.e. applied by raft) per second to the store, considering the last 30 minutes.",
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageRequestsPerSecond = metric.Metadata{
 		Name:        "rebalancing.requestspersecond",
-		Help:        "Average number of requests received recently per second.",
+		Help:        "Number of requests received recently per second, considering the last 30 minutes.",
 		Measurement: "Requests/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageReadsPerSecond = metric.Metadata{
 		Name:        "rebalancing.readspersecond",
-		Help:        "Average number of keys read recently per second.",
+		Help:        "Number of keys read recently per second, considering the last 30 minutes.",
 		Measurement: "Keys/Sec",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaAverageWriteBytesPerSecond = metric.Metadata{
 		Name:        "rebalancing.writebytespersecond",
-		Help:        "Average number of bytes read recently per second.",
+		Help:        "Number of bytes read recently per second, considering the last 30 minutes.",
 		Measurement: "Bytes/Sec",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaAverageReadBytesPerSecond = metric.Metadata{
 		Name:        "rebalancing.readbytespersecond",
-		Help:        "Average number of bytes written recently per second.",
+		Help:        "Number of bytes written per second, considering the last 30 minutes.",
 		Measurement: "Bytes/Sec",
 		Unit:        metric.Unit_BYTES,
 	}
