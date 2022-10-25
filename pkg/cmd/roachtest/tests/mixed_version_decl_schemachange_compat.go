@@ -90,7 +90,7 @@ func validateCorpusFile(
 	}
 
 	// If no error is logged dump out both stdout and std error.
-	if details.RemoteExitStatus != "0" {
+	if details.RemoteExitStatus != 0 {
 		t.Fatalf("Validation command failed with exist status %s, output:\n %s\n%s\n",
 			details.RemoteExitStatus,
 			details.Stdout,

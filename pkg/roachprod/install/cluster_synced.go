@@ -47,6 +47,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var (
+	// For SSH 255s, only one of the following need to be specified
+	// since 255 exits codes will result in the error being marked as
+	// rperrors.ErrSSH255 anyway
+	retryableExitCodes []int
+	retryableErrors    = []error{rperrors.ErrSSH255}
+)
+
 // A SyncedCluster is created from the cluster metadata in the synced clusters
 // cache and is used as the target for installing and managing various software
 // components.
@@ -98,6 +106,57 @@ func NewSyncedCluster(
 	}
 	c.Nodes = nodes
 	return c, nil
+}
+
+// The first retry is after 5s, the second and final is after 25s
+var defaultRunRetryOpt = retry.Options{
+	InitialBackoff: 5 * time.Second,
+	Multiplier:     5,
+	MaxBackoff:     1 * time.Minute,
+	// This will run a total of 3 times `runWithMaybeRetry`
+	MaxRetries: 2,
+}
+
+// runWithMaybeRetry will run the specified function `f` at least once.
+// Any returned error from `f` is passed to the `shouldRetryFn` which,
+// if it returns true, will result in `f` being retried using the `retryOpts`
+// If the `shouldRetryFn` is not specified (nil), then no retries will be
+// performed.
+func runWithMaybeRetry(
+	l *logger.Logger,
+	retryOpts retry.Options,
+	shouldRetryFn func(error, int) bool,
+	f func() ([]byte, error),
+) ([]byte, error) {
+	var err error
+	var b []byte
+
+	for r := retry.Start(retryOpts); r.Next(); {
+		b, err = f()
+		if err != nil {
+			exitCode, _ := rperrors.GetExitCode(err)
+			if shouldRetryFn != nil && shouldRetryFn(err, exitCode) {
+				l.Printf("Encountered [%v] on attempt %v of %v", err, r.CurrentAttempt()+1, defaultRunRetryOpt.MaxRetries+1)
+				continue
+			}
+		}
+		break
+	}
+	return b, err
+}
+
+func defaultShouldRetry(err error, exitCode int) bool {
+	if err != nil && errors.IsAny(err, retryableErrors...) {
+		return true
+	}
+
+	for _, v := range retryableExitCodes {
+		if exitCode == v {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Host returns the public IP of a node.
@@ -574,41 +633,29 @@ type RunResultDetails struct {
 	Node             Node
 	Stdout           string
 	Stderr           string
+	CombinedOut      []byte
 	Err              error
-	RemoteExitStatus string
+	RemoteExitStatus int
 }
 
-func processStdout(stdout string) (string, string) {
-	retStdout := stdout
-	exitStatusPattern := "LAST EXIT STATUS: "
-	exitStatusIndex := strings.LastIndex(retStdout, exitStatusPattern)
-	remoteExitStatus := "-1"
-	// If exitStatusIndex is -1 then "echo LAST EXIT STATUS: $?" didn't run
-	// mostly due to an ssh error but avoid speculation and temporarily
-	// use "-1" for unknown error before checking if it's SSH related later.
-	if exitStatusIndex != -1 {
-		retStdout = stdout[:exitStatusIndex]
-		remoteExitStatus = strings.TrimSpace(stdout[exitStatusIndex+len(exitStatusPattern):])
-	}
-	return retStdout, remoteExitStatus
-}
-
-func runCmdOnSingleNode(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, node Node, cmd string,
+// Error vs result
+// An error is an unexpected state within roachprod
+// A result is the output of running a cmd (could be interpreted as an error)
+func (c *SyncedCluster) runCmdOnSingleNode(
+	ctx context.Context,
+	l *logger.Logger,
+	node Node,
+	cmd string,
+	combined bool,
+	stdout, stderr io.Writer,
 ) (RunResultDetails, error) {
 	result := RunResultDetails{Node: node}
 	sess, err := c.newSession(node)
 	if err != nil {
+		result.Err = err
 		return result, err
 	}
 	defer sess.Close()
-
-	sess.SetWithExitStatus(true)
-	var stdoutBuffer, stderrBuffer bytes.Buffer
-	multStdout := io.MultiWriter(&stdoutBuffer, l.Stdout)
-	multStderr := io.MultiWriter(&stderrBuffer, l.Stderr)
-	sess.SetStdout(multStdout)
-	sess.SetStderr(multStderr)
 
 	// Argument template expansion is node specific (e.g. for {store-dir}).
 	e := expander{
@@ -616,6 +663,7 @@ func runCmdOnSingleNode(
 	}
 	expandedCmd, err := e.expand(ctx, l, c, cmd)
 	if err != nil {
+		result.Err = err
 		return result, err
 	}
 
@@ -633,31 +681,27 @@ func runCmdOnSingleNode(
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
 
-	err = sess.Run(ctx, nodeCmd)
-	result.Stderr = stderrBuffer.String()
-	result.Stdout, result.RemoteExitStatus = processStdout(stdoutBuffer.String())
+	// if running on 2+ nodes
+	if combined {
+		result.CombinedOut, err = sess.CombinedOutput(ctx, nodeCmd)
+	} else {
+		var stdoutBuffer, stderrBuffer bytes.Buffer
+		multStdout := io.MultiWriter(&stdoutBuffer, stdout)
+		multStderr := io.MultiWriter(&stderrBuffer, stderr)
+		sess.SetStdout(multStdout)
+		sess.SetStderr(multStderr)
+
+		err = sess.Run(ctx, nodeCmd)
+		result.Stderr = stderrBuffer.String()
+		result.Stdout = stdoutBuffer.String()
+	}
 
 	if err != nil {
 		detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", node, cmd)
 		err = errors.WithDetail(err, detailMsg)
-		err = rperrors.ClassifyCmdError(err)
-		if errors.Is(err, rperrors.ErrSSH255) {
-			result.RemoteExitStatus = "255"
-		}
 		result.Err = err
-	} else if result.RemoteExitStatus != "0" {
-		result.Err = &NonZeroExitCode{fmt.Sprintf("Non-zero exit code: %s", result.RemoteExitStatus)}
 	}
 	return result, nil
-}
-
-// NonZeroExitCode is returned when a command executed by Run() exits with a non-zero status.
-type NonZeroExitCode struct {
-	message string
-}
-
-func (e *NonZeroExitCode) Error() string {
-	return e.message
 }
 
 // Run a command on >= 1 node in the cluster.
@@ -667,7 +711,7 @@ func (e *NonZeroExitCode) Error() string {
 // is cached and then emitted all together once all commands are completed.
 //
 // stdout: Where stdout messages are written
-// stderr: Where stderr messages are written
+// stderr: Where stderr messages areå written
 // nodes: The cluster nodes where the command will be run.
 // title: A description of the command being run that is output to the logs.
 // cmd: The command to run.
@@ -681,96 +725,59 @@ func (c *SyncedCluster) Run(
 		display = fmt.Sprintf("%s: %s", c.Name, title)
 	}
 
-	errs := make([]error, len(nodes))
-	results := make([]string, len(nodes))
-	if err := c.Parallel(l, display, len(nodes), 0, func(i int) ([]byte, error) {
-		sess, err := c.newSession(nodes[i])
-		if err != nil {
-			errs[i] = err
-			results[i] = err.Error()
-			return nil, nil
-		}
-		defer sess.Close()
-
-		// Argument template expansion is node specific (e.g. for {store-dir}).
-		e := expander{
-			node: nodes[i],
-		}
-		expandedCmd, err := e.expand(ctx, l, c, cmd)
+	results := make([]RunResultDetails, len(nodes))
+	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) ([]byte, error) {
+		//err is a non command failure
+		result, err := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, !stream, stdout, stderr)
+		results[i] = result
 		if err != nil {
 			return nil, err
 		}
-
-		// Be careful about changing these command strings. In particular, we need
-		// to support running commands in the background on both local and remote
-		// nodes. For example:
-		//
-		//   roachprod run cluster -- "sleep 60 &> /dev/null < /dev/null &"
-		//
-		// That command should return immediately. And a "roachprod status" should
-		// reveal that the sleep command is running on the cluster.
-		nodeCmd := fmt.Sprintf(`export ROACHPROD=%s GOTRACEBACK=crash && bash -c %s`,
-			c.roachprodEnvValue(nodes[i]), ssh.Escape1(expandedCmd))
-		if c.IsLocal() {
-			nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(nodes[i]), nodeCmd)
-		}
-
-		if stream {
-			sess.SetStdout(stdout)
-			sess.SetStderr(stderr)
-			errs[i] = sess.Run(ctx, nodeCmd)
-			if errs[i] != nil {
-				detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
-				err = errors.WithDetail(errs[i], detailMsg)
-				err = rperrors.ClassifyCmdError(err)
-				errs[i] = err
-			}
-			return nil, nil
-		}
-
-		out, err := sess.CombinedOutput(ctx, nodeCmd)
-		msg := strings.TrimSpace(string(out))
-		if err != nil {
-			detailMsg := fmt.Sprintf("Node %d. Command with error:\n```\n%s\n```\n", nodes[i], cmd)
-			err = errors.WithDetail(err, detailMsg)
-			err = rperrors.ClassifyCmdError(err)
-			errs[i] = err
-			msg += fmt.Sprintf("\n%v", err)
-		}
-		results[i] = msg
+		//if result.Err != nil, we need to return it here otherwise retry won't know about it
+		// but if we return an Err here, we get a misleading failure in ParallelE
 		return nil, nil
 	}); err != nil {
 		return err
 	}
 
-	if !stream {
-		for i, r := range results {
-			fmt.Fprintf(stdout, "  %2d: %s\n", nodes[i], r)
+	return selectError(results, stream, stdout)
+}
+
+func selectError(results []RunResultDetails, stream bool, stdout io.Writer) error {
+	var errs = make([]error, len(results))
+	for i, r := range results {
+		if !stream {
+			fmt.Fprintf(stdout, "  %2d: %s\n%v\n", i+1, strings.TrimSpace(string(r.CombinedOut)), r.Err)
 		}
+		errs[i] = r.Err
 	}
 	return rperrors.SelectPriorityError(errs)
 }
 
 // RunWithDetails runs a command on the specified nodes and returns results details and an error.
+// This returns separate stderr/out
 func (c *SyncedCluster) RunWithDetails(
 	ctx context.Context, l *logger.Logger, nodes Nodes, title, cmd string,
 ) ([]RunResultDetails, error) {
 	display := fmt.Sprintf("%s: %s", c.Name, title)
+
+	// Caveat. We are capturing the state of a result even though it may
+	// be processed further by the caller of the closure (e.g. retry)
 	results := make([]RunResultDetails, len(nodes))
 
-	failed, err := c.ParallelE(l, display, len(nodes), 0, func(i int) ([]byte, error) {
-		result, err := runCmdOnSingleNode(ctx, l, c, nodes[i], cmd)
-		if err != nil {
-			return nil, err
-		}
+	// Since this returns only failed results, we don't need it, as we already capture all
+	// results in the slice above.
+	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) ([]byte, error) { //nolint:errcheck
+		result, _ := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, false, l.Stdout, l.Stderr)
 		results[i] = result
-		return nil, nil
-	})
-	if err != nil {
-		for _, node := range failed {
-			results[node.Index].Err = node.Err
+		if result.Err != nil {
+			return nil, result.Err
 		}
+		return nil, nil
+	}); err != nil {
+		l.Printf("%v", err)
 	}
+
 	return results, nil
 }
 
@@ -2163,6 +2170,10 @@ type ParallelResult struct {
 func (c *SyncedCluster) Parallel(
 	l *logger.Logger, display string, count, concurrency int, fn func(i int) ([]byte, error),
 ) error {
+	// FIXME: according to ParallelE, if err != nil, then failed contains the failures for each node
+	// however right now, we get failures when the error == nil, and report on them
+	// why tho? this should behave consistently
+	// if any failed - then pick an error, and return that
 	failed, err := c.ParallelE(l, display, count, concurrency, fn)
 	if err != nil {
 		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
@@ -2202,7 +2213,7 @@ func (c *SyncedCluster) ParallelE(
 	startNext := func() {
 		go func(i int) {
 			defer wg.Done()
-			out, err := fn(i)
+			out, err := runWithMaybeRetry(l, defaultRunRetryOpt, defaultShouldRetry, func() ([]byte, error) { return fn(i) })
 			results <- ParallelResult{i, out, err}
 		}(index)
 		index++
@@ -2282,6 +2293,7 @@ func (c *SyncedCluster) ParallelE(
 	}
 
 	if len(failed) > 0 {
+		// FIXME: this message overwrites detail previously added
 		return failed, errors.New("one or more parallel execution failure")
 	}
 	return nil, nil
