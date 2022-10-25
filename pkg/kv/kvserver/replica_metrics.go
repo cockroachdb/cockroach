@@ -331,6 +331,13 @@ func (r *Replica) ReadBytesPerSecond() float64 {
 	return rbps
 }
 
+// CPUNanosPerSecond tracks the time this replica spent on-processor averaged
+// per second.
+func (r *Replica) CPUNanosPerSecond() float64 {
+	cpus, _ := r.loadStats.cpuNanos.AverageRatePerSecond()
+	return cpus
+}
+
 func (r *Replica) needsSplitBySizeRLocked() bool {
 	exceeded, _ := r.exceedsMultipleOfSplitSizeRLocked(1)
 	return exceeded

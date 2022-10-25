@@ -24,6 +24,7 @@ type ReplicaLoad struct {
 	readKeys      *replicastats.ReplicaStats
 	writeBytes    *replicastats.ReplicaStats
 	readBytes     *replicastats.ReplicaStats
+	cpuNanos      *replicastats.ReplicaStats
 }
 
 // NewReplicaLoad returns a new ReplicaLoad, which may be used to track the
@@ -40,6 +41,7 @@ func NewReplicaLoad(clock *hlc.Clock, getNodeLocality replicastats.LocalityOracl
 		readKeys:      replicastats.NewReplicaStats(clock, nil),
 		writeBytes:    replicastats.NewReplicaStats(clock, nil),
 		readBytes:     replicastats.NewReplicaStats(clock, nil),
+		cpuNanos:      replicastats.NewReplicaStats(clock, nil),
 	}
 }
 
@@ -52,6 +54,7 @@ func (rl *ReplicaLoad) split(other *ReplicaLoad) {
 	rl.readKeys.SplitRequestCounts(other.readKeys)
 	rl.writeBytes.SplitRequestCounts(other.writeBytes)
 	rl.readBytes.SplitRequestCounts(other.readBytes)
+	rl.cpuNanos.SplitRequestCounts(other.cpuNanos)
 }
 
 // merge will combine the tracked load in other, into the calling struct.
@@ -62,6 +65,7 @@ func (rl *ReplicaLoad) merge(other *ReplicaLoad) {
 	rl.readKeys.MergeRequestCounts(other.readKeys)
 	rl.writeBytes.MergeRequestCounts(other.writeBytes)
 	rl.readBytes.MergeRequestCounts(other.readBytes)
+	rl.cpuNanos.MergeRequestCounts(other.cpuNanos)
 }
 
 // reset will clear all recorded history.
@@ -72,4 +76,5 @@ func (rl *ReplicaLoad) reset() {
 	rl.readKeys.ResetRequestCounts()
 	rl.writeBytes.ResetRequestCounts()
 	rl.readBytes.ResetRequestCounts()
+	rl.cpuNanos.ResetRequestCounts()
 }
