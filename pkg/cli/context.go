@@ -114,7 +114,7 @@ func setServerContextDefaults() {
 	serverCfg.InflightTraceDirName = ""
 
 	serverCfg.AutoInitializeCluster = false
-	serverCfg.KVConfig.ReadyFn = nil
+	serverCfg.ReadyFn = nil
 	serverCfg.KVConfig.DelayedBootstrapFn = nil
 	serverCfg.KVConfig.JoinList = nil
 	serverCfg.KVConfig.JoinPreferSRVRecords = false
