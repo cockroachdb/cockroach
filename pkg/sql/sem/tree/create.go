@@ -340,12 +340,21 @@ func (l *EnumValueList) Format(ctx *FmtCtx) {
 	}
 }
 
+// CompositeTypeElem is a single element in a composite type definition.
+type CompositeTypeElem struct {
+	Label Name
+	Type  ResolvableTypeReference
+}
+
 // CreateType represents a CREATE TYPE statement.
 type CreateType struct {
 	TypeName *UnresolvedObjectName
 	Variety  CreateTypeVariety
 	// EnumLabels is set when this represents a CREATE TYPE ... AS ENUM statement.
 	EnumLabels EnumValueList
+	// CompositeTypeList is set when this repesnets a CREATE TYPE ... AS ( )
+	// statement.
+	CompositeTypeList []CompositeTypeElem
 	// IfNotExists is true if IF NOT EXISTS was requested.
 	IfNotExists bool
 }
@@ -364,6 +373,17 @@ func (node *CreateType) Format(ctx *FmtCtx) {
 	case Enum:
 		ctx.WriteString("AS ENUM (")
 		ctx.FormatNode(&node.EnumLabels)
+		ctx.WriteString(")")
+	case Composite:
+		ctx.WriteString("AS (")
+		for i, elem := range node.CompositeTypeList {
+			if i != 0 {
+				ctx.WriteString(", ")
+			}
+			ctx.FormatNode(&elem.Label)
+			ctx.WriteString(" ")
+			ctx.WriteString(elem.Type.SQLString())
+		}
 		ctx.WriteString(")")
 	}
 }
