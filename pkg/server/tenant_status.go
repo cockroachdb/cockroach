@@ -1293,3 +1293,8 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 
 	return resp, nil
 }
+
+func (t *tenantStatusServer) TenantHotRanges(ctx context.Context, req *serverpb.TenantHotRangesRequest) (*serverpb.TenantHotRangesResponse, error) {
+	ctx = t.AnnotateCtx(propagateGatewayMetadata(ctx))
+	return t.sqlServer.tenantConnect.TenantHotRanges(ctx, req)
+}

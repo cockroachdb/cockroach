@@ -558,6 +558,19 @@ func (c *Connector) GetAllSystemSpanConfigsThatApply(
 	return spanConfigs, nil
 }
 
+// TenantHotRanges implements the serverpb.TenantHotRanges interface
+func (c *Connector) TenantHotRanges(ctx context.Context, req *serverpb.TenantHotRangesRequest) (*serverpb.TenantHotRangesResponse, error) {
+	var resp *serverpb.TenantHotRangesResponse
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.TenantHotRanges(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // WithTxn implements the spanconfig.KVAccessor interface.
 func (c *Connector) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccessor {
 	panic("not applicable")
