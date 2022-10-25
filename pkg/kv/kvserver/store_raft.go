@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -633,9 +634,11 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	ctx := r.raftCtx
 	stats, err := r.handleRaftReady(ctx, noSnap)
 	maybeFatalOnRaftReadyErr(ctx, err)
+	grunningStart := grunning.Time()
 	elapsed := stats.tEnd.Sub(stats.tBegin)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
 	s.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
+	r.RecordNanosRunning(grunning.Difference(grunningStart, grunning.Time()).Nanoseconds())
 	// Warn if Raft processing took too long. We use the same duration as we
 	// use for warning about excessive raft mutex lock hold times. Long
 	// processing time means we'll have starved local replicas of ticks and
@@ -654,12 +657,14 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	ioThresholds := s.ioThresholds.Current()
 
 	start := timeutil.Now()
+	startGRunning := grunning.Time()
 	ctx := r.raftCtx
 
 	exists, err := r.tick(ctx, livenessMap, ioThresholds)
 	if err != nil {
 		log.Errorf(ctx, "%v", err)
 	}
+	r.RecordNanosRunning(grunning.Difference(startGRunning, grunning.Time()).Nanoseconds())
 	s.metrics.RaftTickingDurationNanos.Inc(timeutil.Since(start).Nanoseconds())
 	return exists // ready
 }
