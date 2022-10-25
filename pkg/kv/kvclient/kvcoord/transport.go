@@ -211,12 +211,17 @@ func (gt *grpcTransport) sendBatch(
 	reply, err := iface.Batch(ctx, &ba)
 	// If we queried a remote node, perform extra validation and
 	// import trace spans.
-	if reply != nil && !rpc.IsLocal(iface) {
-		for i := range reply.Responses {
-			if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
-				log.Errorf(ctx, "%v", err)
-			}
+	for i := range reply.Responses {
+		// TODO(tbg): as of the "investigate corrupt scan response" commit, this gets hit easily
+		// under `./dev test --stress` for TestKVNemesisSingleNode even when this was under !rpc.IsLocal(),
+		// why wasn't rpc.IsLocal() always true?
+		if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
+			log.Errorf(ctx, "%v", err)
+			return nil, err
 		}
+	}
+	if reply != nil && !rpc.IsLocal(iface) {
+
 		// Import the remotely collected spans, if any.
 		if len(reply.CollectedSpans) != 0 {
 			span := tracing.SpanFromContext(ctx)

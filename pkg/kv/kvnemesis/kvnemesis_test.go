@@ -116,6 +116,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 	sqlutils.MakeSQLRunner(sqlDB).Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
 	config := NewDefaultConfig()
+	// config.Ops.DB.DeleteRangeUsingTombstone = 0 // HACK
 	config.NumNodes, config.NumReplicas = 1, 1
 
 	env := &Env{SQLDBs: []*gosql.DB{sqlDB}, Tracker: tr, L: t}
