@@ -157,6 +157,11 @@ func (r *Retry) NextCh() <-chan time.Time {
 	return time.After(r.retryIn())
 }
 
+// CurrentAttempt returns the current attempt
+func (r *Retry) CurrentAttempt() int {
+	return r.currentAttempt
+}
+
 // Do invokes the closure according to the retry options until it returns
 // success or no more retries are possible. Always returns an error unless the
 // return is prompted by a successful invocation of `fn`.

@@ -33,6 +33,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/httputil",
         "//pkg/util/log",
+        "//pkg/util/retry",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/version",
@@ -51,8 +52,11 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":install"],
     deps = [
+        "//pkg/roachprod/logger",
         "//pkg/testutils",
+        "//pkg/util/retry",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )
