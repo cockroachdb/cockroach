@@ -291,13 +291,6 @@ func (so *importSequenceOperators) SchemaExists(
 	return false, errSequenceOperators
 }
 
-// IsTableVisible is part of the eval.DatabaseCatalog interface.
-func (so *importSequenceOperators) IsTableVisible(
-	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
-) (bool, bool, error) {
-	return false, false, errors.WithStack(errSequenceOperators)
-}
-
 // IsTypeVisible is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) IsTypeVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
