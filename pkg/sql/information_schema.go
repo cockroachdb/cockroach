@@ -2734,7 +2734,8 @@ SELECT
 	u.username,
 	"isRole",
   drs.settings,
-	json_object_agg(COALESCE(ro.option, 'null'), ro.value)
+	json_object_agg(COALESCE(ro.option, 'null'), ro.value),
+	u.user_id
 FROM
 	system.users AS u
 	LEFT JOIN system.role_options AS ro ON
@@ -2749,7 +2750,7 @@ GROUP BY
 func forEachRole(
 	ctx context.Context,
 	p *planner,
-	fn func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error,
+	fn func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error,
 ) error {
 	query := forEachRoleQuery(ctx, p)
 
@@ -2778,9 +2779,14 @@ func forEachRole(
 		}
 		options := roleOptions{roleOptionsJSON}
 
+		userID := row[4].(*tree.DOid)
+		if !ok {
+			return errors.Errorf("userID should be an OID, found %s instead", row[4].ResolvedType())
+		}
+
 		// system tables already contain normalized usernames.
 		userName := username.MakeSQLUsernameFromPreNormalizedString(string(usernameS))
-		if err := fn(userName, bool(*isRole), options, defaultSettings); err != nil {
+		if err := fn(userName, bool(*isRole), options, defaultSettings, userID); err != nil {
 			return err
 		}
 	}

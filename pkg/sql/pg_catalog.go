@@ -532,8 +532,7 @@ and thus do not require admin privileges for access.
 https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 	schema: vtable.PGCatalogAuthID,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, _ tree.Datum) error {
+		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, _ tree.Datum, userID *tree.DOid) error {
 			isRoot := tree.DBool(userName.IsRootUser() || userName.IsAdminRole())
 			// Currently, all users and roles inherit the privileges of roles they are
 			// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
@@ -562,7 +561,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-authid.html`,
 			}
 
 			return addRow(
-				h.UserOid(userName),                  // oid
+				userID,                               // oid
 				tree.NewDName(userName.Normalized()), // rolname
 				tree.MakeDBool(isRoot || isSuper),    // rolsuper
 				tree.MakeDBool(roleInherits),         // rolinherit
@@ -2108,7 +2107,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						//
 						// TODO(ajwerner): The public schema effectively carries the privileges
 						// of the database so consider using the database's owner for public.
-						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
+						ownerOID = tree.NewDOid(username.AdminRoleID)
 					}
 					return addRow(
 						h.NamespaceOid(db, sc.GetName()), // oid
@@ -2583,9 +2582,8 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 		// Because Postgres allows access to pg_roles by non-privileged users, we
 		// need to do the same. This shouldn't be an issue, because pg_roles doesn't
 		// include sensitive information such as password hashes.
-		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error {
 				isRoot := tree.DBool(userName.IsRootUser() || userName.IsAdminRole())
 				// Currently, all users and roles inherit the privileges of roles they are
 				// members of. See https://github.com/cockroachdb/cockroach/issues/69583.
@@ -2613,7 +2611,7 @@ https://www.postgresql.org/docs/9.5/view-pg-roles.html`,
 				}
 
 				return addRow(
-					h.UserOid(userName),                  // oid
+					userID,                               // oid
 					tree.NewDName(userName.Normalized()), // rolname
 					tree.MakeDBool(isRoot || isSuper),    // rolsuper
 					tree.MakeDBool(roleInherits),         // rolinherit
@@ -3276,9 +3274,8 @@ var pgCatalogUserTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 	schema: vtable.PGCatalogUser,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
 		return forEachRole(ctx, p,
-			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+			func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error {
 				if isRole {
 					return nil
 				}
@@ -3298,7 +3295,7 @@ https://www.postgresql.org/docs/9.5/view-pg-user.html`,
 
 				return addRow(
 					tree.NewDName(userName.Normalized()), // usename
-					h.UserOid(userName),                  // usesysid
+					userID,                               // usesysid
 					tree.MakeDBool(isRoot || createDB),   // usecreatedb
 					tree.MakeDBool(isRoot || isSuper),    // usesuper
 					tree.DBoolFalse,                      // userepl
@@ -3394,8 +3391,7 @@ var pgCatalogShadowTable = virtualSchemaTable{
 https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 	schema: vtable.PgCatalogShadow,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
-		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+		return forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, userID *tree.DOid) error {
 			noLogin, err := options.noLogin()
 			if err != nil {
 				return err
@@ -3420,7 +3416,7 @@ https://www.postgresql.org/docs/13/view-pg-shadow.html`,
 
 			return addRow(
 				tree.NewDName(userName.Normalized()), // usename
-				h.UserOid(userName),                  // usesysid
+				userID,                               // usesysid
 				tree.MakeDBool(isRoot || createDB),   // usecreatedb
 				tree.MakeDBool(isRoot || isSuper),    // usesuper
 				tree.DBoolFalse,                      // userepl

@@ -5432,7 +5432,7 @@ CREATE TABLE crdb_internal.default_privileges (
 				}
 
 				addRowsForSchema := func(defaultPrivilegeDescriptor catalog.DefaultPrivilegeDescriptor, schema tree.Datum) error {
-					if err := forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum) error {
+					if err := forEachRole(ctx, p, func(userName username.SQLUsername, isRole bool, options roleOptions, settings tree.Datum, _ *tree.DOid) error {
 						role := catpb.DefaultPrivilegesRole{
 							Role: userName,
 						}
