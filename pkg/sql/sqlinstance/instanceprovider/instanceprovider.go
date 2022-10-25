@@ -141,9 +141,5 @@ func (p *provider) Instance(
 // shutdownSQLInstance releases the instance ID and stops the stopper.
 func (p *provider) shutdownSQLInstance(ctx context.Context) {
 	p.stopped.Set(true)
-	err := p.storage.ReleaseInstanceID(ctx, p.instanceID)
-	if err != nil {
-		log.Ops.Warningf(ctx, "could not release instance id %d", p.instanceID)
-	}
 	p.stopper.Stop(ctx)
 }
