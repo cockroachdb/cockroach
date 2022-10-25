@@ -1043,16 +1043,19 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 						for _, priv := range u.Privileges {
 							// We use this function to check for the grant option so that the
 							// object owner also gets is_grantable=true.
-							grantOptionErr := p.CheckGrantOptionsForUser(
-								ctx, typeDesc.GetPrivileges(), typeDesc, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
+							isGrantable, err := p.CheckGrantOptionsForUser(
+								ctx, typeDesc.GetPrivileges(), typeDesc, []privilege.Kind{priv.Kind}, u.User,
 							)
+							if err != nil {
+								return err
+							}
 							if err := addRow(
 								userNameStr,                         // grantee
 								dbNameStr,                           // type_catalog
 								scNameStr,                           // type_schema
 								typeNameStr,                         // type_name
 								tree.NewDString(priv.Kind.String()), // privilege_type
-								yesOrNoDatum(grantOptionErr == nil), // is_grantable
+								yesOrNoDatum(isGrantable),           // is_grantable
 							); err != nil {
 								return err
 							}
@@ -1083,7 +1086,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 						for _, priv := range u.Privileges {
 							// We use this function to check for the grant option so that the
 							// object owner also gets is_grantable=true.
-							grantOptionErr := p.CheckGrantOptionsForUser(
+							grantOptionErr := p.MustCheckGrantOptionsForUser(
 								ctx, sc.GetPrivileges(), sc, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
 							)
 							if err := addRow(
@@ -1395,7 +1398,7 @@ func populateTablePrivileges(
 					if err != nil {
 						return err
 					}
-					grantOptionErr := p.CheckGrantOptionsForUser(
+					grantOptionErr := p.MustCheckGrantOptionsForUser(
 						ctx, privs, table, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
 					)
 					if err := addRow(

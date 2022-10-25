@@ -61,7 +61,7 @@ func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) er
 			return err
 		}
 
-		err = params.p.CheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.p.User(), n.isGrant)
+		err = params.p.MustCheckGrantOptionsForUser(params.ctx, syntheticPrivDesc, systemPrivilegeObject, n.desiredprivs, params.p.User(), n.isGrant)
 		if err != nil {
 			return err
 		}
