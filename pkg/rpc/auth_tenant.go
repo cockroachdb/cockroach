@@ -121,6 +121,9 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
+	case "/cockroach.server.serverpb.Status/TenantHotRanges":
+		return a.authTenantHotRanges(tenID)
+
 	default:
 		return authErrorf("unknown method %q", fullMethod)
 	}
@@ -332,6 +335,19 @@ func (a tenantAuthorizer) authUpdateSpanConfigs(
 		}
 	}
 
+	return nil
+}
+
+// authTenantHotRanges authorizes the provided tenant to invoke the
+// HotRangesByTenant RPC with the provided args. It requires that an authorized
+// tenantID has been set.
+func (a tenantAuthorizer) authTenantHotRanges(
+	tenID roachpb.TenantID) error {
+	if !tenID.IsSet() {
+		return authErrorf("hot ranges request with unspecified tenant not permitted.")
+	}
+	// TODO: validate that req.tenantID is the same as tenant ID in context.
+	// skipped for now to avoid circular dependency when importing serverpb package.
 	return nil
 }
 
