@@ -286,6 +286,25 @@ func BuildStmtDetailsMetadataJSON(
 	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
 }
 
+// BuildContentionEventsJSON returns a json.JSON object for contention events
+// roachpb.ContentionEvent.
+// JSON Schema for contention events
+//
+//	{
+//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//	  "title": "system.statement_statistics.contention_events",
+//	  "type": "object",
+//	  [{
+//	    "blockingTxnID": { "type": "string" },
+//	    "durationMs":    { "type": "number" },
+//	    "indexID":       { "type": "number" },
+//	    "tableID":       { "type": "number" }
+//	  }]
+//	}
+func BuildContentionEventsJSON(events []roachpb.ContentionEvent) (json.JSON, error) {
+	return (*contentionEvents)(&events).encodeJSON()
+}
+
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.
 func EncodeUint64ToBytes(id uint64) []byte {
 	result := make([]byte, 0, 8)

@@ -177,8 +177,10 @@ func (s *Container) RecordStatement(
 	}
 
 	var contention *time.Duration
+	var contentionEvents []roachpb.ContentionEvent
 	if value.ExecStats != nil {
 		contention = &value.ExecStats.ContentionTime
+		contentionEvents = value.ExecStats.ContentionEvents
 	}
 
 	s.insights.ObserveStatement(value.SessionID, &insights.Statement{
@@ -200,6 +202,7 @@ func (s *Container) RecordStatement(
 		RowsWritten:          value.RowsWritten,
 		Nodes:                value.Nodes,
 		Contention:           contention,
+		ContentionEvents:     contentionEvents,
 		IndexRecommendations: value.IndexRecommendations,
 	})
 

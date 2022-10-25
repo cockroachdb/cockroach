@@ -14,6 +14,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -271,7 +272,11 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	require.NoError(t, err)
 	_, err = conn.Exec("SET cluster setting sql.txn_stats.sample_rate  = 1;")
 	require.NoError(t, err)
-	_, err = conn.Exec("CREATE TABLE t (id string, s string);")
+	// Reduce the resolution interval to speed up the test.
+	_, err = conn.Exec(
+		`SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'`)
+	require.NoError(t, err)
+	_, err = conn.Exec("CREATE TABLE t (id string PRIMARY KEY, s string);")
 	require.NoError(t, err)
 
 	// Enable detection by setting a latencyThreshold > 0.
@@ -316,10 +321,20 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 
 	// Verify the table content is valid.
 	testutils.SucceedsWithin(t, func() error {
-		rows, err := conn.QueryContext(ctx, "SELECT "+
-			"query, "+
-			"contention::FLOAT "+
-			"FROM crdb_internal.node_execution_insights where query like 'UPDATE t SET s =%'")
+		rows, err := conn.QueryContext(ctx, `SELECT
+		query,
+		contention::FLOAT ,
+		contention_events->0->>'durationMs' AS durationMs,
+		t.schema_name,
+		t.database_name,
+		t.name,
+		ind.column_name,
+		txn_contention.blocking_txn_fingerprint_id
+		FROM crdb_internal.cluster_execution_insights insight
+		left join crdb_internal.tables t on (contention_events->0->>'tableID')::int = t.table_id
+		left join crdb_internal.index_columns ind on (contention_events->0->>'indexID')::int = ind.column_id
+		left join crdb_internal.transaction_contention_events txn_contention on  (contention_events->0->>'blockingTxnID')::uuid = txn_contention.blocking_txn_id
+																		 where query like 'UPDATE t SET s =%'`)
 		if err != nil {
 			return err
 		}
@@ -331,15 +346,42 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 				return err
 			}
 
-			var contentionFromQuery float64
-			var queryText string
-			err = rows.Scan(&queryText, &contentionFromQuery)
+			var totalContentionFromQuerySeconds, contentionFromEventMs float64
+			var queryText, schemaName, dbName, tableName, indexColumnName string
+			var blockingTxnFingerprintID gosql.NullString
+			err = rows.Scan(&queryText, &totalContentionFromQuerySeconds, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexColumnName, &blockingTxnFingerprintID)
 			if err != nil {
 				return err
 			}
 
-			if contentionFromQuery < .2 {
-				return fmt.Errorf("contention time is %f should be greater than .2 since block is delayed by .5 seconds", contentionFromQuery)
+			if totalContentionFromQuerySeconds < .2 {
+				return fmt.Errorf("contention time is %f should be greater than .2 since block is delayed by .5 seconds", totalContentionFromQuerySeconds)
+			}
+
+			totalContentionFromQueryMs := totalContentionFromQuerySeconds * 1000
+			diff := totalContentionFromQueryMs - contentionFromEventMs
+			if math.Abs(diff) > .1 {
+				return fmt.Errorf("contention time from column: %f should be the same as event value %f", totalContentionFromQueryMs, contentionFromEventMs)
+			}
+
+			if schemaName != "public" {
+				return fmt.Errorf("schema names do not match 'public', %s", schemaName)
+			}
+
+			if dbName != "defaultdb" {
+				return fmt.Errorf("db names do not match 'defaultdb', %s", dbName)
+			}
+
+			if tableName != "t" {
+				return fmt.Errorf("table names do not match 'tableName', %s", tableName)
+			}
+
+			if indexColumnName != "id" {
+				return fmt.Errorf("index names do not match 'tableName', %s", indexColumnName)
+			}
+
+			if !blockingTxnFingerprintID.Valid {
+				return fmt.Errorf("blockingTxnFingerprintId is null")
 			}
 		}
 
@@ -348,7 +390,7 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	}, 5*time.Second)
 }
 
 // Testing that the index recommendation is included
