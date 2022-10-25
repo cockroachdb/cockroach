@@ -329,6 +329,12 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 		evCtx.topic = topic
 	}
 
+	if c.knobs.BeforeEmitRow != nil {
+		if err := c.knobs.BeforeEmitRow(ctx); err != nil {
+			return err
+		}
+	}
+
 	if c.encodingFormat == changefeedbase.OptFormatParquet {
 		return c.encodeForParquet(
 			ctx,
