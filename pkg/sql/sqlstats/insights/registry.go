@@ -11,7 +11,6 @@
 package insights
 
 import (
-	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -21,7 +20,7 @@ import (
 
 // This registry is the central object in the insights subsystem. It observes
 // statement execution to determine which statements are outliers and
-// exposes the set of currently retained insights.
+// writes insights into the provided sink.
 type lockingRegistry struct {
 	statements map[clusterunique.ID]*statementBuf
 	detector   detector
@@ -30,7 +29,6 @@ type lockingRegistry struct {
 }
 
 var _ Writer = &lockingRegistry{}
-var _ Reader = &lockingRegistry{}
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
@@ -98,12 +96,6 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		}
 		r.store.AddInsight(insight)
 	}
-}
-
-func (r *lockingRegistry) IterateInsights(
-	ctx context.Context, visitor func(context.Context, *Insight),
-) {
-	r.store.IterateInsights(ctx, visitor)
 }
 
 // TODO(todd):
