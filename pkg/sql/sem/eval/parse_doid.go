@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -178,12 +179,54 @@ func ParseDOid(ctx context.Context, evalCtx *Context, s string, t *types.T) (*tr
 		if err != nil {
 			return nil, err
 		}
-		id, err := evalCtx.Planner.ResolveTableName(ctx, &tn)
+
+		if tn.ExplicitCatalog {
+			if evalCtx.SessionData().Database != "" && evalCtx.SessionData().Database != tn.Catalog() {
+				// Postgres does not allow cross-database references in this cast
+				// function, so we don't either.
+				return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+					"cross-database references are not implemented: %s", tn.String())
+			}
+		}
+		query := `SELECT c.oid FROM pg_class AS c
+             JOIN pg_namespace AS n ON c.relnamespace = n.oid
+             WHERE c.relname = $1
+             AND n.nspname = $2
+             LIMIT 1`
+		if !tn.ExplicitSchema {
+			// If there is no explicit schema, then we need a different query that
+			// looks for the object name for each schema in the search_path. Choose
+			// the first match in the order of the search_path array. There is an
+			// unused $2 placeholder in the query so that the call to QueryRow can
+			// be consolidated.
+			query = `WITH
+			  current_schemas AS (
+		      SELECT * FROM unnest(current_schemas(true)) WITH ORDINALITY AS scname
+		    )
+			SELECT c.oid
+			FROM pg_class AS c
+		  JOIN pg_namespace AS n ON c.relnamespace = n.oid
+		  JOIN current_schemas AS cs ON cs.scname = n.nspname
+			WHERE c.relname = $1
+			AND $2 IS NOT NULL
+			ORDER BY cs.ordinality ASC
+			LIMIT 1`
+		}
+		row, err := evalCtx.Planner.QueryRowEx(
+			ctx,
+			"regclass-cast",
+			sessiondata.NoSessionDataOverride,
+			query,
+			tn.Object(),
+			tn.Schema(),
+		)
 		if err != nil {
 			return nil, err
 		}
-		// tree.ID is a uint32, so this type conversion is safe.
-		return tree.NewDOidWithTypeAndName(oid.Oid(id), t, tn.ObjectName.String()), nil
+		if row == nil {
+			return nil, pgerror.Newf(pgcode.UndefinedTable, "relation %q does not exist", tn.String())
+		}
+		return tree.NewDOidWithTypeAndName(tree.MustBeDOid(row[0]).Oid, t, tn.ObjectName.String()), nil
 
 	default:
 		d, _ /* errSafeToIgnore */, err := evalCtx.Planner.ResolveOIDFromString(ctx, t, tree.NewDString(s))
