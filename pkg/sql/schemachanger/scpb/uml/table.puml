@@ -40,6 +40,11 @@ object AliasType
 AliasType :  TypeID
 AliasType :  TypeT
 
+object CompositeType
+
+CompositeType :  TypeID
+CompositeType :  ArrayTypeID
+
 object ColumnFamily
 
 ColumnFamily :  TableID
@@ -285,6 +290,12 @@ EnumTypeValue :  TypeID
 EnumTypeValue : []PhysicalRepresentation
 EnumTypeValue :  LogicalRepresentation
 
+object CompositeTypeAttribute
+
+CompositeTypeAttribute :  TypeID
+CompositeTypeAttribute :  Label
+CompositeTypeAttribute :  TypeT
+
 Table <|-- ColumnFamily
 Table <|-- Column
 View <|-- Column
@@ -372,4 +383,5 @@ Table <|-- ObjectParent
 View <|-- ObjectParent
 Sequence <|-- ObjectParent
 EnumType <|-- EnumTypeValue
+CompositeType <|-- CompositeTypeAttribute
 @enduml
