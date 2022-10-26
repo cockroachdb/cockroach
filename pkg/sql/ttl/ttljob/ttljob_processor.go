@@ -387,32 +387,35 @@ func (t *ttlProcessor) runTTLOnSpan(
 
 // keyToDatums translates a RKey on a span for a table to the appropriate datums.
 func keyToDatums(
-	key roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
+	rKey roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
 
-	rKey := key.AsRawKey()
+	key := rKey.AsRawKey()
 
 	// Decode the datums ourselves, instead of using rowenc.DecodeKeyVals.
 	// We cannot use rowenc.DecodeKeyVals because we may not have the entire PK
 	// as the key for the span (e.g. a PK (a, b) may only be split on (a)).
-	rKey, err := codec.StripTenantPrefix(rKey)
+	key, err := codec.StripTenantPrefix(key)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", key)
+		// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", []byte(rKey))
 	}
-	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(rKey)
+	key, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error decoding table/index ID of key=%x", key)
+		// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", []byte(rKey))
 	}
 	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
-	for len(rKey) > 0 && len(encDatums) < len(pkTypes) {
+	for len(key) > 0 && len(encDatums) < len(pkTypes) {
 		i := len(encDatums)
 		// We currently assume all PRIMARY KEY columns are ascending, and block
 		// creation otherwise.
 		enc := descpb.DatumEncoding_ASCENDING_KEY
 		var val rowenc.EncDatum
-		val, rKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, rKey)
+		val, key, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, key)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", key)
+			// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", []byte(rKey))
 		}
 		encDatums = append(encDatums, val)
 	}
@@ -420,7 +423,8 @@ func keyToDatums(
 	datums := make(tree.Datums, len(encDatums))
 	for i, encDatum := range encDatums {
 		if err := encDatum.EnsureDecoded(pkTypes[i], alloc); err != nil {
-			return nil, errors.Wrapf(err, "error ensuring encoded of %x", key)
+			// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+			return nil, errors.Wrapf(err, "error ensuring encoding of %x", []byte(rKey))
 		}
 		datums[i] = encDatum.Datum
 	}
