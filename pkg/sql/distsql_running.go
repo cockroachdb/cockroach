@@ -685,8 +685,7 @@ func (dsp *DistSQLPlanner) Run(
 		return
 	}
 
-	// TODO(radu): this should go through the flow scheduler.
-	flow.Run(ctx, func() {})
+	flow.Run(ctx)
 }
 
 // DistSQLReceiver is an execinfra.RowReceiver and execinfra.BatchReceiver that

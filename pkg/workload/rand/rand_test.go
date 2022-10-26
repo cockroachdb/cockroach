@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -67,7 +67,7 @@ func TestRandRun(t *testing.T) {
 		// printing the Go type in the test description passed to t.Run()
 		sqlName := typeT.SQLStandardName()
 		datum := randgen.RandDatum(rng, typeT, false)
-		unwrapped := eval.UnwrapDatum(nil, datum)
+		unwrapped := tree.UnwrapDOidWrapper(datum)
 
 		t.Run(fmt.Sprintf("%s-%T", sqlName, unwrapped), func(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf("DROP TABLE IF EXISTS %s.%s", dbName, tblName))

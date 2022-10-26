@@ -1965,7 +1965,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
-				d := eval.UnwrapDatum(evalCtx, args[0])
+				d := eval.UnwrapDatum(ctx, evalCtx, args[0])
 				strD, err := eval.PerformCast(ctx, evalCtx, d, types.String)
 				if err != nil {
 					return nil, err
@@ -2006,7 +2006,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				}
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
-				d := eval.UnwrapDatum(evalCtx, args[0])
+				d := eval.UnwrapDatum(ctx, evalCtx, args[0])
 				strD, err := eval.PerformCast(ctx, evalCtx, d, types.String)
 				if err != nil {
 					return nil, err
