@@ -224,7 +224,9 @@ func startTenantInternal(
 		ie: s.execCfg.InternalExecutor,
 		st: args.Settings,
 		makePlanner: func(opName string) (interface{}, func()) {
-			txn := args.db.NewTxn(ctx, "check-system-privilege")
+			// TODO(ssd): We shouldn't be capturing this context at all. The caller
+			// can pass us one.
+			txn := args.db.NewTxn(background, "check-system-privilege")
 			return sql.NewInternalPlanner(
 				opName,
 				txn,
@@ -303,7 +305,7 @@ func startTenantInternal(
 		return nil, nil, nil, "", "", err
 	}
 
-	connManager := netutil.MakeServer(ctx,
+	connManager := netutil.MakeServer(background,
 		args.stopper,
 		serverTLSConfig,                          // tlsConfig
 		http.HandlerFunc(httpServer.baseHandler), // handler
@@ -325,7 +327,7 @@ func startTenantInternal(
 
 	// TODO(tbg): the log dir is not configurable at this point
 	// since it is integrated too tightly with the `./cockroach start` command.
-	if err := startSampleEnvironment(ctx,
+	if err := startSampleEnvironment(background,
 		args.Settings,
 		args.stopper,
 		args.GoroutineDumpDirName,
@@ -336,7 +338,7 @@ func startTenantInternal(
 		return nil, nil, nil, "", "", err
 	}
 
-	if err := s.preStart(ctx,
+	if err := s.preStart(background,
 		args.stopper,
 		args.TestingKnobs,
 		connManager,
@@ -368,13 +370,13 @@ func startTenantInternal(
 
 	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlInstanceProvider, s.SQLInstanceID())
 	if err := args.costController.Start(
-		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
+		background, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
 		return nil, nil, nil, "", "", err
 	}
 
-	if err := s.startServeSQL(ctx,
+	if err := s.startServeSQL(background,
 		args.stopper,
 		s.connManager,
 		s.pgL,
