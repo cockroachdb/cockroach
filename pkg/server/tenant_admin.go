@@ -59,17 +59,9 @@ func (t *tenantAdminServer) RegisterGateway(
 
 var _ grpcGatewayServer = &tenantAdminServer{}
 
-func newTenantAdminServer(
-	ambientCtx log.AmbientContext,
-	sqlServer *SQLServer,
-	status *tenantStatusServer,
-	drain *drainServer,
-) *tenantAdminServer {
+func newTenantAdminServer(ambientCtx log.AmbientContext) *tenantAdminServer {
 	return &tenantAdminServer{
 		AmbientContext: ambientCtx,
-		sqlServer:      sqlServer,
-		drain:          drain,
-		status:         status,
 	}
 }
 

@@ -87,7 +87,6 @@ func newTenantStatusServer(
 	closedSessionCache *sql.ClosedSessionCache,
 	remoteFlowRunner *flowinfra.RemoteFlowRunner,
 	st *cluster.Settings,
-	sqlServer *SQLServer,
 	rpcCtx *rpc.Context,
 	stopper *stop.Stopper,
 ) *tenantStatusServer {
@@ -100,7 +99,6 @@ func newTenantStatusServer(
 			closedSessionCache: closedSessionCache,
 			remoteFlowRunner:   remoteFlowRunner,
 			st:                 st,
-			sqlServer:          sqlServer,
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 		},
