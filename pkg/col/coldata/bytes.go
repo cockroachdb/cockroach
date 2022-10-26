@@ -413,17 +413,6 @@ func (b *Bytes) appendSliceWithSel(src *Bytes, destIdx int, sel []int) {
 	}
 }
 
-// AppendVal appends the given []byte value to the end of the receiver. A nil
-// value will be "converted" into an empty byte slice.
-// TODO(yuzefovich): remove this method.
-func (b *Bytes) AppendVal(v []byte) {
-	if b.isWindow {
-		panic("AppendVal is called on a window into Bytes")
-	}
-	b.elements = append(b.elements, element{})
-	b.elements[len(b.elements)-1].set(v, b)
-}
-
 // Len returns how many []byte values the receiver contains.
 //
 //gcassert:inline
