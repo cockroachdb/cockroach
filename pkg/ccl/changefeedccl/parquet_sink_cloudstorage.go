@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	goparquet "github.com/fraugster/parquet-go"
+	"github.com/fraugster/parquet-go/parquet"
 	"github.com/fraugster/parquet-go/parquetschema"
 )
 
@@ -58,7 +59,8 @@ const (
 // have a single schema written inside it and each parquetWriter can only be
 // associated with a single schema.)
 type parquetCloudStorageSink struct {
-	wrapped *cloudStorageSink
+	wrapped     *cloudStorageSink
+	compression parquet.CompressionCodec
 }
 
 type parquetFileWriter struct {
@@ -68,8 +70,18 @@ type parquetFileWriter struct {
 	numCols        int
 }
 
-func makeParquetCloudStorageSink(baseCloudStorageSink *cloudStorageSink) *parquetCloudStorageSink {
-	return &parquetCloudStorageSink{wrapped: baseCloudStorageSink}
+func makeParquetCloudStorageSink(
+	baseCloudStorageSink *cloudStorageSink,
+) (*parquetCloudStorageSink, error) {
+	parquetSink := &parquetCloudStorageSink{wrapped: baseCloudStorageSink}
+	if !baseCloudStorageSink.compression.enabled() {
+		parquetSink.compression = parquet.CompressionCodec_UNCOMPRESSED
+	} else if baseCloudStorageSink.compression == sinkCompressionGzip {
+		parquetSink.compression = parquet.CompressionCodec_GZIP
+	} else {
+		return nil, errors.AssertionFailedf("Specified compression not supported with parquet")
+	}
+	return parquetSink, nil
 }
 
 // EmitRow does not do anything. It must not be called. It is present so that
@@ -128,7 +140,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 
 	if file.parquetCodec == nil {
 		var err error
-		file.parquetCodec, err = makeParquetWriterWrapper(ctx, updatedRow, &file.buf)
+		file.parquetCodec, err = makeParquetWriterWrapper(ctx, updatedRow, &file.buf, parquetSink.compression)
 		if err != nil {
 			return err
 		}
@@ -188,7 +200,7 @@ func (parquetSink *parquetCloudStorageSink) EncodeAndEmitRow(
 }
 
 func makeParquetWriterWrapper(
-	ctx context.Context, row cdcevent.Row, buf *bytes.Buffer,
+	ctx context.Context, row cdcevent.Row, buf *bytes.Buffer, compression parquet.CompressionCodec,
 ) (*parquetFileWriter, error) {
 	parquetColumns, err := getParquetColumnTypes(ctx, row)
 	if err != nil {
@@ -214,6 +226,7 @@ func makeParquetWriterWrapper(
 	// sinks compressing. Currently using not parquets builtin compressor, relying
 	// on sinks compression
 	parquetWriterOptions = append(parquetWriterOptions, goparquet.WithSchemaDefinition(schema))
+	parquetWriterOptions = append(parquetWriterOptions, goparquet.WithCompressionCodec(compression))
 	pqw := goparquet.NewFileWriter(buf,
 		parquetWriterOptions...,
 	)

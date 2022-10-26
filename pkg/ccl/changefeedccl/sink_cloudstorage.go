@@ -445,7 +445,9 @@ func makeCloudStorageSink(
 			return nil, err
 		}
 		s.compression = algo
-		s.ext = s.ext + ext
+		if encodingOpts.Format != changefeedbase.OptFormatParquet {
+			s.ext = s.ext + ext
+		}
 	}
 
 	// We make the external storage with a nil IOAccountingInterceptor since we
@@ -460,7 +462,11 @@ func makeCloudStorageSink(
 	}
 
 	if encodingOpts.Format == changefeedbase.OptFormatParquet {
-		parquetSinkWithEncoder := makeParquetCloudStorageSink(s)
+		parquetSinkWithEncoder, err := makeParquetCloudStorageSink(s)
+		if err != nil {
+			return nil, err
+		}
+		s.compression = ""
 		return parquetSinkWithEncoder, nil
 	}
 
@@ -674,9 +680,10 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	s.asyncFlushActive = asyncFlushEnabled
 
 	if file.parquetCodec != nil {
-		if err := s.flushParquet(file); err != nil {
+		if err := file.parquetCodec.parquetWriter.Close(); err != nil {
 			return err
 		}
+		file.rawSize = len(file.buf.Bytes())
 	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
@@ -797,29 +804,6 @@ func (s *cloudStorageSink) Close() error {
 
 // Dial implements the Sink interface.
 func (s *cloudStorageSink) Dial() error {
-	return nil
-}
-
-func (s *cloudStorageSink) flushParquet(file *cloudStorageSinkFile) error {
-	// The order of getting size and close is important - we should get size
-	// after Close, as Close adds more data to buffer.
-	if err := file.parquetCodec.parquetWriter.Close(); err != nil {
-		return err
-	}
-	file.rawSize = len(file.buf.Bytes())
-	if file.codec != nil {
-		// Parquet compression can be done in 2 ways: using the parquetwriter
-		// itself or relying on the Sink's compression. Currently, we are using
-		// Sink's compression. When we create the parquet writer, we pass in the
-		// file's buffer to it (see parquetCloudStorageSink) and the writer writes
-		// to that buffer. Once its done, we need to compress that data by writing
-		// to file's codec.
-		tempBuf := bytes.NewBuffer(file.buf.Bytes())
-		file.buf.Reset()
-		if _, err := file.codec.Write(tempBuf.Bytes()); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 

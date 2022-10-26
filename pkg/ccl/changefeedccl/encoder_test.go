@@ -1059,11 +1059,6 @@ func TestParquetEncoder(t *testing.T) {
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		defer TestingSetIncludeParquetMetadata()()
 
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
-	2, CAST('nan' AS FLOAT),false),(3, NULL, NULL, 4.5, NULL)`)
-
 		tests := []struct {
 			name           string
 			changefeedStmt string
@@ -1082,6 +1077,11 @@ func TestParquetEncoder(t *testing.T) {
 
 		for _, test := range tests {
 			t.Run(test.name, func(t *testing.T) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+				sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL)`)
+				defer sqlDB.Exec(t, `DROP TABLE FOO`)
+				sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'Alice', 3, 0.5032135844230652, true), (2, 'Bob',
+	2, CAST('nan' AS FLOAT),false),(3, NULL, NULL, 4.5, NULL)`)
 				foo := feed(t, f, test.changefeedStmt)
 				defer closeFeed(t, foo)
 
