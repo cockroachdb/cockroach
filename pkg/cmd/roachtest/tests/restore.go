@@ -471,7 +471,6 @@ func registerRestore(r registry.Registry) {
 		{dataSet: dataBank2TB{}, nodes: 10, timeout: 6 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, largeVolumes: true},
-		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
 		{dataSet: tpccIncDataLatest{}, nodes: 10, timeout: 6 * time.Hour},
 	} {
 		item := item
