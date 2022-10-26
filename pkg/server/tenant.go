@@ -66,16 +66,23 @@ type SQLServerWrapper struct {
 	clock      *hlc.Clock
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
-	grpc *grpcServer
+	grpc       *grpcServer
+	nodeDialer *nodedialer.Dialer
+	db         *kv.DB
 
 	http        *httpServer
-	sqlServer   *SQLServer
 	authServer  *authenticationServer
 	drainServer *drainServer
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
 	eventsServer *obs.EventsServer
 	stopper      *stop.Stopper
+
+	sqlServer *SQLServer
+	sqlCfg    *SQLConfig
+
+	// Created in NewServer but initialized (made usable) in `(*Server).PreStart`.
+	externalStorageBuilder *externalStorageBuilder
 
 	// Used for multi-tenant cost control (on the tenant side).
 	costController multitenant.TenantSideCostController
@@ -265,16 +272,21 @@ func NewTenantServer(
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
-		grpc: args.grpc,
+		grpc:       args.grpc,
+		nodeDialer: args.nodeDialer,
+		db:         args.db,
 
 		http:         httpServer,
-		sqlServer:    s,
 		authServer:   authServer,
 		drainServer:  drainServer,
 		eventsServer: args.eventsServer,
 		stopper:      args.stopper,
 
-		costController: args.costController,
+		sqlServer: s,
+		sqlCfg:    args.SQLConfig,
+
+		externalStorageBuilder: args.externalStorageBuilder,
+		costController:         args.costController,
 	}
 	return sw, nil
 }
@@ -314,6 +326,26 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if err := s.http.start(ctx, workersCtx, connManager, uiTLSConfig, s.stopper); err != nil {
 		return err
 	}
+
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	fileTableInternalExecutor := sql.MakeInternalExecutor(s.PGServer().SQLServer, sql.MemoryMetrics{}, ieMon)
+	s.externalStorageBuilder.init(
+		ctx,
+		s.sqlCfg.ExternalIODirConfig,
+		s.sqlServer.cfg.Settings,
+		s.sqlServer.cfg.IDContainer,
+		s.nodeDialer,
+		s.sqlServer.cfg.TestingKnobs,
+		&fileTableInternalExecutor,
+		s.sqlServer.execCfg.InternalExecutorFactory,
+		s.db,
+		s.costController,
+	)
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -577,22 +609,10 @@ func makeTenantSQLServerArgs(
 	runtime := status.NewRuntimeStatSampler(startupCtx, clock)
 	registry.AddMetricStruct(runtime)
 
+	// NB: The init method will be called in (*SQLServerWrapper).PreStart().
 	esb := &externalStorageBuilder{}
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
-
-	esb.init(
-		startupCtx,
-		sqlCfg.ExternalIODirConfig,
-		baseCfg.Settings,
-		baseCfg.IDContainer,
-		nodeDialer,
-		baseCfg.TestingKnobs,
-		circularInternalExecutor,
-		internalExecutorFactory,
-		db,
-		costController,
-	)
 
 	grpcServer := newGRPCServer(rpcContext)
 
@@ -666,6 +686,7 @@ func makeTenantSQLServerArgs(
 		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
 		eventsServer:             eventsServer,
+		externalStorageBuilder:   esb,
 	}, nil
 }
 
