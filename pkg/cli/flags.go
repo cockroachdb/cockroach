@@ -1002,6 +1002,22 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 		return f != nil && f.Changed
 	}
 
+	if cmd == mtStartSQLCmd {
+		if !changed(fs, cliflags.ListenAddr.Name) && changed(fs, cliflags.ListenSQLAddr.Name) {
+			// A special affordance for backward-compatibility with previous
+			// versions of CockroachDB.
+			//
+			// In those versions, the 'mt start-sql' command did not support
+			// --listen-addr and instead --sql-addr was controlling both the
+			// RPC and SQL ports together. To support this, we assume that
+			// if the latter is set but the former is not, the user truly
+			// wanted to control both.
+			startCtx.serverListenAddr, serverListenPort = serverSQLAddr, serverSQLPort
+			serverSQLAddr, serverSQLPort = "", ""
+			fs.Lookup(cliflags.ListenSQLAddr.Name).Changed = false
+		}
+	}
+
 	// Construct the socket name, if requested. The flags may not be defined for
 	// `cmd` so be cognizant of that.
 	//

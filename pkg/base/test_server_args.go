@@ -295,7 +295,7 @@ type TestTenantArgs struct {
 	SSLCertsDir string
 
 	// StartingSQLPort, if it is non-zero, is added to the tenant ID in order to
-	// determine the tenant's SQL port.
+	// determine the tenant's SQL+RPC port.
 	StartingSQLPort int
 
 	// StartingHTTPPort, if it is non-zero, is added to the tenant ID in order to

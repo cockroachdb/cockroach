@@ -620,9 +620,7 @@ func (d tenantProtectedTSProvider) Protect(
 // serverutils.StartTenant method.
 type TestTenant struct {
 	*SQLServer
-	Cfg      *BaseConfig
-	sqlAddr  string
-	httpAddr string
+	Cfg *BaseConfig
 	*httpTestServer
 	drain *drainServer
 }
@@ -631,23 +629,17 @@ var _ serverutils.TestTenantInterface = &TestTenant{}
 
 // SQLAddr is part of TestTenantInterface interface.
 func (t *TestTenant) SQLAddr() string {
-	return t.sqlAddr
+	return t.Cfg.SQLAddr
 }
 
 // HTTPAddr is part of TestTenantInterface interface.
 func (t *TestTenant) HTTPAddr() string {
-	return t.httpAddr
+	return t.Cfg.HTTPAddr
 }
 
 // RPCAddr is part of the TestTenantInterface interface.
 func (t *TestTenant) RPCAddr() string {
-	// The RPC and SQL functionality for tenants is multiplexed
-	// on the same address. Having a separate interface to access
-	// for the two addresses makes it easier to distinguish
-	// the use case for which the address is being used.
-	// This also provides parity between SQL only servers and
-	// regular servers.
-	return t.sqlAddr
+	return t.Cfg.Addr
 }
 
 // PGServer is part of TestTenantInterface.
@@ -849,6 +841,11 @@ func (ts *TestServer) StartTenant(
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
 
+	// For now, we don't support split RPC/SQL ports for secondary tenants
+	// in test servers.
+	// TODO(knz): Lift this limitation. It seems arbitrary.
+	baseCfg.SplitListenSQL = false
+
 	localNodeIDContainer := &base.NodeIDContainer{}
 	localNodeIDContainer.Set(ctx, ts.NodeID())
 	blobClientFactory := blobs.NewBlobClientFactory(
@@ -917,8 +914,6 @@ func (ts *TestServer) StartTenant(
 	return &TestTenant{
 		SQLServer:      sw.sqlServer,
 		Cfg:            &baseCfg,
-		sqlAddr:        baseCfg.SQLAddr,
-		httpAddr:       baseCfg.HTTPAddr,
 		httpTestServer: hts,
 		drain:          sw.drainServer,
 	}, err
