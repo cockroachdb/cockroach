@@ -191,6 +191,28 @@ func updateBackReferencesInTypes(
 	return nil
 }
 
+func (m *visitor) UpdateTypeBackReferencesInTypes(
+	ctx context.Context, op scop.UpdateTypeBackReferencesInTypes,
+) error {
+	var forwardRefs catalog.DescriptorIDSet
+	if desc, err := m.s.GetDescriptor(ctx, op.BackReferencedTypeID); err != nil {
+		return err
+	} else if !desc.Dropped() {
+		typ, err := catalog.AsTypeDescriptor(desc)
+		if err != nil {
+			return err
+		}
+		ids, err := typ.GetIDClosure()
+		if err != nil {
+			return err
+		}
+		for id := range ids {
+			forwardRefs.Add(id)
+		}
+	}
+	return updateBackReferencesInTypes(ctx, m, op.TypeIDs, op.BackReferencedTypeID, forwardRefs)
+}
+
 func (m *visitor) UpdateBackReferencesInSequences(
 	ctx context.Context, op scop.UpdateBackReferencesInSequences,
 ) error {

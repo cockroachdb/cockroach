@@ -398,6 +398,14 @@ type UpdateTableBackReferencesInTypes struct {
 	BackReferencedTableID descpb.ID
 }
 
+// UpdateTypeBackReferencesInTypes updates back references to a type
+// in the specified types.
+type UpdateTypeBackReferencesInTypes struct {
+	mutationOp
+	TypeIDs              []descpb.ID
+	BackReferencedTypeID descpb.ID
+}
+
 // RemoveBackReferenceInTypes removes back references to a descriptor in the
 // specified types. It is a special case of the previous op for use with views
 // and multi-region elements, where a forward reference to the type is being
