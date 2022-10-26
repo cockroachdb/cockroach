@@ -400,13 +400,13 @@ func (c *transientCluster) Start(
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
-					TenantID:         roachpb.MakeTenantID(uint64(i + 2)),
-					Stopper:          tenantStopper,
-					ForceInsecure:    c.demoCtx.Insecure,
-					SSLCertsDir:      c.demoDir,
-					StartingSQLPort:  c.demoCtx.SQLPort - 2,
-					StartingHTTPPort: c.demoCtx.HTTPPort - 2,
-					Locality:         c.demoCtx.Localities[i],
+					TenantID:              roachpb.MakeTenantID(uint64(i + 2)),
+					Stopper:               tenantStopper,
+					ForceInsecure:         c.demoCtx.Insecure,
+					SSLCertsDir:           c.demoDir,
+					StartingRPCAndSQLPort: c.demoCtx.SQLPort - 2,
+					StartingHTTPPort:      c.demoCtx.HTTPPort - 2,
+					Locality:              c.demoCtx.Localities[i],
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
@@ -753,9 +753,6 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
 		DisableDefaultTestTenant: true,
-		// This disables the tenant server. We could enable it but would have to
-		// generate the suitable certs at the caller who wishes to do so.
-		TenantAddr: new(string),
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				StickyEngineRegistry: stickyEngineRegistry,
