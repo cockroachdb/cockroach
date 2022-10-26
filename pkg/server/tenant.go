@@ -66,6 +66,7 @@ type SQLServerWrapper struct {
 	sqlServer   *SQLServer
 	authServer  *authenticationServer
 	drainServer *drainServer
+	stopper     *stop.Stopper
 	pgAddr      string
 	httpAddr    string
 }
@@ -335,18 +336,11 @@ func NewTenantServer(
 		return nil, err
 	}
 
-	if err := s.startServeSQL(ctx,
-		args.stopper,
-		s.connManager,
-		s.pgL,
-		nil /* socketFile */); err != nil {
-		return nil, err
-	}
-
 	sw := &SQLServerWrapper{
 		sqlServer:   s,
 		authServer:  authServer,
 		drainServer: drainServer,
+		stopper:     args.stopper,
 		pgAddr:      baseCfg.SQLAddr,
 		httpAddr:    baseCfg.HTTPAddr,
 	}
@@ -369,7 +363,19 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 // This mirrors the implementation of (*Server).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
 func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
-	// TODO(knz): Move code here.
+	workersCtx := s.AnnotateCtx(context.Background())
+
+	if err := s.sqlServer.startServeSQL(
+		workersCtx,
+		s.stopper,
+		s.sqlServer.connManager,
+		s.sqlServer.pgL,
+		&s.sqlServer.cfg.SocketFile,
+	); err != nil {
+		return err
+	}
+
+	log.Event(ctx, "server ready")
 	return nil
 }
 
