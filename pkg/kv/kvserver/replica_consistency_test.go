@@ -164,7 +164,7 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 
 	ctx := context.Background()
 	sb := &strings.Builder{}
-	lim := quotapool.NewRateLimiter("rate", 1e9, 0)
+	lim := quotapool.NewRateLimiter("rate", quotapool.Inf(), 0)
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
