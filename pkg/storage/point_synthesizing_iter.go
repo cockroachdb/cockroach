@@ -122,6 +122,9 @@ type PointSynthesizingIter struct {
 	// It is reset to false on every call to updateRangeKeys(), and accumulates
 	// changes during intermediate positioning operations.
 	rangeKeyChanged bool
+
+	// seekKeyBuf is used to clone seek keys.
+	seekKeyBuf roachpb.Key
 }
 
 var _ MVCCIterator = (*PointSynthesizingIter)(nil)
@@ -137,6 +140,7 @@ func NewPointSynthesizingIter(parent MVCCIterator) *PointSynthesizingIter {
 		rangeKeysBuf:   iter.rangeKeysBuf,
 		rangeKeysPos:   iter.rangeKeysPos,
 		rangeKeysStart: iter.rangeKeysStart,
+		seekKeyBuf:     iter.seekKeyBuf,
 	}
 	return iter
 }
@@ -168,6 +172,7 @@ func (i *PointSynthesizingIter) release() {
 		rangeKeysBuf:   i.rangeKeysBuf[:0],
 		rangeKeysPos:   i.rangeKeysPos[:0],
 		rangeKeysStart: i.rangeKeysStart[:0],
+		seekKeyBuf:     i.seekKeyBuf[:0],
 	}
 	pointSynthesizingIterPool.Put(i)
 }
@@ -350,6 +355,12 @@ func (i *PointSynthesizingIter) clearRangeKeys() {
 
 // SeekGE implements MVCCIterator.
 func (i *PointSynthesizingIter) SeekGE(seekKey MVCCKey) {
+	// The seek key may originate from UnsafeKey (see pebbleMVCCScanner), in which
+	// case it would be invalidated when we seek the parent iter below, so we have
+	// to clone it. We could be clever and try to detect if the backing array is
+	// the same as i.iterKey, but let's be obviously correct instead.
+	i.seekKeyBuf = append(i.seekKeyBuf[:0], seekKey.Key...)
+	seekKey.Key = i.seekKeyBuf
 	i.reverse = false
 	i.iter.SeekGE(seekKey)
 	if ok, _ := i.updateIter(); !ok {
@@ -361,6 +372,8 @@ func (i *PointSynthesizingIter) SeekGE(seekKey MVCCKey) {
 
 // SeekIntentGE implements MVCCIterator.
 func (i *PointSynthesizingIter) SeekIntentGE(seekKey roachpb.Key, txnUUID uuid.UUID) {
+	i.seekKeyBuf = append(i.seekKeyBuf[:0], seekKey...)
+	seekKey = i.seekKeyBuf
 	i.reverse = false
 	i.iter.SeekIntentGE(seekKey, txnUUID)
 	if ok, _ := i.updateIter(); !ok {
@@ -482,6 +495,8 @@ func (i *PointSynthesizingIter) NextKey() {
 
 // SeekLT implements MVCCIterator.
 func (i *PointSynthesizingIter) SeekLT(seekKey MVCCKey) {
+	i.seekKeyBuf = append(i.seekKeyBuf[:0], seekKey.Key...)
+	seekKey.Key = i.seekKeyBuf
 	i.reverse = true
 	i.iter.SeekLT(seekKey)
 	if ok, _ := i.updateIter(); !ok {
