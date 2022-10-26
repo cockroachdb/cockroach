@@ -97,13 +97,6 @@ func backupRestoreTestSetupWithParams(
 	tc = testcluster.StartTestCluster(t, clusterSize, params)
 	init(tc)
 
-	const payloadSize = 100
-	splits := 10
-	if numAccounts == 0 {
-		splits = 0
-	}
-	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
-
 	sqlDB = sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	// Lower the initial buffering adder ingest size to allow concurrent import jobs to run without
@@ -116,9 +109,9 @@ func backupRestoreTestSetupWithParams(
 	// particular, they will override it inline after setting up the test cluster.
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.backup.merge_file_buffer_size = '16MiB'`)
 	sqlDB.Exec(t, `CREATE DATABASE data`)
-	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
-	if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
-		t.Fatalf("%+v", err)
+
+	if err := loadBankData(ctx, sqlDB.DB.(*gosql.DB), numAccounts); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := tc.WaitForFullReplication(); err != nil {
@@ -132,6 +125,18 @@ func backupRestoreTestSetupWithParams(
 	}
 
 	return tc, sqlDB, dir, cleanupFn
+}
+
+func loadBankData(ctx context.Context, db *gosql.DB, numAccounts int) error {
+	const payloadSize = 100
+	splits := 10
+	if numAccounts == 0 {
+		splits = 0
+	}
+	bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
+	l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
+	_, err := workloadsql.Setup(ctx, db, bankData, l)
+	return err
 }
 
 func backupRestoreTestSetup(
