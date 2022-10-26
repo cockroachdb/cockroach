@@ -382,6 +382,23 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// initialized.
 	s.grpc.setMode(modeOperational)
 
+	// Report server listen addresses to logs.
+	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
+		redact.Safe(s.sqlServer.cfg.HTTPRequestScheme()),
+		log.SafeManaged(s.sqlServer.cfg.HTTPAddr),
+		log.SafeManaged(s.sqlServer.cfg.HTTPAdvertiseAddr))
+	rpcConnType := redact.SafeString("grpc/postgres")
+	if s.sqlServer.cfg.SplitListenSQL {
+		rpcConnType = "grpc"
+		log.Ops.Infof(ctx, "starting postgres server at %s (use: %s)",
+			log.SafeManaged(s.sqlServer.cfg.SQLAddr),
+			log.SafeManaged(s.sqlServer.cfg.SQLAdvertiseAddr))
+	}
+	log.Ops.Infof(ctx, "starting %s server at %s", log.SafeManaged(rpcConnType), log.SafeManaged(s.sqlServer.cfg.Addr))
+	log.Ops.Infof(ctx, "advertising SQL server node at %s", log.SafeManaged(s.sqlServer.cfg.AdvertiseAddr))
+
+	log.Event(ctx, "accepting connections")
+
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
 	if err := startPurgeOldSessions(workersCtx, s.authentication); err != nil {
 		return err
