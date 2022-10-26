@@ -50,8 +50,8 @@ exp,benchmark
 11,Grant/grant_all_on_1_table
 12,Grant/grant_all_on_2_tables
 12,Grant/grant_all_on_3_tables
-9,GrantRole/grant_1_role
-11,GrantRole/grant_2_roles
+11,GrantRole/grant_1_role
+15,GrantRole/grant_2_roles
 3,ORMQueries/activerecord_type_introspection_query
 3,ORMQueries/django_table_introspection_1_table
 3,ORMQueries/django_table_introspection_4_tables
