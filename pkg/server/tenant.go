@@ -670,6 +670,9 @@ func makeTenantSQLServerArgs(
 		10*1<<20,                               // maxBufferSizeBytes - 10MB
 		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
 	)
+	if knobs := baseCfg.TestingKnobs.EventExporter; knobs != nil {
+		eventsServer.TestingKnobs = knobs.(obs.EventServerTestingKnobs)
+	}
 
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
