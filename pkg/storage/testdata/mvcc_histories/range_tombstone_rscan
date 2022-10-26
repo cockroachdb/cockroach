@@ -1,20 +1,21 @@
 run ok
-put k=b v=foo ts=1
-del_range_ts k=a end=f ts=2
-put k=b v=foo ts=1
-del k=b ts=3
-del k=b ts=4
+put k=a v=foo ts=1
+put k=a v=bar ts=2
+del_range_ts k=a end=f ts=10
+del k=a ts=11
+with t=A
+  txn_begin ts=20
+  del k=b
+  scan k=a end=z reverse
 ----
+del: "a": found key false
 del: "b": found key false
-del: "b": found key false
->> at end:
-rangekey: {a-f}/[2.000000000,0=/<empty>]
-data: "b"/4.000000000,0 -> /<empty>
-data: "b"/3.000000000,0 -> /<empty>
-data: "b"/1.000000000,0 -> /BYTES/foo
-
-# Forward scans at all timestamps.
-run ok
-scan k=a end=z ts=8 reverse
-----
 scan: "a"-"z" -> <no data>
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=20.000000000,0 wto=false gul=0,0
+rangekey: {a-f}/[10.000000000,0=/<empty>]
+data: "a"/11.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/bar
+data: "a"/1.000000000,0 -> /BYTES/foo
+meta: "b"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=20.000000000,0 min=0,0 seq=0} ts=20.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/20.000000000,0 -> /<empty>

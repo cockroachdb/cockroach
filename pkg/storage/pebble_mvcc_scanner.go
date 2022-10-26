@@ -99,7 +99,11 @@ func (p *pebbleResults) put(
 			return err
 		}
 		if err := v.Verify(k); err != nil {
+			var meta enginepb.MVCCMetadata
+			meta.Unmarshal(value)
+			s := meta.String()
 			return err
+			_ = s
 		}
 	}
 
@@ -497,6 +501,12 @@ func (p *pebbleMVCCScanner) scan(
 		}
 	}
 
+	if ctx.Value("foo") != nil {
+		if !p.reverse {
+			panic("x")
+		}
+	}
+
 	if p.reverse {
 		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
 			return nil, 0, 0, p.err
@@ -507,8 +517,12 @@ func (p *pebbleMVCCScanner) scan(
 		}
 	}
 
+	var sl []string
+	sl = append(sl, p.curUnsafeKey.String(), p.curUnsafeKey.Timestamp.String(), p.curUnsafeValue.String())
 	for p.getAndAdvance(ctx) {
+		sl = append(sl, p.curUnsafeKey.String())
 	}
+	_ = sl
 	p.maybeFailOnMoreRecent()
 
 	if p.err != nil {
@@ -1074,10 +1088,16 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 		// pair.
 		maxNewSize = int(p.targetBytes - p.results.bytes)
 	}
+	s := key.String()
+	mvccK, err2 := DecodeMVCCKey(rawKey)
+	mvccS := mvccK.String()
 	if err := p.results.put(ctx, rawKey, rawValue, p.memAccount, maxNewSize); err != nil {
 		p.err = errors.Wrapf(err, "scan with start key %s", p.start)
 		return false
 	}
+	_ = s
+	_ = mvccS
+	_ = err2
 
 	// Check if we hit the key limit just now to avoid scanning further before
 	// checking the key limit above on the next iteration. This has a small cost

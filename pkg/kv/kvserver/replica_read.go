@@ -318,20 +318,27 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			ek = fmt.Sprint(hdr.EndKey)
 			if sk == `/Table/100/"1a02da0adc21fc69"` && ek == `/Table/100/"c79d1b6b95d2cb62"` {
 				ctx, finishAndGet = tracing.ContextWithRecordingSpan(ctx, r.Tracer, "faulty scan")
+				ctx = context.WithValue(ctx, "foo", "foo")
 				// NB: offending key is /Table/100/"8f3327ce618a441a"
+				var prevStack storage.MVCCRangeKeyStack
 				if err := rw.MVCCIterate(hdr.Key, hdr.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges, func(value storage.MVCCKeyValue, stack storage.MVCCRangeKeyStack) error {
-					if !stack.IsEmpty() {
-						log.Eventf(ctx, "%s", stack)
+					if !stack.IsEmpty() && !prevStack.Equal(stack) {
+						log.Eventf(ctx, "stack: %s", stack)
+					}
+					prevStack = stack
+					if len(value.Key.Key) == 0 {
+						return nil
 					}
 					isVal := value.Key.IsValue()
-					log.Eventf(ctx, "%s [isVal=%t]", value, isVal)
+					log.Eventf(ctx, "[isVal=%t] %x", isVal, value)
 					if isVal {
 						mvccV, err := storage.DecodeMVCCValue(value.Value)
 						if err != nil {
 							return err
 						}
+						present := mvccV.Value.IsPresent()
 						if !mvccV.MVCCValueHeader.IsEmpty() {
-							log.Eventf(ctx, "vh: %v", mvccV.MVCCValueHeader)
+							log.Eventf(ctx, "vh: %v isPresent: %t", mvccV.MVCCValueHeader, present)
 						}
 						if err := mvccV.Value.Verify(value.Key.Key); err != nil {
 							log.Eventf(ctx, "%v", err)
@@ -348,6 +355,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
 		if rec := finishAndGet(); len(rec) > 0 {
 			log.Warningf(ctx, "XXX %s", rec)
+			log.Infof(ctx, "XXX %s", pErr)
 			os.Exit(123)
 		}
 		_ = sk
