@@ -531,7 +531,7 @@ func TestReplicaCircuitBreaker_ExemptRequests(t *testing.T) {
 	tc.TripBreaker(n1)
 
 	exemptRequests := []func() roachpb.Request{
-		func() roachpb.Request { return &roachpb.ExportRequest{ReturnSST: true} },
+		func() roachpb.Request { return &roachpb.ExportRequest{} },
 		func() roachpb.Request {
 			sstFile := &storage.MemFile{}
 			sst := storage.MakeIngestionSSTWriter(context.Background(), cluster.MakeTestingClusterSettings(), sstFile)

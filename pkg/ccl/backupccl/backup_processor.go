@@ -350,7 +350,6 @@ func runBackupProcessor(
 							EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
 							MVCCFilter:                          spec.MVCCFilter,
 							TargetFileSize:                      batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-							ReturnSST:                           true,
 							SplitMidKey:                         splitMidKey,
 						}
 
