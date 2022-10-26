@@ -342,6 +342,14 @@ const (
 	// V23_1_CreateSystemJobInfoTable creates the system.job_info table.
 	V23_1CreateSystemJobInfoTable
 
+	// V23_1RoleMembersTableHasIDColumns is the version where the role_members
+	// system table has columns for ids.
+	V23_1RoleMembersTableHasIDColumns
+
+	// V23_1RoleMembersIDColumnsBackfilled is the version where the columns for
+	// ids in the role_members system table have been backfilled.
+	V23_1RoleMembersIDColumnsBackfilled
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -587,6 +595,14 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1CreateSystemJobInfoTable,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 10},
+	},
+	{
+		Key:     V23_1RoleMembersTableHasIDColumns,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     V23_1RoleMembersIDColumnsBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 14},
 	},
 
 	// *************************************************
