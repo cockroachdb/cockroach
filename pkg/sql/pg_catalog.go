@@ -1124,7 +1124,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 		schema:  schemaDef,
 		indexes: []virtualIndex{
 			{
-				partial: includesIndexEntries,
+				incomplete: includesIndexEntries,
 				populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
 					addRow func(...tree.Datum) error) (bool, error) {
 					var id descpb.ID
@@ -3179,7 +3179,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 	},
 	indexes: []virtualIndex{
 		{
-			partial: false,
+			incomplete: false,
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
 				addRow func(...tree.Datum) error) (bool, error) {
 
