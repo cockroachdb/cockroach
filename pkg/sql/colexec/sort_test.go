@@ -202,7 +202,7 @@ func generateRandomDataForTestSort(
 		tups[i] = make(colexectestutils.Tuple, nCols)
 		for j := range tups[i] {
 			// Small range so we can test partitioning
-			if rng.Float64() < nullProbability {
+			if rng.Float64() < 0.1 {
 				tups[i][j] = nil
 			} else {
 				tups[i][j] = rng.Int63() % 2048

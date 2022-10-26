@@ -888,7 +888,7 @@ func TestAggregatorRandom(t *testing.T) {
 						// NULL values contribute to the row count, so we're updating
 						// the row counts outside of the if block.
 						expRowCounts[curGroup]++
-						if hasNulls && rng.Float64() < nullProbability {
+						if hasNulls && rng.Float64() < 0.1 {
 							aggColNulls.SetNull(i)
 						} else {
 							expNulls[curGroup] = false
