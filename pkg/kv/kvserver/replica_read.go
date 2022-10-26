@@ -318,6 +318,30 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			ek = fmt.Sprint(hdr.EndKey)
 			if sk == `/Table/100/"1a02da0adc21fc69"` && ek == `/Table/100/"c79d1b6b95d2cb62"` {
 				ctx, finishAndGet = tracing.ContextWithRecordingSpan(ctx, r.Tracer, "faulty scan")
+				// NB: offending key is /Table/100/"8f3327ce618a441a"
+				if err := rw.MVCCIterate(hdr.Key, hdr.EndKey, storage.MVCCKeyAndIntentsIterKind, storage.IterKeyTypePointsAndRanges, func(value storage.MVCCKeyValue, stack storage.MVCCRangeKeyStack) error {
+					if !stack.IsEmpty() {
+						log.Eventf(ctx, "%s", stack)
+					}
+					isVal := value.Key.IsValue()
+					log.Eventf(ctx, "%s [isVal=%t]", value, isVal)
+					if isVal {
+						mvccV, err := storage.DecodeMVCCValue(value.Value)
+						if err != nil {
+							return err
+						}
+						if !mvccV.MVCCValueHeader.IsEmpty() {
+							log.Eventf(ctx, "vh: %v", mvccV.MVCCValueHeader)
+						}
+						if err := mvccV.Value.Verify(value.Key.Key); err != nil {
+							log.Eventf(ctx, "%v", err)
+						}
+					}
+
+					return nil
+				}); err != nil {
+					panic(err)
+				}
 			}
 		}
 

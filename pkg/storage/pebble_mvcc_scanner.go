@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -490,6 +491,7 @@ func (p *pebbleMVCCScanner) scan(
 	// this will be a new, unpositioned iterator, which allows omitting the
 	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
+		log.Event(ctx, "initially valid")
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
 			p.enablePointSynthesis()
 		}
