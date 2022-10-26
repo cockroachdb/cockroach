@@ -70,6 +70,13 @@ import (
 // SQLServerWrapper is a utility struct that encapsulates
 // a SQLServer and its helpers that make it a networked service.
 type SQLServerWrapper struct {
+	// NB: This struct definition mirrors that of Server.
+	// The fields are kept in a similar order to make their comparison easier
+	// during reviews.
+	//
+	// TODO(knz): Find a way to merge these two togethers so there is just
+	// one implementation.
+
 	clock      *hlc.Clock
 	rpcContext *rpc.Context
 	// The gRPC server on which the different RPC handlers will be registered.
@@ -128,6 +135,8 @@ func (s *SQLServerWrapper) Drain(
 func NewTenantServer(
 	ctx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (*SQLServerWrapper, error) {
+	// TODO(knz): Make the license application a per-server thing
+	// instead of a global thing.
 	err := ApplyTenantLicense()
 	if err != nil {
 		return nil, err
@@ -254,7 +263,12 @@ func NewTenantServer(
 // between the two exists so that SQL initialization can take place
 // before the first client is accepted.
 func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
-	// TODO(knz): Move morecode here.
+	// NB: This logic mirrors the relevants bits in (*Server).PreStart.
+	// They should be kept in sync.
+	// We also use the same order so they can be positioned side-by-side
+	// for easier comparison during reviews.
+	//
+	// TODO(knz): Find a way to combine this common logic for both methods.
 
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
@@ -316,6 +330,12 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// NB: This is where (*Server).PreStart() reports the listener readiness
+	// via testing knobs: PauseAfterGettingRPCAddress, SignalAfterGettingRPCAddress.
+	// As of this writing, only `cockroach demo` uses those, to coordinate
+	// the initialization of the demo cluster. We do not need this logic
+	// in secondary tenants.
+
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	gwMux, gwCtx, conn, err := configureGRPCGateway(
@@ -362,6 +382,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		if storeSpec.IsEncrypted() {
 			encryptedStore = true
 		}
+
 		for name, val := range listenerFiles {
 			file := filepath.Join(storeSpec.Path, name)
 			if err := os.WriteFile(file, []byte(val), 0644); err != nil {
@@ -381,6 +402,10 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+
+	// TODO(knz): This is the point where we could call
+	// checkHLCUpperBoundExistsAndEnsureMonotonicity(). Why is this not
+	// needed?
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower
@@ -455,6 +480,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
+	// TODO(knz): Missing call here to startSystemLogsGC().
+	// See: https://github.com/cockroachdb/cockroach/issues/90521
+
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
 	if err := startPurgeOldSessions(workersCtx, s.authentication); err != nil {
 		return err
@@ -477,6 +505,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Start the SQL subsystem.
 	if err := s.sqlServer.preStart(
 		workersCtx,
 		s.stopper,
@@ -487,6 +516,10 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+
+	// Enable the Obs Server.
+	// There is more logic here than in (*Server).PreStart() because
+	// we care about the SQL instance ID too.
 	clusterID := s.rpcContext.LogicalClusterID.Get()
 	instanceID := s.sqlServer.SQLInstanceID()
 	if clusterID.Equal(uuid.Nil) {
@@ -519,9 +552,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		}
 	}
 
-	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceProvider, s.sqlServer.SQLInstanceID())
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceProvider, instanceID)
 	if err := s.costController.Start(
-		workersCtx, s.stopper, s.sqlServer.SQLInstanceID(), s.sqlServer.sqlLivenessSessionID,
+		workersCtx, s.stopper, instanceID, s.sqlServer.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
 		return err
