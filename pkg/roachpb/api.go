@@ -641,9 +641,9 @@ func (sr *ScanResponse) Verify(req Request) error {
 
 // Verify verifies the integrity of every value returned in the reverse scan.
 func (sr *ReverseScanResponse) Verify(req Request) error {
-	for _, kv := range sr.Rows {
+	for i, kv := range sr.Rows {
 		if err := kv.Value.Verify(kv.Key); err != nil {
-			return err
+			return errors.Wrapf(err, "%d", i)
 		}
 	}
 	return nil

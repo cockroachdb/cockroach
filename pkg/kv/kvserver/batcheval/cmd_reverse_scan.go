@@ -11,6 +11,7 @@
 package batcheval
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/kr/pretty"
 )
 
 func init() {
@@ -78,8 +80,10 @@ func ReverseScan(
 			_ = err2
 			eq := reflect.DeepEqual(scanRes2, scanRes)
 			_ = eq
+			var diff bytes.Buffer
+			pretty.Fdiff(&diff, scanRes, scanRes2)
 			debug.PrintStack()
-			panic(fmt.Sprintf("read ts %s: %s", cArgs.Header.Timestamp, err))
+			panic(fmt.Sprintf("reader %T: read ts %s: %s, re-scan diff(old,new): %s, num rows: %d", reader, cArgs.Header.Timestamp, err, diff.String(), len(reply.Rows)))
 		}
 	default:
 		panic(fmt.Sprintf("Unknown scanFormat %d", args.ScanFormat))

@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"runtime/debug"
 	"sort"
 	"sync"
 
@@ -89,6 +88,20 @@ func (p *pebbleResults) clear() {
 func (p *pebbleResults) put(
 	ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount, maxNewSize int,
 ) error {
+	if false {
+		k, _, err := enginepb.DecodeKey(key)
+		if err != nil {
+			return err
+		}
+		v := roachpb.Value{RawBytes: value}
+		if err := v.VerifyHeader(); err != nil {
+			return err
+		}
+		if err := v.Verify(k); err != nil {
+			return err
+		}
+	}
+
 	const minSize = 16
 	const maxSize = 128 << 20 // 128 MB
 
@@ -948,7 +961,7 @@ func (p *pebbleMVCCScanner) advanceKey() bool {
 		return false
 	}
 	if p.reverse {
-		debug.PrintStack()
+		//debug.PrintStack()
 		return p.prevKey(p.curUnsafeKey.Key)
 	}
 	return p.nextKey()

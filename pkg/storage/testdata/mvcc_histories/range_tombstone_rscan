@@ -1,0 +1,20 @@
+run ok
+put k=b v=foo ts=1
+del_range_ts k=a end=f ts=2
+put k=b v=foo ts=1
+del k=b ts=3
+del k=b ts=4
+----
+del: "b": found key false
+del: "b": found key false
+>> at end:
+rangekey: {a-f}/[2.000000000,0=/<empty>]
+data: "b"/4.000000000,0 -> /<empty>
+data: "b"/3.000000000,0 -> /<empty>
+data: "b"/1.000000000,0 -> /BYTES/foo
+
+# Forward scans at all timestamps.
+run ok
+scan k=a end=z ts=8 reverse
+----
+scan: "a"-"z" -> <no data>

@@ -95,7 +95,7 @@ func TestKVNemesisSingleNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	var seed int64 = 0 //5408881829841458374 // easy to set a seed here from a failing invocation
+	var seed int64 = 3014226997003847595 //5408881829841458374 // easy to set a seed here from a failing invocation
 	var rng *rand.Rand
 	if seed > 0 {
 		rng = rand.New(rand.NewSource(seed))
