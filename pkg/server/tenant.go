@@ -69,14 +69,21 @@ type SQLServerWrapper struct {
 	grpc       *grpcServer
 	nodeDialer *nodedialer.Dialer
 	db         *kv.DB
+	recorder   *status.MetricsRecorder
+	runtime    *status.RuntimeStatSampler
 
-	http        *httpServer
-	authServer  *authenticationServer
-	drainServer *drainServer
+	http            *httpServer
+	adminAuthzCheck *adminPrivilegeChecker
+	tenantAdmin     *tenantAdminServer
+	tenantStatus    *tenantStatusServer
+	drainServer     *drainServer
+	authentication  *authenticationServer
 	// The Observability Server, used by the Observability Service to subscribe to
 	// CRDB data.
 	eventsServer *obs.EventsServer
 	stopper      *stop.Stopper
+
+	debug *debug.Server
 
 	sqlServer *SQLServer
 	sqlCfg    *SQLConfig
@@ -141,12 +148,6 @@ func NewTenantServer(
 	// defined by-value.
 	ctx = args.BaseConfig.AmbientCtx.AnnotateCtx(ctx)
 
-	// Add the server tags to a generic background context for use
-	// by async goroutines.
-	// We can only annotate the context after makeTenantSQLServerArgs
-	// has defined the instance ID container in the AmbientCtx.
-	background := args.BaseConfig.AmbientCtx.AnnotateCtx(context.Background())
-
 	// The tenantStatusServer needs access to the sqlServer,
 	// but we also need the same object to set up the sqlServer.
 	// So construct the tenant status server with a nil sqlServer,
@@ -196,26 +197,6 @@ func NewTenantServer(
 		gw.RegisterService(args.grpcServer)
 	}
 
-	// Begin configuration of GRPC Gateway
-	gwMux, gwCtx, conn, err := configureGRPCGateway(
-		ctx,
-		background,
-		args.AmbientCtx,
-		args.rpcContext,
-		s.stopper,
-		args.grpc,
-		baseCfg.AdvertiseAddr,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
-		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return nil, err
-		}
-	}
-
 	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
 
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
@@ -226,23 +207,8 @@ func NewTenantServer(
 	}
 	httpServer := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
-	httpServer.handleHealth(gwMux)
-
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
 	if err := startPurgeOldSessions(ctx, authServer); err != nil {
-		return nil, err
-	}
-
-	// TODO(knz): Add support for the APIv2 tree here.
-	if err := httpServer.setupRoutes(ctx,
-		authServer,      /* authnServer */
-		adminAuthzCheck, /* adminAuthzCheck */
-		args.recorder,   /* metricSource */
-		args.runtime,    /* runtimeStatSampler */
-		gwMux,           /* handleRequestsUnauthenticated */
-		debugServer,     /* handleDebugUnauthenticated */
-		nil,             /* apiServer */
-	); err != nil {
 		return nil, err
 	}
 
@@ -275,12 +241,19 @@ func NewTenantServer(
 		grpc:       args.grpc,
 		nodeDialer: args.nodeDialer,
 		db:         args.db,
+		recorder:   args.recorder,
+		runtime:    args.runtime,
 
-		http:         httpServer,
-		authServer:   authServer,
-		drainServer:  drainServer,
-		eventsServer: args.eventsServer,
-		stopper:      args.stopper,
+		http:            httpServer,
+		adminAuthzCheck: adminAuthzCheck,
+		tenantAdmin:     tenantAdminServer,
+		tenantStatus:    tenantStatusServer,
+		drainServer:     drainServer,
+		authentication:  authServer,
+		eventsServer:    args.eventsServer,
+		stopper:         args.stopper,
+
+		debug: debugServer,
 
 		sqlServer: s,
 		sqlCfg:    args.SQLConfig,
@@ -356,6 +329,35 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize grpc-gateway mux and context in order to get the /health
+	// endpoint working even before the node has fully initialized.
+	gwMux, gwCtx, conn, err := configureGRPCGateway(
+		ctx,
+		workersCtx,
+		s.sqlServer.cfg.AmbientCtx,
+		s.rpcContext,
+		s.stopper,
+		s.grpc,
+		s.sqlServer.cfg.AdvertiseAddr,
+	)
+	if err != nil {
+		return err
+	}
+
+	// Connect the various RPC handlers to the gRPC gateway.
+	for _, gw := range []grpcGatewayServer{s.tenantAdmin, s.tenantStatus, s.authentication} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+			return err
+		}
+	}
+
+	// Handle /health early. This is necessary for orchestration.  Note
+	// that /health is not authenticated, on purpose. This is both
+	// because it needs to be available before the cluster is up and can
+	// serve authentication requests, and also because it must work for
+	// monitoring tools which operate without authentication.
+	s.http.handleHealth(gwMux)
+
 	// This opens the main listener.
 	startRPCServer(workersCtx)
 
@@ -369,6 +371,23 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
 	s.grpc.setMode(modeOperational)
+
+	// Connect the HTTP endpoints. This also wraps the privileged HTTP
+	// endpoints served by gwMux by the HTTP cookie authentication
+	// check.
+	if err := s.http.setupRoutes(ctx,
+		s.authentication,  /* authnServer */
+		s.adminAuthzCheck, /* adminAuthzCheck */
+		s.recorder,        /* metricSource */
+		s.runtime,         /* runtimeStatsSampler */
+		gwMux,             /* handleRequestsUnauthenticated */
+		s.debug,           /* handleDebugUnauthenticated */
+		// TODO(knz): the apiV2 server should be enabled for secondary tenants.
+		// See: https://github.com/cockroachdb/cockroach/issues/80789
+		nil, /* apiServer */
+	); err != nil {
+		return err
+	}
 
 	if err := s.sqlServer.preStart(
 		workersCtx,
