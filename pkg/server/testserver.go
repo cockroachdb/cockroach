@@ -620,9 +620,7 @@ func (d tenantProtectedTSProvider) Protect(
 // serverutils.StartTenant method.
 type TestTenant struct {
 	*SQLServer
-	Cfg      *BaseConfig
-	sqlAddr  string
-	httpAddr string
+	Cfg *BaseConfig
 	*httpTestServer
 	drain *drainServer
 }
@@ -631,23 +629,17 @@ var _ serverutils.TestTenantInterface = &TestTenant{}
 
 // SQLAddr is part of TestTenantInterface interface.
 func (t *TestTenant) SQLAddr() string {
-	return t.sqlAddr
+	return t.Cfg.SQLAddr
 }
 
 // HTTPAddr is part of TestTenantInterface interface.
 func (t *TestTenant) HTTPAddr() string {
-	return t.httpAddr
+	return t.Cfg.HTTPAddr
 }
 
 // RPCAddr is part of the TestTenantInterface interface.
 func (t *TestTenant) RPCAddr() string {
-	// The RPC and SQL functionality for tenants is multiplexed
-	// on the same address. Having a separate interface to access
-	// for the two addresses makes it easier to distinguish
-	// the use case for which the address is being used.
-	// This also provides parity between SQL only servers and
-	// regular servers.
-	return t.sqlAddr
+	return t.Cfg.Addr
 }
 
 // PGServer is part of TestTenantInterface.
@@ -849,6 +841,11 @@ func (ts *TestServer) StartTenant(
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
 
+	// For now, we don't support split RPC/SQL ports for secondary tenants
+	// in test servers.
+	// TODO(knz): Lift this limitation. It seems arbitrary.
+	baseCfg.SplitListenSQL = false
+
 	localNodeIDContainer := &base.NodeIDContainer{}
 	localNodeIDContainer.Set(ctx, ts.NodeID())
 	blobClientFactory := blobs.NewBlobClientFactory(
@@ -868,17 +865,20 @@ func (ts *TestServer) StartTenant(
 	if params.SSLCertsDir != "" {
 		baseCfg.SSLCertsDir = params.SSLCertsDir
 	}
-	if params.StartingSQLPort > 0 {
-		addr, _, err := addrutil.SplitHostPort(baseCfg.SQLAddr, strconv.Itoa(params.StartingSQLPort))
+	if params.StartingRPCAndSQLPort > 0 {
+		baseCfg.SplitListenSQL = false
+		addr, _, err := addrutil.SplitHostPort(baseCfg.Addr, strconv.Itoa(params.StartingRPCAndSQLPort))
 		if err != nil {
 			return nil, err
 		}
-		newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingSQLPort+int(params.TenantID.ToUint64())))
+		newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingRPCAndSQLPort+int(params.TenantID.ToUint64())))
+		baseCfg.Addr = newAddr
+		baseCfg.AdvertiseAddr = newAddr
 		baseCfg.SQLAddr = newAddr
 		baseCfg.SQLAdvertiseAddr = newAddr
 	}
 	if params.StartingHTTPPort > 0 {
-		addr, _, err := addrutil.SplitHostPort(baseCfg.SQLAddr, strconv.Itoa(params.StartingHTTPPort))
+		addr, _, err := addrutil.SplitHostPort(baseCfg.HTTPAddr, strconv.Itoa(params.StartingHTTPPort))
 		if err != nil {
 			return nil, err
 		}
@@ -911,14 +911,12 @@ func (ts *TestServer) StartTenant(
 	}
 
 	hts := &httpTestServer{}
-	hts.t.authentication = sw.authServer
+	hts.t.authentication = sw.authentication
 	hts.t.sqlServer = sw.sqlServer
 
 	return &TestTenant{
 		SQLServer:      sw.sqlServer,
 		Cfg:            &baseCfg,
-		sqlAddr:        sw.pgAddr,
-		httpAddr:       sw.httpAddr,
 		httpTestServer: hts,
 		drain:          sw.drainServer,
 	}, err

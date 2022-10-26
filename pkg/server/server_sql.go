@@ -352,6 +352,10 @@ type sqlServerArgs struct {
 
 	// eventsServer communicates with the Observability Service.
 	eventsServer *obs.EventsServer
+
+	// externalStorageBuilder is the constructor for accesses to external
+	// storage.
+	externalStorageBuilder *externalStorageBuilder
 }
 
 type monitorAndMetrics struct {
