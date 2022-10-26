@@ -224,6 +224,16 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.NoPrecondition,
 		systemJobInfoTableMigration,
 	),
+	upgrade.NewTenantUpgrade("add role_id and member_id columns to system.role_members",
+		toCV(clusterversion.V23_1RoleMembersTableHasIDColumns),
+		upgrade.NoPrecondition,
+		alterSystemRoleMembersAddIDColumns,
+	),
+	upgrade.NewTenantUpgrade("backfill role_id and member_id columns in system.role_members",
+		toCV(clusterversion.V23_1RoleMembersIDColumnsBackfilled),
+		upgrade.NoPrecondition,
+		backfillSystemRoleMembersIDColumns,
+	),
 }
 
 func init() {

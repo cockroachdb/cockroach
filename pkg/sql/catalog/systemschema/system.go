@@ -274,12 +274,17 @@ CREATE TABLE system.locations (
 	// role_members stores relationships between roles (role->role and role->user).
 	RoleMembersTableSchema = `
 CREATE TABLE system.role_members (
-  "role"   STRING NOT NULL,
-  "member" STRING NOT NULL,
-  "isAdmin"  BOOL NOT NULL,
+  "role"    STRING NOT NULL,
+  "member"  STRING NOT NULL,
+  "isAdmin" BOOL NOT NULL,
+  role_id   OID,
+  member_id OID,
   CONSTRAINT "primary" PRIMARY KEY ("role", "member"),
   INDEX ("role"),
-  INDEX ("member")
+  INDEX ("member"),
+  INDEX (role_id),
+  INDEX (member_id),
+  UNIQUE INDEX (role_id, member_id)
 );`
 
 	// comments stores comments(database, table, column...).
@@ -1579,6 +1584,8 @@ var (
 				{Name: "role", ID: 1, Type: types.String},
 				{Name: "member", ID: 2, Type: types.String},
 				{Name: "isAdmin", ID: 3, Type: types.Bool},
+				{Name: "role_id", ID: 4, Type: types.Oid, Nullable: true},
+				{Name: "member_id", ID: 5, Type: types.Oid, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1593,6 +1600,20 @@ var (
 					ColumnNames:     []string{"isAdmin"},
 					ColumnIDs:       []descpb.ColumnID{3},
 					DefaultColumnID: 3,
+				},
+				{
+					Name:            "fam_4_role_id",
+					ID:              4,
+					ColumnNames:     []string{"role_id"},
+					ColumnIDs:       []descpb.ColumnID{4},
+					DefaultColumnID: 4,
+				},
+				{
+					Name:            "fam_5_member_id",
+					ID:              5,
+					ColumnNames:     []string{"member_id"},
+					ColumnIDs:       []descpb.ColumnID{5},
+					DefaultColumnID: 5,
 				},
 			},
 			descpb.IndexDescriptor{
@@ -1621,6 +1642,36 @@ var (
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 				KeyColumnIDs:        []descpb.ColumnID{2},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "role_members_role_id_idx",
+				ID:                  4,
+				Unique:              false,
+				KeyColumnNames:      []string{"role_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "role_members_member_id_idx",
+				ID:                  5,
+				Unique:              false,
+				KeyColumnNames:      []string{"member_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{5},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+			},
+			descpb.IndexDescriptor{
+				Name:                "role_members_role_id_member_id_key",
+				ID:                  6,
+				Unique:              true,
+				KeyColumnNames:      []string{"role_id", "member_id"},
+				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{4, 5},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1, 2},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		))
