@@ -22,6 +22,11 @@ import (
 // Limit defines a rate in terms of quota per second.
 type Limit float64
 
+// Inf returns the infinite rate limit, which allows any rate and bursts.
+func Inf() Limit {
+	return Limit(math.Inf(1))
+}
+
 // RateLimiter implements a token-bucket style rate limiter.
 // It has the added feature that quota acquired from the pool can be returned
 // in the case that they end up not getting used.
@@ -34,6 +39,8 @@ type RateLimiter struct {
 // token bucket which has a maximum capacity of burst. If a request attempts to
 // acquire more than burst, it will block until the bucket is full and then
 // put the token bucket in debt.
+//
+// If rate == Inf() then any bursts are allowed, and acquisition does not block.
 func NewRateLimiter(name string, rate Limit, burst int64, options ...Option) *RateLimiter {
 	rl := &RateLimiter{}
 	tb := &TokenBucket{}

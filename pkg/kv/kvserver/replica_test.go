@@ -10433,7 +10433,7 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 		defer snap.Close()
 		res, err := replicaSHA512(ctx, *tc.repl.Desc(), tc.engine,
 			roachpb.ChecksumMode_CHECK_FULL,
-			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Limit(math.MaxFloat64), math.MaxInt64))
+			quotapool.NewRateLimiter("ConsistencyQueue", quotapool.Inf(), 0))
 		if err != nil {
 			return hlc.Timestamp{}, err
 		}
