@@ -1,7 +1,5 @@
 #! /usr/bin/env expect -f
 
-# Disabled until https://github.com/cockroachdb/cockroach/issues/76483 is resolved.
-
 source [file join [file dirname $argv0] common.tcl]
 
 start_server $argv
@@ -47,9 +45,32 @@ send "\r"
 eexpect "defaultdb>"
 end_test
 
-# Quit the SQL client, and open a unix shell.
+# Quit the SQL client.
 send_eof
 eexpect eof
+
+start_test "Check that interrupt without a line editor quits the shell."
+# regression test for #90653.
+spawn $argv sql --no-line-editor
+eexpect "defaultdb>"
+interrupt
+set timeout 1
+expect {
+    "attempting to cancel query" { exit 1 }
+    "panic: runtime error" { exit 1 }
+    timeout {}
+}
+set timeout 30
+interrupt
+expect {
+    "attempting to cancel query" { exit 1 }
+    "panic: runtime error" { exit 1 }
+    eof {}
+}
+end_test
+
+
+# Open a unix shell.
 spawn /bin/bash
 set shell2_spawn_id $spawn_id
 send "PS1=':''/# '\r"
