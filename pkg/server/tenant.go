@@ -171,19 +171,19 @@ func NewTenantServer(
 	// and then assign it once an SQL server gets created. We are
 	// going to assume that the tenant status server won't require
 	// the SQL server object.
-	tenantStatusServer := newTenantStatusServer(
+	sStatus := newTenantStatusServer(
 		baseCfg.AmbientCtx, nil,
 		args.sessionRegistry, args.closedSessionCache, args.flowScheduler, baseCfg.Settings, nil,
 		args.rpcContext, args.stopper,
 	)
 
-	args.sqlStatusServer = tenantStatusServer
-	s, err := newSQLServer(ctx, args)
+	args.sqlStatusServer = sStatus
+	sqlServer, err := newSQLServer(ctx, args)
 	if err != nil {
 		return nil, err
 	}
 	adminAuthzCheck := &adminPrivilegeChecker{
-		ie: s.execCfg.InternalExecutor,
+		ie: sqlServer.execCfg.InternalExecutor,
 		st: args.Settings,
 		makePlanner: func(opName string) (interface{}, func()) {
 			txn := args.db.NewTxn(ctx, "check-system-privilege")
@@ -192,27 +192,32 @@ func NewTenantServer(
 				txn,
 				username.RootUserName(),
 				&sql.MemoryMetrics{},
-				s.execCfg,
+				sqlServer.execCfg,
 				sessiondatapb.SessionData{},
 			)
 		},
 	}
-	tenantStatusServer.privilegeChecker = adminAuthzCheck
-	tenantStatusServer.sqlServer = s
+	sStatus.privilegeChecker = adminAuthzCheck
+	sStatus.sqlServer = sqlServer
 
-	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, s)
+	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, sqlServer)
 
-	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
+	sAdmin := newTenantAdminServer(baseCfg.AmbientCtx, sqlServer, sStatus, drainServer)
 
-	authServer := newAuthenticationServer(baseCfg.Config, s)
+	sAuth := newAuthenticationServer(baseCfg.Config, sqlServer)
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
-	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
+	for _, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth} {
 		gw.RegisterService(args.grpcServer)
 	}
 
-	debugServer := debug.NewServer(baseCfg.AmbientCtx, args.Settings, s.pgServer.HBADebugFn(), s.execCfg.SQLStatusServer)
+	debugServer := debug.NewServer(
+		baseCfg.AmbientCtx,
+		args.Settings,
+		sqlServer.pgServer.HBADebugFn(),
+		sqlServer.execCfg.SQLStatusServer,
+	)
 
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
 		return roachpb.NodeID(0), false, errors.New("tenants cannot proxy to KV Nodes")
@@ -220,7 +225,7 @@ func NewTenantServer(
 	getNodeIDHTTPAddressFn := func(id roachpb.NodeID) (*util.UnresolvedAddr, error) {
 		return nil, errors.New("tenants cannot proxy to KV Nodes")
 	}
-	httpServer := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
+	sHTTP := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
 	sw := &SQLServerWrapper{
 		clock:      args.clock,
@@ -233,18 +238,18 @@ func NewTenantServer(
 		recorder:   args.recorder,
 		runtime:    args.runtime,
 
-		http:            httpServer,
+		http:            sHTTP,
 		adminAuthzCheck: adminAuthzCheck,
-		tenantAdmin:     tenantAdminServer,
-		tenantStatus:    tenantStatusServer,
+		tenantAdmin:     sAdmin,
+		tenantStatus:    sStatus,
 		drainServer:     drainServer,
-		authentication:  authServer,
+		authentication:  sAuth,
 		eventsServer:    args.eventsServer,
 		stopper:         args.stopper,
 
 		debug: debugServer,
 
-		sqlServer: s,
+		sqlServer: sqlServer,
 		sqlCfg:    args.SQLConfig,
 
 		externalStorageBuilder: args.externalStorageBuilder,
