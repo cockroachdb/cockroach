@@ -970,7 +970,7 @@ func restorePlanHook(
 	}
 
 	if restoreStmt.Options.SchemaOnly &&
-		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.Start22_2) {
+		!p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2Start) {
 		return nil, nil, nil, false,
 			errors.New("cannot run RESTORE with schema_only until cluster has fully upgraded to 22.2")
 	}
@@ -1208,7 +1208,7 @@ func checkPrivilegesForRestore(
 			restoreStmt.Targets.TenantID.IsSet()
 
 		var hasRestoreSystemPrivilege bool
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
 				privilege.RESTORE, p.User())
 			hasRestoreSystemPrivilege = err == nil
@@ -1231,7 +1231,7 @@ func checkPrivilegesForRestore(
 	// error. In 22.2 we continue to check for old style privileges and role
 	// options.
 	if len(restoreStmt.Targets.Databases) > 0 {
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
 				privilege.RESTORE, p.User())
 			hasRestoreSystemPrivilege = err == nil

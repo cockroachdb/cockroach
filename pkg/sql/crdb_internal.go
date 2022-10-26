@@ -1570,7 +1570,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 		if !hasAdmin {
 			hasModify := false
 			hasView := false
-			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 				hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
 				hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
 			}
@@ -5046,36 +5046,76 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 	database_name   STRING NOT NULL,
 	grantee         STRING NOT NULL,
 	privilege_type  STRING NOT NULL,
-	is_grantable 		STRING
+	is_grantable 		STRING,
+	INDEX(database_name)
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
-			func(db catalog.DatabaseDescriptor) error {
-				privs := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
-				dbNameStr := tree.NewDString(db.GetName())
-				// TODO(knz): This should filter for the current user, see
-				// https://github.com/cockroachdb/cockroach/issues/35572
-				for _, u := range privs {
-					userNameStr := tree.NewDString(u.User.Normalized())
-					for _, priv := range u.Privileges {
-						// We use this function to check for the grant option so that the
-						// object owner also gets is_grantable=true.
-						grantOptionErr := p.CheckGrantOptionsForUser(
-							ctx, db.GetPrivileges(), db, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
-						)
-						if err := addRow(
-							dbNameStr,                           // database_name
-							userNameStr,                         // grantee
-							tree.NewDString(priv.Kind.String()), // privilege_type
-							yesOrNoDatum(grantOptionErr == nil), // is_grantable
-						); err != nil {
-							return err
-						}
-					}
-				}
-				return nil
-			})
+			makeClusterDatabasePrivilegesFromDescriptor(ctx, p, addRow))
 	},
+	indexes: []virtualIndex{
+		{populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+			if unwrappedConstraint == tree.DNull {
+				return false, nil
+			}
+			dbName := string(tree.MustBeDString(unwrappedConstraint))
+			if dbContext != nil && dbContext.GetName() != dbName {
+				return false, nil
+			}
+
+			flags := tree.CommonLookupFlags{
+				AvoidLeased: true,
+			}
+			dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), dbName, flags)
+			if err != nil || dbDesc == nil {
+				return false, err
+			}
+			hasPriv, err := userCanSeeDescriptor(ctx, p, dbDesc, nil /* parentDBDesc */, false /* allowAdding */)
+			if err != nil || !hasPriv {
+				return false, err
+			}
+			var called bool
+			if err := makeClusterDatabasePrivilegesFromDescriptor(
+				ctx, p, func(datum ...tree.Datum) error {
+					called = true
+					return addRow(datum...)
+				},
+			)(dbDesc); err != nil {
+				return false, err
+			}
+			return called, nil
+		}},
+	},
+}
+
+func makeClusterDatabasePrivilegesFromDescriptor(
+	ctx context.Context, p *planner, addRow func(...tree.Datum) error,
+) func(catalog.DatabaseDescriptor) error {
+	return func(db catalog.DatabaseDescriptor) error {
+		privs := db.GetPrivileges().Show(privilege.Database, true /* showImplicitOwnerPrivs */)
+		dbNameStr := tree.NewDString(db.GetName())
+		// TODO(knz): This should filter for the current user, see
+		// https://github.com/cockroachdb/cockroach/issues/35572
+		for _, u := range privs {
+			userNameStr := tree.NewDString(u.User.Normalized())
+			for _, priv := range u.Privileges {
+				// We use this function to check for the grant option so that the
+				// object owner also gets is_grantable=true.
+				grantOptionErr := p.CheckGrantOptionsForUser(
+					ctx, db.GetPrivileges(), db, []privilege.Kind{priv.Kind}, u.User, true, /* isGrant */
+				)
+				if err := addRow(
+					dbNameStr,                           // database_name
+					userNameStr,                         // grantee
+					tree.NewDString(priv.Kind.String()), // privilege_type
+					yesOrNoDatum(grantOptionErr == nil), // is_grantable
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
 }
 
 var crdbInternalCrossDbReferences = virtualSchemaTable{

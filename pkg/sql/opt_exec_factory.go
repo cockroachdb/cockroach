@@ -1744,7 +1744,7 @@ func (ef *execFactory) ConstructDeleteRange(
 
 	splitter := span.NoopSplitter()
 	canUsePointDelete := ef.planner.ExecCfg().Settings.Version.IsActive(
-		ef.ctx, clusterversion.DeleteRequestReturnKey,
+		ef.ctx, clusterversion.V22_2DeleteRequestReturnKey,
 	)
 	if canUsePointDelete {
 		splitter = span.MakeSplitterForDelete(

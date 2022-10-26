@@ -1895,7 +1895,7 @@ func (s *adminServer) Settings(
 
 		hasView := false
 		hasModify := false
-		if s.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if s.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			hasView = s.checkHasGlobalPrivilege(ctx, user, privilege.VIEWCLUSTERSETTING)
 			hasModify = s.checkHasGlobalPrivilege(ctx, user, privilege.MODIFYCLUSTERSETTING)
 		}
@@ -3562,7 +3562,7 @@ func (c *adminPrivilegeChecker) requireViewActivityPermission(ctx context.Contex
 	}
 	if !isAdmin {
 		hasView := false
-		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			hasView = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
 		}
 		if !hasView {
@@ -3591,7 +3591,7 @@ func (c *adminPrivilegeChecker) requireViewActivityOrViewActivityRedactedPermiss
 	if !isAdmin {
 		hasView := false
 		hasViewRedacted := false
-		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			hasView = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITY)
 			hasViewRedacted = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
 		}
@@ -3627,7 +3627,7 @@ func (c *adminPrivilegeChecker) requireViewActivityAndNoViewActivityRedactedPerm
 
 	if !isAdmin {
 		hasViewRedacted := false
-		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			hasViewRedacted = c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWACTIVITYREDACTED)
 		}
 		if !hasViewRedacted {
@@ -3660,7 +3660,7 @@ func (c *adminPrivilegeChecker) requireViewClusterMetadataPermission(
 		return serverError(ctx, err)
 	}
 	if !isAdmin {
-		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			if hasViewClusterMetadata := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWCLUSTERMETADATA); !hasViewClusterMetadata {
 				return status.Errorf(
 					codes.PermissionDenied, "this operation requires the %s system privilege",
@@ -3681,7 +3681,7 @@ func (c *adminPrivilegeChecker) requireViewDebugPermission(ctx context.Context) 
 		return serverError(ctx, err)
 	}
 	if !isAdmin {
-		if c.st.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if c.st.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			if hasViewDebug := c.checkHasGlobalPrivilege(ctx, userName, privilege.VIEWDEBUG); !hasViewDebug {
 				return status.Errorf(
 					codes.PermissionDenied, "this operation requires the %s system privilege",

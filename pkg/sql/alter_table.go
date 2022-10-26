@@ -902,7 +902,7 @@ func (p *planner) setAuditMode(
 	if !hasAdmin {
 		// Check for system privilege first, otherwise fall back to role options.
 		hasModify := false
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
 		}
 		if !hasModify {

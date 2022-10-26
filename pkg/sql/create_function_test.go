@@ -153,7 +153,7 @@ func TestCreateFunctionGating(t *testing.T) {
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.SchemaChangeSupportsCreateFunction),
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SchemaChangeSupportsCreateFunction),
 		}
 
 		s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -168,7 +168,7 @@ func TestCreateFunctionGating(t *testing.T) {
 		// Override binary version to be older.
 		params.Knobs.Server = &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
-			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.SchemaChangeSupportsCreateFunction - 1),
+			BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2SchemaChangeSupportsCreateFunction - 1),
 		}
 
 		s, sqlDB, _ := serverutils.StartServer(t, params)

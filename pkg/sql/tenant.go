@@ -93,7 +93,7 @@ func CreateTenantRecord(
 
 	// Insert into the tenant table and detect collisions.
 	if info.Name != "" {
-		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TenantNames) {
+		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
 			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}
@@ -636,7 +636,7 @@ func (p *planner) RenameTenant(ctx context.Context, tenID uint64, name string) e
 		return err
 	}
 
-	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TenantNames) {
+	if !p.EvalContext().Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
 		return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 	}
 

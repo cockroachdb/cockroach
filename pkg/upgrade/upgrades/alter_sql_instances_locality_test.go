@@ -41,7 +41,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 					BinaryVersionOverride: clusterversion.ByKey(
-						clusterversion.AlterSystemSQLInstancesAddLocality - 1),
+						clusterversion.V22_2AlterSystemSQLInstancesAddLocality - 1),
 				},
 			},
 		},
@@ -81,7 +81,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 	upgrades.Upgrade(
 		t,
 		sqlDB,
-		clusterversion.AlterSystemSQLInstancesAddLocality,
+		clusterversion.V22_2AlterSystemSQLInstancesAddLocality,
 		nil,   /* done */
 		false, /* expectError */
 	)

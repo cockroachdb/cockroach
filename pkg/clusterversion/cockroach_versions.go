@@ -92,7 +92,7 @@ type Key int
 //	 example, you'll want to introduce the following to `master`.
 //
 //	   (i)  V20_2 (keyed to v20.2.0-0})
-//	   (ii) Start21_1 (keyed to v20.2.0-1})
+//	   (ii) V21_1Start (keyed to v20.2.0-1})
 //
 //	You'll then want to backport (i) to the release branch itself (i.e.
 //	release-20.2). You'll also want to bump binaryMinSupportedVersion. In the
@@ -108,12 +108,13 @@ type Key int
 //
 // When introducing a version constant, you'll want to:
 //
-//	(1) Add it at the end of this block. For versions introduced during and
+//	(1) Prefix its name with the version in which it will be released.
+//	(2) Add it at the end of this block. For versions introduced during and
 //	    after the 21.1 release, Internal versions must be even-numbered. The
 //	    odd versions are used for internal book-keeping. The Internal version
 //	    should be the previous Internal version for the same minor release plus
 //	    two.
-//	(2) Add it at the end of the `versionsSingleton` block below.
+//	(3) Add it at the end of the `versionsSingleton` block below.
 //
 // # Migrations
 //
@@ -167,76 +168,76 @@ const (
 
 	// v22.2 versions.
 	//
-	// Start22_2 demarcates work towards CockroachDB v22.2.
-	Start22_2
+	// V22_2Start demarcates work towards CockroachDB v22.2.
+	V22_2Start
 
-	// LocalTimestamps enables the use of local timestamps in MVCC values.
-	LocalTimestamps
-	// PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
+	// V22_2LocalTimestamps enables the use of local timestamps in MVCC values.
+	V22_2LocalTimestamps
+	// V22_2PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
 	// version that recombines all user keys that may be split across multiple
 	// files into a single table.
-	PebbleFormatSplitUserKeysMarkedCompacted
-	// EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
+	V22_2PebbleFormatSplitUserKeysMarkedCompacted
+	// V22_2EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
 	// migration that bumps Pebble's format major version to a version that
 	// supports range keys.
-	EnsurePebbleFormatVersionRangeKeys
-	// EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
+	V22_2EnsurePebbleFormatVersionRangeKeys
+	// V22_2EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
 	// and is used as the feature gate for use of range keys. Any node at this
 	// version is guaranteed to reside in a cluster where all nodes support range
 	// keys at the Pebble layer.
-	EnablePebbleFormatVersionRangeKeys
-	// TrigramInvertedIndexes enables the creation of trigram inverted indexes
+	V22_2EnablePebbleFormatVersionRangeKeys
+	// V22_2TrigramInvertedIndexes enables the creation of trigram inverted indexes
 	// on strings.
-	TrigramInvertedIndexes
-	// RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
-	RemoveGrantPrivilege
-	// MVCCRangeTombstones enables the use of MVCC range tombstones.
-	MVCCRangeTombstones
-	// UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
+	V22_2TrigramInvertedIndexes
+	// V22_2RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
+	V22_2RemoveGrantPrivilege
+	// V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
+	V22_2MVCCRangeTombstones
+	// V22_2UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
 	// by IDs rather than by their names. For example, a column's DEFAULT (or
 	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
 	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
-	UpgradeSequenceToBeReferencedByID
-	// SampledStmtDiagReqs enables installing statement diagnostic requests that
+	V22_2UpgradeSequenceToBeReferencedByID
+	// V22_2SampledStmtDiagReqs enables installing statement diagnostic requests that
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
-	SampledStmtDiagReqs
-	// AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
+	V22_2SampledStmtDiagReqs
+	// V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
 	// Previously, SSTs containing these could error.
-	AddSSTableTombstones
-	// SystemPrivilegesTable adds system.privileges table.
-	SystemPrivilegesTable
-	// EnablePredicateProjectionChangefeed indicates that changefeeds support
+	V22_2AddSSTableTombstones
+	// V22_2SystemPrivilegesTable adds system.privileges table.
+	V22_2SystemPrivilegesTable
+	// V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
 	// predicates and projections.
-	EnablePredicateProjectionChangefeed
-	// AlterSystemSQLInstancesAddLocality adds a locality column to the
+	V22_2EnablePredicateProjectionChangefeed
+	// V22_2AlterSystemSQLInstancesAddLocality adds a locality column to the
 	// system.sql_instances table.
-	AlterSystemSQLInstancesAddLocality
-	// SystemExternalConnectionsTable adds system.external_connections table.
-	SystemExternalConnectionsTable
-	// AlterSystemStatementStatisticsAddIndexRecommendations adds an
+	V22_2AlterSystemSQLInstancesAddLocality
+	// V22_2SystemExternalConnectionsTable adds system.external_connections table.
+	V22_2SystemExternalConnectionsTable
+	// V22_2AlterSystemStatementStatisticsAddIndexRecommendations adds an
 	// index_recommendations column to the system.statement_statistics table.
-	AlterSystemStatementStatisticsAddIndexRecommendations
-	// RoleIDSequence is the version where the system.role_id_sequence exists.
-	RoleIDSequence
-	// AddSystemUserIDColumn is the version where the system.users table has
+	V22_2AlterSystemStatementStatisticsAddIndexRecommendations
+	// V22_2RoleIDSequence is the version where the system.role_id_sequence exists.
+	V22_2RoleIDSequence
+	// V22_2AddSystemUserIDColumn is the version where the system.users table has
 	// a user_id column for writes only.
-	AddSystemUserIDColumn
-	// SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
+	V22_2AddSystemUserIDColumn
+	// V22_2SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
 	// have ids.
-	SystemUsersIDColumnIsBackfilled
-	// SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
-	SetSystemUsersUserIDColumnNotNull
-	// SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
+	V22_2SystemUsersIDColumnIsBackfilled
+	// V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
+	V22_2SetSystemUsersUserIDColumnNotNull
+	// V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
 	// telemetry logging jobs.
-	SQLSchemaTelemetryScheduledJobs
-	// SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
+	V22_2SQLSchemaTelemetryScheduledJobs
+	// V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
-	SchemaChangeSupportsCreateFunction
-	// DeleteRequestReturnKey is the version where the DeleteRequest began
+	V22_2SchemaChangeSupportsCreateFunction
+	// V22_2DeleteRequestReturnKey is the version where the DeleteRequest began
 	// populating the FoundKey value in the response.
-	DeleteRequestReturnKey
-	// PebbleFormatPrePebblev1Marked performs a Pebble-level migration and
+	V22_2DeleteRequestReturnKey
+	// V22_2PebbleFormatPrePebblev1Marked performs a Pebble-level migration and
 	// upgrades the Pebble format major version to FormatPrePebblev1Marked. This
 	// migration occurs at the per-store level and is twofold:
 	//  - Each store is first bumped to a Pebble format major version that raises
@@ -247,48 +248,48 @@ const (
 	//  pre-Pebblev1 for a low-priority compaction. In a future release of
 	//  Cockroach (likely 23.1), a blocking migration will be run to
 	//  rewrite-compact on any remaining marked tables.
-	PebbleFormatPrePebblev1Marked
-	// RoleOptionsTableHasIDColumn is the version where the role options table
+	V22_2PebbleFormatPrePebblev1Marked
+	// V22_2RoleOptionsTableHasIDColumn is the version where the role options table
 	// has ids.
-	RoleOptionsTableHasIDColumn
-	// RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
+	V22_2RoleOptionsTableHasIDColumn
+	// V22_2RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
 	// table are backfilled.
-	RoleOptionsIDColumnIsBackfilled
-	// SetRoleOptionsUserIDColumnNotNull is the version where the role
+	V22_2RoleOptionsIDColumnIsBackfilled
+	// V22_2SetRoleOptionsUserIDColumnNotNull is the version where the role
 	// options table id column cannot be null. This is the final step
 	// of the system.role_options table migration.
-	SetRoleOptionsUserIDColumnNotNull
-	// UseDelRangeInGCJob enables the use of the DelRange operation in the
+	V22_2SetRoleOptionsUserIDColumnNotNull
+	// V22_2UseDelRangeInGCJob enables the use of the DelRange operation in the
 	// GC job. Before it is enabled, the GC job uses ClearRange operations
 	// after the job waits out the GC TTL. After it has been enabled, the
 	// job instead issues DelRange operations at the beginning of the job
 	// and then waits for the data to be removed automatically before removing
 	// the descriptor and zone configurations.
-	UseDelRangeInGCJob
-	// WaitedForDelRangeInGCJob corresponds to the migration which waits for
+	V22_2UseDelRangeInGCJob
+	// V22_2WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
-	WaitedForDelRangeInGCJob
-	// RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
-	RangefeedUseOneStreamPerNode
-	// NoNonMVCCAddSSTable adds a migration which waits for all
+	V22_2WaitedForDelRangeInGCJob
+	// V22_2RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
+	V22_2RangefeedUseOneStreamPerNode
+	// V22_2NoNonMVCCAddSSTable adds a migration which waits for all
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
-	NoNonMVCCAddSSTable
-	// GCHintInReplicaState adds GC hint to replica state. When this version is
+	V22_2NoNonMVCCAddSSTable
+	// V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
 	// enabled, replicas will populate GC hint and update them when necessary.
-	GCHintInReplicaState
-	// UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
+	V22_2GCHintInReplicaState
+	// V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
-	UpdateInvalidColumnIDsInSequenceBackReferences
-	// TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
+	V22_2UpdateInvalidColumnIDsInSequenceBackReferences
+	// V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
 	// leaseholder nodes.
-	TTLDistSQL
-	// PrioritizeSnapshots adds prioritization to sender snapshots. When this
+	V22_2TTLDistSQL
+	// V22_2PrioritizeSnapshots adds prioritization to sender snapshots. When this
 	// version is enabled, the receiver will look at the priority of snapshots
 	// using the fields added in 22.2.
-	PrioritizeSnapshots
-	// EnableLeaseUpgrade version gates a change in the lease transfer protocol
+	V22_2PrioritizeSnapshots
+	// V22_2EnableLeaseUpgrade version gates a change in the lease transfer protocol
 	// whereby we only ever transfer expiration-based leases (and have
 	// recipients later upgrade them to the more efficient epoch based ones).
 	// This was done to limit the effects of ill-advised lease transfers since
@@ -297,15 +298,15 @@ const (
 	// as part of lease transfers, we don't start sending out expiration based
 	// leases to nodes that (i) don't expect them for certain keyspans, and (ii)
 	// don't know to upgrade them to efficient epoch-based ones.
-	EnableLeaseUpgrade
-	// SupportAssumeRoleAuth is the version where assume role authorization is
+	V22_2EnableLeaseUpgrade
+	// V22_2SupportAssumeRoleAuth is the version where assume role authorization is
 	// supported in cloud storage and KMS.
-	SupportAssumeRoleAuth
+	V22_2SupportAssumeRoleAuth
 
-	// FixUserfileRelatedDescriptorCorruption adds a migration which uses
+	// V22_2FixUserfileRelatedDescriptorCorruption adds a migration which uses
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
-	FixUserfileRelatedDescriptorCorruption
+	V22_2FixUserfileRelatedDescriptorCorruption
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -315,7 +316,7 @@ const (
 	V23_1Start
 
 	// TenantNames adds a name column to system.tenants.
-	TenantNames
+	V23_1TenantNames
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -356,155 +357,155 @@ var rawVersionsSingleton = keyedVersions{
 
 	// v22.2 versions. Internal versions must be even.
 	{
-		Key:     Start22_2,
+		Key:     V22_2Start,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 2},
 	},
 	{
-		Key:     LocalTimestamps,
+		Key:     V22_2LocalTimestamps,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
 	},
 	{
-		Key:     PebbleFormatSplitUserKeysMarkedCompacted,
+		Key:     V22_2PebbleFormatSplitUserKeysMarkedCompacted,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},
 	},
 	{
-		Key:     EnsurePebbleFormatVersionRangeKeys,
+		Key:     V22_2EnsurePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
 	},
 	{
-		Key:     EnablePebbleFormatVersionRangeKeys,
+		Key:     V22_2EnablePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 	{
-		Key:     TrigramInvertedIndexes,
+		Key:     V22_2TrigramInvertedIndexes,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 12},
 	},
 	{
-		Key:     RemoveGrantPrivilege,
+		Key:     V22_2RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
 	},
 	{
-		Key:     MVCCRangeTombstones,
+		Key:     V22_2MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
 	},
 	{
-		Key:     UpgradeSequenceToBeReferencedByID,
+		Key:     V22_2UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 	{
-		Key:     SampledStmtDiagReqs,
+		Key:     V22_2SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
 	{
-		Key:     AddSSTableTombstones,
+		Key:     V22_2AddSSTableTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 	{
-		Key:     SystemPrivilegesTable,
+		Key:     V22_2SystemPrivilegesTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 24},
 	},
 	{
-		Key:     EnablePredicateProjectionChangefeed,
+		Key:     V22_2EnablePredicateProjectionChangefeed,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
 	},
 	{
-		Key:     AlterSystemSQLInstancesAddLocality,
+		Key:     V22_2AlterSystemSQLInstancesAddLocality,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 28},
 	},
 	{
-		Key:     SystemExternalConnectionsTable,
+		Key:     V22_2SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
 	},
 	{
-		Key:     AlterSystemStatementStatisticsAddIndexRecommendations,
+		Key:     V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
 	},
 	{
-		Key:     RoleIDSequence,
+		Key:     V22_2RoleIDSequence,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 34},
 	},
 	{
-		Key:     AddSystemUserIDColumn,
+		Key:     V22_2AddSystemUserIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
 	},
 	{
-		Key:     SystemUsersIDColumnIsBackfilled,
+		Key:     V22_2SystemUsersIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 38},
 	},
 	{
-		Key:     SetSystemUsersUserIDColumnNotNull,
+		Key:     V22_2SetSystemUsersUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
-		Key:     SQLSchemaTelemetryScheduledJobs,
+		Key:     V22_2SQLSchemaTelemetryScheduledJobs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	{
-		Key:     SchemaChangeSupportsCreateFunction,
+		Key:     V22_2SchemaChangeSupportsCreateFunction,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
 	},
 	{
-		Key:     DeleteRequestReturnKey,
+		Key:     V22_2DeleteRequestReturnKey,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
 	},
 	{
-		Key:     PebbleFormatPrePebblev1Marked,
+		Key:     V22_2PebbleFormatPrePebblev1Marked,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
 	},
 	{
-		Key:     RoleOptionsTableHasIDColumn,
+		Key:     V22_2RoleOptionsTableHasIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
 	},
 	{
-		Key:     RoleOptionsIDColumnIsBackfilled,
+		Key:     V22_2RoleOptionsIDColumnIsBackfilled,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
 	},
 	{
-		Key:     SetRoleOptionsUserIDColumnNotNull,
+		Key:     V22_2SetRoleOptionsUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
 	},
 	{
-		Key:     UseDelRangeInGCJob,
+		Key:     V22_2UseDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
 	},
 	{
-		Key:     WaitedForDelRangeInGCJob,
+		Key:     V22_2WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
 	{
-		Key:     RangefeedUseOneStreamPerNode,
+		Key:     V22_2RangefeedUseOneStreamPerNode,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
 	},
 	{
-		Key:     NoNonMVCCAddSSTable,
+		Key:     V22_2NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
 	},
 	{
-		Key:     GCHintInReplicaState,
+		Key:     V22_2GCHintInReplicaState,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 	{
-		Key:     UpdateInvalidColumnIDsInSequenceBackReferences,
+		Key:     V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
 	},
 	{
-		Key:     TTLDistSQL,
+		Key:     V22_2TTLDistSQL,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
 	},
 	{
-		Key:     PrioritizeSnapshots,
+		Key:     V22_2PrioritizeSnapshots,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 70},
 	},
 	{
-		Key:     EnableLeaseUpgrade,
+		Key:     V22_2EnableLeaseUpgrade,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 72},
 	},
 	{
-		Key:     SupportAssumeRoleAuth,
+		Key:     V22_2SupportAssumeRoleAuth,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 74},
 	},
 	{
-		Key:     FixUserfileRelatedDescriptorCorruption,
+		Key:     V22_2FixUserfileRelatedDescriptorCorruption,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
 	{
@@ -516,7 +517,7 @@ var rawVersionsSingleton = keyedVersions{
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 2},
 	},
 	{
-		Key:     TenantNames,
+		Key:     V23_1TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
 	},
 

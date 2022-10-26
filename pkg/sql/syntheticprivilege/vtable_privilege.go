@@ -41,7 +41,7 @@ func (p *VirtualTablePrivilege) GetPath() string {
 func (p *VirtualTablePrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
-	if planner.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+	if planner.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 		return planner.SynthesizePrivilegeDescriptor(ctx, p.GetPath(), p.GetObjectType())
 	}
 	return catpb.NewPrivilegeDescriptor(

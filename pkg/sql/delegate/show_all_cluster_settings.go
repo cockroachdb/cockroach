@@ -27,7 +27,7 @@ func (d *delegator) delegateShowClusterSettingList(
 	// First check system privileges.
 	hasModify := false
 	hasView := false
-	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.SystemPrivilegesTable) {
+	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.V22_2SystemPrivilegesTable) {
 		if err := d.catalog.CheckPrivilege(d.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
 			hasModify = true
 			hasView = true
