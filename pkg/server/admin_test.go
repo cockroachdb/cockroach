@@ -2853,7 +2853,7 @@ func TestAdminPrivilegeChecker(t *testing.T) {
 		},
 	}
 	// test system privileges if valid version
-	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+	if s.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 		sqlDB.Exec(t, "CREATE USER withvaglobalprivilege")
 		sqlDB.Exec(t, "GRANT SYSTEM VIEWACTIVITY TO withvaglobalprivilege")
 		sqlDB.Exec(t, "CREATE USER withvaredactedglobalprivilege")

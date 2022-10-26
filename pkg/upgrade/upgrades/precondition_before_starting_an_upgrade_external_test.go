@@ -40,8 +40,8 @@ func TestPreconditionBeforeStartingAnUpgrade(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.Start22_2 - 1)
-		v1 = clusterversion.ByKey(clusterversion.Start22_2)
+		v0 = clusterversion.ByKey(clusterversion.V22_2Start - 1)
+		v1 = clusterversion.ByKey(clusterversion.V22_2Start)
 	)
 
 	ctx := context.Background()

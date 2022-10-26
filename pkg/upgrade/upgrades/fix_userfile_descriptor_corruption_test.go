@@ -65,8 +65,8 @@ func TestFixUserfileRelatedDescriptorCorruptionUpgrade(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var (
-		v0 = clusterversion.ByKey(clusterversion.FixUserfileRelatedDescriptorCorruption - 1)
-		v1 = clusterversion.ByKey(clusterversion.FixUserfileRelatedDescriptorCorruption)
+		v0 = clusterversion.ByKey(clusterversion.V22_2FixUserfileRelatedDescriptorCorruption - 1)
+		v1 = clusterversion.ByKey(clusterversion.V22_2FixUserfileRelatedDescriptorCorruption)
 	)
 
 	ctx := context.Background()

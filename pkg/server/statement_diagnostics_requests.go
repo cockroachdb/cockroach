@@ -139,7 +139,7 @@ func (s *statusServer) StatementDiagnosticsRequests(
 
 	// TODO(irfansharif): Remove this version gating in 23.1.
 	var extraColumns string
-	if s.admin.server.st.Version.IsActive(ctx, clusterversion.SampledStmtDiagReqs) {
+	if s.admin.server.st.Version.IsActive(ctx, clusterversion.V22_2SampledStmtDiagReqs) {
 		extraColumns = `,
 			sampling_probability`
 	}

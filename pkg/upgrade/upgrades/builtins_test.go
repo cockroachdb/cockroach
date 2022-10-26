@@ -46,7 +46,7 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 	)
 	defer tc.Stopper().Stop(ctx)
 
-	v := clusterversion.ByKey(clusterversion.Start22_2).String()
+	v := clusterversion.ByKey(clusterversion.V22_2Start).String()
 	// Check that the builtin returns false when comparing against 22.1-2
 	// version because we are still on 22.1-0.
 	sqlDB.CheckQueryResults(t, "SELECT crdb_internal.is_at_least_version('"+v+"')", [][]string{{"false"}})

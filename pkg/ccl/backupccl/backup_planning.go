@@ -388,7 +388,7 @@ func checkPrivilegesForBackup(
 			(backupStmt.Targets != nil && backupStmt.Targets.TenantID.IsSet())
 
 		var hasBackupSystemPrivilege bool
-		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.SystemPrivilegesTable) {
+		if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 			err := p.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject,
 				privilege.BACKUP, p.User())
 			hasBackupSystemPrivilege = err == nil
