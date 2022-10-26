@@ -320,6 +320,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.costController,
 	)
 
+	// Register the Observability Server, used by the Observability Service to
+	// subscribe to CRDB data. Note that the server will reject RPCs until
+	// SetResourceInfo is called later.
+	obspb.RegisterObsServer(s.grpc.Server, s.eventsServer)
+
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
@@ -655,7 +660,6 @@ func makeTenantSQLServerArgs(
 		10*1<<20,                               // maxBufferSizeBytes - 10MB
 		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
 	)
-	obspb.RegisterObsServer(grpcServer.Server, eventsServer)
 
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
