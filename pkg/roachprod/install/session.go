@@ -197,7 +197,6 @@ func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, 
 
 	go func() {
 		b, err = s.Cmd.CombinedOutput()
-		err = rperrors.ClassifyCmdError(err)
 		close(commandFinished)
 	}()
 
@@ -216,7 +215,7 @@ func (s *localSession) Run(ctx context.Context, cmd string) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
-		err = rperrors.ClassifyCmdError(s.Cmd.Run())
+		err = s.Cmd.Run()
 		close(commandFinished)
 	}()
 
