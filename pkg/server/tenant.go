@@ -67,6 +67,9 @@ type SQLServerWrapper struct {
 	authServer  *authenticationServer
 	drainServer *drainServer
 	stopper     *stop.Stopper
+
+	// Used for multi-tenant cost control (on the tenant side).
+	costController multitenant.TenantSideCostController
 }
 
 // Drain idempotently activates the draining mode.
@@ -290,30 +293,13 @@ func NewTenantServer(
 	}
 	args.eventsServer.SetResourceInfo(clusterID, int32(instanceID), "unknown" /* version */)
 
-	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
-		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
-		if err != nil {
-			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
-		}
-		return multitenant.ExternalUsage{
-			CPUSecs:           float64(userTimeMillis+sysTimeMillis) * 1e-3,
-			PGWireEgressBytes: s.pgServer.BytesOut(),
-		}
-	}
-
-	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlInstanceProvider, s.SQLInstanceID())
-	if err := args.costController.Start(
-		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
-		externalUsageFn, nextLiveInstanceIDFn,
-	); err != nil {
-		return nil, err
-	}
-
 	sw := &SQLServerWrapper{
 		sqlServer:   s,
 		authServer:  authServer,
 		drainServer: drainServer,
 		stopper:     args.stopper,
+
+		costController: args.costController,
 	}
 	return sw, nil
 }
@@ -326,7 +312,29 @@ func NewTenantServer(
 // between the two exists so that SQL initialization can take place
 // before the first client is accepted.
 func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
-	// TODO(knz): Move code here.
+	// TODO(knz): Move morecode here.
+
+	// externalUsageFn measures the CPU time, for use by tenant
+	// resource usage accounting in costController.Start below.
+	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
+		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
+		if err != nil {
+			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
+		}
+		return multitenant.ExternalUsage{
+			CPUSecs:           float64(userTimeMillis+sysTimeMillis) * 1e-3,
+			PGWireEgressBytes: s.sqlServer.pgServer.BytesOut(),
+		}
+	}
+
+	nextLiveInstanceIDFn := makeNextLiveInstanceIDFn(s.sqlServer.sqlInstanceProvider, s.sqlServer.SQLInstanceID())
+	if err := s.costController.Start(
+		ctx, s.stopper, s.sqlServer.SQLInstanceID(), s.sqlServer.sqlLivenessSessionID,
+		externalUsageFn, nextLiveInstanceIDFn,
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
