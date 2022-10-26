@@ -115,9 +115,6 @@ func NewTenantServer(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
 
-	// TODO(davidh): Do we need to force this to be false?
-	baseCfg.SplitListenSQL = false
-
 	// Add the server tags to the startup context.
 	//
 	// We use args.BaseConfig here instead of baseCfg directly because
@@ -131,31 +128,9 @@ func NewTenantServer(
 	// has defined the instance ID container in the AmbientCtx.
 	background := args.BaseConfig.AmbientCtx.AnnotateCtx(context.Background())
 
-	// StartListenRPCAndSQL will replace the SQLAddr fields if we choose
-	// to share the SQL and gRPC port so here, since the tenant config
-	// expects to have port set on the SQL param we transfer those to
-	// the base Addr params in order for the RPC to be configured
-	// correctly.
-	baseCfg.Addr = baseCfg.SQLAddr
-	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
 	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, args.grpc)
 	if err != nil {
 		return nil, err
-	}
-
-	{
-		waitQuiesce := func(ctx context.Context) {
-			<-args.stopper.ShouldQuiesce()
-			// NB: we can't do this as a Closer because (*Server).ServeWith is
-			// running in a worker and usually sits on accept(pgL) which unblocks
-			// only when pgL closes. In other words, pgL needs to close when
-			// quiescing starts to allow that worker to shut down.
-			_ = pgL.Close()
-		}
-		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
-			waitQuiesce(background)
-			return nil, err
-		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()

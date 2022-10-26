@@ -54,10 +54,6 @@ type TestServerArgs struct {
 	Addr string
 	// SQLAddr (if nonempty) is the SQL address to use for the test server.
 	SQLAddr string
-	// TenantAddr is the tenant KV address to use for the test server. If this
-	// is nil, the tenant server will be set up using a random port. If this
-	// is the empty string, no tenant server will be set up.
-	TenantAddr *string
 	// HTTPAddr (if nonempty) is the HTTP address to use for the test server.
 	HTTPAddr string
 	// DisableTLSForHTTP if set, disables TLS for the HTTP interface.
@@ -294,9 +290,10 @@ type TestTenantArgs struct {
 	// embedded certs.
 	SSLCertsDir string
 
-	// StartingSQLPort, if it is non-zero, is added to the tenant ID in order to
-	// determine the tenant's SQL port.
-	StartingSQLPort int
+	// StartingRPCAndSQLPort, if it is non-zero, is added to the tenant ID in order to
+	// determine the tenant's SQL+RPC port.
+	// If set, force disables SplitListenSQL.
+	StartingRPCAndSQLPort int
 
 	// StartingHTTPPort, if it is non-zero, is added to the tenant ID in order to
 	// determine the tenant's HTTP port.
