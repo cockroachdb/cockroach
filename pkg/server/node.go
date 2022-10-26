@@ -428,7 +428,7 @@ func (n *Node) AnnotateCtxWithSpan(
 // to carry HTTP, only if httpAddr is non-null will this node accept
 // proxied traffic from other nodes.
 func (n *Node) start(
-	ctx context.Context,
+	ctx, workersCtx context.Context,
 	addr, sqlAddr, httpAddr net.Addr,
 	state initState,
 	initialStart bool,
@@ -462,7 +462,7 @@ func (n *Node) start(
 	// Create stores from the engines that were already initialized.
 	for _, e := range state.initializedEngines {
 		s := kvserver.NewStore(ctx, n.storeCfg, e, &n.Descriptor)
-		if err := s.Start(ctx, n.stopper); err != nil {
+		if err := s.Start(workersCtx, n.stopper); err != nil {
 			return errors.Wrap(err, "failed to start store")
 		}
 
@@ -519,7 +519,7 @@ func (n *Node) start(
 		// [1]: It's important to note that store IDs are allocated via a
 		// sequence ID generator stored in a system key.
 		n.additionalStoreInitCh = make(chan struct{})
-		if err := n.stopper.RunAsyncTask(ctx, "initialize-additional-stores", func(ctx context.Context) {
+		if err := n.stopper.RunAsyncTask(workersCtx, "initialize-additional-stores", func(ctx context.Context) {
 			if err := n.initializeAdditionalStores(ctx, state.uninitializedEngines, n.stopper); err != nil {
 				log.Fatalf(ctx, "while initializing additional stores: %v", err)
 			}
@@ -540,7 +540,7 @@ func (n *Node) start(
 	// with a given cluster version, but not if the server starts with a lower
 	// one and gets bumped immediately, which would be possible if gossip got
 	// started earlier).
-	n.startGossiping(ctx, n.stopper)
+	n.startGossiping(workersCtx, n.stopper)
 
 	allEngines := append([]storage.Engine(nil), state.initializedEngines...)
 	allEngines = append(allEngines, state.uninitializedEngines...)
@@ -909,23 +909,28 @@ func (n *Node) GetTenantWeights() kvserver.TenantWeights {
 	return weights
 }
 
-func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
-	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "graphite stats exporter", nil)
+func startGraphiteStatsExporter(
+	ctx context.Context,
+	stopper *stop.Stopper,
+	recorder *status.MetricsRecorder,
+	st *cluster.Settings,
+) {
+	ctx = logtags.AddTag(ctx, "graphite stats exporter", nil)
 	pm := metric.MakePrometheusExporter()
 
-	_ = n.stopper.RunAsyncTask(ctx, "graphite-exporter", func(ctx context.Context) {
+	_ = stopper.RunAsyncTask(ctx, "graphite-exporter", func(ctx context.Context) {
 		var timer timeutil.Timer
 		defer timer.Stop()
 		for {
 			timer.Reset(graphiteInterval.Get(&st.SV))
 			select {
-			case <-n.stopper.ShouldQuiesce():
+			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
 				timer.Read = true
 				endpoint := graphiteEndpoint.Get(&st.SV)
 				if endpoint != "" {
-					if err := n.recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
+					if err := recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
 						log.Infof(ctx, "error pushing metrics to graphite: %s\n", err)
 					}
 				}

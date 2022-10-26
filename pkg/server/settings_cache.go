@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// settingsCacheWriter is responsible for persisting the cluster
+// settings on KV nodes across restarts.
 type settingsCacheWriter struct {
 	stopper *stop.Stopper
 	eng     storage.Engine

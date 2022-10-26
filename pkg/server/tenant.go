@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -59,31 +60,10 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// StartTenant starts a stand-alone SQL server against a KV backend.
-func StartTenant(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
-	baseCfg BaseConfig,
-	sqlCfg SQLConfig,
-) (*SQLServerWrapper, error) {
-	sqlServer, authServer, drainServer, pgAddr, httpAddr, err := startTenantInternal(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
-	if err != nil {
-		return nil, err
-	}
-	return &SQLServerWrapper{
-		SQLServer:   sqlServer,
-		authServer:  authServer,
-		drainServer: drainServer,
-		pgAddr:      pgAddr,
-		httpAddr:    httpAddr,
-	}, err
-}
-
 // SQLServerWrapper is a utility struct that encapsulates
 // a SQLServer and its helpers that make it a networked service.
 type SQLServerWrapper struct {
-	*SQLServer
+	sqlServer   *SQLServer
 	authServer  *authenticationServer
 	drainServer *drainServer
 	pgAddr      string
@@ -111,48 +91,30 @@ func (s *SQLServerWrapper) Drain(
 	return s.drainServer.runDrain(ctx, verbose)
 }
 
-// startTenantInternal is used to build TestServers.
-func startTenantInternal(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	kvClusterName string, // NB: gone after https://github.com/cockroachdb/cockroach/issues/42519
-	baseCfg BaseConfig,
-	sqlCfg SQLConfig,
-) (
-	sqlServer *SQLServer,
-	authServer *authenticationServer,
-	drainServer *drainServer,
-	pgAddr string,
-	httpAddr string,
-	_ error,
-) {
+// NewTenantServer creates a tenant-specific, SQL-only server against a KV backend.
+func NewTenantServer(
+	ctx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
+) (*SQLServerWrapper, error) {
 	err := ApplyTenantLicense()
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	// Inform the server identity provider that we're operating
 	// for a tenant server.
 	baseCfg.idProvider.SetTenant(sqlCfg.TenantID)
 
-	args, err := makeTenantSQLServerArgs(ctx, stopper, kvClusterName, baseCfg, sqlCfg)
+	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 	err = args.ValidateAddrs(ctx)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
-
-	// Initialize gRPC server for use on shared port with pg
-	grpcMain := newGRPCServer(args.rpcContext)
-	grpcMain.setMode(modeOperational)
-	// TODO(harding): Some services (e.g., blob service) don't need to register
-	// a GRPC server. It might be better to use a dummy GRPC service for these.
-	args.grpcServer = grpcMain.Server
 
 	// TODO(davidh): Do we need to force this to be false?
 	baseCfg.SplitListenSQL = false
@@ -177,9 +139,9 @@ func startTenantInternal(
 	// correctly.
 	baseCfg.Addr = baseCfg.SQLAddr
 	baseCfg.AdvertiseAddr = baseCfg.SQLAdvertiseAddr
-	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, grpcMain)
+	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, args.grpc)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	{
@@ -193,16 +155,15 @@ func startTenantInternal(
 		}
 		if err := args.stopper.RunAsyncTask(background, "wait-quiesce-pgl", waitQuiesce); err != nil {
 			waitQuiesce(background)
-			return nil, nil, nil, "", "", err
+			return nil, err
 		}
 	}
 
 	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
-	args.advertiseAddr = baseCfg.AdvertiseAddr
 	// The tenantStatusServer needs access to the sqlServer,
 	// but we also need the same object to set up the sqlServer.
 	// So construct the tenant status server with a nil sqlServer,
@@ -218,7 +179,7 @@ func startTenantInternal(
 	args.sqlStatusServer = tenantStatusServer
 	s, err := newSQLServer(ctx, args)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 	adminAuthzCheck := &adminPrivilegeChecker{
 		ie: s.execCfg.InternalExecutor,
@@ -238,18 +199,18 @@ func startTenantInternal(
 	tenantStatusServer.privilegeChecker = adminAuthzCheck
 	tenantStatusServer.sqlServer = s
 
-	drainServer = newDrainServer(baseCfg, args.stopper, args.grpc, s)
+	drainServer := newDrainServer(baseCfg, args.stopper, args.grpc, s)
 
 	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
 	s.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, 0 /* NodeID */, s.execCfg.Locality)
 
-	authServer = newAuthenticationServer(baseCfg.Config, s)
+	authServer := newAuthenticationServer(baseCfg.Config, s)
 
 	// Register and start gRPC service on pod. This is separate from the
 	// gRPC + Gateway services configured below.
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
-		gw.RegisterService(grpcMain.Server)
+		gw.RegisterService(args.grpcServer)
 	}
 	startRPCServer(background)
 
@@ -260,16 +221,16 @@ func startTenantInternal(
 		args.AmbientCtx,
 		args.rpcContext,
 		s.stopper,
-		grpcMain,
+		args.grpc,
 		baseCfg.AdvertiseAddr,
 	)
 	if err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return nil, nil, nil, "", "", err
+			return nil, err
 		}
 	}
 
@@ -287,7 +248,7 @@ func startTenantInternal(
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
 	if err := startPurgeOldSessions(ctx, authServer); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	// TODO(knz): Add support for the APIv2 tree here.
@@ -300,7 +261,7 @@ func startTenantInternal(
 		debugServer,     /* handleDebugUnauthenticated */
 		nil,             /* apiServer */
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	connManager := netutil.MakeServer(ctx,
@@ -309,7 +270,7 @@ func startTenantInternal(
 		http.HandlerFunc(httpServer.baseHandler), // handler
 	)
 	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	args.recorder.AddNode(
@@ -333,7 +294,7 @@ func startTenantInternal(
 		args.runtime,
 		args.sessionRegistry,
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	if err := s.preStart(ctx,
@@ -343,7 +304,7 @@ func startTenantInternal(
 		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 	clusterID := args.rpcContext.LogicalClusterID.Get()
 	instanceID := s.SQLInstanceID()
@@ -371,7 +332,7 @@ func startTenantInternal(
 		ctx, args.stopper, s.SQLInstanceID(), s.sqlLivenessSessionID,
 		externalUsageFn, nextLiveInstanceIDFn,
 	); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
 	if err := s.startServeSQL(ctx,
@@ -379,18 +340,79 @@ func startTenantInternal(
 		s.connManager,
 		s.pgL,
 		nil /* socketFile */); err != nil {
-		return nil, nil, nil, "", "", err
+		return nil, err
 	}
 
-	return s, authServer, drainServer, baseCfg.SQLAddr, baseCfg.HTTPAddr, nil
+	sw := &SQLServerWrapper{
+		sqlServer:   s,
+		authServer:  authServer,
+		drainServer: drainServer,
+		pgAddr:      baseCfg.SQLAddr,
+		httpAddr:    baseCfg.HTTPAddr,
+	}
+	return sw, nil
+}
+
+// PreStart starts the server on the specified port(s) and
+// initializes subsystems.
+//
+// It does not activate the pgwire listener over the network / unix
+// socket, which is done by the AcceptClients() method. The separation
+// between the two exists so that SQL initialization can take place
+// before the first client is accepted.
+func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
+	// TODO(knz): Move code here.
+	return nil
+}
+
+// AcceptClients starts listening for incoming SQL clients over the network.
+// This mirrors the implementation of (*Server).AcceptClients.
+// TODO(knz): Find a way to implement this method only once for both.
+func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
+	// TODO(knz): Move code here.
+	return nil
+}
+
+// Start calls PreStart() and AcceptClient() in sequence.
+// This is suitable for use e.g. in tests.
+// This mirrors the implementation of (*Server).Start.
+// TODO(knz): Find a way to implement this method only once for both.
+func (s *SQLServerWrapper) Start(ctx context.Context) error {
+	if err := s.PreStart(ctx); err != nil {
+		return err
+	}
+	return s.AcceptClients(ctx)
+}
+
+// AnnotateCtx is a convenience wrapper; see AmbientContext.
+func (s *SQLServerWrapper) AnnotateCtx(ctx context.Context) context.Context {
+	return s.sqlServer.cfg.AmbientCtx.AnnotateCtx(ctx)
+}
+
+// ClusterSettings returns the cluster settings.
+func (s *SQLServerWrapper) ClusterSettings() *cluster.Settings {
+	return s.sqlServer.cfg.Settings
+}
+
+// PGServer exports the pgwire server. Used by tests.
+func (s *SQLServerWrapper) PGServer() *pgwire.Server {
+	return s.sqlServer.pgServer
+}
+
+// LogicalClusterID retrieves the logical cluster ID of this tenant server.
+// Used in cli/mt_start_sql.go.
+func (s *SQLServerWrapper) LogicalClusterID() uuid.UUID {
+	return s.sqlServer.LogicalClusterID()
+}
+
+// StartDiagnostics begins the diagnostic loop of this tenant server.
+// Used in cli/mt_start_sql.go.
+func (s *SQLServerWrapper) StartDiagnostics(ctx context.Context) {
+	s.sqlServer.StartDiagnostics(ctx)
 }
 
 func makeTenantSQLServerArgs(
-	startupCtx context.Context,
-	stopper *stop.Stopper,
-	kvClusterName string,
-	baseCfg BaseConfig,
-	sqlCfg SQLConfig,
+	startupCtx context.Context, stopper *stop.Stopper, baseCfg BaseConfig, sqlCfg SQLConfig,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -398,13 +420,6 @@ func makeTenantSQLServerArgs(
 	// the instance ID (once known) as a tag.
 	instanceIDContainer := baseCfg.IDContainer.SwitchToSQLIDContainer()
 	startupCtx = baseCfg.AmbientCtx.AnnotateCtx(startupCtx)
-
-	// TODO(tbg): this is needed so that the RPC heartbeats between the testcluster
-	// and this tenant work.
-	//
-	// TODO(tbg): address this when we introduce the real tenant RPCs in:
-	// https://github.com/cockroachdb/cockroach/issues/47898
-	baseCfg.ClusterName = kvClusterName
 
 	clock := hlc.NewClockWithSystemTimeSource(time.Duration(baseCfg.MaxOffset))
 
@@ -567,7 +582,7 @@ func makeTenantSQLServerArgs(
 
 	// Create the EventServer. It will be made operational later, after the
 	// cluster ID is known, with a SetResourceInfo() call.
-	obsServer := obs.NewEventServer(
+	eventsServer := obs.NewEventServer(
 		baseCfg.AmbientCtx,
 		timeutil.DefaultTimeSource{},
 		stopper,
@@ -576,7 +591,7 @@ func makeTenantSQLServerArgs(
 		10*1<<20,                               // maxBufferSizeBytes - 10MB
 		monitorAndMetrics.rootSQLMemoryMonitor, // memMonitor - this is not "SQL" usage, but we don't have another memory pool,
 	)
-	obspb.RegisterObsServer(grpcServer.Server, obsServer)
+	obspb.RegisterObsServer(grpcServer.Server, eventsServer)
 
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -624,7 +639,7 @@ func makeTenantSQLServerArgs(
 		costController:           costController,
 		monitorAndMetrics:        monitorAndMetrics,
 		grpc:                     grpcServer,
-		eventsServer:             obsServer,
+		eventsServer:             eventsServer,
 	}, nil
 }
 
