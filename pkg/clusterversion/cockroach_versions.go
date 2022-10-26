@@ -314,15 +314,25 @@ const (
 
 	// V23_1TenantNames adds a name column to system.tenants.
 	V23_1TenantNames
-
 	// V23_1DescIDSequenceForSystemTenant migrates the descriptor ID generator
 	// counter from a meta key to the system.descriptor_id_seq sequence for the
 	// system tenant.
 	V23_1DescIDSequenceForSystemTenant
-
 	// V23_1AddPartialStatisticsPredicateCol adds a column to store the predicate
 	// for a partial statistics collection.
 	V23_1AddPartialStatisticsPredicateCol
+	// V23_1RoleMembersTableHasIDColumns is the version where the role_members
+	// system table has columns for ids.
+	V23_1RoleMembersTableHasIDColumns
+	// V23_1RoleMembersTableHasIndexesForIDColumns is the version where the
+	// role_members system table has indexes for its id columns.
+	V23_1RoleMembersTableHasIndexesForIDColumns
+	// V23_1RoleMembersIDColumnsBackfilled is the version where the columns for
+	// ids in the role_members system table have been backfilled.
+	V23_1RoleMembersIDColumnsBackfilled
+	// V23_1RoleMembersIDColumnsNotNull is the version where the columns for ids
+	// in the role_members system table are made NOT NULL.
+	V23_1RoleMembersIDColumnsNotNull
 
 	// *************************************************
 	// Step (1): Add new versions here.
@@ -537,6 +547,22 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1AddPartialStatisticsPredicateCol,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 8},
+	},
+	{
+		Key:     V23_1RoleMembersTableHasIDColumns,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 10},
+	},
+	{
+		Key:     V23_1RoleMembersTableHasIndexesForIDColumns,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 12},
+	},
+	{
+		Key:     V23_1RoleMembersIDColumnsBackfilled,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 14},
+	},
+	{
+		Key:     V23_1RoleMembersIDColumnsNotNull,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 16},
 	},
 
 	// *************************************************
