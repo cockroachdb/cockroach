@@ -67,8 +67,6 @@ type SQLServerWrapper struct {
 	authServer  *authenticationServer
 	drainServer *drainServer
 	stopper     *stop.Stopper
-	pgAddr      string
-	httpAddr    string
 }
 
 // Drain idempotently activates the draining mode.
@@ -341,8 +339,6 @@ func NewTenantServer(
 		authServer:  authServer,
 		drainServer: drainServer,
 		stopper:     args.stopper,
-		pgAddr:      baseCfg.SQLAddr,
-		httpAddr:    baseCfg.HTTPAddr,
 	}
 	return sw, nil
 }
