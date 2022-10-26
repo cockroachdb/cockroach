@@ -158,44 +158,59 @@ file on your local branch, 2) push a commit containing this import to the `vendo
 
 ## Working Locally with Dependencies
 
-### Installing a Dependency
-1. In `cockroachdb/cockroach`, switch to the local branch you plan to import the external package
+### Installing a new Dependency
+
+1. Familiarize yourself with [our wiki page on adding or updating
+   dependencies](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181862804/Adding%2C+Updating+and+Deleting+external+dependencies).
+   In particular, you will need to go first through a non-technical step
+   related to checking the license of the dependency. This is
+   important and non-optional.
+2. In `cockroachdb/cockroach`, switch to the local branch you plan to import the external package
    into
-2. Run `go get -u <dependency>`. To get a specific version, run `go get -u
+3. Run `go get -u <dependency>`. To get a specific version, run `go get -u
    <dependency>@<version|branch|sha>`. You should see changes in `go.mod` when running `git diff`.
-3. Import the dependency to a go file in `cockorachdb/cockroach`. You may use an anonymous
+4. Import the dependency to a go file in `cockroachdb/cockroach`. You may use an anonymous
    import, e.g. `import _ "golang.org/api/compute/v1"`, if you haven't written any code that
    references the dependency. This ensures cockroach's make file will properly add the package(s) to the vendor directory. Note that IDEs may bicker that
    these import's paths don't exist. That's ok!
-4. Run `go mod tidy` to ensure stale dependencies are removed.
-5. Run `make vendor_rebuild` to add the package to the vendor directory. Note this command will only
+5. Run `go mod tidy` to ensure stale dependencies are removed.
+6. Run `make vendor_rebuild` to add the package to the vendor directory. Note this command will only
    add packages you have imported in the codebase (and any of the package's dependencies), so you
    may want to add import statements for each package you plan to use (i.e. repeat step 3 a couple times).
-6. Run `cd vendor && git diff && cd ..`  to ensure the vendor directory contains the package(s)
+7. Run `cd vendor && git diff && cd ..`  to ensure the vendor directory contains the package(s)
    you imported
-7. Run `make buildshort` to ensure your code compiles.
-8. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
+8. Run `make buildshort` to ensure your code compiles.
+9. Run `./dev generate bazel --mirror` to regenerate DEPS.bzl with the updated Go dependency information.
    Note that you need engineer permissions to mirror dependencies; if you want to get the Bazel build
    working locally without mirroring, `./dev generate bazel` will work, but you won't be able to check
    your changes in. (Assuming that you do have engineer permissions, you can run
    `gcloud auth application-default login` to authenticate if you get a credentials error.)
-9. Follow instructions for [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
+10. Follow instructions for [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule)
 
 ### Updating a Dependency
-Follow the instructions for [Installing a Dependency](#installing-a-dependency). Note:
+
+Follow the instructions for [Installing a Dependency](#installing-a-dependency).
+
+Note:
+
+- You will still need to pay extra attention to the licensing step as
+  described in [the wiki
+  page](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181862804/Adding%2C+Updating+and+Deleting+external+dependencies).
 - If you're only importing a new package from an existing module in `go.mod`, you don't need to
-   re-download the module, step 2 above.
+  re-download the module, step 2 above.
 - If you're only updating the package version, you probably don't need to update the import
-   statements, step 3 above.
+  statements, step 3 above.
 
 When [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule), you may either checkout a new branch, or create a new commit in the original branch you used to publicize the vendor
   dependency.
 
 ### Removing a dependency
+
 When a dependency has been removed, run `go mod tidy` and then `make vendor_rebuild`.
 Then follow the [Pushing the Dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule) steps.
 
 ## Working With Submodules
+
 To keep the bloat of all the changes in all our dependencies out of our main
 repository, we embed `vendor` as a git submodule, storing its content and
 history in [`vendored`](https://github.com/cockroachdb/vendored) instead.
@@ -205,8 +220,9 @@ changed dependencies require a two step process. After altering dependencies and
 changes, follow the steps below.
 
 ### Pushing the Dependency to the `vendored` submodule
-- Notice that `git status` in `cockroachdb/cockroach` checkout will report that the
-`vendor` submodule has `modified/untracked content`.
+
+- Notice that `git status` in `cockroachdb/cockroach` checkout will
+  report that the `vendor` submodule has `modified/untracked content`.
 
 - `cd` into `vendor`, and ...
     + Checkout a **new** named branch
@@ -214,20 +230,24 @@ changes, follow the steps below.
     + Commit all changes, with a nice short message. There's no explicit policy related to commit
       messages in the vendored submodule.
 
-- At this point the `git status` in your `cockroachdb/cockroach` checkout will report `new commits`
-for `vendor` instead of `modified content`.
-- Back in your `cockroachdb/cockroach` branch, commit your code changes and the new `vendor`
-  submodule ref.
+- At this point the `git status` in your `cockroachdb/cockroach`
+  checkout will report `new commits` for `vendor` instead of `modified
+  content`.
+- Back in your `cockroachdb/cockroach` branch, commit your code
+  changes and the new `vendor` submodule ref.
 
 - Before the `cockroachdb/cockroach` commit can be submitted in a pull request, the submodule commit
   it references must be available on `github.com/cockroachdb/vendored`. So, when you're ready to
   publicize your vendor changes, push the `vendored` commit to remote:
 
   + Organization members can push their named branches there directly, via:
-    + `git push [remote vendor name, probably 'origin'] [your vendor branch] `
-  + Non-members should fork the `vendored` repo and submit a pull request to
-`cockroachdb/vendored`, and need wait for it to merge before they will be able
-to use it in a `cockroachdb/cockroach` PR.
+
+    `git push [remote vendor name, probably 'origin'] [your vendor branch] `
+
+  + Non-members should fork the `vendored` repo and submit a pull
+    request to `cockroachdb/vendored`, and need wait for it to merge
+    before they will be able to use it in a `cockroachdb/cockroach`
+    PR.
 
 ### `master` Branch Pointer in Vendored Repo
 
