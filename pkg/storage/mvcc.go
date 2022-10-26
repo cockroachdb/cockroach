@@ -3785,7 +3785,9 @@ func MVCCScan(
 		UpperBound: endKey,
 	})
 	defer iter.Close()
-	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
+
+	r, err := mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
+	return r, err
 }
 
 // MVCCScanToBytes is like MVCCScan, but it returns the results in a byte array.

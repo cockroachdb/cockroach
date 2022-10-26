@@ -88,7 +88,7 @@ func (p *pebbleResults) clear() {
 func (p *pebbleResults) put(
 	ctx context.Context, key []byte, value []byte, memAccount *mon.BoundAccount, maxNewSize int,
 ) error {
-	if false {
+	if true {
 		k, _, err := enginepb.DecodeKey(key)
 		if err != nil {
 			return err

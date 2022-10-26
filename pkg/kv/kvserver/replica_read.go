@@ -12,6 +12,8 @@ package kvserver
 
 import (
 	"context"
+	fmt "fmt"
+	"os"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
@@ -29,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/kr/pretty"
 )
 
@@ -305,7 +309,25 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 			log.VEventf(ctx, 2, "server-side retry of batch")
 		}
 		now := timeutil.Now()
+
+		finishAndGet := func() tracingpb.Recording { return nil }
+		var sk, ek string
+		if len(ba.Requests) == 2 {
+			hdr := ba.Requests[1].GetInner().Header()
+			sk = fmt.Sprint(hdr.Key)
+			ek = fmt.Sprint(hdr.EndKey)
+			if sk == `/Table/100/"1a02da0adc21fc69"` && ek == `/Table/100/"c79d1b6b95d2cb62"` {
+				ctx, finishAndGet = tracing.ContextWithRecordingSpan(ctx, r.Tracer, "faulty scan")
+			}
+		}
+
 		br, res, pErr = evaluateBatch(ctx, kvserverbase.CmdIDKey(""), rw, rec, nil, ba, g, st, ui, true /* readOnly */)
+		if rec := finishAndGet(); len(rec) > 0 {
+			log.Warningf(ctx, "XXX %s", rec)
+			os.Exit(123)
+		}
+		_ = sk
+		_ = ek
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 		// Allow only one retry.
 		if pErr == nil || retries > 0 {
