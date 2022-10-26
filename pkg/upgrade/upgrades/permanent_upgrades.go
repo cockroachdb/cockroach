@@ -33,11 +33,13 @@ import (
 func addRootUser(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
+	ieNotBoundToTxn := deps.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()
+
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `
 	        UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', false,  1)
 	        `
-	_, err := deps.InternalExecutor.Exec(ctx, "addRootUser", nil /* txn */, upsertRootStmt, username.RootUser)
+	_, err := ieNotBoundToTxn.Exec(ctx, "addRootUser", nil /* txn */, upsertRootStmt, username.RootUser)
 	if err != nil {
 		return err
 	}
@@ -46,17 +48,21 @@ func addRootUser(
 	const upsertAdminStmt = `
           UPSERT INTO system.users (username, "hashedPassword", "isRole", "user_id") VALUES ($1, '', true,  2)
           `
-	_, err = deps.InternalExecutor.Exec(ctx, "addAdminRole", nil /* txn */, upsertAdminStmt, username.AdminRole)
+	_, err = ieNotBoundToTxn.Exec(ctx, "addAdminRole", nil /* txn */, upsertAdminStmt, username.AdminRole)
 	if err != nil {
 		return err
 	}
 
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertMembership = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
           `
-	_, err = deps.InternalExecutor.Exec(
-		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser)
+	_, err = ieNotBoundToTxn.Exec(
+		ctx, "addRootToAdminRole", nil /* txn */, upsertMembership, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
+	if err != nil {
+		return err
+	}
+
 	return err
 }
 
