@@ -391,6 +391,17 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		// in _every_ store directory? Not just the first one?
 	}
 
+	// Set up calling s.cfg.ReadyFn at the right time. Essentially, this call
+	// determines when `./cockroach [...] --background` returns.
+	var onSuccessfulReturnFn func()
+	{
+		readyFn := func(bool) {}
+		if s.sqlServer.cfg.ReadyFn != nil {
+			readyFn = s.sqlServer.cfg.ReadyFn
+		}
+		onSuccessfulReturnFn = func() { readyFn(false /* waitForInit */) }
+	}
+
 	// This opens the main listener.
 	startRPCServer(workersCtx)
 
@@ -415,6 +426,9 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	//
 	// TODO(tbg): clarify the contract here and move closer to usage if possible.
 	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
+
+	// Signal server readiness to the caller.
+	onSuccessfulReturnFn()
 
 	// Configure the Sentry reporter to add some additional context to reports.
 	//
