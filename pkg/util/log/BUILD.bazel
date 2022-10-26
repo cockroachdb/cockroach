@@ -129,7 +129,7 @@ go_library(
 
 go_test(
     name = "log_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "ambient_context_test.go",
         "buffered_sink_closer_test.go",
@@ -158,7 +158,7 @@ go_test(
         "trace_test.go",
         ":mock_logsink",  # keep
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     embed = [":log"],
     deps = [
