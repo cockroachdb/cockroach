@@ -70,6 +70,20 @@ $item
 =>
 $input
 
+# InlineAnyWithScan matches on an ANY or NOT ANY expression which was generated
+# from expressions like `column IN (WithScan)` or `column NOT IN (WithScan)`,
+# where the WITH clause definition was normalized into a VALUES clause with
+# constants or placeholders. The `WithScan` is replaced with the VALUES clause
+# in order to avoid a join and can potentially enable a constrained index scan.
+[InlineAnyWithScan, Normalize]
+(Any
+    (WithScan $withScanPrivate:*)
+    $scalar:* & (CanInlineWithScan $withScanPrivate $scalar)
+    $anyPrivate:*
+)
+=>
+(Any (InlineWithScan $withScanPrivate) $scalar $anyPrivate)
+
 # NormalizeInConst ensures that the In operator's tuple operand is sorted with
 # duplicates removed (since duplicates do not change the result).
 [NormalizeInConst, Normalize]

@@ -1313,6 +1313,11 @@ define WithScanPrivate {
     # most cases the column set is sufficient to do this, but various rules make
     # it possible to construct WithScan expressions with no columns.
     ID UniqueID
+
+    # CanInlineInPlace is true when the WithScanExpr is allowed to be inlined
+    # when it is normalized as opposed to inlining which takes place when the
+    # WithExpr is normalized.
+    CanInlineInPlace bool
 }
 
 # RecursiveCTE implements the logic of a recursive CTE:
