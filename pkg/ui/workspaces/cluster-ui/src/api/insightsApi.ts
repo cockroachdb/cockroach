@@ -102,7 +102,7 @@ function transactionContentionResultsToEventState(
   return response.execution.txn_results[0].rows.map(row => ({
     transactionID: row.waiting_txn_id,
     fingerprintID: row.waiting_txn_fingerprint_id,
-    startTime: moment(row.collection_ts),
+    startTime: moment(row.collection_ts).utc(),
     contentionDuration: moment.duration(row.contention_duration),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
     insightName: InsightNameEnum.highContention,
@@ -379,7 +379,7 @@ function transactionContentionDetailsResultsToEventState(
       blockingExecutionID: value.blocking_txn_id,
       blockingFingerprintID: value.blocking_txn_fingerprint_id,
       blockingQueries: null,
-      collectionTimeStamp: moment(value.collection_ts),
+      collectionTimeStamp: moment(value.collection_ts).utc(),
       contentionTimeMs: contentionTimeInMs,
       contendedKey: value.key,
       schemaName: value.schema_name,
@@ -396,7 +396,7 @@ function transactionContentionDetailsResultsToEventState(
   return {
     executionID: row.waiting_txn_id,
     fingerprintID: row.waiting_txn_fingerprint_id,
-    startTime: moment(row.collection_ts),
+    startTime: moment(row.collection_ts).utc(),
     totalContentionTime: totalContentionTime,
     blockingContentionDetails: blockingContentionDetails,
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
