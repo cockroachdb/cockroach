@@ -34,6 +34,7 @@ type transition struct {
 	canFail    bool
 	ops        opsFunc
 	opType     scop.Type
+	isEquiv    bool // True if this transition comes from a `equiv` spec.
 }
 
 func (t transition) OpType() scop.Type {
@@ -81,6 +82,20 @@ func makeTarget(e scpb.Element, spec targetSpec) (t target, err error) {
 	return t, nil
 }
 
+// makeTransitions constructs a slice of transitions from the transition spec, as specified in `opgen_xx.go` file.
+// An example can nicely explain how it works.
+// Example 1:
+//
+//	Input: toAbsent(PUBLIC, equiv(VALIDATED), to(WRITE_ONLY), to(ABSENT))
+//	Output: [VALIDATED, PUBLIC], [PUBLIC, WRITE_ONLY], [WRITE_ONLY, ABSENT]
+//
+// Example 2:
+//
+//	Input: toPublic(ABSENT, to(DELETE_ONLY), to(WRITE_ONLY), to(PUBLIC))
+//	Output: [ABSENT, DELETE_ONLY], [DELETE_ONLY, WRITE_ONLY], [WRITE_ONLY, PUBLIC].
+//
+// Right, nothing too surprising except that the trick we use for `equiv(s)` is to encode it
+// as a transition from `s` to whatever the current status is.
 func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err error) {
 	tbs := makeTransitionBuildState(spec.from)
 
@@ -92,6 +107,7 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 	for i, s := range spec.transitionSpecs {
 		var t transition
 		if s.from == scpb.Status_UNKNOWN {
+			// Construct a transition `tbs.from --> s.to`, which comes from a `to(...)` spec.
 			t.from = tbs.from
 			t.to = s.to
 			if err := tbs.withTransition(s, i == 0 /* isFirst */); err != nil {
@@ -108,6 +124,7 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 				}
 			}
 		} else {
+			// Construct a transition `s.from --> tbs.from`, which comes from a `equiv(...)` spec.
 			t.from = s.from
 			t.to = tbs.from
 			if err := tbs.withEquivTransition(s); err != nil {
@@ -115,6 +132,7 @@ func makeTransitions(e scpb.Element, spec targetSpec) (ret []transition, err err
 					err, "invalid no-op transition %s -> %s", t.from, t.to,
 				)
 			}
+			t.isEquiv = true
 		}
 		t.revertible = tbs.isRevertible
 		if t.opType != scop.MutationType && t.opType != 0 {

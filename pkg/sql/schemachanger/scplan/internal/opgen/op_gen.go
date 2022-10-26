@@ -144,7 +144,14 @@ func (r *registry) buildGraph(
 // InitialStatus returns the status at the source of an op-edge path.
 func InitialStatus(e scpb.Element, target scpb.Status) scpb.Status {
 	if t, found := findTarget(e, target); found {
-		return t.transitions[0].from
+		for _, tstn := range t.transitions {
+			if tstn.isEquiv {
+				continue
+			}
+			return tstn.from
+		}
+		// All transitions results from `equiv(xxx)` specs. Return `to` of the last transition.
+		return t.transitions[len(t.transitions)-1].to
 	}
 	return scpb.Status_UNKNOWN
 }
