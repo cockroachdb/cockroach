@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
+	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -345,6 +346,13 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// This opens the main listener.
 	startRPCServer(workersCtx)
+
+	// Start measuring the Go scheduler latency.
+	if err := schedulerlatency.StartSampler(
+		workersCtx, s.sqlServer.cfg.Settings, s.stopper, s.registry, base.DefaultMetricsSampleInterval,
+	); err != nil {
+		return err
+	}
 
 	// Record a walltime that is lower than the lowest hlc timestamp this current
 	// instance of the node can use. We do not use startTime because it is lower
