@@ -286,7 +286,7 @@ func startTenantInternal(
 	httpServer.handleHealth(gwMux)
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err := startPurgeOldSessions(ctx, authServer); err != nil {
+	if err := startPurgeOldSessions(background, authServer); err != nil {
 		return nil, nil, nil, "", "", err
 	}
 

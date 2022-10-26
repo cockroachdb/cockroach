@@ -1588,7 +1588,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.startSystemLogsGC(ctx)
 
 	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err = startPurgeOldSessions(ctx, s.authentication); err != nil {
+	if err = startPurgeOldSessions(workersCtx, s.authentication); err != nil {
 		return err
 	}
 
