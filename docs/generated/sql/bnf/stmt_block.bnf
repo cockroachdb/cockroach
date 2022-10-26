@@ -1092,6 +1092,7 @@ unreserved_keyword ::=
 	| 'EXPORT'
 	| 'EXTENSION'
 	| 'EXTERNAL'
+	| 'EXTREMES'
 	| 'FAILURE'
 	| 'FILES'
 	| 'FILTER'
@@ -1732,7 +1733,8 @@ create_stats_target ::=
 	table_name
 
 opt_create_stats_options ::=
-	as_of_clause
+	create_stats_option_list
+	| 'WITH' 'OPTIONS' create_stats_option_list
 	| 
 
 schedule_label_spec ::=
@@ -2465,6 +2467,9 @@ opt_routine_body ::=
 	| 'BEGIN' 'ATOMIC' routine_body_stmt_list 'END'
 	| 
 
+create_stats_option_list ::=
+	( create_stats_option ) ( ( create_stats_option ) )*
+
 changefeed_target ::=
 	opt_table_prefix table_name opt_changefeed_family
 
@@ -3043,6 +3048,11 @@ routine_return_stmt ::=
 
 routine_body_stmt_list ::=
 	(  ) ( ( routine_body_stmt ';' ) )*
+
+create_stats_option ::=
+	as_of_clause
+	| 'USING' 'EXTREMES'
+	| where_clause
 
 opt_table_prefix ::=
 	'TABLE'

@@ -870,7 +870,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
-%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION
+%token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
@@ -4678,18 +4678,13 @@ create_stats_target:
   }
 
 opt_create_stats_options:
-  WITH OPTIONS create_stats_option_list
+  create_stats_option_list
   {
-    /* SKIP DOC */
-    $$.val = $3.createStatsOptions()
+    $$.val = $1.createStatsOptions()
   }
-// Allow AS OF SYSTEM TIME without WITH OPTIONS, for consistency with other
-// statements.
-| as_of_clause
+| WITH OPTIONS create_stats_option_list
   {
-    $$.val = &tree.CreateStatsOptions{
-      AsOf: $1.asOfClause(),
-    }
+    $$.val = $3.createStatsOptions()
   }
 | /* EMPTY */
   {
@@ -4728,6 +4723,18 @@ create_stats_option:
   {
     $$.val = &tree.CreateStatsOptions{
       AsOf: $1.asOfClause(),
+    }
+  }
+| USING EXTREMES
+  {
+    $$.val = &tree.CreateStatsOptions{
+      UsingExtremes: true,
+    }
+  }
+| where_clause
+  {
+    $$.val = &tree.CreateStatsOptions{
+      Where: tree.NewWhere(tree.AstWhere, $1.expr()),
     }
   }
 
@@ -15337,6 +15344,7 @@ unreserved_keyword:
 | EXPORT
 | EXTENSION
 | EXTERNAL
+| EXTREMES
 | FAILURE
 | FILES
 | FILTER
