@@ -791,10 +791,10 @@ func addAdminRole(ctx context.Context, r runner) error {
 func addRootToAdminRole(ctx context.Context, r runner) error {
 	// Upsert the role membership into the table. We intentionally override any existing entry.
 	const upsertAdminStmt = `
-          UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+          UPSERT INTO system.role_members ("role", "member", "isAdmin", role_id, member_id) VALUES ($1, $2, true, $3, $4)
           `
 	return r.execAsRootWithRetry(
-		ctx, "addRootToAdminRole", upsertAdminStmt, username.AdminRole, username.RootUser)
+		ctx, "addRootToAdminRole", upsertAdminStmt, username.AdminRole, username.RootUser, username.AdminRoleID, username.RootUserID)
 }
 
 func disallowPublicUserOrRole(ctx context.Context, r runner) error {
