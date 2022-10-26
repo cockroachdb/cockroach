@@ -13,7 +13,6 @@ package colinfo
 import (
 	"bytes"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
@@ -72,7 +71,7 @@ var NoOrdering ColumnOrdering
 //   - 0 if lhs and rhs are equal on the ordering columns;
 //   - less than 0 if lhs comes first;
 //   - greater than 0 if rhs comes first.
-func CompareDatums(ordering ColumnOrdering, evalCtx *eval.Context, lhs, rhs tree.Datums) int {
+func CompareDatums(ordering ColumnOrdering, evalCtx tree.CompareContext, lhs, rhs tree.Datums) int {
 	for _, c := range ordering {
 		// TODO(pmattis): This is assuming that the datum types are compatible. I'm
 		// not sure this always holds as `CASE` expressions can return different
