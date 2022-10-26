@@ -204,8 +204,6 @@ func NewTenantServer(
 
 	tenantAdminServer := newTenantAdminServer(baseCfg.AmbientCtx, s, tenantStatusServer, drainServer)
 
-	s.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, 0 /* NodeID */, s.execCfg.Locality)
-
 	authServer := newAuthenticationServer(baseCfg.Config, s)
 
 	// Register and start gRPC service on pod. This is separate from the
@@ -395,6 +393,10 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	// This opens the main listener.
 	startRPCServer(workersCtx)
+
+	// Ensure components in the DistSQLPlanner that rely on the node ID are
+	// initialized before store startup continues.
+	s.sqlServer.execCfg.DistSQLPlanner.ConstructAndSetSpanResolver(ctx, 0 /* NodeID */, s.sqlServer.execCfg.Locality)
 
 	// Start measuring the Go scheduler latency.
 	if err := schedulerlatency.StartSampler(
