@@ -96,7 +96,9 @@ func (w *schemaChangeWatchDog) watchLoop(ctx context.Context) {
 			// Give the connections a small amount of time to clean up, if they fail
 			// to do so, we will dump stacks.
 			select {
-			case <-w.cmdChannel:
+			case responseChannel := <-w.cmdChannel:
+				// Only command is to stop.
+				close(responseChannel)
 				return
 			case <-time.After(time.Second * 4):
 				panic("dumping stacks, we failed to terminate threads on time.")
