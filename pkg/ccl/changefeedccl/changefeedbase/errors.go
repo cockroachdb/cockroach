@@ -151,3 +151,5 @@ func MaybeStripRetryableErrorMarker(err error) error {
 }
 
 var retryableErrorType = reflect.TypeOf((*retryableError)(nil))
+
+func WithTerminalError(e error) error { return e }

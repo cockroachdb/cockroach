@@ -65,6 +65,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1081,7 +1083,7 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 		// Check that dropping a watched column still stops the changefeed.
 		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
 		if _, err := cf.Next(); !testutils.IsError(err, `schema change occurred at`) {
-			t.Errorf(`expected "schema change occurred at ..." got: %+v`, err.Error())
+			require.Regexp(t, `expected "schema change occurred at ..." got: %+v`, err)
 		}
 	}
 
@@ -3554,9 +3556,9 @@ func TestChangefeedRetryableError(t *testing.T) {
 		knobs.BeforeEmitRow = func(_ context.Context) error {
 			switch atomic.LoadInt64(&failEmit) {
 			case 1:
-				return changefeedbase.MarkRetryableError(fmt.Errorf("synthetic retryable error"))
+				return errors.New("synthetic retryable error")
 			case 2:
-				return fmt.Errorf("synthetic terminal error")
+				return changefeedbase.WithTerminalError(errors.New("synthetic terminal error"))
 			default:
 				return nil
 			}
@@ -3807,8 +3809,10 @@ func TestChangefeedDataTTL(t *testing.T) {
 			}
 		}()
 		go func() {
-			changefeed := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
-			changefeedInit <- changefeed
+			feed, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo")
+			if err == nil {
+				changefeedInit <- feed
+			}
 			close(changefeedInit)
 		}()
 
@@ -3830,6 +3834,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		atomic.StoreInt32(&shouldWait, 0)
 		resume <- struct{}{}
 		dataExpiredRows = <-changefeedInit
+		require.NotNil(t, dataExpiredRows)
 
 		// Verify that, at some point, Next() returns a "must
 		// be after replica GC threshold" error. In the common
@@ -5357,7 +5362,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		require.NoError(t, feedJob.Pause())
 
 		// Make extra sure that the zombie changefeed can't write any more data.
-		beforeEmitRowCh <- changefeedbase.MarkRetryableError(errors.New(`nope don't write it`))
+		beforeEmitRowCh <- errors.New(`nope don't write it`)
 
 		// Insert some data that we should only see out of the changefeed after it
 		// re-runs the backfill.
@@ -5480,6 +5485,111 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 		`foo: [9]->{"after": {"k": 9, "v": 1}}`,
 		`foo: [10]->{"after": {"k": 10, "v": 0}}`,
 	})
+}
+
+func TestChangefeedPropagatesTerminalError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	opts := makeOptions()
+	defer addCloudStorageOptions(t, &opts)()
+	// defer testingUseFastRetry()()
+	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
+
+	const numNodes = 3
+	perServerKnobs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		perServerKnobs[i] = base.TestServerArgs{
+			// Test uses SPLIT AT, which isn't currently supported for
+			// secondary tenants. Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					DrainFast:  true,
+					Changefeed: &TestingKnobs{},
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+			ExternalIODir: opts.externalIODir,
+		}
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{ServerArgsPerNode: perServerKnobs})
+	defer tc.Stopper().Stop(context.Background())
+
+	{
+		db := tc.ServerConn(1)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		serverutils.SetClusterSetting(t, tc, "kv.rangefeed.enabled", true)
+		serverutils.SetClusterSetting(t, tc, "kv.closed_timestamp.target_duration", 100*time.Second)
+		serverutils.SetClusterSetting(t, tc, "changefeed.experimental_poll_interval", 10*time.Millisecond)
+
+		sqlDB.ExecMultiple(t,
+			`CREATE TABLE foo (k INT PRIMARY KEY);`,
+			`INSERT INTO foo (k) SELECT * FROM generate_series(1, 1000);`,
+			`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));`,
+		)
+		for i := 1; i <= 1000; i += 50 {
+			sqlDB.ExecSucceedsSoon(t, "ALTER TABLE foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[$1], $2)", 1+(i%numNodes), i)
+		}
+	}
+	// changefeed coordinator will run on this node.
+	const coordinatorID = 0
+
+	testFn := func(t *testing.T, nodeToFail int, sinkType string) {
+		// Configure changefeed to emit fatal error on the specified node.
+		distSQLKnobs := perServerKnobs[nodeToFail].Knobs.DistSQL.(*execinfra.TestingKnobs)
+		distSQLKnobs.Changefeed.(*TestingKnobs).BeforeEmitRow = func(ctx context.Context) error {
+			// Return terminal error, but make it interesting.
+			err := errors.Wrap(
+				changefeedbase.WithTerminalError(
+					pgerror.Wrapf(
+						errors.Newf("synthetic fatal error from node %d", nodeToFail),
+						pgcode.Io, "something happened with IO")),
+				"while doing something")
+			log.Errorf(ctx, "BeforeEmitRow returning error %s", err)
+			return err
+		}
+
+		defer func() {
+			// Reset all changefeed knobs.
+			for i := 0; i < numNodes; i++ {
+				perServerKnobs[i].Knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+			}
+		}()
+
+		f, closeSink := makeFeedFactoryWithOptions(t, sinkType,
+			tc.Server(coordinatorID), tc.ServerConn(coordinatorID), opts,
+		)
+		defer closeSink()
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+		defer closeFeed(t, feed)
+
+		// We don't know if we picked enterprise or core feed; regardless, consuming
+		// from feed should eventually return an error.
+		var feedErr error
+		for feedErr == nil {
+			_, feedErr = feed.Next()
+		}
+		require.Regexp(t, "synthetic fatal error", feedErr)
+
+		// enterprise feeds should also have the job marked failed.
+		if jobFeed, ok := feed.(cdctest.EnterpriseTestFeed); ok {
+			require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+		}
+	}
+
+	sinkType := randomSinkType()
+	sinkType = "cloudstorage"
+	// t.Run(sinkType, func(t *testing.T) {
+	t.Run("coordinator", func(t *testing.T) {
+		testFn(t, coordinatorID, sinkType)
+	})
+	//t.Run("aggregator", func(t *testing.T) {
+	//	testFn(t, 2, sinkType)
+	//})
+	// })
 }
 
 // Primary key changes are supported by changefeeds starting in 21.1. This tests
@@ -5995,7 +6105,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 		knobs.RaiseRetryableError = func() error {
 			emittedCount++
 			if emittedCount%200 == 0 {
-				return changefeedbase.MarkRetryableError(errors.New("test transient error"))
+				return errors.New("test transient error")
 			}
 			return nil
 		}
@@ -6103,7 +6213,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if status != "retryable error: retryable changefeed error: 500 Internal Server Error: " {
+			if status != "retryable error: 500 Internal Server Error: " {
 				return errors.Errorf("expected retryable error: retryable changefeed error: 500 Internal Server Error:, got: %v", status)
 			}
 			return nil
@@ -6136,7 +6246,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH on_error='pause'`)
@@ -6179,7 +6289,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR bar WITH on_error = 'fail'`)
@@ -6199,7 +6309,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 				DistSQL.(*execinfra.TestingKnobs).
 				Changefeed.(*TestingKnobs)
 			knobs.BeforeEmitRow = func(_ context.Context) error {
-				return errors.Errorf("should fail with custom error")
+				return changefeedbase.WithTerminalError(errors.New("should fail with custom error"))
 			}
 
 			foo := feed(t, f, `CREATE CHANGEFEED FOR quux`)
@@ -7289,7 +7399,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 			DistSQL.(*execinfra.TestingKnobs).
 			Changefeed.(*TestingKnobs)
 		knobs.BeforeEmitRow = func(_ context.Context) error {
-			return errors.Errorf("should fail")
+			return changefeedbase.WithTerminalError(errors.New("should fail"))
 		}
 
 		beforeCreate := timeutil.Now()
