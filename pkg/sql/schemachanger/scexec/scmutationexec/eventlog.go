@@ -70,7 +70,7 @@ func asEventPayload(
 			return &eventpb.DropDatabase{DatabaseName: fullName}, nil
 		case *scpb.Schema:
 			return &eventpb.DropSchema{SchemaName: fullName}, nil
-		case *scpb.AliasType, *scpb.EnumType:
+		case *scpb.AliasType, *scpb.EnumType, *scpb.CompositeType:
 			return &eventpb.DropType{TypeName: fullName}, nil
 		case *scpb.TableComment, *scpb.ColumnComment, *scpb.IndexComment, *scpb.ConstraintComment,
 			*scpb.DatabaseComment, *scpb.SchemaComment:

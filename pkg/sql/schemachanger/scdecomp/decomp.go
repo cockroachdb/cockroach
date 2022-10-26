@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
@@ -192,8 +191,23 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 			})
 		}
 	case descpb.TypeDescriptor_COMPOSITE:
-		name := tree.Name(typ.GetName())
-		panic(scerrors.NotImplementedErrorf(&name, "composite types not supported in new schema changer"))
+		w.ev(descriptorStatus(typ), &scpb.CompositeType{
+			TypeID:      typ.GetID(),
+			ArrayTypeID: typ.GetArrayTypeID(),
+		})
+		composite := typ.TypeDesc().Composite
+		for i := range composite.TupleContents {
+			typeT, err := newTypeT(composite.TupleContents[i])
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "alias type %q (%d)",
+					typ.GetName(), typ.GetID()))
+			}
+			w.ev(descriptorStatus(typ), &scpb.CompositeTypeAttribute{
+				TypeID: typ.GetID(),
+				Label:  composite.TupleLabels[i],
+				TypeT:  *typeT,
+			})
+		}
 	default:
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}

@@ -296,6 +296,68 @@ func FindColumnType(b ElementStatusIterator) (current Status, target TargetStatu
 	return current, target, element
 }
 
+func (e CompositeType) element() {}
+
+// ForEachCompositeType iterates over elements of type CompositeType.
+func ForEachCompositeType(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeType),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeType); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeType finds the first element of type CompositeType.
+func FindCompositeType(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeType) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeType); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
+func (e CompositeTypeAttribute) element() {}
+
+// ForEachCompositeTypeAttribute iterates over elements of type CompositeTypeAttribute.
+func ForEachCompositeTypeAttribute(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *CompositeTypeAttribute),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttribute); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindCompositeTypeAttribute finds the first element of type CompositeTypeAttribute.
+func FindCompositeTypeAttribute(b ElementStatusIterator) (current Status, target TargetStatus, element *CompositeTypeAttribute) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*CompositeTypeAttribute); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e ConstraintComment) element() {}
 
 // ForEachConstraintComment iterates over elements of type ConstraintComment.
