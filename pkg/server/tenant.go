@@ -69,6 +69,7 @@ type SQLServerWrapper struct {
 	grpc       *grpcServer
 	nodeDialer *nodedialer.Dialer
 	db         *kv.DB
+	registry   *metric.Registry
 	recorder   *status.MetricsRecorder
 	runtime    *status.RuntimeStatSampler
 
@@ -212,15 +213,6 @@ func NewTenantServer(
 		return nil, err
 	}
 
-	args.recorder.AddNode(
-		args.registry,
-		roachpb.NodeDescriptor{},
-		timeutil.Now().UnixNano(),
-		baseCfg.AdvertiseAddr,     // advertised addr
-		baseCfg.HTTPAdvertiseAddr, // http addr
-		baseCfg.SQLAdvertiseAddr,  // sql addr
-	)
-
 	sw := &SQLServerWrapper{
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
@@ -228,6 +220,7 @@ func NewTenantServer(
 		grpc:       args.grpc,
 		nodeDialer: args.nodeDialer,
 		db:         args.db,
+		registry:   args.registry,
 		recorder:   args.recorder,
 		runtime:    args.runtime,
 
@@ -359,6 +352,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	//
 	// TODO(tbg): clarify the contract here and move closer to usage if possible.
 	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
+
+	// We can now add the node registry.
+	s.recorder.AddNode(
+		s.registry,
+		roachpb.NodeDescriptor{},
+		timeutil.Now().UnixNano(),
+		s.sqlServer.cfg.AdvertiseAddr,
+		s.sqlServer.cfg.HTTPAdvertiseAddr,
+		s.sqlServer.cfg.SQLAdvertiseAddr,
+	)
 
 	// Begin recording runtime statistics.
 	if err := startSampleEnvironment(workersCtx,
