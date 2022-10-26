@@ -221,19 +221,6 @@ func NewTenantServer(
 		baseCfg.SQLAdvertiseAddr,  // sql addr
 	)
 
-	// TODO(tbg): the log dir is not configurable at this point
-	// since it is integrated too tightly with the `./cockroach start` command.
-	if err := startSampleEnvironment(ctx,
-		args.Settings,
-		args.stopper,
-		args.GoroutineDumpDirName,
-		args.HeapProfileDirName,
-		args.runtime,
-		args.sessionRegistry,
-	); err != nil {
-		return nil, err
-	}
-
 	sw := &SQLServerWrapper{
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
@@ -372,6 +359,18 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	//
 	// TODO(tbg): clarify the contract here and move closer to usage if possible.
 	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
+
+	// Begin recording runtime statistics.
+	if err := startSampleEnvironment(workersCtx,
+		s.ClusterSettings(),
+		s.stopper,
+		s.sqlServer.cfg.GoroutineDumpDirName,
+		s.sqlServer.cfg.HeapProfileDirName,
+		s.runtime,
+		s.tenantStatus.sessionRegistry,
+	); err != nil {
+		return err
+	}
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
