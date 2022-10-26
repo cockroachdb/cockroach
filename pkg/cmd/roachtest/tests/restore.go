@@ -431,9 +431,9 @@ func (tpccIncDataLatest) runRestore(ctx context.Context, c cluster.Cluster) {
 	// imported and then a workload of 1000 warehouses was run against the cluster
 	// while the incremental backups were being taken.
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE FROM '/2022/09/07-000000.00' IN
-				'gs://cockroach-fixtures/tpcc-incrementals-22.2?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-09-07 12:15:00'"`)
+				RESTORE FROM '2022/09/29-000000.00' IN
+				'gs://cockroach-fixtures/backups/tpcc/rev-history=false,inc-count=48,cluster/8000-warehouses/22.2.0-alpha.4?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-09-28 23:42:00'"`)
 }
 
 func (tpccIncDataLatest) runRestoreDetached(
