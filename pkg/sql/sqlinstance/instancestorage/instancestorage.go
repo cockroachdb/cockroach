@@ -227,9 +227,11 @@ func (s *Storage) getAllInstanceRows(
 	return instances, nil
 }
 
-// ReleaseInstanceID releases an instance ID prior to shutdown of a SQL pod
-// The instance ID can be reused by another SQL pod of the same tenant.
+// ReleaseInstanceID deletes an instance ID record. The instance ID becomes
+// available to be reused by another SQL pod of the same tenant.
 func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) error {
+	// TODO(andrei): Ensure that we do not delete an instance ID that we no longer
+	// own, instead of deleting blindly.
 	key := makeInstanceKey(s.codec, s.tableID, id)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if _, err := s.db.Del(ctx, key); err != nil {
