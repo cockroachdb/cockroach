@@ -1322,7 +1322,11 @@ func (*IncrementRequest) flags() flag {
 }
 
 func (*DeleteRequest) flags() flag {
-	return isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
+	// isRead because of the FoundKey boolean in the response, indicating whether
+	// an existing key was deleted at the read timestamp. isIntentWrite allows
+	// omitting needsRefresh. For background, see:
+	// https://github.com/cockroachdb/cockroach/pull/89375
+	return isRead | isWrite | isTxn | isLocking | isIntentWrite | appliesTSCache | canBackpressure
 }
 
 func (drr *DeleteRangeRequest) flags() flag {
