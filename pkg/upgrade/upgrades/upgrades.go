@@ -171,6 +171,21 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		alterSystemTableStatisticsAddPartialPredicate,
 	),
+	upgrade.NewTenantUpgrade("add role_id and member_id columns to system.role_members",
+		toCV(clusterversion.V23_1RoleMembersTableHasIDColumns),
+		NoPrecondition,
+		alterSystemRoleMembersAddIDColumns,
+	),
+	upgrade.NewTenantUpgrade("add indexes to system.role_members for role_id and member_id columns",
+		toCV(clusterversion.V23_1RoleMembersTableHasIndexesForIDColumns),
+		NoPrecondition,
+		alterSystemRoleMembersAddIndexesForIDColumns,
+	),
+	upgrade.NewTenantUpgrade("backfill role_id and member_id columns in system.role_members",
+		toCV(clusterversion.V23_1RoleMembersIDColumnsBackfilled),
+		NoPrecondition,
+		backfillSystemRoleMembersIDColumns,
+	),
 }
 
 func init() {
