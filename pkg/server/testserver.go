@@ -917,8 +917,8 @@ func (ts *TestServer) StartTenant(
 	return &TestTenant{
 		SQLServer:      sw.sqlServer,
 		Cfg:            &baseCfg,
-		sqlAddr:        sw.pgAddr,
-		httpAddr:       sw.httpAddr,
+		sqlAddr:        baseCfg.SQLAddr,
+		httpAddr:       baseCfg.HTTPAddr,
 		httpTestServer: hts,
 		drain:          sw.drainServer,
 	}, err
