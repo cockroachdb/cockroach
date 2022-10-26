@@ -2166,7 +2166,6 @@ func fetchDescVersionModificationTime(
 		RequestHeader: header,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		StartTime:     hlc.Timestamp{},
-		ReturnSST:     true,
 	}
 	clock := hlc.NewClockWithSystemTimeSource(time.Minute /* maxOffset */)
 	hh := roachpb.Header{Timestamp: clock.Now()}

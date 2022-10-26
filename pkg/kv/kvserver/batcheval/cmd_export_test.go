@@ -57,7 +57,6 @@ func TestExportCmd(t *testing.T) {
 			RequestHeader:  roachpb.RequestHeader{Key: bootstrap.TestingUserTableDataMin(), EndKey: keys.MaxKey},
 			StartTime:      start,
 			MVCCFilter:     mvccFilter,
-			ReturnSST:      true,
 			TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&tc.Server(0).ClusterSettings().SV),
 		}
 		var h roachpb.Header

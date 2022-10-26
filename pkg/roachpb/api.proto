@@ -1521,9 +1521,6 @@ message ExportRequest {
 	// ingesting the SSTs via `AddSSTable`.
   bool split_mid_key = 13;
 
-  // Return the exported SST data in the response.
-  bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
-
   // This parameter has no effect on 22.2, as TBI is always enabled. For
   // compatibility with 22.1 nodes, callers must continue to set this as
   // appropriate until 22.2.
@@ -1541,13 +1538,7 @@ message ExportRequest {
   // then there is no limit.
   int64 target_file_size = 10;
 
-  // ReturnSSTBelowSize is the threshold which (if non-zero) causes files which
-  // are below that size threshold to be returned, as if ReturnSST were set,
-  // instead of being written to the assigned storage location.
-  // Note: returned SSTs are never encrypted.
-  int64 return_sst_below_size = 11;
-
-  reserved 2, 8;
+  reserved 2, 5, 8, 11;
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the
