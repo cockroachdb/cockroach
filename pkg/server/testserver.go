@@ -83,7 +83,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
-	baseCfg := MakeBaseConfig(st, tr)
+	baseCfg := MakeBaseConfig(st, tr, base.DefaultTestStoreSpec)
 	// Test servers start in secure mode by default.
 	baseCfg.Insecure = false
 	// Configure test storage engine.
@@ -112,7 +112,7 @@ func makeTestBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 }
 
 func makeTestKVConfig() KVConfig {
-	kvCfg := MakeKVConfig(base.DefaultTestStoreSpec)
+	kvCfg := MakeKVConfig()
 	return kvCfg
 }
 
@@ -847,6 +847,7 @@ func (ts *TestServer) StartTenant(
 	baseCfg.Locality = params.Locality
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
+	baseCfg.ClusterName = ts.Cfg.ClusterName
 
 	localNodeIDContainer := &base.NodeIDContainer{}
 	localNodeIDContainer.Set(ctx, ts.NodeID())
@@ -895,10 +896,9 @@ func (ts *TestServer) StartTenant(
 			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
 		}
 	}
-	sqlServer, authServer, drainServer, addr, httpAddr, err := startTenantInternal(
+	sw, err := NewTenantServer(
 		ctx,
 		stopper,
-		ts.Cfg.ClusterName,
 		baseCfg,
 		sqlCfg,
 	)
@@ -906,17 +906,21 @@ func (ts *TestServer) StartTenant(
 		return nil, err
 	}
 
+	if err := sw.Start(ctx); err != nil {
+		return nil, err
+	}
+
 	hts := &httpTestServer{}
-	hts.t.authentication = authServer
-	hts.t.sqlServer = sqlServer
+	hts.t.authentication = sw.authServer
+	hts.t.sqlServer = sw.sqlServer
 
 	return &TestTenant{
-		SQLServer:      sqlServer,
+		SQLServer:      sw.sqlServer,
 		Cfg:            &baseCfg,
-		sqlAddr:        addr,
-		httpAddr:       httpAddr,
+		sqlAddr:        sw.pgAddr,
+		httpAddr:       sw.httpAddr,
 		httpTestServer: hts,
-		drain:          drainServer,
+		drain:          sw.drainServer,
 	}, err
 }
 

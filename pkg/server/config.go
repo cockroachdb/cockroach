@@ -194,10 +194,24 @@ type BaseConfig struct {
 	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
 	// which a feature unique to the demo shell.
 	EnableDemoLoginEndpoint bool
+
+	// ReadyFn is called when the server has started listening on its
+	// sockets.
+	//
+	// The bool parameter is true if the server is not bootstrapped yet, will not
+	// bootstrap itself and will be waiting for an `init` command or accept
+	// bootstrapping from a joined node.
+	//
+	// This method is invoked from the main start goroutine, so it should not
+	// do nontrivial work.
+	ReadyFn func(waitForInit bool)
+
+	// Stores is specified to enable durable key-value storage.
+	Stores base.StoreSpecList
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
-func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
+func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer, storeSpec base.StoreSpec) BaseConfig {
 	if tr == nil {
 		panic("nil Tracer")
 	}
@@ -218,6 +232,9 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer) BaseConfig {
 		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
 		StorageEngine:                  storage.DefaultStorageEngine,
 		EnableWebSessionAuthentication: !disableWebLogin,
+		Stores: base.StoreSpecList{
+			Specs: []base.StoreSpec{storeSpec},
+		},
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
@@ -276,9 +293,6 @@ type Config struct {
 // up a KV server.
 type KVConfig struct {
 	base.RaftConfig
-
-	// Stores is specified to enable durable key-value storage.
-	Stores base.StoreSpecList
 
 	// Attrs specifies a colon-separated list of node topography or machine
 	// capabilities, used to match capabilities or location preferences specified
@@ -362,17 +376,6 @@ type KVConfig struct {
 	// actions.
 	EventLogEnabled bool
 
-	// ReadyFn is called when the server has started listening on its
-	// sockets.
-	//
-	// The bool parameter is true if the server is not bootstrapped yet, will not
-	// bootstrap itself and will be waiting for an `init` command or accept
-	// bootstrapping from a joined node.
-	//
-	// This method is invoked from the main start goroutine, so it should not
-	// do nontrivial work.
-	ReadyFn func(waitForInit bool)
-
 	// DelayedBootstrapFn is called if the bootstrap process does not complete
 	// in a timely fashion, typically 30s after the server starts listening.
 	DelayedBootstrapFn func()
@@ -394,7 +397,7 @@ type KVConfig struct {
 }
 
 // MakeKVConfig returns a KVConfig with default values.
-func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
+func MakeKVConfig() KVConfig {
 	kvCfg := KVConfig{
 		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfig(),
 		CacheSize:               DefaultCacheSize,
@@ -404,9 +407,6 @@ func MakeKVConfig(storeSpec base.StoreSpec) KVConfig {
 		EventLogEnabled:         defaultEventLogEnabled,
 		SnapshotSendLimit:       kvserver.DefaultSnapshotSendLimit,
 		SnapshotApplyLimit:      kvserver.DefaultSnapshotApplyLimit,
-		Stores: base.StoreSpecList{
-			Specs: []base.StoreSpec{storeSpec},
-		},
 	}
 	kvCfg.RaftConfig.SetDefaults()
 	return kvCfg
@@ -494,8 +494,8 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
-	baseCfg := MakeBaseConfig(st, tr)
-	kvCfg := MakeKVConfig(storeSpec)
+	baseCfg := MakeBaseConfig(st, tr, storeSpec)
+	kvCfg := MakeKVConfig()
 
 	cfg := Config{
 		BaseConfig: baseCfg,

@@ -63,7 +63,7 @@ func TestInstanceProvider(t *testing.T) {
 		const expectedInstanceID = base.SQLInstanceID(1)
 		stopper, slInstance, storage, clock := setup(t)
 		defer stopper.Stop(ctx)
-		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, addr)
+		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, func() string { return addr })
 		slInstance.Start(ctx)
 		instanceProvider.InitForTest(ctx)
 		instanceID, sessionID, err := instanceProvider.Instance(ctx)
