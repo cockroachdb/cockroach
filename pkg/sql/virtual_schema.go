@@ -88,13 +88,13 @@ type virtualIndex struct {
 		addRow func(...tree.Datum) error,
 	) (matched bool, err error)
 
-	// partial is true if the virtual index isn't able to satisfy all constraints.
+	// incomplete is true if the virtual index isn't able to satisfy all constraints.
 	// For example, the pg_class table contains both indexes and tables. Tables
 	// can be looked up via a virtual index, since we can look up their descriptor
 	// by their ID directly. But indexes can't - they're hashed identifiers with
-	// no actual index. So we mark this index as partial, and if we get no match
+	// no actual index. So we mark this index as incomplete, and if we get no match
 	// during populate, we'll fall back on populating the entire table.
-	partial bool
+	incomplete bool
 }
 
 // virtualSchemaTable represents a table within a virtualSchema.
@@ -252,7 +252,7 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 	}
 
 	virtualIdx := t.getIndex(index.GetID())
-	if virtualIdx.partial {
+	if virtualIdx.incomplete {
 		return false
 	}
 
@@ -735,8 +735,8 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 					return err
 				}
 			}
-			if !matched && virtualIndex.partial {
-				// If no row was matched, and the index was partial, we have no choice
+			if !matched && virtualIndex.incomplete {
+				// If no row was matched, and the index was incomplete, we have no choice
 				// but to populate the entire table and search through it.
 				break
 			}
