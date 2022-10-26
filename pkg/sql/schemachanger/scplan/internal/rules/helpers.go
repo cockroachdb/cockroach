@@ -245,7 +245,7 @@ func forEachElement(fn func(element scpb.Element) error) error {
 func IsDescriptor(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.Database, *scpb.Schema, *scpb.Table, *scpb.View, *scpb.Sequence,
-		*scpb.AliasType, *scpb.EnumType:
+		*scpb.AliasType, *scpb.EnumType, *scpb.CompositeType:
 		return true
 	}
 	return false
@@ -334,7 +334,7 @@ func isWithExpression(element scpb.Element) bool {
 
 func isTypeDescriptor(element scpb.Element) bool {
 	switch element.(type) {
-	case *scpb.EnumType, *scpb.AliasType:
+	case *scpb.EnumType, *scpb.AliasType, *scpb.CompositeType:
 		return true
 	default:
 		return false

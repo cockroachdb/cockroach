@@ -59,6 +59,7 @@ message ElementProto {
   Table table = 5;
   EnumType enum_type = 6;
   AliasType alias_type = 7;
+  CompositeType composite_type = 8;
 
   // Relation elements.
   ColumnFamily column_family = 20 [(gogoproto.moretags) = "parent:\"Table\""];
@@ -122,7 +123,11 @@ message ElementProto {
   // Enum type elements.
   EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
 
-  // Next element group start id: 140
+  // Composite type elements.
+  CompositeTypeAttrType composite_type_attr_type = 140 [(gogoproto.moretags) = "parent:\"CompositeType\""];
+  CompositeTypeAttrName composite_type_attr_name = 141 [(gogoproto.moretags) = "parent:\"CompositeType\""];
+
+  // Next element group start id: 160
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -353,6 +358,11 @@ message AliasType {
   TypeT embedded_type_t = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+message CompositeType {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
 message Schema {
   uint32 schema_id = 1 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 
@@ -507,6 +517,16 @@ message EnumTypeValue {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   bytes physical_representation = 2;
   string logical_representation = 3;
+}
+
+message CompositeTypeAttrName {
+  uint32 composite_type_id = 1 [(gogoproto.customname) = "CompositeTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+}
+
+message CompositeTypeAttrType {
+  uint32 composite_type_id = 1 [(gogoproto.customname) = "CompositeTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  TypeT embedded_type_t = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
 // TableZoneConfig temporary place holder just to allow blocking operations.
