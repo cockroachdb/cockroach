@@ -6572,13 +6572,17 @@ session_var_parts:
 
 // %Help: SHOW STATISTICS - display table statistics
 // %Category: Misc
-// %Text: SHOW STATISTICS [USING JSON] FOR TABLE <table_name>
+// %Text: SHOW STATISTICS [USING JSON] FOR TABLE <table_name> [WITH FORECAST]
 //
-// Returns the available statistics for a table.
-// The statistics can include a histogram ID, which can
-// be used with SHOW HISTOGRAM.
-// If USING JSON is specified, the statistics and histograms
-// are encoded in JSON format.
+// Returns the available statistics for a table. The statistics can include a
+// histogram ID, which can be used with SHOW HISTOGRAM.
+//
+// If USING JSON is specified, the statistics and histograms are encoded in JSON
+// format.
+//
+// If WITH FORECAST is specified, forecasted statistics are included if
+// available.
+//
 // %SeeAlso: SHOW HISTOGRAM
 show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name opt_with_options
