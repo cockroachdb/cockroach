@@ -84,3 +84,161 @@ data: "a"/47.000000000,0 -> /<empty>
 data: "a"/46.000000000,0 -> /BYTES/abc
 data: "a"/44.000000000,0 -> /<empty>
 data: "b"/49.000000000,0 -> /<empty>
+
+
+# Try deleting historical versions using a txn with an old read timestamp, and
+# ensure "found key" is reported correctly for various timestamps along with the
+# WriteTooOldError (which may be deferred).
+run error
+with t=A
+  txn_begin ts=43
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=43.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 43.000000000,0 too old; wrote at 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run error
+with t=A
+  txn_begin ts=44
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=44.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 44.000000000,0 too old; wrote at 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run error
+with t=A
+  txn_begin ts=46
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key true
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=46.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 46.000000000,0 too old; wrote at 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run error
+with t=A
+  txn_begin ts=47
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=47.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+error: (*roachpb.WriteTooOldError:) WriteTooOldError: write for key "a" at timestamp 47.000000000,0 too old; wrote at 50.000000000,0
+
+run ok
+with t=A
+  resolve_intent k=a status=ABORTED
+  txn_remove
+----
+>> at end:
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+run ok
+with t=A
+  txn_begin ts=49
+  txn_advance ts=50
+  del k=a
+----
+del: "a": found key false
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=49.000000000,0 wto=false gul=0,0
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
+
+# Delete an inline value, both missing and existing.
+run ok
+del k=i
+put k=i v=inline
+del k=i
+----
+del: "i": found key false
+del: "i": found key true
+>> at end:
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=50.000000000,0 min=0,0 seq=0} ts=50.000000000,0 del=true klen=12 vlen=0 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/50.000000000,0 -> /<empty>
+data: "a"/48.000000000,0 -> /<empty>
+data: "a"/47.000000000,0 -> /<empty>
+data: "a"/46.000000000,0 -> /BYTES/abc
+data: "a"/44.000000000,0 -> /<empty>
+data: "b"/49.000000000,0 -> /<empty>
