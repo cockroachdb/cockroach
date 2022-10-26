@@ -13,6 +13,8 @@ package server
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -339,6 +341,29 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// serve authentication requests, and also because it must work for
 	// monitoring tools which operate without authentication.
 	s.http.handleHealth(gwMux)
+
+	// Write listener info files early in the startup sequence. `listenerInfo` has a comment.
+	listenerFiles := listenerInfo{
+		listenRPC:    s.sqlServer.cfg.Addr,
+		advertiseRPC: s.sqlServer.cfg.AdvertiseAddr,
+		listenSQL:    s.sqlServer.cfg.SQLAddr,
+		advertiseSQL: s.sqlServer.cfg.SQLAdvertiseAddr,
+		listenHTTP:   s.sqlServer.cfg.HTTPAdvertiseAddr,
+	}.Iter()
+
+	for _, storeSpec := range s.sqlServer.cfg.Stores.Specs {
+		if storeSpec.InMemory {
+			continue
+		}
+		for name, val := range listenerFiles {
+			file := filepath.Join(storeSpec.Path, name)
+			if err := os.WriteFile(file, []byte(val), 0644); err != nil {
+				return errors.Wrapf(err, "failed to write %s", file)
+			}
+		}
+		// TODO(knz): Do we really want to write the listener files
+		// in _every_ store directory? Not just the first one?
+	}
 
 	// This opens the main listener.
 	startRPCServer(workersCtx)
