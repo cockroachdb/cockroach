@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -377,6 +378,16 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	); err != nil {
 		return err
 	}
+
+	// Export statistics to graphite, if enabled by configuration.
+	var graphiteOnce sync.Once
+	graphiteEndpoint.SetOnChange(&s.ClusterSettings().SV, func(context.Context) {
+		if graphiteEndpoint.Get(&s.ClusterSettings().SV) != "" {
+			graphiteOnce.Do(func() {
+				startGraphiteStatsExporter(workersCtx, s.stopper, s.recorder, s.ClusterSettings())
+			})
+		}
+	})
 
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
