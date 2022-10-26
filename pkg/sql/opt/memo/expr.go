@@ -1281,3 +1281,54 @@ func (g *GroupingPrivate) GroupingOrderType(required *props.OrderingChoice) Grou
 	}
 	return PartialStreaming
 }
+
+// IsConstantsAndPlaceholders returns true if all values in the list are
+// constant, placeholders or tuples containing constants, placeholders or other
+// such nested tuples.
+func (v *ValuesExpr) IsConstantsAndPlaceholders() bool {
+	// Constant expressions should be leak-proof, so this is a quick test to
+	// determine if the ValuesExpr even needs to be checked.
+	if !v.Relational().VolatilitySet.IsLeakproof() {
+		return false
+	}
+	// Another quick check for something other than constants
+	if !v.Relational().OuterCols.Empty() {
+		return false
+	}
+	// A safety check
+	if len(v.Rows) == 0 {
+		return false
+	}
+	if !v.Rows.IsConstantsAndPlaceholders(v.Memo().EvalContext()) {
+		return false
+	}
+	return true
+}
+
+// IsConstantsAndPlaceholders returns true if all scalar expressions in the list
+// are constants, placeholders or tuples containing constants or placeholders.
+// If a tuple nested within a tuple is found, false is returned.
+func (e ScalarListExpr) IsConstantsAndPlaceholders(evalCtx *eval.Context) bool {
+	return e.isConstantsAndPlaceholders(evalCtx, false /* insideTuple */)
+}
+
+func (e ScalarListExpr) isConstantsAndPlaceholders(evalCtx *eval.Context, insideTuple bool) bool {
+	for _, scalarExpr := range e {
+		if tupleExpr, ok := scalarExpr.(*TupleExpr); ok {
+			if insideTuple {
+				return false
+			}
+			if !tupleExpr.Elems.isConstantsAndPlaceholders(evalCtx, true) {
+				return false
+			}
+		} else {
+			if scalarExpr == nil {
+				panic(errors.AssertionFailedf("nil scalar expression in list"))
+			}
+			if !opt.IsConstValueOp(scalarExpr) && scalarExpr.Op() != opt.PlaceholderOp {
+				return false
+			}
+		}
+	}
+	return true
+}
