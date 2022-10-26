@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -147,11 +146,10 @@ func validateParquetFile(
 				return err
 			}
 
-			// If we're encoding a DOidWrapper, then we want to cast the wrapped datum.
-			// Note that we pass in nil as the first argument since we're not interested
-			// in evaluating the placeholders.
-			validateDatum(t, eval.UnwrapDatum(nil, test.datums[i][j]), eval.UnwrapDatum(nil, datum),
-				test.cols[j].Typ)
+			// If we're encoding a DOidWrapper, then we want to cast the wrapped
+			// datum. Note that we don't use eval.UnwrapDatum since we're not
+			// interested in evaluating the placeholders.
+			validateDatum(t, tree.UnwrapDOidWrapper(test.datums[i][j]), tree.UnwrapDOidWrapper(datum), test.cols[j].Typ)
 		}
 		i++
 	}

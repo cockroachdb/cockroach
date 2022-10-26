@@ -315,7 +315,7 @@ func startConnExecutor(
 					TempFS:            tempFS,
 					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
 				},
-				flowinfra.NewFlowScheduler(ambientCtx, stopper, st),
+				flowinfra.NewRemoteFlowRunner(ambientCtx, stopper, nil /* acc */),
 			),
 			nil, /* distSender */
 			nil, /* nodeDescs */

@@ -663,7 +663,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				break
 			}
 			constraintDatum := span.StartKey().Value(0)
-			unwrappedConstraint := eval.UnwrapDatum(p.EvalContext(), constraintDatum)
+			unwrappedConstraint := eval.UnwrapDatum(ctx, p.EvalContext(), constraintDatum)
 			virtualIndex := def.getIndex(index.GetID())
 			// NULL constraint will not match any row.
 			matched := unwrappedConstraint != tree.DNull
