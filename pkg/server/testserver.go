@@ -911,7 +911,7 @@ func (ts *TestServer) StartTenant(
 	}
 
 	hts := &httpTestServer{}
-	hts.t.authentication = sw.authServer
+	hts.t.authentication = sw.authentication
 	hts.t.sqlServer = sw.sqlServer
 
 	return &TestTenant{
