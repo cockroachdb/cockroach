@@ -133,6 +133,7 @@ go_library(
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_fraugster_parquet_go//:parquet-go",
+        "@com_github_fraugster_parquet_go//parquet",
         "@com_github_fraugster_parquet_go//parquetschema",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_google_btree//:btree",
