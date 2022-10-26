@@ -196,6 +196,18 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		err = errors.Wrapf(err, "initVirtualDesc problem with schema: \n%s", t.schema)
 		return descpb.TableDescriptor{}, err
 	}
+
+	if t.generator != nil {
+		for _, idx := range t.indexes {
+			if idx.incomplete {
+				return descpb.TableDescriptor{}, errors.AssertionFailedf(
+					"virtual table %s.%s contains an incomplete index and a generator will"+
+						" never use the index", sc.GetName(), mutDesc.GetName(),
+				)
+			}
+		}
+	}
+
 	for _, index := range mutDesc.PublicNonPrimaryIndexes() {
 		if index.NumKeyColumns() > 1 {
 			panic("we don't know how to deal with virtual composite indexes yet")
