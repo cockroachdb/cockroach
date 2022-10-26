@@ -63,10 +63,19 @@ import (
 // SQLServerWrapper is a utility struct that encapsulates
 // a SQLServer and its helpers that make it a networked service.
 type SQLServerWrapper struct {
+	clock      *hlc.Clock
+	rpcContext *rpc.Context
+	// The gRPC server on which the different RPC handlers will be registered.
+	grpc *grpcServer
+
+	http        *httpServer
 	sqlServer   *SQLServer
 	authServer  *authenticationServer
 	drainServer *drainServer
-	stopper     *stop.Stopper
+	// The Observability Server, used by the Observability Service to subscribe to
+	// CRDB data.
+	eventsServer *obs.EventsServer
+	stopper      *stop.Stopper
 
 	// Used for multi-tenant cost control (on the tenant side).
 	costController multitenant.TenantSideCostController
@@ -131,16 +140,6 @@ func NewTenantServer(
 	// has defined the instance ID container in the AmbientCtx.
 	background := args.BaseConfig.AmbientCtx.AnnotateCtx(context.Background())
 
-	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, background, baseCfg, stopper, args.grpc)
-	if err != nil {
-		return nil, err
-	}
-
-	serverTLSConfig, err := args.rpcContext.GetUIServerTLSConfig()
-	if err != nil {
-		return nil, err
-	}
-
 	// The tenantStatusServer needs access to the sqlServer,
 	// but we also need the same object to set up the sqlServer.
 	// So construct the tenant status server with a nil sqlServer,
@@ -189,7 +188,6 @@ func NewTenantServer(
 	for _, gw := range []grpcGatewayServer{tenantAdminServer, tenantStatusServer, authServer} {
 		gw.RegisterService(args.grpcServer)
 	}
-	startRPCServer(background)
 
 	// Begin configuration of GRPC Gateway
 	gwMux, gwCtx, conn, err := configureGRPCGateway(
@@ -241,15 +239,6 @@ func NewTenantServer(
 		return nil, err
 	}
 
-	connManager := netutil.MakeServer(ctx,
-		args.stopper,
-		serverTLSConfig,                          // tlsConfig
-		http.HandlerFunc(httpServer.baseHandler), // handler
-	)
-	if err := httpServer.start(ctx, background, connManager, serverTLSConfig, args.stopper); err != nil {
-		return nil, err
-	}
-
 	args.recorder.AddNode(
 		args.registry,
 		roachpb.NodeDescriptor{},
@@ -258,8 +247,6 @@ func NewTenantServer(
 		baseCfg.HTTPAdvertiseAddr, // http addr
 		baseCfg.SQLAdvertiseAddr,  // sql addr
 	)
-
-	orphanedLeasesTimeThresholdNanos := args.clock.Now().WallTime
 
 	// TODO(tbg): the log dir is not configurable at this point
 	// since it is integrated too tightly with the `./cockroach start` command.
@@ -274,30 +261,18 @@ func NewTenantServer(
 		return nil, err
 	}
 
-	if err := s.preStart(ctx,
-		args.stopper,
-		args.TestingKnobs,
-		connManager,
-		pgL,
-		orphanedLeasesTimeThresholdNanos,
-	); err != nil {
-		return nil, err
-	}
-	clusterID := args.rpcContext.LogicalClusterID.Get()
-	instanceID := s.SQLInstanceID()
-	if clusterID.Equal(uuid.Nil) {
-		log.Fatalf(ctx, "expected LogicalClusterID to be initialized after preStart")
-	}
-	if instanceID == 0 {
-		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
-	}
-	args.eventsServer.SetResourceInfo(clusterID, int32(instanceID), "unknown" /* version */)
-
 	sw := &SQLServerWrapper{
-		sqlServer:   s,
-		authServer:  authServer,
-		drainServer: drainServer,
-		stopper:     args.stopper,
+		clock:      args.clock,
+		rpcContext: args.rpcContext,
+
+		grpc: args.grpc,
+
+		http:         httpServer,
+		sqlServer:    s,
+		authServer:   authServer,
+		drainServer:  drainServer,
+		eventsServer: args.eventsServer,
+		stopper:      args.stopper,
 
 		costController: args.costController,
 	}
@@ -313,6 +288,75 @@ func NewTenantServer(
 // before the first client is accepted.
 func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// TODO(knz): Move morecode here.
+
+	// Start a context for the asynchronous network workers.
+	workersCtx := s.AnnotateCtx(context.Background())
+
+	// Load the TLS configuration for the HTTP server.
+	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
+	if err != nil {
+		return err
+	}
+
+	// connManager tracks incoming connections accepted via listeners
+	// and automatically closes them when the stopper indicates a
+	// shutdown.
+	// This handles both:
+	// - HTTP connections for the admin UI with an optional TLS handshake over HTTP.
+	// - SQL client connections with a TLS handshake over TCP.
+	// (gRPC connections are handled separately via s.grpc and perform
+	// their TLS handshake on their own)
+	connManager := netutil.MakeServer(workersCtx, s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
+
+	// Start the admin UI server. This opens the HTTP listen socket,
+	// optionally sets up TLS, and dispatches the server worker for the
+	// web UI.
+	if err := s.http.start(ctx, workersCtx, connManager, uiTLSConfig, s.stopper); err != nil {
+		return err
+	}
+
+	// Start the RPC server. This opens the RPC/SQL listen socket,
+	// and dispatches the server worker for the RPC.
+	// The SQL listener is returned, to start the SQL server later
+	// below when the server has initialized.
+	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc)
+	if err != nil {
+		return err
+	}
+
+	// This opens the main listener.
+	startRPCServer(workersCtx)
+
+	// Record a walltime that is lower than the lowest hlc timestamp this current
+	// instance of the node can use. We do not use startTime because it is lower
+	// than the timestamp used to create the bootstrap schema.
+	//
+	// TODO(tbg): clarify the contract here and move closer to usage if possible.
+	orphanedLeasesTimeThresholdNanos := s.clock.Now().WallTime
+
+	// After setting modeOperational, we can block until all stores are fully
+	// initialized.
+	s.grpc.setMode(modeOperational)
+
+	if err := s.sqlServer.preStart(
+		workersCtx,
+		s.stopper,
+		s.sqlServer.cfg.TestingKnobs,
+		connManager,
+		pgL,
+		orphanedLeasesTimeThresholdNanos,
+	); err != nil {
+		return err
+	}
+	clusterID := s.rpcContext.LogicalClusterID.Get()
+	instanceID := s.sqlServer.SQLInstanceID()
+	if clusterID.Equal(uuid.Nil) {
+		log.Fatalf(ctx, "expected LogicalClusterID to be initialized after preStart")
+	}
+	if instanceID == 0 {
+		log.Fatalf(ctx, "expected SQLInstanceID to be initialized after preStart")
+	}
+	s.eventsServer.SetResourceInfo(clusterID, int32(instanceID), "unknown" /* version */)
 
 	// externalUsageFn measures the CPU time, for use by tenant
 	// resource usage accounting in costController.Start below.
@@ -551,9 +595,6 @@ func makeTenantSQLServerArgs(
 	)
 
 	grpcServer := newGRPCServer(rpcContext)
-	// In a SQL-only server, there is no separate node initialization
-	// phase. Start RPC immediately in the operational state.
-	grpcServer.setMode(modeOperational)
 
 	sessionRegistry := sql.NewSessionRegistry()
 	flowScheduler := flowinfra.NewFlowScheduler(baseCfg.AmbientCtx, stopper, st)
