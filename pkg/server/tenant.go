@@ -209,11 +209,6 @@ func NewTenantServer(
 	}
 	httpServer := newHTTPServer(baseCfg, args.rpcContext, parseNodeIDFn, getNodeIDHTTPAddressFn)
 
-	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err := startPurgeOldSessions(ctx, authServer); err != nil {
-		return nil, err
-	}
-
 	sw := &SQLServerWrapper{
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
@@ -386,6 +381,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// After setting modeOperational, we can block until all stores are fully
 	// initialized.
 	s.grpc.setMode(modeOperational)
+
+	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
+	if err := startPurgeOldSessions(workersCtx, s.authentication); err != nil {
+		return err
+	}
 
 	// Connect the HTTP endpoints. This also wraps the privileged HTTP
 	// endpoints served by gwMux by the HTTP cookie authentication
