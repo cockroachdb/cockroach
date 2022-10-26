@@ -2358,6 +2358,7 @@ func (c *cliState) maybeHandleInterrupt() func() {
 					// by re-throwing the signal after stopping the signal capture.
 					signal.Reset(os.Interrupt)
 					_ = sysutil.InterruptSelf()
+					return
 				}
 
 				fmt.Fprintf(c.iCtx.stderr, "\nattempting to cancel query...\n")
