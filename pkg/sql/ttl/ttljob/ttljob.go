@@ -690,40 +690,43 @@ func runTTLOnRange(
 
 // keyToDatums translates a RKey on a range for a table to the appropriate datums.
 func keyToDatums(
-	key roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
+	rKey roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
 ) (tree.Datums, error) {
-	rKey := key.AsRawKey()
+	key := rKey.AsRawKey()
 
 	// If any of these errors, that means we reached an "empty" key, which
 	// symbolizes the start or end of a range.
-	if _, _, err := codec.DecodeTablePrefix(rKey); err != nil {
+	if _, _, err := codec.DecodeTablePrefix(key); err != nil {
 		return nil, nil //nolint:returnerrcheck
 	}
-	if _, _, _, err := codec.DecodeIndexPrefix(rKey); err != nil {
+	if _, _, _, err := codec.DecodeIndexPrefix(key); err != nil {
 		return nil, nil //nolint:returnerrcheck
 	}
 
 	// Decode the datums ourselves, instead of using rowenc.DecodeKeyVals.
 	// We cannot use rowenc.DecodeKeyVals because we may not have the entire PK
 	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
-	rKey, err := codec.StripTenantPrefix(key.AsRawKey())
+	key, err := codec.StripTenantPrefix(rKey.AsRawKey())
 	if err != nil {
-		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", key)
+		// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", []byte(rKey))
 	}
-	rKey, _, _, err = rowenc.DecodePartialTableIDIndexID(key)
+	key, _, _, err = rowenc.DecodePartialTableIDIndexID(rKey)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", key)
+		// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", []byte(rKey))
 	}
 	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
-	for len(rKey) > 0 && len(encDatums) < len(pkTypes) {
+	for len(key) > 0 && len(encDatums) < len(pkTypes) {
 		i := len(encDatums)
 		// We currently assume all PRIMARY KEY columns are ascending, and block
 		// creation otherwise.
 		enc := descpb.DatumEncoding_ASCENDING_KEY
 		var val rowenc.EncDatum
-		val, rKey, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, rKey)
+		val, key, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, key)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", key)
+			// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", []byte(rKey))
 		}
 		encDatums = append(encDatums, val)
 	}
@@ -731,7 +734,8 @@ func keyToDatums(
 	datums := make(tree.Datums, len(encDatums))
 	for i, encDatum := range encDatums {
 		if err := encDatum.EnsureDecoded(pkTypes[i], alloc); err != nil {
-			return nil, errors.Wrapf(err, "error ensuring encoded of %x", key)
+			// Convert rKey to []byte to prevent hex encoding output of RKey.String().
+			return nil, errors.Wrapf(err, "error ensuring encoding of %x", []byte(rKey))
 		}
 		datums[i] = encDatum.Datum
 	}
