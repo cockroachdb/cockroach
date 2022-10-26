@@ -130,24 +130,6 @@ function would_stress() {
   fi
 }
 
-function maybe_stress() {
-   # NB: This code doesn't know about posting Github issues as we don't stress on
-   # the release branches.
-  if ! would_stress; then
-    return 0
-  fi
-
-  target=$1
-  shift
-
-  block="Maybe ${target} pull request"
-  tc_start_block "${block}"
-  run build/builder.sh make protobuf
-  run build/builder.sh go install ./pkg/cmd/github-pull-request-make
-  run_json_test build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET="${target}" github-pull-request-make
-  tc_end_block "${block}"
-}
-
 # Returns the list of release branches from origin (origin/release-*), ordered
 # by version (higher version numbers first).
 get_release_branches() {
