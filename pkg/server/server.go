@@ -1039,6 +1039,8 @@ func (li listenerInfo) Iter() map[string]string {
 
 // Start calls PreStart() and AcceptClient() in sequence.
 // This is suitable for use e.g. in tests.
+// This mirrors the implementation of (*SQLServerWrapper).Start.
+// TODO(knz): Find a way to implement this method only once for both.
 func (s *Server) Start(ctx context.Context) error {
 	if err := s.PreStart(ctx); err != nil {
 		return err
@@ -1074,6 +1076,9 @@ func (s *Server) Start(ctx context.Context) error {
 // should represent the general startup operation.
 func (s *Server) PreStart(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
+
+	// The following initialization is mirrored in
+	// (*SQLServerWrapper).PreStart. Please keep them in sync.
 
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
@@ -1746,6 +1751,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 }
 
 // AcceptClients starts listening for incoming SQL clients over the network.
+// This mirrors the implementation of (*SQLServerWrapper).AcceptClients.
+// TODO(knz): Find a way to implement this method only once for both.
 func (s *Server) AcceptClients(ctx context.Context) error {
 	workersCtx := s.AnnotateCtx(context.Background())
 
