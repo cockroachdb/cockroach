@@ -11,8 +11,6 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./schemaInsights.reducer";
-import { CACHE_INVALIDATION_PERIOD, throttleWithReset } from "../utils";
-import { rootActions } from "../reducers";
 import { getSchemaInsights } from "../../api";
 
 export function* refreshSchemaInsightsSaga() {
@@ -28,16 +26,9 @@ export function* requestSchemaInsightsSaga(): any {
   }
 }
 
-export function* schemaInsightsSaga(
-  cacheInvalidationPeriod: number = CACHE_INVALIDATION_PERIOD,
-) {
+export function* schemaInsightsSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, rootActions.resetState],
-      refreshSchemaInsightsSaga,
-    ),
+    takeLatest(actions.refresh, refreshSchemaInsightsSaga),
     takeLatest(actions.request, requestSchemaInsightsSaga),
   ]);
 }

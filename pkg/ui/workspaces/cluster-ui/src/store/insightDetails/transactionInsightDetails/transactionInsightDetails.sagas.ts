@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, delay, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./transactionInsightDetails.reducer";
 import {
@@ -37,14 +37,9 @@ export function* requestTransactionInsightDetailsSaga(
   }
 }
 
-export function* receivedTransactionInsightDetailsSaga() {
-  yield put(actions.invalidated());
-}
-
 export function* transactionInsightDetailsSaga() {
   yield all([
     takeLatest(actions.refresh, refreshTransactionInsightDetailsSaga),
     takeLatest(actions.request, requestTransactionInsightDetailsSaga),
-    takeLatest(actions.received, receivedTransactionInsightDetailsSaga),
   ]);
 }

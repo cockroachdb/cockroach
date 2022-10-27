@@ -23,6 +23,7 @@ import {
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
+import { TransactionInsightEventDetailsRequest } from "src/api";
 
 const mapStateToProps = (
   state: AppState,
@@ -39,7 +40,11 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): TransactionInsightDetailsDispatchProps => ({
-  refreshTransactionInsightDetails: actions.refresh,
+  refreshTransactionInsightDetails: (
+    req: TransactionInsightEventDetailsRequest,
+  ) => {
+    dispatch(actions.refresh(req));
+  },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({

@@ -80,10 +80,6 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
     this.refresh();
   }
 
-  componentDidUpdate(): void {
-    this.refresh();
-  }
-
   prevPage = (): void => this.props.history.goBack();
 
   renderContent = (): React.ReactElement => {
