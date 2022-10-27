@@ -2038,12 +2038,13 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestGCAssert", func(t *testing.T) {
 		skip.UnderShort(t)
-		skip.UnderBazelWithIssue(t, 65485, "Doesn't work in Bazel -- not really sure why yet")
 
 		t.Parallel()
 		var buf strings.Builder
 		if err := gcassert.GCAssert(&buf,
 			"../../col/coldata",
+			"../../kv/kvclient/rangecache",
+			"../../sql/catalog/descs",
 			"../../sql/colcontainer",
 			"../../sql/colconv",
 			"../../sql/colexec",
@@ -2059,8 +2060,10 @@ func TestLint(t *testing.T) {
 			"../../sql/colfetcher",
 			"../../sql/opt",
 			"../../sql/row",
-			"../../kv/kvclient/rangecache",
 			"../../storage",
+			"../../storage/enginepb",
+			"../../util",
+			"../../util/hlc",
 		); err != nil {
 			t.Fatal(err)
 		}
