@@ -225,6 +225,8 @@ func (h *ProcOutputHelper) EmitRow(
 		return DrainRequested, nil
 	}
 
+	// TODO(yuzefovich): consider removing this logging since the verbosity
+	// check is not exactly free.
 	if log.V(3) {
 		log.InfofDepth(ctx, 1, "pushing row %s", outRow.String(h.OutputTypes))
 	}
@@ -713,9 +715,6 @@ func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatu
 	}
 	if !ok {
 		pb.MoveToDraining(nil /* err */)
-	}
-	if outRow != nil && log.V(3) && pb.Ctx != nil {
-		log.InfofDepth(pb.Ctx, 1, "pushing row %s", outRow.String(pb.OutputHelper.OutputTypes))
 	}
 	return outRow
 }
