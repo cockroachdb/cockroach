@@ -42,23 +42,50 @@ func unmarshalVersionMap() (versionMap, error) {
 	return res, nil
 }
 
+// PredecessorHistory returns the last consecutive `k` releases that
+// precede the given buildVersion in the upgrade order (as dictated by
+// predecessor_version.json). E.g., if buildVersion=22.2 and k=2, then
+// this function will return ["21.2.7", "22.1.6"] (at the time of
+// writing).
+func PredecessorHistory(buildVersion version.Version, k int) ([]string, error) {
+	if buildVersion == (version.Version{}) {
+		return nil, errors.Errorf("buildVersion not set")
+	}
+
+	verMap, err := unmarshalVersionMap()
+	if err != nil {
+		return nil, errors.Wrap(err, "cannot load version map")
+	}
+
+	var versions []string
+	currentVersion := &buildVersion
+	for j := 0; j < k; j++ {
+		currentVersionMajorMinor := fmt.Sprintf("%d.%d", currentVersion.Major(), currentVersion.Minor())
+		v, ok := verMap[currentVersionMajorMinor]
+		if !ok {
+			return nil, errors.Errorf("prev version not set for version: %s", currentVersionMajorMinor)
+		}
+
+		versions = append([]string{v}, versions...)
+		formattedVersion := fmt.Sprintf("v%s", v)
+		currentVersion, err = version.Parse(formattedVersion)
+		if err != nil {
+			return nil, fmt.Errorf("invalid previous version %s: %w", formattedVersion, err)
+		}
+	}
+
+	return versions, nil
+}
+
 // PredecessorVersion returns a recent predecessor of the build version (i.e.
 // the build tag of the main binary). For example, if the running binary is from
 // the master branch prior to releasing 19.2.0, this will return a recent
 // (ideally though not necessarily the latest) 19.1 patch release.
 func PredecessorVersion(buildVersion version.Version) (string, error) {
-	if buildVersion == (version.Version{}) {
-		return "", errors.Errorf("buildVersion not set")
+	history, err := PredecessorHistory(buildVersion, 1)
+	if err != nil {
+		return "", err
 	}
 
-	verMap, err := unmarshalVersionMap()
-	if err != nil {
-		return "", errors.Wrap(err, "cannot load version map")
-	}
-	buildVersionMajorMinor := fmt.Sprintf("%d.%d", buildVersion.Major(), buildVersion.Minor())
-	v, ok := verMap[buildVersionMajorMinor]
-	if !ok {
-		return "", errors.Errorf("prev version not set for version: %s", buildVersionMajorMinor)
-	}
-	return v, nil
+	return history[0], nil
 }
