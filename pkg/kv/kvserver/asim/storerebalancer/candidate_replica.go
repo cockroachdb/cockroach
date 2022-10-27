@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -89,25 +88,10 @@ func (sr *simulatorReplica) Desc() *roachpb.RangeDescriptor {
 	return sr.rng.Descriptor()
 }
 
-// QPS returns the current queries-per-second recorded on this replica.
-func (sr *simulatorReplica) QPS() float64 {
-	return sr.usage.QueriesPerSecond
-}
-
 // RangeUsageInfo returns usage information (sizes and traffic) needed by
 // the allocator to make rebalancing decisions for a given range.
 func (sr *simulatorReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 	return sr.usage
-}
-
-// Stats returns the QPS replica load stats.
-func (sr *simulatorReplica) Stats() *replicastats.RatedSummary {
-	// TODO(kvoli): instrument replica stats for the simulator. Currently we
-	// have the replica stats struct however we do not use the summary
-	// information on per-count localities supplied from it.
-	return &replicastats.RatedSummary{
-		QPS: sr.QPS(),
-	}
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica.

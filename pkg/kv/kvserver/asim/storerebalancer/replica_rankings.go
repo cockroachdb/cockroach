@@ -12,12 +12,15 @@ package storerebalancer
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 )
 
-func hottestRanges(state state.State, storeID state.StoreID) []kvserver.CandidateReplica {
+func hottestRanges(
+	state state.State, storeID state.StoreID, dim load.Dimension,
+) []kvserver.CandidateReplica {
 	replRankings := kvserver.NewReplicaRankings()
-	accumulator := replRankings.NewAccumulator()
+	accumulator := kvserver.NewReplicaAccumulator(dim)
 	// NB: This follows the actual implementation, where replicas are included
 	// regardless of whether the replica is a lease holder. These are later
 	// filtered out in the store rebalancer.
@@ -26,5 +29,5 @@ func hottestRanges(state state.State, storeID state.StoreID) []kvserver.Candidat
 		accumulator.AddReplica(candidateReplica)
 	}
 	replRankings.Update(accumulator)
-	return replRankings.TopQPS()
+	return replRankings.TopLoad()
 }

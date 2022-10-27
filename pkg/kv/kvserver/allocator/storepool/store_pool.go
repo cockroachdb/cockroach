@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -414,7 +415,11 @@ type AllocatorStorePool interface {
 
 	// UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
 	// involved store descriptors immediately after a lease transfer.
-	UpdateLocalStoresAfterLeaseTransfer(from roachpb.StoreID, to roachpb.StoreID, rangeQPS float64)
+	UpdateLocalStoresAfterLeaseTransfer(
+		from roachpb.StoreID,
+		to roachpb.StoreID,
+		rangeUsageInfo allocator.RangeUsageInfo,
+	)
 
 	// UpdateLocalStoreAfterRelocate is used to update the local copy of the
 	// previous and new replica stores immediately after a successful relocate
@@ -423,7 +428,7 @@ type AllocatorStorePool interface {
 		voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 		oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
 		localStore roachpb.StoreID,
-		rangeQPS float64,
+		rangeUsageInfo allocator.RangeUsageInfo,
 	)
 }
 
@@ -606,13 +611,13 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 	voterTargets, nonVoterTargets []roachpb.ReplicationTarget,
 	oldVoters, oldNonVoters []roachpb.ReplicaDescriptor,
 	localStore roachpb.StoreID,
-	rangeQPS float64,
+	rangeUsageInfo allocator.RangeUsageInfo,
 ) {
 	if len(voterTargets) < 1 {
 		return
 	}
 	leaseTarget := voterTargets[0]
-	sp.UpdateLocalStoresAfterLeaseTransfer(localStore, leaseTarget.StoreID, rangeQPS)
+	sp.UpdateLocalStoresAfterLeaseTransfer(localStore, leaseTarget.StoreID, rangeUsageInfo)
 
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
@@ -641,7 +646,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRelocate(
 // UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
 // involved store descriptors immediately after a lease transfer.
 func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
-	from roachpb.StoreID, to roachpb.StoreID, rangeQPS float64,
+	from roachpb.StoreID, to roachpb.StoreID, rangeUsageInfo allocator.RangeUsageInfo,
 ) {
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
@@ -649,10 +654,10 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	fromDetail := *sp.GetStoreDetailLocked(from)
 	if fromDetail.Desc != nil {
 		fromDetail.Desc.Capacity.LeaseCount--
-		if fromDetail.Desc.Capacity.QueriesPerSecond < rangeQPS {
+		if fromDetail.Desc.Capacity.QueriesPerSecond < rangeUsageInfo.QueriesPerSecond {
 			fromDetail.Desc.Capacity.QueriesPerSecond = 0
 		} else {
-			fromDetail.Desc.Capacity.QueriesPerSecond -= rangeQPS
+			fromDetail.Desc.Capacity.QueriesPerSecond -= rangeUsageInfo.QueriesPerSecond
 		}
 		sp.DetailsMu.StoreDetails[from] = &fromDetail
 	}
@@ -660,7 +665,7 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	toDetail := *sp.GetStoreDetailLocked(to)
 	if toDetail.Desc != nil {
 		toDetail.Desc.Capacity.LeaseCount++
-		toDetail.Desc.Capacity.QueriesPerSecond += rangeQPS
+		toDetail.Desc.Capacity.QueriesPerSecond += rangeUsageInfo.QueriesPerSecond
 		sp.DetailsMu.StoreDetails[to] = &toDetail
 	}
 }
@@ -999,6 +1004,13 @@ func (sl StoreList) ExcludeInvalid(constraints []roachpb.ConstraintsConjunction)
 		}
 	}
 	return MakeStoreList(filteredDescs)
+}
+
+// LoadMeans returns the mean for each load dimension tracked in the storelist.
+func (sl StoreList) LoadMeans() load.Load {
+	dims := load.Vector{}
+	dims[load.Queries] = sl.CandidateQueriesPerSecond.Mean
+	return dims
 }
 
 // ToMap returns the set of known stores as a map keyed by the store ID, with
