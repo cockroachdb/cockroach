@@ -25,7 +25,7 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_DROPPED,
 				revertible(false),
-				emit(func(this *scpb.IndexData, md *targetsWithElementMap) *scop.CreateGCJobForIndex {
+				emit(func(this *scpb.IndexData, md *opGenContext) *scop.CreateGCJobForIndex {
 					return &scop.CreateGCJobForIndex{
 						TableID:             this.TableID,
 						IndexID:             this.IndexID,

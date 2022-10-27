@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	username "github.com/cockroachdb/cockroach/pkg/security/username"
+	cluster "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	catalog "github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	scexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	scmutationexec "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
@@ -178,6 +179,20 @@ func (m *MockDependencies) Clock() scmutationexec.Clock {
 func (mr *MockDependenciesMockRecorder) Clock() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Clock", reflect.TypeOf((*MockDependencies)(nil).Clock))
+}
+
+// ClusterSettings mocks base method.
+func (m *MockDependencies) ClusterSettings() *cluster.Settings {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClusterSettings")
+	ret0, _ := ret[0].(*cluster.Settings)
+	return ret0
+}
+
+// ClusterSettings indicates an expected call of ClusterSettings.
+func (mr *MockDependenciesMockRecorder) ClusterSettings() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClusterSettings", reflect.TypeOf((*MockDependencies)(nil).ClusterSettings))
 }
 
 // DescriptorMetadataUpdater mocks base method.

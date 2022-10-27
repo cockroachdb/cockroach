@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -49,6 +50,16 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
+				emit(func(this *scpb.TemporaryIndex, md *opGenContext) *scop.CreateGCJobForIndex {
+					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+						return &scop.CreateGCJobForIndex{
+							TableID:             this.TableID,
+							IndexID:             this.IndexID,
+							StatementForDropJob: statementForDropJob(this, md),
+						}
+					}
+					return nil
+				}),
 				emit(func(this *scpb.TemporaryIndex) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
 						TableID: this.TableID,

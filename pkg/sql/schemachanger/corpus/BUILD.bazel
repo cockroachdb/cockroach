@@ -25,6 +25,7 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         ":corpus",
+        "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scplan",

@@ -24,7 +24,7 @@ func init() {
 			scpb.Status_PUBLIC,
 			to(scpb.Status_DROPPED,
 				revertible(false),
-				emit(func(this *scpb.TableData, md *targetsWithElementMap) *scop.CreateGCJobForTable {
+				emit(func(this *scpb.TableData, md *opGenContext) *scop.CreateGCJobForTable {
 					return &scop.CreateGCJobForTable{
 						TableID:             this.TableID,
 						DatabaseID:          this.DatabaseID,

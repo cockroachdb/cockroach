@@ -13,6 +13,7 @@ package scrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 )
 
@@ -27,4 +28,7 @@ type JobRunDependencies interface {
 	// the execution of the callback. After committing the transaction, the job
 	// registry should be notified to adopt jobs.
 	WithTxnInJob(ctx context.Context, fn JobTxnFunc) error
+
+	// ClusterSettings returns the cluster settings.
+	ClusterSettings() *cluster.Settings
 }

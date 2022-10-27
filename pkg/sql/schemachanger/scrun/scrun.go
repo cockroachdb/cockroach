@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -66,6 +65,7 @@ func runTransactionPhase(
 		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
 	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
+		ActiveVersion:              deps.ClusterSettings().Version.ActiveVersion(ctx),
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 	})
@@ -91,7 +91,6 @@ func runTransactionPhase(
 func RunSchemaChangesInJob(
 	ctx context.Context,
 	knobs *scexec.TestingKnobs,
-	settings *cluster.Settings,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
 	descriptorIDs []descpb.ID,
@@ -113,6 +112,7 @@ func RunSchemaChangesInJob(
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
 	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
+		ActiveVersion:              deps.ClusterSettings().Version.ActiveVersion(ctx),
 		ExecutionPhase:             scop.PostCommitPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 	})

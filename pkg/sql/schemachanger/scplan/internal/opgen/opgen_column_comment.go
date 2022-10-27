@@ -28,7 +28,7 @@ func init() {
 						PGAttributeNum: this.PgAttributeNum,
 					}
 				}),
-				emit(func(this *scpb.ColumnComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.ColumnComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -43,7 +43,7 @@ func init() {
 						PgAttributeNum: this.PgAttributeNum,
 					}
 				}),
-				emit(func(this *scpb.ColumnComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.ColumnComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),

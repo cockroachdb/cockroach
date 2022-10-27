@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -273,6 +274,7 @@ func checkExplainDiagrams(
 		action = writePlanToFile
 	}
 	params := scplan.Params{
+		ActiveVersion:              clusterversion.TestingClusterVersion,
 		ExecutionPhase:             scop.StatementPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return 1 },
 	}
@@ -332,7 +334,7 @@ func execStatementWithTestDeps(
 		deps.LogSideEffectf("# begin %s", deps.Phase())
 		const rollback = false
 		err = scrun.RunSchemaChangesInJob(
-			ctx, deps.TestingKnobs(), deps.ClusterSettings(), deps, jobID, job.DescriptorIDs, rollback,
+			ctx, deps.TestingKnobs(), deps, jobID, job.DescriptorIDs, rollback,
 		)
 		require.NoError(t, err, "error in mock schema change job execution")
 		deps.LogSideEffectf("# end %s", deps.Phase())

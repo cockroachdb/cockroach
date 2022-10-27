@@ -27,7 +27,7 @@ func init() {
 						Comment: this.Comment,
 					}
 				}),
-				emit(func(this *scpb.IndexComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.IndexComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -41,7 +41,7 @@ func init() {
 						IndexID: this.IndexID,
 					}
 				}),
-				emit(func(this *scpb.IndexComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.IndexComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
