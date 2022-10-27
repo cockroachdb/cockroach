@@ -13,13 +13,14 @@ package server
 import (
 	"context"
 	"fmt"
+	math_rand "math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -27,22 +28,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// systemLogGCPeriod is the period for running gc on systemlog tables.
-	systemLogGCPeriod = 10 * time.Minute
-)
-
 var (
+	systemLogGCPeriod = settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		"server.log_gc.period",
+		"the period at which log-like system tables are checked for old entries",
+		time.Hour,
+		settings.NonNegativeDuration,
+	).WithPublic()
+
+	systemLogGCLimit = settings.RegisterIntSetting(
+		settings.TenantWritable,
+		"server.log_gc.max_deletions_per_cycle",
+		"the maximum number of entries to delete on each purge of log-like system tables",
+		1000,
+	).WithPublic()
+
 	// rangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
 	// entries are periodically garbage collected.
 	rangeLogTTL = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.rangelog.ttl",
-		fmt.Sprintf(
-			"if nonzero, range log entries older than this duration are deleted every %s. "+
-				"Should not be lowered below 24 hours.",
-			systemLogGCPeriod,
-		),
+		"if nonzero, entries in system.rangelog older than this duration are periodically purged",
 		30*24*time.Hour, // 30 days
 	).WithPublic()
 
@@ -51,57 +58,56 @@ var (
 	eventLogTTL = settings.RegisterDurationSetting(
 		settings.TenantWritable,
 		"server.eventlog.ttl",
-		fmt.Sprintf(
-			"if nonzero, entries in system.eventlog older than this duration are deleted every %s. "+
-				"Should not be lowered below 24 hours.",
-			systemLogGCPeriod,
-		),
+		"if nonzero, entries in system.eventlog older than this duration are periodically purged",
 		90*24*time.Hour, // 90 days
+	).WithPublic()
+
+	webSessionPurgeTTL = settings.RegisterDurationSetting(
+		settings.TenantWritable,
+		"server.web_session.purge.ttl",
+		"if nonzero, entries in system.web_sessions older than this duration are periodically purged",
+		time.Hour,
 	).WithPublic()
 )
 
 // gcSystemLog deletes entries in the given system log table between
-// timestampLowerBound and timestampUpperBound if the server is the lease holder
-// for range 1.
-// Leaseholder constraint is present so that only one node in the cluster
-// performs gc.
+// timestampLowerBound and timestampUpperBound.
 // The system log table is expected to have a "timestamp" column.
 // It returns the timestampLowerBound to be used in the next iteration, number
 // of rows affected and error (if any).
-func (s *Server) gcSystemLog(
-	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
+func gcSystemLog(
+	ctx context.Context,
+	sqlServer *SQLServer,
+	opName, table, tsCol string,
+	timestampLowerBound, timestampUpperBound time.Time,
+	limit int64,
 ) (time.Time, int64, error) {
 	var totalRowsAffected int64
-	repl, _, err := s.node.stores.GetReplicaForRangeID(ctx, roachpb.RangeID(1))
-	if roachpb.IsRangeNotFoundError(err) {
-		return timestampLowerBound, 0, nil
-	}
-	if err != nil {
-		return timestampLowerBound, 0, err
-	}
-
-	if !repl.IsFirstRange() || !repl.OwnsValidLease(ctx, s.clock.NowAsClockTimestamp()) {
-		return timestampLowerBound, 0, nil
-	}
 
 	deleteStmt := fmt.Sprintf(
-		`SELECT count(1), max(timestamp) FROM
-[DELETE FROM system.%s WHERE timestamp >= $1 AND timestamp <= $2 LIMIT 1000 RETURNING timestamp]`,
-		table,
+		`WITH d AS (
+   DELETE FROM system.public.%[1]s
+    WHERE %[2]s >= $1 AND %[2]s <= $2
+    LIMIT $3
+RETURNING %[2]s
+)
+SELECT count(1), max(%[2]s) FROM d`,
+		lexbase.EscapeSQLIdent(table),
+		lexbase.EscapeSQLIdent(tsCol),
 	)
 
 	for {
 		var rowsAffected int64
-		err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			var err error
-			row, err := s.sqlServer.internalExecutor.QueryRowEx(
+		err := func() error {
+			row, err := sqlServer.internalExecutor.QueryRowEx(
 				ctx,
-				table+"-gc",
-				txn,
+				opName,
+				nil, /* txn */
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				deleteStmt,
 				timestampLowerBound,
 				timestampUpperBound,
+				limit,
 			)
 			if err != nil {
 				return err
@@ -129,7 +135,8 @@ func (s *Server) gcSystemLog(
 				}
 			}
 			return nil
-		})
+		}()
+
 		totalRowsAffected += rowsAffected
 		if err != nil {
 			return timestampLowerBound, totalRowsAffected, err
@@ -143,78 +150,150 @@ func (s *Server) gcSystemLog(
 
 // systemLogGCConfig has configurations for gc of systemlog.
 type systemLogGCConfig struct {
+	// onlySystemTenant indicates whether the cleanup for this
+	// table should occur in secondary tenants or not.
+	onlySystemTenant bool
+
+	// table is the name of the system table.
+	table string
+
+	// timestampCol is the name of the timestamp column, used
+	// as condition to cut old values.
+	timestampCol string
+
 	// ttl is the time to live for rows in systemlog table.
 	ttl *settings.DurationSetting
+
 	// timestampLowerBound is the timestamp below which rows are gc'ed.
 	// It is maintained to avoid hitting tombstones during gc and is updated
 	// after every gc run.
 	timestampLowerBound time.Time
 }
 
+func runSystemLogGCForOneTable(
+	ctx context.Context, sqlServer *SQLServer, st *cluster.Settings, gcConfig *systemLogGCConfig,
+) (int64, error) {
+	ttl := gcConfig.ttl.Get(&st.SV)
+	if ttl == 0 {
+		// GC disabled for this table. Do nothing.
+		return 0, nil
+	}
+
+	opName := gcConfig.table + "-" + gcConfig.timestampCol + "-gc"
+	limit := systemLogGCLimit.Get(&st.SV)
+	timestampUpperBound := timeutil.Unix(0, sqlServer.execCfg.Clock.PhysicalNow()-int64(ttl))
+	newTimestampLowerBound, rowsAffected, err := gcSystemLog(
+		ctx, sqlServer, opName,
+		gcConfig.table, gcConfig.timestampCol,
+		gcConfig.timestampLowerBound,
+		timestampUpperBound,
+		limit,
+	)
+	if err != nil {
+		return rowsAffected, err
+	}
+	gcConfig.timestampLowerBound = newTimestampLowerBound
+	return rowsAffected, nil
+}
+
+func runSystemLogGC(
+	ctx context.Context, sqlServer *SQLServer, st *cluster.Settings, gcConfigs []systemLogGCConfig,
+) {
+	forSystemTenant := sqlServer.execCfg.Codec.ForSystemTenant()
+	for i := range gcConfigs {
+		gcConfig := &gcConfigs[i]
+		if gcConfig.onlySystemTenant && !forSystemTenant {
+			continue
+		}
+
+		if rowsAffected, err := runSystemLogGCForOneTable(ctx, sqlServer, st, gcConfig); err != nil {
+			log.Warningf(ctx, "error garbage collecting %s.%s: %v", gcConfig.table, gcConfig.timestampCol, err)
+		} else {
+			log.Infof(ctx, "garbage collected %d rows from %s.%s", rowsAffected, gcConfig.table, gcConfig.timestampCol)
+		}
+	}
+}
+
+func getTablesToGC() []systemLogGCConfig {
+	// NB: we need to reconstruct the slice anew every time
+	// because the timestampLowerBound field is modified in-place
+	// by the GC task.
+	return []systemLogGCConfig{
+		{true, "rangelog", "timestamp", rangeLogTTL, timeutil.Unix(0, 0)},
+		{false, "eventlog", "timestamp", eventLogTTL, timeutil.Unix(0, 0)},
+		{false, "web_sessions", "expiresAt", webSessionPurgeTTL, timeutil.Unix(0, 0)},
+		{false, "web_sessions", "revokedAt", webSessionPurgeTTL, timeutil.Unix(0, 0)},
+	}
+}
+
 // startSystemLogsGC starts a worker which periodically GCs system.rangelog
 // and system.eventlog.
 // The TTLs for each of these logs is retrieved from cluster settings.
-func (s *Server) startSystemLogsGC(ctx context.Context) {
-	systemLogsToGC := map[string]*systemLogGCConfig{
-		"rangelog": {
-			ttl:                 rangeLogTTL,
-			timestampLowerBound: timeutil.Unix(0, 0),
-		},
-		"eventlog": {
-			ttl:                 eventLogTTL,
-			timestampLowerBound: timeutil.Unix(0, 0),
-		},
-	}
+//
+// TODO(knz): This should be best replaced by SQL-level row TTL.
+// See: https://github.com/cockroachdb/cockroach/issues/89453
+func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
+	// systemLogsToGC stores the state of the GC loops,
+	// including the lower bound for the deletion timestamps.
+	systemLogsToGC := getTablesToGC()
 
-	_ = s.stopper.RunAsyncTask(ctx, "system-log-gc", func(ctx context.Context) {
-		period := systemLogGCPeriod
-		if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCPeriod != 0 {
-			period = storeKnobs.SystemLogsGCPeriod
+	cfg := sqlServer.cfg
+	st := sqlServer.execCfg.Settings
+
+	return sqlServer.stopper.RunAsyncTask(ctx, "system-log-gc", func(ctx context.Context) {
+		getPeriod := func() time.Duration {
+			period := systemLogGCPeriod.Get(&st.SV)
+			if period < 1*time.Second {
+				// Clamp the period to 1 second to avoid busy looping.
+				period = 1 * time.Second
+			}
+			if storeKnobs, ok := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCPeriod != 0 {
+				period = storeKnobs.SystemLogsGCPeriod
+			}
+			return period
 		}
+		period := getPeriod()
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		// The very first period is 25% off the configured period, to
+		// avoid a thundering herd effect on the system table between
+		// nodes when multiple nodes are started simultaneously.
+		timer.Reset(jitteredInterval(period))
 
-		t := time.NewTicker(period)
-		defer t.Stop()
-
-		for {
+		for ; ; timer.Reset(getPeriod()) {
 			select {
-			case <-t.C:
-				for table, gcConfig := range systemLogsToGC {
-					ttl := gcConfig.ttl.Get(&s.cfg.Settings.SV)
-					if ttl > 0 {
-						timestampUpperBound := timeutil.Unix(0, s.clock.PhysicalNow()-int64(ttl))
-						newTimestampLowerBound, rowsAffected, err := s.gcSystemLog(
-							ctx,
-							table,
-							gcConfig.timestampLowerBound,
-							timestampUpperBound,
-						)
-						if err != nil {
-							log.Warningf(
-								ctx,
-								"error garbage collecting %s: %v",
-								table,
-								err,
-							)
-						} else {
-							gcConfig.timestampLowerBound = newTimestampLowerBound
-							if log.V(1) {
-								log.Infof(ctx, "garbage collected %d rows from %s", rowsAffected, table)
-							}
-						}
-					}
-				}
+			case <-timer.C:
+				timer.Read = true
 
-				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCGCDone != nil {
+				// Do the work for all system tables.
+				runSystemLogGC(ctx, sqlServer, st, systemLogsToGC)
+
+				// If we are in a test, coordinate with the test.
+				if storeKnobs, ok := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCGCDone != nil {
 					select {
 					case storeKnobs.SystemLogsGCGCDone <- struct{}{}:
-					case <-s.stopper.ShouldQuiesce():
+						// Step has made one step forward. We can continue to iterate.
+					case <-sqlServer.stopper.ShouldQuiesce():
 						// Test has finished.
+						return
+					case <-ctx.Done():
+						// Test also has finished.
 						return
 					}
 				}
-			case <-s.stopper.ShouldQuiesce():
+			case <-sqlServer.stopper.ShouldQuiesce():
+				// Server is shutting down.
+				return
+			case <-ctx.Done():
+				// Something is telling us to go away.
 				return
 			}
 		}
 	})
+}
+
+// jitteredInterval returns a randomly jittered (+/-25%) duration
+// from the interval.
+func jitteredInterval(interval time.Duration) time.Duration {
+	return time.Duration(float64(interval) * (0.75 + 0.5*math_rand.Float64()))
 }
