@@ -38,7 +38,6 @@ const (
 	copySlice
 	appendSlice
 	appendSliceWithSel
-	appendVal
 )
 
 func (m bytesMethod) String() string {
@@ -55,14 +54,12 @@ func (m bytesMethod) String() string {
 		return "AppendSlice"
 	case appendSliceWithSel:
 		return "appendSliceWithSel"
-	case appendVal:
-		return "AppendVal"
 	default:
 		panic(fmt.Sprintf("unknown bytes method %d", m))
 	}
 }
 
-var bytesMethods = []bytesMethod{set, window, copyMethod, copySlice, appendSlice, appendSliceWithSel, appendVal}
+var bytesMethods = []bytesMethod{set, window, copyMethod, copySlice, appendSlice, appendSliceWithSel}
 
 // applyMethodsAndVerify applies the given methods on b1 and a reference
 // [][]byte implementation and checks if the results are equal. If
@@ -170,16 +167,6 @@ func applyMethodsAndVerify(
 			for _, srcIdx := range sel {
 				b2 = append(b2, append([]byte(nil), b2Source[srcIdx]...))
 			}
-			if selfReferencingSources {
-				b1Source = b1
-				b2Source = b2
-			}
-		case appendVal:
-			v := make([]byte, rng.Intn(testMaxElementLength))
-			rng.Read(v)
-			debugString += fmt.Sprintf("(%v)", v)
-			b1.AppendVal(v)
-			b2 = append(b2, v)
 			if selfReferencingSources {
 				b1Source = b1
 				b2Source = b2
@@ -296,26 +283,28 @@ func TestBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("Simple", func(t *testing.T) {
-		b1 := NewBytes(0)
-		b1.AppendVal([]byte("hello"))
+		b1 := NewBytes(2)
+		b1.Set(0, []byte("hello"))
 		require.Equal(t, "hello", string(b1.Get(0)))
-		b1.AppendVal(nil)
+		b1.Set(1, nil)
 		require.Equal(t, []byte{}, b1.Get(1))
 		require.Equal(t, 2, b1.Len())
 	})
 
 	t.Run("Append", func(t *testing.T) {
-		b1 := NewBytes(0)
-		b2 := NewBytes(0)
-		b2.AppendVal([]byte("source bytes value"))
-		b1.AppendVal([]byte("one"))
-		b1.AppendVal([]byte("two"))
+		b1 := NewBytes(2)
+		b2 := NewBytes(1)
+		b2.Set(0, []byte("source bytes value"))
+		b1.Set(0, []byte("one"))
+		b1.Set(1, []byte("two"))
 		// Truncate b1.
 		require.Equal(t, 2, b1.Len())
 		b1.AppendSlice(b2, 0, 0, 0)
 		require.Equal(t, 0, b1.Len())
 
-		b1.AppendVal([]byte("hello again"))
+		// Modify the vector so that it has one element.
+		b1.elements = b1.elements[:1]
+		b1.Set(0, []byte("hello again"))
 
 		// Try appending b2 3 times. The first time will overwrite the current
 		// present value in b1.
@@ -327,10 +316,10 @@ func TestBytes(t *testing.T) {
 			}
 		}
 
-		b2 = NewBytes(0)
-		b2.AppendVal([]byte("hello again"))
-		b2.AppendVal([]byte("hello again"))
-		b2.AppendVal([]byte("hello again"))
+		b2 = NewBytes(3)
+		b2.Set(0, []byte("hello again"))
+		b2.Set(1, []byte("hello again"))
+		b2.Set(2, []byte("hello again"))
 		// Try to append only a subset of the source keeping the first element of
 		// b1 intact.
 		b1.AppendSlice(b2, 1, 1, 2)
@@ -340,14 +329,14 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("Copy", func(t *testing.T) {
-		b1 := NewBytes(0)
-		b2 := NewBytes(0)
-		b1.AppendVal([]byte("one"))
-		b1.AppendVal([]byte("two"))
-		b1.AppendVal([]byte("three"))
+		b1 := NewBytes(3)
+		b2 := NewBytes(2)
+		b1.Set(0, []byte("one"))
+		b1.Set(1, []byte("two"))
+		b1.Set(2, []byte("three"))
 
-		b2.AppendVal([]byte("source one"))
-		b2.AppendVal([]byte("source two"))
+		b2.Set(0, []byte("source one"))
+		b2.Set(1, []byte("source two"))
 
 		// Copy "source two" into "two"'s position. This also tests that elements
 		// following the copied element are correctly shifted.
@@ -380,10 +369,10 @@ func TestBytes(t *testing.T) {
 	})
 
 	t.Run("Window", func(t *testing.T) {
-		b1 := NewBytes(0)
-		b1.AppendVal([]byte("one"))
-		b1.AppendVal([]byte("two"))
-		b1.AppendVal([]byte("three"))
+		b1 := NewBytes(3)
+		b1.Set(0, []byte("one"))
+		b1.Set(1, []byte("two"))
+		b1.Set(2, []byte("three"))
 
 		w := b1.Window(0, 3)
 		require.NotEqual(t, unsafe.Pointer(b1), unsafe.Pointer(w), "Bytes.Window should create a new object")
@@ -392,18 +381,18 @@ func TestBytes(t *testing.T) {
 		require.Equal(t, "two", string(b1.Get(1)))
 		require.Equal(t, "two", string(b2.Get(0)))
 
-		require.Panics(t, func() { b2.AppendVal([]byte("four")) }, "appending to the window into b1 should have panicked")
+		require.Panics(t, func() { b2.Set(0, []byte("four")) }, "modifying the window into b1 should have panicked")
 	})
 
 	t.Run("String", func(t *testing.T) {
-		b1 := NewBytes(0)
+		b1 := NewBytes(3)
 		vals := [][]byte{
 			[]byte("one"),
 			[]byte("two"),
 			[]byte("three"),
 		}
 		for i := range vals {
-			b1.AppendVal(vals[i])
+			b1.Set(i, vals[i])
 		}
 
 		// The values should be printed using the String function.
