@@ -31,6 +31,7 @@ type AggHistogram struct {
 var _ metric.Iterable = (*AggHistogram)(nil)
 var _ metric.PrometheusIterable = (*AggHistogram)(nil)
 var _ metric.PrometheusExportable = (*AggHistogram)(nil)
+var _ metric.WindowedHistogram = (*AggHistogram)(nil)
 
 // NewHistogram constructs a new AggHistogram.
 func NewHistogram(
@@ -64,6 +65,21 @@ func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() 
 
 // Inspect is part of the metric.Iterable interface.
 func (a *AggHistogram) Inspect(f func(interface{})) { f(a) }
+
+// TotalCountWindowed is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) TotalCountWindowed() int64 {
+	return a.h.TotalCountWindowed()
+}
+
+// TotalSumWindowed is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) TotalSumWindowed() float64 {
+	return a.h.TotalSumWindowed()
+}
+
+// ValueAtQuantileWindowed is part of the metric.WindowedHistogram interface
+func (a *AggHistogram) ValueAtQuantileWindowed(q float64) float64 {
+	return a.h.ValueAtQuantileWindowed(q)
+}
 
 // GetType is part of the metric.PrometheusExportable interface.
 func (a *AggHistogram) GetType() *io_prometheus_client.MetricType {
