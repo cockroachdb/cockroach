@@ -568,7 +568,7 @@ func cleanQueryResult(queryRes string) (string, error) {
 	r := regexp.MustCompile(`([\s\S]+)\n{3}Time:.+`)
 	res := r.FindStringSubmatch(formatted)
 	if len(res) < 2 {
-		return "", errors.Wrapf(errors.Newf("%s", queryRes), "cannot parse the query result: %#v")
+		return "", errors.Errorf("cannot parse the query result: %s", queryRes)
 	}
 	return res[1], nil
 
