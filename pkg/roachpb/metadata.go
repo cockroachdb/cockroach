@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -581,6 +582,14 @@ func (sc StoreCapacity) FractionUsed() float64 {
 		return float64(sc.Capacity-sc.Available) / float64(sc.Capacity)
 	}
 	return float64(sc.Used) / float64(sc.Available+sc.Used)
+}
+
+// Load returns an allocator load representation of the store capacity.
+func (sc StoreCapacity) Load() load.Load {
+	dims := load.Vector{}
+	dims[load.Queries] = sc.QueriesPerSecond
+	return dims
+
 }
 
 // AddressForLocality returns the network address that nodes in the specified

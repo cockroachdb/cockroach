@@ -93,7 +93,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	manual.Advance(replicastats.MinStatsDuration + time.Second)
 
-	rangeUsageInfo := rangeUsageInfoForRepl(&replica)
+	rangeUsageInfo := RangeUsageInfoForRepl(&replica)
 	QPS, _ := replica.loadStats.batchRequests.AverageRatePerSecond()
 	WPS, _ := replica.loadStats.writeKeys.AverageRatePerSecond()
 
@@ -139,7 +139,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedL0Sublevels, desc.Capacity.L0Sublevels)
 	}
 
-	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
+	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo)
 	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(1))
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
@@ -164,7 +164,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	sp.UpdateLocalStoreAfterRelocate(
 		[]roachpb.ReplicationTarget{{StoreID: roachpb.StoreID(1)}}, []roachpb.ReplicationTarget{},
 		[]roachpb.ReplicaDescriptor{{StoreID: roachpb.StoreID(2)}}, []roachpb.ReplicaDescriptor{},
-		roachpb.StoreID(2), rangeUsageInfo.QueriesPerSecond)
+		roachpb.StoreID(2), rangeUsageInfo)
 
 	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(1))
 	require.True(t, ok)
@@ -227,7 +227,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	}
 	replica.loadStats = NewReplicaLoad(store.Clock(), nil)
 
-	rangeUsageInfo := rangeUsageInfoForRepl(replica)
+	rangeUsageInfo := RangeUsageInfoForRepl(replica)
 
 	// Update StorePool, which should be a no-op.
 	storeID := roachpb.StoreID(1)

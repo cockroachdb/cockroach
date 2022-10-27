@@ -15,7 +15,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -49,18 +49,17 @@ type CandidateReplica interface {
 	DescAndSpanConfig() (*roachpb.RangeDescriptor, roachpb.SpanConfig)
 	// Desc returns the authoritative range descriptor.
 	Desc() *roachpb.RangeDescriptor
-	// QPS returns the current queries-per-second recorded on this replica.
-	QPS() float64
 	// RangeUsageInfo returns usage information (sizes and traffic) needed by
 	// the allocator to make rebalancing decisions for a given range.
 	RangeUsageInfo() allocator.RangeUsageInfo
-	// Stats returns a snapshot of the QPS replica load stats
-	Stats() *replicastats.RatedSummary
 	// AdminTransferLease transfers the LeaderLease to another replica.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
 	// Repl returns the underlying replica for this CandidateReplica. It is
 	// only used for determining timeouts in production code and not the
 	// simulator.
+	//
+	// TODO(kvoli): Remove this method. Refactor the timeout calculation to
+	// avoid needing the replica ref.
 	Repl() *Replica
 	// String implements the string interface.
 	String() string
@@ -68,19 +67,13 @@ type CandidateReplica interface {
 
 type candidateReplica struct {
 	*Replica
-	qps float64
-	// TODO(aayush): Include writes-per-second and logicalBytes of storage?
-}
-
-// QPS returns the current queries-per-second recorded on this replica.
-func (cr candidateReplica) QPS() float64 {
-	return cr.qps
+	usage allocator.RangeUsageInfo
 }
 
 // RangeUsageInfo returns usage information (sizes and traffic) needed by
 // the allocator to make rebalancing decisions for a given range.
 func (cr candidateReplica) RangeUsageInfo() allocator.RangeUsageInfo {
-	return rangeUsageInfoForRepl(cr.Replica)
+	return cr.usage
 }
 
 // Replica returns the underlying replica for this CandidateReplica. It is
@@ -90,17 +83,12 @@ func (cr candidateReplica) Repl() *Replica {
 	return cr.Replica
 }
 
-// Stats returns the QPS replica load stats.
-func (cr candidateReplica) Stats() *replicastats.RatedSummary {
-	return cr.Replica.loadStats.batchRequests.SnapshotRatedSummary()
-}
-
 // ReplicaRankings maintains top-k orderings of the replicas in a store by QPS.
 type ReplicaRankings struct {
 	mu struct {
 		syncutil.Mutex
-		qpsAccumulator *RRAccumulator
-		byQPS          []CandidateReplica
+		dimAccumulator *RRAccumulator
+		byDim          []CandidateReplica
 	}
 }
 
@@ -110,29 +98,35 @@ func NewReplicaRankings() *ReplicaRankings {
 }
 
 // NewAccumulator returns a new rrAccumulator.
-func (rr *ReplicaRankings) NewAccumulator() *RRAccumulator {
+//
+// TODO(kvoli): When adding another load dimension to be balanced upon, it will
+// be necessary to clairfy the semantics of this API. This is especially true
+// since the UI is coupled to this function.
+func (rr *ReplicaRankings) NewAccumulator(dimension load.Dimension) *RRAccumulator {
 	res := &RRAccumulator{}
-	res.qps.val = func(r CandidateReplica) float64 { return r.QPS() }
+	res.dim.val = func(r CandidateReplica) float64 {
+		return r.RangeUsageInfo().Load().Dim(dimension)
+	}
 	return res
 }
 
 // Update sets the accumulator for replica tracking to be the passed in value.
 func (rr *ReplicaRankings) Update(acc *RRAccumulator) {
 	rr.mu.Lock()
-	rr.mu.qpsAccumulator = acc
+	rr.mu.dimAccumulator = acc
 	rr.mu.Unlock()
 }
 
-// TopQPS returns the highest QPS CandidateReplicas that are tracked.
-func (rr *ReplicaRankings) TopQPS() []CandidateReplica {
+// TopLoad returns the highest load CandidateReplicas that are tracked.
+func (rr *ReplicaRankings) TopLoad() []CandidateReplica {
 	rr.mu.Lock()
 	defer rr.mu.Unlock()
 	// If we have a new set of data, consume it. Otherwise, just return the most
 	// recently consumed data.
-	if rr.mu.qpsAccumulator != nil && rr.mu.qpsAccumulator.qps.Len() > 0 {
-		rr.mu.byQPS = consumeAccumulator(&rr.mu.qpsAccumulator.qps)
+	if rr.mu.dimAccumulator != nil && rr.mu.dimAccumulator.dim.Len() > 0 {
+		rr.mu.byDim = consumeAccumulator(&rr.mu.dimAccumulator.dim)
 	}
-	return rr.mu.byQPS
+	return rr.mu.byDim
 }
 
 // RRAccumulator is used to update the replicas tracked by ReplicaRankings.
@@ -144,22 +138,22 @@ func (rr *ReplicaRankings) TopQPS() []CandidateReplica {
 // prevents concurrent loaders of data from messing with each other -- the last
 // `update`d accumulator will win.
 type RRAccumulator struct {
-	qps rrPriorityQueue
+	dim rrPriorityQueue
 }
 
 // AddReplica adds a replica to the replica accumulator.
 func (a *RRAccumulator) AddReplica(repl CandidateReplica) {
 	// If the heap isn't full, just push the new replica and return.
-	if a.qps.Len() < numTopReplicasToTrack {
-		heap.Push(&a.qps, repl)
+	if a.dim.Len() < numTopReplicasToTrack {
+		heap.Push(&a.dim, repl)
 		return
 	}
 
 	// Otherwise, conditionally push if the new replica is more deserving than
 	// the current tip of the heap.
-	if repl.QPS() > a.qps.entries[0].QPS() {
-		heap.Pop(&a.qps)
-		heap.Push(&a.qps, repl)
+	if a.dim.val(repl) > a.dim.val(a.dim.entries[0]) {
+		heap.Pop(&a.dim)
+		heap.Push(&a.dim, repl)
 	}
 }
 
@@ -247,7 +241,7 @@ type RRAccumulatorByTenant map[roachpb.TenantID]rrPriorityQueue
 // AddReplica adds a replica to the replica accumulator.
 func (a RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
 	// Do not consider ranges as hot when they are accessed once or less times.
-	if repl.QPS() <= 1 {
+	if repl.RangeUsageInfo().QueriesPerSecond <= 1 {
 		return
 	}
 
@@ -259,7 +253,7 @@ func (a RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
 	r, ok := a[tID]
 	if !ok {
 		q := rrPriorityQueue{
-			val: func(r CandidateReplica) float64 { return r.QPS() },
+			val: func(r CandidateReplica) float64 { return r.RangeUsageInfo().QueriesPerSecond },
 		}
 		heap.Push(&q, repl)
 		a[tID] = q
@@ -272,7 +266,7 @@ func (a RRAccumulatorByTenant) AddReplica(repl CandidateReplica) {
 		return
 	}
 
-	if repl.QPS() > r.entries[0].QPS() {
+	if repl.RangeUsageInfo().QueriesPerSecond > r.entries[0].RangeUsageInfo().QueriesPerSecond {
 		heap.Pop(&r)
 		heap.Push(&r, repl)
 		a[tID] = r
