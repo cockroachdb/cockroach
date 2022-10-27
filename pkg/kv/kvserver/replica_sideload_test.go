@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -794,11 +795,16 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 	defer SetMockAddSSTable()()
 
 	testutils.RunTrueAndFalse(t, "loosely-coupled", func(t *testing.T, looselyCoupled bool) {
+		if looselyCoupled {
+			skip.WithIssue(t, 77046)
+		}
 		tc := testContext{}
 		stopper := stop.NewStopper()
 		ctx := context.Background()
 		defer stopper.Stop(ctx)
-		tc.Start(ctx, t, stopper)
+		cfg := TestStoreConfig(nil)
+		cfg.TestingKnobs.DisableRaftLogQueue = true
+		tc.StartWithStoreConfig(ctx, t, stopper, cfg)
 		st := tc.store.ClusterSettings()
 		looselyCoupledTruncationEnabled.Override(ctx, &st.SV, looselyCoupled)
 
@@ -821,6 +827,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		// remove any leftover files (ok, unless the last one is reproposed but
 		// that's *very* unlikely to happen for the last one)
 		addLastIndex()
+		t.Logf("indexes %v", indexes)
 
 		fmtSideloaded := func() []string {
 			tc.repl.raftMu.Lock()
@@ -839,7 +846,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 			const rangeID = 1
 			newFirstIndex := indexes[i] + 1
 			truncateArgs := truncateLogArgs(newFirstIndex, rangeID)
-			log.Eventf(ctx, "truncating to index < %d", newFirstIndex)
+			t.Logf("truncating to index < %d", newFirstIndex)
 			if _, pErr := kv.SendWrappedWith(ctx, tc.Sender(), roachpb.Header{RangeID: rangeID}, &truncateArgs); pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -850,6 +857,7 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 				t.Fatalf("after truncation at %d (i=%d), expected at least %d files left, but have:\n%v",
 					indexes[i], i, minFiles, sideloadStrings)
 			}
+			t.Logf("truncated to %d, files left: %s", newFirstIndex, sideloadStrings)
 		}
 
 		if sideloadStrings := fmtSideloaded(); len(sideloadStrings) != 0 {

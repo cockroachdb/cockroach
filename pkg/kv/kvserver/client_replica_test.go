@@ -1964,6 +1964,7 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						DisableCanAckBeforeApplication: true,
 						EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
 							TestingEvalFilter: testingEvalFilter,
 						},
@@ -2933,6 +2934,7 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
+						DisableCanAckBeforeApplication: true,
 						TestingRequestFilter: func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
 							if rejectAfterRevoke && ba.IsSingleTransferLeaseRequest() {
 								transferLeaseReqBlockOnce.Do(func() {
