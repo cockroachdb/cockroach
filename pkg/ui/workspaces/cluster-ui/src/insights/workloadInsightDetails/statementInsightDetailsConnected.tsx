@@ -41,7 +41,9 @@ const mapStateToProps = (
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementInsightDetailsDispatchProps => ({
-  refreshStatementInsights: statementInsights.refresh,
+  refreshStatementInsights: () => {
+    dispatch(statementInsights.refresh());
+  },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
