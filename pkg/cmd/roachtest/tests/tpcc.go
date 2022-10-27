@@ -51,6 +51,16 @@ const (
 	usingExistingData // skips import
 )
 
+// rampDuration returns the default durations passed to the `ramp`
+// option when running a tpcc workload in these tests.
+func rampDuration(isLocal bool) time.Duration {
+	if isLocal {
+		return 30 * time.Second
+	}
+
+	return 5 * time.Minute
+}
+
 type tpccOptions struct {
 	Warehouses     int
 	ExtraRunArgs   string
@@ -210,17 +220,16 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		ep = &cep
 	}
 
-	rampDuration := 5 * time.Minute
 	if c.IsLocal() {
 		opts.Warehouses = 1
 		if opts.Duration > time.Minute {
 			opts.Duration = time.Minute
 		}
-		rampDuration = 30 * time.Second
 	}
 	crdbNodes, workloadNode := setupTPCC(ctx, t, c, opts)
 	t.Status("waiting")
 	m := c.NewMonitor(ctx, crdbNodes)
+	rampDur := rampDuration(c.IsLocal())
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
@@ -231,13 +240,14 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 			if len(workloadInstances) > 1 {
 				statsPrefix = fmt.Sprintf("workload_%d.", i)
 			}
-			t.WorkerStatus(fmt.Sprintf("running tpcc idx %d on %s", i, pgURLs[i]))
+			t.WorkerStatus(fmt.Sprintf("running tpcc worker=%d warehouses=%d ramp=%s duration=%s on %s (<%s)",
+				i, opts.Warehouses, rampDur, opts.Duration, pgURLs[i], time.Minute))
 			cmd := fmt.Sprintf(
 				"./cockroach workload run tpcc --warehouses=%d --histograms="+t.PerfArtifactsDir()+"/%sstats.json "+
 					opts.ExtraRunArgs+" --ramp=%s --duration=%s --prometheus-port=%d --pprofport=%d %s %s",
 				opts.Warehouses,
 				statsPrefix,
-				rampDuration,
+				rampDur,
 				opts.Duration,
 				workloadInstances[i].prometheusPort,
 				workloadPProfStartPort+i,
@@ -320,6 +330,138 @@ func maxSupportedTPCCWarehouses(
 	return warehouses
 }
 
+// runTPCCMixedHeadroom runs a mixed-version test that imports a large
+// `bank` dataset, and runs one or multiple database upgrades while a
+// TPCC workload is running. The number of database upgrades is
+// controlled by the `versionsToUpgrade` parameter.
+func runTPCCMixedHeadroom(
+	ctx context.Context, t test.Test, c cluster.Cluster, cloud string, versionsToUpgrade int,
+) {
+	if runtime.GOARCH == "arm64" {
+		t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
+	}
+	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+	workloadNode := c.Node(c.Spec().NodeCount)
+
+	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, c.Spec())
+	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+	if c.IsLocal() {
+		headroomWarehouses = 10
+	}
+
+	// We'll need this below.
+	tpccBackgroundStepper := func(duration time.Duration) backgroundStepper {
+		return backgroundStepper{
+			nodes: crdbNodes,
+			run: func(ctx context.Context, u *versionUpgradeTest) error {
+				t.L().Printf("running background TPCC workload for %s", duration)
+				runTPCC(ctx, t, c, tpccOptions{
+					Warehouses: headroomWarehouses,
+					Duration:   duration,
+					SetupType:  usingExistingData,
+					Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						// Noop - we don't let tpcc upload or start binaries in this test.
+					},
+				})
+				return nil
+			}}
+	}
+
+	randomCRDBNode := func() int { return crdbNodes.RandNode()[0] }
+	const mainBinary = ""
+
+	// NB: this results in ~100GB of (actual) disk usage per node once things
+	// have settled down, and ~7.5k ranges. The import takes ~40 minutes.
+	// The full 6.5m import ran into out of disk errors (on 250gb machines),
+	// hence division by two.
+	bankRows := 65104166 / 2
+	if c.IsLocal() {
+		bankRows = 1000
+	}
+
+	history, err := PredecessorHistory(*t.BuildVersion(), versionsToUpgrade)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sep := " -> "
+	t.L().Printf("testing upgrade: %s%scurrent", strings.Join(history, sep), sep)
+	history = append(history, mainBinary)
+
+	waitForWorkloadToRampUp := sleepStep(rampDuration(c.IsLocal()))
+	logStep := func(format string, args ...interface{}) versionStep {
+		return func(ctx context.Context, t test.Test, u *versionUpgradeTest) {
+			t.L().Printf(format, args...)
+		}
+	}
+
+	oldestVersion := history[0]
+	setupSteps := []versionStep{
+		logStep("starting from fixture at version %s", oldestVersion),
+		uploadAndStartFromCheckpointFixture(crdbNodes, oldestVersion),
+		waitForUpgradeStep(crdbNodes),               // let oldest version settle (gossip etc)
+		uploadVersionStep(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
+
+		// Load TPCC dataset, don't run TPCC yet. We do this while in the
+		// version we are starting with to load some data and hopefully
+		// create some state that will need work by long-running
+		// migrations.
+		importTPCCStep(oldestVersion, headroomWarehouses, crdbNodes),
+		// Add a lot of cold data to this cluster. This further stresses the version
+		// upgrade machinery, in which a) all ranges are touched and b) work proportional
+		// to the amount data may be carried out.
+		importLargeBankStep(oldestVersion, bankRows, crdbNodes),
+	}
+
+	// upgradeToVersionSteps returns the list of steps to be performed
+	// when upgrading to the given version.
+	upgradeToVersionSteps := func(crdbVersion string) []versionStep {
+		duration := 10 * time.Minute
+		versionString := crdbVersion
+		if crdbVersion == mainBinary {
+			duration = 100 * time.Minute
+			versionString = "current"
+		}
+		tpccWorkload := tpccBackgroundStepper(duration)
+
+		return []versionStep{
+			logStep("upgrading to version %q", versionString),
+			preventAutoUpgradeStep(randomCRDBNode()),
+			// Upload and restart cluster into the new
+			// binary (stays at previous cluster version).
+			binaryUpgradeStep(crdbNodes, crdbVersion),
+			// Now start running TPCC in the background.
+			tpccWorkload.launch,
+			// Wait for the workload to ramp up before attemping to
+			// upgrade the cluster version. If we start the migrations
+			// immediately after launching the tpcc workload above, they
+			// could finish "too quickly", before the workload had a
+			// chance to pick up the pace (starting all the workers, range
+			// merge/splits, compactions, etc). By waiting here, we
+			// increase the concurrency exposed to the upgrade migrations,
+			// and increase the chances of exposing bugs (such as #83079).
+			waitForWorkloadToRampUp,
+			// While tpcc is running in the background, bump the cluster
+			// version manually. We do this over allowing automatic upgrades
+			// to get a better idea of what errors come back here, if any.
+			// This will block until the long-running migrations have run.
+			allowAutoUpgradeStep(randomCRDBNode()),
+			setClusterSettingVersionStep,
+			// Wait until TPCC background run terminates
+			// and fail if it reports an error.
+			tpccWorkload.wait,
+		}
+	}
+
+	// Test steps consist of the setup steps + the upgrade steps for
+	// each upgrade being carried out here.
+	testSteps := append([]versionStep{}, setupSteps...)
+	for _, nextVersion := range history[1:] {
+		testSteps = append(testSteps, upgradeToVersionSteps(nextVersion)...)
+	}
+
+	newVersionUpgradeTest(c, testSteps...).run(ctx, t)
+}
+
 func registerTPCC(r registry.Registry) {
 	cloud := r.MakeClusterSpec(1).Cloud
 	headroomSpec := r.MakeClusterSpec(4, spec.CPU(16), spec.RandomlyUseZfs())
@@ -359,81 +501,18 @@ func registerTPCC(r registry.Registry) {
 		Cluster:           mixedHeadroomSpec,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			if runtime.GOARCH == "arm64" {
-				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
-			}
-			crdbNodes := c.Range(1, 4)
-			workloadNode := c.Node(5)
-
-			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), cloud, t.Spec().(*registry.TestSpec).Cluster)
-			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			if c.IsLocal() {
-				headroomWarehouses = 10
-			}
-
-			// We'll need this below.
-			tpccBackgroundStepper := backgroundStepper{
-				nodes: crdbNodes,
-				run: func(ctx context.Context, u *versionUpgradeTest) error {
-					const duration = 120 * time.Minute
-					t.L().Printf("running background TPCC workload")
-					runTPCC(ctx, t, c, tpccOptions{
-						Warehouses: headroomWarehouses,
-						Duration:   duration,
-						SetupType:  usingExistingData,
-						Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-							// Noop - we don't let tpcc upload or start binaries in this test.
-						},
-					})
-					return nil
-				}}
-			const (
-				mainBinary = ""
-				n1         = 1
-			)
-
-			// NB: this results in ~100GB of (actual) disk usage per node once things
-			// have settled down, and ~7.5k ranges. The import takes ~40 minutes.
-			// The full 6.5m import ran into out of disk errors (on 250gb machines),
-			// hence division by two.
-			bankRows := 65104166 / 2
-			if c.IsLocal() {
-				bankRows = 1000
-			}
-
-			oldV, err := PredecessorVersion(*t.BuildVersion())
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			newVersionUpgradeTest(c,
-				uploadAndStartFromCheckpointFixture(crdbNodes, oldV),
-				waitForUpgradeStep(crdbNodes), // let predecessor version settle (gossip etc)
-				preventAutoUpgradeStep(n1),
-				// Load TPCC dataset, don't run TPCC yet. We do this while in the old
-				// version to load some data and hopefully create some state that will
-				// need work by long-running migrations.
-				importTPCCStep(oldV, headroomWarehouses, crdbNodes),
-				// Add a lot of cold data to this cluster. This further stresses the version
-				// upgrade machinery, in which a) all ranges are touched and b) work proportional
-				// to the amount data may be carried out.
-				importLargeBankStep(oldV, bankRows, crdbNodes),
-				// Upload and restart cluster into the new
-				// binary (stays at old cluster version).
-				binaryUpgradeStep(crdbNodes, mainBinary),
-				uploadVersionStep(workloadNode, mainBinary), // for tpccBackgroundStepper's workload
-				// Now start running TPCC in the background.
-				tpccBackgroundStepper.launch,
-				// While tpcc is running in the background, bump the cluster
-				// version manually. We do this over allowing automatic upgrades
-				// to get a better idea of what errors come back here, if any.
-				// This will block until the long-running migrations have run.
-				allowAutoUpgradeStep(n1),
-				setClusterSettingVersionStep,
-				// Wait until TPCC background run terminates
-				// and fail if it reports an error.
-				tpccBackgroundStepper.wait,
-			).run(ctx, t)
+			runTPCCMixedHeadroom(ctx, t, c, cloud, 1)
+		},
+	})
+	r.Add(registry.TestSpec{
+		// run the same mixed-headroom test, but going back two versions
+		Name:              "tpcc/mixed-headroom/multiple-upgrades/" + mixedHeadroomSpec.String(),
+		Owner:             registry.OwnerTestEng,
+		Tags:              []string{`default`},
+		Cluster:           mixedHeadroomSpec,
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCCMixedHeadroom(ctx, t, c, cloud, 2)
 		},
 	})
 	r.Add(registry.TestSpec{
