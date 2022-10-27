@@ -454,9 +454,8 @@ func (ca *changeAggregator) close() {
 	}
 
 	if ca.sink != nil {
-		if err := ca.sink.Close(); err != nil {
-			log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
-		}
+		// Best effort: context is often cancel by now, so we expect to see an error
+		_ = ca.sink.Close()
 	}
 	ca.memAcc.Close(ca.Ctx)
 	if ca.kvFeedMemMon != nil {
