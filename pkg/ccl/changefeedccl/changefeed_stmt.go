@@ -435,7 +435,7 @@ func createChangefeedJobRecord(
 	if changefeedStmt.Select != nil {
 		// Serialize changefeed expression.
 		normalized, _, err := validateAndNormalizeChangefeedExpression(
-			ctx, p, changefeedStmt.Select, targetDescs, targets, opts.IncludeVirtual(), opts.IsSet(changefeedbase.OptSplitColumnFamilies),
+			ctx, p, changefeedStmt.Select, targetDescs, targets, opts.IncludeVirtual(), opts.KeyOnly(), opts.IsSet(changefeedbase.OptSplitColumnFamilies),
 		)
 		if err != nil {
 			return nil, err
@@ -898,6 +898,7 @@ func validateAndNormalizeChangefeedExpression(
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 	targets []jobspb.ChangefeedTargetSpecification,
 	includeVirtual bool,
+	keyOnly bool,
 	splitColFams bool,
 ) (n cdceval.NormalizedSelectClause, target jobspb.ChangefeedTargetSpecification, _ error) {
 	if len(descriptors) != 1 || len(targets) != 1 {
@@ -908,7 +909,7 @@ func validateAndNormalizeChangefeedExpression(
 		tableDescr = d.(catalog.TableDescriptor)
 	}
 	return cdceval.NormalizeAndValidateSelectForTarget(
-		ctx, execCtx, tableDescr, targets[0], sc, includeVirtual, splitColFams)
+		ctx, execCtx, tableDescr, targets[0], sc, includeVirtual, keyOnly, splitColFams)
 }
 
 type changefeedResumer struct {
