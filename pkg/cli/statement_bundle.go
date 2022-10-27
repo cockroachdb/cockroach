@@ -292,6 +292,12 @@ func getExplainCombinations(
 				return nil, nil, errors.Wrapf(err, "unable to parse type %s for col %s", typ, col)
 			}
 			colType := tree.MustBeStaticallyKnownType(colTypeRef)
+			if stat["histo_buckets"] == nil {
+				// There might not be any histogram buckets if the stats were
+				// collected when the table was empty or all values in the
+				// column were NULL.
+				continue
+			}
 			buckets := stat["histo_buckets"].([]interface{})
 			var maxUpperBound tree.Datum
 			for _, b := range buckets {
