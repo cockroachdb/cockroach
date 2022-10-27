@@ -32,1887 +32,52 @@ query TTTT colnames
 SELECT create_statement, create_nofks, alter_statements, validate_statements FROM crdb_internal.create_statements WHERE database_name = 'test'
 ----
 create_statement  create_nofks  alter_statements  validate_statements
-CREATE TABLE crdb_internal.active_range_feeds (
-   id INT8 NULL,
-   tags STRING NULL,
-   startts STRING NULL,
-   diff BOOL NULL,
-   node_id INT8 NULL,
-   range_id INT8 NULL,
-   created INT8 NULL,
-   range_start STRING NULL,
-   range_end STRING NULL,
-   resolved STRING NULL,
-   last_event_utc INT8 NULL,
-   num_errs INT8 NULL,
-   last_err STRING NULL
-)  CREATE TABLE crdb_internal.active_range_feeds (
-   id INT8 NULL,
-   tags STRING NULL,
-   startts STRING NULL,
-   diff BOOL NULL,
-   node_id INT8 NULL,
-   range_id INT8 NULL,
-   created INT8 NULL,
-   range_start STRING NULL,
-   range_end STRING NULL,
-   resolved STRING NULL,
-   last_event_utc INT8 NULL,
-   num_errs INT8 NULL,
-   last_err STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.backward_dependencies (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NULL,
-   column_id INT8 NULL,
-   dependson_id INT8 NOT NULL,
-   dependson_type STRING NOT NULL,
-   dependson_index_id INT8 NULL,
-   dependson_name STRING NULL,
-   dependson_details STRING NULL
-)  CREATE TABLE crdb_internal.backward_dependencies (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NULL,
-   column_id INT8 NULL,
-   dependson_id INT8 NOT NULL,
-   dependson_type STRING NOT NULL,
-   dependson_index_id INT8 NULL,
-   dependson_name STRING NULL,
-   dependson_details STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.builtin_functions (
-   function STRING NOT NULL,
-   signature STRING NOT NULL,
-   category STRING NOT NULL,
-   details STRING NOT NULL
-)  CREATE TABLE crdb_internal.builtin_functions (
-   function STRING NOT NULL,
-   signature STRING NOT NULL,
-   category STRING NOT NULL,
-   details STRING NOT NULL
-)  {}  {}
-CREATE VIEW crdb_internal.cluster_contended_indexes (
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  num_contention_events
-) AS SELECT
-    DISTINCT database_name, schema_name, name, index_name, num_contention_events
-  FROM
-    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
-  WHERE
-    (
-      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
-      AND crdb_internal.cluster_contention_events.table_id
-        = crdb_internal.table_indexes.descriptor_id
-    )
-    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
-  ORDER BY
-    num_contention_events DESC  CREATE VIEW crdb_internal.cluster_contended_indexes (
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  num_contention_events
-) AS SELECT
-    DISTINCT database_name, schema_name, name, index_name, num_contention_events
-  FROM
-    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
-  WHERE
-    (
-      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
-      AND crdb_internal.cluster_contention_events.table_id
-        = crdb_internal.table_indexes.descriptor_id
-    )
-    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
-  ORDER BY
-    num_contention_events DESC  {}  {}
-CREATE VIEW crdb_internal.cluster_contended_keys (
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  key,
-  num_contention_events
-) AS SELECT
-    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
-  FROM
-    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
-  WHERE
-    (
-      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
-      AND crdb_internal.cluster_contention_events.table_id
-        = crdb_internal.table_indexes.descriptor_id
-    )
-    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
-  GROUP BY
-    database_name, schema_name, name, index_name, key  CREATE VIEW crdb_internal.cluster_contended_keys (
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  key,
-  num_contention_events
-) AS SELECT
-    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
-  FROM
-    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
-  WHERE
-    (
-      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
-      AND crdb_internal.cluster_contention_events.table_id
-        = crdb_internal.table_indexes.descriptor_id
-    )
-    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
-  GROUP BY
-    database_name, schema_name, name, index_name, key  {}  {}
-CREATE VIEW crdb_internal.cluster_contended_tables (
-  database_name,
-  schema_name,
-  table_name,
-  num_contention_events
-) AS SELECT
-    database_name, schema_name, name, sum(num_contention_events)
-  FROM
-    (
-      SELECT
-        DISTINCT database_name, schema_name, name, index_id, num_contention_events
-      FROM
-        crdb_internal.cluster_contention_events
-        JOIN crdb_internal.tables ON
-            crdb_internal.cluster_contention_events.table_id
-            = crdb_internal.tables.table_id
-    )
-  GROUP BY
-    database_name, schema_name, name  CREATE VIEW crdb_internal.cluster_contended_tables (
-  database_name,
-  schema_name,
-  table_name,
-  num_contention_events
-) AS SELECT
-    database_name, schema_name, name, sum(num_contention_events)
-  FROM
-    (
-      SELECT
-        DISTINCT database_name, schema_name, name, index_id, num_contention_events
-      FROM
-        crdb_internal.cluster_contention_events
-        JOIN crdb_internal.tables ON
-            crdb_internal.cluster_contention_events.table_id
-            = crdb_internal.tables.table_id
-    )
-  GROUP BY
-    database_name, schema_name, name  {}  {}
-CREATE TABLE crdb_internal.cluster_contention_events (
-   table_id INT8 NULL,
-   index_id INT8 NULL,
-   num_contention_events INT8 NOT NULL,
-   cumulative_contention_time INTERVAL NOT NULL,
-   key BYTES NOT NULL,
-   txn_id UUID NOT NULL,
-   count INT8 NOT NULL
-)  CREATE TABLE crdb_internal.cluster_contention_events (
-   table_id INT8 NULL,
-   index_id INT8 NULL,
-   num_contention_events INT8 NOT NULL,
-   cumulative_contention_time INTERVAL NOT NULL,
-   key BYTES NOT NULL,
-   txn_id UUID NOT NULL,
-   count INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_database_privileges (
-   database_name STRING NOT NULL,
-   grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL,
-   is_grantable STRING NULL,
-   INDEX cluster_database_privileges_database_name_idx (database_name ASC) STORING (grantee, privilege_type, is_grantable)
-)  CREATE TABLE crdb_internal.cluster_database_privileges (
-   database_name STRING NOT NULL,
-   grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL,
-   is_grantable STRING NULL,
-   INDEX cluster_database_privileges_database_name_idx (database_name ASC) STORING (grantee, privilege_type, is_grantable)
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_distsql_flows (
-   flow_id UUID NOT NULL,
-   node_id INT8 NOT NULL,
-   stmt STRING NULL,
-   since TIMESTAMPTZ NOT NULL,
-   status STRING NOT NULL
-)  CREATE TABLE crdb_internal.cluster_distsql_flows (
-   flow_id UUID NOT NULL,
-   node_id INT8 NOT NULL,
-   stmt STRING NULL,
-   since TIMESTAMPTZ NOT NULL,
-   status STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_execution_insights (
-   session_id STRING NOT NULL,
-   txn_id UUID NOT NULL,
-   txn_fingerprint_id BYTES NOT NULL,
-   stmt_id STRING NOT NULL,
-   stmt_fingerprint_id BYTES NOT NULL,
-   problem STRING NOT NULL,
-   causes STRING[] NOT NULL,
-   query STRING NOT NULL,
-   status STRING NOT NULL,
-   start_time TIMESTAMP NOT NULL,
-   end_time TIMESTAMP NOT NULL,
-   full_scan BOOL NOT NULL,
-   user_name STRING NOT NULL,
-   app_name STRING NOT NULL,
-   database_name STRING NOT NULL,
-   plan_gist STRING NOT NULL,
-   rows_read INT8 NOT NULL,
-   rows_written INT8 NOT NULL,
-   priority STRING NOT NULL,
-   retries INT8 NOT NULL,
-   last_retry_reason STRING NULL,
-   exec_node_ids INT8[] NOT NULL,
-   contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL,
-   implicit_txn BOOL NOT NULL
-)  CREATE TABLE crdb_internal.cluster_execution_insights (
-   session_id STRING NOT NULL,
-   txn_id UUID NOT NULL,
-   txn_fingerprint_id BYTES NOT NULL,
-   stmt_id STRING NOT NULL,
-   stmt_fingerprint_id BYTES NOT NULL,
-   problem STRING NOT NULL,
-   causes STRING[] NOT NULL,
-   query STRING NOT NULL,
-   status STRING NOT NULL,
-   start_time TIMESTAMP NOT NULL,
-   end_time TIMESTAMP NOT NULL,
-   full_scan BOOL NOT NULL,
-   user_name STRING NOT NULL,
-   app_name STRING NOT NULL,
-   database_name STRING NOT NULL,
-   plan_gist STRING NOT NULL,
-   rows_read INT8 NOT NULL,
-   rows_written INT8 NOT NULL,
-   priority STRING NOT NULL,
-   retries INT8 NOT NULL,
-   last_retry_reason STRING NULL,
-   exec_node_ids INT8[] NOT NULL,
-   contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL,
-   implicit_txn BOOL NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_inflight_traces (
-   trace_id INT8 NOT NULL,
-   node_id INT8 NOT NULL,
-   root_op_name STRING NOT NULL,
-   trace_str STRING NULL,
-   jaeger_json STRING NULL,
-   INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, root_op_name, trace_str, jaeger_json)
-)  CREATE TABLE crdb_internal.cluster_inflight_traces (
-   trace_id INT8 NOT NULL,
-   node_id INT8 NOT NULL,
-   root_op_name STRING NOT NULL,
-   trace_str STRING NULL,
-   jaeger_json STRING NULL,
-   INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, root_op_name, trace_str, jaeger_json)
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_locks (
-   range_id INT8 NOT NULL,
-   table_id INT8 NOT NULL,
-   database_name STRING NOT NULL,
-   schema_name STRING NULL,
-   table_name STRING NOT NULL,
-   index_name STRING NULL,
-   lock_key BYTES NOT NULL,
-   lock_key_pretty STRING NOT NULL,
-   txn_id UUID NULL,
-   ts TIMESTAMP NULL,
-   lock_strength STRING NULL,
-   durability STRING NULL,
-   granted BOOL NULL,
-   contended BOOL NOT NULL,
-   duration INTERVAL NULL,
-   INDEX cluster_locks_table_id_idx (table_id ASC) STORING (range_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
-   INDEX cluster_locks_database_name_idx (database_name ASC) STORING (range_id, table_id, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
-   INDEX cluster_locks_table_name_idx (table_name ASC) STORING (range_id, table_id, database_name, schema_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
-   INDEX cluster_locks_contended_idx (contended ASC) STORING (range_id, table_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, duration)
-)  CREATE TABLE crdb_internal.cluster_locks (
-   range_id INT8 NOT NULL,
-   table_id INT8 NOT NULL,
-   database_name STRING NOT NULL,
-   schema_name STRING NULL,
-   table_name STRING NOT NULL,
-   index_name STRING NULL,
-   lock_key BYTES NOT NULL,
-   lock_key_pretty STRING NOT NULL,
-   txn_id UUID NULL,
-   ts TIMESTAMP NULL,
-   lock_strength STRING NULL,
-   durability STRING NULL,
-   granted BOOL NULL,
-   contended BOOL NOT NULL,
-   duration INTERVAL NULL,
-   INDEX cluster_locks_table_id_idx (table_id ASC) STORING (range_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
-   INDEX cluster_locks_database_name_idx (database_name ASC) STORING (range_id, table_id, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
-   INDEX cluster_locks_table_name_idx (table_name ASC) STORING (range_id, table_id, database_name, schema_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
-   INDEX cluster_locks_contended_idx (contended ASC) STORING (range_id, table_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, duration)
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_queries (
-   query_id STRING NULL,
-   txn_id UUID NULL,
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   start TIMESTAMP NULL,
-   query STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   distributed BOOL NULL,
-   phase STRING NULL,
-   full_scan BOOL NULL,
-   plan_gist STRING NULL
-)  CREATE TABLE crdb_internal.cluster_queries (
-   query_id STRING NULL,
-   txn_id UUID NULL,
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   start TIMESTAMP NULL,
-   query STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   distributed BOOL NULL,
-   phase STRING NULL,
-   full_scan BOOL NULL,
-   plan_gist STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_sessions (
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   active_queries STRING NULL,
-   last_active_query STRING NULL,
-   num_txns_executed INT8 NULL,
-   session_start TIMESTAMP NULL,
-   active_query_start TIMESTAMP NULL,
-   kv_txn STRING NULL,
-   alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL,
-   status STRING NULL,
-   session_end TIMESTAMP NULL
-)  CREATE TABLE crdb_internal.cluster_sessions (
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   active_queries STRING NULL,
-   last_active_query STRING NULL,
-   num_txns_executed INT8 NULL,
-   session_start TIMESTAMP NULL,
-   active_query_start TIMESTAMP NULL,
-   kv_txn STRING NULL,
-   alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL,
-   status STRING NULL,
-   session_end TIMESTAMP NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_settings (
-   variable STRING NOT NULL,
-   value STRING NOT NULL,
-   type STRING NOT NULL,
-   public BOOL NOT NULL,
-   description STRING NOT NULL
-)  CREATE TABLE crdb_internal.cluster_settings (
-   variable STRING NOT NULL,
-   value STRING NOT NULL,
-   type STRING NOT NULL,
-   public BOOL NOT NULL,
-   description STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_statement_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   plan_hash BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL,
-   index_recommendations STRING[] NOT NULL
-)  CREATE TABLE crdb_internal.cluster_statement_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   transaction_fingerprint_id BYTES NOT NULL,
-   plan_hash BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   sampled_plan JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL,
-   index_recommendations STRING[] NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_transaction_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  CREATE TABLE crdb_internal.cluster_transaction_statistics (
-   aggregated_ts TIMESTAMPTZ NOT NULL,
-   fingerprint_id BYTES NOT NULL,
-   app_name STRING NOT NULL,
-   metadata JSONB NOT NULL,
-   statistics JSONB NOT NULL,
-   aggregation_interval INTERVAL NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.cluster_transactions (
-   id UUID NULL,
-   node_id INT8 NULL,
-   session_id STRING NULL,
-   start TIMESTAMP NULL,
-   txn_string STRING NULL,
-   application_name STRING NULL,
-   num_stmts INT8 NULL,
-   num_retries INT8 NULL,
-   num_auto_retries INT8 NULL,
-   last_auto_retry_reason STRING NULL
-)  CREATE TABLE crdb_internal.cluster_transactions (
-   id UUID NULL,
-   node_id INT8 NULL,
-   session_id STRING NULL,
-   start TIMESTAMP NULL,
-   txn_string STRING NULL,
-   application_name STRING NULL,
-   num_stmts INT8 NULL,
-   num_retries INT8 NULL,
-   num_auto_retries INT8 NULL,
-   last_auto_retry_reason STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.create_function_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_id INT8 NULL,
-   schema_name STRING NULL,
-   function_id INT8 NULL,
-   function_name STRING NULL,
-   create_statement STRING NULL
-)  CREATE TABLE crdb_internal.create_function_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_id INT8 NULL,
-   schema_name STRING NULL,
-   function_id INT8 NULL,
-   function_name STRING NULL,
-   create_statement STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.create_schema_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   descriptor_id INT8 NULL,
-   create_statement STRING NULL
-)  CREATE TABLE crdb_internal.create_schema_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   descriptor_id INT8 NULL,
-   create_statement STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.create_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NOT NULL,
-   descriptor_id INT8 NULL,
-   descriptor_type STRING NOT NULL,
-   descriptor_name STRING NOT NULL,
-   create_statement STRING NOT NULL,
-   state STRING NOT NULL,
-   create_nofks STRING NOT NULL,
-   alter_statements STRING[] NOT NULL,
-   validate_statements STRING[] NOT NULL,
-   has_partitions BOOL NOT NULL,
-   is_multi_region BOOL NOT NULL,
-   is_virtual BOOL NOT NULL,
-   is_temporary BOOL NOT NULL,
-   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region, is_virtual, is_temporary)
-)  CREATE TABLE crdb_internal.create_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NOT NULL,
-   descriptor_id INT8 NULL,
-   descriptor_type STRING NOT NULL,
-   descriptor_name STRING NOT NULL,
-   create_statement STRING NOT NULL,
-   state STRING NOT NULL,
-   create_nofks STRING NOT NULL,
-   alter_statements STRING[] NOT NULL,
-   validate_statements STRING[] NOT NULL,
-   has_partitions BOOL NOT NULL,
-   is_multi_region BOOL NOT NULL,
-   is_virtual BOOL NOT NULL,
-   is_temporary BOOL NOT NULL,
-   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region, is_virtual, is_temporary)
-)  {}  {}
-CREATE TABLE crdb_internal.create_type_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NULL,
-   create_statement STRING NULL,
-   enum_members STRING[] NULL,
-   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
-)  CREATE TABLE crdb_internal.create_type_statements (
-   database_id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NULL,
-   create_statement STRING NULL,
-   enum_members STRING[] NULL,
-   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
-)  {}  {}
-CREATE TABLE crdb_internal.cross_db_references (
-   object_database STRING NOT NULL,
-   object_schema STRING NOT NULL,
-   object_name STRING NOT NULL,
-   referenced_object_database STRING NOT NULL,
-   referenced_object_schema STRING NOT NULL,
-   referenced_object_name STRING NOT NULL,
-   cross_database_reference_description STRING NOT NULL
-)  CREATE TABLE crdb_internal.cross_db_references (
-   object_database STRING NOT NULL,
-   object_schema STRING NOT NULL,
-   object_name STRING NOT NULL,
-   referenced_object_database STRING NOT NULL,
-   referenced_object_schema STRING NOT NULL,
-   referenced_object_name STRING NOT NULL,
-   cross_database_reference_description STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.databases (
-   id INT8 NOT NULL,
-   name STRING NOT NULL,
-   owner NAME NOT NULL,
-   primary_region STRING NULL,
-   secondary_region STRING NULL,
-   regions STRING[] NULL,
-   survival_goal STRING NULL,
-   placement_policy STRING NULL,
-   create_statement STRING NOT NULL
-)  CREATE TABLE crdb_internal.databases (
-   id INT8 NOT NULL,
-   name STRING NOT NULL,
-   owner NAME NOT NULL,
-   primary_region STRING NULL,
-   secondary_region STRING NULL,
-   regions STRING[] NULL,
-   survival_goal STRING NULL,
-   placement_policy STRING NULL,
-   create_statement STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.default_privileges (
-   database_name STRING NOT NULL,
-   schema_name STRING NULL,
-   "role" STRING NULL,
-   for_all_roles BOOL NULL,
-   object_type STRING NOT NULL,
-   grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL,
-   is_grantable BOOL NULL
-)  CREATE TABLE crdb_internal.default_privileges (
-   database_name STRING NOT NULL,
-   schema_name STRING NULL,
-   "role" STRING NULL,
-   for_all_roles BOOL NULL,
-   object_type STRING NOT NULL,
-   grantee STRING NOT NULL,
-   privilege_type STRING NOT NULL,
-   is_grantable BOOL NULL
-)  {}  {}
-CREATE TABLE crdb_internal.feature_usage (
-   feature_name STRING NOT NULL,
-   usage_count INT8 NOT NULL
-)  CREATE TABLE crdb_internal.feature_usage (
-   feature_name STRING NOT NULL,
-   usage_count INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.forward_dependencies (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NULL,
-   dependedonby_id INT8 NOT NULL,
-   dependedonby_type STRING NOT NULL,
-   dependedonby_index_id INT8 NULL,
-   dependedonby_name STRING NULL,
-   dependedonby_details STRING NULL
-)  CREATE TABLE crdb_internal.forward_dependencies (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NULL,
-   dependedonby_id INT8 NOT NULL,
-   dependedonby_type STRING NOT NULL,
-   dependedonby_index_id INT8 NULL,
-   dependedonby_name STRING NULL,
-   dependedonby_details STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.gossip_alerts (
-   node_id INT8 NOT NULL,
-   store_id INT8 NULL,
-   category STRING NOT NULL,
-   description STRING NOT NULL,
-   value FLOAT8 NOT NULL
-)  CREATE TABLE crdb_internal.gossip_alerts (
-   node_id INT8 NOT NULL,
-   store_id INT8 NULL,
-   category STRING NOT NULL,
-   description STRING NOT NULL,
-   value FLOAT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.gossip_liveness (
-   node_id INT8 NOT NULL,
-   epoch INT8 NOT NULL,
-   expiration STRING NOT NULL,
-   draining BOOL NOT NULL,
-   decommissioning BOOL NOT NULL,
-   membership STRING NOT NULL,
-   updated_at TIMESTAMP NULL
-)  CREATE TABLE crdb_internal.gossip_liveness (
-   node_id INT8 NOT NULL,
-   epoch INT8 NOT NULL,
-   expiration STRING NOT NULL,
-   draining BOOL NOT NULL,
-   decommissioning BOOL NOT NULL,
-   membership STRING NOT NULL,
-   updated_at TIMESTAMP NULL
-)  {}  {}
-CREATE TABLE crdb_internal.gossip_network (
-   source_id INT8 NOT NULL,
-   target_id INT8 NOT NULL
-)  CREATE TABLE crdb_internal.gossip_network (
-   source_id INT8 NOT NULL,
-   target_id INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.gossip_nodes (
-   node_id INT8 NOT NULL,
-   network STRING NOT NULL,
-   address STRING NOT NULL,
-   advertise_address STRING NOT NULL,
-   sql_network STRING NOT NULL,
-   sql_address STRING NOT NULL,
-   advertise_sql_address STRING NOT NULL,
-   attrs JSONB NOT NULL,
-   locality STRING NOT NULL,
-   cluster_name STRING NOT NULL,
-   server_version STRING NOT NULL,
-   build_tag STRING NOT NULL,
-   started_at TIMESTAMP NOT NULL,
-   is_live BOOL NOT NULL,
-   ranges INT8 NOT NULL,
-   leases INT8 NOT NULL
-)  CREATE TABLE crdb_internal.gossip_nodes (
-   node_id INT8 NOT NULL,
-   network STRING NOT NULL,
-   address STRING NOT NULL,
-   advertise_address STRING NOT NULL,
-   sql_network STRING NOT NULL,
-   sql_address STRING NOT NULL,
-   advertise_sql_address STRING NOT NULL,
-   attrs JSONB NOT NULL,
-   locality STRING NOT NULL,
-   cluster_name STRING NOT NULL,
-   server_version STRING NOT NULL,
-   build_tag STRING NOT NULL,
-   started_at TIMESTAMP NOT NULL,
-   is_live BOOL NOT NULL,
-   ranges INT8 NOT NULL,
-   leases INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.index_columns (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NOT NULL,
-   index_name STRING NOT NULL,
-   column_type STRING NOT NULL,
-   column_id INT8 NOT NULL,
-   column_name STRING NULL,
-   column_direction STRING NULL,
-   implicit BOOL NULL
-)  CREATE TABLE crdb_internal.index_columns (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NOT NULL,
-   index_name STRING NOT NULL,
-   column_type STRING NOT NULL,
-   column_id INT8 NOT NULL,
-   column_name STRING NULL,
-   column_direction STRING NULL,
-   implicit BOOL NULL
-)  {}  {}
-CREATE TABLE crdb_internal.index_usage_statistics (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
-   total_reads INT8 NOT NULL,
-   last_read TIMESTAMPTZ NULL
-)  CREATE TABLE crdb_internal.index_usage_statistics (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
-   total_reads INT8 NOT NULL,
-   last_read TIMESTAMPTZ NULL
-)  {}  {}
-CREATE TABLE crdb_internal.invalid_objects (
-   id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   obj_name STRING NULL,
-   error STRING NULL
-)  CREATE TABLE crdb_internal.invalid_objects (
-   id INT8 NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   obj_name STRING NULL,
-   error STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.jobs (
-   job_id INT8 NULL,
-   job_type STRING NULL,
-   description STRING NULL,
-   statement STRING NULL,
-   user_name STRING NULL,
-   descriptor_ids INT8[] NULL,
-   status STRING NULL,
-   running_status STRING NULL,
-   created TIMESTAMP NULL,
-   started TIMESTAMP NULL,
-   finished TIMESTAMP NULL,
-   modified TIMESTAMP NULL,
-   fraction_completed FLOAT8 NULL,
-   high_water_timestamp DECIMAL NULL,
-   error STRING NULL,
-   coordinator_id INT8 NULL,
-   trace_id INT8 NULL,
-   last_run TIMESTAMP NULL,
-   next_run TIMESTAMP NULL,
-   num_runs INT8 NULL,
-   execution_errors STRING[] NULL,
-   execution_events JSONB NULL
-)  CREATE TABLE crdb_internal.jobs (
-   job_id INT8 NULL,
-   job_type STRING NULL,
-   description STRING NULL,
-   statement STRING NULL,
-   user_name STRING NULL,
-   descriptor_ids INT8[] NULL,
-   status STRING NULL,
-   running_status STRING NULL,
-   created TIMESTAMP NULL,
-   started TIMESTAMP NULL,
-   finished TIMESTAMP NULL,
-   modified TIMESTAMP NULL,
-   fraction_completed FLOAT8 NULL,
-   high_water_timestamp DECIMAL NULL,
-   error STRING NULL,
-   coordinator_id INT8 NULL,
-   trace_id INT8 NULL,
-   last_run TIMESTAMP NULL,
-   next_run TIMESTAMP NULL,
-   num_runs INT8 NULL,
-   execution_errors STRING[] NULL,
-   execution_events JSONB NULL
-)  {}  {}
-CREATE TABLE crdb_internal.kv_node_liveness (
-   node_id INT8 NOT NULL,
-   epoch INT8 NOT NULL,
-   expiration STRING NOT NULL,
-   draining BOOL NOT NULL,
-   membership STRING NOT NULL
-)  CREATE TABLE crdb_internal.kv_node_liveness (
-   node_id INT8 NOT NULL,
-   epoch INT8 NOT NULL,
-   expiration STRING NOT NULL,
-   draining BOOL NOT NULL,
-   membership STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.kv_node_status (
-   node_id INT8 NOT NULL,
-   network STRING NOT NULL,
-   address STRING NOT NULL,
-   attrs JSONB NOT NULL,
-   locality STRING NOT NULL,
-   server_version STRING NOT NULL,
-   go_version STRING NOT NULL,
-   tag STRING NOT NULL,
-   "time" STRING NOT NULL,
-   revision STRING NOT NULL,
-   cgo_compiler STRING NOT NULL,
-   platform STRING NOT NULL,
-   distribution STRING NOT NULL,
-   type STRING NOT NULL,
-   dependencies STRING NOT NULL,
-   started_at TIMESTAMP NOT NULL,
-   updated_at TIMESTAMP NOT NULL,
-   metrics JSONB NOT NULL,
-   args JSONB NOT NULL,
-   env JSONB NOT NULL,
-   activity JSONB NOT NULL
-)  CREATE TABLE crdb_internal.kv_node_status (
-   node_id INT8 NOT NULL,
-   network STRING NOT NULL,
-   address STRING NOT NULL,
-   attrs JSONB NOT NULL,
-   locality STRING NOT NULL,
-   server_version STRING NOT NULL,
-   go_version STRING NOT NULL,
-   tag STRING NOT NULL,
-   "time" STRING NOT NULL,
-   revision STRING NOT NULL,
-   cgo_compiler STRING NOT NULL,
-   platform STRING NOT NULL,
-   distribution STRING NOT NULL,
-   type STRING NOT NULL,
-   dependencies STRING NOT NULL,
-   started_at TIMESTAMP NOT NULL,
-   updated_at TIMESTAMP NOT NULL,
-   metrics JSONB NOT NULL,
-   args JSONB NOT NULL,
-   env JSONB NOT NULL,
-   activity JSONB NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.kv_store_status (
-   node_id INT8 NOT NULL,
-   store_id INT8 NOT NULL,
-   attrs JSONB NOT NULL,
-   capacity INT8 NOT NULL,
-   available INT8 NOT NULL,
-   used INT8 NOT NULL,
-   logical_bytes INT8 NOT NULL,
-   range_count INT8 NOT NULL,
-   lease_count INT8 NOT NULL,
-   writes_per_second FLOAT8 NOT NULL,
-   bytes_per_replica JSONB NOT NULL,
-   writes_per_replica JSONB NOT NULL,
-   metrics JSONB NOT NULL,
-   properties JSONB NOT NULL
-)  CREATE TABLE crdb_internal.kv_store_status (
-   node_id INT8 NOT NULL,
-   store_id INT8 NOT NULL,
-   attrs JSONB NOT NULL,
-   capacity INT8 NOT NULL,
-   available INT8 NOT NULL,
-   used INT8 NOT NULL,
-   logical_bytes INT8 NOT NULL,
-   range_count INT8 NOT NULL,
-   lease_count INT8 NOT NULL,
-   writes_per_second FLOAT8 NOT NULL,
-   bytes_per_replica JSONB NOT NULL,
-   writes_per_replica JSONB NOT NULL,
-   metrics JSONB NOT NULL,
-   properties JSONB NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.leases (
-   node_id INT8 NOT NULL,
-   table_id INT8 NOT NULL,
-   name STRING NOT NULL,
-   parent_id INT8 NOT NULL,
-   expiration TIMESTAMP NOT NULL,
-   deleted BOOL NOT NULL
-)  CREATE TABLE crdb_internal.leases (
-   node_id INT8 NOT NULL,
-   table_id INT8 NOT NULL,
-   name STRING NOT NULL,
-   parent_id INT8 NOT NULL,
-   expiration TIMESTAMP NOT NULL,
-   deleted BOOL NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.lost_descriptors_with_data (
-   descid INT8 NOT NULL
-)  CREATE TABLE crdb_internal.lost_descriptors_with_data (
-   descid INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_build_info (
-   node_id INT8 NOT NULL,
-   field STRING NOT NULL,
-   value STRING NOT NULL
-)  CREATE TABLE crdb_internal.node_build_info (
-   node_id INT8 NOT NULL,
-   field STRING NOT NULL,
-   value STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_contention_events (
-   table_id INT8 NULL,
-   index_id INT8 NULL,
-   num_contention_events INT8 NOT NULL,
-   cumulative_contention_time INTERVAL NOT NULL,
-   key BYTES NOT NULL,
-   txn_id UUID NOT NULL,
-   count INT8 NOT NULL
-)  CREATE TABLE crdb_internal.node_contention_events (
-   table_id INT8 NULL,
-   index_id INT8 NULL,
-   num_contention_events INT8 NOT NULL,
-   cumulative_contention_time INTERVAL NOT NULL,
-   key BYTES NOT NULL,
-   txn_id UUID NOT NULL,
-   count INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_distsql_flows (
-   flow_id UUID NOT NULL,
-   node_id INT8 NOT NULL,
-   stmt STRING NULL,
-   since TIMESTAMPTZ NOT NULL,
-   status STRING NOT NULL
-)  CREATE TABLE crdb_internal.node_distsql_flows (
-   flow_id UUID NOT NULL,
-   node_id INT8 NOT NULL,
-   stmt STRING NULL,
-   since TIMESTAMPTZ NOT NULL,
-   status STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_execution_insights (
-   session_id STRING NOT NULL,
-   txn_id UUID NOT NULL,
-   txn_fingerprint_id BYTES NOT NULL,
-   stmt_id STRING NOT NULL,
-   stmt_fingerprint_id BYTES NOT NULL,
-   problem STRING NOT NULL,
-   causes STRING[] NOT NULL,
-   query STRING NOT NULL,
-   status STRING NOT NULL,
-   start_time TIMESTAMP NOT NULL,
-   end_time TIMESTAMP NOT NULL,
-   full_scan BOOL NOT NULL,
-   user_name STRING NOT NULL,
-   app_name STRING NOT NULL,
-   database_name STRING NOT NULL,
-   plan_gist STRING NOT NULL,
-   rows_read INT8 NOT NULL,
-   rows_written INT8 NOT NULL,
-   priority STRING NOT NULL,
-   retries INT8 NOT NULL,
-   last_retry_reason STRING NULL,
-   exec_node_ids INT8[] NOT NULL,
-   contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL,
-   implicit_txn BOOL NOT NULL
-)  CREATE TABLE crdb_internal.node_execution_insights (
-   session_id STRING NOT NULL,
-   txn_id UUID NOT NULL,
-   txn_fingerprint_id BYTES NOT NULL,
-   stmt_id STRING NOT NULL,
-   stmt_fingerprint_id BYTES NOT NULL,
-   problem STRING NOT NULL,
-   causes STRING[] NOT NULL,
-   query STRING NOT NULL,
-   status STRING NOT NULL,
-   start_time TIMESTAMP NOT NULL,
-   end_time TIMESTAMP NOT NULL,
-   full_scan BOOL NOT NULL,
-   user_name STRING NOT NULL,
-   app_name STRING NOT NULL,
-   database_name STRING NOT NULL,
-   plan_gist STRING NOT NULL,
-   rows_read INT8 NOT NULL,
-   rows_written INT8 NOT NULL,
-   priority STRING NOT NULL,
-   retries INT8 NOT NULL,
-   last_retry_reason STRING NULL,
-   exec_node_ids INT8[] NOT NULL,
-   contention INTERVAL NULL,
-   index_recommendations STRING[] NOT NULL,
-   implicit_txn BOOL NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_inflight_trace_spans (
-   trace_id INT8 NOT NULL,
-   parent_span_id INT8 NOT NULL,
-   span_id INT8 NOT NULL,
-   goroutine_id INT8 NOT NULL,
-   finished BOOL NOT NULL,
-   start_time TIMESTAMPTZ NULL,
-   duration INTERVAL NULL,
-   operation STRING NULL
-)  CREATE TABLE crdb_internal.node_inflight_trace_spans (
-   trace_id INT8 NOT NULL,
-   parent_span_id INT8 NOT NULL,
-   span_id INT8 NOT NULL,
-   goroutine_id INT8 NOT NULL,
-   finished BOOL NOT NULL,
-   start_time TIMESTAMPTZ NULL,
-   duration INTERVAL NULL,
-   operation STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_metrics (
-   store_id INT8 NULL,
-   name STRING NOT NULL,
-   value FLOAT8 NOT NULL
-)  CREATE TABLE crdb_internal.node_metrics (
-   store_id INT8 NULL,
-   name STRING NOT NULL,
-   value FLOAT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_queries (
-   query_id STRING NULL,
-   txn_id UUID NULL,
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   start TIMESTAMP NULL,
-   query STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   distributed BOOL NULL,
-   phase STRING NULL,
-   full_scan BOOL NULL,
-   plan_gist STRING NULL
-)  CREATE TABLE crdb_internal.node_queries (
-   query_id STRING NULL,
-   txn_id UUID NULL,
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   start TIMESTAMP NULL,
-   query STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   distributed BOOL NULL,
-   phase STRING NULL,
-   full_scan BOOL NULL,
-   plan_gist STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_runtime_info (
-   node_id INT8 NOT NULL,
-   component STRING NOT NULL,
-   field STRING NOT NULL,
-   value STRING NOT NULL
-)  CREATE TABLE crdb_internal.node_runtime_info (
-   node_id INT8 NOT NULL,
-   component STRING NOT NULL,
-   field STRING NOT NULL,
-   value STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_sessions (
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   active_queries STRING NULL,
-   last_active_query STRING NULL,
-   num_txns_executed INT8 NULL,
-   session_start TIMESTAMP NULL,
-   active_query_start TIMESTAMP NULL,
-   kv_txn STRING NULL,
-   alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL,
-   status STRING NULL,
-   session_end TIMESTAMP NULL
-)  CREATE TABLE crdb_internal.node_sessions (
-   node_id INT8 NOT NULL,
-   session_id STRING NULL,
-   user_name STRING NULL,
-   client_address STRING NULL,
-   application_name STRING NULL,
-   active_queries STRING NULL,
-   last_active_query STRING NULL,
-   num_txns_executed INT8 NULL,
-   session_start TIMESTAMP NULL,
-   active_query_start TIMESTAMP NULL,
-   kv_txn STRING NULL,
-   alloc_bytes INT8 NULL,
-   max_alloc_bytes INT8 NULL,
-   status STRING NULL,
-   session_end TIMESTAMP NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_statement_statistics (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   flags STRING NOT NULL,
-   statement_id STRING NOT NULL,
-   key STRING NOT NULL,
-   anonymized STRING NULL,
-   count INT8 NOT NULL,
-   first_attempt_count INT8 NOT NULL,
-   max_retries INT8 NOT NULL,
-   last_error STRING NULL,
-   rows_avg FLOAT8 NOT NULL,
-   rows_var FLOAT8 NOT NULL,
-   parse_lat_avg FLOAT8 NOT NULL,
-   parse_lat_var FLOAT8 NOT NULL,
-   plan_lat_avg FLOAT8 NOT NULL,
-   plan_lat_var FLOAT8 NOT NULL,
-   run_lat_avg FLOAT8 NOT NULL,
-   run_lat_var FLOAT8 NOT NULL,
-   service_lat_avg FLOAT8 NOT NULL,
-   service_lat_var FLOAT8 NOT NULL,
-   overhead_lat_avg FLOAT8 NOT NULL,
-   overhead_lat_var FLOAT8 NOT NULL,
-   bytes_read_avg FLOAT8 NOT NULL,
-   bytes_read_var FLOAT8 NOT NULL,
-   rows_read_avg FLOAT8 NOT NULL,
-   rows_read_var FLOAT8 NOT NULL,
-   network_bytes_avg FLOAT8 NULL,
-   network_bytes_var FLOAT8 NULL,
-   network_msgs_avg FLOAT8 NULL,
-   network_msgs_var FLOAT8 NULL,
-   max_mem_usage_avg FLOAT8 NULL,
-   max_mem_usage_var FLOAT8 NULL,
-   max_disk_usage_avg FLOAT8 NULL,
-   max_disk_usage_var FLOAT8 NULL,
-   contention_time_avg FLOAT8 NULL,
-   contention_time_var FLOAT8 NULL,
-   implicit_txn BOOL NOT NULL,
-   full_scan BOOL NOT NULL,
-   sample_plan JSONB NULL,
-   database_name STRING NOT NULL,
-   exec_node_ids INT8[] NOT NULL,
-   txn_fingerprint_id STRING NULL,
-   index_recommendations STRING[] NOT NULL
-)  CREATE TABLE crdb_internal.node_statement_statistics (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   flags STRING NOT NULL,
-   statement_id STRING NOT NULL,
-   key STRING NOT NULL,
-   anonymized STRING NULL,
-   count INT8 NOT NULL,
-   first_attempt_count INT8 NOT NULL,
-   max_retries INT8 NOT NULL,
-   last_error STRING NULL,
-   rows_avg FLOAT8 NOT NULL,
-   rows_var FLOAT8 NOT NULL,
-   parse_lat_avg FLOAT8 NOT NULL,
-   parse_lat_var FLOAT8 NOT NULL,
-   plan_lat_avg FLOAT8 NOT NULL,
-   plan_lat_var FLOAT8 NOT NULL,
-   run_lat_avg FLOAT8 NOT NULL,
-   run_lat_var FLOAT8 NOT NULL,
-   service_lat_avg FLOAT8 NOT NULL,
-   service_lat_var FLOAT8 NOT NULL,
-   overhead_lat_avg FLOAT8 NOT NULL,
-   overhead_lat_var FLOAT8 NOT NULL,
-   bytes_read_avg FLOAT8 NOT NULL,
-   bytes_read_var FLOAT8 NOT NULL,
-   rows_read_avg FLOAT8 NOT NULL,
-   rows_read_var FLOAT8 NOT NULL,
-   network_bytes_avg FLOAT8 NULL,
-   network_bytes_var FLOAT8 NULL,
-   network_msgs_avg FLOAT8 NULL,
-   network_msgs_var FLOAT8 NULL,
-   max_mem_usage_avg FLOAT8 NULL,
-   max_mem_usage_var FLOAT8 NULL,
-   max_disk_usage_avg FLOAT8 NULL,
-   max_disk_usage_var FLOAT8 NULL,
-   contention_time_avg FLOAT8 NULL,
-   contention_time_var FLOAT8 NULL,
-   implicit_txn BOOL NOT NULL,
-   full_scan BOOL NOT NULL,
-   sample_plan JSONB NULL,
-   database_name STRING NOT NULL,
-   exec_node_ids INT8[] NOT NULL,
-   txn_fingerprint_id STRING NULL,
-   index_recommendations STRING[] NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_transaction_statistics (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   key STRING NULL,
-   statement_ids STRING[] NULL,
-   count INT8 NULL,
-   max_retries INT8 NULL,
-   service_lat_avg FLOAT8 NOT NULL,
-   service_lat_var FLOAT8 NOT NULL,
-   retry_lat_avg FLOAT8 NOT NULL,
-   retry_lat_var FLOAT8 NOT NULL,
-   commit_lat_avg FLOAT8 NOT NULL,
-   commit_lat_var FLOAT8 NOT NULL,
-   rows_read_avg FLOAT8 NOT NULL,
-   rows_read_var FLOAT8 NOT NULL,
-   network_bytes_avg FLOAT8 NULL,
-   network_bytes_var FLOAT8 NULL,
-   network_msgs_avg FLOAT8 NULL,
-   network_msgs_var FLOAT8 NULL,
-   max_mem_usage_avg FLOAT8 NULL,
-   max_mem_usage_var FLOAT8 NULL,
-   max_disk_usage_avg FLOAT8 NULL,
-   max_disk_usage_var FLOAT8 NULL,
-   contention_time_avg FLOAT8 NULL,
-   contention_time_var FLOAT8 NULL
-)  CREATE TABLE crdb_internal.node_transaction_statistics (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   key STRING NULL,
-   statement_ids STRING[] NULL,
-   count INT8 NULL,
-   max_retries INT8 NULL,
-   service_lat_avg FLOAT8 NOT NULL,
-   service_lat_var FLOAT8 NOT NULL,
-   retry_lat_avg FLOAT8 NOT NULL,
-   retry_lat_var FLOAT8 NOT NULL,
-   commit_lat_avg FLOAT8 NOT NULL,
-   commit_lat_var FLOAT8 NOT NULL,
-   rows_read_avg FLOAT8 NOT NULL,
-   rows_read_var FLOAT8 NOT NULL,
-   network_bytes_avg FLOAT8 NULL,
-   network_bytes_var FLOAT8 NULL,
-   network_msgs_avg FLOAT8 NULL,
-   network_msgs_var FLOAT8 NULL,
-   max_mem_usage_avg FLOAT8 NULL,
-   max_mem_usage_var FLOAT8 NULL,
-   max_disk_usage_avg FLOAT8 NULL,
-   max_disk_usage_var FLOAT8 NULL,
-   contention_time_avg FLOAT8 NULL,
-   contention_time_var FLOAT8 NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_transactions (
-   id UUID NULL,
-   node_id INT8 NULL,
-   session_id STRING NULL,
-   start TIMESTAMP NULL,
-   txn_string STRING NULL,
-   application_name STRING NULL,
-   num_stmts INT8 NULL,
-   num_retries INT8 NULL,
-   num_auto_retries INT8 NULL,
-   last_auto_retry_reason STRING NULL
-)  CREATE TABLE crdb_internal.node_transactions (
-   id UUID NULL,
-   node_id INT8 NULL,
-   session_id STRING NULL,
-   start TIMESTAMP NULL,
-   txn_string STRING NULL,
-   application_name STRING NULL,
-   num_stmts INT8 NULL,
-   num_retries INT8 NULL,
-   num_auto_retries INT8 NULL,
-   last_auto_retry_reason STRING NULL
-)  {}  {}
-CREATE TABLE crdb_internal.node_txn_stats (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   txn_count INT8 NOT NULL,
-   txn_time_avg_sec FLOAT8 NOT NULL,
-   txn_time_var_sec FLOAT8 NOT NULL,
-   committed_count INT8 NOT NULL,
-   implicit_count INT8 NOT NULL
-)  CREATE TABLE crdb_internal.node_txn_stats (
-   node_id INT8 NOT NULL,
-   application_name STRING NOT NULL,
-   txn_count INT8 NOT NULL,
-   txn_time_avg_sec FLOAT8 NOT NULL,
-   txn_time_var_sec FLOAT8 NOT NULL,
-   committed_count INT8 NOT NULL,
-   implicit_count INT8 NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.partitions (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
-   parent_name STRING NULL,
-   name STRING NOT NULL,
-   columns INT8 NOT NULL,
-   column_names STRING NULL,
-   list_value STRING NULL,
-   range_value STRING NULL,
-   zone_id INT8 NULL,
-   subzone_id INT8 NULL
-)  CREATE TABLE crdb_internal.partitions (
-   table_id INT8 NOT NULL,
-   index_id INT8 NOT NULL,
-   parent_name STRING NULL,
-   name STRING NOT NULL,
-   columns INT8 NOT NULL,
-   column_names STRING NULL,
-   list_value STRING NULL,
-   range_value STRING NULL,
-   zone_id INT8 NULL,
-   subzone_id INT8 NULL
-)  {}  {}
-CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
-   name STRING NOT NULL,
-   implemented BOOL NULL
-)  CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
-   name STRING NOT NULL,
-   implemented BOOL NULL
-)  {}  {}
-CREATE TABLE crdb_internal.predefined_comments (
-   type INT8 NULL,
-   object_id INT8 NULL,
-   sub_id INT8 NULL,
-   comment STRING NULL
-)  CREATE TABLE crdb_internal.predefined_comments (
-   type INT8 NULL,
-   object_id INT8 NULL,
-   sub_id INT8 NULL,
-   comment STRING NULL
-)  {}  {}
-CREATE VIEW crdb_internal.ranges (
-  range_id,
-  start_key,
-  start_pretty,
-  end_key,
-  end_pretty,
-  table_id,
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  replicas,
-  replica_localities,
-  voting_replicas,
-  non_voting_replicas,
-  learner_replicas,
-  split_enforced_until,
-  lease_holder,
-  range_size
-) AS SELECT
-    range_id,
-    start_key,
-    start_pretty,
-    end_key,
-    end_pretty,
-    table_id,
-    database_name,
-    schema_name,
-    table_name,
-    index_name,
-    replicas,
-    replica_localities,
-    voting_replicas,
-    non_voting_replicas,
-    learner_replicas,
-    split_enforced_until,
-    crdb_internal.lease_holder(start_key) AS lease_holder,
-    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
-    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
-    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
-    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
-      AS range_size
-  FROM
-    crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (
-  range_id,
-  start_key,
-  start_pretty,
-  end_key,
-  end_pretty,
-  table_id,
-  database_name,
-  schema_name,
-  table_name,
-  index_name,
-  replicas,
-  replica_localities,
-  voting_replicas,
-  non_voting_replicas,
-  learner_replicas,
-  split_enforced_until,
-  lease_holder,
-  range_size
-) AS SELECT
-    range_id,
-    start_key,
-    start_pretty,
-    end_key,
-    end_pretty,
-    table_id,
-    database_name,
-    schema_name,
-    table_name,
-    index_name,
-    replicas,
-    replica_localities,
-    voting_replicas,
-    non_voting_replicas,
-    learner_replicas,
-    split_enforced_until,
-    crdb_internal.lease_holder(start_key) AS lease_holder,
-    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
-    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
-    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
-    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
-      AS range_size
-  FROM
-    crdb_internal.ranges_no_leases  {}  {}
-CREATE TABLE crdb_internal.ranges_no_leases (
-   range_id INT8 NOT NULL,
-   start_key BYTES NOT NULL,
-   start_pretty STRING NOT NULL,
-   end_key BYTES NOT NULL,
-   end_pretty STRING NOT NULL,
-   table_id INT8 NOT NULL,
-   database_name STRING NOT NULL,
-   schema_name STRING NOT NULL,
-   table_name STRING NOT NULL,
-   index_name STRING NOT NULL,
-   replicas INT8[] NOT NULL,
-   replica_localities STRING[] NOT NULL,
-   voting_replicas INT8[] NOT NULL,
-   non_voting_replicas INT8[] NOT NULL,
-   learner_replicas INT8[] NOT NULL,
-   split_enforced_until TIMESTAMP NULL
-)  CREATE TABLE crdb_internal.ranges_no_leases (
-   range_id INT8 NOT NULL,
-   start_key BYTES NOT NULL,
-   start_pretty STRING NOT NULL,
-   end_key BYTES NOT NULL,
-   end_pretty STRING NOT NULL,
-   table_id INT8 NOT NULL,
-   database_name STRING NOT NULL,
-   schema_name STRING NOT NULL,
-   table_name STRING NOT NULL,
-   index_name STRING NOT NULL,
-   replicas INT8[] NOT NULL,
-   replica_localities STRING[] NOT NULL,
-   voting_replicas INT8[] NOT NULL,
-   non_voting_replicas INT8[] NOT NULL,
-   learner_replicas INT8[] NOT NULL,
-   split_enforced_until TIMESTAMP NULL
-)  {}  {}
-CREATE TABLE crdb_internal.regions (
-   region STRING NOT NULL,
-   zones STRING[] NOT NULL
-)  CREATE TABLE crdb_internal.regions (
-   region STRING NOT NULL,
-   zones STRING[] NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.schema_changes (
-   table_id INT8 NOT NULL,
-   parent_id INT8 NOT NULL,
-   name STRING NOT NULL,
-   type STRING NOT NULL,
-   target_id INT8 NULL,
-   target_name STRING NULL,
-   state STRING NOT NULL,
-   direction STRING NOT NULL
-)  CREATE TABLE crdb_internal.schema_changes (
-   table_id INT8 NOT NULL,
-   parent_id INT8 NOT NULL,
-   name STRING NOT NULL,
-   type STRING NOT NULL,
-   target_id INT8 NULL,
-   target_name STRING NULL,
-   state STRING NOT NULL,
-   direction STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.session_trace (
-   span_idx INT8 NOT NULL,
-   message_idx INT8 NOT NULL,
-   "timestamp" TIMESTAMPTZ NOT NULL,
-   duration INTERVAL NULL,
-   operation STRING NULL,
-   loc STRING NOT NULL,
-   tag STRING NOT NULL,
-   message STRING NOT NULL,
-   age INTERVAL NOT NULL
-)  CREATE TABLE crdb_internal.session_trace (
-   span_idx INT8 NOT NULL,
-   message_idx INT8 NOT NULL,
-   "timestamp" TIMESTAMPTZ NOT NULL,
-   duration INTERVAL NULL,
-   operation STRING NULL,
-   loc STRING NOT NULL,
-   tag STRING NOT NULL,
-   message STRING NOT NULL,
-   age INTERVAL NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.session_variables (
-   variable STRING NOT NULL,
-   value STRING NOT NULL,
-   hidden BOOL NOT NULL
-)  CREATE TABLE crdb_internal.session_variables (
-   variable STRING NOT NULL,
-   value STRING NOT NULL,
-   hidden BOOL NOT NULL
-)  {}  {}
-CREATE VIEW crdb_internal.statement_statistics (
-  aggregated_ts,
-  fingerprint_id,
-  transaction_fingerprint_id,
-  plan_hash,
-  app_name,
-  metadata,
-  statistics,
-  sampled_plan,
-  aggregation_interval,
-  index_recommendations
-) AS SELECT
-    aggregated_ts,
-    fingerprint_id,
-    transaction_fingerprint_id,
-    plan_hash,
-    app_name,
-    max(metadata) AS metadata,
-    crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
-    max(sampled_plan),
-    aggregation_interval,
-    array_remove(array_agg(index_rec), NULL) AS index_recommendations
-  FROM
-    (
-      SELECT
-        aggregated_ts,
-        fingerprint_id,
-        transaction_fingerprint_id,
-        plan_hash,
-        app_name,
-        metadata,
-        statistics,
-        sampled_plan,
-        aggregation_interval,
-        index_recommendations
-      FROM
-        crdb_internal.cluster_statement_statistics
-      UNION ALL
-        SELECT
-          aggregated_ts,
-          fingerprint_id,
-          transaction_fingerprint_id,
-          plan_hash,
-          app_name,
-          metadata,
-          statistics,
-          plan,
-          agg_interval,
-          index_recommendations
-        FROM
-          system.statement_statistics
-    )
-    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
-  GROUP BY
-    aggregated_ts,
-    fingerprint_id,
-    transaction_fingerprint_id,
-    plan_hash,
-    app_name,
-    aggregation_interval  CREATE VIEW crdb_internal.statement_statistics (
-  aggregated_ts,
-  fingerprint_id,
-  transaction_fingerprint_id,
-  plan_hash,
-  app_name,
-  metadata,
-  statistics,
-  sampled_plan,
-  aggregation_interval,
-  index_recommendations
-) AS SELECT
-    aggregated_ts,
-    fingerprint_id,
-    transaction_fingerprint_id,
-    plan_hash,
-    app_name,
-    max(metadata) AS metadata,
-    crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
-    max(sampled_plan),
-    aggregation_interval,
-    array_remove(array_agg(index_rec), NULL) AS index_recommendations
-  FROM
-    (
-      SELECT
-        aggregated_ts,
-        fingerprint_id,
-        transaction_fingerprint_id,
-        plan_hash,
-        app_name,
-        metadata,
-        statistics,
-        sampled_plan,
-        aggregation_interval,
-        index_recommendations
-      FROM
-        crdb_internal.cluster_statement_statistics
-      UNION ALL
-        SELECT
-          aggregated_ts,
-          fingerprint_id,
-          transaction_fingerprint_id,
-          plan_hash,
-          app_name,
-          metadata,
-          statistics,
-          plan,
-          agg_interval,
-          index_recommendations
-        FROM
-          system.statement_statistics
-    )
-    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
-  GROUP BY
-    aggregated_ts,
-    fingerprint_id,
-    transaction_fingerprint_id,
-    plan_hash,
-    app_name,
-    aggregation_interval  {}  {}
-CREATE TABLE crdb_internal.super_regions (
-   id INT8 NOT NULL,
-   database_name STRING NOT NULL,
-   super_region_name STRING NOT NULL,
-   regions STRING[] NULL
-)  CREATE TABLE crdb_internal.super_regions (
-   id INT8 NOT NULL,
-   database_name STRING NOT NULL,
-   super_region_name STRING NOT NULL,
-   regions STRING[] NULL
-)  {}  {}
-CREATE TABLE crdb_internal.table_columns (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   column_id INT8 NOT NULL,
-   column_name STRING NOT NULL,
-   column_type STRING NOT NULL,
-   nullable BOOL NOT NULL,
-   default_expr STRING NULL,
-   hidden BOOL NOT NULL
-)  CREATE TABLE crdb_internal.table_columns (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   column_id INT8 NOT NULL,
-   column_name STRING NOT NULL,
-   column_type STRING NOT NULL,
-   nullable BOOL NOT NULL,
-   default_expr STRING NULL,
-   hidden BOOL NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.table_indexes (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NOT NULL,
-   index_name STRING NOT NULL,
-   index_type STRING NOT NULL,
-   is_unique BOOL NOT NULL,
-   is_inverted BOOL NOT NULL,
-   is_sharded BOOL NOT NULL,
-   is_visible BOOL NOT NULL,
-   shard_bucket_count INT8 NULL,
-   created_at TIMESTAMP NULL,
-   create_statement STRING NOT NULL
-)  CREATE TABLE crdb_internal.table_indexes (
-   descriptor_id INT8 NULL,
-   descriptor_name STRING NOT NULL,
-   index_id INT8 NOT NULL,
-   index_name STRING NOT NULL,
-   index_type STRING NOT NULL,
-   is_unique BOOL NOT NULL,
-   is_inverted BOOL NOT NULL,
-   is_sharded BOOL NOT NULL,
-   is_visible BOOL NOT NULL,
-   shard_bucket_count INT8 NULL,
-   created_at TIMESTAMP NULL,
-   create_statement STRING NOT NULL
-)  {}  {}
-CREATE TABLE crdb_internal.table_row_statistics (
-   table_id INT8 NOT NULL,
-   table_name STRING NOT NULL,
-   estimated_row_count INT8 NULL
-)  CREATE TABLE crdb_internal.table_row_statistics (
-   table_id INT8 NOT NULL,
-   table_name STRING NOT NULL,
-   estimated_row_count INT8 NULL
-)  {}  {}
-CREATE TABLE crdb_internal.tables (
-   table_id INT8 NOT NULL,
-   parent_id INT8 NOT NULL,
-   name STRING NOT NULL,
-   database_name STRING NULL,
-   version INT8 NOT NULL,
-   mod_time TIMESTAMP NOT NULL,
-   mod_time_logical DECIMAL NOT NULL,
-   format_version STRING NOT NULL,
-   state STRING NOT NULL,
-   sc_lease_node_id INT8 NULL,
-   sc_lease_expiration_time TIMESTAMP NULL,
-   drop_time TIMESTAMP NULL,
-   audit_mode STRING NOT NULL,
-   schema_name STRING NOT NULL,
-   parent_schema_id INT8 NOT NULL,
-   locality STRING NULL
-)  CREATE TABLE crdb_internal.tables (
-   table_id INT8 NOT NULL,
-   parent_id INT8 NOT NULL,
-   name STRING NOT NULL,
-   database_name STRING NULL,
-   version INT8 NOT NULL,
-   mod_time TIMESTAMP NOT NULL,
-   mod_time_logical DECIMAL NOT NULL,
-   format_version STRING NOT NULL,
-   state STRING NOT NULL,
-   sc_lease_node_id INT8 NULL,
-   sc_lease_expiration_time TIMESTAMP NULL,
-   drop_time TIMESTAMP NULL,
-   audit_mode STRING NOT NULL,
-   schema_name STRING NOT NULL,
-   parent_schema_id INT8 NOT NULL,
-   locality STRING NULL
-)  {}  {}
-CREATE VIEW crdb_internal.tenant_usage_details (
-  tenant_id,
-  total_ru,
-  total_read_bytes,
-  total_read_requests,
-  total_write_bytes,
-  total_write_requests,
-  total_sql_pod_seconds,
-  total_pgwire_egress_bytes,
-  total_external_io_ingress_bytes,
-  total_external_io_egress_bytes
-) AS SELECT
-    tenant_id,
-    (j->>'rU')::FLOAT8 AS total_ru,
-    (j->>'readBytes')::INT8 AS total_read_bytes,
-    (j->>'readRequests')::INT8 AS total_read_requests,
-    (j->>'writeBytes')::INT8 AS total_write_bytes,
-    (j->>'writeRequests')::INT8 AS total_write_requests,
-    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
-    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
-    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
-    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
-  FROM
-    (
-       SELECT
-         tenant_id,
-         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
-           AS j
-       FROM
-         system.tenant_usage
-       WHERE
-         instance_id = 0
-    )  CREATE VIEW crdb_internal.tenant_usage_details (
-  tenant_id,
-  total_ru,
-  total_read_bytes,
-  total_read_requests,
-  total_write_bytes,
-  total_write_requests,
-  total_sql_pod_seconds,
-  total_pgwire_egress_bytes,
-  total_external_io_ingress_bytes,
-  total_external_io_egress_bytes
-) AS SELECT
-    tenant_id,
-    (j->>'rU')::FLOAT8 AS total_ru,
-    (j->>'readBytes')::INT8 AS total_read_bytes,
-    (j->>'readRequests')::INT8 AS total_read_requests,
-    (j->>'writeBytes')::INT8 AS total_write_bytes,
-    (j->>'writeRequests')::INT8 AS total_write_requests,
-    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
-    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
-    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
-    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
-  FROM
-    (
-       SELECT
-         tenant_id,
-         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
-           AS j
-       FROM
-         system.tenant_usage
-       WHERE
-           instance_id = 0
-    )  {}  {}
-CREATE TABLE crdb_internal.transaction_contention_events (
-   collection_ts TIMESTAMPTZ NOT NULL,
-   blocking_txn_id UUID NOT NULL,
-   blocking_txn_fingerprint_id BYTES NOT NULL,
-   waiting_txn_id UUID NOT NULL,
-   waiting_txn_fingerprint_id BYTES NOT NULL,
-   contention_duration INTERVAL NOT NULL,
-   contending_key BYTES NOT NULL
-)  CREATE TABLE crdb_internal.transaction_contention_events (
-   collection_ts TIMESTAMPTZ NOT NULL,
-   blocking_txn_id UUID NOT NULL,
-   blocking_txn_fingerprint_id BYTES NOT NULL,
-   waiting_txn_id UUID NOT NULL,
-   waiting_txn_fingerprint_id BYTES NOT NULL,
-   contention_duration INTERVAL NOT NULL,
-   contending_key BYTES NOT NULL
-)  {}  {}
-CREATE VIEW crdb_internal.transaction_statistics (
-  aggregated_ts,
-  fingerprint_id,
-  app_name,
-  metadata,
-  statistics,
-  aggregation_interval
-) AS SELECT
-    aggregated_ts,
-    fingerprint_id,
-    app_name,
-    max(metadata),
-    crdb_internal.merge_transaction_stats(array_agg(statistics)),
-    aggregation_interval
-  FROM
-    (
-      SELECT
-        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
-      FROM
-        crdb_internal.cluster_transaction_statistics
-      UNION ALL
-        SELECT
-          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
-        FROM
-          system.transaction_statistics
-    )
-  GROUP BY
-    aggregated_ts, fingerprint_id, app_name, aggregation_interval  CREATE VIEW crdb_internal.transaction_statistics (
-  aggregated_ts,
-  fingerprint_id,
-  app_name,
-  metadata,
-  statistics,
-  aggregation_interval
-) AS SELECT
-    aggregated_ts,
-    fingerprint_id,
-    app_name,
-    max(metadata),
-    crdb_internal.merge_transaction_stats(array_agg(statistics)),
-    aggregation_interval
-  FROM
-    (
-      SELECT
-        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
-      FROM
-        crdb_internal.cluster_transaction_statistics
-      UNION ALL
-        SELECT
-          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
-        FROM
-          system.transaction_statistics
-    )
-  GROUP BY
-    aggregated_ts, fingerprint_id, app_name, aggregation_interval  {}  {}
-CREATE TABLE crdb_internal.zones (
-   zone_id INT8 NOT NULL,
-   subzone_id INT8 NOT NULL,
-   target STRING NULL,
-   range_name STRING NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   table_name STRING NULL,
-   index_name STRING NULL,
-   partition_name STRING NULL,
-   raw_config_yaml STRING NOT NULL,
-   raw_config_sql STRING NULL,
-   raw_config_protobuf BYTES NOT NULL,
-   full_config_yaml STRING NOT NULL,
-   full_config_sql STRING NULL
-)  CREATE TABLE crdb_internal.zones (
-   zone_id INT8 NOT NULL,
-   subzone_id INT8 NOT NULL,
-   target STRING NULL,
-   range_name STRING NULL,
-   database_name STRING NULL,
-   schema_name STRING NULL,
-   table_name STRING NULL,
-   index_name STRING NULL,
-   partition_name STRING NULL,
-   raw_config_yaml STRING NOT NULL,
-   raw_config_sql STRING NULL,
-   raw_config_protobuf BYTES NOT NULL,
-   full_config_yaml STRING NOT NULL,
-   full_config_sql STRING NULL
+CREATE TABLE pg_extension.geography_columns (
+   f_table_catalog NAME NULL,
+   f_table_schema NAME NULL,
+   f_table_name NAME NULL,
+   f_geography_column NAME NULL,
+   coord_dimension INT8 NULL,
+   srid INT8 NULL,
+   type STRING NULL
+)  CREATE TABLE pg_extension.geography_columns (
+   f_table_catalog NAME NULL,
+   f_table_schema NAME NULL,
+   f_table_name NAME NULL,
+   f_geography_column NAME NULL,
+   coord_dimension INT8 NULL,
+   srid INT8 NULL,
+   type STRING NULL
+)  {}  {}
+CREATE TABLE pg_extension.geometry_columns (
+   f_table_catalog NAME NULL,
+   f_table_schema NAME NULL,
+   f_table_name NAME NULL,
+   f_geometry_column NAME NULL,
+   coord_dimension INT8 NULL,
+   srid INT8 NULL,
+   type STRING NULL
+)  CREATE TABLE pg_extension.geometry_columns (
+   f_table_catalog NAME NULL,
+   f_table_schema NAME NULL,
+   f_table_name NAME NULL,
+   f_geometry_column NAME NULL,
+   coord_dimension INT8 NULL,
+   srid INT8 NULL,
+   type STRING NULL
+)  {}  {}
+CREATE TABLE pg_extension.spatial_ref_sys (
+   srid INT8 NULL,
+   auth_name VARCHAR(256) NULL,
+   auth_srid INT8 NULL,
+   srtext VARCHAR(2048) NULL,
+   proj4text VARCHAR(2048) NULL
+)  CREATE TABLE pg_extension.spatial_ref_sys (
+   srid INT8 NULL,
+   auth_name VARCHAR(256) NULL,
+   auth_srid INT8 NULL,
+   srtext VARCHAR(2048) NULL,
+   proj4text VARCHAR(2048) NULL
 )  {}  {}
 CREATE TABLE information_schema.administrable_role_authorizations (
    grantee STRING NOT NULL,
@@ -6735,52 +4900,1887 @@ CREATE TABLE pg_catalog.pg_views (
    viewowner NAME NULL,
    definition STRING NULL
 )  {}  {}
-CREATE TABLE pg_extension.geography_columns (
-   f_table_catalog NAME NULL,
-   f_table_schema NAME NULL,
-   f_table_name NAME NULL,
-   f_geography_column NAME NULL,
-   coord_dimension INT8 NULL,
-   srid INT8 NULL,
-   type STRING NULL
-)  CREATE TABLE pg_extension.geography_columns (
-   f_table_catalog NAME NULL,
-   f_table_schema NAME NULL,
-   f_table_name NAME NULL,
-   f_geography_column NAME NULL,
-   coord_dimension INT8 NULL,
-   srid INT8 NULL,
-   type STRING NULL
+CREATE TABLE crdb_internal.active_range_feeds (
+   id INT8 NULL,
+   tags STRING NULL,
+   startts STRING NULL,
+   diff BOOL NULL,
+   node_id INT8 NULL,
+   range_id INT8 NULL,
+   created INT8 NULL,
+   range_start STRING NULL,
+   range_end STRING NULL,
+   resolved STRING NULL,
+   last_event_utc INT8 NULL,
+   num_errs INT8 NULL,
+   last_err STRING NULL
+)  CREATE TABLE crdb_internal.active_range_feeds (
+   id INT8 NULL,
+   tags STRING NULL,
+   startts STRING NULL,
+   diff BOOL NULL,
+   node_id INT8 NULL,
+   range_id INT8 NULL,
+   created INT8 NULL,
+   range_start STRING NULL,
+   range_end STRING NULL,
+   resolved STRING NULL,
+   last_event_utc INT8 NULL,
+   num_errs INT8 NULL,
+   last_err STRING NULL
 )  {}  {}
-CREATE TABLE pg_extension.geometry_columns (
-   f_table_catalog NAME NULL,
-   f_table_schema NAME NULL,
-   f_table_name NAME NULL,
-   f_geometry_column NAME NULL,
-   coord_dimension INT8 NULL,
-   srid INT8 NULL,
-   type STRING NULL
-)  CREATE TABLE pg_extension.geometry_columns (
-   f_table_catalog NAME NULL,
-   f_table_schema NAME NULL,
-   f_table_name NAME NULL,
-   f_geometry_column NAME NULL,
-   coord_dimension INT8 NULL,
-   srid INT8 NULL,
-   type STRING NULL
+CREATE TABLE crdb_internal.backward_dependencies (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NULL,
+   column_id INT8 NULL,
+   dependson_id INT8 NOT NULL,
+   dependson_type STRING NOT NULL,
+   dependson_index_id INT8 NULL,
+   dependson_name STRING NULL,
+   dependson_details STRING NULL
+)  CREATE TABLE crdb_internal.backward_dependencies (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NULL,
+   column_id INT8 NULL,
+   dependson_id INT8 NOT NULL,
+   dependson_type STRING NOT NULL,
+   dependson_index_id INT8 NULL,
+   dependson_name STRING NULL,
+   dependson_details STRING NULL
 )  {}  {}
-CREATE TABLE pg_extension.spatial_ref_sys (
-   srid INT8 NULL,
-   auth_name VARCHAR(256) NULL,
-   auth_srid INT8 NULL,
-   srtext VARCHAR(2048) NULL,
-   proj4text VARCHAR(2048) NULL
-)  CREATE TABLE pg_extension.spatial_ref_sys (
-   srid INT8 NULL,
-   auth_name VARCHAR(256) NULL,
-   auth_srid INT8 NULL,
-   srtext VARCHAR(2048) NULL,
-   proj4text VARCHAR(2048) NULL
+CREATE TABLE crdb_internal.builtin_functions (
+   function STRING NOT NULL,
+   signature STRING NOT NULL,
+   category STRING NOT NULL,
+   details STRING NOT NULL
+)  CREATE TABLE crdb_internal.builtin_functions (
+   function STRING NOT NULL,
+   signature STRING NOT NULL,
+   category STRING NOT NULL,
+   details STRING NOT NULL
+)  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS SELECT
+    DISTINCT database_name, schema_name, name, index_name, num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC  CREATE VIEW crdb_internal.cluster_contended_indexes (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  num_contention_events
+) AS SELECT
+    DISTINCT database_name, schema_name, name, index_name, num_contention_events
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  ORDER BY
+    num_contention_events DESC  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key  CREATE VIEW crdb_internal.cluster_contended_keys (
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  key,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, index_name, crdb_internal.pretty_key(key, 0), sum(count)
+  FROM
+    crdb_internal.cluster_contention_events, crdb_internal.tables, crdb_internal.table_indexes
+  WHERE
+    (
+      crdb_internal.cluster_contention_events.index_id = crdb_internal.table_indexes.index_id
+      AND crdb_internal.cluster_contention_events.table_id
+        = crdb_internal.table_indexes.descriptor_id
+    )
+    AND crdb_internal.cluster_contention_events.table_id = crdb_internal.tables.table_id
+  GROUP BY
+    database_name, schema_name, name, index_name, key  {}  {}
+CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    (
+      SELECT
+        DISTINCT database_name, schema_name, name, index_id, num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    )
+  GROUP BY
+    database_name, schema_name, name  CREATE VIEW crdb_internal.cluster_contended_tables (
+  database_name,
+  schema_name,
+  table_name,
+  num_contention_events
+) AS SELECT
+    database_name, schema_name, name, sum(num_contention_events)
+  FROM
+    (
+      SELECT
+        DISTINCT database_name, schema_name, name, index_id, num_contention_events
+      FROM
+        crdb_internal.cluster_contention_events
+        JOIN crdb_internal.tables ON
+            crdb_internal.cluster_contention_events.table_id
+            = crdb_internal.tables.table_id
+    )
+  GROUP BY
+    database_name, schema_name, name  {}  {}
+CREATE TABLE crdb_internal.cluster_contention_events (
+   table_id INT8 NULL,
+   index_id INT8 NULL,
+   num_contention_events INT8 NOT NULL,
+   cumulative_contention_time INTERVAL NOT NULL,
+   key BYTES NOT NULL,
+   txn_id UUID NOT NULL,
+   count INT8 NOT NULL
+)  CREATE TABLE crdb_internal.cluster_contention_events (
+   table_id INT8 NULL,
+   index_id INT8 NULL,
+   num_contention_events INT8 NOT NULL,
+   cumulative_contention_time INTERVAL NOT NULL,
+   key BYTES NOT NULL,
+   txn_id UUID NOT NULL,
+   count INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_database_privileges (
+   database_name STRING NOT NULL,
+   grantee STRING NOT NULL,
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL,
+   INDEX cluster_database_privileges_database_name_idx (database_name ASC) STORING (grantee, privilege_type, is_grantable)
+)  CREATE TABLE crdb_internal.cluster_database_privileges (
+   database_name STRING NOT NULL,
+   grantee STRING NOT NULL,
+   privilege_type STRING NOT NULL,
+   is_grantable STRING NULL,
+   INDEX cluster_database_privileges_database_name_idx (database_name ASC) STORING (grantee, privilege_type, is_grantable)
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   stmt STRING NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  CREATE TABLE crdb_internal.cluster_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   stmt STRING NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problem STRING NOT NULL,
+   causes STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority STRING NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
+)  CREATE TABLE crdb_internal.cluster_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problem STRING NOT NULL,
+   causes STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority STRING NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_inflight_traces (
+   trace_id INT8 NOT NULL,
+   node_id INT8 NOT NULL,
+   root_op_name STRING NOT NULL,
+   trace_str STRING NULL,
+   jaeger_json STRING NULL,
+   INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, root_op_name, trace_str, jaeger_json)
+)  CREATE TABLE crdb_internal.cluster_inflight_traces (
+   trace_id INT8 NOT NULL,
+   node_id INT8 NOT NULL,
+   root_op_name STRING NOT NULL,
+   trace_str STRING NULL,
+   jaeger_json STRING NULL,
+   INDEX cluster_inflight_traces_trace_id_idx (trace_id ASC) STORING (node_id, root_op_name, trace_str, jaeger_json)
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_locks (
+   range_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   table_name STRING NOT NULL,
+   index_name STRING NULL,
+   lock_key BYTES NOT NULL,
+   lock_key_pretty STRING NOT NULL,
+   txn_id UUID NULL,
+   ts TIMESTAMP NULL,
+   lock_strength STRING NULL,
+   durability STRING NULL,
+   granted BOOL NULL,
+   contended BOOL NOT NULL,
+   duration INTERVAL NULL,
+   INDEX cluster_locks_table_id_idx (table_id ASC) STORING (range_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_database_name_idx (database_name ASC) STORING (range_id, table_id, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_table_name_idx (table_name ASC) STORING (range_id, table_id, database_name, schema_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_contended_idx (contended ASC) STORING (range_id, table_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, duration)
+)  CREATE TABLE crdb_internal.cluster_locks (
+   range_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   table_name STRING NOT NULL,
+   index_name STRING NULL,
+   lock_key BYTES NOT NULL,
+   lock_key_pretty STRING NOT NULL,
+   txn_id UUID NULL,
+   ts TIMESTAMP NULL,
+   lock_strength STRING NULL,
+   durability STRING NULL,
+   granted BOOL NULL,
+   contended BOOL NOT NULL,
+   duration INTERVAL NULL,
+   INDEX cluster_locks_table_id_idx (table_id ASC) STORING (range_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_database_name_idx (database_name ASC) STORING (range_id, table_id, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_table_name_idx (table_name ASC) STORING (range_id, table_id, database_name, schema_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, contended, duration),
+   INDEX cluster_locks_contended_idx (contended ASC) STORING (range_id, table_id, database_name, schema_name, table_name, index_name, lock_key, lock_key_pretty, txn_id, ts, lock_strength, durability, granted, duration)
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_queries (
+   query_id STRING NULL,
+   txn_id UUID NULL,
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   start TIMESTAMP NULL,
+   query STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   distributed BOOL NULL,
+   phase STRING NULL,
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
+)  CREATE TABLE crdb_internal.cluster_queries (
+   query_id STRING NULL,
+   txn_id UUID NULL,
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   start TIMESTAMP NULL,
+   query STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   distributed BOOL NULL,
+   phase STRING NULL,
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_sessions (
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   active_queries STRING NULL,
+   last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
+   session_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
+   kv_txn STRING NULL,
+   alloc_bytes INT8 NULL,
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
+)  CREATE TABLE crdb_internal.cluster_sessions (
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   active_queries STRING NULL,
+   last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
+   session_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
+   kv_txn STRING NULL,
+   alloc_bytes INT8 NULL,
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_settings (
+   variable STRING NOT NULL,
+   value STRING NOT NULL,
+   type STRING NOT NULL,
+   public BOOL NOT NULL,
+   description STRING NOT NULL
+)  CREATE TABLE crdb_internal.cluster_settings (
+   variable STRING NOT NULL,
+   value STRING NOT NULL,
+   type STRING NOT NULL,
+   public BOOL NOT NULL,
+   description STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
+   plan_hash BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL,
+   index_recommendations STRING[] NOT NULL
+)  CREATE TABLE crdb_internal.cluster_statement_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   transaction_fingerprint_id BYTES NOT NULL,
+   plan_hash BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   sampled_plan JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL,
+   index_recommendations STRING[] NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  CREATE TABLE crdb_internal.cluster_transaction_statistics (
+   aggregated_ts TIMESTAMPTZ NOT NULL,
+   fingerprint_id BYTES NOT NULL,
+   app_name STRING NOT NULL,
+   metadata JSONB NOT NULL,
+   statistics JSONB NOT NULL,
+   aggregation_interval INTERVAL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.cluster_transactions (
+   id UUID NULL,
+   node_id INT8 NULL,
+   session_id STRING NULL,
+   start TIMESTAMP NULL,
+   txn_string STRING NULL,
+   application_name STRING NULL,
+   num_stmts INT8 NULL,
+   num_retries INT8 NULL,
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
+)  CREATE TABLE crdb_internal.cluster_transactions (
+   id UUID NULL,
+   node_id INT8 NULL,
+   session_id STRING NULL,
+   start TIMESTAMP NULL,
+   txn_string STRING NULL,
+   application_name STRING NULL,
+   num_stmts INT8 NULL,
+   num_retries INT8 NULL,
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.create_function_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_id INT8 NULL,
+   schema_name STRING NULL,
+   function_id INT8 NULL,
+   function_name STRING NULL,
+   create_statement STRING NULL
+)  CREATE TABLE crdb_internal.create_function_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_id INT8 NULL,
+   schema_name STRING NULL,
+   function_id INT8 NULL,
+   function_name STRING NULL,
+   create_statement STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.create_schema_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   descriptor_id INT8 NULL,
+   create_statement STRING NULL
+)  CREATE TABLE crdb_internal.create_schema_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   descriptor_id INT8 NULL,
+   create_statement STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.create_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NOT NULL,
+   descriptor_id INT8 NULL,
+   descriptor_type STRING NOT NULL,
+   descriptor_name STRING NOT NULL,
+   create_statement STRING NOT NULL,
+   state STRING NOT NULL,
+   create_nofks STRING NOT NULL,
+   alter_statements STRING[] NOT NULL,
+   validate_statements STRING[] NOT NULL,
+   has_partitions BOOL NOT NULL,
+   is_multi_region BOOL NOT NULL,
+   is_virtual BOOL NOT NULL,
+   is_temporary BOOL NOT NULL,
+   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region, is_virtual, is_temporary)
+)  CREATE TABLE crdb_internal.create_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NOT NULL,
+   descriptor_id INT8 NULL,
+   descriptor_type STRING NOT NULL,
+   descriptor_name STRING NOT NULL,
+   create_statement STRING NOT NULL,
+   state STRING NOT NULL,
+   create_nofks STRING NOT NULL,
+   alter_statements STRING[] NOT NULL,
+   validate_statements STRING[] NOT NULL,
+   has_partitions BOOL NOT NULL,
+   is_multi_region BOOL NOT NULL,
+   is_virtual BOOL NOT NULL,
+   is_temporary BOOL NOT NULL,
+   INDEX create_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_type, descriptor_name, create_statement, state, create_nofks, alter_statements, validate_statements, has_partitions, is_multi_region, is_virtual, is_temporary)
+)  {}  {}
+CREATE TABLE crdb_internal.create_type_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NULL,
+   create_statement STRING NULL,
+   enum_members STRING[] NULL,
+   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
+)  CREATE TABLE crdb_internal.create_type_statements (
+   database_id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NULL,
+   create_statement STRING NULL,
+   enum_members STRING[] NULL,
+   INDEX create_type_statements_descriptor_id_idx (descriptor_id ASC) STORING (database_id, database_name, schema_name, descriptor_name, create_statement, enum_members)
+)  {}  {}
+CREATE TABLE crdb_internal.cross_db_references (
+   object_database STRING NOT NULL,
+   object_schema STRING NOT NULL,
+   object_name STRING NOT NULL,
+   referenced_object_database STRING NOT NULL,
+   referenced_object_schema STRING NOT NULL,
+   referenced_object_name STRING NOT NULL,
+   cross_database_reference_description STRING NOT NULL
+)  CREATE TABLE crdb_internal.cross_db_references (
+   object_database STRING NOT NULL,
+   object_schema STRING NOT NULL,
+   object_name STRING NOT NULL,
+   referenced_object_database STRING NOT NULL,
+   referenced_object_schema STRING NOT NULL,
+   referenced_object_name STRING NOT NULL,
+   cross_database_reference_description STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.databases (
+   id INT8 NOT NULL,
+   name STRING NOT NULL,
+   owner NAME NOT NULL,
+   primary_region STRING NULL,
+   secondary_region STRING NULL,
+   regions STRING[] NULL,
+   survival_goal STRING NULL,
+   placement_policy STRING NULL,
+   create_statement STRING NOT NULL
+)  CREATE TABLE crdb_internal.databases (
+   id INT8 NOT NULL,
+   name STRING NOT NULL,
+   owner NAME NOT NULL,
+   primary_region STRING NULL,
+   secondary_region STRING NULL,
+   regions STRING[] NULL,
+   survival_goal STRING NULL,
+   placement_policy STRING NULL,
+   create_statement STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.default_privileges (
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   "role" STRING NULL,
+   for_all_roles BOOL NULL,
+   object_type STRING NOT NULL,
+   grantee STRING NOT NULL,
+   privilege_type STRING NOT NULL,
+   is_grantable BOOL NULL
+)  CREATE TABLE crdb_internal.default_privileges (
+   database_name STRING NOT NULL,
+   schema_name STRING NULL,
+   "role" STRING NULL,
+   for_all_roles BOOL NULL,
+   object_type STRING NOT NULL,
+   grantee STRING NOT NULL,
+   privilege_type STRING NOT NULL,
+   is_grantable BOOL NULL
+)  {}  {}
+CREATE TABLE crdb_internal.feature_usage (
+   feature_name STRING NOT NULL,
+   usage_count INT8 NOT NULL
+)  CREATE TABLE crdb_internal.feature_usage (
+   feature_name STRING NOT NULL,
+   usage_count INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.forward_dependencies (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NULL,
+   dependedonby_id INT8 NOT NULL,
+   dependedonby_type STRING NOT NULL,
+   dependedonby_index_id INT8 NULL,
+   dependedonby_name STRING NULL,
+   dependedonby_details STRING NULL
+)  CREATE TABLE crdb_internal.forward_dependencies (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NULL,
+   dependedonby_id INT8 NOT NULL,
+   dependedonby_type STRING NOT NULL,
+   dependedonby_index_id INT8 NULL,
+   dependedonby_name STRING NULL,
+   dependedonby_details STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.gossip_alerts (
+   node_id INT8 NOT NULL,
+   store_id INT8 NULL,
+   category STRING NOT NULL,
+   description STRING NOT NULL,
+   value FLOAT8 NOT NULL
+)  CREATE TABLE crdb_internal.gossip_alerts (
+   node_id INT8 NOT NULL,
+   store_id INT8 NULL,
+   category STRING NOT NULL,
+   description STRING NOT NULL,
+   value FLOAT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.gossip_liveness (
+   node_id INT8 NOT NULL,
+   epoch INT8 NOT NULL,
+   expiration STRING NOT NULL,
+   draining BOOL NOT NULL,
+   decommissioning BOOL NOT NULL,
+   membership STRING NOT NULL,
+   updated_at TIMESTAMP NULL
+)  CREATE TABLE crdb_internal.gossip_liveness (
+   node_id INT8 NOT NULL,
+   epoch INT8 NOT NULL,
+   expiration STRING NOT NULL,
+   draining BOOL NOT NULL,
+   decommissioning BOOL NOT NULL,
+   membership STRING NOT NULL,
+   updated_at TIMESTAMP NULL
+)  {}  {}
+CREATE TABLE crdb_internal.gossip_network (
+   source_id INT8 NOT NULL,
+   target_id INT8 NOT NULL
+)  CREATE TABLE crdb_internal.gossip_network (
+   source_id INT8 NOT NULL,
+   target_id INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.gossip_nodes (
+   node_id INT8 NOT NULL,
+   network STRING NOT NULL,
+   address STRING NOT NULL,
+   advertise_address STRING NOT NULL,
+   sql_network STRING NOT NULL,
+   sql_address STRING NOT NULL,
+   advertise_sql_address STRING NOT NULL,
+   attrs JSONB NOT NULL,
+   locality STRING NOT NULL,
+   cluster_name STRING NOT NULL,
+   server_version STRING NOT NULL,
+   build_tag STRING NOT NULL,
+   started_at TIMESTAMP NOT NULL,
+   is_live BOOL NOT NULL,
+   ranges INT8 NOT NULL,
+   leases INT8 NOT NULL
+)  CREATE TABLE crdb_internal.gossip_nodes (
+   node_id INT8 NOT NULL,
+   network STRING NOT NULL,
+   address STRING NOT NULL,
+   advertise_address STRING NOT NULL,
+   sql_network STRING NOT NULL,
+   sql_address STRING NOT NULL,
+   advertise_sql_address STRING NOT NULL,
+   attrs JSONB NOT NULL,
+   locality STRING NOT NULL,
+   cluster_name STRING NOT NULL,
+   server_version STRING NOT NULL,
+   build_tag STRING NOT NULL,
+   started_at TIMESTAMP NOT NULL,
+   is_live BOOL NOT NULL,
+   ranges INT8 NOT NULL,
+   leases INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.index_columns (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NOT NULL,
+   index_name STRING NOT NULL,
+   column_type STRING NOT NULL,
+   column_id INT8 NOT NULL,
+   column_name STRING NULL,
+   column_direction STRING NULL,
+   implicit BOOL NULL
+)  CREATE TABLE crdb_internal.index_columns (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NOT NULL,
+   index_name STRING NOT NULL,
+   column_type STRING NOT NULL,
+   column_id INT8 NOT NULL,
+   column_name STRING NULL,
+   column_direction STRING NULL,
+   implicit BOOL NULL
+)  {}  {}
+CREATE TABLE crdb_internal.index_usage_statistics (
+   table_id INT8 NOT NULL,
+   index_id INT8 NOT NULL,
+   total_reads INT8 NOT NULL,
+   last_read TIMESTAMPTZ NULL
+)  CREATE TABLE crdb_internal.index_usage_statistics (
+   table_id INT8 NOT NULL,
+   index_id INT8 NOT NULL,
+   total_reads INT8 NOT NULL,
+   last_read TIMESTAMPTZ NULL
+)  {}  {}
+CREATE TABLE crdb_internal.invalid_objects (
+   id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   obj_name STRING NULL,
+   error STRING NULL
+)  CREATE TABLE crdb_internal.invalid_objects (
+   id INT8 NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   obj_name STRING NULL,
+   error STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.jobs (
+   job_id INT8 NULL,
+   job_type STRING NULL,
+   description STRING NULL,
+   statement STRING NULL,
+   user_name STRING NULL,
+   descriptor_ids INT8[] NULL,
+   status STRING NULL,
+   running_status STRING NULL,
+   created TIMESTAMP NULL,
+   started TIMESTAMP NULL,
+   finished TIMESTAMP NULL,
+   modified TIMESTAMP NULL,
+   fraction_completed FLOAT8 NULL,
+   high_water_timestamp DECIMAL NULL,
+   error STRING NULL,
+   coordinator_id INT8 NULL,
+   trace_id INT8 NULL,
+   last_run TIMESTAMP NULL,
+   next_run TIMESTAMP NULL,
+   num_runs INT8 NULL,
+   execution_errors STRING[] NULL,
+   execution_events JSONB NULL
+)  CREATE TABLE crdb_internal.jobs (
+   job_id INT8 NULL,
+   job_type STRING NULL,
+   description STRING NULL,
+   statement STRING NULL,
+   user_name STRING NULL,
+   descriptor_ids INT8[] NULL,
+   status STRING NULL,
+   running_status STRING NULL,
+   created TIMESTAMP NULL,
+   started TIMESTAMP NULL,
+   finished TIMESTAMP NULL,
+   modified TIMESTAMP NULL,
+   fraction_completed FLOAT8 NULL,
+   high_water_timestamp DECIMAL NULL,
+   error STRING NULL,
+   coordinator_id INT8 NULL,
+   trace_id INT8 NULL,
+   last_run TIMESTAMP NULL,
+   next_run TIMESTAMP NULL,
+   num_runs INT8 NULL,
+   execution_errors STRING[] NULL,
+   execution_events JSONB NULL
+)  {}  {}
+CREATE TABLE crdb_internal.kv_node_liveness (
+   node_id INT8 NOT NULL,
+   epoch INT8 NOT NULL,
+   expiration STRING NOT NULL,
+   draining BOOL NOT NULL,
+   membership STRING NOT NULL
+)  CREATE TABLE crdb_internal.kv_node_liveness (
+   node_id INT8 NOT NULL,
+   epoch INT8 NOT NULL,
+   expiration STRING NOT NULL,
+   draining BOOL NOT NULL,
+   membership STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.kv_node_status (
+   node_id INT8 NOT NULL,
+   network STRING NOT NULL,
+   address STRING NOT NULL,
+   attrs JSONB NOT NULL,
+   locality STRING NOT NULL,
+   server_version STRING NOT NULL,
+   go_version STRING NOT NULL,
+   tag STRING NOT NULL,
+   "time" STRING NOT NULL,
+   revision STRING NOT NULL,
+   cgo_compiler STRING NOT NULL,
+   platform STRING NOT NULL,
+   distribution STRING NOT NULL,
+   type STRING NOT NULL,
+   dependencies STRING NOT NULL,
+   started_at TIMESTAMP NOT NULL,
+   updated_at TIMESTAMP NOT NULL,
+   metrics JSONB NOT NULL,
+   args JSONB NOT NULL,
+   env JSONB NOT NULL,
+   activity JSONB NOT NULL
+)  CREATE TABLE crdb_internal.kv_node_status (
+   node_id INT8 NOT NULL,
+   network STRING NOT NULL,
+   address STRING NOT NULL,
+   attrs JSONB NOT NULL,
+   locality STRING NOT NULL,
+   server_version STRING NOT NULL,
+   go_version STRING NOT NULL,
+   tag STRING NOT NULL,
+   "time" STRING NOT NULL,
+   revision STRING NOT NULL,
+   cgo_compiler STRING NOT NULL,
+   platform STRING NOT NULL,
+   distribution STRING NOT NULL,
+   type STRING NOT NULL,
+   dependencies STRING NOT NULL,
+   started_at TIMESTAMP NOT NULL,
+   updated_at TIMESTAMP NOT NULL,
+   metrics JSONB NOT NULL,
+   args JSONB NOT NULL,
+   env JSONB NOT NULL,
+   activity JSONB NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.kv_store_status (
+   node_id INT8 NOT NULL,
+   store_id INT8 NOT NULL,
+   attrs JSONB NOT NULL,
+   capacity INT8 NOT NULL,
+   available INT8 NOT NULL,
+   used INT8 NOT NULL,
+   logical_bytes INT8 NOT NULL,
+   range_count INT8 NOT NULL,
+   lease_count INT8 NOT NULL,
+   writes_per_second FLOAT8 NOT NULL,
+   bytes_per_replica JSONB NOT NULL,
+   writes_per_replica JSONB NOT NULL,
+   metrics JSONB NOT NULL,
+   properties JSONB NOT NULL
+)  CREATE TABLE crdb_internal.kv_store_status (
+   node_id INT8 NOT NULL,
+   store_id INT8 NOT NULL,
+   attrs JSONB NOT NULL,
+   capacity INT8 NOT NULL,
+   available INT8 NOT NULL,
+   used INT8 NOT NULL,
+   logical_bytes INT8 NOT NULL,
+   range_count INT8 NOT NULL,
+   lease_count INT8 NOT NULL,
+   writes_per_second FLOAT8 NOT NULL,
+   bytes_per_replica JSONB NOT NULL,
+   writes_per_replica JSONB NOT NULL,
+   metrics JSONB NOT NULL,
+   properties JSONB NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.leases (
+   node_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   parent_id INT8 NOT NULL,
+   expiration TIMESTAMP NOT NULL,
+   deleted BOOL NOT NULL
+)  CREATE TABLE crdb_internal.leases (
+   node_id INT8 NOT NULL,
+   table_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   parent_id INT8 NOT NULL,
+   expiration TIMESTAMP NOT NULL,
+   deleted BOOL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  CREATE TABLE crdb_internal.lost_descriptors_with_data (
+   descid INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_build_info (
+   node_id INT8 NOT NULL,
+   field STRING NOT NULL,
+   value STRING NOT NULL
+)  CREATE TABLE crdb_internal.node_build_info (
+   node_id INT8 NOT NULL,
+   field STRING NOT NULL,
+   value STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_contention_events (
+   table_id INT8 NULL,
+   index_id INT8 NULL,
+   num_contention_events INT8 NOT NULL,
+   cumulative_contention_time INTERVAL NOT NULL,
+   key BYTES NOT NULL,
+   txn_id UUID NOT NULL,
+   count INT8 NOT NULL
+)  CREATE TABLE crdb_internal.node_contention_events (
+   table_id INT8 NULL,
+   index_id INT8 NULL,
+   num_contention_events INT8 NOT NULL,
+   cumulative_contention_time INTERVAL NOT NULL,
+   key BYTES NOT NULL,
+   txn_id UUID NOT NULL,
+   count INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   stmt STRING NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  CREATE TABLE crdb_internal.node_distsql_flows (
+   flow_id UUID NOT NULL,
+   node_id INT8 NOT NULL,
+   stmt STRING NULL,
+   since TIMESTAMPTZ NOT NULL,
+   status STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problem STRING NOT NULL,
+   causes STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority STRING NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
+)  CREATE TABLE crdb_internal.node_execution_insights (
+   session_id STRING NOT NULL,
+   txn_id UUID NOT NULL,
+   txn_fingerprint_id BYTES NOT NULL,
+   stmt_id STRING NOT NULL,
+   stmt_fingerprint_id BYTES NOT NULL,
+   problem STRING NOT NULL,
+   causes STRING[] NOT NULL,
+   query STRING NOT NULL,
+   status STRING NOT NULL,
+   start_time TIMESTAMP NOT NULL,
+   end_time TIMESTAMP NOT NULL,
+   full_scan BOOL NOT NULL,
+   user_name STRING NOT NULL,
+   app_name STRING NOT NULL,
+   database_name STRING NOT NULL,
+   plan_gist STRING NOT NULL,
+   rows_read INT8 NOT NULL,
+   rows_written INT8 NOT NULL,
+   priority STRING NOT NULL,
+   retries INT8 NOT NULL,
+   last_retry_reason STRING NULL,
+   exec_node_ids INT8[] NOT NULL,
+   contention INTERVAL NULL,
+   index_recommendations STRING[] NOT NULL,
+   implicit_txn BOOL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_inflight_trace_spans (
+   trace_id INT8 NOT NULL,
+   parent_span_id INT8 NOT NULL,
+   span_id INT8 NOT NULL,
+   goroutine_id INT8 NOT NULL,
+   finished BOOL NOT NULL,
+   start_time TIMESTAMPTZ NULL,
+   duration INTERVAL NULL,
+   operation STRING NULL
+)  CREATE TABLE crdb_internal.node_inflight_trace_spans (
+   trace_id INT8 NOT NULL,
+   parent_span_id INT8 NOT NULL,
+   span_id INT8 NOT NULL,
+   goroutine_id INT8 NOT NULL,
+   finished BOOL NOT NULL,
+   start_time TIMESTAMPTZ NULL,
+   duration INTERVAL NULL,
+   operation STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_metrics (
+   store_id INT8 NULL,
+   name STRING NOT NULL,
+   value FLOAT8 NOT NULL
+)  CREATE TABLE crdb_internal.node_metrics (
+   store_id INT8 NULL,
+   name STRING NOT NULL,
+   value FLOAT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_queries (
+   query_id STRING NULL,
+   txn_id UUID NULL,
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   start TIMESTAMP NULL,
+   query STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   distributed BOOL NULL,
+   phase STRING NULL,
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
+)  CREATE TABLE crdb_internal.node_queries (
+   query_id STRING NULL,
+   txn_id UUID NULL,
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   start TIMESTAMP NULL,
+   query STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   distributed BOOL NULL,
+   phase STRING NULL,
+   full_scan BOOL NULL,
+   plan_gist STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_runtime_info (
+   node_id INT8 NOT NULL,
+   component STRING NOT NULL,
+   field STRING NOT NULL,
+   value STRING NOT NULL
+)  CREATE TABLE crdb_internal.node_runtime_info (
+   node_id INT8 NOT NULL,
+   component STRING NOT NULL,
+   field STRING NOT NULL,
+   value STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_sessions (
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   active_queries STRING NULL,
+   last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
+   session_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
+   kv_txn STRING NULL,
+   alloc_bytes INT8 NULL,
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
+)  CREATE TABLE crdb_internal.node_sessions (
+   node_id INT8 NOT NULL,
+   session_id STRING NULL,
+   user_name STRING NULL,
+   client_address STRING NULL,
+   application_name STRING NULL,
+   active_queries STRING NULL,
+   last_active_query STRING NULL,
+   num_txns_executed INT8 NULL,
+   session_start TIMESTAMP NULL,
+   active_query_start TIMESTAMP NULL,
+   kv_txn STRING NULL,
+   alloc_bytes INT8 NULL,
+   max_alloc_bytes INT8 NULL,
+   status STRING NULL,
+   session_end TIMESTAMP NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_statement_statistics (
+   node_id INT8 NOT NULL,
+   application_name STRING NOT NULL,
+   flags STRING NOT NULL,
+   statement_id STRING NOT NULL,
+   key STRING NOT NULL,
+   anonymized STRING NULL,
+   count INT8 NOT NULL,
+   first_attempt_count INT8 NOT NULL,
+   max_retries INT8 NOT NULL,
+   last_error STRING NULL,
+   rows_avg FLOAT8 NOT NULL,
+   rows_var FLOAT8 NOT NULL,
+   parse_lat_avg FLOAT8 NOT NULL,
+   parse_lat_var FLOAT8 NOT NULL,
+   plan_lat_avg FLOAT8 NOT NULL,
+   plan_lat_var FLOAT8 NOT NULL,
+   run_lat_avg FLOAT8 NOT NULL,
+   run_lat_var FLOAT8 NOT NULL,
+   service_lat_avg FLOAT8 NOT NULL,
+   service_lat_var FLOAT8 NOT NULL,
+   overhead_lat_avg FLOAT8 NOT NULL,
+   overhead_lat_var FLOAT8 NOT NULL,
+   bytes_read_avg FLOAT8 NOT NULL,
+   bytes_read_var FLOAT8 NOT NULL,
+   rows_read_avg FLOAT8 NOT NULL,
+   rows_read_var FLOAT8 NOT NULL,
+   network_bytes_avg FLOAT8 NULL,
+   network_bytes_var FLOAT8 NULL,
+   network_msgs_avg FLOAT8 NULL,
+   network_msgs_var FLOAT8 NULL,
+   max_mem_usage_avg FLOAT8 NULL,
+   max_mem_usage_var FLOAT8 NULL,
+   max_disk_usage_avg FLOAT8 NULL,
+   max_disk_usage_var FLOAT8 NULL,
+   contention_time_avg FLOAT8 NULL,
+   contention_time_var FLOAT8 NULL,
+   implicit_txn BOOL NOT NULL,
+   full_scan BOOL NOT NULL,
+   sample_plan JSONB NULL,
+   database_name STRING NOT NULL,
+   exec_node_ids INT8[] NOT NULL,
+   txn_fingerprint_id STRING NULL,
+   index_recommendations STRING[] NOT NULL
+)  CREATE TABLE crdb_internal.node_statement_statistics (
+   node_id INT8 NOT NULL,
+   application_name STRING NOT NULL,
+   flags STRING NOT NULL,
+   statement_id STRING NOT NULL,
+   key STRING NOT NULL,
+   anonymized STRING NULL,
+   count INT8 NOT NULL,
+   first_attempt_count INT8 NOT NULL,
+   max_retries INT8 NOT NULL,
+   last_error STRING NULL,
+   rows_avg FLOAT8 NOT NULL,
+   rows_var FLOAT8 NOT NULL,
+   parse_lat_avg FLOAT8 NOT NULL,
+   parse_lat_var FLOAT8 NOT NULL,
+   plan_lat_avg FLOAT8 NOT NULL,
+   plan_lat_var FLOAT8 NOT NULL,
+   run_lat_avg FLOAT8 NOT NULL,
+   run_lat_var FLOAT8 NOT NULL,
+   service_lat_avg FLOAT8 NOT NULL,
+   service_lat_var FLOAT8 NOT NULL,
+   overhead_lat_avg FLOAT8 NOT NULL,
+   overhead_lat_var FLOAT8 NOT NULL,
+   bytes_read_avg FLOAT8 NOT NULL,
+   bytes_read_var FLOAT8 NOT NULL,
+   rows_read_avg FLOAT8 NOT NULL,
+   rows_read_var FLOAT8 NOT NULL,
+   network_bytes_avg FLOAT8 NULL,
+   network_bytes_var FLOAT8 NULL,
+   network_msgs_avg FLOAT8 NULL,
+   network_msgs_var FLOAT8 NULL,
+   max_mem_usage_avg FLOAT8 NULL,
+   max_mem_usage_var FLOAT8 NULL,
+   max_disk_usage_avg FLOAT8 NULL,
+   max_disk_usage_var FLOAT8 NULL,
+   contention_time_avg FLOAT8 NULL,
+   contention_time_var FLOAT8 NULL,
+   implicit_txn BOOL NOT NULL,
+   full_scan BOOL NOT NULL,
+   sample_plan JSONB NULL,
+   database_name STRING NOT NULL,
+   exec_node_ids INT8[] NOT NULL,
+   txn_fingerprint_id STRING NULL,
+   index_recommendations STRING[] NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_transaction_statistics (
+   node_id INT8 NOT NULL,
+   application_name STRING NOT NULL,
+   key STRING NULL,
+   statement_ids STRING[] NULL,
+   count INT8 NULL,
+   max_retries INT8 NULL,
+   service_lat_avg FLOAT8 NOT NULL,
+   service_lat_var FLOAT8 NOT NULL,
+   retry_lat_avg FLOAT8 NOT NULL,
+   retry_lat_var FLOAT8 NOT NULL,
+   commit_lat_avg FLOAT8 NOT NULL,
+   commit_lat_var FLOAT8 NOT NULL,
+   rows_read_avg FLOAT8 NOT NULL,
+   rows_read_var FLOAT8 NOT NULL,
+   network_bytes_avg FLOAT8 NULL,
+   network_bytes_var FLOAT8 NULL,
+   network_msgs_avg FLOAT8 NULL,
+   network_msgs_var FLOAT8 NULL,
+   max_mem_usage_avg FLOAT8 NULL,
+   max_mem_usage_var FLOAT8 NULL,
+   max_disk_usage_avg FLOAT8 NULL,
+   max_disk_usage_var FLOAT8 NULL,
+   contention_time_avg FLOAT8 NULL,
+   contention_time_var FLOAT8 NULL
+)  CREATE TABLE crdb_internal.node_transaction_statistics (
+   node_id INT8 NOT NULL,
+   application_name STRING NOT NULL,
+   key STRING NULL,
+   statement_ids STRING[] NULL,
+   count INT8 NULL,
+   max_retries INT8 NULL,
+   service_lat_avg FLOAT8 NOT NULL,
+   service_lat_var FLOAT8 NOT NULL,
+   retry_lat_avg FLOAT8 NOT NULL,
+   retry_lat_var FLOAT8 NOT NULL,
+   commit_lat_avg FLOAT8 NOT NULL,
+   commit_lat_var FLOAT8 NOT NULL,
+   rows_read_avg FLOAT8 NOT NULL,
+   rows_read_var FLOAT8 NOT NULL,
+   network_bytes_avg FLOAT8 NULL,
+   network_bytes_var FLOAT8 NULL,
+   network_msgs_avg FLOAT8 NULL,
+   network_msgs_var FLOAT8 NULL,
+   max_mem_usage_avg FLOAT8 NULL,
+   max_mem_usage_var FLOAT8 NULL,
+   max_disk_usage_avg FLOAT8 NULL,
+   max_disk_usage_var FLOAT8 NULL,
+   contention_time_avg FLOAT8 NULL,
+   contention_time_var FLOAT8 NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_transactions (
+   id UUID NULL,
+   node_id INT8 NULL,
+   session_id STRING NULL,
+   start TIMESTAMP NULL,
+   txn_string STRING NULL,
+   application_name STRING NULL,
+   num_stmts INT8 NULL,
+   num_retries INT8 NULL,
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
+)  CREATE TABLE crdb_internal.node_transactions (
+   id UUID NULL,
+   node_id INT8 NULL,
+   session_id STRING NULL,
+   start TIMESTAMP NULL,
+   txn_string STRING NULL,
+   application_name STRING NULL,
+   num_stmts INT8 NULL,
+   num_retries INT8 NULL,
+   num_auto_retries INT8 NULL,
+   last_auto_retry_reason STRING NULL
+)  {}  {}
+CREATE TABLE crdb_internal.node_txn_stats (
+   node_id INT8 NOT NULL,
+   application_name STRING NOT NULL,
+   txn_count INT8 NOT NULL,
+   txn_time_avg_sec FLOAT8 NOT NULL,
+   txn_time_var_sec FLOAT8 NOT NULL,
+   committed_count INT8 NOT NULL,
+   implicit_count INT8 NOT NULL
+)  CREATE TABLE crdb_internal.node_txn_stats (
+   node_id INT8 NOT NULL,
+   application_name STRING NOT NULL,
+   txn_count INT8 NOT NULL,
+   txn_time_avg_sec FLOAT8 NOT NULL,
+   txn_time_var_sec FLOAT8 NOT NULL,
+   committed_count INT8 NOT NULL,
+   implicit_count INT8 NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.partitions (
+   table_id INT8 NOT NULL,
+   index_id INT8 NOT NULL,
+   parent_name STRING NULL,
+   name STRING NOT NULL,
+   columns INT8 NOT NULL,
+   column_names STRING NULL,
+   list_value STRING NULL,
+   range_value STRING NULL,
+   zone_id INT8 NULL,
+   subzone_id INT8 NULL
+)  CREATE TABLE crdb_internal.partitions (
+   table_id INT8 NOT NULL,
+   index_id INT8 NOT NULL,
+   parent_name STRING NULL,
+   name STRING NOT NULL,
+   columns INT8 NOT NULL,
+   column_names STRING NULL,
+   list_value STRING NULL,
+   range_value STRING NULL,
+   zone_id INT8 NULL,
+   subzone_id INT8 NULL
+)  {}  {}
+CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
+   name STRING NOT NULL,
+   implemented BOOL NULL
+)  CREATE TABLE crdb_internal.pg_catalog_table_is_implemented (
+   name STRING NOT NULL,
+   implemented BOOL NULL
+)  {}  {}
+CREATE TABLE crdb_internal.predefined_comments (
+   type INT8 NULL,
+   object_id INT8 NULL,
+   sub_id INT8 NULL,
+   comment STRING NULL
+)  CREATE TABLE crdb_internal.predefined_comments (
+   type INT8 NULL,
+   object_id INT8 NULL,
+   sub_id INT8 NULL,
+   comment STRING NULL
+)  {}  {}
+CREATE VIEW crdb_internal.ranges (
+  range_id,
+  start_key,
+  start_pretty,
+  end_key,
+  end_pretty,
+  table_id,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  replicas,
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas,
+  learner_replicas,
+  split_enforced_until,
+  lease_holder,
+  range_size
+) AS SELECT
+    range_id,
+    start_key,
+    start_pretty,
+    end_key,
+    end_pretty,
+    table_id,
+    database_name,
+    schema_name,
+    table_name,
+    index_name,
+    replicas,
+    replica_localities,
+    voting_replicas,
+    non_voting_replicas,
+    learner_replicas,
+    split_enforced_until,
+    crdb_internal.lease_holder(start_key) AS lease_holder,
+    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
+    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
+      AS range_size
+  FROM
+    crdb_internal.ranges_no_leases  CREATE VIEW crdb_internal.ranges (
+  range_id,
+  start_key,
+  start_pretty,
+  end_key,
+  end_pretty,
+  table_id,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  replicas,
+  replica_localities,
+  voting_replicas,
+  non_voting_replicas,
+  learner_replicas,
+  split_enforced_until,
+  lease_holder,
+  range_size
+) AS SELECT
+    range_id,
+    start_key,
+    start_pretty,
+    end_key,
+    end_pretty,
+    table_id,
+    database_name,
+    schema_name,
+    table_name,
+    index_name,
+    replicas,
+    replica_localities,
+    voting_replicas,
+    non_voting_replicas,
+    learner_replicas,
+    split_enforced_until,
+    crdb_internal.lease_holder(start_key) AS lease_holder,
+    (crdb_internal.range_stats(start_key)->>'key_bytes')::INT8
+    + (crdb_internal.range_stats(start_key)->>'val_bytes')::INT8
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_key_bytes')::INT8, 0)
+    + COALESCE((crdb_internal.range_stats(start_key)->>'range_val_bytes')::INT8, 0)
+      AS range_size
+  FROM
+    crdb_internal.ranges_no_leases  {}  {}
+CREATE TABLE crdb_internal.ranges_no_leases (
+   range_id INT8 NOT NULL,
+   start_key BYTES NOT NULL,
+   start_pretty STRING NOT NULL,
+   end_key BYTES NOT NULL,
+   end_pretty STRING NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   table_name STRING NOT NULL,
+   index_name STRING NOT NULL,
+   replicas INT8[] NOT NULL,
+   replica_localities STRING[] NOT NULL,
+   voting_replicas INT8[] NOT NULL,
+   non_voting_replicas INT8[] NOT NULL,
+   learner_replicas INT8[] NOT NULL,
+   split_enforced_until TIMESTAMP NULL
+)  CREATE TABLE crdb_internal.ranges_no_leases (
+   range_id INT8 NOT NULL,
+   start_key BYTES NOT NULL,
+   start_pretty STRING NOT NULL,
+   end_key BYTES NOT NULL,
+   end_pretty STRING NOT NULL,
+   table_id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   table_name STRING NOT NULL,
+   index_name STRING NOT NULL,
+   replicas INT8[] NOT NULL,
+   replica_localities STRING[] NOT NULL,
+   voting_replicas INT8[] NOT NULL,
+   non_voting_replicas INT8[] NOT NULL,
+   learner_replicas INT8[] NOT NULL,
+   split_enforced_until TIMESTAMP NULL
+)  {}  {}
+CREATE TABLE crdb_internal.regions (
+   region STRING NOT NULL,
+   zones STRING[] NOT NULL
+)  CREATE TABLE crdb_internal.regions (
+   region STRING NOT NULL,
+   zones STRING[] NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.schema_changes (
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   type STRING NOT NULL,
+   target_id INT8 NULL,
+   target_name STRING NULL,
+   state STRING NOT NULL,
+   direction STRING NOT NULL
+)  CREATE TABLE crdb_internal.schema_changes (
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   type STRING NOT NULL,
+   target_id INT8 NULL,
+   target_name STRING NULL,
+   state STRING NOT NULL,
+   direction STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.session_trace (
+   span_idx INT8 NOT NULL,
+   message_idx INT8 NOT NULL,
+   "timestamp" TIMESTAMPTZ NOT NULL,
+   duration INTERVAL NULL,
+   operation STRING NULL,
+   loc STRING NOT NULL,
+   tag STRING NOT NULL,
+   message STRING NOT NULL,
+   age INTERVAL NOT NULL
+)  CREATE TABLE crdb_internal.session_trace (
+   span_idx INT8 NOT NULL,
+   message_idx INT8 NOT NULL,
+   "timestamp" TIMESTAMPTZ NOT NULL,
+   duration INTERVAL NULL,
+   operation STRING NULL,
+   loc STRING NOT NULL,
+   tag STRING NOT NULL,
+   message STRING NOT NULL,
+   age INTERVAL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.session_variables (
+   variable STRING NOT NULL,
+   value STRING NOT NULL,
+   hidden BOOL NOT NULL
+)  CREATE TABLE crdb_internal.session_variables (
+   variable STRING NOT NULL,
+   value STRING NOT NULL,
+   hidden BOOL NOT NULL
+)  {}  {}
+CREATE VIEW crdb_internal.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  metadata,
+  statistics,
+  sampled_plan,
+  aggregation_interval,
+  index_recommendations
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    max(metadata) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
+    max(sampled_plan),
+    aggregation_interval,
+    array_remove(array_agg(index_rec), NULL) AS index_recommendations
+  FROM
+    (
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        sampled_plan,
+        aggregation_interval,
+        index_recommendations
+      FROM
+        crdb_internal.cluster_statement_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval,
+          index_recommendations
+        FROM
+          system.statement_statistics
+    )
+    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
+  GROUP BY
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    aggregation_interval  CREATE VIEW crdb_internal.statement_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  transaction_fingerprint_id,
+  plan_hash,
+  app_name,
+  metadata,
+  statistics,
+  sampled_plan,
+  aggregation_interval,
+  index_recommendations
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    max(metadata) AS metadata,
+    crdb_internal.merge_statement_stats(array_agg(DISTINCT statistics)),
+    max(sampled_plan),
+    aggregation_interval,
+    array_remove(array_agg(index_rec), NULL) AS index_recommendations
+  FROM
+    (
+      SELECT
+        aggregated_ts,
+        fingerprint_id,
+        transaction_fingerprint_id,
+        plan_hash,
+        app_name,
+        metadata,
+        statistics,
+        sampled_plan,
+        aggregation_interval,
+        index_recommendations
+      FROM
+        crdb_internal.cluster_statement_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts,
+          fingerprint_id,
+          transaction_fingerprint_id,
+          plan_hash,
+          app_name,
+          metadata,
+          statistics,
+          plan,
+          agg_interval,
+          index_recommendations
+        FROM
+          system.statement_statistics
+    )
+    LEFT JOIN LATERAL unnest(index_recommendations) AS index_rec ON true
+  GROUP BY
+    aggregated_ts,
+    fingerprint_id,
+    transaction_fingerprint_id,
+    plan_hash,
+    app_name,
+    aggregation_interval  {}  {}
+CREATE TABLE crdb_internal.super_regions (
+   id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   super_region_name STRING NOT NULL,
+   regions STRING[] NULL
+)  CREATE TABLE crdb_internal.super_regions (
+   id INT8 NOT NULL,
+   database_name STRING NOT NULL,
+   super_region_name STRING NOT NULL,
+   regions STRING[] NULL
+)  {}  {}
+CREATE TABLE crdb_internal.table_columns (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   column_id INT8 NOT NULL,
+   column_name STRING NOT NULL,
+   column_type STRING NOT NULL,
+   nullable BOOL NOT NULL,
+   default_expr STRING NULL,
+   hidden BOOL NOT NULL
+)  CREATE TABLE crdb_internal.table_columns (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   column_id INT8 NOT NULL,
+   column_name STRING NOT NULL,
+   column_type STRING NOT NULL,
+   nullable BOOL NOT NULL,
+   default_expr STRING NULL,
+   hidden BOOL NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.table_indexes (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NOT NULL,
+   index_name STRING NOT NULL,
+   index_type STRING NOT NULL,
+   is_unique BOOL NOT NULL,
+   is_inverted BOOL NOT NULL,
+   is_sharded BOOL NOT NULL,
+   is_visible BOOL NOT NULL,
+   shard_bucket_count INT8 NULL,
+   created_at TIMESTAMP NULL,
+   create_statement STRING NOT NULL
+)  CREATE TABLE crdb_internal.table_indexes (
+   descriptor_id INT8 NULL,
+   descriptor_name STRING NOT NULL,
+   index_id INT8 NOT NULL,
+   index_name STRING NOT NULL,
+   index_type STRING NOT NULL,
+   is_unique BOOL NOT NULL,
+   is_inverted BOOL NOT NULL,
+   is_sharded BOOL NOT NULL,
+   is_visible BOOL NOT NULL,
+   shard_bucket_count INT8 NULL,
+   created_at TIMESTAMP NULL,
+   create_statement STRING NOT NULL
+)  {}  {}
+CREATE TABLE crdb_internal.table_row_statistics (
+   table_id INT8 NOT NULL,
+   table_name STRING NOT NULL,
+   estimated_row_count INT8 NULL
+)  CREATE TABLE crdb_internal.table_row_statistics (
+   table_id INT8 NOT NULL,
+   table_name STRING NOT NULL,
+   estimated_row_count INT8 NULL
+)  {}  {}
+CREATE TABLE crdb_internal.tables (
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   database_name STRING NULL,
+   version INT8 NOT NULL,
+   mod_time TIMESTAMP NOT NULL,
+   mod_time_logical DECIMAL NOT NULL,
+   format_version STRING NOT NULL,
+   state STRING NOT NULL,
+   sc_lease_node_id INT8 NULL,
+   sc_lease_expiration_time TIMESTAMP NULL,
+   drop_time TIMESTAMP NULL,
+   audit_mode STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   parent_schema_id INT8 NOT NULL,
+   locality STRING NULL
+)  CREATE TABLE crdb_internal.tables (
+   table_id INT8 NOT NULL,
+   parent_id INT8 NOT NULL,
+   name STRING NOT NULL,
+   database_name STRING NULL,
+   version INT8 NOT NULL,
+   mod_time TIMESTAMP NOT NULL,
+   mod_time_logical DECIMAL NOT NULL,
+   format_version STRING NOT NULL,
+   state STRING NOT NULL,
+   sc_lease_node_id INT8 NULL,
+   sc_lease_expiration_time TIMESTAMP NULL,
+   drop_time TIMESTAMP NULL,
+   audit_mode STRING NOT NULL,
+   schema_name STRING NOT NULL,
+   parent_schema_id INT8 NOT NULL,
+   locality STRING NULL
+)  {}  {}
+CREATE VIEW crdb_internal.tenant_usage_details (
+  tenant_id,
+  total_ru,
+  total_read_bytes,
+  total_read_requests,
+  total_write_bytes,
+  total_write_requests,
+  total_sql_pod_seconds,
+  total_pgwire_egress_bytes,
+  total_external_io_ingress_bytes,
+  total_external_io_egress_bytes
+) AS SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
+  FROM
+    (
+       SELECT
+         tenant_id,
+         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
+           AS j
+       FROM
+         system.tenant_usage
+       WHERE
+         instance_id = 0
+    )  CREATE VIEW crdb_internal.tenant_usage_details (
+  tenant_id,
+  total_ru,
+  total_read_bytes,
+  total_read_requests,
+  total_write_bytes,
+  total_write_requests,
+  total_sql_pod_seconds,
+  total_pgwire_egress_bytes,
+  total_external_io_ingress_bytes,
+  total_external_io_egress_bytes
+) AS SELECT
+    tenant_id,
+    (j->>'rU')::FLOAT8 AS total_ru,
+    (j->>'readBytes')::INT8 AS total_read_bytes,
+    (j->>'readRequests')::INT8 AS total_read_requests,
+    (j->>'writeBytes')::INT8 AS total_write_bytes,
+    (j->>'writeRequests')::INT8 AS total_write_requests,
+    (j->>'sqlPodsCpuSeconds')::FLOAT8 AS total_sql_pod_seconds,
+    (j->>'pgwireEgressBytes')::INT8 AS total_pgwire_egress_bytes,
+    (j->>'externalIOIngressBytes')::INT8 AS total_external_io_ingress_bytes,
+    (j->>'externalIOEgressBytes')::INT8 AS total_external_io_egress_bytes
+  FROM
+    (
+       SELECT
+         tenant_id,
+         crdb_internal.pb_to_json('cockroach.roachpb.TenantConsumption', total_consumption)
+           AS j
+       FROM
+         system.tenant_usage
+       WHERE
+           instance_id = 0
+    )  {}  {}
+CREATE TABLE crdb_internal.transaction_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  CREATE TABLE crdb_internal.transaction_contention_events (
+   collection_ts TIMESTAMPTZ NOT NULL,
+   blocking_txn_id UUID NOT NULL,
+   blocking_txn_fingerprint_id BYTES NOT NULL,
+   waiting_txn_id UUID NOT NULL,
+   waiting_txn_fingerprint_id BYTES NOT NULL,
+   contention_duration INTERVAL NOT NULL,
+   contending_key BYTES NOT NULL
+)  {}  {}
+CREATE VIEW crdb_internal.transaction_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  metadata,
+  statistics,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    max(metadata),
+    crdb_internal.merge_transaction_stats(array_agg(statistics)),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
+      FROM
+        crdb_internal.cluster_transaction_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
+        FROM
+          system.transaction_statistics
+    )
+  GROUP BY
+    aggregated_ts, fingerprint_id, app_name, aggregation_interval  CREATE VIEW crdb_internal.transaction_statistics (
+  aggregated_ts,
+  fingerprint_id,
+  app_name,
+  metadata,
+  statistics,
+  aggregation_interval
+) AS SELECT
+    aggregated_ts,
+    fingerprint_id,
+    app_name,
+    max(metadata),
+    crdb_internal.merge_transaction_stats(array_agg(statistics)),
+    aggregation_interval
+  FROM
+    (
+      SELECT
+        aggregated_ts, fingerprint_id, app_name, metadata, statistics, aggregation_interval
+      FROM
+        crdb_internal.cluster_transaction_statistics
+      UNION ALL
+        SELECT
+          aggregated_ts, fingerprint_id, app_name, metadata, statistics, agg_interval
+        FROM
+          system.transaction_statistics
+    )
+  GROUP BY
+    aggregated_ts, fingerprint_id, app_name, aggregation_interval  {}  {}
+CREATE TABLE crdb_internal.zones (
+   zone_id INT8 NOT NULL,
+   subzone_id INT8 NOT NULL,
+   target STRING NULL,
+   range_name STRING NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   table_name STRING NULL,
+   index_name STRING NULL,
+   partition_name STRING NULL,
+   raw_config_yaml STRING NOT NULL,
+   raw_config_sql STRING NULL,
+   raw_config_protobuf BYTES NOT NULL,
+   full_config_yaml STRING NOT NULL,
+   full_config_sql STRING NULL
+)  CREATE TABLE crdb_internal.zones (
+   zone_id INT8 NOT NULL,
+   subzone_id INT8 NOT NULL,
+   target STRING NULL,
+   range_name STRING NULL,
+   database_name STRING NULL,
+   schema_name STRING NULL,
+   table_name STRING NULL,
+   index_name STRING NULL,
+   partition_name STRING NULL,
+   raw_config_yaml STRING NOT NULL,
+   raw_config_sql STRING NULL,
+   raw_config_protobuf BYTES NOT NULL,
+   full_config_yaml STRING NOT NULL,
+   full_config_sql STRING NULL
 )  {}  {}
 CREATE TABLE public.t (
    a INT8 NULL,
