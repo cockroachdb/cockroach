@@ -118,6 +118,9 @@
         }
     },
     "printf": {
+        "analyzer_flags": {
+            "funcs": "ErrEvent,ErrEventf,Error,Errorf,ErrorfDepth,Event,Eventf,Fatal,Fatalf,FatalfDepth,Info,Infof,InfofDepth,AssertionFailedf,AssertionFailedWithDepthf,NewAssertionErrorWithWrappedErrf,DangerousStatementf,pgerror.New,pgerror.NewWithDepthf,pgerror.Newf,SetDetailf,SetHintf,Unimplemented,Unimplementedf,UnimplementedWithDepthf,UnimplementedWithIssueDetailf,UnimplementedWithIssuef,VEvent,VEventf,Warning,Warningf,WarningfDepth,Wrapf,WrapWithDepthf,redact.Fprint,redact.Fprintf,redact.Sprint,redact.Sprintf"
+        },
         "only_files": {
             "cockroach/pkg/.*$": "first-party code"
         }
