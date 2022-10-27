@@ -26,6 +26,12 @@ func TestVersionsAreValid(t *testing.T) {
 	require.NoError(t, versionsSingleton.Validate())
 }
 
+func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	require.NoError(t, versionsSingleton.PreserveVersionsForMinBinaryVersion())
+}
+
 func TestVersionFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

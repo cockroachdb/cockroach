@@ -134,3 +134,29 @@ func (kv keyedVersions) Validate() error {
 
 	return nil
 }
+
+// PreserveVersionsForMinBinaryVersion makes sure that versions at or above
+// binaryMinSupportedVersion are not deleted.
+func (kv keyedVersions) PreserveVersionsForMinBinaryVersion() error {
+	prevVersion := keyedVersion{
+		Key:     -1,
+		Version: roachpb.Version{Major: 1, Minor: 1},
+	}
+	for _, namedVersion := range kv {
+		v := namedVersion.Version
+		if v.Less(binaryMinSupportedVersion) {
+			prevVersion = namedVersion
+			continue
+		}
+		if v.Major == prevVersion.Major && v.Minor == prevVersion.Minor {
+			if v.Internal != prevVersion.Internal+2 {
+				return errors.Errorf("version(s) between %s (%s) and %s (%s) is(are) at or above minBinaryVersion (%s) and should not be removed",
+					prevVersion.Key, prevVersion.Version,
+					namedVersion.Key, namedVersion.Version,
+					binaryMinSupportedVersion)
+			}
+		}
+		prevVersion = namedVersion
+	}
+	return nil
+}
