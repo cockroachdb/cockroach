@@ -17,18 +17,55 @@ import (
 	"strings"
 )
 
-// tsweight is a string A, B, C, or D.
-type tsweight int
+// This file defines the TSVector data structure, which is used to implement
+// Postgres's tsvector text search mechanism.
+// See https://www.postgresql.org/docs/current/datatype-textsearch.html for
+// context on what each of the pieces do.
+//
+// TSVector is ultimately used to represent a document as a posting list - a
+// list of lexemes in the doc (typically without stop words like common or short
+// words, and typically stemmed using a stemming algorithm like snowball
+// stemming (https://snowballstem.org/)), along with an associated set of
+// positions that those lexemes occur within the document.
+//
+// Typically, this posting list is then stored in an inverted index within the
+// database to accelerate searches of terms within the document.
+//
+// The key structures are:
+// - tsTerm is a document term (also referred to as lexeme) along with a
+//   position list, which contains the positions within a document that a term
+//   appeared, along with an optional weight, which controls matching.
+// - tsTerm is also used during parsing of both TSQueries and TSVectors, so a
+//   tsTerm also can represent an TSQuery operator.
+// - tsWeight represents the weight of a given lexeme. It's also used for
+//   queries, when a "star" weight is available that matches any weight.
+// - TSVector is a list of tsTerms, ordered by their lexeme.
+
+// tsWeight is a bitfield that represents the weight of a given term. When
+// stored in a TSVector, only 1 of the bits will be set. The default weight is
+// D - as a result, we store 0 for the weight of terms with weight D or no
+// specified weight. The weightStar value is never set in a TSVector weight.
+//
+// tsWeight is also used inside of TSQueries, to specify the weight to search.
+// Within TSQueries, the absence of a weight is the default, and indicates that
+// the search term should match any matching term, regardless of its weight. If
+// one or more of the weights are set in a search term, it indicates that the
+// query should match only terms with the given weights.
+type tsWeight int
 
 const (
-	weightD tsweight = 1 << iota
+	// These enum values are a bitfield and must be kept in order.
+	weightD tsWeight = 1 << iota
 	weightC
 	weightB
 	weightA
+	// weightStar is a special "weight" that can be specified only in a search
+	// term. It indicates prefix matching, which will allow the term to match any
+	// document term that begins with the search term.
 	weightStar
 )
 
-func (w tsweight) String() string {
+func (w tsWeight) String() string {
 	var ret strings.Builder
 	if w&weightStar != 0 {
 		ret.WriteByte('*')
@@ -48,47 +85,20 @@ func (w tsweight) String() string {
 	return ret.String()
 }
 
-type tsposition struct {
+// tsPosition is a position within a document, along with an optional weight.
+type tsPosition struct {
 	position int
-	weight   tsweight
+	weight   tsWeight
 }
 
-type tsoperator int
-
-const (
-	// Parentheses can be used to control nesting of the TSQuery operators.
-	// Without parentheses, | binds least tightly,
-	// then &, then <->, and ! most tightly.
-
-	invalid    tsoperator = iota
-	and                   // binary
-	or                    // binary
-	not                   // unary prefix
-	followedby            // binary
-	lparen                // grouping
-	rparen                // grouping
-)
-
-func (o tsoperator) precedence() int {
-	switch o {
-	case not:
-		return 4
-	case followedby:
-		return 3
-	case and:
-		return 2
-	case or:
-		return 1
-	}
-	panic(fmt.Sprintf("no precdence for operator %d", o))
-}
-
+// tsTerm is either a lexeme and position list, or an operator (when parsing a
+// a TSQuery).
 type tsTerm struct {
-	// A term is either a lexeme and position list, or an operator.
 	lexeme    string
-	positions []tsposition
+	positions []tsPosition
 
-	operator tsoperator
+	// The operator and followedN fields are only used when parsing a TSQuery.
+	operator tsOperator
 	// Set only when operator = followedby
 	followedN int
 }
@@ -194,8 +204,8 @@ func ParseTSVector(input string) (TSVector, error) {
 	if len(ret) >= 1 {
 		// Make sure to sort and uniq the position list even if there's only 1
 		// entry.
-		latsIdx := len(ret) - 1
-		ret[latsIdx].positions = sortAndUniqTSPositions(ret[latsIdx].positions)
+		lastIdx := len(ret) - 1
+		ret[lastIdx].positions = sortAndUniqTSPositions(ret[lastIdx].positions)
 	}
 	return ret, nil
 }

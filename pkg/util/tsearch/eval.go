@@ -37,9 +37,12 @@ func (e *tsEvaluator) eval() (bool, error) {
 	return e.evalNode(e.q.root)
 }
 
+// evalNode is used to evaluate a query node that's not nested within any
+// followed by operators. it returns true if the match was successful.
 func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 	switch node.op {
 	case invalid:
+		// If there's no operator we're evaluating a leaf term.
 		prefixMatch := false
 		if len(node.term.positions) > 0 && node.term.positions[0].weight == weightStar {
 			prefixMatch = true
@@ -59,12 +62,14 @@ func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 		}
 		return false, nil
 	case and:
+		// Match if both operands are true.
 		l, err := e.evalNode(node.l)
 		if err != nil || !l {
 			return false, err
 		}
 		return e.evalNode(node.r)
 	case or:
+		// Match if either operand is true.
 		l, err := e.evalNode(node.l)
 		if err != nil {
 			return false, err
@@ -74,38 +79,69 @@ func (e *tsEvaluator) evalNode(node *tsNode) (bool, error) {
 		}
 		return e.evalNode(node.r)
 	case not:
+		// Match if the operand is false.
 		ret, err := e.evalNode(node.l)
 		return !ret, err
 	case followedby:
+		// For followed-by queries, we recurse into the special followed-by handler.
+		// Then, we return true if there is at least one position at which the
+		// followed-by query matches.
 		positions, err := e.evalWithinFollowedBy(node)
 		return len(positions.positions) > 0, err
 	}
 	return false, errors.AssertionFailedf("invalid operator %d", node.op)
 }
 
-type tspositionset struct {
-	positions []tsposition
-	width     int
-	invert    bool
+// tsPositionSet keeps track of metadata for a followed-by match. It's used to
+// pass information about followed by queries during evaluation of them.
+type tsPositionSet struct {
+	// positions is the list of positions that the match is successful at (or,
+	// if invert is true, unsuccessful at).
+	positions []tsPosition
+	// width is the width of the match. This is important to track to deal with
+	// chained followed by queries with possibly different widths (<-> vs <2> etc).
+	// A match of a single term within a followed by has width 0.
+	width int
+	// invert, if true, indicates that this match should be inverted. It's used
+	// to handle followed by matches within not operators.
+	invert bool
 }
 
+// emitMode is a bitfield that controls the output of followed by matches.
 type emitMode int
 
 const (
+	// emitMatches causes evalFollowedBy to emit matches - positions at which
+	// the left argument is found separated from the right argument by the right
+	// width.
 	emitMatches emitMode = 1 << iota
+	// emitLeftUnmatched causes evalFollowedBy to emit places at which the left
+	// arm doesn't match.
 	emitLeftUnmatched
+	// emitRightUnmatched causes evalFollowedBy to emit places at which the right
+	// arm doesn't match.
 	emitRightUnmatched
 )
 
+// evalFollowedBy handles evaluating a followed by operator. It needs
+// information about the positions at which the left and right arms of the
+// followed by operator matches, as well as the offsets for each of the arms:
+// the number of lexemes apart each of the matches were.
+// the emitMode controls the output - see the comments on each of the emitMode
+// values for details.
+// This function is a little bit confusing, because it's operating on two
+// input position sets, and not directly on search terms. Its job is to do set
+// operations on the input sets, depending on emitMode - an intersection or
+// difference depending on the desired outcome by evalWithinFollowedBy.
 func (e *tsEvaluator) evalFollowedBy(
-	lPositions, rPositions tspositionset, lOffset, rOffset int, emitMode emitMode,
-) (tspositionset, error) {
+	lPositions, rPositions tsPositionSet, lOffset, rOffset int, emitMode emitMode,
+) (tsPositionSet, error) {
 	// Followed by makes sure that two terms are separated by exactly n words.
 	// First, find all slots that match for the left expression.
 
 	// Find the offsetted intersection of 2 sorted integer lists, using the
 	// followedN as the offset.
-	var ret tspositionset
+	var ret tsPositionSet
 	var lIdx, rIdx int
 	// Loop through the two sorted position lists, until the position on the
 	// right is as least as large as the position on the left.
@@ -139,18 +175,18 @@ func (e *tsEvaluator) evalFollowedBy(
 
 		if lPos < rPos {
 			if emitMode&emitLeftUnmatched > 0 {
-				ret.positions = append(ret.positions, tsposition{position: lPos})
+				ret.positions = append(ret.positions, tsPosition{position: lPos})
 			}
 			lIdx++
 		} else if lPos == rPos {
 			if emitMode&emitMatches > 0 {
-				ret.positions = append(ret.positions, tsposition{position: rPos})
+				ret.positions = append(ret.positions, tsPosition{position: rPos})
 			}
 			lIdx++
 			rIdx++
 		} else {
 			if emitMode&emitRightUnmatched > 0 {
-				ret.positions = append(ret.positions, tsposition{position: rPos})
+				ret.positions = append(ret.positions, tsPosition{position: rPos})
 			}
 			rIdx++
 		}
@@ -162,9 +198,10 @@ func (e *tsEvaluator) evalFollowedBy(
 // operator. Instead of just returning true or false, and possibly short
 // circuiting on boolean ops, we need to return all of the tspositions at which
 // each arm of the followed by expression matches.
-func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tspositionset, error) {
+func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tsPositionSet, error) {
 	switch node.op {
 	case invalid:
+		// We're evaluating a leaf (a term).
 		prefixMatch := false
 		if len(node.term.positions) > 0 && node.term.positions[0].weight == weightStar {
 			prefixMatch = true
@@ -177,9 +214,9 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tspositionset, error) 
 		})
 		if i >= len(e.v) {
 			// No match.
-			return tspositionset{}, nil
+			return tsPositionSet{}, nil
 		}
-		var ret []tsposition
+		var ret []tsPosition
 		if prefixMatch {
 			for j := i; j < len(e.v); j++ {
 				t := e.v[j]
@@ -189,22 +226,23 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tspositionset, error) 
 				ret = append(ret, t.positions...)
 			}
 			ret = sortAndUniqTSPositions(ret)
-			return tspositionset{positions: ret}, nil
+			return tsPositionSet{positions: ret}, nil
 		} else if e.v[i].lexeme != target {
 			// No match.
-			return tspositionset{}, nil
+			return tsPositionSet{}, nil
 		}
-		return tspositionset{positions: e.v[i].positions}, nil
+		// Return all of the positions at which the term is present.
+		return tsPositionSet{positions: e.v[i].positions}, nil
 	case or:
 		var lOffset, rOffset, width int
 
 		lPositions, err := e.evalWithinFollowedBy(node.l)
 		if err != nil {
-			return tspositionset{}, err
+			return tsPositionSet{}, err
 		}
 		rPositions, err := e.evalWithinFollowedBy(node.r)
 		if err != nil {
-			return tspositionset{}, err
+			return tsPositionSet{}, err
 		}
 
 		width = lPositions.width
@@ -236,7 +274,7 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tspositionset, error) 
 	case not:
 		ret, err := e.evalWithinFollowedBy(node.l)
 		if err != nil {
-			return tspositionset{}, err
+			return tsPositionSet{}, err
 		}
 		ret.invert = !ret.invert
 		return ret, nil
@@ -248,11 +286,11 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tspositionset, error) 
 
 		lPositions, err := e.evalWithinFollowedBy(node.l)
 		if err != nil {
-			return tspositionset{}, err
+			return tsPositionSet{}, err
 		}
 		rPositions, err := e.evalWithinFollowedBy(node.r)
 		if err != nil {
-			return tspositionset{}, err
+			return tsPositionSet{}, err
 		}
 		if node.op == followedby {
 			lOffset = node.followedN + rPositions.width
@@ -284,12 +322,12 @@ func (e *tsEvaluator) evalWithinFollowedBy(node *tsNode) (tspositionset, error) 
 		ret.width = width
 		return ret, err
 	}
-	return tspositionset{}, errors.AssertionFailedf("invalid operator %d", node.op)
+	return tsPositionSet{}, errors.AssertionFailedf("invalid operator %d", node.op)
 }
 
-// sortAndUniqTSPositions sorts and uniquifies the input tsposition list by
+// sortAndUniqTSPositions sorts and uniquifies the input tsPosition list by
 // their position attributes.
-func sortAndUniqTSPositions(pos []tsposition) []tsposition {
+func sortAndUniqTSPositions(pos []tsPosition) []tsPosition {
 	if len(pos) <= 1 {
 		return pos
 	}
