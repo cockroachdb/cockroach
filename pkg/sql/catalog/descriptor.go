@@ -941,6 +941,9 @@ type TableLookupFn func(descpb.ID) (TableDescriptor, error)
 // Descriptors is a sortable list of Descriptors.
 type Descriptors []Descriptor
 
+// ImplementCatalogDescriptorList implement descriptorlist.CatalogDescriptorList.
+func (d Descriptors) ImplementCatalogDescriptorList() {}
+
 func (d Descriptors) Len() int           { return len(d) }
 func (d Descriptors) Less(i, j int) bool { return d[i].GetID() < d[j].GetID() }
 func (d Descriptors) Swap(i, j int)      { d[i], d[j] = d[j], d[i] }

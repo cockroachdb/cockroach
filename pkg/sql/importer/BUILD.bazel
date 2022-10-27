@@ -58,6 +58,7 @@ go_library(
         "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descriptorlist",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/ingesting",
         "//pkg/sql/catalog/resolver",
