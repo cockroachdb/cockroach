@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/etcd/raft/v3"
@@ -329,6 +330,12 @@ func (r *Replica) WriteBytesPerSecond() float64 {
 func (r *Replica) ReadBytesPerSecond() float64 {
 	rbps, _ := r.loadStats.readBytes.AverageRatePerSecond()
 	return rbps
+}
+
+// RequestLocality returns counters representing the locality of requests to
+// this replica.
+func (r *Replica) RequestLocality() *replicastats.RatedSummary {
+	return r.loadStats.batchRequests.SnapshotRatedSummary()
 }
 
 func (r *Replica) needsSplitBySizeRLocked() bool {

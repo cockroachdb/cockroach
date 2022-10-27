@@ -10,6 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/allocator/state",
         "//pkg/kv/kvserver/constraint",
         "//pkg/roachpb",
         "//pkg/settings",

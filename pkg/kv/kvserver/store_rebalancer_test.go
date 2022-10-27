@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -435,7 +436,7 @@ type testRange struct {
 }
 
 func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
-	acc := rr.NewAccumulator()
+	acc := rr.NewAccumulator(state.QueriesDimension)
 	for i, r := range ranges {
 		rangeID := roachpb.RangeID(i + 1)
 		repl := &Replica{store: s, RangeID: rangeID}
@@ -467,13 +468,12 @@ func loadRanges(rr *ReplicaRankings, s *Store, ranges []testRange) {
 		// TODO(a-robinson): The below three lines won't be needed once the old
 		// rangeInfo code is ripped out of the allocator.
 		repl.mu.state.Stats = &enginepb.MVCCStats{}
-
 		repl.loadStats = NewReplicaLoad(s.Clock(), nil)
 		repl.loadStats.batchRequests.SetMeanRateForTesting(r.qps)
 
 		acc.AddReplica(candidateReplica{
 			Replica: repl,
-			qps:     r.qps,
+			usage:   RangeUsageInfoForRepl(repl),
 		})
 	}
 	rr.Update(acc)
@@ -792,11 +792,9 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 				},
 			)
 			rctx := sr.makeRebalanceContext(ctx)
-			rctx.options = &allocatorimpl.QPSScorerOptions{
-				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-				Deterministic:         false,
-				QPSRebalanceThreshold: qpsRebalanceThreshold,
-			}
+			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+			rctx.options.LoadThreshold = allocatorimpl.MakeQPSOnlyDim(qpsRebalanceThreshold)
+
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(ctx, rctx)
 			var rebalancedVoterStores, rebalancedNonVoterStores []roachpb.StoreID
 			for _, target := range voterTargets {
@@ -1124,11 +1122,10 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 				},
 			)
 			rctx := sr.makeRebalanceContext(ctx)
-			rctx.options = &allocatorimpl.QPSScorerOptions{
-				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthBlockRebalanceTo},
-				Deterministic:         true,
-				QPSRebalanceThreshold: 0.05,
-			}
+			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
+				EnforcementLevel: allocatorimpl.StoreHealthBlockRebalanceTo}
+			rctx.options.LoadThreshold = allocatorimpl.MakeQPSOnlyDim(0.05)
+
 			_, voterTargets, nonVoterTargets := sr.chooseRangeToRebalance(
 				ctx,
 				rctx,
@@ -1202,11 +1199,10 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{localDesc.StoreID}, qps: 100}})
 
 	rctx := sr.makeRebalanceContext(ctx)
-	rctx.options = &allocatorimpl.QPSScorerOptions{
-		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-		Deterministic:         true,
-		QPSRebalanceThreshold: 0.05,
-	}
+	rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
+		EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+	rctx.options.LoadThreshold = allocatorimpl.MakeQPSOnlyDim(0.05)
+
 	sr.chooseRangeToRebalance(ctx, rctx)
 	trace := finishAndGetRecording()
 	require.Regexpf(
@@ -1349,12 +1345,12 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 
 			s.cfg.DefaultSpanConfig.NumReplicas = int32(len(tc.voters))
 			loadRanges(rr, s, []testRange{{voters: tc.voters, qps: tc.QPS}})
+
 			rctx := sr.makeRebalanceContext(ctx)
-			rctx.options = &allocatorimpl.QPSScorerOptions{
-				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-				Deterministic:         true,
-				QPSRebalanceThreshold: tc.rebalanceThreshold,
-			}
+			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
+				EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+			rctx.options.LoadThreshold = allocatorimpl.MakeQPSOnlyDim(tc.rebalanceThreshold)
+
 			_, voterTargets, _ := sr.chooseRangeToRebalance(ctx, rctx)
 			require.Len(t, voterTargets, len(tc.expRebalancedVoters))
 
@@ -1451,11 +1447,10 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	// over it.
 	loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
 	rctx = sr.makeRebalanceContext(ctx)
-	rctx.options = &allocatorimpl.QPSScorerOptions{
-		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: allocatorimpl.StoreHealthNoAction},
-		Deterministic:         true,
-		QPSRebalanceThreshold: 0.05,
-	}
+	rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
+		EnforcementLevel: allocatorimpl.StoreHealthNoAction}
+	rctx.options.LoadThreshold = allocatorimpl.MakeQPSOnlyDim(0.05)
+
 	repl = rctx.hottestRanges[0]
 
 	_, targets, _ := sr.chooseRangeToRebalance(ctx, rctx)
@@ -1615,11 +1610,11 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			loadRanges(rr, s, []testRange{{voters: []roachpb.StoreID{1, 3, 5}, qps: 100}})
 
 			rctx := sr.makeRebalanceContext(ctx)
-			rctx.options = &allocatorimpl.QPSScorerOptions{
-				StoreHealthOptions:    allocatorimpl.StoreHealthOptions{EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold},
-				Deterministic:         true,
-				QPSRebalanceThreshold: 0.05,
-			}
+			require.Greater(t, len(rctx.hottestRanges), 0)
+
+			rctx.options.StoreHealthOptions = allocatorimpl.StoreHealthOptions{
+				EnforcementLevel: test.enforcement, L0SublevelThreshold: allocatorimpl.MaxL0SublevelThreshold}
+			rctx.options.LoadThreshold = allocatorimpl.MakeQPSOnlyDim(0.05)
 
 			_, targetVoters, _ := sr.chooseRangeToRebalance(ctx, rctx)
 			require.Equal(t, test.expectedTargets, targetVoters)

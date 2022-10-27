@@ -36,7 +36,7 @@ func TestHottestRanges(t *testing.T) {
 	}
 
 	qpsF := func(c kvserver.CandidateReplica) int {
-		return int(c.QPS())
+		return int(c.RangeUsageInfo().QueriesPerSecond)
 	}
 	ridF := func(c kvserver.CandidateReplica) int {
 		return int(c.GetRangeID())

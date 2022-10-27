@@ -2,41 +2,6 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "operator",
-    srcs = [
-        "controller.go",
-        "operation.go",
-        "pq.go",
-        "relocate_range.go",
-        "transfer_lease.go",
-    ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/operator",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/kv/kvserver",
-        "//pkg/kv/kvserver/allocator/allocatorimpl",
-        "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/state",
-        "//pkg/roachpb",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
-)
-
-go_test(
-    name = "operator_test",
-    srcs = ["controller_test.go"],
-    args = ["-test.timeout=295s"],
-    embed = [":operator"],
-    deps = [
-        "//pkg/kv/kvserver/allocator/allocatorimpl",
-        "//pkg/kv/kvserver/asim/config",
-        "//pkg/kv/kvserver/asim/state",
-        "//pkg/roachpb",
-        "@com_github_stretchr_testify//require",
-    ],
-)
-
-go_library(
     name = "op",
     srcs = [
         "controller.go",
@@ -49,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
@@ -63,6 +29,7 @@ go_test(
     args = ["-test.timeout=295s"],
     embed = [":op"],
     deps = [
+        "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",

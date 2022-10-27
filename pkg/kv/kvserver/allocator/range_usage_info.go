@@ -10,10 +10,35 @@
 
 package allocator
 
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
+)
+
 // RangeUsageInfo contains usage information (sizes and traffic) needed by the
 // allocator to make rebalancing decisions for a given range.
 type RangeUsageInfo struct {
 	LogicalBytes     int64
 	QueriesPerSecond float64
 	WritesPerSecond  float64
+	RequestLocality  *RangeRequestLocalityInfo
+}
+
+// RangeRequestLocalityInfo is the same as PerLocalityCounts and is used for
+// tracking the request counts from each unique locality. It tracks the
+// duration over which the request were recoreded.
+type RangeRequestLocalityInfo struct {
+	Counts   map[string]float64
+	Duration time.Duration
+}
+
+// Load returns a load dimension representation of the range usage.
+func (r RangeUsageInfo) Load() state.Load {
+	dims := state.StaticDimensionContainer{}
+	dims[state.RangeCountDimension] = float64(1)
+	dims[state.QueriesDimension] = r.QueriesPerSecond
+	dims[state.WriteKeysDimension] = r.WritesPerSecond
+	dims[state.StorageDimension] = float64(r.LogicalBytes)
+	return dims
 }

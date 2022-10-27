@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	astate "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
@@ -112,12 +113,14 @@ func newStoreRebalancerControl(
 
 }
 
-func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.QPSScorerOptions {
-	return &allocatorimpl.QPSScorerOptions{
-		StoreHealthOptions:    allocatorimpl.StoreHealthOptions{},
-		Deterministic:         true,
-		QPSRebalanceThreshold: src.settings.LBRebalanceQPSThreshold,
-		MinRequiredQPSDiff:    src.settings.LBMinRequiredQPSDiff,
+func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
+	return &allocatorimpl.LoadScorerOptions{
+		StoreHealthOptions:           allocatorimpl.StoreHealthOptions{},
+		Deterministic:                true,
+		LoadDims:                     []astate.LoadDimension{astate.QueriesDimension},
+		LoadThreshold:                allocatorimpl.MakeQPSOnlyDim(src.settings.LBRebalanceQPSThreshold),
+		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(astate.QueriesDimension),
+		MinRequiredRebalanceLoadDiff: allocatorimpl.MakeQPSOnlyDim(src.settings.LBMinRequiredQPSDiff),
 	}
 }
 
@@ -135,9 +138,10 @@ func (src *storeRebalancerControl) makeRebalanceContext(
 
 	return kvserver.NewRebalanceContext(
 		&localDesc,
+		astate.QueriesDimension,
 		options,
 		kvserver.LBRebalancingMode(src.settings.LBRebalancingMode),
-		allocatorimpl.OverfullQPSThreshold(options, allStoresList.CandidateQueriesPerSecond.Mean),
+		allocatorimpl.OverfullLoadThresholds(allStoresList.LoadMeans(), options.LoadThreshold, options.MinLoadThreshold),
 		allStoresList.ToMap(),
 		allStoresList,
 		hottestRanges(state, src.storeID),
@@ -240,7 +244,7 @@ func (src *storeRebalancerControl) applyLeaseRebalance(
 		candidateReplica.GetRangeID(),
 		candidateReplica.StoreID(),
 		target.StoreID,
-		candidateReplica.QPS(),
+		candidateReplica.RangeUsageInfo(),
 	)
 
 	// Dispatch the transfer and updating the pending transfer state.

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -505,7 +506,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 // UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
 // involved store descriptors immediately after a lease transfer.
 func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
-	from roachpb.StoreID, to roachpb.StoreID, rangeQPS float64,
+	from roachpb.StoreID, to roachpb.StoreID, rangeUsageInfo allocator.RangeUsageInfo,
 ) {
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
@@ -513,10 +514,10 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	fromDetail := *sp.GetStoreDetailLocked(from)
 	if fromDetail.Desc != nil {
 		fromDetail.Desc.Capacity.LeaseCount--
-		if fromDetail.Desc.Capacity.QueriesPerSecond < rangeQPS {
+		if fromDetail.Desc.Capacity.QueriesPerSecond < rangeUsageInfo.QueriesPerSecond {
 			fromDetail.Desc.Capacity.QueriesPerSecond = 0
 		} else {
-			fromDetail.Desc.Capacity.QueriesPerSecond -= rangeQPS
+			fromDetail.Desc.Capacity.QueriesPerSecond -= rangeUsageInfo.QueriesPerSecond
 		}
 		sp.DetailsMu.StoreDetails[from] = &fromDetail
 	}
@@ -524,7 +525,7 @@ func (sp *StorePool) UpdateLocalStoresAfterLeaseTransfer(
 	toDetail := *sp.GetStoreDetailLocked(to)
 	if toDetail.Desc != nil {
 		toDetail.Desc.Capacity.LeaseCount++
-		toDetail.Desc.Capacity.QueriesPerSecond += rangeQPS
+		toDetail.Desc.Capacity.QueriesPerSecond += rangeUsageInfo.QueriesPerSecond
 		sp.DetailsMu.StoreDetails[to] = &toDetail
 	}
 }
@@ -833,6 +834,17 @@ func (sl StoreList) ExcludeInvalid(constraints []roachpb.ConstraintsConjunction)
 		}
 	}
 	return MakeStoreList(filteredDescs)
+}
+
+// LoadMeans returns the mean for each load dimension tracked in the storelist.
+func (sl StoreList) LoadMeans() state.Load {
+	dims := state.StaticDimensionContainer{}
+	dims[state.RangeCountDimension] = sl.CandidateRanges.Mean
+	dims[state.LeaseCountDimension] = sl.CandidateLeases.Mean
+	dims[state.QueriesDimension] = sl.CandidateQueriesPerSecond.Mean
+	dims[state.WriteKeysDimension] = sl.candidateWritesPerSecond.Mean
+	dims[state.StorageDimension] = sl.candidateLogicalBytes.Mean
+	return dims
 }
 
 // ToMap returns the set of known stores as a map keyed by the store ID, with

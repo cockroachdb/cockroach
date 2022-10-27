@@ -36,6 +36,7 @@ go_library(
     deps = [
         "//pkg/geo/geopb",
         "//pkg/keysbase",
+        "//pkg/kv/kvserver/allocator/state",
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/storage/enginepb",
         "//pkg/util",

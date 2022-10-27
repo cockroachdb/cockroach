@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -47,7 +49,7 @@ func TestReplicaRankings(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		acc := rr.NewAccumulator()
+		acc := rr.NewAccumulator(state.QueriesDimension)
 
 		// Randomize the order of the inputs each time the test is run.
 		want := make([]float64, len(tc.replicasByQPS))
@@ -59,24 +61,24 @@ func TestReplicaRankings(t *testing.T) {
 		for i, replQPS := range tc.replicasByQPS {
 			acc.AddReplica(candidateReplica{
 				Replica: &Replica{RangeID: roachpb.RangeID(i)},
-				qps:     replQPS,
+				usage:   allocator.RangeUsageInfo{QueriesPerSecond: replQPS},
 			})
 		}
 		rr.Update(acc)
 
 		// Make sure we can read off all expected replicas in the correct order.
-		repls := rr.TopQPS()
+		repls := rr.TopLoad()
 		if len(repls) != len(want) {
 			t.Errorf("wrong number of replicas in output; got: %v; want: %v", repls, tc.replicasByQPS)
 			continue
 		}
 		for i := range want {
-			if repls[i].QPS() != want[i] {
-				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].QPS(), i, want, tc.replicasByQPS)
+			if repls[i].RangeUsageInfo().QueriesPerSecond != want[i] {
+				t.Errorf("got %f for %d'th element; want %f (input: %v)", repls[i].RangeUsageInfo().QueriesPerSecond, i, want, tc.replicasByQPS)
 				break
 			}
 		}
-		replsCopy := rr.TopQPS()
+		replsCopy := rr.TopLoad()
 		if !reflect.DeepEqual(repls, replsCopy) {
 			t.Errorf("got different replicas on second call to topQPS; first call: %v, second call: %v", repls, replsCopy)
 		}

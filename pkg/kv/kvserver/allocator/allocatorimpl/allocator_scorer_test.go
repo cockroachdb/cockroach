@@ -1559,9 +1559,7 @@ func TestRebalanceBalanceScoreOnQPS(t *testing.T) {
 	storeList := storepool.StoreList{
 		CandidateQueriesPerSecond: storepool.Stat{Mean: 1000},
 	}
-	options := QPSScorerOptions{
-		QPSRebalanceThreshold: 0.1,
-	}
+	options := TestingQPSLoadScorerOptions(0, 0.1)
 
 	testCases := []struct {
 		QPS             float64
