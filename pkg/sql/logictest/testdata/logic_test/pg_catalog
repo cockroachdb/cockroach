@@ -312,7 +312,8 @@ pg_catalog.pg_namespace  CREATE TABLE pg_catalog.pg_namespace (
                            oid OID NULL,
                            nspname NAME NOT NULL,
                            nspowner OID NULL,
-                           nspacl STRING[] NULL
+                           nspacl STRING[] NULL,
+                           INDEX pg_namespace_oid_idx (oid ASC) STORING (nspname, nspowner, nspacl)
                          )
 
 query TTBTTTB colnames
@@ -2593,7 +2594,7 @@ objoid      classoid    objsubid  description
 4294967098  4294967123  0         pg_largeobject_metadata was created for compatibility and is currently unimplemented
 4294967096  4294967123  0         locks held by active processes (empty - feature does not exist)
 4294967095  4294967123  0         available materialized views (empty - feature does not exist)
-4294967094  4294967123  0         available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
+4294967094  4294967123  0         available namespaces
 4294967093  4294967123  0         opclass (empty - Operator classes not supported yet)
 4294967092  4294967123  0         operators (incomplete)
 4294967091  4294967123  0         pg_opfamily was created for compatibility and is currently unimplemented
