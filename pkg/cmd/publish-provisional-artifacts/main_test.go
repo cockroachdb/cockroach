@@ -369,23 +369,25 @@ func TestBless(t *testing.T) {
 			expectedGets: nil,
 			expectedPuts: []string{
 				"s3://binaries.cockroachdb.com/cockroach-latest.linux-amd64.tgz/no-cache " +
-					"REDIRECT cockroach-v0.0.1.linux-amd64.tgz",
+					"REDIRECT /cockroach-v0.0.1.linux-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.linux-amd64.tgz.sha256sum/no-cache " +
-					"REDIRECT cockroach-v0.0.1.linux-amd64.tgz.sha256sum",
+					"REDIRECT /cockroach-v0.0.1.linux-amd64.tgz.sha256sum",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz/no-cache " +
-					"REDIRECT cockroach-v0.0.1.darwin-10.9-amd64.tgz",
+					"REDIRECT /cockroach-v0.0.1.darwin-10.9-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz.sha256sum/no-cache " +
-					"REDIRECT cockroach-v0.0.1.darwin-10.9-amd64.tgz.sha256sum",
+					"REDIRECT /cockroach-v0.0.1.darwin-10.9-amd64.tgz.sha256sum",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-11.0-aarch64.unsigned.tgz/no-cache " +
-					"REDIRECT cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz",
+					"REDIRECT /cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-11.0-aarch64.unsigned.tgz.sha256sum/no-cache " +
-					"REDIRECT cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz.sha256sum",
+					"REDIRECT /cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz.sha256sum",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip/no-cache " +
-					"REDIRECT cockroach-v0.0.1.windows-6.2-amd64.zip",
+					"REDIRECT /cockroach-v0.0.1.windows-6.2-amd64.zip",
 				"s3://binaries.cockroachdb.com/cockroach-latest.windows-6.2-amd64.zip.sha256sum/no-cache " +
-					"REDIRECT cockroach-v0.0.1.windows-6.2-amd64.zip.sha256sum",
-				"s3://binaries.cockroachdb.com/cockroach-latest.linux-3.7.10-gnu-aarch64.tgz/no-cache REDIRECT cockroach-v0.0.1.linux-3.7.10-gnu-aarch64.tgz",
-				"s3://binaries.cockroachdb.com/cockroach-latest.linux-3.7.10-gnu-aarch64.tgz.sha256sum/no-cache REDIRECT cockroach-v0.0.1.linux-3.7.10-gnu-aarch64.tgz.sha256sum",
+					"REDIRECT /cockroach-v0.0.1.windows-6.2-amd64.zip.sha256sum",
+				"s3://binaries.cockroachdb.com/cockroach-latest.linux-3.7.10-gnu-aarch64.tgz/no-cache " +
+					"REDIRECT /cockroach-v0.0.1.linux-3.7.10-gnu-aarch64.tgz",
+				"s3://binaries.cockroachdb.com/cockroach-latest.linux-3.7.10-gnu-aarch64.tgz.sha256sum/no-cache " +
+					"REDIRECT /cockroach-v0.0.1.linux-3.7.10-gnu-aarch64.tgz.sha256sum",
 			},
 		},
 	}
