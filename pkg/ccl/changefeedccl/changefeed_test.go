@@ -121,7 +121,6 @@ func TestChangefeedReplanning(t *testing.T) {
 	}
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-
 		ctx := context.Background()
 
 		numNodes := 3
@@ -172,7 +171,7 @@ func TestChangefeedReplanning(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY);`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (0);`)
 
-		feedFactory := makeKafkaFeedFactoryForCluster(tc, db)
+		feedFactory := makeKafkaFeedFactory(tc, db)
 
 		cf := feed(t, feedFactory, "CREATE CHANGEFEED FOR d.foo")
 		defer closeFeed(t, cf)
@@ -1081,7 +1080,7 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 		// Check that dropping a watched column still stops the changefeed.
 		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
 		if _, err := cf.Next(); !testutils.IsError(err, `schema change occurred at`) {
-			t.Errorf(`expected "schema change occurred at ..." got: %+v`, err.Error())
+			require.Regexp(t, `expected "schema change occurred at ..." got: %+v`, err)
 		}
 	}
 
@@ -2769,7 +2768,7 @@ func TestChangefeedRestartMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactoryForCluster(cluster, db)
+	f := makeKafkaFeedFactory(cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH updated")
 	defer closeFeed(t, feed)
 	assertPayloadsStripTs(t, feed, []string{
@@ -2827,7 +2826,7 @@ func TestChangefeedStopPolicyMultiNode(t *testing.T) {
 	db = cluster.ServerConn(feedServerID)
 	sqlDB = sqlutils.MakeSQLRunner(db)
 
-	f := makeKafkaFeedFactoryForCluster(cluster, db)
+	f := makeKafkaFeedFactory(cluster, db)
 	feed := feed(t, f, "CREATE CHANGEFEED FOR test_tab WITH schema_change_policy='stop'")
 	defer closeFeed(t, feed)
 	sqlDB.Exec(t, `INSERT INTO test_tab VALUES (1)`)
@@ -2943,7 +2942,7 @@ func TestChangefeedRBRAvroAddRegion(t *testing.T) {
 	cluster, db, cleanup := startTestCluster(t)
 	defer cleanup()
 
-	f := makeKafkaFeedFactoryForCluster(cluster, db)
+	f := makeKafkaFeedFactory(cluster, db)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `CREATE TABLE rbr (a INT PRIMARY KEY)`)
 	waitForSchemaChange(t, sqlDB, `ALTER TABLE rbr SET LOCALITY REGIONAL BY ROW`)
@@ -3753,8 +3752,10 @@ func TestChangefeedDataTTL(t *testing.T) {
 			}
 		}()
 		go func() {
-			changefeed := feed(t, f, "CREATE CHANGEFEED FOR TABLE foo")
-			changefeedInit <- changefeed
+			feed, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo")
+			if err == nil {
+				changefeedInit <- feed
+			}
 			close(changefeedInit)
 		}()
 
@@ -3776,6 +3777,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		atomic.StoreInt32(&shouldWait, 0)
 		resume <- struct{}{}
 		dataExpiredRows = <-changefeedInit
+		require.NotNil(t, dataExpiredRows)
 
 		// Verify that, at some point, Next() returns a "must
 		// be after replica GC threshold" error. In the common
@@ -5352,7 +5354,7 @@ func TestChangefeedRestartDuringBackfill(t *testing.T) {
 		require.NoError(t, feedJob.Pause())
 
 		// Make extra sure that the zombie changefeed can't write any more data.
-		beforeEmitRowCh <- changefeedbase.MarkRetryableError(errors.New(`nope don't write it`))
+		beforeEmitRowCh <- errors.New(`nope don't write it`)
 
 		// Insert some data that we should only see out of the changefeed after it
 		// re-runs the backfill.
@@ -5475,6 +5477,127 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 		`foo: [9]->{"after": {"k": 9, "v": 1}}`,
 		`foo: [10]->{"after": {"k": 10, "v": 0}}`,
 	})
+}
+
+func TestChangefeedPropagatesTerminalError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	opts := makeOptions()
+	defer addCloudStorageOptions(t, &opts)()
+	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
+
+	const numNodes = 3
+	perServerKnobs := make(map[int]base.TestServerArgs, numNodes)
+	for i := 0; i < numNodes; i++ {
+		perServerKnobs[i] = base.TestServerArgs{
+			// Test uses SPLIT AT, which isn't currently supported for
+			// secondary tenants. Tracked with #76378.
+			DisableDefaultTestTenant: true,
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					DrainFast:  true,
+					Changefeed: &TestingKnobs{},
+				},
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+			ExternalIODir: opts.externalIODir,
+			UseDatabase:   "d",
+		}
+	}
+
+	tc := serverutils.StartNewTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ServerArgsPerNode: perServerKnobs,
+			ReplicationMode:   base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(context.Background())
+
+	{
+		db := tc.ServerConn(1)
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		serverutils.SetClusterSetting(t, tc, "kv.rangefeed.enabled", true)
+
+		sqlDB.ExecMultiple(t,
+			`CREATE DATABASE d;`,
+			`CREATE TABLE foo (k INT PRIMARY KEY);`,
+			`INSERT INTO foo (k) SELECT * FROM generate_series(1, 1000);`,
+			`ALTER TABLE foo SPLIT AT (SELECT * FROM generate_series(1, 1000, 50));`,
+		)
+		for i := 1; i <= 1000; i += 50 {
+			sqlDB.ExecSucceedsSoon(t, "ALTER TABLE foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[$1], $2)", 1+(i%numNodes), i)
+		}
+	}
+	// changefeed coordinator will run on this node.
+	const coordinatorID = 0
+
+	testFn := func(t *testing.T, nodesToFail []int, opts feedTestOptions) {
+		for _, n := range nodesToFail {
+			// Configure changefeed to emit fatal error on the specified nodes.
+			distSQLKnobs := perServerKnobs[n].Knobs.DistSQL.(*execinfra.TestingKnobs)
+			var numEmitted int32
+			distSQLKnobs.Changefeed.(*TestingKnobs).BeforeEmitRow = func(ctx context.Context) error {
+				// Emit few rows before returning an error.
+				if atomic.AddInt32(&numEmitted, 1) > 10 {
+					err := errors.Newf("synthetic fatal error from node %d", n)
+					log.Errorf(ctx, "BeforeEmitRow returning error %s", err)
+					return err
+				}
+				return nil
+			}
+		}
+
+		defer func() {
+			// Reset all changefeed knobs.
+			for i := 0; i < numNodes; i++ {
+				perServerKnobs[i].Knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+			}
+		}()
+
+		sinkType := randomSinkTypeWithOptions(opts)
+		f, closeSink := makeFeedFactoryWithOptions(t, sinkType, tc, tc.ServerConn(coordinatorID), opts)
+		defer closeSink()
+		feed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+		defer closeFeed(t, feed)
+
+		// We don't know if we picked enterprise or core feed; regardless, consuming
+		// from feed should eventually return an error.
+		var feedErr error
+		for feedErr == nil {
+			_, feedErr = feed.Next()
+		}
+		log.Errorf(context.Background(), "feedErr=%s", feedErr)
+		require.Regexp(t, "synthetic fatal error", feedErr)
+
+		// enterprise feeds should also have the job marked failed.
+		if jobFeed, ok := feed.(cdctest.EnterpriseTestFeed); ok {
+			require.NoError(t, jobFeed.WaitForStatus(func(s jobs.Status) bool { return s == jobs.StatusFailed }))
+		}
+	}
+
+	for _, tc := range []struct {
+		name        string
+		nodesToFail []int
+		opts        feedTestOptions
+	}{
+		{
+			name:        "coordinator",
+			nodesToFail: []int{coordinatorID},
+			opts:        opts,
+		},
+		{
+			name:        "aggregator",
+			nodesToFail: []int{2},
+			opts:        opts.omitSinks("sinkless"), // Sinkless run on coordinator only.
+		},
+		{
+			name:        "many aggregators",
+			nodesToFail: []int{0, 2},
+			opts:        opts.omitSinks("sinkless"), // Sinkless run on coordinator only.
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) { testFn(t, tc.nodesToFail, tc.opts) })
+	}
 }
 
 // Primary key changes are supported by changefeeds starting in 21.1. This tests
@@ -5990,7 +6113,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 		knobs.RaiseRetryableError = func() error {
 			emittedCount++
 			if emittedCount%200 == 0 {
-				return changefeedbase.MarkRetryableError(errors.New("test transient error"))
+				return errors.New("test transient error")
 			}
 			return nil
 		}
@@ -6098,9 +6221,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if status != "retryable error: retryable changefeed error: 500 Internal Server Error: " {
-				return errors.Errorf("expected retryable error: retryable changefeed error: 500 Internal Server Error:, got: %v", status)
-			}
+			require.Regexp(t, "500 Internal Server Error", status)
 			return nil
 		})
 

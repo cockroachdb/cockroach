@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Shopify/sarama"
@@ -371,7 +372,7 @@ func (f *jobFeed) Details() (*jobspb.ChangefeedDetails, error) {
 	if err := f.db.QueryRow(
 		`SELECT payload FROM system.jobs WHERE id=$1`, f.jobID,
 	).Scan(&payloadBytes); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "Details for job %d", f.jobID)
 	}
 	var payload jobspb.Payload
 	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
@@ -386,7 +387,7 @@ func (f *jobFeed) HighWaterMark() (hlc.Timestamp, error) {
 	if err := f.db.QueryRow(
 		`SELECT progress FROM system.jobs WHERE id=$1`, f.jobID,
 	).Scan(&details); err != nil {
-		return hlc.Timestamp{}, err
+		return hlc.Timestamp{}, errors.Wrapf(err, "HighWaterMark for job %d", f.jobID)
 	}
 	var progress jobspb.Progress
 	if err := protoutil.Unmarshal(details, &progress); err != nil {
@@ -417,10 +418,12 @@ func (f *jobFeed) TickHighWaterMark(minHWM hlc.Timestamp) error {
 // FetchTerminalJobErr retrieves the error message from changefeed job.
 func (f *jobFeed) FetchTerminalJobErr() error {
 	var errStr string
-	if err := f.db.QueryRow(
-		`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
-	).Scan(&errStr); err != nil {
-		return err
+	if err := testutils.SucceedsSoonError(func() error {
+		return f.db.QueryRow(
+			`SELECT error FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
+		).Scan(&errStr)
+	}); err != nil {
+		return errors.Wrapf(err, "FetchTerminalJobErr for job %d", f.jobID)
 	}
 
 	if errStr != "" {
@@ -434,7 +437,7 @@ func (f *jobFeed) FetchRunningStatus() (runningStatusStr string, err error) {
 	if err = f.db.QueryRow(
 		`SELECT running_status FROM [SHOW JOBS] WHERE job_id=$1`, f.jobID,
 	).Scan(&runningStatusStr); err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "FetchRunningStatus for job %d", f.jobID)
 	}
 	return runningStatusStr, err
 }
@@ -692,7 +695,7 @@ func (e enterpriseFeedFactory) startFeedJob(f *jobFeed, create string, args ...i
 	e.di.prepareJob(f)
 	if err := e.db.QueryRow(create, args...).Scan(&f.jobID); err != nil {
 		e.di.pendingJob = nil
-		return err
+		return errors.Wrapf(err, "failed to start feed for job %d", f.jobID)
 	}
 	e.di.startJob(f)
 	return nil
@@ -705,15 +708,32 @@ type tableFeedFactory struct {
 	uri url.URL
 }
 
+func getInjectables(srvOrCluster interface{}) (serverutils.TestTenantInterface, []feedInjectable) {
+	switch t := srvOrCluster.(type) {
+	case serverutils.TestTenantInterface:
+		t.PGServer()
+		return t, []feedInjectable{t}
+	case serverutils.TestClusterInterface:
+		servers := make([]feedInjectable, t.NumServers())
+		for i := range servers {
+			servers[i] = t.Server(i)
+		}
+		return t.Server(0), servers
+	default:
+		panic(errors.AssertionFailedf("unexpected type %T", t))
+	}
+}
+
 // makeTableFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeTableFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB, sink url.URL,
+	srvOrCluster interface{}, db *gosql.DB, sink url.URL,
 ) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &tableFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
-			di: newDepInjector(srv),
+			s:  s,
+			di: newDepInjector(injectables...),
 			db: db,
 		},
 		uri: sink,
@@ -809,12 +829,20 @@ func (c *tableFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return toSend, nil
 		}
 
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-c.ss.eventReady():
-		case <-c.shutdown:
-			return nil, c.terminalJobError()
+		if err := contextutil.RunWithTimeout(
+			context.Background(), "tableFeed.Next", timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-c.ss.eventReady():
+					return nil
+				case <-c.shutdown:
+					return c.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 
 		var toSend []*cdctest.TestFeedMessage
@@ -882,21 +910,27 @@ func (c *tableFeed) Close() error {
 
 var cloudFeedFileRE = regexp.MustCompile(`^\d{33}-(.+?)-(\d+)-(\d+)-([0-9a-fA-F]{8})-(.+?)-`)
 
+var feedIdx int32
+
+func feedSubDir() string {
+	return strconv.Itoa(int(atomic.AddInt32(&feedIdx, 1)))
+}
+
 type cloudFeedFactory struct {
 	enterpriseFeedFactory
-	dir     string
-	feedIdx int
+	dir string
 }
 
 // makeCloudFeedFactory returns a TestFeedFactory implementation using the cloud
 // storage uri.
 func makeCloudFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB, dir string,
+	srvOrCluster interface{}, db *gosql.DB, dir string,
 ) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &cloudFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
-			di: newDepInjector(srv),
+			s:  s,
+			di: newDepInjector(injectables...),
 			db: db,
 		},
 		dir: dir,
@@ -957,8 +991,7 @@ func (f *cloudFeedFactory) Feed(
 		)
 	}
 
-	feedDir := strconv.Itoa(f.feedIdx)
-	f.feedIdx++
+	feedDir := feedSubDir()
 	sinkURI := `experimental-nodelocal://0/` + feedDir
 	// TODO(dan): This is a pretty unsatisfying way to test that the uri passes
 	// through params it doesn't understand to ExternalStorage.
@@ -968,7 +1001,7 @@ func (f *cloudFeedFactory) Feed(
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
 	feedDir = filepath.Join(f.dir, feedDir)
-	if err := os.Mkdir(feedDir, 0755); err != nil {
+	if err := os.Mkdir(feedDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, err
 	}
 
@@ -1301,12 +1334,20 @@ func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return e, nil
 		}
 
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-c.ss.eventReady():
-		case <-c.shutdown:
-			return nil, c.terminalJobError()
+		if err := contextutil.RunWithTimeout(
+			context.Background(), "cloudFeed.Next", timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-c.ss.eventReady():
+					return nil
+				case <-c.shutdown:
+					return c.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 
 		if err := filepath.Walk(c.dir, c.walkDir); err != nil {
@@ -1591,33 +1632,14 @@ type kafkaFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*kafkaFeedFactory)(nil)
 
 // makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
-func makeKafkaFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
+func makeKafkaFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &kafkaFeedFactory{
 		knobs: &sinkKnobs{},
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
+			s:  s,
 			db: db,
-			di: newDepInjector(srv),
-		},
-	}
-}
-
-// makeKafkaFeedFactoryForCluster returns a TestFeedFactory
-// implementation using the `kafka` uri.
-func makeKafkaFeedFactoryForCluster(
-	c serverutils.TestClusterInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
-	servers := make([]feedInjectable, c.NumServers())
-	for i := 0; i < c.NumServers(); i++ {
-		servers[i] = c.Server(i)
-	}
-	return &kafkaFeedFactory{
-		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  c.Server(0),
-			db: db,
-			di: newDepInjector(servers...),
+			di: newDepInjector(injectables...),
 		},
 	}
 }
@@ -1729,12 +1751,20 @@ func (k *kafkaFeed) Partitions() []string {
 func (k *kafkaFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		var msg *sarama.ProducerMessage
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-k.shutdown:
-			return nil, k.terminalJobError()
-		case msg = <-k.source:
+		if err := contextutil.RunWithTimeout(
+			context.Background(), "kafka.Next", timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-k.shutdown:
+					return k.terminalJobError()
+				case msg = <-k.source:
+					return nil
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 
 		fm := &cdctest.TestFeedMessage{
@@ -1802,15 +1832,14 @@ type webhookFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
 
 // makeWebhookFeedFactory returns a TestFeedFactory implementation using the `webhook-webhooks` uri.
-func makeWebhookFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
+func makeWebhookFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	useSecure := rand.Float32() < 0.5
 	return &webhookFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
+			s:  s,
 			db: db,
-			di: newDepInjector(srv),
+			di: newDepInjector(injectables...),
 		},
 		useSecureServer: useSecure,
 	}
@@ -2006,13 +2035,22 @@ func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 			return m, nil
 		}
 
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-f.ss.eventReady():
-		case <-f.mockSink.NotifyMessage():
-		case <-f.shutdown:
-			return nil, f.terminalJobError()
+		if err := contextutil.RunWithTimeout(
+			context.Background(), "webhook.Next", timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-f.ss.eventReady():
+					return nil
+				case <-f.mockSink.NotifyMessage():
+					return nil
+				case <-f.shutdown:
+					return f.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 	}
 }
@@ -2114,14 +2152,13 @@ type pubsubFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
 
 // makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
-func makePubsubFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
+func makePubsubFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &pubsubFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
+			s:  s,
 			db: db,
-			di: newDepInjector(srv),
+			di: newDepInjector(injectables...),
 		},
 	}
 }
@@ -2252,12 +2289,21 @@ func (p *pubsubFeed) Next() (*cdctest.TestFeedMessage, error) {
 
 			return m, nil
 		}
-		select {
-		case <-time.After(timeout()):
-			return nil, &contextutil.TimeoutError{}
-		case <-p.ss.eventReady():
-		case <-p.shutdown:
-			return nil, p.terminalJobError()
+
+		if err := contextutil.RunWithTimeout(
+			context.Background(), "pubsub.Next", timeout(),
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-p.ss.eventReady():
+					return nil
+				case <-p.shutdown:
+					return p.terminalJobError()
+				}
+			},
+		); err != nil {
+			return nil, err
 		}
 	}
 }
