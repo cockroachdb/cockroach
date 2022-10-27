@@ -62,13 +62,14 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created     time.Time
-	codec       io.WriteCloser
-	rawSize     int
-	numMessages int
-	buf         bytes.Buffer
-	alloc       kvevent.Alloc
-	oldestMVCC  hlc.Timestamp
+	created      time.Time
+	codec        io.WriteCloser
+	rawSize      int
+	numMessages  int
+	buf          bytes.Buffer
+	alloc        kvevent.Alloc
+	oldestMVCC   hlc.Timestamp
+	parquetCodec *parquetFileWriter
 }
 
 var _ io.Writer = &cloudStorageSinkFile{}
@@ -419,6 +420,9 @@ func makeCloudStorageSink(
 		// would require a bit of refactoring.
 		s.ext = `.csv`
 		s.rowDelimiter = []byte{'\n'}
+	case changefeedbase.OptFormatParquet:
+		s.ext = `.parquet`
+		s.rowDelimiter = nil
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptFormat, encodingOpts.Format)
@@ -441,7 +445,9 @@ func makeCloudStorageSink(
 			return nil, err
 		}
 		s.compression = algo
-		s.ext = s.ext + ext
+		if encodingOpts.Format != changefeedbase.OptFormatParquet {
+			s.ext = s.ext + ext
+		}
 	}
 
 	// We make the external storage with a nil IOAccountingInterceptor since we
@@ -454,6 +460,18 @@ func makeCloudStorageSink(
 	} else {
 		s.metrics = (*sliMetrics)(nil)
 	}
+
+	if encodingOpts.Format == changefeedbase.OptFormatParquet {
+		parquetSinkWithEncoder, err := makeParquetCloudStorageSink(s)
+		if err != nil {
+			return nil, err
+		}
+		// For parquet, we will always use the compression internally supported by
+		// parquet codec.
+		s.compression = ""
+		return parquetSinkWithEncoder, nil
+	}
+
 	return s, nil
 }
 
@@ -663,6 +681,12 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 	}
 	s.asyncFlushActive = asyncFlushEnabled
 
+	if file.parquetCodec != nil {
+		if err := file.parquetCodec.parquetWriter.Close(); err != nil {
+			return err
+		}
+		file.rawSize = len(file.buf.Bytes())
+	}
 	// We use this monotonically increasing fileID to ensure correct ordering
 	// among files emitted at the same timestamp during the same job session.
 	fileID := s.fileID

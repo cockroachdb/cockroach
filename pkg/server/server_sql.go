@@ -90,8 +90,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
@@ -164,7 +163,8 @@ type SQLServer struct {
 	// tenants.
 	sqlLivenessSessionID           sqlliveness.SessionID
 	sqlLivenessProvider            sqlliveness.Provider
-	sqlInstanceProvider            sqlinstance.Provider
+	sqlInstanceReader              *instancestorage.Reader
+	sqlInstanceStorage             *instancestorage.Storage
 	metricsRegistry                *metric.Registry
 	diagnosticsReporter            *diagnostics.Reporter
 	spanconfigMgr                  *spanconfigmanager.Manager
@@ -316,7 +316,10 @@ type sqlServerArgs struct {
 	sqlLivenessProvider sqlliveness.Provider
 
 	// Stores and manages sql instance information.
-	sqlInstanceProvider sqlinstance.Provider
+	sqlInstanceReader *instancestorage.Reader
+	// Low-level access to the system.sql_instances table, used for allocating
+	// this server's instance ID.
+	sqlInstanceStorage *instancestorage.Storage
 
 	// The protected timestamps KV subsystem depends on this, so we pass a
 	// pointer to an empty struct in this configuration, which newSQLServer
@@ -453,11 +456,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// If the node id is already populated, we only need to create a placeholder
 	// instance provider without initializing the instance, since this is not a
 	// SQL pod server.
-	_, isNotSQLPod := cfg.nodeIDContainer.OptionalNodeID()
+	_, isMixedSQLAndKVNode := cfg.nodeIDContainer.OptionalNodeID()
+	isSQLPod := !isMixedSQLAndKVNode
 
 	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
 	var sessionEventsConsumer slinstance.SessionEventListener
-	if !isNotSQLPod {
+	if isSQLPod {
 		// For SQL pods, we want the process to shutdown when the session liveness
 		// record is found to be deleted. This is because, if the session is
 		// deleted, the instance ID used by this server may have been stolen by
@@ -471,30 +475,22 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs, sessionEventsConsumer,
 	)
 
-	if isNotSQLPod {
-		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
-	} else {
-		// The advertised address it not known yet at this point. It will only get
-		// known during PreStart(). We delay its access.
-		getAdvertiseAddr := func() string {
-			if cfg.BaseConfig.AdvertiseAddr == "" {
-				log.Fatal(ctx, "programming error: usage of advertised addr before listeners have started")
-			}
-			return cfg.BaseConfig.AdvertiseAddr
+	if isSQLPod {
+		if codec.ForSystemTenant() {
+			return nil, errors.AssertionFailedf("non-system codec used for SQL pod")
 		}
-		cfg.sqlInstanceProvider = instanceprovider.New(
-			cfg.stopper, cfg.db, codec, cfg.sqlLivenessProvider, getAdvertiseAddr, cfg.Locality, cfg.rangeFeedFactory, cfg.clock,
-		)
-	}
 
-	if !codec.ForSystemTenant() {
+		cfg.sqlInstanceStorage = instancestorage.NewStorage(cfg.db, codec, cfg.sqlLivenessProvider)
+		cfg.sqlInstanceReader = instancestorage.NewReader(
+			cfg.sqlInstanceStorage,
+			cfg.sqlLivenessProvider.CachedReader(),
+			cfg.rangeFeedFactory,
+			codec, cfg.clock, cfg.stopper)
+
 		// In a multi-tenant environment, use the sqlInstanceProvider to resolve
 		// SQL pod addresses.
 		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, error) {
-			if cfg.sqlInstanceProvider == nil {
-				return nil, errors.Errorf("no sqlInstanceProvider")
-			}
-			info, err := cfg.sqlInstanceProvider.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
+			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
 				return nil, errors.Wrapf(err, "unable to look up descriptor for nsql%d", nodeID)
 			}
@@ -502,6 +498,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 		cfg.podNodeDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 	} else {
+		if !codec.ForSystemTenant() {
+			return nil, errors.AssertionFailedf("system codec used for SQL-only node")
+		}
 		cfg.podNodeDialer = cfg.nodeDialer
 	}
 
@@ -861,7 +860,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.nodeDialer.ConnHealthTryDial,
 			cfg.podNodeDialer,
 			codec,
-			cfg.sqlInstanceProvider,
+			cfg.sqlInstanceReader,
 			cfg.clock,
 		),
 
@@ -1214,7 +1213,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sqlMemMetrics:                     sqlMemMetrics,
 		stmtDiagnosticsRegistry:           stmtDiagnosticsRegistry,
 		sqlLivenessProvider:               cfg.sqlLivenessProvider,
-		sqlInstanceProvider:               cfg.sqlInstanceProvider,
+		sqlInstanceStorage:                cfg.sqlInstanceStorage,
+		sqlInstanceReader:                 cfg.sqlInstanceReader,
 		metricsRegistry:                   cfg.registry,
 		diagnosticsReporter:               reporter,
 		spanconfigMgr:                     spanConfig.manager,
@@ -1231,11 +1231,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 // Checks if tenant exists. This function does a very superficial check to see if the system db
 // has been bootstrapped for the tenant. This is not a complete check and is only sufficient
 // to be used in the dev environment.
-func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB) error {
+func checkTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB) error {
 	if codec.ForSystemTenant() {
-		// Skip check for system tenant and return early.
-		return nil
+		return errors.AssertionFailedf("asked to check for tenant but system codec specified")
 	}
+
 	key := catalogkeys.MakeDatabaseNameKey(codec, systemschema.SystemDatabaseName)
 	result, err := db.Get(ctx, key)
 	if err != nil {
@@ -1250,45 +1250,10 @@ func maybeCheckTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB)
 	return nil
 }
 
-func (s *SQLServer) startSQLLivenessAndInstanceProviders(ctx context.Context) error {
-	// If necessary, start the tenant proxy first, to ensure all other
-	// components can properly route to KV nodes. The Start method will block
-	// until a connection is established to the cluster and its ID has been
-	// determined.
-	if s.tenantConnect != nil {
-		if err := s.tenantConnect.Start(ctx); err != nil {
-			return err
-		}
-	}
-	s.sqlLivenessProvider.Start(ctx)
-	// sqlInstanceProvider must always be started after sqlLivenessProvider
-	// as sqlInstanceProvider relies on the session initialized and maintained by
-	// sqlLivenessProvider.
-	if err := s.sqlInstanceProvider.Start(ctx); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *SQLServer) setInstanceID(ctx context.Context) error {
-	if _, ok := s.sqlIDContainer.OptionalNodeID(); ok {
-		// sqlIDContainer has already been initialized with a node ID,
-		// we don't need to initialize a SQL instance ID in this case
-		// as this is not a SQL pod server.
-		return nil
-	}
-	instanceID, sessionID, err := s.sqlInstanceProvider.Instance(ctx)
-	if err != nil {
-		return err
-	}
-	// TODO(andrei): Release the instance ID on server shutdown. It is not trivial
-	// to determine where/when exactly to do that, though. Doing it after stopper
-	// quiescing doesn't work. Doing it too soon, for example as part of draining,
-	// is potentially dangerous because the server will continue to use the
-	// instance ID for a while.
-
-	err = s.sqlIDContainer.SetSQLInstanceID(ctx, instanceID)
-	if err != nil {
+func (s *SQLServer) setInstanceID(
+	ctx context.Context, instanceID base.SQLInstanceID, sessionID sqlliveness.SessionID,
+) error {
+	if err := s.sqlIDContainer.SetSQLInstanceID(ctx, instanceID); err != nil {
 		return err
 	}
 	s.execCfg.DistSQLPlanner.SetGatewaySQLInstanceID(instanceID)
@@ -1304,21 +1269,62 @@ func (s *SQLServer) preStart(
 	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-	// The sqlliveness and sqlinstance subsystem should be started first to ensure
-	// the instance ID is initialized prior to any other systems that need it.
-	if err := s.startSQLLivenessAndInstanceProviders(ctx); err != nil {
-		return err
+
+	// If necessary, start the tenant proxy first, to ensure all other
+	// components can properly route to KV nodes. The Start method will block
+	// until a connection is established to the cluster and its ID has been
+	// determined.
+	if s.tenantConnect != nil {
+		if err := s.tenantConnect.Start(ctx); err != nil {
+			return err
+		}
+		// Confirm tenant exists prior to initialization. This is a sanity
+		// check for the dev environment to ensure that a tenant has been
+		// successfully created before attempting to initialize a SQL
+		// server for it.
+		if err := checkTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
+			return err
+		}
 	}
-	// Confirm tenant exists prior to initialization. This is a sanity
-	// check for the dev environment to ensure that a tenant has been
-	// successfully created before attempting to initialize a SQL
-	// server for it.
-	if err := maybeCheckTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
-		return err
+
+	// Start the sql liveness subsystem. We'll need it to get a session.
+	s.sqlLivenessProvider.Start(ctx)
+
+	_, isMixedSQLAndKVNode := s.sqlIDContainer.OptionalNodeID()
+	isTenant := !isMixedSQLAndKVNode
+
+	if isTenant {
+		session, err := s.sqlLivenessProvider.Session(ctx)
+		if err != nil {
+			return err
+		}
+		// Allocate our instance ID.
+		instanceID, err := s.sqlInstanceStorage.CreateInstance(
+			ctx, session.ID(), session.Expiration(), s.cfg.AdvertiseAddr, s.distSQLServer.Locality)
+		if err != nil {
+			return err
+		}
+		// TODO(andrei): Release the instance ID on server shutdown. It is not trivial
+		// to determine where/when exactly to do that, though. Doing it after stopper
+		// quiescing doesn't work. Doing it too soon, for example as part of draining,
+		// is potentially dangerous because the server will continue to use the
+		// instance ID for a while.
+
+		// Hand the instance ID to everybody who needs it, unless the sqlIDContainer
+		// has already been initialized with a node ID. IN that case we don't need to
+		// initialize a SQL instance ID in this case as this is not a SQL pod server.
+		if err := s.setInstanceID(ctx, instanceID, session.ID()); err != nil {
+			return err
+		}
+		// Start the instance provider. This needs to come after we've allocated our
+		// instance ID because the instances reader needs to see our own instance;
+		// we might be the only SQL server available, and if the reader doesn't see
+		// it, we'd be unable to plan any queries.
+		if err := s.sqlInstanceReader.Start(ctx); err != nil {
+			return err
+		}
 	}
-	if err := s.setInstanceID(ctx); err != nil {
-		return err
-	}
+
 	s.connManager = connManager
 	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)

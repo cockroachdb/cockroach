@@ -325,7 +325,7 @@ func startConnExecutor(
 			nil, /* connHealthCheckerSystem */
 			nil, /* podNodeDialer */
 			keys.SystemSQLCodec,
-			nil, /* sqlInstanceProvider */
+			nil, /* sqlAddressResolver */
 			clock,
 		),
 		QueryCache:              querycache.New(0),

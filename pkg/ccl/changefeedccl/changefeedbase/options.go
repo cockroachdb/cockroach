@@ -141,9 +141,10 @@ const (
 	OptEnvelopeWrapped       EnvelopeType = `wrapped`
 	OptEnvelopeBare          EnvelopeType = `bare`
 
-	OptFormatJSON FormatType = `json`
-	OptFormatAvro FormatType = `avro`
-	OptFormatCSV  FormatType = `csv`
+	OptFormatJSON    FormatType = `json`
+	OptFormatAvro    FormatType = `avro`
+	OptFormatCSV     FormatType = `csv`
+	OptFormatParquet FormatType = `parquet`
 
 	OptOnErrorFail  OnErrorType = `fail`
 	OptOnErrorPause OnErrorType = `pause`
@@ -289,7 +290,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptCursor:                   timestampOption,
 	OptEndTime:                  timestampOption,
 	OptEnvelope:                 enum("row", "key_only", "wrapped", "deprecated_row", "bare"),
-	OptFormat:                   enum("json", "avro", "csv", "experimental_avro"),
+	OptFormat:                   enum("json", "avro", "csv", "experimental_avro", "parquet"),
 	OptFullTableName:            flagOption,
 	OptKeyInValue:               flagOption,
 	OptTopicInValue:             flagOption,
@@ -710,7 +711,7 @@ func (e EncodingOptions) Validate() error {
 			OptEnvelope, OptEnvelopeRow, OptFormat, OptFormatAvro,
 		)
 	}
-	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON {
+	if e.Envelope != OptEnvelopeWrapped && e.Format != OptFormatJSON && e.Format != OptFormatParquet {
 		requiresWrap := []struct {
 			k string
 			b bool
@@ -916,15 +917,27 @@ func (s StatementOptions) ValidateForCreateChangefeed() error {
 	if err != nil {
 		return err
 	}
-	if scanType == OnlyInitialScan {
+	validateInitialScanUnsupportedOptions := func(errMsg string) error {
 		for o := range InitialScanOnlyUnsupportedOptions {
 			if _, ok := s.m[o]; ok {
-				return errors.Newf(`cannot specify both %s and %s`, OptInitialScanOnly, o)
+				return errors.Newf(`cannot specify both %s and %s`, errMsg, o)
 			}
+		}
+		return nil
+	}
+	if scanType == OnlyInitialScan {
+		if err := validateInitialScanUnsupportedOptions(OptInitialScanOnly); err != nil {
+			return err
 		}
 	} else {
 		if s.m[OptFormat] == string(OptFormatCSV) {
 			return errors.Newf(`%s=%s is only usable with %s`, OptFormat, OptFormatCSV, OptInitialScanOnly)
+		}
+	}
+	// Right now parquet does not support any of these options
+	if s.m[OptFormat] == string(OptFormatParquet) {
+		if err := validateInitialScanUnsupportedOptions(string(OptFormatParquet)); err != nil {
+			return err
 		}
 	}
 	return nil
