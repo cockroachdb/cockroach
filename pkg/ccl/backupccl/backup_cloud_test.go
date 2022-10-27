@@ -122,9 +122,9 @@ func setupS3URI(
 func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	bucket := os.Getenv("GS_BUCKET")
+	bucket := os.Getenv("GOOGLE_BUCKET")
 	if bucket == "" {
-		skip.IgnoreLint(t, "GS_BUCKET env var must be set")
+		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
 	}
 
 	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
