@@ -11,46 +11,33 @@
 package insights
 
 import (
-	"context"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/cache"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // This registry is the central object in the insights subsystem. It observes
 // statement execution to determine which statements are outliers and
-// exposes the set of currently retained insights.
+// writes insights into the provided sink.
 type lockingRegistry struct {
-	detector detector
-	causes   *causes
-
-	// Note that this single mutex places unnecessary constraints on outlier
-	// detection and reporting. We will develop a higher-throughput system
-	// before enabling the insights subsystem by default.
-	mu struct {
-		syncutil.RWMutex
-		statements map[clusterunique.ID]*statementBuf
-		insights   *cache.OrderedCache
-	}
+	statements map[clusterunique.ID]*statementBuf
+	detector   detector
+	causes     *causes
+	sink       sink
 }
 
 var _ Writer = &lockingRegistry{}
-var _ Reader = &lockingRegistry{}
 
 func (r *lockingRegistry) ObserveStatement(sessionID clusterunique.ID, statement *Statement) {
 	if !r.enabled() {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	b, ok := r.mu.statements[sessionID]
+	b, ok := r.statements[sessionID]
 	if !ok {
 		b = statementsBufPool.Get().(*statementBuf)
-		r.mu.statements[sessionID] = b
+		r.statements[sessionID] = b
 	}
 	b.append(statement)
 }
@@ -75,17 +62,12 @@ var statementsBufPool = sync.Pool{
 	},
 }
 
-var insightPool = sync.Pool{
-	New: func() interface{} {
-		return new(Insight)
-	},
-}
-
 func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transaction *Transaction) {
 	if !r.enabled() {
 		return
 	}
-	statements := r.popSessionStatements(sessionID)
+	statements := r.statements[sessionID]
+	delete(r.statements, sessionID)
 	defer statements.release()
 
 	var slowStatements util.FastIntSet
@@ -100,12 +82,7 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	// Note that we'll record insights for every statement, not just for
 	// the slow ones.
 	for i, s := range *statements {
-		insight := insightPool.Get().(*Insight)
-		*insight = Insight{
-			Session:     Session{ID: sessionID},
-			Transaction: transaction,
-			Statement:   s,
-		}
+		insight := makeInsight(sessionID, transaction, s)
 		if slowStatements.Contains(i) {
 			switch s.Status {
 			case Statement_Completed:
@@ -117,19 +94,8 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 				insight.Problem = Problem_FailedExecution
 			}
 		}
-		r.addInsight(s.ID, insight)
+		r.sink.AddInsight(insight)
 	}
-}
-
-func (r *lockingRegistry) IterateInsights(
-	ctx context.Context, visitor func(context.Context, *Insight),
-) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	r.mu.insights.Do(func(_, v interface{}) bool {
-		visitor(ctx, v.(*Insight))
-		return false
-	})
 }
 
 // TODO(todd):
@@ -142,38 +108,11 @@ func (r *lockingRegistry) enabled() bool {
 	return r.detector.enabled()
 }
 
-func (r *lockingRegistry) popSessionStatements(sessionID clusterunique.ID) *statementBuf {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	statements := r.mu.statements[sessionID]
-	delete(r.mu.statements, sessionID)
-	return statements
-}
-
-func (r *lockingRegistry) addInsight(id clusterunique.ID, insight *Insight) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.mu.insights.Add(id, insight)
-}
-
-func newRegistry(st *cluster.Settings, detector detector) *lockingRegistry {
-	config := cache.Config{
-		Policy: cache.CacheFIFO,
-		ShouldEvict: func(size int, key, value interface{}) bool {
-			return int64(size) > ExecutionInsightsCapacity.Get(&st.SV)
-		},
-		OnEvicted: func(_, value interface{}) {
-			insight := value.(*Insight)
-			insight.Causes = insight.Causes[:0]
-			*insight = Insight{Causes: insight.Causes}
-			insightPool.Put(insight)
-		},
+func newRegistry(st *cluster.Settings, detector detector, sink sink) *lockingRegistry {
+	return &lockingRegistry{
+		statements: make(map[clusterunique.ID]*statementBuf),
+		detector:   detector,
+		causes:     &causes{st: st},
+		sink:       sink,
 	}
-	r := &lockingRegistry{
-		detector: detector,
-		causes:   &causes{st: st},
-	}
-	r.mu.statements = make(map[clusterunique.ID]*statementBuf)
-	r.mu.insights = cache.NewOrderedCache(config)
-	return r
 }
