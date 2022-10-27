@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 )
 
 // GlobalPrivilege represents privileges granted via
@@ -42,7 +42,7 @@ var GlobalPrivilegeObject = &GlobalPrivilege{}
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (p *GlobalPrivilege) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
+	ctx context.Context, planner evalinterfaces.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	return planner.SynthesizePrivilegeDescriptor(ctx, p.GetPath(), p.GetObjectType())
 }

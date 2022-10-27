@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -443,9 +444,9 @@ func internalExtendedEvalCtx(
 	evalContextTestingKnobs := execCfg.EvalContextTestingKnobs
 
 	var indexUsageStats *idxusage.LocalIndexUsageStats
-	var sqlStatsController eval.SQLStatsController
-	var schemaTelemetryController eval.SchemaTelemetryController
-	var indexUsageStatsController eval.IndexUsageStatsController
+	var sqlStatsController evalinterfaces.SQLStatsController
+	var schemaTelemetryController evalinterfaces.SchemaTelemetryController
+	var indexUsageStatsController evalinterfaces.IndexUsageStatsController
 	if execCfg.InternalExecutor != nil {
 		if execCfg.InternalExecutor.s != nil {
 			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
@@ -735,10 +736,10 @@ func (p *planner) QueryIteratorEx(
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
-) (eval.InternalRows, error) {
+) (evalinterfaces.InternalRows, error) {
 	ie := initInternalExecutor(ctx, p)
 	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
-	return rows.(eval.InternalRows), err
+	return rows.(evalinterfaces.InternalRows), err
 }
 
 // QueryBufferedEx executes the supplied SQL statement and returns the resulting

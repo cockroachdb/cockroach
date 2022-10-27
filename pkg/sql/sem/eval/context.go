@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -108,7 +109,7 @@ type Context struct {
 	// timestamps, so that each FROM clause can have its own
 	// timestamp. In that case, the timestamp would not be set
 	// globally for the entire txn and this field would not be needed.
-	AsOfSystemTime *AsOfSystemTime
+	AsOfSystemTime *evalinterfaces.AsOfSystemTime
 
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
@@ -136,29 +137,29 @@ type Context struct {
 	// from Context is under way.
 	deprecatedContext context.Context
 
-	Planner Planner
+	Planner evalinterfaces.Planner
 
 	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
 	JobExecContext interface{}
 
-	PrivilegedAccessor PrivilegedAccessor
+	PrivilegedAccessor evalinterfaces.PrivilegedAccessor
 
-	SessionAccessor SessionAccessor
+	SessionAccessor evalinterfaces.SessionAccessor
 
-	ClientNoticeSender ClientNoticeSender
+	ClientNoticeSender evalinterfaces.ClientNoticeSender
 
-	Sequence SequenceOperators
+	Sequence evalinterfaces.SequenceOperators
 
-	Tenant TenantOperator
+	Tenant evalinterfaces.TenantOperator
 
 	// Regions stores information about regions.
-	Regions RegionOperator
+	Regions evalinterfaces.RegionOperator
 
-	JoinTokenCreator JoinTokenCreator
+	JoinTokenCreator evalinterfaces.JoinTokenCreator
 
-	Gossip GossipOperator
+	Gossip evalinterfaces.GossipOperator
 
-	PreparedStatementState PreparedStatementState
+	PreparedStatementState evalinterfaces.PreparedStatementState
 
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
@@ -196,18 +197,18 @@ type Context struct {
 
 	SQLLivenessReader sqlliveness.Reader
 
-	SQLStatsController SQLStatsController
+	SQLStatsController evalinterfaces.SQLStatsController
 
-	SchemaTelemetryController SchemaTelemetryController
+	SchemaTelemetryController evalinterfaces.SchemaTelemetryController
 
-	IndexUsageStatsController IndexUsageStatsController
+	IndexUsageStatsController evalinterfaces.IndexUsageStatsController
 
 	// CompactEngineSpan is used to force compaction of a span in a store.
-	CompactEngineSpan CompactEngineSpanFunc
+	CompactEngineSpan evalinterfaces.CompactEngineSpanFunc
 
 	// SetCompactionConcurrency is used to change the compaction concurrency of
 	// a store.
-	SetCompactionConcurrency SetCompactionConcurrencyFunc
+	SetCompactionConcurrency evalinterfaces.SetCompactionConcurrencyFunc
 
 	// KVStoresIterator is used by various crdb_internal builtins to directly
 	// access stores on this node.
@@ -223,11 +224,11 @@ type Context struct {
 	// StmtDiagnosticsRequestInserter is used by the
 	// crdb_internal.request_statement_bundle builtin to insert a statement
 	// bundle request.
-	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
+	StmtDiagnosticsRequestInserter evalinterfaces.StmtDiagnosticsRequestInsertFunc
 
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.
-	CatalogBuiltins CatalogBuiltins
+	CatalogBuiltins evalinterfaces.CatalogBuiltins
 
 	// QueryCancelKey is the key used by the pgwire protocol to cancel the
 	// query currently running in this session.
@@ -239,7 +240,7 @@ type Context struct {
 	RangeStatsFetcher RangeStatsFetcher
 
 	// ChangefeedState stores the state (progress) of core changefeeds.
-	ChangefeedState ChangefeedState
+	ChangefeedState evalinterfaces.ChangefeedState
 }
 
 // DescIDGenerator generates unique descriptor IDs.
@@ -343,7 +344,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 }
 
 type fakePlannerWithMonitor struct {
-	Planner
+	evalinterfaces.Planner
 	monitor *mon.BytesMonitor
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -331,7 +332,7 @@ var strOrOidTypes = []*types.T{types.String, types.Oid}
 func makePGPrivilegeInquiryDef(
 	infoDetail string,
 	objSpecArgs argTypeOpts,
-	fn func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error),
+	fn func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error),
 ) builtinDefinition {
 	// Collect the different argument type variations.
 	//
@@ -412,11 +413,11 @@ func makePGPrivilegeInquiryDef(
 					return nil, err
 				}
 				switch ret {
-				case eval.HasPrivilege:
+				case evalinterfaces.HasPrivilege:
 					return tree.DBoolTrue, nil
-				case eval.HasNoPrivilege:
+				case evalinterfaces.HasNoPrivilege:
 					return tree.DBoolFalse, nil
-				case eval.ObjectNotFound:
+				case evalinterfaces.ObjectNotFound:
 					return tree.DNull, nil
 				default:
 					panic(fmt.Sprintf("unrecognized HasAnyPrivilegeResult %d", ret))
@@ -1349,11 +1350,11 @@ SELECT description
 	"has_any_column_privilege": makePGPrivilegeInquiryDef(
 		"any column of table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			tableArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1367,7 +1368,7 @@ SELECT description
 				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
@@ -1376,12 +1377,12 @@ SELECT description
 	"has_column_privilege": makePGPrivilegeInquiryDef(
 		"column",
 		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			tableArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			colArg := eval.UnwrapDatum(ctx, evalCtx, args[1])
 			specifier, err := columnHasPrivilegeSpecifier(tableArg, colArg)
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[2], privMap{
@@ -1395,7 +1396,7 @@ SELECT description
 				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
@@ -1404,12 +1405,12 @@ SELECT description
 	"has_database_privilege": makePGPrivilegeInquiryDef(
 		"database",
 		argTypeOpts{{"database", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 
 			databaseArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := databaseHasPrivilegeSpecifier(databaseArg)
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1423,7 +1424,7 @@ SELECT description
 				"TEMP WITH GRANT OPTION":      {Kind: privilege.CREATE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
@@ -1433,17 +1434,17 @@ SELECT description
 	"has_foreign_data_wrapper_privilege": makePGPrivilegeInquiryDef(
 		"foreign-data wrapper",
 		argTypeOpts{{"fdw", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			fdwArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			fdw, err := getNameForArg(ctx, evalCtx, fdwArg, "pg_foreign_data_wrapper", "fdwname")
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			retNull := false
 			if fdw == "" {
 				switch fdwArg.(type) {
 				case *tree.DString:
-					return eval.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
+					return evalinterfaces.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"foreign-data wrapper %s does not exist", fdwArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching foreign data wrapper is found
@@ -1457,21 +1458,21 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			if retNull {
-				return eval.ObjectNotFound, nil
+				return evalinterfaces.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges for all foreign-data wrappers.
 			_ = privs
-			return eval.HasPrivilege, nil
+			return evalinterfaces.HasPrivilege, nil
 		},
 	),
 
 	"has_function_privilege": makePGPrivilegeInquiryDef(
 		"function",
 		argTypeOpts{{"function", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			oidArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			// When specifying a function by a text string rather than by OID,
 			// the allowed input is the same as for the regprocedure data type.
@@ -1481,7 +1482,7 @@ SELECT description
 				var err error
 				oid, err = eval.ParseDOid(ctx, evalCtx, string(*t), types.RegProcedure)
 				if err != nil {
-					return eval.HasNoPrivilege, err
+					return evalinterfaces.HasNoPrivilege, err
 				}
 			case *tree.DOid:
 				oid = t
@@ -1491,18 +1492,18 @@ SELECT description
 			_, _, err := evalCtx.Planner.ResolveFunctionByOID(ctx, oid.(*tree.DOid).Oid)
 			if err != nil {
 				if errors.Is(err, tree.ErrFunctionUndefined) {
-					return eval.ObjectNotFound, nil
+					return evalinterfaces.ObjectNotFound, nil
 				}
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
-			specifier := eval.HasPrivilegeSpecifier{FunctionOID: &oid.(*tree.DOid).Oid}
+			specifier := evalinterfaces.HasPrivilegeSpecifier{FunctionOID: &oid.(*tree.DOid).Oid}
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				"EXECUTE":                   {Kind: privilege.EXECUTE},
 				"EXECUTE WITH GRANT OPTION": {Kind: privilege.EXECUTE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			// For user-defined function, utilize the descriptor based way.
@@ -1514,27 +1515,27 @@ SELECT description
 			// no one can grant on them.
 			for _, priv := range privs {
 				if !priv.GrantOption {
-					return eval.HasPrivilege, nil
+					return evalinterfaces.HasPrivilege, nil
 				}
 			}
-			return eval.HasNoPrivilege, nil
+			return evalinterfaces.HasNoPrivilege, nil
 		},
 	),
 
 	"has_language_privilege": makePGPrivilegeInquiryDef(
 		"language",
 		argTypeOpts{{"language", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			langArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			lang, err := getNameForArg(ctx, evalCtx, langArg, "pg_language", "lanname")
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			retNull := false
 			if lang == "" {
 				switch langArg.(type) {
 				case *tree.DString:
-					return eval.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
+					return evalinterfaces.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"language %s does not exist", langArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching language is found
@@ -1548,26 +1549,26 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			if retNull {
-				return eval.ObjectNotFound, nil
+				return evalinterfaces.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges for all languages.
 			_ = privs
-			return eval.HasPrivilege, nil
+			return evalinterfaces.HasPrivilege, nil
 		},
 	),
 
 	"has_schema_privilege": makePGPrivilegeInquiryDef(
 		"schema",
 		argTypeOpts{{"schema", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			schemaArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			databaseName := evalCtx.SessionData().Database
 			specifier, err := schemaHasPrivilegeSpecifier(ctx, evalCtx, schemaArg, databaseName)
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1577,11 +1578,11 @@ SELECT description
 				"USAGE WITH GRANT OPTION":  {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			if len(databaseName) == 0 {
 				// If no database is set, return NULL.
-				return eval.ObjectNotFound, nil
+				return evalinterfaces.ObjectNotFound, nil
 			}
 
 			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
@@ -1591,11 +1592,11 @@ SELECT description
 	"has_sequence_privilege": makePGPrivilegeInquiryDef(
 		"sequence",
 		argTypeOpts{{"sequence", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			seqArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(seqArg, true /* isSequence */)
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			privs, err := parsePrivilegeStr(args[1], privMap{
 				// Sequences and other table objects cannot be given a USAGE privilege,
@@ -1608,7 +1609,7 @@ SELECT description
 				"UPDATE WITH GRANT OPTION": {Kind: privilege.UPDATE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasPrivilege, err
+				return evalinterfaces.HasPrivilege, err
 			}
 			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
@@ -1617,17 +1618,17 @@ SELECT description
 	"has_server_privilege": makePGPrivilegeInquiryDef(
 		"foreign server",
 		argTypeOpts{{"server", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			serverArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			server, err := getNameForArg(ctx, evalCtx, serverArg, "pg_foreign_server", "srvname")
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			retNull := false
 			if server == "" {
 				switch serverArg.(type) {
 				case *tree.DString:
-					return eval.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
+					return evalinterfaces.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"server %s does not exist", serverArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching foreign server is found when
@@ -1641,25 +1642,25 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			if retNull {
-				return eval.ObjectNotFound, nil
+				return evalinterfaces.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges for all foreign servers.
 			_ = privs
-			return eval.HasPrivilege, nil
+			return evalinterfaces.HasPrivilege, nil
 		},
 	),
 
 	"has_table_privilege": makePGPrivilegeInquiryDef(
 		"table",
 		argTypeOpts{{"table", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			tableArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 
 			privs, err := parsePrivilegeStr(args[1], privMap{
@@ -1681,7 +1682,7 @@ SELECT description
 				"RULE WITH GRANT OPTION":       {Kind: privilege.RULE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			return evalCtx.Planner.HasAnyPrivilege(ctx, specifier, user, privs)
 		},
@@ -1690,17 +1691,17 @@ SELECT description
 	"has_tablespace_privilege": makePGPrivilegeInquiryDef(
 		"tablespace",
 		argTypeOpts{{"tablespace", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			tablespaceArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			tablespace, err := getNameForArg(ctx, evalCtx, tablespaceArg, "pg_tablespace", "spcname")
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			retNull := false
 			if tablespace == "" {
 				switch tablespaceArg.(type) {
 				case *tree.DString:
-					return eval.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
+					return evalinterfaces.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"tablespace %s does not exist", tablespaceArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching tablespace is found when given
@@ -1714,21 +1715,21 @@ SELECT description
 				"CREATE WITH GRANT OPTION": {Kind: privilege.CREATE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			if retNull {
-				return eval.ObjectNotFound, nil
+				return evalinterfaces.ObjectNotFound, nil
 			}
 			// All users have CREATE privileges in all tablespaces.
 			_ = privs
-			return eval.HasPrivilege, nil
+			return evalinterfaces.HasPrivilege, nil
 		},
 	),
 
 	"has_type_privilege": makePGPrivilegeInquiryDef(
 		"type",
 		argTypeOpts{{"type", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			oidArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			// When specifying a type by a text string rather than by OID, the
 			// allowed input is the same as for the regtype data type.
@@ -1738,7 +1739,7 @@ SELECT description
 				var err error
 				oid, err = eval.ParseDOid(ctx, evalCtx, string(*t), types.RegType)
 				if err != nil {
-					return eval.HasNoPrivilege, err
+					return evalinterfaces.HasNoPrivilege, err
 				}
 			case *tree.DOid:
 				oid = t
@@ -1746,7 +1747,7 @@ SELECT description
 
 			typ, err := getNameForArg(ctx, evalCtx, oid, "pg_type", "typname")
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			retNull := false
 			if typ == "" {
@@ -1760,25 +1761,25 @@ SELECT description
 				"USAGE WITH GRANT OPTION": {Kind: privilege.USAGE, GrantOption: true},
 			})
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			if retNull {
-				return eval.ObjectNotFound, nil
+				return evalinterfaces.ObjectNotFound, nil
 			}
 			// All users have USAGE privileges to all types.
 			_ = privs
-			return eval.HasPrivilege, nil
+			return evalinterfaces.HasPrivilege, nil
 		},
 	),
 
 	"pg_has_role": makePGPrivilegeInquiryDef(
 		"role",
 		argTypeOpts{{"role", strOrOidTypes}},
-		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (evalinterfaces.HasAnyPrivilegeResult, error) {
 			roleArg := eval.UnwrapDatum(ctx, evalCtx, args[0])
 			roleS, err := getNameForArg(ctx, evalCtx, roleArg, "pg_roles", "rolname")
 			if err != nil {
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 			// Note: the username in pg_roles is already normalized, so we can safely
 			// turn it into a SQLUsername without re-normalization.
@@ -1786,18 +1787,18 @@ SELECT description
 			if role.Undefined() {
 				switch roleArg.(type) {
 				case *tree.DString:
-					return eval.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
+					return evalinterfaces.HasNoPrivilege, pgerror.Newf(pgcode.UndefinedObject,
 						"role %s does not exist", roleArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching role is found when given an
 					// OID.
-					return eval.ObjectNotFound, nil
+					return evalinterfaces.ObjectNotFound, nil
 				}
 			}
 
 			privStrs := normalizePrivilegeStr(args[1])
 			for _, privStr := range privStrs {
-				var hasAnyPrivilegeResult eval.HasAnyPrivilegeResult
+				var hasAnyPrivilegeResult evalinterfaces.HasAnyPrivilegeResult
 				var err error
 				switch privStr {
 				case "USAGE":
@@ -1811,17 +1812,17 @@ SELECT description
 					"MEMBER WITH ADMIN OPTION":
 					hasAnyPrivilegeResult, err = isAdminOfRole(ctx, evalCtx, user, role)
 				default:
-					return eval.HasNoPrivilege, pgerror.Newf(pgcode.InvalidParameterValue,
+					return evalinterfaces.HasNoPrivilege, pgerror.Newf(pgcode.InvalidParameterValue,
 						"unrecognized privilege type: %q", privStr)
 				}
 				if err != nil {
-					return eval.HasNoPrivilege, err
+					return evalinterfaces.HasNoPrivilege, err
 				}
-				if hasAnyPrivilegeResult == eval.HasPrivilege {
+				if hasAnyPrivilegeResult == evalinterfaces.HasPrivilege {
 					return hasAnyPrivilegeResult, nil
 				}
 			}
-			return eval.HasNoPrivilege, nil
+			return evalinterfaces.HasNoPrivilege, nil
 		},
 	),
 
@@ -2243,8 +2244,10 @@ SELECT description
 	return r[0], nil
 }
 
-func databaseHasPrivilegeSpecifier(databaseArg tree.Datum) (eval.HasPrivilegeSpecifier, error) {
-	var specifier eval.HasPrivilegeSpecifier
+func databaseHasPrivilegeSpecifier(
+	databaseArg tree.Datum,
+) (evalinterfaces.HasPrivilegeSpecifier, error) {
+	var specifier evalinterfaces.HasPrivilegeSpecifier
 	switch t := databaseArg.(type) {
 	case *tree.DString:
 		s := string(*t)
@@ -2262,8 +2265,8 @@ func databaseHasPrivilegeSpecifier(databaseArg tree.Datum) (eval.HasPrivilegeSpe
 // the given table.
 func tableHasPrivilegeSpecifier(
 	tableArg tree.Datum, isSequence bool,
-) (eval.HasPrivilegeSpecifier, error) {
-	specifier := eval.HasPrivilegeSpecifier{
+) (evalinterfaces.HasPrivilegeSpecifier, error) {
+	specifier := evalinterfaces.HasPrivilegeSpecifier{
 		IsSequence: &isSequence,
 	}
 	switch t := tableArg.(type) {
@@ -2282,7 +2285,7 @@ func tableHasPrivilegeSpecifier(
 // Note that we only verify the column exists for has_column_privilege.
 func columnHasPrivilegeSpecifier(
 	tableArg tree.Datum, colArg tree.Datum,
-) (eval.HasPrivilegeSpecifier, error) {
+) (evalinterfaces.HasPrivilegeSpecifier, error) {
 	specifier, err := tableHasPrivilegeSpecifier(tableArg, false /* isSequence */)
 	if err != nil {
 		return specifier, err
@@ -2302,8 +2305,8 @@ func columnHasPrivilegeSpecifier(
 
 func schemaHasPrivilegeSpecifier(
 	ctx context.Context, evalCtx *eval.Context, schemaArg tree.Datum, databaseName string,
-) (eval.HasPrivilegeSpecifier, error) {
-	specifier := eval.HasPrivilegeSpecifier{
+) (evalinterfaces.HasPrivilegeSpecifier, error) {
+	specifier := evalinterfaces.HasPrivilegeSpecifier{
 		SchemaDatabaseName: &databaseName,
 	}
 	var schemaIsRequired bool
@@ -2387,7 +2390,7 @@ func pgTrueTypImpl(attrField, typField string, retType *types.T) builtinDefiniti
 // See https://github.com/cockroachdb/cockroach/issues/69583.
 func hasPrivsOfRole(
 	ctx context.Context, evalCtx *eval.Context, user, role username.SQLUsername,
-) (eval.HasAnyPrivilegeResult, error) {
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
 	return isMemberOfRole(ctx, evalCtx, user, role)
 }
 
@@ -2397,28 +2400,28 @@ func hasPrivsOfRole(
 // This is defined to recurse through roles regardless of rolinherit.
 func isMemberOfRole(
 	ctx context.Context, evalCtx *eval.Context, user, role username.SQLUsername,
-) (eval.HasAnyPrivilegeResult, error) {
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
 	// Fast path for simple case.
 	if user == role {
-		return eval.HasPrivilege, nil
+		return evalinterfaces.HasPrivilege, nil
 	}
 
 	// Superusers have every privilege and are part of every role.
 	if isSuper, err := evalCtx.Planner.UserHasAdminRole(ctx, user); err != nil {
-		return eval.HasNoPrivilege, err
+		return evalinterfaces.HasNoPrivilege, err
 	} else if isSuper {
-		return eval.HasPrivilege, nil
+		return evalinterfaces.HasPrivilege, nil
 	}
 
 	allRoleMemberships, err := evalCtx.Planner.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
-		return eval.HasNoPrivilege, err
+		return evalinterfaces.HasNoPrivilege, err
 	}
 	_, member := allRoleMemberships[role]
 	if member {
-		return eval.HasPrivilege, nil
+		return evalinterfaces.HasPrivilege, nil
 	}
-	return eval.HasNoPrivilege, nil
+	return evalinterfaces.HasNoPrivilege, nil
 }
 
 // isAdminOfRole returns whether the user is an admin of the specified role.
@@ -2427,14 +2430,14 @@ func isMemberOfRole(
 // member (directly or indirectly) WITH ADMIN OPTION, or a superuser?
 func isAdminOfRole(
 	ctx context.Context, evalCtx *eval.Context, user, role username.SQLUsername,
-) (eval.HasAnyPrivilegeResult, error) {
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
 	// Superusers are an admin of every role.
 	//
 	// NB: this is intentionally before the user == role check here.
 	if isSuper, err := evalCtx.Planner.UserHasAdminRole(ctx, user); err != nil {
-		return eval.HasNoPrivilege, err
+		return evalinterfaces.HasNoPrivilege, err
 	} else if isSuper {
-		return eval.HasPrivilege, nil
+		return evalinterfaces.HasPrivilege, nil
 	}
 
 	// Fast path for simple case.
@@ -2472,17 +2475,17 @@ func isAdminOfRole(
 		// for compatibility, we just need to check whether the user matches the
 		// session user.
 		if isSessionUser := user == evalCtx.SessionData().SessionUser(); isSessionUser {
-			return eval.HasPrivilege, nil
+			return evalinterfaces.HasPrivilege, nil
 		}
-		return eval.HasNoPrivilege, nil
+		return evalinterfaces.HasNoPrivilege, nil
 	}
 
 	allRoleMemberships, err := evalCtx.Planner.MemberOfWithAdminOption(ctx, user)
 	if err != nil {
-		return eval.HasNoPrivilege, err
+		return evalinterfaces.HasNoPrivilege, err
 	}
 	if isAdmin := allRoleMemberships[role]; isAdmin {
-		return eval.HasPrivilege, nil
+		return evalinterfaces.HasPrivilege, nil
 	}
-	return eval.HasNoPrivilege, nil
+	return evalinterfaces.HasNoPrivilege, nil
 }

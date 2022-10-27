@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1271,11 +1272,11 @@ type ExecutorConfig struct {
 
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
-	CompactEngineSpanFunc eval.CompactEngineSpanFunc
+	CompactEngineSpanFunc evalinterfaces.CompactEngineSpanFunc
 
 	// CompactionConcurrencyFunc is used to inform a storage engine to change its
 	// compaction concurrency.
-	CompactionConcurrencyFunc eval.SetCompactionConcurrencyFunc
+	CompactionConcurrencyFunc evalinterfaces.SetCompactionConcurrencyFunc
 
 	// TraceCollector is used to contact all live nodes in the cluster, and
 	// collect trace spans from their inflight node registries.
@@ -1834,14 +1835,14 @@ func checkResultType(typ *types.T) error {
 // TIME clause.
 func (p *planner) EvalAsOfTimestamp(
 	ctx context.Context, asOfClause tree.AsOfClause, opts ...asof.EvalOption,
-) (eval.AsOfSystemTime, error) {
+) (evalinterfaces.AsOfSystemTime, error) {
 	asOf, err := asof.Eval(ctx, asOfClause, &p.semaCtx, p.EvalContext(), opts...)
 	if err != nil {
-		return eval.AsOfSystemTime{}, err
+		return evalinterfaces.AsOfSystemTime{}, err
 	}
 	ts := asOf.Timestamp
 	if now := p.execCfg.Clock.Now(); now.Less(ts) && !ts.Synthetic {
-		return eval.AsOfSystemTime{}, errors.Errorf(
+		return evalinterfaces.AsOfSystemTime{}, errors.Errorf(
 			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
 	}
 	return asOf, nil
@@ -1852,7 +1853,9 @@ func (p *planner) EvalAsOfTimestamp(
 // timestamp is not nil, it is the timestamp to which a transaction
 // should be set. The statements that will be checked are Select,
 // ShowTrace (of a Select statement), Scrub, Export, and CreateStats.
-func (p *planner) isAsOf(ctx context.Context, stmt tree.Statement) (*eval.AsOfSystemTime, error) {
+func (p *planner) isAsOf(
+	ctx context.Context, stmt tree.Statement,
+) (*evalinterfaces.AsOfSystemTime, error) {
 	var asOf tree.AsOfClause
 	switch s := stmt.(type) {
 	case *tree.Select:

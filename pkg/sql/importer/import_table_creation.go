@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -243,12 +244,12 @@ func (i importDatabaseRegionConfig) PrimaryRegionString() string {
 	return string(i.primaryRegion)
 }
 
-var _ eval.DatabaseRegionConfig = &importDatabaseRegionConfig{}
+var _ evalinterfaces.DatabaseRegionConfig = &importDatabaseRegionConfig{}
 
 // CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 func (so *importRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
-) (eval.DatabaseRegionConfig, error) {
+) (evalinterfaces.DatabaseRegionConfig, error) {
 	return importDatabaseRegionConfig{primaryRegion: so.primaryRegion}, nil
 }
 
@@ -326,11 +327,11 @@ func (so *importSequenceOperators) IsTypeVisible(
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (so *importSequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
-	specifier eval.HasPrivilegeSpecifier,
+	specifier evalinterfaces.HasPrivilegeSpecifier,
 	user username.SQLUsername,
 	privs []privilege.Privilege,
-) (eval.HasAnyPrivilegeResult, error) {
-	return eval.HasNoPrivilege, errors.WithStack(errSequenceOperators)
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
+	return evalinterfaces.HasNoPrivilege, errors.WithStack(errSequenceOperators)
 }
 
 // IncrementSequenceByID implements the eval.SequenceOperators interface.

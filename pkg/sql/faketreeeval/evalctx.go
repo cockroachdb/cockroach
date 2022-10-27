@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -40,7 +40,7 @@ import (
 // returning errors.
 type DummySequenceOperators struct{}
 
-var _ eval.SequenceOperators = &DummySequenceOperators{}
+var _ evalinterfaces.SequenceOperators = &DummySequenceOperators{}
 
 var errSequenceOperators = unimplemented.NewWithIssue(42508,
 	"cannot evaluate scalar expressions containing sequence operations in this context")
@@ -88,11 +88,11 @@ func (so *DummySequenceOperators) IsTypeVisible(
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (so *DummySequenceOperators) HasAnyPrivilege(
 	ctx context.Context,
-	specifier eval.HasPrivilegeSpecifier,
+	specifier evalinterfaces.HasPrivilegeSpecifier,
 	user username.SQLUsername,
 	privs []privilege.Privilege,
-) (eval.HasAnyPrivilegeResult, error) {
-	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
+	return evalinterfaces.HasNoPrivilege, errors.WithStack(errEvalPlanner)
 }
 
 // IncrementSequenceByID is part of the eval.SequenceOperators interface.
@@ -121,7 +121,7 @@ func (so *DummySequenceOperators) SetSequenceValueByID(
 // returning errors.
 type DummyRegionOperator struct{}
 
-var _ eval.RegionOperator = &DummyRegionOperator{}
+var _ evalinterfaces.RegionOperator = &DummyRegionOperator{}
 
 var errRegionOperator = unimplemented.NewWithIssue(42508,
 	"cannot evaluate scalar expressions containing region operations in this context")
@@ -129,7 +129,7 @@ var errRegionOperator = unimplemented.NewWithIssue(42508,
 // CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 func (so *DummyRegionOperator) CurrentDatabaseRegionConfig(
 	_ context.Context,
-) (eval.DatabaseRegionConfig, error) {
+) (evalinterfaces.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errRegionOperator)
 }
 
@@ -313,7 +313,7 @@ func (*DummyEvalPlanner) SynthesizePrivilegeDescriptor(
 	return nil, nil
 }
 
-var _ eval.Planner = &DummyEvalPlanner{}
+var _ evalinterfaces.Planner = &DummyEvalPlanner{}
 
 var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate scalar expressions using table lookups in this context")
@@ -321,7 +321,7 @@ var errEvalPlanner = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessi
 // CurrentDatabaseRegionConfig is part of the eval.RegionOperator interface.
 func (ep *DummyEvalPlanner) CurrentDatabaseRegionConfig(
 	_ context.Context,
-) (eval.DatabaseRegionConfig, error) {
+) (evalinterfaces.DatabaseRegionConfig, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
@@ -373,11 +373,11 @@ func (ep *DummyEvalPlanner) IsTypeVisible(
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (ep *DummyEvalPlanner) HasAnyPrivilege(
 	ctx context.Context,
-	specifier eval.HasPrivilegeSpecifier,
+	specifier evalinterfaces.HasPrivilegeSpecifier,
 	user username.SQLUsername,
 	privs []privilege.Privilege,
-) (eval.HasAnyPrivilegeResult, error) {
-	return eval.HasNoPrivilege, errors.WithStack(errEvalPlanner)
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
+	return evalinterfaces.HasNoPrivilege, errors.WithStack(errEvalPlanner)
 }
 
 // ResolveTableName is part of the eval.DatabaseCatalog interface.
@@ -434,7 +434,7 @@ func (ep *DummyEvalPlanner) QueryIteratorEx(
 	override sessiondata.InternalExecutorOverride,
 	stmt string,
 	qargs ...interface{},
-) (eval.InternalRows, error) {
+) (evalinterfaces.InternalRows, error) {
 	return nil, errors.WithStack(errEvalPlanner)
 }
 
@@ -472,7 +472,7 @@ func (ep *DummyEvalPlanner) IsANSIDML() bool {
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
-var _ eval.PrivilegedAccessor = &DummyPrivilegedAccessor{}
+var _ evalinterfaces.PrivilegedAccessor = &DummyPrivilegedAccessor{}
 
 var errEvalPrivileged = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate privileged expressions in this context")
@@ -494,7 +494,7 @@ func (ep *DummyPrivilegedAccessor) LookupZoneConfigByNamespaceID(
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.
 type DummySessionAccessor struct{}
 
-var _ eval.SessionAccessor = &DummySessionAccessor{}
+var _ evalinterfaces.SessionAccessor = &DummySessionAccessor{}
 
 var errEvalSessionVar = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate scalar expressions that access session variables in this context")
@@ -528,7 +528,7 @@ func (ep *DummySessionAccessor) HasRoleOption(
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
 type DummyClientNoticeSender struct{}
 
-var _ eval.ClientNoticeSender = &DummyClientNoticeSender{}
+var _ evalinterfaces.ClientNoticeSender = &DummyClientNoticeSender{}
 
 // BufferClientNotice is part of the eval.ClientNoticeSender interface.
 func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, pgnotice.Notice) {}
@@ -536,7 +536,7 @@ func (c *DummyClientNoticeSender) BufferClientNotice(context.Context, pgnotice.N
 // DummyTenantOperator implements the tree.TenantOperator interface.
 type DummyTenantOperator struct{}
 
-var _ eval.TenantOperator = &DummyTenantOperator{}
+var _ evalinterfaces.TenantOperator = &DummyTenantOperator{}
 
 var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessionContext,
 	"cannot evaluate tenant operation in this context")
@@ -580,7 +580,7 @@ func (c *DummyTenantOperator) UpdateTenantResourceLimits(
 // interface.
 type DummyPreparedStatementState struct{}
 
-var _ eval.PreparedStatementState = (*DummyPreparedStatementState)(nil)
+var _ evalinterfaces.PreparedStatementState = (*DummyPreparedStatementState)(nil)
 
 // HasActivePortals is part of the tree.PreparedStatementState interface.
 func (ps *DummyPreparedStatementState) HasActivePortals() bool {

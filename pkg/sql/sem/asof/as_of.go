@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -108,7 +109,7 @@ func Eval(
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
 	opts ...EvalOption,
-) (eval.AsOfSystemTime, error) {
+) (evalinterfaces.AsOfSystemTime, error) {
 	o := evalOptions{}
 	for _, f := range opts {
 		o = f(o)
@@ -137,7 +138,7 @@ func Eval(
 	defer scalarProps.Restore(*scalarProps)
 	scalarProps.Require("AS OF SYSTEM TIME", tree.RejectSpecial|tree.RejectSubqueries)
 
-	var ret eval.AsOfSystemTime
+	var ret evalinterfaces.AsOfSystemTime
 
 	// In order to support the follower reads feature we permit this expression
 	// to be a simple invocation of the follower_read_timestamp function.
@@ -150,7 +151,7 @@ func Eval(
 		case funcTypeFollowerRead:
 		case funcTypeBoundedStaleness:
 			if !o.allowBoundedStaleness {
-				return eval.AsOfSystemTime{}, newInvalidExprError()
+				return evalinterfaces.AsOfSystemTime{}, newInvalidExprError()
 			}
 			ret.BoundedStaleness = true
 
@@ -158,15 +159,15 @@ func Eval(
 			if len(asOfFuncExpr.Exprs) == 2 {
 				nearestOnlyExpr, err := asOfFuncExpr.Exprs[1].TypeCheck(ctx, semaCtx, types.Bool)
 				if err != nil {
-					return eval.AsOfSystemTime{}, err
+					return evalinterfaces.AsOfSystemTime{}, err
 				}
 				nearestOnlyEval, err := eval.Expr(ctx, evalCtx, nearestOnlyExpr)
 				if err != nil {
-					return eval.AsOfSystemTime{}, err
+					return evalinterfaces.AsOfSystemTime{}, err
 				}
 				nearestOnly, ok := nearestOnlyEval.(*tree.DBool)
 				if !ok {
-					return eval.AsOfSystemTime{}, pgerror.Newf(
+					return evalinterfaces.AsOfSystemTime{}, pgerror.Newf(
 						pgcode.InvalidParameterValue,
 						"%s: expected bool argument for nearest_only",
 						asOfFuncExpr.Func.String(),
@@ -175,33 +176,33 @@ func Eval(
 				ret.NearestOnly = bool(*nearestOnly)
 			}
 		default:
-			return eval.AsOfSystemTime{}, newInvalidExprError()
+			return evalinterfaces.AsOfSystemTime{}, newInvalidExprError()
 		}
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.TimestampTZ)
 		if err != nil {
-			return eval.AsOfSystemTime{}, err
+			return evalinterfaces.AsOfSystemTime{}, err
 		}
 	} else {
 		var err error
 		te, err = asOf.Expr.TypeCheck(ctx, semaCtx, types.String)
 		if err != nil {
-			return eval.AsOfSystemTime{}, err
+			return evalinterfaces.AsOfSystemTime{}, err
 		}
 		if !eval.IsConst(evalCtx, te) {
-			return eval.AsOfSystemTime{}, newInvalidExprError()
+			return evalinterfaces.AsOfSystemTime{}, newInvalidExprError()
 		}
 	}
 
 	d, err := eval.Expr(ctx, evalCtx, te)
 	if err != nil {
-		return eval.AsOfSystemTime{}, err
+		return evalinterfaces.AsOfSystemTime{}, err
 	}
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
 	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d)
 	if err != nil {
-		return eval.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
+		return evalinterfaces.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
 	return ret, nil
 }

@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 )
 
 // ExternalConnectionPrivilege represents privileges on external connection
@@ -37,7 +37,7 @@ func (e *ExternalConnectionPrivilege) GetPath() string {
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (e *ExternalConnectionPrivilege) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
+	ctx context.Context, planner evalinterfaces.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	if planner.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
 		return planner.SynthesizePrivilegeDescriptor(ctx, e.GetPath(),

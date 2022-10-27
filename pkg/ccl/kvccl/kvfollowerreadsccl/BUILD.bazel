@@ -65,6 +65,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/physicalplan/replicaoracle",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sem/eval/evalinterfaces",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

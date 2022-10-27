@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild/internal/scbuildstmt"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -76,7 +77,7 @@ type Dependencies interface {
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() ZoneConfigGetter
 
-	ClientNoticeSender() eval.ClientNoticeSender
+	ClientNoticeSender() evalinterfaces.ClientNoticeSender
 }
 
 // CreatePartitioningCCLCallback is the type of the CCL callback for creating

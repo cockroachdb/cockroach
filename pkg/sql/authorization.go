@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -238,7 +238,7 @@ func (p *planner) CheckGrantOptionsForUser(
 }
 
 func getOwnerOfPrivilegeObject(
-	ctx context.Context, p eval.Planner, privilegeObject catalog.PrivilegeObject,
+	ctx context.Context, p evalinterfaces.Planner, privilegeObject catalog.PrivilegeObject,
 ) (username.SQLUsername, error) {
 	privDesc, err := privilegeObject.GetPrivilegeDescriptor(ctx, p)
 	if err != nil {
@@ -263,7 +263,7 @@ func getOwnerOfPrivilegeObject(
 // IsOwner returns if the role has ownership on the privilege object.
 func IsOwner(
 	ctx context.Context,
-	p eval.Planner,
+	p evalinterfaces.Planner,
 	privilegeObject catalog.PrivilegeObject,
 	role username.SQLUsername,
 ) (bool, error) {

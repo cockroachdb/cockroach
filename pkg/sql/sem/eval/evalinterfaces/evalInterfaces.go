@@ -1,14 +1,4 @@
-// Copyright 2022 The Cockroach Authors.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.txt.
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0, included in the file
-// licenses/APL.txt.
-
-package eval
+package evalinterfaces
 
 import (
 	"context"
@@ -39,55 +29,6 @@ import (
 type DatabaseRegionConfig interface {
 	IsValidRegionNameString(r string) bool
 	PrimaryRegionString() string
-}
-
-// HasAnyPrivilegeResult represents the non-error results of calling HasAnyPrivilege
-type HasAnyPrivilegeResult = int8
-
-const (
-	// HasPrivilege means at least one of the specified privileges is granted.
-	HasPrivilege HasAnyPrivilegeResult = 1
-	// HasNoPrivilege means no privileges are granted.
-	HasNoPrivilege HasAnyPrivilegeResult = 0
-	// ObjectNotFound means the object that privileges are being checked on was not found.
-	ObjectNotFound HasAnyPrivilegeResult = -1
-)
-
-// DatabaseCatalog consists of functions that reference the session database
-// and is to be used from Context.
-type DatabaseCatalog interface {
-
-	// ParseQualifiedTableName parses a SQL string of the form
-	// `[ database_name . ] [ schema_name . ] table_name`.
-	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
-	ParseQualifiedTableName(sql string) (*tree.TableName, error)
-
-	// ResolveTableName expands the given table name and
-	// makes it point to a valid object.
-	// If the database name is not given, it uses the search path to find it, and
-	// sets it on the returned TableName.
-	// It returns the ID of the resolved table, and an error if the table doesn't exist.
-	ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error)
-
-	// SchemaExists looks up the schema with the given name and determines
-	// whether it exists.
-	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)
-
-	// IsTableVisible checks if the table with the given ID belongs to a schema
-	// on the given sessiondata.SearchPath.
-	IsTableVisible(
-		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
-	) (isVisible bool, exists bool, err error)
-
-	// IsTypeVisible checks if the type with the given ID belongs to a schema
-	// on the given sessiondata.SearchPath.
-	IsTypeVisible(
-		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
-	) (isVisible bool, exists bool, err error)
-
-	// HasAnyPrivilege returns whether the current user has privilege to access
-	// the given object.
-	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user username.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
 }
 
 // CastFunc is a function which cases a datum to a given type.
@@ -655,4 +596,53 @@ type AsOfSystemTime struct {
 	// This is be zero if there is no maximum bound.
 	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
+}
+
+// HasAnyPrivilegeResult represents the non-error results of calling HasAnyPrivilege
+type HasAnyPrivilegeResult = int8
+
+const (
+	// HasPrivilege means at least one of the specified privileges is granted.
+	HasPrivilege HasAnyPrivilegeResult = 1
+	// HasNoPrivilege means no privileges are granted.
+	HasNoPrivilege HasAnyPrivilegeResult = 0
+	// ObjectNotFound means the object that privileges are being checked on was not found.
+	ObjectNotFound HasAnyPrivilegeResult = -1
+)
+
+// DatabaseCatalog consists of functions that reference the session database
+// and is to be used from Context.
+type DatabaseCatalog interface {
+
+	// ParseQualifiedTableName parses a SQL string of the form
+	// `[ database_name . ] [ schema_name . ] table_name`.
+	// NB: this is deprecated! Use parser.ParseQualifiedTableName when possible.
+	ParseQualifiedTableName(sql string) (*tree.TableName, error)
+
+	// ResolveTableName expands the given table name and
+	// makes it point to a valid object.
+	// If the database name is not given, it uses the search path to find it, and
+	// sets it on the returned TableName.
+	// It returns the ID of the resolved table, and an error if the table doesn't exist.
+	ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error)
+
+	// SchemaExists looks up the schema with the given name and determines
+	// whether it exists.
+	SchemaExists(ctx context.Context, dbName, scName string) (found bool, err error)
+
+	// IsTableVisible checks if the table with the given ID belongs to a schema
+	// on the given sessiondata.SearchPath.
+	IsTableVisible(
+		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
+	) (isVisible bool, exists bool, err error)
+
+	// IsTypeVisible checks if the type with the given ID belongs to a schema
+	// on the given sessiondata.SearchPath.
+	IsTypeVisible(
+		ctx context.Context, curDB string, searchPath sessiondata.SearchPath, typeID oid.Oid,
+	) (isVisible bool, exists bool, err error)
+
+	// HasAnyPrivilege returns whether the current user has privilege to access
+	// the given object.
+	HasAnyPrivilege(ctx context.Context, specifier HasPrivilegeSpecifier, user username.SQLUsername, privs []privilege.Privilege) (HasAnyPrivilegeResult, error)
 }

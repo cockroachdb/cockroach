@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -136,7 +137,7 @@ func (ev *boundedStalenessTraceEvent) EventOutput() string {
 type boundedStalenessRetryEvent struct {
 	nodeIdx int
 	*roachpb.MinTimestampBoundUnsatisfiableError
-	asOf eval.AsOfSystemTime
+	asOf evalinterfaces.AsOfSystemTime
 }
 
 func (ev *boundedStalenessRetryEvent) EventOutput() string {

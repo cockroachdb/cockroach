@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -2357,7 +2358,7 @@ var payloadsForTraceGeneratorType = types.MakeLabeledTuple(
 type payloadsForTraceGenerator struct {
 	// Iterator over all internal rows of a query that retrieves all payloads
 	// of a trace.
-	it eval.InternalRows
+	it evalinterfaces.InternalRows
 }
 
 func makePayloadsForTraceGenerator(
@@ -2443,7 +2444,7 @@ const (
 // showCreateAllSchemasGenerator supports the execution of
 // crdb_internal.show_create_all_schemas(dbName).
 type showCreateAllSchemasGenerator struct {
-	evalPlanner eval.Planner
+	evalPlanner evalinterfaces.Planner
 	txn         *kv.Txn
 	ids         []int64
 	dbName      string
@@ -2523,7 +2524,7 @@ func makeShowCreateAllSchemasGenerator(
 // showCreateAllTablesGenerator supports the execution of
 // crdb_internal.show_create_all_tables(dbName).
 type showCreateAllTablesGenerator struct {
-	evalPlanner eval.Planner
+	evalPlanner evalinterfaces.Planner
 	txn         *kv.Txn
 	ids         []int64
 	dbName      string
@@ -2680,7 +2681,7 @@ func makeShowCreateAllTablesGenerator(
 // showCreateAllTypesGenerator supports the execution of
 // crdb_internal.show_create_all_types(dbName).
 type showCreateAllTypesGenerator struct {
-	evalPlanner eval.Planner
+	evalPlanner evalinterfaces.Planner
 	txn         *kv.Txn
 	ids         []int64
 	dbName      string

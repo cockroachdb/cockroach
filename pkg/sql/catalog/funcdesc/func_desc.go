@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -513,7 +513,7 @@ func (desc *immutable) GetObjectType() privilege.ObjectType {
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (desc *immutable) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
+	ctx context.Context, planner evalinterfaces.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	return desc.GetPrivileges(), nil
 }

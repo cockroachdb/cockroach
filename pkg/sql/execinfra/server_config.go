@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -169,15 +170,15 @@ type ServerConfig struct {
 
 	// SQLStatsController is an interface used to reset SQL stats without the need to
 	// introduce dependency on the sql package.
-	SQLStatsController eval.SQLStatsController
+	SQLStatsController evalinterfaces.SQLStatsController
 
 	// SchemaTelemetryController is an interface used by the builtins to create a
 	// job schedule for schema telemetry jobs.
-	SchemaTelemetryController eval.SchemaTelemetryController
+	SchemaTelemetryController evalinterfaces.SchemaTelemetryController
 
 	// IndexUsageStatsController is an interface used to reset index usage stats without
 	// the need to introduce dependency on the sql package.
-	IndexUsageStatsController eval.IndexUsageStatsController
+	IndexUsageStatsController evalinterfaces.IndexUsageStatsController
 
 	// SQLSQLResponseAdmissionQ is the admission queue to use for
 	// SQLSQLResponseWork.

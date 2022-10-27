@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/scviz"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -265,7 +265,7 @@ func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
 }
 
 // ClientNoticeSender implements scbuild.Dependencies.
-func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
+func (s *TestState) ClientNoticeSender() evalinterfaces.ClientNoticeSender {
 	return &faketreeeval.DummyClientNoticeSender{}
 }
 

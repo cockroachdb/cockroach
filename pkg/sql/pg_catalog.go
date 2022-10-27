@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -608,7 +608,9 @@ https://www.postgresql.org/docs/9.6/view-pg-available-extensions.html`,
 	unimplemented: true,
 }
 
-func getOwnerOID(ctx context.Context, p eval.Planner, desc catalog.Descriptor) (tree.Datum, error) {
+func getOwnerOID(
+	ctx context.Context, p evalinterfaces.Planner, desc catalog.Descriptor,
+) (tree.Datum, error) {
 	owner, err := getOwnerOfPrivilegeObject(ctx, p, desc)
 	if err != nil {
 		return nil, err
@@ -618,7 +620,7 @@ func getOwnerOID(ctx context.Context, p eval.Planner, desc catalog.Descriptor) (
 }
 
 func getOwnerName(
-	ctx context.Context, p eval.Planner, desc catalog.Descriptor,
+	ctx context.Context, p evalinterfaces.Planner, desc catalog.Descriptor,
 ) (tree.Datum, error) {
 	owner, err := getOwnerOfPrivilegeObject(ctx, p, desc)
 	if err != nil {
@@ -2971,7 +2973,7 @@ func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
 
 func addPGTypeRowForTable(
 	ctx context.Context,
-	p eval.Planner,
+	p evalinterfaces.Planner,
 	h oidHasher,
 	db catalog.DatabaseDescriptor,
 	scName string,

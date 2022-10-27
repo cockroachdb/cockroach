@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -1356,7 +1356,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 // if the current database is not multi-region enabled.
 func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
-) (eval.DatabaseRegionConfig, error) {
+) (evalinterfaces.DatabaseRegionConfig, error) {
 	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
 		ctx,
 		p.txn,

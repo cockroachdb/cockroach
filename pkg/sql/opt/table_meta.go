@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
@@ -450,7 +450,7 @@ func (tm *TableMeta) VirtualComputedColumns() ColSet {
 // database owning the table described by `tm`, or returns hasRegionName=false
 // if not multiregion. The result is cached in TableMeta.
 func (tm *TableMeta) GetRegionsInDatabase(
-	ctx context.Context, planner eval.Planner,
+	ctx context.Context, planner evalinterfaces.Planner,
 ) (regionNames catpb.RegionNames, hasRegionNames bool) {
 	multiregionConfig, ok := tm.TableAnnotation(regionConfigAnnID).(*multiregion.RegionConfig)
 	if ok {
@@ -487,7 +487,7 @@ func (tm *TableMeta) GetRegionsInDatabase(
 // owning the table described by `tm`, or returns ok=false if not multiregion.
 // The result is cached in TableMeta.
 func (tm *TableMeta) GetDatabaseSurvivalGoal(
-	ctx context.Context, planner eval.Planner,
+	ctx context.Context, planner evalinterfaces.Planner,
 ) (survivalGoal descpb.SurvivalGoal, ok bool) {
 	// If planner is nil, we could be running an internal query or something else
 	// which is not a user query, so make sure we don't error out this case.

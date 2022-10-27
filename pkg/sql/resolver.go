@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -228,19 +228,19 @@ func (p *planner) IsTypeVisible(
 // HasAnyPrivilege is part of the eval.DatabaseCatalog interface.
 func (p *planner) HasAnyPrivilege(
 	ctx context.Context,
-	specifier eval.HasPrivilegeSpecifier,
+	specifier evalinterfaces.HasPrivilegeSpecifier,
 	user username.SQLUsername,
 	privs []privilege.Privilege,
-) (eval.HasAnyPrivilegeResult, error) {
+) (evalinterfaces.HasAnyPrivilegeResult, error) {
 	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
 		ctx,
 		specifier,
 	)
 	if err != nil {
-		return eval.HasNoPrivilege, err
+		return evalinterfaces.HasNoPrivilege, err
 	}
 	if desc == nil {
-		return eval.ObjectNotFound, nil
+		return evalinterfaces.ObjectNotFound, nil
 	}
 
 	for _, priv := range privs {
@@ -256,7 +256,7 @@ func (p *planner) HasAnyPrivilege(
 			if pgerror.GetPGCode(err) == pgcode.InsufficientPrivilege {
 				continue
 			}
-			return eval.HasNoPrivilege, err
+			return evalinterfaces.HasNoPrivilege, err
 		}
 
 		if priv.GrantOption {
@@ -264,19 +264,19 @@ func (p *planner) HasAnyPrivilege(
 				if pgerror.GetPGCode(err) == pgcode.WarningPrivilegeNotGranted {
 					continue
 				}
-				return eval.HasNoPrivilege, err
+				return evalinterfaces.HasNoPrivilege, err
 			}
 		}
-		return eval.HasPrivilege, nil
+		return evalinterfaces.HasPrivilege, nil
 	}
 
-	return eval.HasNoPrivilege, nil
+	return evalinterfaces.HasNoPrivilege, nil
 }
 
 // ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
 // and returns the descriptor for the given object.
 func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
-	ctx context.Context, specifier eval.HasPrivilegeSpecifier,
+	ctx context.Context, specifier evalinterfaces.HasPrivilegeSpecifier,
 ) (catalog.Descriptor, error) {
 	if specifier.DatabaseName != nil {
 		return p.Descriptors().GetImmutableDatabaseByName(
@@ -358,7 +358,7 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 }
 
 func validateColumnForHasPrivilegeSpecifier(
-	table catalog.TableDescriptor, specifier eval.HasPrivilegeSpecifier,
+	table catalog.TableDescriptor, specifier evalinterfaces.HasPrivilegeSpecifier,
 ) error {
 	if specifier.ColumnName != nil {
 		_, err := table.FindColumnWithName(*specifier.ColumnName)

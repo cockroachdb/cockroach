@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -914,7 +915,7 @@ func performCastWithoutPrecisionTruncation(
 // performIntToOidCast casts the input integer to the OID type given by the
 // input types.T.
 func performIntToOidCast(
-	ctx context.Context, res Planner, t *types.T, v tree.DInt,
+	ctx context.Context, res evalinterfaces.Planner, t *types.T, v tree.DInt,
 ) (tree.Datum, error) {
 	// OIDs are always unsigned 32-bit integers. Some languages, like Java,
 	// store OIDs as signed 32-bit integers, so we implement the cast

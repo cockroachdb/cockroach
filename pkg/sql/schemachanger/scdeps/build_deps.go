@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -53,7 +54,7 @@ func NewBuilderDependencies(
 	settings *cluster.Settings,
 	statements []string,
 	internalExecutor sqlutil.InternalExecutor,
-	clientNoticeSender eval.ClientNoticeSender,
+	clientNoticeSender evalinterfaces.ClientNoticeSender,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:        clusterID,
@@ -87,7 +88,7 @@ type buildDeps struct {
 	astFormatter       scbuild.AstFormatter
 	featureChecker     scbuild.FeatureChecker
 	internalExecutor   sqlutil.InternalExecutor
-	clientNoticeSender eval.ClientNoticeSender
+	clientNoticeSender evalinterfaces.ClientNoticeSender
 }
 
 var _ scbuild.CatalogReader = (*buildDeps)(nil)
@@ -406,6 +407,6 @@ func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
 }
 
 // ClientNoticeSender implements the scbuild.Dependencies interface.
-func (d *buildDeps) ClientNoticeSender() eval.ClientNoticeSender {
+func (d *buildDeps) ClientNoticeSender() evalinterfaces.ClientNoticeSender {
 	return d.clientNoticeSender
 }
