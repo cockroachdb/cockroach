@@ -19,6 +19,15 @@ SELECT table_name, type FROM [SHOW TABLES]
 ----
 tbl  table
 
+# Verify that temp schema is visible in pg_namespace index.
+let $tempSchemaOID
+SELECT oid FROM pg_namespace where nspname LIKE 'pg_temp%'
+
+query B
+SELECT nspname LIKE 'pg_temp%' FROM pg_namespace where oid = $tempSchemaOID
+----
+true
+
 statement ok
 DROP TABLE tbl
 
