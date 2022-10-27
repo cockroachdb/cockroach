@@ -28,6 +28,7 @@ import {
 import { SchemaInsightEventFilters } from "../types";
 import { SortSetting } from "src/sortedtable";
 import { actions as localStorageActions } from "../../store/localStorage";
+import { Dispatch } from "redux";
 
 const mapStateToProps = (
   state: AppState,
@@ -41,19 +42,29 @@ const mapStateToProps = (
   sortSetting: selectSortSetting(state),
 });
 
-const mapDispatchToProps = {
-  onFiltersChange: (filters: SchemaInsightEventFilters) =>
-    localStorageActions.update({
-      key: "filters/SchemaInsightsPage",
-      value: filters,
-    }),
-  onSortChange: (ss: SortSetting) =>
-    localStorageActions.update({
-      key: "sortSetting/SchemaInsightsPage",
-      value: ss,
-    }),
-  refreshSchemaInsights: actions.refresh,
-};
+const mapDispatchToProps = (
+  dispatch: Dispatch,
+): SchemaInsightsViewDispatchProps => ({
+  onFiltersChange: (filters: SchemaInsightEventFilters) => {
+    dispatch(
+      localStorageActions.update({
+        key: "filters/SchemaInsightsPage",
+        value: filters,
+      }),
+    );
+  },
+  onSortChange: (ss: SortSetting) => {
+    dispatch(
+      localStorageActions.update({
+        key: "sortSetting/SchemaInsightsPage",
+        value: ss,
+      }),
+    );
+  },
+  refreshSchemaInsights: () => {
+    dispatch(actions.refresh());
+  },
+});
 
 export const SchemaInsightsPageConnected = withRouter(
   connect<

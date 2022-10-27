@@ -73,15 +73,19 @@ const TransactionDispatchProps = (
   dispatch: Dispatch,
 ): TransactionInsightsViewDispatchProps => ({
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
-    localStorageActions.update({
-      key: "filters/InsightsPage",
-      value: filters,
-    }),
+    dispatch(
+      localStorageActions.update({
+        key: "filters/InsightsPage",
+        value: filters,
+      }),
+    ),
   onSortChange: (ss: SortSetting) =>
-    localStorageActions.update({
-      key: "sortSetting/InsightsPage",
-      value: ss,
-    }),
+    dispatch(
+      localStorageActions.update({
+        key: "sortSetting/InsightsPage",
+        value: ss,
+      }),
+    ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
@@ -89,27 +93,35 @@ const TransactionDispatchProps = (
       }),
     );
   },
-  refreshTransactionInsights: transactionInsights.refresh,
+  refreshTransactionInsights: () => {
+    dispatch(transactionInsights.refresh());
+  },
 });
 
 const StatementDispatchProps = (
   dispatch: Dispatch,
 ): StatementInsightsViewDispatchProps => ({
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
-    localStorageActions.update({
-      key: "filters/InsightsPage",
-      value: filters,
-    }),
+    dispatch(
+      localStorageActions.update({
+        key: "filters/InsightsPage",
+        value: filters,
+      }),
+    ),
   onSortChange: (ss: SortSetting) =>
-    localStorageActions.update({
-      key: "sortSetting/InsightsPage",
-      value: ss,
-    }),
+    dispatch(
+      localStorageActions.update({
+        key: "sortSetting/InsightsPage",
+        value: ss,
+      }),
+    ),
   onColumnsChange: (value: string[]) =>
-    localStorageActions.update({
-      key: "showColumns/StatementInsightsPage",
-      value: value.join(","),
-    }),
+    dispatch(
+      localStorageActions.update({
+        key: "showColumns/StatementInsightsPage",
+        value: value.join(","),
+      }),
+    ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
       sqlStatsActions.updateTimeScale({
@@ -117,7 +129,9 @@ const StatementDispatchProps = (
       }),
     );
   },
-  refreshStatementInsights: statementInsights.refresh,
+  refreshStatementInsights: () => {
+    dispatch(statementInsights.refresh());
+  },
 });
 
 type StateProps = {
