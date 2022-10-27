@@ -2269,7 +2269,9 @@ func (t *logicTest) purgeZoneConfig() {
 	for i := 0; i < t.cluster.NumServers(); i++ {
 		sysconfigProvider := t.cluster.Server(i).SystemConfigProvider()
 		sysconfig := sysconfigProvider.GetSystemConfig()
-		sysconfig.PurgeZoneConfigCache()
+		if sysconfig != nil {
+			sysconfig.PurgeZoneConfigCache()
+		}
 	}
 }
 
