@@ -24,6 +24,8 @@ import (
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
+// pauseReplicationIOThreshold is the admission.io.overload threshold at which
+// we pause replication to non-essential followers.
 var pauseReplicationIOThreshold = settings.RegisterFloatSetting(
 	settings.SystemOnly,
 	"admission.kv.pause_replication_io_threshold",
