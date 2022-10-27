@@ -36,6 +36,7 @@ func ConstrainPrimaryIndexSpanByFilter(
 	descr catalog.TableDescriptor,
 	target jobspb.ChangefeedTargetSpecification,
 	includeVirtual bool,
+	keyOnly bool,
 ) (_ []roachpb.Span, updatedSelect string, _ error) {
 	if selectClause == "" {
 		return nil, "", errors.AssertionFailedf("unexpected empty filter")
@@ -46,7 +47,7 @@ func ConstrainPrimaryIndexSpanByFilter(
 			"could not parse changefeed expression")
 	}
 
-	ed, err := newEventDescriptorForTarget(descr, target, schemaTS(execCtx), includeVirtual)
+	ed, err := newEventDescriptorForTarget(descr, target, schemaTS(execCtx), includeVirtual, keyOnly)
 	if err != nil {
 		return nil, "", err
 	}

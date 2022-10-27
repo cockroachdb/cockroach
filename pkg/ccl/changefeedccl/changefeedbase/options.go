@@ -831,6 +831,11 @@ func (s StatementOptions) IncludeVirtual() bool {
 	return s.m[OptVirtualColumns] == string(OptVirtualColumnsNull)
 }
 
+// KeyOnly returns true if we are using the 'key_only' envelope.
+func (s StatementOptions) KeyOnly() bool {
+	return s.m[OptEnvelope] == string(OptEnvelopeKeyOnly)
+}
+
 // GetMinCheckpointFrequency returns the minimum frequency with which checkpoints should be
 // recorded. Returns nil if not set, and an error if invalid.
 func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {

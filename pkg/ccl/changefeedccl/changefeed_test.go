@@ -6673,7 +6673,7 @@ func normalizeCDCExpression(t *testing.T, execCfgI interface{}, exprStr string) 
 
 	execCtx := p.(sql.JobExecContext)
 	_, _, err = cdceval.NormalizeAndValidateSelectForTarget(
-		context.Background(), execCtx, desc, target, sc, false, false,
+		context.Background(), execCtx, desc, target, sc, false, false, false,
 	)
 	require.NoError(t, err)
 	log.Infof(context.Background(), "PostNorm: %s", tree.StmtDebugString(sc))

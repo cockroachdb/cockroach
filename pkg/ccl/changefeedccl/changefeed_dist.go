@@ -199,8 +199,10 @@ func fetchSpansForTables(
 	}
 	target := details.TargetSpecifications[0]
 	includeVirtual := details.Opts[changefeedbase.OptVirtualColumns] == string(changefeedbase.OptVirtualColumnsNull)
+	keyOnly := details.Opts[changefeedbase.OptEnvelope] == string(changefeedbase.OptEnvelopeKeyOnly)
+
 	return cdceval.ConstrainPrimaryIndexSpanByFilter(
-		ctx, execCtx, details.Select, tableDescs[0], target, includeVirtual)
+		ctx, execCtx, details.Select, tableDescs[0], target, includeVirtual, keyOnly)
 }
 
 var replanChangefeedThreshold = settings.RegisterFloatSetting(

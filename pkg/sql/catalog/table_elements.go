@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 )
@@ -764,6 +765,34 @@ func UserDefinedTypeColsHaveSameVersion(desc TableDescriptor, otherDesc TableDes
 		}
 	}
 	return true
+}
+
+// UserDefinedTypeColsInFamilyHaveSameVersion returns whether one table descriptor's
+// columns with user defined type metadata have the same versions of metadata
+// as in the other descriptor, for all columns in the same family.
+// Note that this function is only valid on two
+// descriptors representing the same table at the same version.
+func UserDefinedTypeColsInFamilyHaveSameVersion(
+	desc TableDescriptor, otherDesc TableDescriptor, familyID descpb.FamilyID,
+) (bool, error) {
+	family, err := desc.FindFamilyByID(familyID)
+	if err != nil {
+		return false, err
+	}
+
+	familyCols := util.FastIntSet{}
+	for _, colID := range family.ColumnIDs {
+		familyCols.Add(int(colID))
+	}
+
+	otherCols := otherDesc.UserDefinedTypeColumns()
+	for i, thisCol := range desc.UserDefinedTypeColumns() {
+		this, other := thisCol.GetType(), otherCols[i].GetType()
+		if familyCols.Contains(int(thisCol.GetID())) && this.TypeMeta.Version != other.TypeMeta.Version {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // ColumnIDToOrdinalMap returns a map from Column ID to the ordinal
