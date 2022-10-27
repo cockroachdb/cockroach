@@ -169,6 +169,7 @@ describe("Database Table Page", function () {
         details: {
           loading: false,
           loaded: false,
+          lastError: undefined,
           createStatement: "",
           replicaCount: 0,
           indexNames: [],
@@ -182,6 +183,7 @@ describe("Database Table Page", function () {
         stats: {
           loading: false,
           loaded: false,
+          lastError: undefined,
           sizeInBytes: 0,
           rangeCount: 0,
           nodesByRegionString: "",
@@ -189,6 +191,7 @@ describe("Database Table Page", function () {
         indexStats: {
           loading: false,
           loaded: false,
+          lastError: undefined,
           stats: [],
           lastReset: null,
         },
@@ -223,6 +226,7 @@ describe("Database Table Page", function () {
     driver.assertTableDetails({
       loading: false,
       loaded: true,
+      lastError: null,
       createStatement: "CREATE TABLE foo",
       replicaCount: 5,
       indexNames: ["primary", "another_index"],
@@ -251,6 +255,7 @@ describe("Database Table Page", function () {
     driver.assertTableStats({
       loading: false,
       loaded: true,
+      lastError: null,
       sizeInBytes: 44040192,
       rangeCount: 4200,
       nodesByRegionString: "",
@@ -306,6 +311,7 @@ describe("Database Table Page", function () {
     driver.assertIndexStats({
       loading: false,
       loaded: true,
+      lastError: null,
       stats: [
         {
           indexName: "jobs_status_created_idx",
