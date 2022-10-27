@@ -68,6 +68,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/sqlutil",
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/arith",
