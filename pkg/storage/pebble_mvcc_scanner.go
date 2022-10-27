@@ -100,10 +100,10 @@ func (p *pebbleResults) put(
 		}
 		if err := v.Verify(k); err != nil {
 			var meta enginepb.MVCCMetadata
-			meta.Unmarshal(value)
+			_ = meta.Unmarshal(value)
 			s := meta.String()
-			return err
 			_ = s
+			return err
 		}
 	}
 
@@ -837,6 +837,9 @@ func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
 			// Note that we read at the intent timestamp, not at our read timestamp
 			// as the intent timestamp may have been pushed forward by another
 			// transaction. Txn's always need to read their own writes.
+			if ctx.Value("foo") != nil {
+				return p.seekVersion(ctx, metaTS, false)
+			}
 			return p.seekVersion(ctx, metaTS, false)
 		}
 

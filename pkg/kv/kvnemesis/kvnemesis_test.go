@@ -91,7 +91,7 @@ func testClusterArgs(tr *SeqTracker) base.TestClusterArgs {
 func TestKVNemesisSingleNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t)
+	//	skip.UnderRace(t)
 
 	ctx := context.Background()
 

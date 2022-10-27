@@ -2761,17 +2761,18 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 
 	ctx := context.Background()
 	manualClock := hlc.NewHybridManualClock()
-	tc := testcluster.StartTestCluster(t, 2,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Server: &server.TestingKnobs{
-						WallClock: manualClock,
-					},
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Server: &server.TestingKnobs{
+					WallClock: manualClock,
 				},
 			},
-		})
+		},
+	}
+	args.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{AckComm}
+	tc := testcluster.StartTestCluster(t, 2, args)
 	defer tc.Stopper().Stop(ctx)
 	// We conduct the test on the second server, because we can keep it clean
 	// and control exactly which ranges end up on it.

@@ -612,7 +612,7 @@ func (i *PointSynthesizingIter) Key() MVCCKey {
 // UnsafeKey implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeKey() MVCCKey {
 	if i.atPoint {
-		return i.iterKey
+		return i.iterKey.Clone() // didn't fix it
 	}
 	if i.rangeKeysIdx >= i.rangeKeysEnd || i.rangeKeysIdx < 0 {
 		return MVCCKey{}
@@ -620,13 +620,13 @@ func (i *PointSynthesizingIter) UnsafeKey() MVCCKey {
 	return MVCCKey{
 		Key:       i.rangeKeysPos,
 		Timestamp: i.rangeKeys[i.rangeKeysIdx].Timestamp,
-	}
+	}.Clone() // didn't fix it
 }
 
 // UnsafeRawKey implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeRawKey() []byte {
 	if i.atPoint {
-		return i.iter.UnsafeRawKey()
+		return append([]byte(nil), i.iter.UnsafeRawKey()...) // didn't fix it
 	}
 	return EncodeMVCCKey(i.UnsafeKey())
 }
@@ -634,7 +634,7 @@ func (i *PointSynthesizingIter) UnsafeRawKey() []byte {
 // UnsafeRawMVCCKey implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 	if i.atPoint {
-		return i.iter.UnsafeRawMVCCKey()
+		return append([]byte(nil), i.iter.UnsafeRawMVCCKey()...) // didn't fix it
 	}
 	return EncodeMVCCKey(i.UnsafeKey())
 }
@@ -650,12 +650,12 @@ func (i *PointSynthesizingIter) Value() []byte {
 // UnsafeValue implements MVCCIterator.
 func (i *PointSynthesizingIter) UnsafeValue() []byte {
 	if i.atPoint {
-		return i.iter.UnsafeValue()
+		return append([]byte(nil), i.iter.UnsafeValue()...) // didn't fix it
 	}
 	if i.rangeKeysIdx >= len(i.rangeKeys) || i.rangeKeysIdx < 0 {
 		return nil
 	}
-	return i.rangeKeys[i.rangeKeysIdx].Value
+	return append([]byte(nil), i.rangeKeys[i.rangeKeysIdx].Value...) // didn't fix it
 }
 
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
