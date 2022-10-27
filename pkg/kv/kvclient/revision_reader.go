@@ -39,7 +39,6 @@ func GetAllRevisions(
 		RequestHeader: roachpb.RequestHeader{Key: startKey, EndKey: endKey},
 		StartTime:     startTime,
 		MVCCFilter:    roachpb.MVCCFilter_All,
-		ReturnSST:     true,
 	}
 	resp, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {

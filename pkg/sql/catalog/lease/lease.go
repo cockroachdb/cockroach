@@ -258,7 +258,6 @@ func getDescriptorsFromStoreForInterval(
 		RequestHeader: requestHeader,
 		StartTime:     lowerBound.Prev(),
 		MVCCFilter:    roachpb.MVCCFilter_All,
-		ReturnSST:     true,
 	}
 
 	// Export request returns descriptors in decreasing modification time.
