@@ -64,7 +64,6 @@ func TestDuplicateHandling(t *testing.T) {
 			},
 			MVCCFilter: roachpb.MVCCFilter_All,
 			StartTime:  hlc.Timestamp{},
-			ReturnSST:  true,
 		}
 		header := roachpb.Header{Timestamp: s.Clock().Now()}
 		resp, err := kv.SendWrappedWith(ctx,

@@ -607,7 +607,6 @@ func fetchDescriptorsWithPriorityOverride(
 		RequestHeader: roachpb.RequestHeaderFromSpan(span),
 		StartTime:     startTS,
 		MVCCFilter:    roachpb.MVCCFilter_All,
-		ReturnSST:     true,
 	}
 
 	fetchDescriptors := func(ctx context.Context) (roachpb.Response, error) {
