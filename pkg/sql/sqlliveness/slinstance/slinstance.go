@@ -67,9 +67,6 @@ type session struct {
 	mu struct {
 		syncutil.RWMutex
 		exp hlc.Timestamp
-		// sessionExpiryCallbacks are invoked when the session expires. They're
-		// invoked under the session's lock, so keep them small.
-		sessionExpiryCallbacks []func(ctx context.Context)
 	}
 }
 
@@ -88,27 +85,18 @@ func (s *session) Start() hlc.Timestamp {
 	return s.start
 }
 
-// RegisterCallbackForSessionExpiry adds the given function to the list
-// of functions called after a session expires. The functions are
-// executed in a goroutine.
-func (s *session) RegisterCallbackForSessionExpiry(sExp func(context.Context)) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.mu.sessionExpiryCallbacks = append(s.mu.sessionExpiryCallbacks, sExp)
-}
-
-func (s *session) invokeSessionExpiryCallbacks(ctx context.Context) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, callback := range s.mu.sessionExpiryCallbacks {
-		callback(ctx)
-	}
-}
-
 func (s *session) setExpiration(exp hlc.Timestamp) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.mu.exp = exp
+}
+
+// SessionEventListener is an interface used by the Instance to notify
+// listeners of some state changes.
+type SessionEventListener interface {
+	// OnSessionDeleted is called when the session liveness record is found to be
+	// missing.
+	OnSessionDeleted(context.Context)
 }
 
 // Instance implements the sqlliveness.Instance interface by storing the
@@ -117,15 +105,17 @@ func (s *session) setExpiration(exp hlc.Timestamp) {
 // to replace a session that has expired and deleted from the table.
 // TODO(rima): Rename Instance to avoid confusion with sqlinstance.SQLInstance.
 type Instance struct {
-	clock     *hlc.Clock
-	settings  *cluster.Settings
-	stopper   *stop.Stopper
-	storage   Writer
-	ttl       func() time.Duration
-	hb        func() time.Duration
-	testKnobs sqlliveness.TestingKnobs
-	startErr  error
-	mu        struct {
+	clock    *hlc.Clock
+	settings *cluster.Settings
+	stopper  *stop.Stopper
+	// sessionEvents gets notified of some session state changes.
+	sessionEvents SessionEventListener
+	storage       Writer
+	ttl           func() time.Duration
+	hb            func() time.Duration
+	testKnobs     sqlliveness.TestingKnobs
+	startErr      error
+	mu            struct {
 		started bool
 		syncutil.Mutex
 		blockCh chan struct{}
@@ -154,9 +144,7 @@ func (l *Instance) clearSession(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if expiration := l.mu.s.Expiration(); expiration.Less(l.clock.Now()) {
-		// If the session has expired, invoke the session expiry callbacks
-		// associated with the session.
-		l.mu.s.invokeSessionExpiryCallbacks(ctx)
+		l.sessionEvents.OnSessionDeleted(ctx)
 	}
 	l.mu.s = nil
 	l.mu.blockCh = make(chan struct{})
@@ -206,6 +194,10 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	return s, nil
 }
 
+// extendSession adds the ttl to the session's expiration.
+//
+// Returns false if the session record is not found, meaning that someone
+// deleted it.
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 
@@ -266,6 +258,7 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 						// the session failed.
 						close(l.mu.blockCh)
 					}()
+					l.sessionEvents.OnSessionDeleted(ctx)
 					return
 				}
 				l.setSession(newSession)
@@ -293,18 +286,26 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 
 // NewSQLInstance returns a new Instance struct and starts its heartbeating
 // loop.
+//
+// sessionEvents, if not nil, gets notified of some session state transitions.
 func NewSQLInstance(
 	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	storage Writer,
 	settings *cluster.Settings,
 	testKnobs *sqlliveness.TestingKnobs,
+	sessionEvents SessionEventListener,
 ) *Instance {
+	if sessionEvents == nil {
+		sessionEvents = &dummySessionEventListener{}
+	}
+
 	l := &Instance{
-		clock:    clock,
-		settings: settings,
-		storage:  storage,
-		stopper:  stopper,
+		clock:         clock,
+		settings:      settings,
+		storage:       storage,
+		stopper:       stopper,
+		sessionEvents: sessionEvents,
 		ttl: func() time.Duration {
 			return DefaultTTL.Get(&settings.SV)
 		},
@@ -371,3 +372,10 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 		}
 	}
 }
+
+type dummySessionEventListener struct{}
+
+var _ SessionEventListener = &dummySessionEventListener{}
+
+// OnSessionDeleted implements the slinstance.SessionEventListener interface.
+func (d *dummySessionEventListener) OnSessionDeleted(context.Context) {}

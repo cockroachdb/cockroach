@@ -22,13 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,7 +38,7 @@ func TestInstanceProvider(t *testing.T) {
 
 	ctx := context.Background()
 	setup := func(t *testing.T) (
-		*stop.Stopper, *slinstance.Instance, *slstorage.FakeStorage, *hlc.Clock,
+		*stop.Stopper, *slinstance.Instance, *slstorage.FakeStorage, *channelSessionEventListener, *hlc.Clock,
 	) {
 		timeSource := timeutil.NewTestTimeSource()
 		clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
@@ -54,14 +52,15 @@ func TestInstanceProvider(t *testing.T) {
 
 		stopper := stop.NewStopper()
 		fakeStorage := slstorage.NewFakeStorage()
-		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
-		return stopper, slInstance, fakeStorage, clock
+		events := &channelSessionEventListener{c: make(chan struct{})}
+		slInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil /* testKnobs */, events)
+		return stopper, slInstance, fakeStorage, events, clock
 	}
 
 	t.Run("test-init-shutdown", func(t *testing.T) {
 		const addr = "addr"
 		const expectedInstanceID = base.SQLInstanceID(1)
-		stopper, slInstance, storage, clock := setup(t)
+		stopper, slInstance, storage, events, clock := setup(t)
 		defer stopper.Stop(ctx)
 		instanceProvider := instanceprovider.NewTestInstanceProvider(stopper, slInstance, func() string { return addr })
 		slInstance.Start(ctx)
@@ -87,12 +86,21 @@ func TestInstanceProvider(t *testing.T) {
 		// Delete the session to shutdown the instance.
 		require.NoError(t, storage.Delete(ctx, sessionID))
 
-		// Verify that the SQL instance is shutdown on session expiry.
-		testutils.SucceedsSoon(t, func() error {
-			if _, _, err = instanceProvider.Instance(ctx); !errors.Is(err, instanceprovider.ErrProviderShutDown) {
-				return errors.Errorf("sql instance is not shutdown on session expiry")
-			}
-			return nil
-		})
+		select {
+		case <-events.c:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("session deletion event not signaled")
+		}
 	})
+}
+
+type channelSessionEventListener struct {
+	c chan struct{}
+}
+
+var _ slinstance.SessionEventListener = &channelSessionEventListener{}
+
+// OnSessionDeleted implements the slinstance.SessionEventListener interface.
+func (d *channelSessionEventListener) OnSessionDeleted(context.Context) {
+	close(d.c)
 }

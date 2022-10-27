@@ -143,6 +143,7 @@ type Server struct {
 	eventsServer  *obs.EventsServer
 	raftTransport *kvserver.RaftTransport
 	stopper       *stop.Stopper
+	stopTrigger   *stopTrigger
 
 	debug    *debug.Server
 	kvProber *kvprober.Prober
@@ -168,6 +169,9 @@ type Server struct {
 }
 
 // NewServer creates a Server from a server.Config.
+//
+// The caller is responsible for listening on the server's ShutdownRequested()
+// channel and calling stopper.Stop().
 func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if err := cfg.ValidateAddrs(context.Background()); err != nil {
 		return nil, err
@@ -837,6 +841,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// The settings cache writer is responsible for persisting the
 	// cluster settings on KV nodes across restarts.
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
+	stopTrigger := newStopTrigger()
 
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
@@ -856,6 +861,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SQLConfig:                &cfg.SQLConfig,
 		BaseConfig:               &cfg.BaseConfig,
 		stopper:                  stopper,
+		stopTrigger:              stopTrigger,
 		clock:                    clock,
 		runtime:                  runtimeSampler,
 		rpcContext:               rpcContext,
@@ -931,7 +937,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 
 	// Create a drain server.
-	drain := newDrainServer(cfg.BaseConfig, stopper, grpcServer, sqlServer)
+	drain := newDrainServer(cfg.BaseConfig, stopper, stopTrigger, grpcServer, sqlServer)
 	drain.setNode(node, nodeLiveness)
 
 	*lateBoundServer = Server{
@@ -969,6 +975,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		eventsServer:           eventsServer,
 		raftTransport:          raftTransport,
 		stopper:                stopper,
+		stopTrigger:            stopTrigger,
 		debug:                  debugServer,
 		kvProber:               kvProber,
 		replicationReporter:    replicationReporter,
@@ -1780,6 +1787,12 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 // RPC.
 func (s *Server) Stop() {
 	s.stopper.Stop(context.Background())
+}
+
+// ShutdownRequested returns a channel that is signaled when a subsystem wants
+// the server to be shut down.
+func (s *Server) ShutdownRequested() <-chan ShutdownRequest {
+	return s.stopTrigger.C()
 }
 
 // TempDir returns the filepath of the temporary directory used for temp storage.

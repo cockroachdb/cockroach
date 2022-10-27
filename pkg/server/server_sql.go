@@ -93,6 +93,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instanceprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slprovider"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -135,6 +136,7 @@ import (
 type SQLServer struct {
 	ambientCtx              log.AmbientContext
 	stopper                 *stop.Stopper
+	stopTrigger             *stopTrigger
 	sqlIDContainer          *base.SQLIDContainer
 	pgServer                *pgwire.Server
 	distSQLServer           *distsql.ServerImpl
@@ -245,6 +247,10 @@ type sqlServerArgs struct {
 	*BaseConfig
 
 	stopper *stop.Stopper
+	// stopTrigger is user by the sqlServer to signal requests to shut down the
+	// server. The creator of the server is supposed to listen for such requests
+	// and terminate the process.
+	stopTrigger *stopTrigger
 
 	// SQL uses the clock to assign timestamps to transactions, among many
 	// other things.
@@ -404,6 +410,22 @@ func newRootSQLMemoryMonitor(opts monitorAndMetricsOptions) monitorAndMetrics {
 	}
 }
 
+// stopperSessionEventListener implements slinstance.SessionEventListener and
+// turns a session deletion event into a request to stop the server.
+type stopperSessionEventListener struct {
+	trigger *stopTrigger
+}
+
+var _ slinstance.SessionEventListener = &stopperSessionEventListener{}
+
+func (s *stopperSessionEventListener) OnSessionDeleted(ctx context.Context) {
+	s.trigger.signalStop(ctx,
+		MakeShutdownRequest(ShutdownReasonFatalError, errors.New("sql liveness session deleted")))
+}
+
+// newSQLServer constructs a new SQLServer. The caller is responsible for
+// listening to the server's ShutdownRequested() channel (which is the same as
+// cfg.stopTrigger.C()) and stopping cfg.stopper when signaled.
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// NB: ValidateAddrs also fills in defaults.
 	if err := cfg.Config.ValidateAddrs(ctx); err != nil {
@@ -428,15 +450,27 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	tracingService := service.New(cfg.Tracer)
 	tracingservicepb.RegisterTracingServer(cfg.grpcServer, tracingService)
 
-	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
-	cfg.sqlLivenessProvider = slprovider.New(
-		cfg.AmbientCtx,
-		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs,
-	)
 	// If the node id is already populated, we only need to create a placeholder
 	// instance provider without initializing the instance, since this is not a
 	// SQL pod server.
 	_, isNotSQLPod := cfg.nodeIDContainer.OptionalNodeID()
+
+	sqllivenessKnobs, _ := cfg.TestingKnobs.SQLLivenessKnobs.(*sqlliveness.TestingKnobs)
+	var sessionEventsConsumer slinstance.SessionEventListener
+	if !isNotSQLPod {
+		// For SQL pods, we want the process to shutdown when the session liveness
+		// record is found to be deleted. This is because, if the session is
+		// deleted, the instance ID used by this server may have been stolen by
+		// another server, or it may be stolen in the future. This server shouldn't
+		// use the instance ID anymore, and there's no mechanism for allocating a
+		// new one after startup.
+		sessionEventsConsumer = &stopperSessionEventListener{trigger: cfg.stopTrigger}
+	}
+	cfg.sqlLivenessProvider = slprovider.New(
+		cfg.AmbientCtx,
+		cfg.stopper, cfg.clock, cfg.db, codec, cfg.Settings, sqllivenessKnobs, sessionEventsConsumer,
+	)
+
 	if isNotSQLPod {
 		cfg.sqlInstanceProvider = sqlinstance.NewFakeSQLProvider()
 	} else {
@@ -1160,6 +1194,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	return &SQLServer{
 		ambientCtx:                        cfg.BaseConfig.AmbientCtx,
 		stopper:                           cfg.stopper,
+		stopTrigger:                       cfg.stopTrigger,
 		sqlIDContainer:                    cfg.nodeIDContainer,
 		pgServer:                          pgServer,
 		distSQLServer:                     distSQLServer,
@@ -1614,4 +1649,10 @@ func prepareUnixSocket(
 // for this server.
 func (s *SQLServer) LogicalClusterID() uuid.UUID {
 	return s.execCfg.NodeInfo.LogicalClusterID()
+}
+
+// ShutdownRequested returns a channel that is signaled when a subsystem wants
+// the server to be shut down.
+func (s *SQLServer) ShutdownRequested() <-chan ShutdownRequest {
+	return s.stopTrigger.C()
 }
