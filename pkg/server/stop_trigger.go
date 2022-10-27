@@ -43,7 +43,7 @@ func (s *stopTrigger) signalStop(ctx context.Context, r ShutdownRequest) {
 	defer s.mu.Unlock()
 	if !s.mu.shutdownRequest.Empty() {
 		// Someone else already triggered the shutdown.
-		log.Infof(ctx, "received a second shutdown request: %s", r)
+		log.Infof(ctx, "received a second shutdown request: %s", r.ShutdownCause())
 		return
 	}
 	s.mu.shutdownRequest = r

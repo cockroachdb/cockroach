@@ -13,7 +13,6 @@ package colexec
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSelectInInt64(t *testing.T) {
@@ -100,12 +100,13 @@ func TestSelectInInt64(t *testing.T) {
 
 func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
+	rng, _ := randutil.NewTestRand()
 	typs := []*types.T{types.Int}
 	batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 	col1 := batch.ColVec(0).Int64()
 
 	for i := 0; i < coldata.BatchSize(); i++ {
-		if float64(i) < float64(coldata.BatchSize())*selectivity {
+		if float64(i) < float64(coldata.BatchSize())*0.5 {
 			col1[i] = int64(i % 10)
 		} else {
 			col1[i] = -1
@@ -114,7 +115,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 
 	if hasNulls {
 		for i := 0; i < coldata.BatchSize(); i++ {
-			if rand.Float64() < nullProbability {
+			if rng.Float64() < 0.1 {
 				batch.ColVec(0).Nulls().SetNull(i)
 			}
 		}

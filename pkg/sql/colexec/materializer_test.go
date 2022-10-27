@@ -115,7 +115,7 @@ func BenchmarkMaterializer(b *testing.B) {
 				b.Run(fmt.Sprintf("%s/hasNulls=%t/useSel=%t", typ, hasNulls, useSelectionVector), func(b *testing.B) {
 					nullProb := 0.0
 					if hasNulls {
-						nullProb = nullProbability
+						nullProb = 0.1
 					}
 					batch := testAllocator.NewMemBatchWithMaxCapacity(typs)
 					for _, colVec := range batch.ColVecs() {
