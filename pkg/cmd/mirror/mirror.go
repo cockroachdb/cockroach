@@ -406,10 +406,9 @@ def go_deps():
 			if mod.Replace != nil {
 				fmt.Printf("        replace = \"%s\",\n", replaced.Path)
 			}
-			// Note: `build/teamcity-check-genfiles.sh` checks for
-			// the presence of the "TODO: mirror this repo" comment.
-			// Don't update this comment without also updating the
-			// script.
+			// Note: `build/teamcity/cockroach/ci/tests/check_generated_code_impl.sh`
+			// checks for the presence of the "TODO: mirror this repo" comment.
+			// Don't update this comment without also updating the script.
 			fmt.Printf(`        # TODO: mirror this repo (to fix, run `+"`./dev generate bazel --mirror`)"+`
         sum = "%s",
         version = "%s",
