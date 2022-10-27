@@ -35,6 +35,7 @@ type testSuite struct {
 	XMLName   xml.Name    `xml:"testsuite"`
 	TestCases []*testCase `xml:"testcase"`
 	Attrs     []xml.Attr  `xml:",any,attr"`
+	Name      string      `xml:"name,attr"`
 }
 
 type testCase struct {
@@ -46,12 +47,14 @@ type testCase struct {
 	// and usable way.
 	Name    string      `xml:"name,attr"`
 	Time    string      `xml:"time,attr"`
-	Failure *xmlMessage `xml:"failure,omitempty"`
-	Error   *xmlMessage `xml:"error,omitempty"`
-	Skipped *xmlMessage `xml:"skipped,omitempty"`
+	Failure *XMLMessage `xml:"failure,omitempty"`
+	Error   *XMLMessage `xml:"error,omitempty"`
+	Skipped *XMLMessage `xml:"skipped,omitempty"`
 }
 
-type xmlMessage struct {
+// XMLMessage is a catch-all structure containing details about a test
+// failure.
+type XMLMessage struct {
 	Message  string     `xml:"message,attr"`
 	Attrs    []xml.Attr `xml:",any,attr"`
 	Contents string     `xml:",chardata"`
@@ -151,6 +154,7 @@ func MergeTestXMLs(suitesToMerge []TestSuites, outFile io.Writer) error {
 	var resultSuites TestSuites
 	resultSuites.Suites = append(resultSuites.Suites, testSuite{})
 	resultSuite := &resultSuites.Suites[0]
+	resultSuite.Name = suitesToMerge[0].Suites[0].Name
 	resultSuite.Attrs = suitesToMerge[0].Suites[0].Attrs
 	cases := make(map[string]*testCase)
 	for _, suites := range suitesToMerge {
