@@ -485,7 +485,7 @@ default cluster settings. It's intended to be used in conjunction with
 `,
 	Args: cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		return roachprod.Init(context.Background(), roachprodLibraryLogger, args[0])
+		return roachprod.Init(context.Background(), roachprodLibraryLogger, args[0], startOpts)
 	}),
 }
 
