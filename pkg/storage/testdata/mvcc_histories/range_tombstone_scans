@@ -120,7 +120,6 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "f" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "j" -> /<empty> @4.000000000,0
@@ -132,7 +131,6 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "j" -> /<empty> @4.000000000,0
@@ -145,7 +143,6 @@ scan: "a" -> /<empty> @3.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "j" -> /<empty> @4.000000000,0
@@ -170,7 +167,7 @@ scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
-scan: "e" -> /<empty> @4.000000000,0
+scan: "e"-"f" -> <no data>
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "g" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
@@ -277,7 +274,6 @@ scan k=a end=z ts=4 tombstones reverse
 scan: "j" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -289,7 +285,6 @@ scan k=a end=z ts=5 tombstones reverse
 scan: "j" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -302,7 +297,6 @@ scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=
 scan: "j" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /BYTES/f5 @5.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0
@@ -328,7 +322,7 @@ scan: "b" -> /<empty> @2.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: intent "e" {id=00000000 key="e" pri=0.00000000 epo=0 ts=6.000000000,0 min=0,0 seq=0}
-scan: "e" -> /<empty> @4.000000000,0
+scan: "e"-"f" -> <no data>
 scan: "f" -> /BYTES/f5 @5.000000000,0
 scan: "g" -> /<empty> @4.000000000,0
 scan: "h" -> /<empty> @4.000000000,0
@@ -376,7 +370,6 @@ scan k=a end=h+ ts=4 tombstones reverse
 ----
 scan: "h" -> /<empty> @4.000000000,0
 scan: "f" -> /<empty> @4.000000000,0
-scan: "e" -> /<empty> @4.000000000,0
 scan: "d" -> /<empty> @4.000000000,0
 scan: "c" -> /<empty> @4.000000000,0
 scan: "b" -> /<empty> @2.000000000,0

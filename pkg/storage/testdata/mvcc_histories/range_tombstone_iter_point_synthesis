@@ -77,10 +77,7 @@ iter_scan
 iter_seek_ge: "a"/4.000000000,0=/<empty>
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
-iter_scan: "a"/1.000000000,0=/<empty>
 iter_scan: "b"/4.000000000,0=/<empty>
-iter_scan: "b"/3.000000000,0=/<empty>
-iter_scan: "b"/1.000000000,0=/<empty>
 iter_scan: "c"/5.000000000,0=/<empty>
 iter_scan: "c"/3.000000000,0=/<empty>
 iter_scan: "c"/1.000000000,0=/<empty>
@@ -89,7 +86,6 @@ iter_scan: "d"/7.000000000,0=/BYTES/d7
 iter_scan: "d"/5.000000000,0=/<empty>
 iter_scan: "d"/4.000000000,0=/BYTES/d4
 iter_scan: "d"/2.000000000,0=/BYTES/d2
-iter_scan: "d"/1.000000000,0=/<empty>
 iter_scan: "e"/5.000000000,0=/<empty>
 iter_scan: "e"/3.000000000,0=/BYTES/e3
 iter_scan: "f"/6.000000000,0=/BYTES/f6
@@ -102,7 +98,6 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4
 iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "h"/1.000000000,0=/<empty>
 iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
@@ -123,7 +118,6 @@ iter_scan: "l"/5.000000000,0=/<empty>
 iter_scan: "k"/5.000000000,0=/BYTES/k5
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
-iter_scan: "h"/1.000000000,0=/<empty>
 iter_scan: "h"/3.000000000,0=/BYTES/h3
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "g"/3.000000000,0=/<empty>
@@ -136,7 +130,6 @@ iter_scan: "f"/5.000000000,0=/<empty>
 iter_scan: "f"/6.000000000,0=/BYTES/f6
 iter_scan: "e"/3.000000000,0=/BYTES/e3
 iter_scan: "e"/5.000000000,0=/<empty>
-iter_scan: "d"/1.000000000,0=/<empty>
 iter_scan: "d"/2.000000000,0=/BYTES/d2
 iter_scan: "d"/4.000000000,0=/BYTES/d4
 iter_scan: "d"/5.000000000,0=/<empty>
@@ -145,10 +138,7 @@ iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000
 iter_scan: "c"/1.000000000,0=/<empty>
 iter_scan: "c"/3.000000000,0=/<empty>
 iter_scan: "c"/5.000000000,0=/<empty>
-iter_scan: "b"/1.000000000,0=/<empty>
-iter_scan: "b"/3.000000000,0=/<empty>
 iter_scan: "b"/4.000000000,0=/<empty>
-iter_scan: "a"/1.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: .
@@ -276,15 +266,15 @@ iter_seek_lt: "l"/5.000000000,0=/<empty>
 iter_seek_lt: "l"/5.000000000,0=/<empty>
 iter_seek_lt: "k"/5.000000000,0=/BYTES/k5
 iter_seek_lt: "j"/7.000000000,0=/BYTES/j7
-iter_seek_lt: "h"/1.000000000,0=/<empty>
-iter_seek_lt: "h"/1.000000000,0=/<empty>
+iter_seek_lt: "h"/3.000000000,0=/BYTES/h3
+iter_seek_lt: "h"/3.000000000,0=/BYTES/h3
 iter_seek_lt: "g"/2.000000000,0=/BYTES/g2
 iter_seek_lt: "f"/2.000000000,0=/BYTES/f2
 iter_seek_lt: "e"/3.000000000,0=/BYTES/e3
-iter_seek_lt: "d"/1.000000000,0=/<empty>
+iter_seek_lt: "d"/2.000000000,0=/BYTES/d2
 iter_seek_lt: "c"/1.000000000,0=/<empty>
-iter_seek_lt: "b"/1.000000000,0=/<empty>
-iter_seek_lt: "a"/1.000000000,0=/<empty>
+iter_seek_lt: "b"/4.000000000,0=/<empty>
+iter_seek_lt: "a"/2.000000000,0=/BYTES/a2
 iter_seek_lt: .
 
 run ok
@@ -368,7 +358,7 @@ iter_seek_ge: "a"/4.000000000,0=/<empty>
 iter_seek_ge: "a"/4.000000000,0=/<empty>
 iter_seek_ge: "a"/2.000000000,0=/BYTES/a2
 iter_seek_ge: "a"/2.000000000,0=/BYTES/a2
-iter_seek_ge: "a"/1.000000000,0=/<empty>
+iter_seek_ge: "b"/4.000000000,0=/<empty>
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -380,9 +370,9 @@ iter_seek_ge k=b ts=1
 ----
 iter_seek_ge: "b"/4.000000000,0=/<empty>
 iter_seek_ge: "b"/4.000000000,0=/<empty>
-iter_seek_ge: "b"/3.000000000,0=/<empty>
-iter_seek_ge: "b"/1.000000000,0=/<empty>
-iter_seek_ge: "b"/1.000000000,0=/<empty>
+iter_seek_ge: "c"/5.000000000,0=/<empty>
+iter_seek_ge: "c"/5.000000000,0=/<empty>
+iter_seek_ge: "c"/5.000000000,0=/<empty>
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -420,7 +410,7 @@ iter_seek_ge: "d"/5.000000000,0=/<empty>
 iter_seek_ge: "d"/4.000000000,0=/BYTES/d4
 iter_seek_ge: "d"/2.000000000,0=/BYTES/d2
 iter_seek_ge: "d"/2.000000000,0=/BYTES/d2
-iter_seek_ge: "d"/1.000000000,0=/<empty>
+iter_seek_ge: "e"/5.000000000,0=/<empty>
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -481,8 +471,8 @@ iter_seek_ge k=h ts=1
 ----
 iter_seek_ge: "h"/3.000000000,0=/BYTES/h3
 iter_seek_ge: "h"/3.000000000,0=/BYTES/h3
-iter_seek_ge: "h"/1.000000000,0=/<empty>
-iter_seek_ge: "h"/1.000000000,0=/<empty>
+iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -654,11 +644,11 @@ iter_seek_lt k=b ts=3
 iter_seek_lt k=b ts=4
 iter_seek_lt k=b ts=5
 ----
-iter_seek_lt: "b"/3.000000000,0=/<empty>
-iter_seek_lt: "b"/3.000000000,0=/<empty>
 iter_seek_lt: "b"/4.000000000,0=/<empty>
-iter_seek_lt: "a"/1.000000000,0=/<empty>
-iter_seek_lt: "a"/1.000000000,0=/<empty>
+iter_seek_lt: "b"/4.000000000,0=/<empty>
+iter_seek_lt: "b"/4.000000000,0=/<empty>
+iter_seek_lt: "a"/2.000000000,0=/BYTES/a2
+iter_seek_lt: "a"/2.000000000,0=/BYTES/a2
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -673,8 +663,8 @@ iter_seek_lt: "c"/3.000000000,0=/<empty>
 iter_seek_lt: "c"/3.000000000,0=/<empty>
 iter_seek_lt: "c"/5.000000000,0=/<empty>
 iter_seek_lt: "c"/5.000000000,0=/<empty>
-iter_seek_lt: "b"/1.000000000,0=/<empty>
-iter_seek_lt: "b"/1.000000000,0=/<empty>
+iter_seek_lt: "b"/4.000000000,0=/<empty>
+iter_seek_lt: "b"/4.000000000,0=/<empty>
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -709,8 +699,8 @@ iter_seek_lt: "e"/3.000000000,0=/BYTES/e3
 iter_seek_lt: "e"/3.000000000,0=/BYTES/e3
 iter_seek_lt: "e"/5.000000000,0=/<empty>
 iter_seek_lt: "e"/5.000000000,0=/<empty>
-iter_seek_lt: "d"/1.000000000,0=/<empty>
-iter_seek_lt: "d"/1.000000000,0=/<empty>
+iter_seek_lt: "d"/2.000000000,0=/BYTES/d2
+iter_seek_lt: "d"/2.000000000,0=/BYTES/d2
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -763,8 +753,8 @@ iter_new types=pointsAndRanges pointSynthesis
 iter_seek_lt k=i ts=1
 iter_seek_lt k=i ts=2
 ----
-iter_seek_lt: "h"/1.000000000,0=/<empty>
-iter_seek_lt: "h"/1.000000000,0=/<empty>
+iter_seek_lt: "h"/3.000000000,0=/BYTES/h3
+iter_seek_lt: "h"/3.000000000,0=/BYTES/h3
 
 run ok
 iter_new types=pointsAndRanges pointSynthesis
@@ -851,10 +841,7 @@ iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000
 iter_scan: "c"/1.000000000,0=/<empty>
 iter_scan: "c"/3.000000000,0=/<empty>
 iter_scan: "c"/5.000000000,0=/<empty>
-iter_scan: "b"/1.000000000,0=/<empty>
-iter_scan: "b"/3.000000000,0=/<empty>
 iter_scan: "b"/4.000000000,0=/<empty>
-iter_scan: "a"/1.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: .
@@ -871,10 +858,7 @@ iter_scan: "d"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000
 iter_scan: "c"/1.000000000,0=/<empty>
 iter_scan: "c"/3.000000000,0=/<empty>
 iter_scan: "c"/5.000000000,0=/<empty>
-iter_scan: "b"/1.000000000,0=/<empty>
-iter_scan: "b"/3.000000000,0=/<empty>
 iter_scan: "b"/4.000000000,0=/<empty>
-iter_scan: "a"/1.000000000,0=/<empty>
 iter_scan: "a"/2.000000000,0=/BYTES/a2
 iter_scan: "a"/4.000000000,0=/<empty>
 iter_scan: .
@@ -891,7 +875,6 @@ iter_scan: "g"/4.000000000,0=/BYTES/g4
 iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "h"/1.000000000,0=/<empty>
 iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
@@ -909,7 +892,6 @@ iter_seek_lt: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/3.000000000,0=/<empty>
 iter_scan: "g"/2.000000000,0=/BYTES/g2
 iter_scan: "h"/3.000000000,0=/BYTES/h3
-iter_scan: "h"/1.000000000,0=/<empty>
 iter_scan: "j"/0,0=txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
 iter_scan: "j"/7.000000000,0=/BYTES/j7
 iter_scan: "k"/5.000000000,0=/BYTES/k5
@@ -944,7 +926,7 @@ iter_next
 iter_seek_lt: "e"/5.000000000,0=/<empty>
 iter_next: "e"/3.000000000,0=/BYTES/e3
 iter_prev: "e"/5.000000000,0=/<empty>
-iter_prev: "d"/1.000000000,0=/<empty>
+iter_prev: "d"/2.000000000,0=/BYTES/d2
 iter_next: "e"/5.000000000,0=/<empty>
 
 run ok
@@ -962,7 +944,7 @@ iter_next
 ----
 iter_seek_ge: "e"/3.000000000,0=/BYTES/e3
 iter_prev: "e"/5.000000000,0=/<empty>
-iter_prev: "d"/1.000000000,0=/<empty>
+iter_prev: "d"/2.000000000,0=/BYTES/d2
 iter_next_key: "e"/5.000000000,0=/<empty>
 iter_next: "e"/3.000000000,0=/BYTES/e3
 iter_next_key: "f"/6.000000000,0=/BYTES/f6

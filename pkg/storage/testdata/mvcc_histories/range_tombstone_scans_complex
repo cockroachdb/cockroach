@@ -166,28 +166,21 @@ scan: "k" -> /BYTES/k5 @5.000000000,0
 run ok
 scan k=a end=z ts=1 tombstones inconsistent
 ----
-scan: "a" -> /<empty> @1.000000000,0
-scan: "b" -> /<empty> @1.000000000,0
 scan: "c" -> /<empty> @1.000000000,0
-scan: "d" -> /<empty> @1.000000000,0
-scan: "h" -> /<empty> @1.000000000,0
 
 run ok
 scan k=a end=z ts=2 tombstones inconsistent
 ----
 scan: "a" -> /BYTES/a2 @2.000000000,0
-scan: "b" -> /<empty> @1.000000000,0
 scan: "c" -> /<empty> @1.000000000,0
 scan: "d" -> /BYTES/d2 @2.000000000,0
 scan: "f" -> /BYTES/f2 @2.000000000,0
 scan: "g" -> /BYTES/g2 @2.000000000,0
-scan: "h" -> /<empty> @1.000000000,0
 
 run ok
 scan k=a end=z ts=3 tombstones inconsistent
 ----
 scan: "a" -> /BYTES/a2 @2.000000000,0
-scan: "b" -> /<empty> @3.000000000,0
 scan: "c" -> /<empty> @3.000000000,0
 scan: "d" -> /BYTES/d2 @2.000000000,0
 scan: "e" -> /BYTES/e3 @3.000000000,0
@@ -305,21 +298,15 @@ scan: "f" -> /BYTES/f6 @6.000000000,0
 run ok
 scan k=a end=z ts=1 reverse tombstones inconsistent
 ----
-scan: "h" -> /<empty> @1.000000000,0
-scan: "d" -> /<empty> @1.000000000,0
 scan: "c" -> /<empty> @1.000000000,0
-scan: "b" -> /<empty> @1.000000000,0
-scan: "a" -> /<empty> @1.000000000,0
 
 run ok
 scan k=a end=z ts=2 reverse tombstones inconsistent
 ----
-scan: "h" -> /<empty> @1.000000000,0
 scan: "g" -> /BYTES/g2 @2.000000000,0
 scan: "f" -> /BYTES/f2 @2.000000000,0
 scan: "d" -> /BYTES/d2 @2.000000000,0
 scan: "c" -> /<empty> @1.000000000,0
-scan: "b" -> /<empty> @1.000000000,0
 scan: "a" -> /BYTES/a2 @2.000000000,0
 
 run ok
@@ -332,7 +319,6 @@ scan: "f" -> /<empty> @3.000000000,0
 scan: "e" -> /BYTES/e3 @3.000000000,0
 scan: "d" -> /BYTES/d2 @2.000000000,0
 scan: "c" -> /<empty> @3.000000000,0
-scan: "b" -> /<empty> @3.000000000,0
 scan: "a" -> /BYTES/a2 @2.000000000,0
 
 run ok

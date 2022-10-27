@@ -1,0 +1,41 @@
+# Regression test for https://github.com/cockroachdb/cockroach/issues/90642.
+#
+#  REAL DATASET          SYNTHETIC DATASET
+#  2    a2 [b2]          2   a2 [b2]
+#  1    [---)            1   x
+#       a   b                a   b
+#
+# Recall that pebbleMVCCScanner only enables pointSynthesizingIter when it
+# encounters a range key. In the case above, during a reverse scan, the [a-b)@1
+# range key will first become visible to pebbleMVCCScanner when it lands on a@2,
+# so it enabled point synthesis positioned at the a@2 point key. Notice how the
+# iterator has now skipped over the synthetic point tombstone a@1.
+#
+# This is particularly problematic when combined with pebbleMVCCScanner peeking,
+# which assumes that following a iterPeekPrev() call, an iterNext() call can
+# step the parent iterator forward once to get back to the original position.
+# With the above bug, that is no longer true, as it instead lands on the 
+# synthetic point tombstone which was skipped during reverse iteration. During
+# intent processing for b@2, such an iterNext() call is expected to land on the
+# intent's provisional value at b@2, but it instead lands on the intent itself
+# at b@0. This in turn caused a value checksum or decoding failure, where it was
+# expecting the current key to be b@2, but the actual key was b@0.
+run ok
+del_range_ts k=a end=b ts=1
+put k=a ts=2 v=a2
+with t=A
+  txn_begin k=b ts=2
+  put k=b v=b2
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=2.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=2.000000000,0 min=0,0 seq=0} ts=2.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/2.000000000,0 -> /BYTES/b2
+
+run ok
+scan t=A k=a end=z reverse
+----
+scan: "b" -> /BYTES/b2 @2.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
