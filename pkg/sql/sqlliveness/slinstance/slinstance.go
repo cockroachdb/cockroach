@@ -118,7 +118,6 @@ type Instance struct {
 	testKnobs     sqlliveness.TestingKnobs
 	mu            struct {
 		syncutil.Mutex
-		started  bool
 		startErr error
 		blockCh  chan struct{}
 		s        *session
@@ -335,10 +334,6 @@ func NewSQLInstance(
 func (l *Instance) Start(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.mu.started {
-		return
-	}
-	l.mu.started = true
 	log.Infof(ctx, "starting SQL liveness instance")
 	// Detach from ctx's cancelation.
 	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
@@ -354,12 +349,6 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 			return s, err
 		}
 	}
-	l.mu.Lock()
-	if !l.mu.started {
-		l.mu.Unlock()
-		return nil, sqlliveness.NotStartedError
-	}
-	l.mu.Unlock()
 
 	for {
 		s, ch := l.getSessionOrBlockCh()
