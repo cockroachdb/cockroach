@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval/evalinterfaces"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege/synthplanner"
 )
 
 // GetPublicSchema returns a synthetic public schema which is
@@ -55,7 +55,7 @@ func (p public) GetRawBytesInStorage() []byte { return nil }
 
 // GetPrivilegeDescriptor implements the PrivilegeObject interface.
 func (p public) GetPrivilegeDescriptor(
-	ctx context.Context, planner evalinterfaces.Planner,
+	ctx context.Context, planner synthplanner.SyntheticPrivilegeNeededPlanner,
 ) (*catpb.PrivilegeDescriptor, error) {
 	return p.GetPrivileges(), nil
 }
