@@ -67,7 +67,7 @@ type session struct {
 	start hlc.Timestamp
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		exp hlc.Timestamp
 	}
 }
@@ -77,8 +77,8 @@ func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.mu.exp
 }
 
