@@ -7,6 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/team",
     visibility = ["//pkg:__subpackages__"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/internal/reporoot",
         "@com_github_cockroachdb_errors//:errors",
         "@in_gopkg_yaml_v2//:yaml_v2",

@@ -6,7 +6,7 @@ dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-bazel-support.sh"  # For process_test_json
 source "$dir/teamcity-support.sh"
 
-bazel build //pkg/cmd/bazci //pkg/cmd/github-post //pkg/cmd/testfilter --config=ci
+bazel build //pkg/cmd/bazci --config=ci
 BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 
@@ -14,7 +14,6 @@ log_into_gcloud
 export GOOGLE_APPLICATION_CREDENTIALS="$PWD/.google-credentials.json"
 
 ARTIFACTS_DIR=/artifacts
-GO_TEST_JSON_OUTPUT_FILE=$ARTIFACTS_DIR/test.json.txt
 exit_status=0
 
 configs=(
@@ -36,15 +35,8 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \
     --test_env=COCKROACH_LOGIC_TEST_BACKUP_RESTORE_PROBABILITY=0.5 \
     --test_env=GO_TEST_WRAP_TESTV=1 \
     --test_env=GO_TEST_WRAP=1 \
-    --test_env=GO_TEST_JSON_OUTPUT_FILE=$GO_TEST_JSON_OUTPUT_FILE.$config \
     --test_timeout=28800 \
     --test_env=GOOGLE_APPLICATION_CREDENTIALS="$GOOGLE_APPLICATION_CREDENTIALS" \
     || exit_status=$?
 
-process_test_json \
-  $BAZEL_BIN/pkg/cmd/testfilter/testfilter_/testfilter \
-  $BAZEL_BIN/pkg/cmd/github-post/github-post_/github-post \
-  $ARTIFACTS_DIR \
-  $GO_TEST_JSON_OUTPUT_FILE.$config \
-  $exit_status
 done
