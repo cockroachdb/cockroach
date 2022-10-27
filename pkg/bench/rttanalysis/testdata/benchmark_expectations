@@ -73,8 +73,8 @@ exp,benchmark
 3,ORMQueries/information_schema._pg_index_position
 2,ORMQueries/pg_attribute
 2,ORMQueries/pg_class
-10,ORMQueries/pg_is_other_temp_schema
-18,ORMQueries/pg_is_other_temp_schema_multiple_times
+8,ORMQueries/pg_is_other_temp_schema
+8,ORMQueries/pg_is_other_temp_schema_multiple_times
 4,ORMQueries/pg_my_temp_schema
 4,ORMQueries/pg_my_temp_schema_multiple_times
 4,ORMQueries/pg_namespace

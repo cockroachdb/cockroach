@@ -4772,12 +4772,14 @@ CREATE TABLE pg_catalog.pg_namespace (
    oid OID NULL,
    nspname NAME NOT NULL,
    nspowner OID NULL,
-   nspacl STRING[] NULL
+   nspacl STRING[] NULL,
+   INDEX pg_namespace_oid_idx (oid ASC) STORING (nspname, nspowner, nspacl)
 )  CREATE TABLE pg_catalog.pg_namespace (
    oid OID NULL,
    nspname NAME NOT NULL,
    nspowner OID NULL,
-   nspacl STRING[] NULL
+   nspacl STRING[] NULL,
+   INDEX pg_namespace_oid_idx (oid ASC) STORING (nspname, nspowner, nspacl)
 )  {}  {}
 CREATE TABLE pg_catalog.pg_opclass (
    oid OID NULL,
