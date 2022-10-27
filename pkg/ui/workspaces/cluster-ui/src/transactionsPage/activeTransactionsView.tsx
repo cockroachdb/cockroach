@@ -23,7 +23,7 @@ import {
   ActiveStatementFilters,
   ActiveTransactionFilters,
 } from "src/activeExecutions";
-import SQLActivityError from "src/sqlActivity/errorComponent";
+import LoadingError from "src/sqlActivity/errorComponent";
 import {
   calculateActiveFilters,
   Filter,
@@ -192,7 +192,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
           page="active transactions"
           error={sessionsError}
           renderError={() =>
-            SQLActivityError({
+            LoadingError({
               statsType: "transactions",
             })
           }
