@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -39,7 +38,8 @@ func TestRegistry(t *testing.T) {
 	t.Run("slow detection", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -51,7 +51,7 @@ func TestRegistry(t *testing.T) {
 		}}
 		var actual []*Insight
 
-		registry.IterateInsights(
+		store.IterateInsights(
 			context.Background(),
 			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
@@ -74,7 +74,8 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, s)
 		registry.ObserveTransaction(session.ID, transaction)
 
@@ -86,7 +87,7 @@ func TestRegistry(t *testing.T) {
 		}}
 		var actual []*Insight
 
-		registry.IterateInsights(
+		store.IterateInsights(
 			context.Background(),
 			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
@@ -99,12 +100,13 @@ func TestRegistry(t *testing.T) {
 	t.Run("disabled", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 0)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		var actual []*Insight
-		registry.IterateInsights(
+		store.IterateInsights(
 			context.Background(),
 			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
@@ -121,12 +123,13 @@ func TestRegistry(t *testing.T) {
 			FingerprintID:    roachpb.StmtFingerprintID(100),
 			LatencyInSeconds: 0.5,
 		}
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement2)
 		registry.ObserveTransaction(session.ID, transaction)
 
 		var actual []*Insight
-		registry.IterateInsights(
+		store.IterateInsights(
 			context.Background(),
 			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
@@ -146,7 +149,8 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveStatement(otherSession.ID, otherStatement)
 		registry.ObserveTransaction(session.ID, transaction)
@@ -164,7 +168,7 @@ func TestRegistry(t *testing.T) {
 			Problem:     Problem_SlowExecution,
 		}}
 		var actual []*Insight
-		registry.IterateInsights(
+		store.IterateInsights(
 			context.Background(),
 			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
@@ -187,7 +191,8 @@ func TestRegistry(t *testing.T) {
 
 		st := cluster.MakeTestingClusterSettings()
 		LatencyThreshold.Override(ctx, &st.SV, 1*time.Second)
-		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		store := newStore(st)
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, store)
 		registry.ObserveStatement(session.ID, statement)
 		registry.ObserveStatement(session.ID, siblingStatment)
 		registry.ObserveTransaction(session.ID, transaction)
@@ -204,7 +209,7 @@ func TestRegistry(t *testing.T) {
 			Problem:     Problem_None,
 		}}
 		var actual []*Insight
-		registry.IterateInsights(
+		store.IterateInsights(
 			context.Background(),
 			func(ctx context.Context, o *Insight) {
 				actual = append(actual, o)
@@ -213,40 +218,4 @@ func TestRegistry(t *testing.T) {
 
 		require.Equal(t, expected, actual)
 	})
-
-	t.Run("retention", func(t *testing.T) {
-		st := cluster.MakeTestingClusterSettings()
-		LatencyThreshold.Override(ctx, &st.SV, 100*time.Millisecond)
-		slow := 2 * LatencyThreshold.Get(&st.SV).Seconds()
-		r := newRegistry(st, &latencyThresholdDetector{st: st})
-
-		// With the ExecutionInsightsCapacity set to 5, we retain the 5 most recently-seen insights.
-		ExecutionInsightsCapacity.Override(ctx, &st.SV, 5)
-		for id := 0; id < 10; id++ {
-			observeStatementExecution(r, uint64(id), slow)
-		}
-		assertInsightStatementIDs(t, r, []uint64{9, 8, 7, 6, 5})
-
-		// Lowering the ExecutionInsightsCapacity requires having a new insight to evict the others.
-		ExecutionInsightsCapacity.Override(ctx, &st.SV, 2)
-		assertInsightStatementIDs(t, r, []uint64{9, 8, 7, 6, 5})
-		observeStatementExecution(r, 10, slow)
-		assertInsightStatementIDs(t, r, []uint64{10, 9})
-	})
-}
-
-func observeStatementExecution(registry *lockingRegistry, idBase uint64, latencyInSeconds float64) {
-	sessionID := clusterunique.ID{Uint128: uint128.FromInts(2, 0)}
-	txnID := uuid.FromUint128(uint128.FromInts(1, idBase))
-	stmtID := clusterunique.ID{Uint128: uint128.FromInts(0, idBase)}
-	registry.ObserveStatement(sessionID, &Statement{ID: stmtID, LatencyInSeconds: latencyInSeconds})
-	registry.ObserveTransaction(sessionID, &Transaction{ID: txnID})
-}
-
-func assertInsightStatementIDs(t *testing.T, registry *lockingRegistry, expected []uint64) {
-	var actual []uint64
-	registry.IterateInsights(context.Background(), func(ctx context.Context, insight *Insight) {
-		actual = append(actual, insight.Statement.ID.Lo)
-	})
-	require.ElementsMatch(t, expected, actual)
 }
