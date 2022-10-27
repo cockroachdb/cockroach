@@ -17,6 +17,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/errors"
 	"gopkg.in/yaml.v2"
@@ -82,11 +83,20 @@ func (m Map) GetAliasesForPurpose(alias Alias, purpose Purpose) ([]Alias, bool) 
 
 // DefaultLoadTeams loads teams from the repo root's TEAMS.yaml.
 func DefaultLoadTeams() (Map, error) {
-	path := reporoot.GetFor(".", "TEAMS.yaml")
-	if path == "" {
-		return nil, errors.New("TEAMS.yaml not found")
+	var path string
+	if os.Getenv("BAZEL_TEST") != "" {
+		runfiles, err := bazel.RunfilesPath()
+		if err != nil {
+			return nil, err
+		}
+		path = filepath.Join(runfiles, "TEAMS.yaml")
+	} else {
+		root := reporoot.GetFor(".", "TEAMS.yaml")
+		if root == "" {
+			return nil, errors.New("TEAMS.yaml not found")
+		}
+		path = filepath.Join(root, "TEAMS.yaml")
 	}
-	path = filepath.Join(path, "TEAMS.yaml")
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err

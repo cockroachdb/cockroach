@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/errors"
@@ -84,11 +85,20 @@ func DefaultLoadCodeOwners() (*CodeOwners, error) {
 	if err != nil {
 		return nil, err
 	}
-	path := reporoot.GetFor(".", ".github/CODEOWNERS")
+	var path string
+	if os.Getenv("BAZEL_TEST") != "" {
+		// NB: The test needs to depend on the CODEOWNERS file.
+		runfiles, err := bazel.RunfilesPath()
+		if err != nil {
+			return nil, err
+		}
+		path = filepath.Join(runfiles, ".github", "CODEOWNERS")
+	} else {
+		path = filepath.Join(reporoot.GetFor(".", ".github/CODEOWNERS"), ".github/CODEOWNERS")
+	}
 	if path == "" {
 		return nil, errors.Errorf("CODEOWNERS not found")
 	}
-	path = filepath.Join(path, ".github/CODEOWNERS")
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err

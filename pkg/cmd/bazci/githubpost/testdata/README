@@ -1,4 +1,7 @@
-The files in this directory simulate real failure logs from nightly stress runs.
+There are two kinds of test file in this directory: `go test -json`-formatted
+files and Bazel `test.xml`-formatted files.
+
+The `json` files in this directory simulate real failure logs from nightly stress runs.
 They have been truncated for clarity.
 
 To regenerate them, run something like the following command:

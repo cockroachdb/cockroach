@@ -1,0 +1,25 @@
+<testsuites>
+	<testsuite errors="0" failures="2" skipped="0" tests="1284" time="0.208" name="github.com/cockroachdb/cockroach/pkg/util/json">
+		<testcase classname="json" name="TestJSONEncodeRoundTrip" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONEncodeStrictRoundTrip" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors" time="0.000">
+			<failure message="Failed" type="">=== RUN   TestJSONErrors&#xA;--- FAIL: TestJSONErrors (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="json" name="TestJSONErrors/&#34;\b&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/&#34;\v&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/&#34;\x00&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/&#34;_&#34;" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/01" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/1_2_3" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/[1,_2,_3]]" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/[1,_2,_3]}_do_not_ignore" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/frues" time="0.000">
+			<failure message="Failed" type="">=== RUN   TestJSONErrors/frues&#xA;    json_test.go:278: expected error message to be &#39;trailing characters after JSON document&#39;, but was &#39;unable to decode JSON: invalid character &#39;r&#39; in literal false (expecting &#39;a&#39;)&#39;&#xA;    --- FAIL: TestJSONErrors/frues (0.00s)&#xA;</failure>
+		</testcase>
+		<testcase classname="json" name="TestJSONErrors/true_false" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/{" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/{&#34;foo&#34;:_01}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/{&#39;foo&#39;:_1}" time="0.000"></testcase>
+		<testcase classname="json" name="TestJSONErrors/{foo:_1}" time="0.000"></testcase>
+	</testsuite>
+</testsuites>
