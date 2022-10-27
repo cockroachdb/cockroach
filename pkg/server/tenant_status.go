@@ -205,7 +205,7 @@ func (t *tenantStatusServer) CancelQuery(
 
 	// This request needs to be forwarded to another instance.
 	if instanceID != t.sqlServer.SQLInstanceID() {
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 		if err != nil {
 			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
 				return &serverpb.CancelQueryResponse{
@@ -284,7 +284,7 @@ func (t *tenantStatusServer) CancelQueryByKey(
 	// This request needs to be forwarded to another node.
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = t.AnnotateCtx(ctx)
-	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, req.SQLInstanceID)
+	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, req.SQLInstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (t *tenantStatusServer) CancelSession(
 
 	// This request needs to be forwarded to another instance.
 	if instanceID != t.sqlServer.SQLInstanceID() {
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 		if err != nil {
 			if errors.Is(err, sqlinstance.NonExistentInstanceError) {
 				return &serverpb.CancelSessionResponse{
@@ -426,7 +426,7 @@ func (t *tenantStatusServer) ListExecutionInsights(
 		if local {
 			return t.baseStatusServer.localExecutionInsights(ctx)
 		}
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, requestedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, requestedInstanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -507,7 +507,7 @@ func (t *tenantStatusServer) ResetSQLStats(
 			return response, nil
 		}
 
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, parsedInstanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -636,7 +636,7 @@ func (t *tenantStatusServer) Statements(
 				t.sqlServer,
 				req.FetchMode)
 		}
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, parsedInstanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -728,7 +728,7 @@ func (t *tenantStatusServer) iteratePods(
 	responseFn func(instanceID base.SQLInstanceID, resp interface{}),
 	errorFn func(instanceID base.SQLInstanceID, nodeFnError error),
 ) error {
-	liveTenantInstances, err := t.sqlServer.sqlInstanceProvider.GetAllInstances(ctx)
+	liveTenantInstances, err := t.sqlServer.sqlInstanceReader.GetAllInstances(ctx)
 	if err != nil {
 		return err
 	}
@@ -846,7 +846,7 @@ func (t *tenantStatusServer) Profile(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -879,7 +879,7 @@ func (t *tenantStatusServer) Stacks(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -920,7 +920,7 @@ func (t *tenantStatusServer) IndexUsageStatistics(
 			return indexUsageStatsLocal(statsReader)
 		}
 
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, parsedInstanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -1010,7 +1010,7 @@ func (t *tenantStatusServer) ResetIndexUsageStats(
 			return resp, nil
 		}
 
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, parsedInstanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -1087,7 +1087,7 @@ func (t *tenantStatusServer) Details(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -1097,7 +1097,7 @@ func (t *tenantStatusServer) Details(
 		}
 		return status.Details(ctx, req)
 	}
-	localInstance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, t.sqlServer.SQLInstanceID())
+	localInstance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, t.sqlServer.SQLInstanceID())
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "local instance unavailable")
 	}
@@ -1120,7 +1120,7 @@ func (t *tenantStatusServer) NodesList(
 	if _, err := t.privilegeChecker.requireAdminUser(ctx); err != nil {
 		return nil, err
 	}
-	instances, err := t.sqlServer.sqlInstanceProvider.GetAllInstances(ctx)
+	instances, err := t.sqlServer.sqlInstanceReader.GetAllInstances(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1154,7 +1154,7 @@ func (t *tenantStatusServer) TxnIDResolution(
 		return t.localTxnIDResolution(req), nil
 	}
 
-	instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+	instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -1196,7 +1196,7 @@ func (t *tenantStatusServer) GetFiles(
 		return nil, status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, instanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, instanceID)
 		if err != nil {
 			return nil, err
 		}
@@ -1253,7 +1253,7 @@ func (t *tenantStatusServer) TransactionContentionEvents(
 			return t.localTransactionContentionEvents(shouldRedactContendingKey), nil
 		}
 
-		instance, err := t.sqlServer.sqlInstanceProvider.GetInstance(ctx, parsedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, parsedInstanceID)
 		if err != nil {
 			return nil, err
 		}

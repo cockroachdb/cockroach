@@ -93,6 +93,11 @@ func (r Row) ForEachColumn() Iterator {
 	return iter{r: r, cols: r.valueCols}
 }
 
+// ForAllColumns returns Iterator for all columns.
+func (r Row) ForAllColumns() Iterator {
+	return iter{r: r, cols: r.allCols}
+}
+
 // ForEachUDTColumn returns Datum iterator for each column containing user defined types.
 func (r Row) ForEachUDTColumn() Iterator {
 	return iter{r: r, cols: r.udtCols}
@@ -202,6 +207,7 @@ type EventDescriptor struct {
 	keyCols   []int // Primary key columns.
 	valueCols []int // All column family columns.
 	udtCols   []int // Columns containing UDTs.
+	allCols   []int // Contains all the columns
 }
 
 // NewEventDescriptor returns EventDescriptor for specified table and family descriptors.
@@ -295,6 +301,12 @@ func NewEventDescriptor(
 			}
 		}
 	}
+
+	allCols := make([]int, len(sd.cols))
+	for i := 0; i < len(sd.cols); i++ {
+		allCols = append(allCols, i)
+	}
+	sd.allCols = allCols
 
 	return &sd, nil
 }

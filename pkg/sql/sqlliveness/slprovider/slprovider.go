@@ -48,6 +48,13 @@ func New(
 	}
 }
 
+type provider struct {
+	*slstorage.Storage
+	*slinstance.Instance
+}
+
+var _ sqlliveness.Provider = &provider{}
+
 func (p *provider) Start(ctx context.Context) {
 	p.Storage.Start(ctx)
 	p.Instance.Start(ctx)
@@ -55,9 +62,4 @@ func (p *provider) Start(ctx context.Context) {
 
 func (p *provider) Metrics() metric.Struct {
 	return p.Storage.Metrics()
-}
-
-type provider struct {
-	*slstorage.Storage
-	*slinstance.Instance
 }

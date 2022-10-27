@@ -16,6 +16,8 @@ import (
 	"encoding/base64"
 	gojson "encoding/json"
 	"fmt"
+	"io"
+	"math"
 	"math/rand"
 	"net/url"
 	"os"
@@ -28,8 +30,10 @@ import (
 
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -51,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	goparquet "github.com/fraugster/parquet-go"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -523,6 +528,20 @@ func (s *notifyFlushSink) Flush(ctx context.Context) error {
 	return s.Sink.Flush(ctx)
 }
 
+func (s *notifyFlushSink) EncodeAndEmitRow(
+	ctx context.Context,
+	updatedRow cdcevent.Row,
+	prevRow cdcevent.Row,
+	topic TopicDescriptor,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+) error {
+	if sinkWithEncoder, ok := s.Sink.(SinkWithEncoder); ok {
+		return sinkWithEncoder.EncodeAndEmitRow(ctx, updatedRow, prevRow, topic, updated, mvcc, alloc)
+	}
+	return errors.AssertionFailedf("Expected a sink with encoder for, found %T", s.Sink)
+}
+
 var _ Sink = (*notifyFlushSink)(nil)
 
 // feedInjectable is the subset of the
@@ -905,6 +924,38 @@ func (f *cloudFeedFactory) Feed(
 			tree.KVOption{Key: changefeedbase.OptKeyInValue},
 		)
 	}
+	// Determine if we can enable parquet output if the changefeed is compatible
+	// with parquet format, if no format is specified. If it is, we will use
+	// parquet format with a probability of 0.4. The rest of the time json is used
+	parquetPossible := true
+
+	for _, opt := range createStmt.Options {
+		if string(opt.Key) == changefeedbase.OptFormat {
+			parquetPossible = false
+			break
+		}
+		for o := range changefeedbase.InitialScanOnlyUnsupportedOptions {
+			if o == string(opt.Key) {
+				parquetPossible = false
+				break
+			}
+		}
+	}
+	randNum := rand.Intn(5)
+	if randNum < 3 {
+		parquetPossible = false
+	}
+	if parquetPossible {
+		TestingSetIncludeParquetMetadata()
+		log.Infof(context.Background(), "Using parquet format")
+		createStmt.Options = append(
+			createStmt.Options,
+			tree.KVOption{
+				Key:   changefeedbase.OptFormat,
+				Value: tree.NewStrVal(string(changefeedbase.OptFormatParquet)),
+			},
+		)
+	}
 
 	feedDir := strconv.Itoa(f.feedIdx)
 	f.feedIdx++
@@ -944,11 +995,6 @@ func (f *cloudFeedFactory) Server() serverutils.TestTenantInterface {
 	return f.s
 }
 
-type cloudFeedEntry struct {
-	topic          string
-	value, payload []byte
-}
-
 type cloudFeed struct {
 	*jobFeed
 	seenTrackerMap
@@ -957,7 +1003,7 @@ type cloudFeed struct {
 	isBare bool
 
 	resolved string
-	rows     []cloudFeedEntry
+	rows     []*cdctest.TestFeedMessage
 }
 
 var _ cdctest.TestFeed = (*cloudFeed)(nil)
@@ -1041,55 +1087,218 @@ func extractKeyFromJSONValue(isBare bool, wrapped []byte) (key []byte, value []b
 	return key, value, nil
 }
 
+func (c *cloudFeed) decodeParquetValueAsJSON(value interface{}) (interface{}, error) {
+	switch vv := value.(type) {
+	case []byte:
+		// Currently, for encoding from CRDB data type to Parquet data type, for
+		// any complex structure (that is, other than ints and floats), it is
+		// always a byte array which is the string representation of that datum
+		// (except for arrays, see below). Therefore, if the parquet reader
+		// decodes a column value as a Go native byte array, then we can be sure
+		// that it is the equivalent string representation of the CRDB datum.
+		// Hence, we can use this value to construct the final JSON object which
+		// will be used by assertPayload to compare actual and expected JSON
+		// objects.
+
+		// Ideally there should be no need to convert byte array to string but
+		// JSON encoder will encode byte arrays as base 64 encoded strings.
+		// Hence, we need to convert to string to tell Marshal to decode it as a
+		// string. For every other Go native type, we can use the type as is and
+		// json.Marhsal will work correctly.
+		return string(vv), nil
+	case map[string]interface{}:
+		// This is CRDB ARRAY data type (only data type for which we use parquet
+		// LIST logical type. For all other CRDB types, it's either a byte array
+		// or a primitive parquet type). See importer.NewParquetColumn for
+		// details on how CRDB Array is encoded to parquet. (read it before
+		// reading the rest of the comments). Ideally, the parquet reader should
+		// decode the encoded CRDB array datum as a go native list type. But we
+		// use a low level API provided by the vendor which decodes parquet's
+		// LIST logical data type
+		// (https://github.com/apache/parquet-format/blob/master/LogicalTypes.md)
+		// into this weird map structure in Go (It actually makes a lot of sense
+		// why this is done if you understand the parquet LIST logical data
+		// type). A higher level API would convert this map data structure into
+		// go native list type which is what the code below does. This would
+		// probably need to be changed if the parquet vendor is changed.
+
+		// TODO(ganeshb): Make sure that the library is indeed decoding parquet lists
+		// into this weird map format and it is not because of the way we encode
+		vtemp := make([]interface{}, 0)
+		if castedValue, ok := vv["list"].([]map[string]interface{}); ok {
+			for _, ele := range castedValue {
+				if elementVal, ok := ele["element"]; ok {
+					if byteTypeElement, ok := elementVal.([]byte); ok {
+						vtemp = append(vtemp, string(byteTypeElement))
+					} else {
+						// Primitive types
+						vtemp = append(vtemp, ele["element"])
+					}
+				} else {
+					return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+				}
+			}
+		} else {
+			return nil, errors.Errorf("Data structure returned by parquet vendor for CRDB ARRAY type is not as expected.")
+		}
+		return vtemp, nil
+	default:
+		// int's, float's and other primitive types
+		if floatVal, ok := vv.(float64); ok {
+			// gojson cannot encode NaN values
+			// https://github.com/golang/go/issues/25721
+			if math.IsNaN(floatVal) {
+				return "NaN", nil
+			}
+		}
+		return vv, nil
+	}
+}
+
+// appendParquetTestFeedMessages function reads the parquet file and converts each row to its JSON
+// equivalent and appends it to the cloudfeed's row object.
+func (c *cloudFeed) appendParquetTestFeedMessages(
+	path string, topic string, envelopeType changefeedbase.EnvelopeType,
+) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fr, err := goparquet.NewFileReader(f)
+	if err != nil {
+		return err
+	}
+
+	primaryKeyColumnsString, ok := fr.MetaData()["primaryKeyNames"]
+	if !ok {
+		return errors.Errorf("Did not find primary key column names in metadata of parquet file during testing")
+	}
+
+	columnsNamesString, ok := fr.MetaData()["columnNames"]
+	if !ok {
+		return errors.Errorf("Did not find column names in metadata of parquet file during testing")
+	}
+	columns := strings.Split(columnsNamesString, ",")
+	primaryKeys := strings.Split(primaryKeyColumnsString, ",")
+
+	columnNameSet := make(map[string]struct{})
+	primaryKeyColumnSet := make(map[string]struct{})
+
+	for _, key := range primaryKeys[:len(primaryKeys)-1] {
+		primaryKeyColumnSet[key] = struct{}{}
+	}
+
+	for _, key := range columns[:len(columns)-1] {
+		columnNameSet[key] = struct{}{}
+	}
+
+	for {
+		row, err := fr.NextRow()
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// Holds column to its value mapping for a row and the entire thing will be
+		// JSON encoded later.
+		value := make(map[string]interface{})
+
+		// Holds the mapping of primary keys and its values.
+		key := make(map[string]interface{}, 0)
+		isDeleted := false
+
+		for k, v := range row {
+			if k == parquetCrdbEventTypeColName {
+				if string(v.([]byte)) == parquetEventDelete {
+					isDeleted = true
+				}
+				continue
+			}
+
+			if _, ok := columnNameSet[k]; ok {
+				value[k], err = c.decodeParquetValueAsJSON(v)
+				if err != nil {
+					return err
+				}
+			}
+
+			if _, ok := primaryKeyColumnSet[k]; ok {
+				decodedKeyVal, err := c.decodeParquetValueAsJSON(v)
+				if err != nil {
+					return err
+				}
+				key[k] = decodedKeyVal
+			}
+		}
+
+		if !isDeleted {
+			for col := range columnNameSet {
+				if _, ok := value[col]; !ok {
+					value[col] = nil
+				}
+			}
+		} else {
+			for k := range primaryKeyColumnSet {
+				delete(value, k)
+			}
+		}
+
+		valueWithAfter := make(map[string]interface{})
+
+		if envelopeType == changefeedbase.OptEnvelopeBare {
+			valueWithAfter = value
+		} else {
+			if isDeleted {
+				valueWithAfter["after"] = nil
+			} else {
+				valueWithAfter["after"] = value
+			}
+		}
+
+		orderedKey := make([]interface{}, 0)
+		for _, k := range primaryKeys[:len(primaryKeys)-1] {
+			orderedKey = append(orderedKey, key[k])
+		}
+
+		// Sorts the keys
+		jsonValue, err := reformatJSON(valueWithAfter)
+		if err != nil {
+			return err
+		}
+
+		jsonKey, err := reformatJSON(orderedKey)
+		if err != nil {
+			return err
+		}
+
+		m := &cdctest.TestFeedMessage{
+			Topic: topic,
+			Value: jsonValue,
+			Key:   jsonKey,
+		}
+
+		if isNew := c.markSeen(m); !isNew {
+			continue
+		}
+
+		c.rows = append(c.rows, m)
+	}
+
+	return nil
+}
+
 // Next implements the TestFeed interface.
 func (c *cloudFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
 		if len(c.rows) > 0 {
 			e := c.rows[0]
 			c.rows = c.rows[1:]
-			m := &cdctest.TestFeedMessage{
-				Topic:    e.topic,
-				Value:    e.value,
-				Resolved: e.payload,
-			}
-
-			// The other TestFeed impls check both key and value here, but cloudFeeds
-			// don't have keys.
-			if len(m.Value) > 0 {
-				details, err := c.Details()
-				if err != nil {
-					return nil, err
-				}
-
-				switch v := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat]); v {
-				case ``, changefeedbase.OptFormatJSON:
-					// Cloud storage sinks default the `WITH key_in_value` option so that
-					// the key is recoverable. Extract it out of the value (also removing it
-					// so the output matches the other sinks). Note that this assumes the
-					// format is json, this will have to be fixed once we add format=avro
-					// support to cloud storage.
-					//
-					// TODO(dan): Leave the key in the value if the TestFeed user
-					// specifically requested it.
-					if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
-						return nil, err
-					}
-					if isNew := c.markSeen(m); !isNew {
-						continue
-					}
-					m.Resolved = nil
-					return m, nil
-				case changefeedbase.OptFormatCSV:
-					if isNew := c.markSeen(m); !isNew {
-						continue
-					}
-					return m, nil
-				default:
-					return nil, errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, v)
-				}
-			}
-			m.Key, m.Value = nil, nil
-			return m, nil
+			return e, nil
 		}
 
 		select {
@@ -1148,7 +1357,7 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		resolvedEntry := cloudFeedEntry{payload: resolvedPayload}
+		resolvedEntry := &cdctest.TestFeedMessage{Resolved: resolvedPayload}
 		c.rows = append(c.rows, resolvedEntry)
 		c.resolved = path
 		return nil
@@ -1169,16 +1378,54 @@ func (c *cloudFeed) walkDir(path string, info os.FileInfo, err error) error {
 		return err
 	}
 	defer f.Close()
-	// NB: This is the logic for JSON. Avro will involve parsing an
-	// "Object Container File".
+	details, err := c.Details()
+	if err != nil {
+		return err
+	}
+
+	format := changefeedbase.FormatType(details.Opts[changefeedbase.OptFormat])
+
+	if format == changefeedbase.OptFormatParquet {
+		envelopeType := changefeedbase.EnvelopeType(details.Opts[changefeedbase.OptEnvelope])
+		return c.appendParquetTestFeedMessages(path, topic, envelopeType)
+	}
+
 	s := bufio.NewScanner(f)
 	for s.Scan() {
-		c.rows = append(c.rows, cloudFeedEntry{
-			topic: topic,
-			value: append([]byte(nil), s.Bytes()...),
-		})
+		value := append([]byte(nil), s.Bytes()...)
+		m := &cdctest.TestFeedMessage{
+			Topic: topic,
+			Value: value,
+		}
+
+		// NB: This is the logic for JSON. Avro will involve parsing an
+		// "Object Container File".
+		switch format {
+		case ``, changefeedbase.OptFormatJSON:
+			// Cloud storage sinks default the `WITH key_in_value` option so that
+			// the key is recoverable. Extract it out of the value (also removing it
+			// so the output matches the other sinks). Note that this assumes the
+			// format is json, this will have to be fixed once we add format=avro
+			// support to cloud storage.
+			//
+			// TODO(dan): Leave the key in the value if the TestFeed user
+			// specifically requested it.
+			if m.Key, m.Value, err = extractKeyFromJSONValue(c.isBare, m.Value); err != nil {
+				return err
+			}
+			if isNew := c.markSeen(m); !isNew {
+				continue
+			}
+			m.Resolved = nil
+			c.rows = append(c.rows, m)
+		case changefeedbase.OptFormatCSV:
+			c.rows = append(c.rows, m)
+		default:
+			return errors.Errorf(`unknown %s: %s`, changefeedbase.OptFormat, format)
+		}
 	}
 	return nil
+
 }
 
 // teeGroup facilitates reading messages from input channel

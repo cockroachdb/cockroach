@@ -231,7 +231,7 @@ func TestAlterChangefeedSetDiffOption(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo with format='json'`)
 		defer closeFeed(t, testFeed)
 
 		feed, ok := testFeed.(cdctest.EnterpriseTestFeed)
@@ -1384,7 +1384,7 @@ func TestAlterChangefeedWithOldCursorFromCreateChangefeed(t *testing.T) {
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 		knobs.OverrideCursor = calculateCursor
 
-		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET format='json'`, castedFeed.JobID()))
+		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d UNSET resolved`, castedFeed.JobID()))
 
 		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, castedFeed.JobID()))
 		waitForJobStatus(sqlDB, t, castedFeed.JobID(), `running`)

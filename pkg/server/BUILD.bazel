@@ -206,7 +206,7 @@ go_library(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sessioninit",
         "//pkg/sql/sqlinstance",
-        "//pkg/sql/sqlinstance/instanceprovider",
+        "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqlliveness/slprovider",
