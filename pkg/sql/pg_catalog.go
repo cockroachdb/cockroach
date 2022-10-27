@@ -21,6 +21,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -2048,7 +2050,7 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 }
 
 var pgCatalogNamespaceTable = virtualSchemaTable{
-	comment: `available namespaces (incomplete; namespaces and databases are congruent in CockroachDB)
+	comment: `available namespaces
 https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 	schema: vtable.PGCatalogNamespace,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -2065,9 +2067,6 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						}
 					} else if sc.SchemaKind() == catalog.SchemaPublic {
 						// admin is the owner of the public schema.
-						//
-						// TODO(ajwerner): The public schema effectively carries the privileges
-						// of the database so consider using the database's owner for public.
 						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
 					}
 					return addRow(
@@ -2078,6 +2077,59 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					)
 				})
 			})
+	},
+	indexes: []virtualIndex{
+		{
+			// incomplete is true because this index does not contain temporary schemas.
+			incomplete: true,
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, db catalog.DatabaseDescriptor,
+				addRow func(...tree.Datum) error,
+			) (bool, error) {
+				h := makeOidHasher()
+				coid := tree.MustBeDOid(unwrappedConstraint)
+				ooid := coid.Oid
+				sc, err := func() (catalog.SchemaDescriptor, error) {
+					// The system database still does not have a physical public schema.
+					if !db.HasPublicSchemaWithDescriptor() && ooid == keys.SystemPublicSchemaID {
+						return schemadesc.GetPublicSchema(), nil
+					}
+					if sc, ok := schemadesc.GetVirtualSchemaByID(descpb.ID(ooid)); ok {
+						return sc, nil
+					}
+					return p.Descriptors().GetImmutableSchemaByID(
+						ctx, p.Txn(), descpb.ID(ooid), tree.SchemaLookupFlags{Required: true},
+					)
+				}()
+				if err != nil {
+					if sqlerrors.IsUndefinedSchemaError(err) {
+						// No schema found, so no rows.
+						//nolint:returnerrcheck
+						return false, nil
+					}
+					return false, err
+				}
+				ownerOID := tree.DNull
+				if sc.SchemaKind() == catalog.SchemaUserDefined {
+					var err error
+					ownerOID, err = getOwnerOID(ctx, p, sc)
+					if err != nil {
+						return false, err
+					}
+				} else if sc.SchemaKind() == catalog.SchemaPublic {
+					// admin is the owner of the public schema.
+					ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
+				}
+				if err := addRow(
+					schemaOid(sc.GetID()),         // oid
+					tree.NewDString(sc.GetName()), // nspname
+					ownerOID,                      // nspowner
+					tree.DNull,                    // nspacl
+				); err != nil {
+					return false, err
+				}
+				return true, nil
+			},
+		},
 	},
 }
 
