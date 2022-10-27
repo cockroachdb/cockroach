@@ -562,16 +562,16 @@ func (e *Engines) Close() {
 
 // cpuWorkPermissionGranter implements the pebble.CPUWorkPermissionGranter
 // interface.
-type cpuWorkPermissionGranter struct {
-	*admission.SoftSlotGranter
-}
+//type cpuWorkPermissionGranter struct {
+//*admission.SoftSlotGranter
+//}
 
-func (c *cpuWorkPermissionGranter) TryGetProcs(count int) int {
-	return c.TryGetSlots(count)
-}
-func (c *cpuWorkPermissionGranter) ReturnProcs(count int) {
-	c.ReturnSlots(count)
-}
+//func (c *cpuWorkPermissionGranter) TryGetProcs(count int) int {
+//return c.TryGetSlots(count)
+//}
+//func (c *cpuWorkPermissionGranter) ReturnProcs(count int) {
+//c.ReturnSlots(count)
+//}
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
 func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
@@ -697,9 +697,11 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			pebbleConfig.Opts.TableCache = tableCache
 			pebbleConfig.Opts.MaxOpenFiles = int(openFileLimitPerStore)
 			pebbleConfig.Opts.Experimental.MaxWriterConcurrency = 2
-			pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
-				cfg.SoftSlotGranter,
-			}
+			// TODO(jackson): Implement the new pebble.CPUWorkPermissionGranter
+			// interface.
+			//pebbleConfig.Opts.Experimental.CPUWorkPermissionGranter = &cpuWorkPermissionGranter{
+			//cfg.SoftSlotGranter,
+			//}
 			if storeKnobs.SmallEngineBlocks {
 				for i := range pebbleConfig.Opts.Levels {
 					pebbleConfig.Opts.Levels[i].BlockSize = 1
