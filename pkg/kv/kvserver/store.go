@@ -2906,8 +2906,9 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
-	rankingsAccumulator := s.replRankings.NewAccumulator()
-	rankingsByTenantAccumulator := s.replRankingsByTenant.NewAccumulator()
+	rankingsAccumulator := NewReplicaAccumulator(
+		LBRebalancingDimension(LoadBasedRebalancingDimension.Get(&s.ClusterSettings().SV)).ToDimension())
+	rankingsByTenantAccumulator := NewTenantReplicaAccumulator()
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
 	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
@@ -2916,26 +2917,19 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		if r.OwnsValidLease(ctx, now) {
 			leaseCount++
 		}
-		mvccStats := r.GetMVCCStats()
-		logicalBytes += mvccStats.Total()
-		bytesPerReplica = append(bytesPerReplica, float64(mvccStats.Total()))
+		usage := RangeUsageInfoForRepl(r)
+		logicalBytes += usage.LogicalBytes
+		bytesPerReplica = append(bytesPerReplica, float64(usage.LogicalBytes))
 		// TODO(a-robinson): How dangerous is it that these numbers will be
 		// incorrectly low the first time or two it gets gossiped when a store
 		// starts? We can't easily have a countdown as its value changes like for
 		// leases/replicas.
-		var qps float64
-		if avgQPS, dur := r.loadStats.batchRequests.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
-			qps = avgQPS
-			totalQueriesPerSecond += avgQPS
-			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
-		}
-		if wps, dur := r.loadStats.writeKeys.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
-			totalWritesPerSecond += wps
-			writesPerReplica = append(writesPerReplica, wps)
-		}
+		totalQueriesPerSecond += usage.QueriesPerSecond
+		totalWritesPerSecond += usage.WritesPerSecond
+		writesPerReplica = append(writesPerReplica, usage.WritesPerSecond)
 		cr := candidateReplica{
 			Replica: r,
-			qps:     qps,
+			usage:   usage,
 		}
 		rankingsAccumulator.AddReplica(cr)
 		rankingsByTenantAccumulator.AddReplica(cr)
@@ -3414,8 +3408,8 @@ type HotReplicaInfo struct {
 // Note that this uses cached information, so it's cheap but may be slightly
 // out of date.
 func (s *Store) HottestReplicas() []HotReplicaInfo {
-	topQPS := s.replRankings.TopQPS()
-	return mapToHotReplicasInfo(topQPS)
+	topLoad := s.replRankings.TopLoad()
+	return mapToHotReplicasInfo(topLoad)
 }
 
 // HottestReplicasByTenant returns the hottest replicas on a store for specified
@@ -3430,7 +3424,7 @@ func mapToHotReplicasInfo(repls []CandidateReplica) []HotReplicaInfo {
 	hotRepls := make([]HotReplicaInfo, len(repls))
 	for i := range repls {
 		hotRepls[i].Desc = repls[i].Desc()
-		hotRepls[i].QPS = repls[i].QPS()
+		hotRepls[i].QPS = repls[i].RangeUsageInfo().QueriesPerSecond
 		hotRepls[i].RequestsPerSecond = repls[i].Repl().RequestsPerSecond()
 		hotRepls[i].WriteKeysPerSecond = repls[i].Repl().WritesPerSecond()
 		hotRepls[i].ReadKeysPerSecond = repls[i].Repl().ReadsPerSecond()

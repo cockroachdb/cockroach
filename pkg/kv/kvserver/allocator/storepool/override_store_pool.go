@@ -173,7 +173,7 @@ func (o *OverrideStorePool) UpdateLocalStoreAfterRebalance(
 // StorePool.UpdateLocalStoresAfterLeaseTransfer(..) is not a read-only method and
 // mutates the state of the held store details.
 func (o *OverrideStorePool) UpdateLocalStoresAfterLeaseTransfer(
-	_ roachpb.StoreID, _ roachpb.StoreID, _ float64,
+	_ roachpb.StoreID, _ roachpb.StoreID, _ allocator.RangeUsageInfo,
 ) {
 }
 
@@ -182,6 +182,9 @@ func (o *OverrideStorePool) UpdateLocalStoresAfterLeaseTransfer(
 // StorePool.UpdateLocalStoreAfterRelocate(..) is not a read-only method and
 // mutates the state of the held store details.
 func (o *OverrideStorePool) UpdateLocalStoreAfterRelocate(
-	_, _ []roachpb.ReplicationTarget, _, _ []roachpb.ReplicaDescriptor, _ roachpb.StoreID, _ float64,
+	_, _ []roachpb.ReplicationTarget,
+	_, _ []roachpb.ReplicaDescriptor,
+	_ roachpb.StoreID,
+	_ allocator.RangeUsageInfo,
 ) {
 }

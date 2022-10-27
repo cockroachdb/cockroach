@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -152,8 +153,8 @@ const (
 	// LeaseCountConvergence transfers leases such that lease counts converge
 	// across stores.
 	LeaseCountConvergence
-	// QPSConvergence transfers leases such that QPS converges across stores.
-	QPSConvergence
+	// LoadConvergence transfers leases such that load converges across stores.
+	LoadConvergence
 )
 
 // TransferLeaseOptions is the set of options needed to evaluate a lease
@@ -170,6 +171,9 @@ type TransferLeaseOptions struct {
 	// AllowUninitializedCandidates allows a lease transfer target to include
 	// replicas which are not in the existing replica set.
 	AllowUninitializedCandidates bool
+	// LoadDimensions declares the load dimensions to use when the Goal is
+	// LoadConvergence.
+	LoadDimensions []load.Dimension
 }
 
 // LeaseTransferOutcome represents the result of shedLease().
