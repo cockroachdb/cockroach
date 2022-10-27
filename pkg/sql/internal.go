@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptorlist"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -103,9 +104,9 @@ type InternalExecutor struct {
 // statement, so these descriptors should really be specified at a per-query/
 // statement level. See #34304.
 func (ie *InternalExecutor) WithSyntheticDescriptors(
-	descs []catalog.Descriptor, run func() error,
+	descs descriptorlist.CatalogDescriptorList, run func() error,
 ) error {
-	ie.syntheticDescriptors = descs
+	ie.syntheticDescriptors = *descs.(*catalog.Descriptors)
 	defer func() {
 		ie.syntheticDescriptors = nil
 	}()

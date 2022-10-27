@@ -32,9 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptorlist"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -933,7 +933,7 @@ func (ie *wrappedInternalExecutor) setErrFunc(f func(statement string) error) {
 }
 
 func (ie *wrappedInternalExecutor) WithSyntheticDescriptors(
-	descs []catalog.Descriptor, run func() error,
+	descs descriptorlist.CatalogDescriptorList, run func() error,
 ) error {
 	panic("not implemented")
 }

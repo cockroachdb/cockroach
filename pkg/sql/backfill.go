@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptorlist"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -1544,7 +1545,7 @@ func ValidateCheckConstraint(
 		semaCtx.TypeResolver = &resolver
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
-		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
+		return ie.WithSyntheticDescriptors(descriptorlist.CatalogDescriptorList(&catalog.Descriptors{tableDesc}), func() error {
 			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, constraint.CheckConstraint.Expr,
 				tableDesc.(*tabledesc.Mutable), ie)
 		})
@@ -1718,7 +1719,7 @@ func countExpectedRowsForInvertedIndex(
 		if idx.IsPartial() {
 			stmt = fmt.Sprintf(`%s WHERE %s`, stmt, idx.GetPredicate())
 		}
-		return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+		return ie.WithSyntheticDescriptors(descriptorlist.CatalogDescriptorList(&catalog.Descriptors{desc}), func() error {
 			row, err := ie.QueryRowEx(ctx, "verify-inverted-idx-count", txn, execOverride, stmt)
 			if err != nil {
 				return err
@@ -1891,7 +1892,7 @@ func populateExpectedCounts(
 		// query plan that uses the indexes being backfilled.
 		query := fmt.Sprintf(`SELECT count(1)%s FROM [%d AS t]@[%d]`, partialIndexCounts, desc.GetID(), desc.GetPrimaryIndexID())
 
-		return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+		return ie.WithSyntheticDescriptors(descriptorlist.CatalogDescriptorList(&catalog.Descriptors{desc}), func() error {
 			cnt, err := ie.QueryRowEx(ctx, "VERIFY INDEX", txn, execOverride, query)
 			if err != nil {
 				return err
@@ -1996,7 +1997,7 @@ func countIndexRowsAndMaybeCheckUniqueness(
 		if idx.IsPartial() {
 			query = fmt.Sprintf(`%s WHERE %s`, query, idx.GetPredicate())
 		}
-		return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+		return ie.WithSyntheticDescriptors(descriptorlist.CatalogDescriptorList(&catalog.Descriptors{desc}), func() error {
 			row, err := ie.QueryRowEx(ctx, "verify-idx-count", txn, execOverride, query)
 			if err != nil {
 				return err
@@ -2567,8 +2568,9 @@ func validateCheckInTxn(
 		syntheticDescs = append(syntheticDescs, tableDesc)
 	}
 
+	syntheticDescriptors := catalog.Descriptors(syntheticDescs)
 	return ie.WithSyntheticDescriptors(
-		syntheticDescs,
+		descriptorlist.CatalogDescriptorList(&syntheticDescriptors),
 		func() error {
 			return validateCheckExpr(ctx, semaCtx, txn, sessionData, checkExpr, tableDesc, ie)
 		})
@@ -2638,8 +2640,9 @@ func validateFkInTxn(
 		return err
 	}
 
+	syntheticDescriptors := catalog.Descriptors(syntheticDescs)
 	return ie.WithSyntheticDescriptors(
-		syntheticDescs,
+		descriptorlist.CatalogDescriptorList(&syntheticDescriptors),
 		func() error {
 			return validateForeignKey(ctx, srcTable, targetTable, fk, ie, txn)
 		})
@@ -2681,8 +2684,9 @@ func validateUniqueWithoutIndexConstraintInTxn(
 		return errors.AssertionFailedf("unique constraint %s does not exist", constraintName)
 	}
 
+	syntheticDescriptors := catalog.Descriptors(syntheticDescs)
 	return ie.WithSyntheticDescriptors(
-		syntheticDescs,
+		descriptorlist.CatalogDescriptorList(&syntheticDescriptors),
 		func() error {
 			return validateUniqueConstraint(
 				ctx,
