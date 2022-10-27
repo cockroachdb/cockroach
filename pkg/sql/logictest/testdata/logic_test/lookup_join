@@ -1481,3 +1481,38 @@ SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a AND f >= b ORDER
 
 statement ok
 RESET variable_inequality_lookup_join_enabled
+
+
+subtest regression_89576
+
+# Regression test for #89576. Lookup joins should not try to produce virtual
+# computed columns directly from primary indexes.
+statement ok
+CREATE TABLE t89576 (
+  k INT PRIMARY KEY,
+  s STRING,
+  v STRING AS (lower(s)) VIRTUAL NOT NULL,
+  INDEX (v)
+);
+INSERT INTO t89576 VALUES (1, 'foo')
+
+query T
+SELECT t2.v
+FROM t89576 AS t1
+LEFT JOIN t89576 AS t2
+ON (t2.v) = (t1.v)
+AND (t2.s) = (t1.s)
+----
+foo
+
+# TODO(#90771): We no longer explore lookup joins for this query, but it
+# should be possible by projecting virtual computed column expressions after the
+# upper join in the paired joiner. When this is supported, this query should
+# succeed and we should turn this test directive into "query T" and verify the
+# result matches the one in the query above.
+statement error pgcode XXUUU could not produce a query plan conforming to the LOOKUP JOIN hint
+SELECT t2.v
+FROM t89576 AS t1
+LEFT LOOKUP JOIN t89576 AS t2
+ON (t2.v) = (t1.v)
+AND (t2.s) = (t1.s)
