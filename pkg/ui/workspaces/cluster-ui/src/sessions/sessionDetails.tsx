@@ -23,7 +23,7 @@ import {
 } from "./sessionsTable";
 
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
-import SQLActivityError from "../sqlActivity/errorComponent";
+import LoadingError from "../sqlActivity/errorComponent";
 
 import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
 import { Bytes, DATE_FORMAT } from "src/util/format";
@@ -214,7 +214,7 @@ export class SessionDetails extends React.Component<SessionDetailsProps> {
             error={this.props.sessionError}
             render={this.renderContent}
             renderError={() =>
-              SQLActivityError({
+              LoadingError({
                 statsType: "sessions",
               })
             }
