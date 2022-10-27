@@ -46,6 +46,11 @@ const selectLoaded = createSelector(
   databases => databases.valid,
 );
 
+const selectLastError = createSelector(
+  (state: AdminUIState) => state.cachedData.databases,
+  databases => databases.lastError,
+);
+
 const sortSettingLocalSetting = new LocalSetting(
   "sortSetting/DatabasesPage",
   (state: AdminUIState) => state.localSettings,
@@ -105,6 +110,7 @@ const selectDatabases = createSelector(
       return {
         loading: !!details?.inFlight,
         loaded: !!details?.valid,
+        lastError: details?.lastError,
         name: database,
         sizeInBytes: sizeInBytes,
         tableCount: details?.data?.table_names?.length || 0,
@@ -123,6 +129,7 @@ const selectDatabases = createSelector(
 export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   loading: selectLoading(state),
   loaded: selectLoaded(state),
+  lastError: selectLastError(state),
   databases: selectDatabases(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   automaticStatsCollectionEnabled: selectAutomaticStatsCollectionEnabled(state),

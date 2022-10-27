@@ -55,7 +55,7 @@ import {
   timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
-import SQLActivityError from "../sqlActivity/errorComponent";
+import LoadingError from "../sqlActivity/errorComponent";
 import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
@@ -396,7 +396,7 @@ export class StatementDetails extends React.Component<
             error={error}
             render={this.renderTabs}
             renderError={() =>
-              SQLActivityError({
+              LoadingError({
                 statsType: "statements",
               })
             }
@@ -484,7 +484,7 @@ export class StatementDetails extends React.Component<
         {hasTimeout && (
           <InlineAlert
             intent="danger"
-            title={SQLActivityError({
+            title={LoadingError({
               statsType: "statements",
               timeout: true,
             })}

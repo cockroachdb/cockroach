@@ -31,6 +31,7 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabaseDetailsPageProps = {
   loading: true,
   loaded: false,
+  lastError: undefined,
   name: randomName(),
   tables: [],
   viewMode: ViewMode.Tables,
@@ -60,6 +61,7 @@ const withLoadingIndicator: DatabaseDetailsPageProps = {
 const withoutData: DatabaseDetailsPageProps = {
   loading: false,
   loaded: true,
+  lastError: null,
   name: randomName(),
   tables: [],
   viewMode: ViewMode.Tables,
@@ -89,6 +91,7 @@ const withoutData: DatabaseDetailsPageProps = {
 const withData: DatabaseDetailsPageProps = {
   loading: false,
   loaded: true,
+  lastError: null,
   name: randomName(),
   tables: _.map(Array(42), _item => {
     const roles = _.uniq(
@@ -103,6 +106,7 @@ const withData: DatabaseDetailsPageProps = {
       details: {
         loading: false,
         loaded: true,
+        lastError: null,
         columnCount: _.random(5, 42),
         indexCount: _.random(1, 6),
         userCount: roles.length,
@@ -114,6 +118,7 @@ const withData: DatabaseDetailsPageProps = {
       stats: {
         loading: false,
         loaded: true,
+        lastError: null,
         replicationSizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
         rangeCount: _.random(50, 500),
         nodesByRegionString:

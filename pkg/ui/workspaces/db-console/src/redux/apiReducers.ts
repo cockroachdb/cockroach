@@ -91,6 +91,8 @@ export const refreshLocations = locationsReducerObj.refresh;
 const databasesReducerObj = new CachedDataReducer(
   api.getDatabaseList,
   "databases",
+  null,
+  moment.duration(10, "m"),
 );
 export const refreshDatabases = databasesReducerObj.refresh;
 
@@ -102,6 +104,8 @@ const databaseDetailsReducerObj = new KeyedCachedDataReducer(
   api.getDatabaseDetails,
   "databaseDetails",
   databaseRequestToID,
+  null,
+  moment.duration(10, "m"),
 );
 
 const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
@@ -134,6 +138,8 @@ const tableDetailsReducerObj = new KeyedCachedDataReducer(
   api.getTableDetails,
   "tableDetails",
   tableRequestToID,
+  null,
+  moment.duration(10, "m"),
 );
 export const refreshTableDetails = tableDetailsReducerObj.refresh;
 
@@ -141,6 +147,8 @@ const tableStatsReducerObj = new KeyedCachedDataReducer(
   api.getTableStats,
   "tableStats",
   tableRequestToID,
+  null,
+  moment.duration(10, "m"),
 );
 export const refreshTableStats = tableStatsReducerObj.refresh;
 
