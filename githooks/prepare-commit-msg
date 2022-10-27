@@ -96,6 +96,23 @@ ${cchar}Release note (bug fix): \\
 "
 fi
 
+# Add an issue or epic reference.
+if ! grep -q -E '^(?i:close[sd]?|fix(?:e[sd])?|resolve[sd]?)' "$1"; then
+	sed_script+="/$cchar Please enter the commit message for your changes./i\\
+$cchar Please enter a valid issue or epic reference:\\
+${cchar}Fixes: #77376\\
+${cchar}Part of https://cockroachlabs.atlassian.net/browse/CRDB-13558\\
+${cchar}Informs: https://github.com/cockroachdb/cockroach/issues/33316\\
+${cchar}Epic: CRDB-8035\\
+${cchar}Epic: none\\
+${cchar}      ^-- the least preferred option\\
+
+;
+"
+fi
+
+# with '#' will be ignored
+
 # Inject commit message recommendations into the commit message help text.
 sed_script+="/$cchar.*an empty message aborts the commit./a\\
 $cchar\\
@@ -116,6 +133,9 @@ $cchar     <why it needed to change: This was inadequate because ...>\\
 $cchar     <what you did about it: To address this, this patch ...>\\
 $cchar\\
 $cchar     Release note (<category>): <what> <show> <why>\\
+$cchar     ---\\
+$cchar\\
+$cchar     Fixes <GH/Jira issue ID/URL to GH/Jira issue>\\
 $cchar     ---\\
 $cchar\\
 $cchar Wrap long lines! 72 columns is best.\\
