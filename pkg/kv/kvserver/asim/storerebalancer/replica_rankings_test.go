@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +37,7 @@ func TestHottestRanges(t *testing.T) {
 	}
 
 	qpsF := func(c kvserver.CandidateReplica) int {
-		return int(c.QPS())
+		return int(c.RangeUsageInfo().QueriesPerSecond)
 	}
 	ridF := func(c kvserver.CandidateReplica) int {
 		return int(c.GetRangeID())
@@ -50,9 +51,9 @@ func TestHottestRanges(t *testing.T) {
 	s.TransferLease(6, 3)
 	s.TransferLease(7, 3)
 
-	hot1 := hottestRanges(s, 1)
-	hot2 := hottestRanges(s, 2)
-	hot3 := hottestRanges(s, 3)
+	hot1 := hottestRanges(s, 1, load.Queries)
+	hot2 := hottestRanges(s, 2, load.Queries)
+	hot3 := hottestRanges(s, 3, load.Queries)
 
 	// NB: We only assert on the ranges where the store holds a lease. The
 	// other replicas will be included, however will have a QPS of zero and be

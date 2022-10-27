@@ -180,7 +180,7 @@ func TestReplicaStats(t *testing.T) {
 			rs.RecordCount(1, req)
 		}
 		manual.Advance(time.Second)
-		if actual, _ := rs.PerLocalityDecayingRate(); !floatMapsEqual(tc.expected, actual) {
+		if actual := rs.PerLocalityDecayingRate(); !floatMapsEqual(tc.expected, actual) {
 			t.Errorf("%d: incorrect per-locality QPS averages: %s", i, pretty.Diff(tc.expected, actual))
 		}
 		var expectedAvgQPS float64
@@ -195,7 +195,7 @@ func TestReplicaStats(t *testing.T) {
 		for k, v := range tc.expected {
 			tc.expected[k] = v / 2
 		}
-		if actual, _ := rs.PerLocalityDecayingRate(); !floatMapsEqual(tc.expected, actual) {
+		if actual := rs.PerLocalityDecayingRate(); !floatMapsEqual(tc.expected, actual) {
 			t.Errorf("%d: incorrect per-locality QPS averages: %s", i, pretty.Diff(tc.expected, actual))
 		}
 		expectedAvgQPS /= 2
@@ -227,7 +227,8 @@ func TestReplicaStatsDecay(t *testing.T) {
 	})
 
 	{
-		counts, dur := rs.PerLocalityDecayingRate()
+		summary := rs.SnapshotRatedSummary()
+		counts, dur := summary.LocalityCounts, summary.Duration
 		if len(counts) != 0 {
 			t.Errorf("expected empty request counts, got %+v", counts)
 		}
@@ -235,7 +236,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 			t.Errorf("expected duration = 0, got %v", dur)
 		}
 		manual.Advance(1)
-		if _, dur := rs.PerLocalityDecayingRate(); dur != 1 {
+		if dur := rs.SnapshotRatedSummary().Duration; dur != 1 {
 			t.Errorf("expected duration = 1, got %v", dur)
 		}
 		rs.ResetRequestCounts()
@@ -250,7 +251,8 @@ func TestReplicaStatsDecay(t *testing.T) {
 			awsLocalities[2]: 2,
 			awsLocalities[3]: 1,
 		}
-		actual, dur := rs.PerLocalityDecayingRate()
+		summary := rs.SnapshotRatedSummary()
+		actual, dur := summary.LocalityCounts, summary.Duration
 		if dur != 0 {
 			t.Errorf("expected duration = 0, got %v", dur)
 		}
@@ -267,7 +269,8 @@ func TestReplicaStatsDecay(t *testing.T) {
 				counts[k] = v * decayFactor
 				expected[k] = counts[k] / totalDuration.Seconds()
 			}
-			actual, dur = rs.PerLocalityDecayingRate()
+			summary = rs.SnapshotRatedSummary()
+			actual, dur = summary.LocalityCounts, summary.Duration
 			if expectedDur := replStatsRotateInterval * time.Duration(i+1); dur != expectedDur {
 				t.Errorf("expected duration = %v, got %v", expectedDur, dur)
 			}
@@ -283,7 +286,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 		// have any value other than zero. The keys are not cleared as they are
 		// likely to appear again.
 		manual.Advance(replStatsRotateInterval)
-		actualCounts, _ := rs.PerLocalityDecayingRate()
+		actualCounts := rs.PerLocalityDecayingRate()
 		for _, v := range actualCounts {
 			require.Zero(t, v)
 		}
@@ -306,7 +309,7 @@ func TestReplicaStatsDecay(t *testing.T) {
 			awsLocalities[2]: (2*decayFactor + 2) / durationDivisor,
 			awsLocalities[3]: (1*decayFactor + 3) / durationDivisor,
 		}
-		if actual, _ := rs.PerLocalityDecayingRate(); !reflect.DeepEqual(expected, actual) {
+		if actual := rs.PerLocalityDecayingRate(); !reflect.DeepEqual(expected, actual) {
 			t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
 		}
 	}
@@ -339,44 +342,44 @@ func TestReplicaStatsDecaySmoothing(t *testing.T) {
 		awsLocalities[2]: 2,
 		awsLocalities[3]: 1,
 	}
-	if actual, _ := rs.PerLocalityDecayingRate(); !reflect.DeepEqual(expected, actual) {
-		t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual))
+	if actual := rs.SnapshotRatedSummary(); !reflect.DeepEqual(expected, actual.LocalityCounts) {
+		t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual.LocalityCounts))
 	}
 
 	increment := replStatsRotateInterval / 2
 	manual.Advance(increment)
-	actual1, dur := rs.PerLocalityDecayingRate()
-	if dur != increment {
-		t.Errorf("expected duration = %v; got %v", increment, dur)
+	actual1 := rs.SnapshotRatedSummary()
+	if actual1.Duration != increment {
+		t.Errorf("expected duration = %v; got %v", increment, actual1.Duration)
 	}
 	for k := range expected {
 		expected[k] /= increment.Seconds()
 	}
-	if !floatMapsEqual(expected, actual1) {
-		t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual1))
+	if !floatMapsEqual(expected, actual1.LocalityCounts) {
+		t.Errorf("incorrect per-locality request counts: %s", pretty.Diff(expected, actual1.LocalityCounts))
 	}
 
 	// Verify that all values decrease as time advances if no requests come in.
 	manual.Advance(1)
-	actual2, _ := rs.PerLocalityDecayingRate()
-	if len(actual1) != len(actual2) {
-		t.Fatalf("unexpected different results sizes (expected %d, got %d)", len(actual1), len(actual2))
+	actual2 := rs.SnapshotRatedSummary()
+	if len(actual1.LocalityCounts) != len(actual2.LocalityCounts) {
+		t.Fatalf("unexpected different results sizes (expected %d, got %d)", len(actual1.LocalityCounts), len(actual2.LocalityCounts))
 	}
-	for k := range actual1 {
-		if actual2[k] >= actual1[k] {
-			t.Errorf("expected newer count %f to be smaller than older count %f", actual2[k], actual2[k])
+	for k := range actual1.LocalityCounts {
+		if actual2.LocalityCounts[k] >= actual1.LocalityCounts[k] {
+			t.Errorf("expected newer count %f to be smaller than older count %f", actual2.LocalityCounts[k], actual2.LocalityCounts[k])
 		}
 	}
 
 	// Ditto for passing a window boundary.
 	manual.Advance(increment)
-	actual3, _ := rs.PerLocalityDecayingRate()
-	if len(actual2) != len(actual3) {
-		t.Fatalf("unexpected different results sizes (expected %d, got %d)", len(actual2), len(actual3))
+	actual3 := rs.SnapshotRatedSummary()
+	if len(actual2.LocalityCounts) != len(actual3.LocalityCounts) {
+		t.Fatalf("unexpected different results sizes (expected %d, got %d)", len(actual2.LocalityCounts), len(actual3.LocalityCounts))
 	}
-	for k := range actual2 {
-		if actual3[k] >= actual2[k] {
-			t.Errorf("expected newer count %f to be smaller than older count %f", actual3[k], actual3[k])
+	for k := range actual2.LocalityCounts {
+		if actual3.LocalityCounts[k] >= actual2.LocalityCounts[k] {
+			t.Errorf("expected newer count %f to be smaller than older count %f", actual3.LocalityCounts[k], actual3.LocalityCounts[k])
 		}
 	}
 }
