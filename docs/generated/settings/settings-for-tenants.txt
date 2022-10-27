@@ -60,10 +60,12 @@ server.child_metrics.enabled	boolean	false	enables the exporting of child metric
 server.clock.forward_jump_check_enabled	boolean	false	if enabled, forward clock jumps > max_offset/2 will cause a panic
 server.clock.persist_upper_bound_interval	duration	0s	the interval between persisting the wall time upper bound of the clock. The clock does not generate a wall time greater than the persisted timestamp and will panic if it sees a wall time greater than this value. When cockroach starts, it waits for the wall time to catch-up till this persisted timestamp. This guarantees monotonic wall time across server restarts. Not setting this or setting a value of 0 disables this feature.
 server.eventlog.enabled	boolean	true	if set, logged notable events are also stored in the table system.eventlog
-server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
+server.eventlog.ttl	duration	2160h0m0s	if nonzero, entries in system.eventlog older than this duration are periodically purged
 server.host_based_authentication.configuration	string		host-based authentication configuration to use during connection authentication
 server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with all HTTP requests. The headers will contain a max-age setting of one year. Browsers honoring the header will always use HTTPS to access the DB Console. Ensure that TLS is correctly configured prior to enabling.
 server.identity_map.configuration	string		system-identity to database-username mappings
+server.log_gc.max_deletions_per_cycle	integer	1000	the maximum number of entries to delete on each purge of log-like system tables
+server.log_gc.period	duration	1h0m0s	the period at which log-like system tables are checked for old entries
 server.max_connections_per_gateway	integer	-1	the maximum number of non-superuser SQL connections per gateway allowed at a given time (note: this will only limit future connection attempts and will not affect already established connections). Negative values result in unlimited number of connections. Superusers are not affected by this limit.
 server.oidc_authentication.autologin	boolean	false	if true, logged-out visitors to the DB Console will be automatically redirected to the OIDC login endpoint
 server.oidc_authentication.button_text	string	Login with your OIDC provider	text to show on button on DB Console login page to login with your OIDC provider (only shown if OIDC is enabled)
@@ -75,7 +77,7 @@ server.oidc_authentication.principal_regex	string	(.+)	regular expression to app
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback) 
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)
-server.rangelog.ttl	duration	720h0m0s	if nonzero, range log entries older than this duration are deleted every 10m0s. Should not be lowered below 24 hours.
+server.rangelog.ttl	duration	720h0m0s	if nonzero, entries in system.rangelog older than this duration are periodically purged
 server.shutdown.connection_wait	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
 server.shutdown.drain_wait	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.drain_wait is to set the wait time for health probes to notice that the node is not ready.)
 server.shutdown.lease_transfer_wait	duration	5s	the timeout for a single iteration of the range lease transfer phase of draining (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)
@@ -88,9 +90,6 @@ server.user_login.password_hashes.default_cost.crdb_bcrypt	integer	10	the hashin
 server.user_login.password_hashes.default_cost.scram_sha_256	integer	119680	the hashing cost to use when storing passwords supplied as cleartext by SQL clients with the hashing method scram-sha-256 (allowed range: 4096-240000000000)
 server.user_login.timeout	duration	10s	timeout after which client authentication times out if some system range is unavailable (0 = no timeout)
 server.user_login.upgrade_bcrypt_stored_passwords_to_scram.enabled	boolean	true	whether to automatically re-encode stored passwords using crdb-bcrypt to scram-sha-256
-server.web_session.auto_logout.timeout	duration	168h0m0s	the duration that web sessions will survive before being periodically purged, since they were last used
-server.web_session.purge.max_deletions_per_cycle	integer	1000	the maximum number of old sessions to delete for each purge
-server.web_session.purge.period	duration	1h0m0s	the time until old sessions are deleted
 server.web_session.purge.ttl	duration	1h0m0s	if nonzero, entries in system.web_sessions older than this duration are periodically purged
 server.web_session_timeout	duration	168h0m0s	the duration that a newly created web session will be valid
 sql.auth.change_own_password.enabled	boolean	false	controls whether a user is allowed to change their own password, even if they have no other privileges
