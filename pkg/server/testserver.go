@@ -599,6 +599,15 @@ func (ts *TestServer) Start(ctx context.Context) error {
 		ts.Stopper().Stop(context.Background())
 		return err
 	}
+	go func() {
+		// If the server requests a shutdown, do that simply by stopping the
+		// stopper.
+		select {
+		case <-ts.Server.ShutdownRequested():
+			ts.Stopper().Stop(ts.Server.AnnotateCtx(context.Background()))
+		case <-ts.Stopper().ShouldQuiesce():
+		}
+	}()
 	return nil
 }
 
@@ -905,6 +914,15 @@ func (ts *TestServer) StartTenant(
 	if err != nil {
 		return nil, err
 	}
+	go func() {
+		// If the server requests a shutdown, do that simply by stopping the
+		// tenant's stopper.
+		select {
+		case <-sw.ShutdownRequested():
+			stopper.Stop(sw.AnnotateCtx(context.Background()))
+		case <-stopper.ShouldQuiesce():
+		}
+	}()
 
 	if err := sw.Start(ctx); err != nil {
 		return nil, err

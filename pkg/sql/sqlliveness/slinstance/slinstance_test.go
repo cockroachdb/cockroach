@@ -44,11 +44,11 @@ func TestSQLInstance(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
 
 	fakeStorage := slstorage.NewFakeStorage()
-	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
 	sqlInstance.Start(ctx)
 
 	// Add one more instance to introduce concurrent access to storage.
-	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil)
+	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
 	dummy.Start(ctx)
 
 	s1, err := sqlInstance.Session(ctx)
