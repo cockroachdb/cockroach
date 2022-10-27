@@ -26,6 +26,32 @@ func TestVersionsAreValid(t *testing.T) {
 	require.NoError(t, versionsSingleton.Validate())
 }
 
+// TestPreserveVersionsForMinBinaryVersion ensures that versions
+// at or above binaryMinSupportedVersion are not deleted.
+func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	prevVersion := keyedVersion{
+		Key:     -1,
+		Version: roachpb.Version{Major: 1, Minor: 1},
+	}
+	for _, namedVersion := range versionsSingleton {
+		v := namedVersion.Version
+		if v.Less(binaryMinSupportedVersion) {
+			prevVersion = namedVersion
+			continue
+		}
+		if v.Major == prevVersion.Major && v.Minor == prevVersion.Minor {
+			require.Equalf(t, prevVersion.Internal+2, v.Internal,
+				"version(s) between %s (%s) and %s (%s) is(are) at or above minBinaryVersion (%s) and should not be removed",
+				prevVersion.Key, prevVersion.Version,
+				namedVersion.Key, namedVersion.Version,
+				binaryMinSupportedVersion)
+		}
+		prevVersion = namedVersion
+	}
+}
+
 func TestVersionFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
