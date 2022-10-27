@@ -5765,8 +5765,33 @@ func MVCCIsSpanEmpty(
 }
 
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
-// interval (StartTS, EndTS] as a Pebble SST. See MVCCExportOptions for options.
-// StartTS may be zero.
+// interval (StartTS, EndTS] as a Pebble SST. See mvccExportToWriter for more
+// details.
+func MVCCExportToSST(
+	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, MVCCKey, error) {
+	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
+	defer span.Finish()
+	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
+	defer sstWriter.Close()
+
+	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &sstWriter)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+	}
+
+	if summary.DataSize == 0 {
+		// If no records were added to the sstable, skip completing it and return a
+		// nil slice – the export code will discard it anyway (based on 0 DataSize).
+		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
+	}
+
+	return summary, resumeKey, sstWriter.Finish()
+}
+
+// mvccExportToWriter exports changes to the keyrange [StartKey, EndKey) over
+// the interval (StartTS, EndTS] to the passed in writer. See MVCCExportOptions
+// for options. StartTS may be zero.
 //
 // This comes in two principal flavors: all revisions or latest revision only.
 // In all-revisions mode, exports everything matching the span and time bounds,
@@ -5786,16 +5811,14 @@ func MVCCIsSpanEmpty(
 // intents outside are ignored.
 //
 // Returns an export summary and a resume key that allows resuming the export if
-// it reached a limit. Data is written to dest as it is collected. If an error
-// is returned then dest contents are undefined.
-func MVCCExportToSST(
-	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+// it reached a limit. Data is written to the writer as it is collected. If an
+// error is returned then the writer's contents are undefined. It is the
+// responsibility of the caller to Finish() / Close() the passed in writer.
+func mvccExportToWriter(
+	ctx context.Context, reader Reader, opts MVCCExportOptions, writer Writer,
 ) (roachpb.BulkOpSummary, MVCCKey, error) {
-	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
+	ctx, span := tracing.ChildSpan(ctx, "storage.mvccExportToWriter")
 	defer span.Finish()
-	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
-	defer sstWriter.Close()
 
 	// If we're not exporting all revisions then we can mask point keys below any
 	// MVCC range tombstones, since we don't care about them.
@@ -5934,7 +5957,7 @@ func MVCCExportToSST(
 				}
 				// Export only the inner roachpb.Value, not the MVCCValue header.
 				rawValue := mvccValue.Value.RawBytes
-				if err := sstWriter.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
+				if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, err
 				}
 			}
@@ -6045,11 +6068,11 @@ func MVCCExportToSST(
 			if unsafeKey.Timestamp.IsEmpty() {
 				// This should never be an intent since the incremental iterator returns
 				// an error when encountering intents.
-				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+				if err := writer.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
-				if err := sstWriter.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
+				if err := writer.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}
@@ -6107,21 +6130,11 @@ func MVCCExportToSST(
 			}
 			// Export only the inner roachpb.Value, not the MVCCValue header.
 			rawValue := mvccValue.Value.RawBytes
-			if err := sstWriter.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
+			if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, err
 			}
 		}
 		rows.BulkOpSummary.DataSize += rangeKeysSize
-	}
-
-	if rows.BulkOpSummary.DataSize == 0 {
-		// If no records were added to the sstable, skip completing it and return a
-		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
-	}
-
-	if err := sstWriter.Finish(); err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
 	return rows.BulkOpSummary, resumeKey, nil
