@@ -124,10 +124,6 @@ func evalExport(
 		return result.Result{}, nil
 	}
 
-	if !args.ReturnSST {
-		return result.Result{}, errors.New("ReturnSST is required")
-	}
-
 	if args.Encryption != nil {
 		return result.Result{}, errors.New("returned SSTs cannot be encrypted")
 	}
