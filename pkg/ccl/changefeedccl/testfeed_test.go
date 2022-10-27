@@ -686,15 +686,32 @@ type tableFeedFactory struct {
 	uri url.URL
 }
 
+func getInjectables(srvOrCluster interface{}) (serverutils.TestTenantInterface, []feedInjectable) {
+	switch t := srvOrCluster.(type) {
+	case serverutils.TestTenantInterface:
+		t.PGServer()
+		return t, []feedInjectable{t}
+	case serverutils.TestClusterInterface:
+		servers := make([]feedInjectable, t.NumServers())
+		for i := range servers {
+			servers[i] = t.Server(i)
+		}
+		return t.Server(0), servers
+	default:
+		panic(errors.AssertionFailedf("unexpected type %T", t))
+	}
+}
+
 // makeTableFeedFactory returns a TestFeedFactory implementation using the
 // `experimental-sql` uri.
 func makeTableFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB, sink url.URL,
+	srvOrCluster interface{}, db *gosql.DB, sink url.URL,
 ) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &tableFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
-			di: newDepInjector(srv),
+			s:  s,
+			di: newDepInjector(injectables...),
 			db: db,
 		},
 		uri: sink,
@@ -872,12 +889,13 @@ type cloudFeedFactory struct {
 // makeCloudFeedFactory returns a TestFeedFactory implementation using the cloud
 // storage uri.
 func makeCloudFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB, dir string,
+	srvOrCluster interface{}, db *gosql.DB, dir string,
 ) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &cloudFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
-			di: newDepInjector(srv),
+			s:  s,
+			di: newDepInjector(injectables...),
 			db: db,
 		},
 		dir: dir,
@@ -917,7 +935,7 @@ func (f *cloudFeedFactory) Feed(
 	// Nodelocal puts its dir under `ExternalIODir`, which is passed into
 	// cloudFeedFactory.
 	feedDir = filepath.Join(f.dir, feedDir)
-	if err := os.Mkdir(feedDir, 0755); err != nil {
+	if err := os.Mkdir(feedDir, 0755); err != nil && !errors.Is(err, os.ErrExist) {
 		return nil, err
 	}
 
@@ -1344,33 +1362,14 @@ type kafkaFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*kafkaFeedFactory)(nil)
 
 // makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
-func makeKafkaFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
+func makeKafkaFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &kafkaFeedFactory{
 		knobs: &sinkKnobs{},
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
+			s:  s,
 			db: db,
-			di: newDepInjector(srv),
-		},
-	}
-}
-
-// makeKafkaFeedFactoryForCluster returns a TestFeedFactory
-// implementation using the `kafka` uri.
-func makeKafkaFeedFactoryForCluster(
-	c serverutils.TestClusterInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
-	servers := make([]feedInjectable, c.NumServers())
-	for i := 0; i < c.NumServers(); i++ {
-		servers[i] = c.Server(i)
-	}
-	return &kafkaFeedFactory{
-		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  c.Server(0),
-			db: db,
-			di: newDepInjector(servers...),
+			di: newDepInjector(injectables...),
 		},
 	}
 }
@@ -1555,15 +1554,14 @@ type webhookFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*webhookFeedFactory)(nil)
 
 // makeWebhookFeedFactory returns a TestFeedFactory implementation using the `webhook-webhooks` uri.
-func makeWebhookFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
+func makeWebhookFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	useSecure := rand.Float32() < 0.5
 	return &webhookFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
+			s:  s,
 			db: db,
-			di: newDepInjector(srv),
+			di: newDepInjector(injectables...),
 		},
 		useSecureServer: useSecure,
 	}
@@ -1867,14 +1865,13 @@ type pubsubFeedFactory struct {
 var _ cdctest.TestFeedFactory = (*pubsubFeedFactory)(nil)
 
 // makePubsubFeedFactory returns a TestFeedFactory implementation using the `pubsub` uri.
-func makePubsubFeedFactory(
-	srv serverutils.TestTenantInterface, db *gosql.DB,
-) cdctest.TestFeedFactory {
+func makePubsubFeedFactory(srvOrCluster interface{}, db *gosql.DB) cdctest.TestFeedFactory {
+	s, injectables := getInjectables(srvOrCluster)
 	return &pubsubFeedFactory{
 		enterpriseFeedFactory: enterpriseFeedFactory{
-			s:  srv,
+			s:  s,
 			db: db,
-			di: newDepInjector(srv),
+			di: newDepInjector(injectables...),
 		},
 	}
 }
