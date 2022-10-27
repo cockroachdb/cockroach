@@ -220,9 +220,6 @@ func (a *_AGG_TYPEAggregator) processBatch(batch coldata.Batch, startIdx, endIdx
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// {{if not .IsBytesLike}}
-				// gcassert:bce
-				// {{end}}
 				outCol.Set(i, a.curAgg)
 			}
 		}

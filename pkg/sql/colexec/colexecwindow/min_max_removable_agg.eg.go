@@ -241,7 +241,6 @@ func (a *minBoolAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -565,7 +564,6 @@ func (a *minDecimalAggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -720,7 +718,6 @@ func (a *minInt16Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -897,7 +894,6 @@ func (a *minInt32Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -1074,7 +1070,6 @@ func (a *minInt64Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -1251,7 +1246,6 @@ func (a *minFloat64Aggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -1444,7 +1438,6 @@ func (a *minTimestampAggregator) processBatch(batch coldata.Batch, startIdx, end
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -1613,7 +1606,6 @@ func (a *minIntervalAggregator) processBatch(batch coldata.Batch, startIdx, endI
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -1966,7 +1958,6 @@ func (a *minDatumAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -2208,7 +2199,6 @@ func (a *maxBoolAggregator) processBatch(batch coldata.Batch, startIdx, endIdx i
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -2532,7 +2522,6 @@ func (a *maxDecimalAggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -2687,7 +2676,6 @@ func (a *maxInt16Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -2864,7 +2852,6 @@ func (a *maxInt32Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -3041,7 +3028,6 @@ func (a *maxInt64Aggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -3218,7 +3204,6 @@ func (a *maxFloat64Aggregator) processBatch(batch coldata.Batch, startIdx, endId
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -3411,7 +3396,6 @@ func (a *maxTimestampAggregator) processBatch(batch coldata.Batch, startIdx, end
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -3580,7 +3564,6 @@ func (a *maxIntervalAggregator) processBatch(batch coldata.Batch, startIdx, endI
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
@@ -3933,7 +3916,6 @@ func (a *maxDatumAggregator) processBatch(batch coldata.Batch, startIdx, endIdx 
 			if a.queue.isEmpty() {
 				outNulls.SetNull(i)
 			} else {
-				// gcassert:bce
 				outCol.Set(i, a.curAgg)
 			}
 		}
