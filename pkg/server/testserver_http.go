@@ -150,12 +150,10 @@ func (ts *httpTestServer) createAuthUser(userName username.SQLUsername, isAdmin 
 		return err
 	}
 	if isAdmin {
-		// We can't use the GRANT statement here because we don't want
-		// to rely on CCL code.
 		if _, err := ts.t.sqlServer.internalExecutor.ExecEx(context.TODO(),
 			"grant-admin", nil,
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"INSERT INTO system.role_members (role, member, \"isAdmin\") VALUES ('admin', $1, true)", userName.Normalized(),
+			fmt.Sprintf("GRANT admin TO %s WITH ADMIN OPTION", userName.Normalized()),
 		); err != nil {
 			return err
 		}
