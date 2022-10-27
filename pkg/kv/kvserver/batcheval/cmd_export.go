@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/gogo/protobuf/types"
 )
 
 // SSTTargetSizeSetting is the cluster setting name for the
@@ -104,14 +103,6 @@ func evalExport(
 
 	ctx, evalExportSpan := tracing.ChildSpan(ctx, "evalExport")
 	defer evalExportSpan.Finish()
-
-	var evalExportTrace types.StringValue
-	if cArgs.EvalCtx.NodeID() == h.GatewayNodeID {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export on gateway node %d", cArgs.EvalCtx.NodeID())
-	} else {
-		evalExportTrace.Value = fmt.Sprintf("evaluating Export on remote node %d", cArgs.EvalCtx.NodeID())
-	}
-	evalExportSpan.RecordStructured(&evalExportTrace)
 
 	// Table's marked to be excluded from backup are expected to be configured
 	// with a short GC TTL. Additionally, backup excludes such table's from being
