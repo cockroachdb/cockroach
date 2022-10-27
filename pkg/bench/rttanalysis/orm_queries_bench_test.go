@@ -285,6 +285,102 @@ ORDER BY i.relname`,
 FROM indexes
 ORDER BY relname DESC, input`,
 		},
+
+		{
+			Name:  "hasura column descriptions",
+			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
+			Stmt: `WITH
+  "tabletable" as ( SELECT "table".oid,
+           "table".relkind,
+           "table".relname AS "table_name",
+           "schema".nspname AS "table_schema"
+      FROM pg_catalog.pg_class "table"
+      JOIN pg_catalog.pg_namespace "schema"
+          ON schema.oid = "table".relnamespace
+      WHERE "table".relkind IN ('r', 't', 'v', 'm', 'f', 'p')
+        AND "schema".nspname NOT LIKE 'pg_%'
+        AND "schema".nspname NOT IN ('information_schema', 'hdb_catalog', 'hdb_lib', '_timescaledb_internal', 'crdb_internal')
+  )
+SELECT
+  "table".table_schema,
+  "table".table_name,
+  coalesce(columns.description, '[]') as columns
+FROM "tabletable" "table"
+
+LEFT JOIN LATERAL
+  ( SELECT
+      pg_catalog.col_description("table".oid, "column".attnum) as description
+    FROM pg_catalog.pg_attribute "column"
+    WHERE "column".attrelid = "table".oid
+  ) columns ON true;`,
+		},
+
+		{
+			Name: "hasura column descriptions 8 tables",
+			Setup: `CREATE TABLE t1(a int primary key, b int);
+CREATE TABLE t2(a int primary key, b int);
+CREATE TABLE t3(a int primary key, b int);
+CREATE TABLE t4(a int primary key, b int);
+CREATE TABLE t5(a int primary key, b int);
+CREATE TABLE t6(a int primary key, b int);
+CREATE TABLE t7(a int primary key, b int);
+CREATE TABLE t8(a int primary key, b int);`,
+			Stmt: `WITH
+  "tabletable" as ( SELECT "table".oid,
+           "table".relkind,
+           "table".relname AS "table_name",
+           "schema".nspname AS "table_schema"
+      FROM pg_catalog.pg_class "table"
+      JOIN pg_catalog.pg_namespace "schema"
+          ON schema.oid = "table".relnamespace
+      WHERE "table".relkind IN ('r', 't', 'v', 'm', 'f', 'p')
+        AND "schema".nspname NOT LIKE 'pg_%'
+        AND "schema".nspname NOT IN ('information_schema', 'hdb_catalog', 'hdb_lib', '_timescaledb_internal', 'crdb_internal')
+  )
+SELECT
+  "table".table_schema,
+  "table".table_name,
+  coalesce(columns.description, '[]') as columns
+FROM "tabletable" "table"
+
+LEFT JOIN LATERAL
+  ( SELECT
+      pg_catalog.col_description("table".oid, "column".attnum) as description
+    FROM pg_catalog.pg_attribute "column"
+    WHERE "column".attrelid = "table".oid
+  ) columns ON true;`,
+		},
+
+		// Once https://github.com/cockroachdb/cockroach/issues/88885 is resolved,
+		// the previous test case should be identical to this one.
+		{
+			Name:  "hasura column descriptions modified",
+			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
+			Stmt: `WITH
+  "tabletable" as ( SELECT "table".oid,
+           "table".relkind,
+           "table".relname AS "table_name",
+           "schema".nspname AS "table_schema"
+      FROM pg_catalog.pg_class "table"
+      JOIN pg_catalog.pg_namespace "schema"
+          ON schema.oid = "table".relnamespace
+      WHERE "table".relkind IN ('r', 't', 'v', 'm', 'f', 'p')
+        AND "schema".nspname NOT LIKE 'pg_%'
+        AND "schema".nspname NOT IN ('information_schema', 'hdb_catalog', 'hdb_lib', '_timescaledb_internal', 'crdb_internal')
+  )
+SELECT
+  "table".table_schema,
+  "table".table_name,
+  coalesce(columns.description, '[]') as columns
+FROM "tabletable" "table"
+
+LEFT JOIN LATERAL
+  ( SELECT
+      pg_catalog.col_description("column".attrelid, "column".attnum) as description
+    FROM pg_catalog.pg_attribute "column"
+    WHERE "column".attrelid = "table".oid
+  ) columns ON true;`,
+		},
 	})
 }
 
