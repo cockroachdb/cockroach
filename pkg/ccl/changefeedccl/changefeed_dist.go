@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
@@ -270,8 +271,12 @@ func startDistChangefeed(
 
 	execPlan := func(ctx context.Context) error {
 		defer stopReplanner()
+		// Derive a separate context so that we can shut down the changefeed
+		// as soon as we see an error.
+		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 
-		resultRows := makeChangefeedResultWriter(resultsCh)
+		resultRows := makeChangefeedResultWriter(resultsCh, cancel)
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
 			resultRows,
@@ -444,10 +449,18 @@ type changefeedResultWriter struct {
 	rowsCh       chan<- tree.Datums
 	rowsAffected int
 	err          error
+	cancelOnce   struct {
+		sync.Once
+		cancel context.CancelFunc
+	}
 }
 
-func makeChangefeedResultWriter(rowsCh chan<- tree.Datums) *changefeedResultWriter {
-	return &changefeedResultWriter{rowsCh: rowsCh}
+func makeChangefeedResultWriter(
+	rowsCh chan<- tree.Datums, cancel context.CancelFunc,
+) *changefeedResultWriter {
+	w := &changefeedResultWriter{rowsCh: rowsCh}
+	w.cancelOnce.cancel = cancel
+	return w
 }
 
 func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
@@ -467,7 +480,9 @@ func (w *changefeedResultWriter) IncrementRowsAffected(ctx context.Context, n in
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
+	w.cancelOnce.Do(w.cancelOnce.cancel)
 }
+
 func (w *changefeedResultWriter) Err() error {
 	return w.err
 }
