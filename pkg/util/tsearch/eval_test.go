@@ -61,6 +61,7 @@ func TestEval(t *testing.T) {
 		{`a <2> b`, `a:1 b:3`, true},
 		{`a:* <0> ab:*`, `abba:1`, true},
 		{`a:* <0> ab:*`, `a:1`, false},
+		{`a:* <1> abc:*`, `a:1 abd:2`, false},
 
 		// Negations.
 		{`a <-> !b`, `a:1 b:2`, false},
@@ -77,7 +78,6 @@ func TestEval(t *testing.T) {
 		{`!a <-> !b`, `a:3 b:4`, true},
 		{`!a <-> !b`, `a:3`, true},
 
-		//{`!a <-> !b`, ``, true},
 		// Or on the RHS of a follows-by.
 		{`a <-> (b|c)`, `a:1 b:2`, true},
 		{`a <-> (b|c)`, `a:1 c:2`, true},
@@ -91,6 +91,8 @@ func TestEval(t *testing.T) {
 		{`a <-> (!b|!c)`, `a:1 b:2`, true},
 		{`a <-> (!b|!c)`, `a:1 c:2`, true},
 		{`a <-> (!b|!c)`, `a:1 d:2`, true},
+		{`a <-> ((b <-> c) | d)`, `a:1 b:2 c:3 d:4`, true},
+		{`a <-> (b | (c <-> d))`, `a:1 b:2 c:3 d:4`, true},
 		// And on the RHS of a follows-by.
 		{`a <-> (b&c)`, `a:1 b:2`, false},
 		{`a <-> (b&c)`, `a:1 c:2`, false},
@@ -104,6 +106,8 @@ func TestEval(t *testing.T) {
 		{`a <-> (!b&!c)`, `a:1 b:2`, false},
 		{`a <-> (!b&!c)`, `a:1 c:2`, false},
 		{`a <-> (!b&!c)`, `a:1 d:2`, true},
+		{`a <-> ((b <-> c) & d)`, `a:1 b:2 c:3 d:4`, false},
+		{`a <-> (b & (c <-> d))`, `a:1 b:2 c:3 d:4`, false},
 	}
 	for _, tc := range tcs {
 		t.Log(tc)
@@ -120,6 +124,10 @@ func TestEval(t *testing.T) {
 	// This subtest runs all the test cases against PG to ensure the behavior is
 	// the same.
 	t.Run("ComparePG", func(t *testing.T) {
+		// This test can be manually run by pointing it to a local Postgres. There
+		// are no requirements for the contents of the local Postgres - it just runs
+		// expressions. The test validates that all of the test cases in this test
+		// file work the same in Postgres as they do this package.
 		skip.IgnoreLint(t, "need to manually enable")
 		conn, err := pgx.Connect(context.Background(), "postgresql://jordan@localhost:5432")
 		require.NoError(t, err)
