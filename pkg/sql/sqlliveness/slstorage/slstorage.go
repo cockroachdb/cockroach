@@ -43,7 +43,7 @@ var GCInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"server.sqlliveness.gc_interval",
 	"duration between attempts to delete extant sessions that have expired",
-	20*time.Second,
+	time.Hour,
 	settings.NonNegativeDuration,
 )
 
