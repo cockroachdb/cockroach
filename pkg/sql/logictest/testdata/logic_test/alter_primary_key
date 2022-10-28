@@ -1654,3 +1654,11 @@ t_pkey      i            ASC
 t_pkey      j            N/A
 t_j_key     j            ASC
 t_j_key     i            ASC
+
+subtest regression_90836
+
+statement ok
+CREATE TABLE t_90836(a INT NOT NULL, b INT NOT NULL, CONSTRAINT "constraint" PRIMARY KEY (a));
+
+statement ok
+BEGIN; ALTER TABLE t_90836 DROP CONSTRAINT "constraint"; ALTER TABLE t_90836 ADD CONSTRAINT "constraint" PRIMARY KEY (b); COMMIT;
