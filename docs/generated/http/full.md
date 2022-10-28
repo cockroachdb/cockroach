@@ -2116,6 +2116,7 @@ Session represents one SQL session.
 | num_txns_executed | [int32](#cockroach.server.serverpb.ListSessionsResponse-int32) |  | Count of the number of transactions that have been opened on this session. This count includes transactions that are in progress. | [reserved](#support-status) |
 | txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) | repeated | List of transaction fingerprint IDs in this session. | [reserved](#support-status) |
 | total_active_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | The session's total active time. | [reserved](#support-status) |
+| recent_statements | [ActiveQuery](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery) | repeated | The recent statements that were executed in this session. | [reserved](#support-status) |
 
 
 
@@ -2165,6 +2166,28 @@ TxnInfo represents an in flight user transaction on some Session.
 | priority | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery"></a>
+#### ActiveQuery
+
+ActiveQuery represents a query in flight on some Session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | ID of the query (uint128 presented as a hexadecimal string). | [reserved](#support-status) |
+| txn_id | [bytes](#cockroach.server.serverpb.ListSessionsResponse-bytes) |  | The UUID of the transaction this query is running in. | [reserved](#support-status) |
+| sql | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | SQL query string specified by the user. | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
+| is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
+| phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
+| sql_no_constants | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sql_summary | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
+| is_full_scan | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if the query contains a full table or index scan. Note that this field is only valid if the query is in the EXECUTING phase. | [reserved](#support-status) |
 
 
 
@@ -2256,6 +2279,7 @@ Session represents one SQL session.
 | num_txns_executed | [int32](#cockroach.server.serverpb.ListSessionsResponse-int32) |  | Count of the number of transactions that have been opened on this session. This count includes transactions that are in progress. | [reserved](#support-status) |
 | txn_fingerprint_ids | [uint64](#cockroach.server.serverpb.ListSessionsResponse-uint64) | repeated | List of transaction fingerprint IDs in this session. | [reserved](#support-status) |
 | total_active_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | The session's total active time. | [reserved](#support-status) |
+| recent_statements | [ActiveQuery](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery) | repeated | The recent statements that were executed in this session. | [reserved](#support-status) |
 
 
 
@@ -2305,6 +2329,28 @@ TxnInfo represents an in flight user transaction on some Session.
 | priority | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | quality_of_service | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  |  | [reserved](#support-status) |
 | last_auto_retry_reason | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | Error message describing the cause for the txn's last automatic retry. | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery"></a>
+#### ActiveQuery
+
+ActiveQuery represents a query in flight on some Session.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| id | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | ID of the query (uint128 presented as a hexadecimal string). | [reserved](#support-status) |
+| txn_id | [bytes](#cockroach.server.serverpb.ListSessionsResponse-bytes) |  | The UUID of the transaction this query is running in. | [reserved](#support-status) |
+| sql | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | SQL query string specified by the user. | [reserved](#support-status) |
+| start | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Timestamp) |  | Start timestamp of this query. | [reserved](#support-status) |
+| is_distributed | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if this query is distributed. | [reserved](#support-status) |
+| phase | [ActiveQuery.Phase](#cockroach.server.serverpb.ListSessionsResponse-cockroach.server.serverpb.ActiveQuery.Phase) |  | phase stores the current phase of execution for this query. | [reserved](#support-status) |
+| progress | [float](#cockroach.server.serverpb.ListSessionsResponse-float) |  | progress is an estimate of the fraction of this query that has been processed. | [reserved](#support-status) |
+| sql_no_constants | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The SQL statement fingerprint, compatible with StatementStatisticsKey. | [reserved](#support-status) |
+| sql_summary | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | A summarized version of the sql query. | [reserved](#support-status) |
+| is_full_scan | [bool](#cockroach.server.serverpb.ListSessionsResponse-bool) |  | True if the query contains a full table or index scan. Note that this field is only valid if the query is in the EXECUTING phase. | [reserved](#support-status) |
 
 
 

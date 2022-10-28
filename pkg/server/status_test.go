@@ -3338,6 +3338,136 @@ CREATE USER %s with password 'hunter2';
 	wg.Wait()
 }
 
+// TestRecentStatementCache tests that statements are being written correctly to the
+// RecentStatementsCache, and that the information is surfaced via the ListSessions API.
+func TestRecentStatementCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serverParams, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: serverParams,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	user := "test_user"
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'hunter2' VIEWACTIVITY;`, user))
+	require.NoError(t, err)
+
+	expectedShowDatabases := 3
+	expectedShowTables := 5
+	expectedBadQueries := 2
+	expectedTimeouts := 4
+
+	// Start a session, and run SHOW DATABASES the specified number of times.
+	db1 := getUserConn(t, user, testCluster.Server(0))
+	defer db1.Close()
+	for i := 0; i < expectedShowDatabases; i++ {
+		sqlutils.MakeSQLRunner(db1).Exec(t, `SHOW DATABASES`)
+	}
+
+	// Run SHOW TABLES the specified number of times.
+	for i := 0; i < expectedShowTables; i++ {
+		sqlutils.MakeSQLRunner(db1).Exec(t, `SHOW TABLES`)
+	}
+
+	// Run a bad query the specified number of times.
+	for i := 0; i < expectedBadQueries; i++ {
+		sqlutils.MakeSQLRunner(db1).ExpectErr(t, `pq: column "bad_query" does not exist`, "SELECT bad_query;")
+	}
+
+	// Run a query that will time out the specified number of times.
+	_, err = db1.Exec("SET statement_timeout = '100ms';")
+	require.NoError(t, err)
+
+	for i := 0; i < expectedTimeouts; i++ {
+		sqlutils.MakeSQLRunner(db1).ExpectErr(t, `pq: query execution canceled due to statement timeout`, "SELECT pg_sleep(10);")
+	}
+
+	_, err = db1.Exec("RESET statement_timeout;")
+	require.NoError(t, err)
+
+	// TODO(amy): add test for Canceled query.
+
+	testutils.SucceedsSoon(t, func() error {
+		sessionsResponse := doSessionsRequest(user)
+		allSessions := sessionsResponse.Sessions
+
+		numShowDatabases := 0
+		numShowTables := 0
+		numBadQueries := 0
+		numTimeouts := 0
+
+		// Count the number of each statement in the cache, and check that the status is correct.
+		for _, session := range allSessions {
+			for _, qm := range session.RecentStatements {
+				if strings.Contains(qm.SqlSummary, "DATABASES") {
+					if qm.Phase != serverpb.ActiveQuery_COMPLETED {
+						return errors.Newf("Expected %s phase, got %s\n", serverpb.ActiveQuery_COMPLETED.String(), qm.Phase.String())
+					}
+					numShowDatabases++
+				}
+				if strings.Contains(qm.SqlSummary, "TABLES") {
+					if qm.Phase != serverpb.ActiveQuery_COMPLETED {
+						return errors.Newf("Expected %s phase, got %s\n", serverpb.ActiveQuery_COMPLETED.String(), qm.Phase.String())
+					}
+					numShowTables++
+				}
+				if strings.Contains(qm.SqlSummary, "bad_query") {
+					if qm.Phase != serverpb.ActiveQuery_FAILED {
+						return errors.Newf("Expected %s phase, got %s\n", serverpb.ActiveQuery_FAILED.String(), qm.Phase.String())
+					}
+					numBadQueries++
+				}
+				if strings.Contains(qm.SqlSummary, "pg_sleep") {
+					if qm.Phase != serverpb.ActiveQuery_TIMED_OUT {
+						return errors.Newf("Expected %s phase, got %s\n", serverpb.ActiveQuery_TIMED_OUT.String(), qm.Phase.String())
+					}
+					numTimeouts++
+				}
+			}
+		}
+
+		if numShowDatabases != expectedShowDatabases {
+			return errors.Newf("Expected %d SHOW DATABASES statements, got %d\n", expectedShowDatabases, numShowDatabases)
+		}
+		if numShowTables != expectedShowTables {
+			return errors.Newf("Expected %d SHOW TABLES statements, got %d\n", expectedShowTables, numShowTables)
+		}
+		if numBadQueries != expectedBadQueries {
+			return errors.Newf("Expected %d SELECT bad_query statements, got %d\n", expectedBadQueries, numBadQueries)
+		}
+		if numTimeouts != expectedTimeouts {
+			return errors.Newf("Expected %d timed out statements, got %d\n", expectedTimeouts, numTimeouts)
+		}
+		return nil
+	})
+}
+
 func TestTransactionContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

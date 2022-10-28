@@ -72,6 +72,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"      // register jobs declared outside of pkg/sql
@@ -752,6 +753,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	sessionRegistry := sql.NewSessionRegistry()
 	closedSessionCache := sql.NewClosedSessionCache(cfg.Settings, sqlMonitorAndMetrics.rootSQLMemoryMonitor, time.Now)
+	recentStatementsCache := recent.NewStatementsCache(st)
 	flowScheduler := flowinfra.NewFlowScheduler(cfg.AmbientCtx, stopper, st)
 
 	sStatus := newStatusServer(
@@ -836,6 +838,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		closedSessionCache:       closedSessionCache,
+		recentStatementsCache:    recentStatementsCache,
 		flowScheduler:            flowScheduler,
 		circularInternalExecutor: internalExecutor,
 		collectionFactory:        collectionFactory,

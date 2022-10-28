@@ -887,6 +887,10 @@ message ActiveQuery {
   enum Phase {
     PREPARING = 0;
     EXECUTING = 1;
+    CANCELED = 2;
+    TIMED_OUT = 3;
+    COMPLETED = 4;
+    FAILED    = 5;
   }
   // phase stores the current phase of execution for this query.
   Phase phase = 5;
@@ -986,6 +990,9 @@ message Session {
   // The session's total active time.
   google.protobuf.Duration total_active_time = 18 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
+
+  // The recent statements that were executed in this session.
+  repeated ActiveQuery recent_statements = 19 [(gogoproto.nullable) = false];
 }
 
 // An error wrapper object for ListSessionsResponse.

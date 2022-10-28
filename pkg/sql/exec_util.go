@@ -17,12 +17,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -78,6 +81,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
@@ -1175,20 +1179,21 @@ type ExecutorConfig struct {
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 	// SQLStatusServer gives access to a subset of the Status service and is
 	// available when not running as a system tenant.
-	SQLStatusServer    serverpb.SQLStatusServer
-	TenantStatusServer serverpb.TenantStatusServer
-	RegionsServer      serverpb.RegionsServer
-	MetricsRecorder    nodeStatusGenerator
-	SessionRegistry    *SessionRegistry
-	ClosedSessionCache *ClosedSessionCache
-	SQLLiveness        sqlliveness.Liveness
-	JobRegistry        *jobs.Registry
-	VirtualSchemas     *VirtualSchemaHolder
-	DistSQLPlanner     *DistSQLPlanner
-	TableStatsCache    *stats.TableStatisticsCache
-	StatsRefresher     *stats.Refresher
-	InternalExecutor   *InternalExecutor
-	QueryCache         *querycache.C
+	SQLStatusServer       serverpb.SQLStatusServer
+	TenantStatusServer    serverpb.TenantStatusServer
+	RegionsServer         serverpb.RegionsServer
+	MetricsRecorder       nodeStatusGenerator
+	SessionRegistry       *SessionRegistry
+	ClosedSessionCache    *ClosedSessionCache
+	RecentStatementsCache *recent.StatementsCache
+	SQLLiveness           sqlliveness.Liveness
+	JobRegistry           *jobs.Registry
+	VirtualSchemas        *VirtualSchemaHolder
+	DistSQLPlanner        *DistSQLPlanner
+	TableStatsCache       *stats.TableStatisticsCache
+	StatsRefresher        *stats.Refresher
+	InternalExecutor      *InternalExecutor
+	QueryCache            *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
 	FeatureFlagMetrics   *featureflag.DenialMetrics
@@ -1919,6 +1924,14 @@ const (
 
 	// Execution phase.
 	executing queryPhase = 1
+
+	canceled queryPhase = 2
+
+	timedOut queryPhase = 3
+
+	completed queryPhase = 4
+
+	failed queryPhase = 5
 )
 
 // queryMeta stores metadata about a query. Stored as reference in
@@ -1976,6 +1989,45 @@ func (q *queryMeta) getStatement() (tree.Statement, error) {
 		return nil, err
 	}
 	return parsed.AST, nil
+}
+
+// toActiveQuery translates the queryMeta to a serverpb.ActiveQuery.
+func (q *queryMeta) toActiveQuery(stmtID clusterunique.ID) (serverpb.ActiveQuery, error) {
+	truncateSQL := func(sql string) string {
+		if len(sql) > MaxSQLBytes {
+			sql = sql[:MaxSQLBytes-utf8.RuneLen('…')]
+			// Ensure the resulting string is valid utf8.
+			for {
+				if r, _ := utf8.DecodeLastRuneInString(sql); r != utf8.RuneError {
+					break
+				}
+				sql = sql[:len(sql)-1]
+			}
+			sql += "…"
+		}
+		return sql
+	}
+
+	ast, err := q.getStatement()
+	if err != nil {
+		return serverpb.ActiveQuery{}, err
+	}
+	sqlNoConstants := truncateSQL(formatStatementHideConstants(ast))
+	sql := truncateSQL(ast.String())
+	progress := math.Float64frombits(atomic.LoadUint64(&q.progressAtomic))
+	activeQuery := serverpb.ActiveQuery{
+		TxnID:          q.txnID,
+		ID:             stmtID.String(),
+		Start:          q.start.UTC(),
+		Sql:            sql,
+		SqlNoConstants: sqlNoConstants,
+		SqlSummary:     formatStatementSummary(ast),
+		IsDistributed:  q.isDistributed,
+		Phase:          (serverpb.ActiveQuery_Phase)(q.phase),
+		Progress:       float32(progress),
+		IsFullScan:     q.isFullScan,
+	}
+	return activeQuery, nil
 }
 
 // SessionDefaults mirrors fields in Session, for restoring default

@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/rangeprober"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
@@ -295,6 +296,9 @@ type sqlServerArgs struct {
 
 	// Used to store closed sessions.
 	closedSessionCache *sql.ClosedSessionCache
+
+	// Used to store recent statements.
+	recentStatementsCache *recent.StatementsCache
 
 	// Used to track the DistSQL flows scheduled on this node but initiated on
 	// behalf of other nodes.
@@ -778,6 +782,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RegionsServer:             cfg.regionsServer,
 		SessionRegistry:           cfg.sessionRegistry,
 		ClosedSessionCache:        cfg.closedSessionCache,
+		RecentStatementsCache:     cfg.recentStatementsCache,
 		ContentionRegistry:        contentionRegistry,
 		SQLLiveness:               cfg.sqlLivenessProvider,
 		JobRegistry:               jobRegistry,

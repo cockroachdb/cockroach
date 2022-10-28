@@ -324,6 +324,22 @@ func (ex *connExecutor) execStmtInOpenState(
 			}
 		}
 
+		// Set the query phase, and add the query to the RecentStatementsCache.
+		qm, ok := ex.mu.ActiveQueries[queryID]
+		if ok {
+			if queryTimedOut {
+				qm.phase = timedOut
+			} else if res != nil && ctx.Err() != nil && res.Err() != nil {
+				qm.phase = canceled
+			} else if res != nil && ctx.Err() == nil && res.Err() != nil {
+				qm.phase = failed
+			} else {
+				qm.phase = completed
+			}
+
+			ex.server.addToRecentStatementsCache(ex.sessionID, queryID, qm)
+		}
+
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
 		// canceled, all sorts of actors can detect the cancelation and set all
