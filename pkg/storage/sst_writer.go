@@ -35,6 +35,7 @@ type SSTWriter struct {
 }
 
 var _ Writer = &SSTWriter{}
+var _ ExportWriter = &SSTWriter{}
 
 // writeCloseSyncer interface copied from pebble.sstable.
 type writeCloseSyncer interface {

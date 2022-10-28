@@ -689,25 +689,26 @@ var commands = map[string]cmd{
 	"check_intent":         {typReadOnly, cmdCheckIntent},
 	"add_lock":             {typLocksUpdate, cmdAddLock},
 
-	"clear":            {typDataUpdate, cmdClear},
-	"clear_range":      {typDataUpdate, cmdClearRange},
-	"clear_rangekey":   {typDataUpdate, cmdClearRangeKey},
-	"clear_time_range": {typDataUpdate, cmdClearTimeRange},
-	"cput":             {typDataUpdate, cmdCPut},
-	"del":              {typDataUpdate, cmdDelete},
-	"del_range":        {typDataUpdate, cmdDeleteRange},
-	"del_range_ts":     {typDataUpdate, cmdDeleteRangeTombstone},
-	"del_range_pred":   {typDataUpdate, cmdDeleteRangePredicate},
-	"export":           {typReadOnly, cmdExport},
-	"get":              {typReadOnly, cmdGet},
-	"gc_clear_range":   {typDataUpdate, cmdGCClearRange},
-	"increment":        {typDataUpdate, cmdIncrement},
-	"initput":          {typDataUpdate, cmdInitPut},
-	"merge":            {typDataUpdate, cmdMerge},
-	"put":              {typDataUpdate, cmdPut},
-	"put_rangekey":     {typDataUpdate, cmdPutRangeKey},
-	"scan":             {typReadOnly, cmdScan},
-	"is_span_empty":    {typReadOnly, cmdIsSpanEmpty},
+	"clear":              {typDataUpdate, cmdClear},
+	"clear_range":        {typDataUpdate, cmdClearRange},
+	"clear_rangekey":     {typDataUpdate, cmdClearRangeKey},
+	"clear_time_range":   {typDataUpdate, cmdClearTimeRange},
+	"cput":               {typDataUpdate, cmdCPut},
+	"del":                {typDataUpdate, cmdDelete},
+	"del_range":          {typDataUpdate, cmdDeleteRange},
+	"del_range_ts":       {typDataUpdate, cmdDeleteRangeTombstone},
+	"del_range_pred":     {typDataUpdate, cmdDeleteRangePredicate},
+	"export":             {typReadOnly, cmdExport},
+	"export_fingerprint": {typReadOnly, cmdExportFingerprint},
+	"get":                {typReadOnly, cmdGet},
+	"gc_clear_range":     {typDataUpdate, cmdGCClearRange},
+	"increment":          {typDataUpdate, cmdIncrement},
+	"initput":            {typDataUpdate, cmdInitPut},
+	"merge":              {typDataUpdate, cmdMerge},
+	"put":                {typDataUpdate, cmdPut},
+	"put_rangekey":       {typDataUpdate, cmdPutRangeKey},
+	"scan":               {typReadOnly, cmdScan},
+	"is_span_empty":      {typReadOnly, cmdIsSpanEmpty},
 
 	"iter_new":                    {typReadOnly, cmdIterNew},
 	"iter_new_incremental":        {typReadOnly, cmdIterNewIncremental}, // MVCCIncrementalIterator
@@ -1308,6 +1309,11 @@ func cmdIsSpanEmpty(e *evalCtx) error {
 	})
 }
 
+func cmdExportFingerprint(e *evalCtx) error {
+	e.exportFingerprint = true
+	return cmdExport(e)
+}
+
 func cmdExport(e *evalCtx) error {
 	key, endKey := e.getKeyRange()
 	opts := storage.MVCCExportOptions{
@@ -1332,16 +1338,36 @@ func cmdExport(e *evalCtx) error {
 	defer r.Close()
 
 	sstFile := &storage.MemFile{}
-	summary, resume, err := storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
-	if err != nil {
-		return err
+
+	var summary roachpb.BulkOpSummary
+	var resume storage.MVCCKey
+	var fingerprint uint64
+	var err error
+	if e.exportFingerprint {
+		summary, resume, fingerprint, err = storage.MVCCExportFingerprint(e.ctx, e.st, r, opts, sstFile)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("export_fingerprint: %s", &summary)
+	} else {
+		summary, resume, err = storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("export: %s", &summary)
 	}
 
-	e.results.buf.Printf("export: %s", &summary)
 	if resume.Key != nil {
 		e.results.buf.Printf(" resume=%s", resume)
 	}
 	e.results.buf.Printf("\n")
+
+	if e.exportFingerprint {
+		oracle := storage.MakeFingerprintOracle(e.st, e.engine, opts)
+		expectedFingerprint, _ := oracle.GetFingerprintAndRangeKeys(e.ctx, e.t)
+		require.Equal(e.t, expectedFingerprint, fingerprint)
+		e.results.buf.Printf("pointkeys_fingerprint_verified\n")
+	}
 
 	iter, err := storage.NewMemSSTIterator(sstFile.Bytes(), false /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
@@ -1967,6 +1993,7 @@ type evalCtx struct {
 	sstWriter         *storage.SSTWriter
 	sstFile           *storage.MemFile
 	ssts              [][]byte
+	exportFingerprint bool
 }
 
 func newEvalCtx(ctx context.Context, engine storage.Engine) *evalCtx {
