@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/recent"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -191,6 +192,9 @@ func NewTenantServer(
 	closedSessionCache := sql.NewClosedSessionCache(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
+
+	// Instantiate the cache of recent statements.
+	args.recentStatementsCache = recent.NewStatementsCache(baseCfg.Settings)
 
 	// Instantiate the status API server.
 	// The tenantStatusServer needs access to the sqlServer,

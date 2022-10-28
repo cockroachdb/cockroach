@@ -575,6 +575,33 @@ func (s *Server) GetTxnIDCache() *txnidcache.Cache {
 	return s.txnIDCache
 }
 
+// addToRecentStatementsCache adds a completed statement to the
+// RecentStatementsCache on the Server ExecutorConfig.
+func (s *Server) addToRecentStatementsCache(
+	sessionID clusterunique.ID, queryID clusterunique.ID, qm *queryMeta,
+) {
+	if !qm.hidden {
+		// TODO(amy): may want to pass in time to be precise about query end time.
+		timeNow := timeutil.Now()
+		parsed, err := parser.ParseOne(qm.stmt.SQL)
+		if err != nil {
+			// TODO(amy): use better Context
+			log.Warningf(context.Background(), "failed to re-parse sql during session "+
+				"serialization")
+			return
+		}
+		activeQuery := qm.toActiveQuery(queryID, parsed, timeNow)
+		s.cfg.RecentStatementsCache.Add(sessionID, queryID, activeQuery)
+	}
+}
+
+// getRecentStatementsForSession gets the completed statements for
+// the given session ID. It returns a list of statement IDs and a list
+// of the corresponding queryMeta.
+func (s *Server) getRecentStatementsForSession(sessionID clusterunique.ID) []serverpb.ActiveQuery {
+	return s.cfg.RecentStatementsCache.GetRecentStatementsForSession(sessionID)
+}
+
 // GetScrubbedStmtStats returns the statement statistics by app, with the
 // queries scrubbed of their identifiers. Any statements which cannot be
 // scrubbed will be omitted from the returned map.
@@ -3182,6 +3209,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
+
 		// Note: while it may seem tempting to just use query.stmt.AST instead of
 		// re-parsing the original SQL, it's unfortunately NOT SAFE to do so because
 		// the AST is currently not immutable - doing so will produce data races.
@@ -3197,33 +3225,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 				"serialization")
 			continue
 		}
-		sqlNoConstants := truncateSQL(formatStatementHideConstants(parsed.AST))
-		nPlaceholders := 0
-		if query.placeholders != nil {
-			nPlaceholders = len(query.placeholders.Values)
-		}
-		placeholders := make([]string, nPlaceholders)
-		for i := range placeholders {
-			placeholders[i] = tree.AsStringWithFlags(query.placeholders.Values[i], tree.FmtSimple)
-		}
-		sql := truncateSQL(query.stmt.SQL)
-		progress := math.Float64frombits(atomic.LoadUint64(&query.progressAtomic))
-		queryStart := query.start.UTC()
-		activeQueries = append(activeQueries, serverpb.ActiveQuery{
-			TxnID:          query.txnID,
-			ID:             id.String(),
-			Start:          queryStart,
-			ElapsedTime:    timeNow.Sub(queryStart),
-			Sql:            sql,
-			SqlNoConstants: sqlNoConstants,
-			SqlSummary:     formatStatementSummary(parsed.AST),
-			Placeholders:   placeholders,
-			IsDistributed:  query.isDistributed,
-			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
-			Progress:       float32(progress),
-			IsFullScan:     query.isFullScan,
-			PlanGist:       query.planGist,
-		})
+		activeQuery := query.toActiveQuery(id, parsed, timeNow)
+		activeQueries = append(activeQueries, activeQuery)
 	}
 	lastActiveQuery := ""
 	lastActiveQueryNoConstants := ""
@@ -3235,6 +3238,8 @@ func (ex *connExecutor) serialize() serverpb.Session {
 	if len(activeQueries) > 0 {
 		status = serverpb.Session_ACTIVE
 	}
+
+	recentStatements := ex.server.getRecentStatementsForSession(ex.sessionID)
 
 	// We always use base here as the fields from the SessionData should always
 	// be that of the root session.
@@ -3267,6 +3272,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		LastActiveQueryNoConstants: lastActiveQueryNoConstants,
 		Status:                     status,
 		TotalActiveTime:            sessionActiveTime,
+		RecentStatements:           recentStatements,
 	}
 }
 
