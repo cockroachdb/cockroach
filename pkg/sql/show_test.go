@@ -726,6 +726,21 @@ func TestShowQueriesFillsInValuesForPlaceholders(t *testing.T) {
 			[]interface{}{"hello"},
 			"SELECT upper('hello')",
 		},
+		{
+			"SELECT /* test */ upper($1)",
+			[]interface{}{"hello"},
+			"SELECT upper('hello') /* test */",
+		},
+		{
+			"SELECT /* test */ 'hi'::string",
+			[]interface{}{},
+			"SELECT 'hi'::STRING /* test */",
+		},
+		{
+			"SELECT /* test */ 'hi'::string /* fnord */",
+			[]interface{}{},
+			"SELECT 'hi'::STRING /* test */ /* fnord */",
+		},
 	}
 
 	// Perform both as a simple execution and as a prepared statement,
@@ -761,7 +776,14 @@ func TestShowQueriesFillsInValuesForPlaceholders(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				require.Equal(t, test.expected, recordedQueries[test.statement])
+				// parse and stringify the statement so that it matches the key in the
+				// recordedQueries map.
+				stmt, err := parser.ParseOne(test.statement)
+				if err != nil {
+					t.Fatal(err)
+				}
+				sql := stmt.AST.String()
+				require.Equal(t, test.expected, recordedQueries[sql])
 			})
 		}
 	}

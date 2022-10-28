@@ -16,6 +16,7 @@ package lint
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/build"
 	"os"
@@ -2164,47 +2165,16 @@ func TestLint(t *testing.T) {
 		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
 		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
 		//    Otherwise it may be a Print wrapper.
-		printfuncs := strings.Join([]string{
-			"ErrEvent",
-			"ErrEventf",
-			"Error",
-			"Errorf",
-			"ErrorfDepth",
-			"Event",
-			"Eventf",
-			"Fatal",
-			"Fatalf",
-			"FatalfDepth",
-			"Info",
-			"Infof",
-			"InfofDepth",
-			"AssertionFailedf",
-			"AssertionFailedWithDepthf",
-			"NewAssertionErrorWithWrappedErrf",
-			"DangerousStatementf",
-			"pgerror.New",
-			"pgerror.NewWithDepthf",
-			"pgerror.Newf",
-			"SetDetailf",
-			"SetHintf",
-			"Unimplemented",
-			"Unimplementedf",
-			"UnimplementedWithDepthf",
-			"UnimplementedWithIssueDetailf",
-			"UnimplementedWithIssuef",
-			"VEvent",
-			"VEventf",
-			"Warning",
-			"Warningf",
-			"WarningfDepth",
-			"Wrapf",
-			"WrapWithDepthf",
-			"redact.Fprint",
-			"redact.Fprintf",
-			"redact.Sprint",
-			"redact.Sprintf",
-		}, ",")
-
+		// Note we retrieve the list of printfuncs from nogo_config.json.
+		jsonFile, err := os.ReadFile(filepath.Join(crdb.Dir, "build", "bazelutil", "nogo_config.json"))
+		if err != nil {
+			t.Error(err)
+		}
+		var printSchema map[string]map[string]map[string]string
+		if err := json.Unmarshal(jsonFile, &printSchema); err != nil {
+			t.Error(err)
+		}
+		printfuncs := printSchema["printf"]["analyzer_flags"]["funcs"]
 		nakedGoroutineExceptions := `(` + strings.Join([]string{
 			`pkg/.*_test\.go`,
 			`pkg/acceptance/.*\.go`,

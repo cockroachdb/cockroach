@@ -307,15 +307,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	var queryDoneAfterFunc chan struct{}
 	var txnDoneAfterFunc chan struct{}
 
-	// Early-associate placeholder info with the eval context,
-	// so that we can fill in placeholder values in our call to addActiveQuery, below.
-	if !ex.planner.EvalContext().HasPlaceholders() {
-		ex.planner.EvalContext().Placeholders = pinfo
-	}
-
 	var cancelQuery context.CancelFunc
 	ctx, cancelQuery = contextutil.WithCancel(ctx)
-	ex.addActiveQuery(ast, formatWithPlaceholders(ctx, ast, ex.planner.EvalContext()), queryID, cancelQuery)
+	ex.addActiveQuery(parserStmt, pinfo, queryID, cancelQuery)
 
 	// Make sure that we always unregister the query. It also deals with
 	// overwriting res.Error to a more user-friendly message in case of query
@@ -547,7 +541,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			if perr, ok := retPayload.(payloadWithError); ok {
 				execErr = perr.errorCause()
 			}
-			filter(ctx, ex.sessionData(), ast.String(), execErr)
+			filter(ctx, ex.sessionData(), stmt.AST.String(), execErr)
 		}
 
 		// Do the auto-commit, if necessary. In the extended protocol, the
@@ -2106,13 +2100,17 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 
 // addActiveQuery adds a running query to the list of running queries.
 func (ex *connExecutor) addActiveQuery(
-	ast tree.Statement, rawStmt string, queryID clusterunique.ID, cancelQuery context.CancelFunc,
+	stmt parser.Statement,
+	placeholders *tree.PlaceholderInfo,
+	queryID clusterunique.ID,
+	cancelQuery context.CancelFunc,
 ) {
-	_, hidden := ast.(tree.HiddenFromShowQueries)
+	_, hidden := stmt.AST.(tree.HiddenFromShowQueries)
 	qm := &queryMeta{
 		txnID:         ex.state.mu.txn.ID(),
 		start:         ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived),
-		rawStmt:       rawStmt,
+		stmt:          stmt,
+		placeholders:  placeholders,
 		phase:         preparing,
 		isDistributed: false,
 		isFullScan:    false,

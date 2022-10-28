@@ -30,8 +30,7 @@ import moment from "moment";
 // Transaction insight events.
 
 // There are three transaction contention event insight queries:
-// 1. A query that selects transaction contention events from crdb_internal.transaction_contention_events
-// and joins on transaction ids from crdb_internal.cluster_execution_insights.
+// 1. A query that selects transaction contention events from crdb_internal.transaction_contention_events.
 // 2. A query that selects statement fingerprint IDS from crdb_internal.transaction_statistics, filtering on the
 // fingerprint IDs recorded in the contention events.
 // 3. A query that selects statement queries from crdb_internal.statement_statistics, filtering on the fingerprint IDs
@@ -75,12 +74,10 @@ const txnContentionQuery = `SELECT *
                                                waiting_txn_fingerprint_id,
                                                max(collection_ts)       AS collection_ts,
                                                sum(contention_duration) AS total_contention_duration
-                                        FROM crdb_internal.transaction_contention_events tce
-                                        WHERE waiting_txn_fingerprint_id != '\x0000000000000000'
-                                        GROUP BY waiting_txn_id, waiting_txn_fingerprint_id),
-                                       (SELECT txn_id FROM crdb_internal.cluster_execution_insights)
-                                  WHERE total_contention_duration > threshold
-                                     OR waiting_txn_id = txn_id)
+                                        FROM crdb_internal.transaction_contention_events
+                                        WHERE encode(waiting_txn_fingerprint_id, 'hex') != '0000000000000000'
+                                        GROUP BY waiting_txn_id, waiting_txn_fingerprint_id)
+                                  WHERE total_contention_duration > threshold)
                             WHERE rank = 1`;
 
 type TransactionContentionResponseColumns = {

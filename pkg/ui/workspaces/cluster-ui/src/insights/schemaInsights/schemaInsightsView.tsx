@@ -83,9 +83,9 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh every 5mins.
+    // Refresh every 1 minute.
     refreshSchemaInsights();
-    const interval = setInterval(refreshSchemaInsights, 60 * 1000 * 5);
+    const interval = setInterval(refreshSchemaInsights, 60 * 1000);
     return () => {
       clearInterval(interval);
     };

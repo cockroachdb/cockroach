@@ -44,7 +44,7 @@ func TestScanOneStmt(t *testing.T) {
 		{
 			sql: `SELECT 1 /* comment */  ; /* comment */  ; /* comment */ `,
 			exp: []stmt{{
-				sql: `SELECT 1`,
+				sql: `SELECT 1 /* comment */  `,
 				tok: []int{SELECT, ICONST},
 			}},
 		},
@@ -73,11 +73,11 @@ func TestScanOneStmt(t *testing.T) {
 			sql: ` ; /* x */ SELECT 1  ; SET /* y */ ; ;  INSERT INTO table;  ;`,
 			exp: []stmt{
 				{
-					sql: `SELECT 1`,
+					sql: `SELECT 1  `,
 					tok: []int{SELECT, ICONST},
 				},
 				{
-					sql: `SET`,
+					sql: `SET /* y */ `,
 					tok: []int{SET},
 				},
 				{

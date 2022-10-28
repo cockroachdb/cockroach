@@ -8,12 +8,10 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { all, call, delay, put, takeLatest } from "redux-saga/effects";
+import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./transactionInsights.reducer";
 import { getTransactionInsightEventState } from "src/api/insightsApi";
-import { throttleWithReset } from "src/store/utils";
-import { rootActions } from "src/store/reducers";
 
 export function* refreshTransactionInsightsSaga() {
   yield put(actions.request());
@@ -28,26 +26,9 @@ export function* requestTransactionInsightsSaga(): any {
   }
 }
 
-export function* receivedTransactionInsightsSaga(delayMs: number) {
-  yield delay(delayMs);
-  yield put(actions.invalidated());
-}
-
-export function* transactionInsightsSaga(
-  cacheInvalidationPeriod: number = 10 * 1000,
-) {
+export function* transactionInsightsSaga() {
   yield all([
-    throttleWithReset(
-      cacheInvalidationPeriod,
-      actions.refresh,
-      [actions.invalidated, rootActions.resetState],
-      refreshTransactionInsightsSaga,
-    ),
-    takeLatest(actions.request, requestTransactionInsightsSaga),
-    takeLatest(
-      actions.received,
-      receivedTransactionInsightsSaga,
-      cacheInvalidationPeriod,
-    ),
+    takeEvery(actions.refresh, refreshTransactionInsightsSaga),
+    takeEvery(actions.request, requestTransactionInsightsSaga),
   ]);
 }

@@ -399,8 +399,8 @@ export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
 const transactionInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getTransactionInsightEventState,
   "transactionInsights",
-  moment.duration(10, "s"),
-  moment.duration(30, "s"),
+  null,
+  moment.duration(5, "m"),
 );
 export const refreshTransactionInsights = transactionInsightsReducerObj.refresh;
 
@@ -408,7 +408,7 @@ const statementInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getStatementInsightsApi,
   "statementInsights",
   null,
-  moment.duration(30, "s"), // Timeout
+  moment.duration(5, "m"),
 );
 export const refreshStatementInsights = statementInsightsReducerObj.refresh;
 
@@ -420,6 +420,8 @@ const transactionInsightDetailsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.getTransactionInsightEventDetailsState,
   "transactionInsightDetails",
   transactionInsightRequestKey,
+  null,
+  moment.duration(5, "m"),
 );
 export const refreshTransactionInsightDetails =
   transactionInsightDetailsReducerObj.refresh;
@@ -428,7 +430,7 @@ const schemaInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getSchemaInsights,
   "schemaInsights",
   null,
-  moment.duration(30, "s"),
+  moment.duration(5, "m"),
 );
 export const refreshSchemaInsights = schemaInsightsReducerObj.refresh;
 

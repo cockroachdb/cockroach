@@ -47,7 +47,6 @@ const transactionInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state.
     refresh: noopReducer,
     request: noopReducer,
   },
