@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -467,6 +468,10 @@ func performCastWithoutPrecisionTruncation(
 			s = t.String()
 		case *tree.DJSON:
 			s = t.JSON.String()
+		case *tree.DTSQuery:
+			s = t.TSQuery.String()
+		case *tree.DTSVector:
+			s = t.TSVector.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
 		case *tree.DVoid:
@@ -834,6 +839,24 @@ func performCastWithoutPrecisionTruncation(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(j))
+		}
+	case types.TSQueryFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			q, err := tsearch.ParseTSQuery(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DTSQuery{TSQuery: q}, nil
+		}
+	case types.TSVectorFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			vec, err := tsearch.ParseTSVector(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DTSVector{TSVector: vec}, nil
 		}
 	case types.ArrayFamily:
 		switch v := d.(type) {

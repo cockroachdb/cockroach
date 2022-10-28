@@ -378,6 +378,18 @@ enum Family {
     // index keys, which do not fully encode an object.
     EncodedKeyFamily = 27;
 
+    // TSQueryFamily is a type family for the TSQuery type, which is the type
+    // of full text search queries.
+    //   Canonical: types.TSQuery
+    //   Oid      : T_tsquery
+    TSQueryFamily = 28;
+
+    // TSVectorFamily is a type family for the TSVector type, which is the type
+    // of full text search document representations.
+    //   Canonical: types.TSVector
+    //   Oid      : T_tsvector
+    TSVectorFamily = 29;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

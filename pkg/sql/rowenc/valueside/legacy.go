@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -138,6 +139,18 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			if err != nil {
 				return r, err
 			}
+			r.SetBytes(data)
+			return r, nil
+		}
+	case types.TSQueryFamily:
+		if v, ok := val.(*tree.DTSQuery); ok {
+			data := tsearch.EncodeTSQueryPGBinary(nil, v.TSQuery)
+			r.SetBytes(data)
+			return r, nil
+		}
+	case types.TSVectorFamily:
+		if v, ok := val.(*tree.DTSVector); ok {
+			data := tsearch.EncodeTSVector(nil, v.TSVector)
 			r.SetBytes(data)
 			return r, nil
 		}
@@ -347,6 +360,26 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return tree.NewDJSON(jsonDatum), nil
+	case types.TSQueryFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		vec, err := tsearch.DecodeTSQueryPGBinary(v)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDTSQuery(vec), nil
+	case types.TSVectorFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		vec, err := tsearch.DecodeTSVector(v)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDTSVector(vec), nil
 	case types.EnumFamily:
 		v, err := value.GetBytes()
 		if err != nil {

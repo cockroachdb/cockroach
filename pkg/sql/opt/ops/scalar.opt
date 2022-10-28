@@ -494,6 +494,14 @@ define BBoxIntersects {
     Right ScalarExpr
 }
 
+# TSMatches is the @@ operator when used with tsquery/tsvector operands.
+# It maps to tree.TSMatches.
+[Scalar, Bool, Comparison]
+define TSMatches {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
 [Scalar, Bool]

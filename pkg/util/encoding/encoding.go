@@ -1662,6 +1662,8 @@ const (
 	ArrayKeyDesc Type = 23 // Array key encoded descendingly
 	Box2D        Type = 24
 	Void         Type = 25
+	TSQuery      Type = 26
+	TSVector     Type = 27
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2621,6 +2623,22 @@ func EncodeJSONValue(appendTo []byte, colID uint32, data []byte) []byte {
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
+// EncodeTSQueryValue encodes an already-byte-encoded TSQuery value with no
+// value tag but with a length prefix, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeTSQueryValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, TSQuery)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
+// EncodeTSVectorValue encodes an already-byte-encoded TSVector value with no
+// value tag but with a length prefix, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeTSVectorValue(appendTo []byte, colID uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colID, TSVector)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
 // DecodeValueTag decodes a value encoded by EncodeValueTag, used as a prefix in
 // each of the other EncodeFooValue methods.
 //
@@ -3009,7 +3027,7 @@ func PeekValueLengthWithOffsetsAndType(b []byte, dataOffset int, typ Type) (leng
 		return dataOffset + n, err
 	case Float:
 		return dataOffset + floatValueEncodedLength, nil
-	case Bytes, Array, JSON, Geo:
+	case Bytes, Array, JSON, Geo, TSVector, TSQuery:
 		_, n, i, err := DecodeNonsortingUvarint(b)
 		return dataOffset + n + int(i), err
 	case Box2D:

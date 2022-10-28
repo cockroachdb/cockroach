@@ -1,0 +1,20 @@
+query BB
+SELECT 'foo:1,2 bar:3'::tsvector @@ 'foo <-> bar'::tsquery, 'foo <-> bar'::tsquery @@ 'foo:1,2 bar:3'::tsvector
+----
+true  true
+
+statement ok
+CREATE TABLE a (v tsvector, q tsquery)
+
+statement ok
+INSERT INTO a VALUES('foo:1,2 bar:4B'::tsvector, 'foo <2> bar'::tsquery)
+
+query TT
+SELECT * FROM a
+----
+'bar':4B 'foo':1,2  'foo' <2> 'bar'
+
+query BB
+SELECT v @@ 'foo <2> bar'::tsquery, v @@ 'foo <-> bar'::tsquery FROM a
+----
+true  false

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
@@ -501,6 +502,18 @@ func DecodeDatum(
 				return nil, err
 			}
 			return tree.ParseDJSON(string(b))
+		case oid.T_tsquery:
+			ret, err := tsearch.ParseTSQuery(string(b))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DTSQuery{TSQuery: ret}, nil
+		case oid.T_tsvector:
+			ret, err := tsearch.ParseTSVector(string(b))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DTSVector{TSVector: ret}, nil
 		}
 		if typ.Family() == types.ArrayFamily {
 			// Arrays come in in their string form, so we parse them as such and later
@@ -788,6 +801,18 @@ func DecodeDatum(
 			}
 			ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
 			return &tree.DBitArray{BitArray: ba}, err
+		case oid.T_tsquery:
+			ret, err := tsearch.DecodeTSQueryPGBinary(b)
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDTSQuery(ret), nil
+		case oid.T_tsvector:
+			ret, err := tsearch.DecodeTSVectorPGBinary(b)
+			if err != nil {
+				return nil, err
+			}
+			return tree.NewDTSVector(ret), nil
 		default:
 			if typ.Family() == types.ArrayFamily {
 				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code)

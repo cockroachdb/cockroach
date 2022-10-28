@@ -9,12 +9,6 @@
 
 DATABASE="${1-postgres}"
 
-psql $DATABASE -Xqtc "SELECT postgis_full_version()" &> /dev/null
-if [ $? -ne 0 ]; then
-  echo "error: postgis must be installed in database $DATABASE";
-  echo "hint: you can specify another database as the first argument";
-  exit 1;
-fi
 
 PG_CAST_QUERY="
   SELECT

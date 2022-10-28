@@ -60,6 +60,7 @@ const (
 	JSONFetchText
 	JSONFetchValPath
 	JSONFetchTextPath
+	TSMatch
 
 	NumBinaryOperatorSymbols
 )
@@ -84,6 +85,7 @@ var binaryOpName = [...]string{
 	JSONFetchText:     "->>",
 	JSONFetchValPath:  "#>",
 	JSONFetchTextPath: "#>>",
+	TSMatch:           "@@",
 }
 
 // IsPadded returns whether the binary operator needs to be padded.

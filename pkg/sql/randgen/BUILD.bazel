@@ -46,6 +46,7 @@ go_library(
         "//pkg/util/timeofday",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tsearch",
         "//pkg/util/uint128",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_apd_v3//:apd",

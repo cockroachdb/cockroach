@@ -105,6 +105,7 @@ func ValidateColumnDefType(t *types.T) error {
 	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
+		types.TSQueryFamily, types.TSVectorFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily:
 		// These types are OK.
 
@@ -165,6 +166,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 			return MustBeValueEncoded(semanticType.ArrayContents())
 		}
 	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
+		return true
+	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
 	}
 	return false
