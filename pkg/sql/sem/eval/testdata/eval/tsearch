@@ -1,0 +1,62 @@
+# Basic smoke tests for tsquery/tsvector evaluation. Note that this is also
+# tested in the util/tsearch package.
+
+eval
+'foo:3'::tsvector @@ 'bar'::tsquery
+----
+false
+
+eval
+'bar:3'::tsvector @@ 'bar'::tsquery
+----
+true
+
+eval
+'bar:3'::tsvector @@ 'bar & baz'::tsquery
+----
+false
+
+eval
+'bar:3'::tsvector @@ 'bar & !baz'::tsquery
+----
+true
+
+eval
+'bar:3'::tsvector @@ 'bar | baz'::tsquery
+----
+true
+
+eval
+'bar:3'::tsvector @@ 'qux | baz'::tsquery
+----
+false
+
+eval
+'bar:3 baz:4'::tsvector @@ 'bar & baz'::tsquery
+----
+true
+
+eval
+'bar:3 baz:4'::tsvector @@ 'bar & !baz'::tsquery
+----
+false
+
+eval
+'bar:3 baz:4'::tsvector @@ 'bar | baz'::tsquery
+----
+true
+
+eval
+'bar:3 baz:4'::tsvector @@ 'bar <-> baz'::tsquery
+----
+true
+
+eval
+'bar:3 baz:4'::tsvector @@ 'baz <-> bar'::tsquery
+----
+false
+
+eval
+'bar:3 baz:5'::tsvector @@ 'baz <2> bar'::tsquery
+----
+false

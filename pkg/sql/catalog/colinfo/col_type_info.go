@@ -168,6 +168,8 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 		}
 	case types.JsonFamily, types.TupleFamily, types.GeographyFamily, types.GeometryFamily:
 		return true
+	case types.TSVectorFamily, types.TSQueryFamily:
+		return true
 	}
 	return false
 }
