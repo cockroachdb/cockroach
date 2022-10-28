@@ -39,7 +39,6 @@ go_library(
         "haproxy.go",
         "import.go",
         "init.go",
-        "initial_sql.go",
         "log_flags.go",
         "mt.go",
         "mt_cert.go",

@@ -33,6 +33,7 @@ go_library(
         "index_usage_stats.go",
         "init.go",
         "init_handshake.go",
+        "initial_sql.go",
         "listen_and_update_addrs.go",
         "load_endpoint.go",
         "loopback.go",

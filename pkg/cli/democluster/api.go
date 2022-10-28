@@ -16,7 +16,6 @@ import (
 
 	democlusterapi "github.com/cockroachdb/cockroach/pkg/cli/democluster/api"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 )
 
 // DemoCluster represents a demo cluster.
@@ -28,7 +27,6 @@ type DemoCluster interface {
 	// before the initialization completes.
 	Start(
 		ctx context.Context,
-		runInitialSQL func(ctx context.Context, s *server.Server, startSingleNode bool, adminUser, adminPassword string) error,
 	) error
 
 	// GetConnURL retrieves the connection URL to the first node.
