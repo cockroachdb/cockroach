@@ -67,11 +67,14 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		// ever populated in the version cluster setting. A value is populated during
 		// the activation of 21.1. See the documentation attached to the TenantCluster
 		// in upgrade/upgradecluster for more details on the tenant upgrade flow.
-		// Note that a the value of 21.1 is populated when a tenant cluster is created
+		// Note that the value of 21.1 is populated when a tenant cluster is created
 		// during 21.1 in crdb_internal.create_tenant.
 		//
 		// Note that the tenant will read the value in the system.settings table
 		// before accepting SQL connections.
+		//
+		// TODO(knz): Check if this special initialization can be removed.
+		// See: https://github.com/cockroachdb/cockroach/issues/90831
 		st := serverCfg.BaseConfig.Settings
 		return clusterversion.Initialize(
 			ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
