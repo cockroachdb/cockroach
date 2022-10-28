@@ -91,6 +91,10 @@ func ParseAndRequireString(
 		d, err = ParseDUuidFromString(s)
 	case types.EnumFamily:
 		d, err = MakeDEnumFromLogicalRepresentation(t, s)
+	case types.TSQueryFamily:
+		d, err = ParseDTSQuery(s)
+	case types.TSVectorFamily:
+		d, err = ParseDTSVector(s)
 	case types.TupleFamily:
 		d, dependsOnContext, err = ParseDTupleFromString(ctx, s, t)
 	case types.VoidFamily:

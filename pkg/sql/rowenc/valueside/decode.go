@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -188,6 +189,26 @@ func DecodeUntaggedDatum(
 			return nil, b, err
 		}
 		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
+	case types.TSQueryFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		v, err := tsearch.DecodeTSQuery(data)
+		if err != nil {
+			return nil, b, err
+		}
+		return tree.NewDTSQuery(v), b, nil
+	case types.TSVectorFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		v, err := tsearch.DecodeTSVector(data)
+		if err != nil {
+			return nil, b, err
+		}
+		return tree.NewDTSVector(v), b, nil
 	case types.OidFamily:
 		// TODO: This possibly should decode to uint32 (with corresponding changes
 		// to encoding) to ensure that the value fits in a DOid without any loss of

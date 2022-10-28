@@ -328,6 +328,8 @@
 <tr><td>timestamptz <code>=</code> timestamptz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timetz <code>=</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timetz <code>=</code> timetz</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>tsquery <code>=</code> tsquery</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>tsvector <code>=</code> tsvector</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>=</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>=</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>=</code> <a href="uuid.html">uuid[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -360,6 +362,12 @@
 </thead><tbody>
 <tr><td>anyelement <code>@></code> anyelement</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code>@></code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+</tbody></table>
+<table><thead>
+<tr><td><code>@@</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>tsquery <code>@@</code> tsvector</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>tsvector <code>@@</code> tsquery</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>ILIKE</code></td><td>Return</td></tr>
@@ -445,6 +453,8 @@
 <tr><td>timestamptz <code>IS NOT DISTINCT FROM</code> timestamptz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timetz <code>IS NOT DISTINCT FROM</code> <a href="time.html">time</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timetz <code>IS NOT DISTINCT FROM</code> timetz</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>tsquery <code>IS NOT DISTINCT FROM</code> tsquery</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>tsvector <code>IS NOT DISTINCT FROM</code> tsvector</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>IS NOT DISTINCT FROM</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>unknown <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>IS NOT DISTINCT FROM</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
