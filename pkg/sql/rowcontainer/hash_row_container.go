@@ -886,6 +886,15 @@ func (h *HashDiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 		return errors.New("already using disk")
 	}
 	hdrc := MakeHashDiskRowContainer(h.diskMonitor, h.engine)
+	defer func() {
+		if h.src != &hdrc {
+			// For whatever reason, we weren't able to spill, so in order to not
+			// leak any of the disk resources we explicitly close the disk
+			// container we've just created - otherwise, we will lose the
+			// reference to it and won't ever close it properly.
+			hdrc.Close(ctx)
+		}
+	}()
 	if err := hdrc.Init(ctx, h.shouldMark, h.types, h.storedEqCols, h.encodeNull); err != nil {
 		return err
 	}
