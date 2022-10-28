@@ -16,15 +16,15 @@ import { commonStyles } from "src/common";
 import classNames from "classnames/bind";
 import { useHistory, match } from "react-router-dom";
 import { Col, Row, Tabs } from "antd";
-import { ActiveStatementDetailsOverviewTab } from "./activeStatementDetailsOverviewTab";
+import { RecentStatementDetailsOverviewTab } from "./recentStatementDetailsOverviewTab";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { getExplainPlanFromGist } from "../api/decodePlanGistApi";
 import { getMatchParamByName } from "src/util/query";
 import { executionIdAttr } from "../util";
 import {
-  ActiveStatement,
+  RecentStatement,
   ExecutionContentionDetails,
-} from "src/activeExecutions";
+} from "src/recentExecutions";
 
 import "antd/lib/tabs/style";
 import "antd/lib/col/style";
@@ -37,14 +37,14 @@ import { getIdxRecommendationsFromExecution } from "../api/idxRecForStatementApi
 import { SortSetting } from "../sortedtable";
 const cx = classNames.bind(styles);
 
-export type ActiveStatementDetailsStateProps = {
+export type RecentStatementDetailsStateProps = {
   isTenant?: boolean;
   contentionDetails?: ExecutionContentionDetails;
-  statement: ActiveStatement;
+  statement: RecentStatement;
   match: match;
 };
 
-export type ActiveStatementDetailsDispatchProps = {
+export type RecentStatementDetailsDispatchProps = {
   refreshLiveWorkload: () => void;
 };
 
@@ -59,10 +59,10 @@ type ExplainPlanState = {
   error: Error;
 };
 
-export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
-  ActiveStatementDetailsDispatchProps;
+export type RecentStatementDetailsProps = RecentStatementDetailsStateProps &
+  RecentStatementDetailsDispatchProps;
 
-export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
+export const RecentStatementDetails: React.FC<RecentStatementDetailsProps> = ({
   isTenant,
   contentionDetails,
   statement,
@@ -114,7 +114,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
     }
   };
 
-  const returnToActiveStatements = () => {
+  const returnToRecentStatements = () => {
     history.push("/sql-activity?tab=Statements&view=active");
   };
 
@@ -124,14 +124,14 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
       <Helmet title={`Details`} />
       <div className={cx("section", "page--header")}>
         <Button
-          onClick={returnToActiveStatements}
+          onClick={returnToRecentStatements}
           type="unstyled-link"
           size="small"
           icon={<ArrowLeft fontSize={"10px"} />}
           iconPosition="left"
           className="small-margin"
         >
-          Active Statements
+          Recent Statements
         </Button>
         <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
           Statement Execution ID:{" "}
@@ -154,7 +154,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
         onTabClick={onTabClick}
       >
         <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
-          <ActiveStatementDetailsOverviewTab
+          <RecentStatementDetailsOverviewTab
             statement={statement}
             contentionDetails={contentionDetails}
           />

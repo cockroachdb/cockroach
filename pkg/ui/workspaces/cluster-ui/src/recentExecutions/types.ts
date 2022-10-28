@@ -24,7 +24,7 @@ export const ActiveStatementPhase =
 export const SessionStatusType =
   protos.cockroach.server.serverpb.Session.Status;
 
-export interface ActiveExecution {
+export interface RecentExecution {
   statementID?: string; // Empty for transactions not currently executing a statement.
   stmtNoConstants?: string; // Empty for transactions not currently executing a statement.
   transactionID: string;
@@ -38,35 +38,35 @@ export interface ActiveExecution {
   timeSpentWaiting?: moment.Duration;
 }
 
-export type ActiveStatement = ActiveExecution &
-  Required<Pick<ActiveExecution, "statementID">> & {
+export type RecentStatement = RecentExecution &
+  Required<Pick<RecentExecution, "statementID">> & {
     user: string;
     clientAddress: string;
     isFullScan: boolean;
     planGist?: string;
   };
 
-export type ActiveTransaction = ActiveExecution & {
+export type RecentTransaction = RecentExecution & {
   statementCount: number;
   retries: number;
   lastAutoRetryReason?: string;
   priority: string;
 };
 
-export type ActiveExecutions = {
-  statements: ActiveStatement[];
-  transactions: ActiveTransaction[];
+export type RecentExecutions = {
+  statements: RecentStatement[];
+  transactions: RecentTransaction[];
 };
 
-export type ActiveStatementFilters = Omit<
+export type RecentStatementFilters = Omit<
   Filters,
   "database" | "sqlType" | "fullScan" | "distributed" | "regions" | "nodes"
 >;
 
-export type ActiveTransactionFilters = ActiveStatementFilters;
+export type RecentTransactionFilters = RecentStatementFilters;
 
 export type ContendedExecution = Pick<
-  ActiveExecution,
+  RecentExecution,
   "status" | "start" | "query"
 > & {
   transactionExecutionID: string;
