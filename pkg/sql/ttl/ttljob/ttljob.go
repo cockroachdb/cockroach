@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -431,7 +429,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
 			// (by default, a 0 element startPK or endPK means the beginning or end).
 			if rangeDesc.StartKey.AsRawKey().Compare(entirePKSpan.Key) > 0 {
-				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey, p.ExecCfg().Codec, pkTypes, &alloc)
+				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey.AsRawKey(), p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
 					return errors.Wrapf(
 						err,
@@ -444,7 +442,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			}
 			if rangeDesc.EndKey.AsRawKey().Compare(entirePKSpan.EndKey) < 0 {
 				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
+				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey.AsRawKey(), p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
 					return errors.Wrapf(
 						err,
@@ -686,60 +684,6 @@ func runTTLOnRange(
 		}
 	}
 	return nil
-}
-
-// keyToDatums translates a RKey on a range for a table to the appropriate datums.
-func keyToDatums(
-	rKey roachpb.RKey, codec keys.SQLCodec, pkTypes []*types.T, alloc *tree.DatumAlloc,
-) (tree.Datums, error) {
-	key := rKey.AsRawKey()
-
-	// If any of these errors, that means we reached an "empty" key, which
-	// symbolizes the start or end of a range.
-	if _, _, err := codec.DecodeTablePrefix(key); err != nil {
-		return nil, nil //nolint:returnerrcheck
-	}
-	if _, _, _, err := codec.DecodeIndexPrefix(key); err != nil {
-		return nil, nil //nolint:returnerrcheck
-	}
-
-	// Decode the datums ourselves, instead of using rowenc.DecodeKeyVals.
-	// We cannot use rowenc.DecodeKeyVals because we may not have the entire PK
-	// as the key for the range (e.g. a PK (a, b) may only be split on (a)).
-	key, err := codec.StripTenantPrefix(rKey.AsRawKey())
-	if err != nil {
-		// Convert rKey to []byte to prevent hex encoding output of RKey.String().
-		return nil, errors.Wrapf(err, "error decoding tenant prefix of %x", []byte(rKey))
-	}
-	key, _, _, err = rowenc.DecodePartialTableIDIndexID(rKey)
-	if err != nil {
-		// Convert rKey to []byte to prevent hex encoding output of RKey.String().
-		return nil, errors.Wrapf(err, "error decoding table/index ID of %x", []byte(rKey))
-	}
-	encDatums := make([]rowenc.EncDatum, 0, len(pkTypes))
-	for len(key) > 0 && len(encDatums) < len(pkTypes) {
-		i := len(encDatums)
-		// We currently assume all PRIMARY KEY columns are ascending, and block
-		// creation otherwise.
-		enc := descpb.DatumEncoding_ASCENDING_KEY
-		var val rowenc.EncDatum
-		val, key, err = rowenc.EncDatumFromBuffer(pkTypes[i], enc, key)
-		if err != nil {
-			// Convert rKey to []byte to prevent hex encoding output of RKey.String().
-			return nil, errors.Wrapf(err, "error decoding EncDatum of %x", []byte(rKey))
-		}
-		encDatums = append(encDatums, val)
-	}
-
-	datums := make(tree.Datums, len(encDatums))
-	for i, encDatum := range encDatums {
-		if err := encDatum.EnsureDecoded(pkTypes[i], alloc); err != nil {
-			// Convert rKey to []byte to prevent hex encoding output of RKey.String().
-			return nil, errors.Wrapf(err, "error ensuring encoding of %x", []byte(rKey))
-		}
-		datums[i] = encDatum.Datum
-	}
-	return datums, nil
 }
 
 // OnFailOrCancel implements the jobs.Resumer interface.
