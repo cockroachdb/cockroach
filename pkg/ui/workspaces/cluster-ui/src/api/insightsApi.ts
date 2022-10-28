@@ -29,7 +29,7 @@ import {
   TxnInsightEvent,
 } from "src/insights";
 import moment from "moment";
-import { INTERNAL_APP_NAME_PREFIX } from "src/activeExecutions/activeStatementUtils";
+import { INTERNAL_APP_NAME_PREFIX } from "src/recentExecutions/recentStatementUtils";
 import { FixFingerprintHexValue } from "../util";
 
 // Transaction contention insight events.

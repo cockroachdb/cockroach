@@ -14,34 +14,36 @@ import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
 import { AppState } from "../store";
 import {
-  ActiveTransactionDetails,
-  ActiveTransactionDetailsDispatchProps,
-} from "./activeTransactionDetails";
-import { ActiveTransactionDetailsStateProps } from ".";
+  RecentStatementDetails,
+  RecentStatementDetailsDispatchProps,
+} from "./recentStatementDetails";
+import { RecentStatementDetailsStateProps } from ".";
 import {
-  selectActiveTransaction,
-  selectContentionDetailsForTransaction,
-} from "src/selectors/activeExecutions.selectors";
+  selecteRecentStatement,
+  selectContentionDetailsForStatement,
+} from "src/selectors/recentExecutions.selectors";
+import { selectIsTenant } from "src/store/uiConfig";
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
-): ActiveTransactionDetailsStateProps => {
+): RecentStatementDetailsStateProps => {
   return {
-    transaction: selectActiveTransaction(state, props),
-    contentionDetails: selectContentionDetailsForTransaction(state, props),
+    contentionDetails: selectContentionDetailsForStatement(state, props),
+    statement: selecteRecentStatement(state, props),
     match: props.match,
+    isTenant: selectIsTenant(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
-): ActiveTransactionDetailsDispatchProps => ({
+): RecentStatementDetailsDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
-export const ActiveTransactionDetailsPageConnected = withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(ActiveTransactionDetails),
+export const RecentStatementDetailsPageConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(RecentStatementDetails),
 );
