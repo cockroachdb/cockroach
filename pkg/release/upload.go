@@ -254,7 +254,7 @@ type LatestOpts struct {
 // MarkLatestReleaseWithSuffix adds redirects to release files using "latest" instead of the version
 func MarkLatestReleaseWithSuffix(svc ObjectPutGetter, o LatestOpts, suffix string) {
 	keys := makeArchiveKeys(o.Platform, o.VersionStr, "cockroach")
-	versionedKey := keys.archive + suffix
+	versionedKey := "/" + keys.archive + suffix
 	oLatest := o
 	oLatest.VersionStr = latestStr
 	latestKeys := makeArchiveKeys(oLatest.Platform, oLatest.VersionStr, "cockroach")
