@@ -1,0 +1,14 @@
+# Tests for CASE expressions.
+
+# CASE expressions should resolve as type TEXT when all branches have type
+# UNKNOWN.
+# TODO(mgartner): This returning "unknown" because the CASE is first folded to
+# tree.DNull, which has no associated type. I think we need a concept of typed
+# NULL datums in order for this to work correctly in optimizer folds and
+# execution.
+query TT
+SELECT
+  pg_typeof(CASE WHEN NULL THEN NULL ELSE NULL END),
+  pg_typeof(CASE 1 WHEN 2 THEN NULL ELSE NULL END)
+----
+unknown  unknown

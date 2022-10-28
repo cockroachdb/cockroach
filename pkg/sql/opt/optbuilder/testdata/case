@@ -1,0 +1,15 @@
+# Tests for CASE expressions.
+
+# If all branches have type unknown, the CASE should be typed as STRING.
+build format=show-types
+SELECT
+  CASE WHEN NULL THEN NULL ELSE NULL END,
+  CASE 1 WHEN 2 THEN NULL ELSE NULL END
+----
+project
+ ├── columns: case:1(string) case:2(string)
+ ├── values
+ │    └── () [type=tuple]
+ └── projections
+      ├── CASE WHEN NULL THEN NULL::STRING ELSE NULL::STRING END [as=case:1, type=string]
+      └── CASE 1 WHEN 2 THEN NULL::STRING ELSE NULL::STRING END [as=case:2, type=string]
