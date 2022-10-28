@@ -44,7 +44,12 @@ func NormalizeAndValidateSelectForTarget(
 	includeVirtual bool,
 	keyOnly bool,
 	splitColFams bool,
-) (n NormalizedSelectClause, _ jobspb.ChangefeedTargetSpecification, _ error) {
+) (n NormalizedSelectClause, _ jobspb.ChangefeedTargetSpecification, retErr error) {
+	defer func() {
+		if pan := recover(); pan != nil {
+			retErr = errors.Newf("low-level error while normalizing expression, probably syntax is unsupported in CREATE CHANGEFEED: %s", pan)
+		}
+	}()
 	execCtx.SemaCtx()
 	execCfg := execCtx.ExecCfg()
 	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2EnablePredicateProjectionChangefeed) {
