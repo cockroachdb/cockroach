@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -316,7 +315,7 @@ func NewDatumRowConverter(
 	// immutDesc.VisibleColumns. If no target columns are specified we assume all
 	// columns of the table descriptor are to be inserted into.
 	if len(targetColNames) != 0 {
-		if targetCols, err = colinfo.ProcessTargetColumns(tableDesc, targetColNames,
+		if targetCols, err = catalog.ProcessTargetColumns(tableDesc, targetColNames,
 			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}

@@ -109,9 +109,10 @@ func (tu *optTableUpserter) init(
 	// rows returned from the operation.
 	if tu.rowsNeeded {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
+		returnCols := catalog.Columns(tu.returnCols)
 		tu.rows = rowcontainer.NewRowContainer(
 			evalCtx.Planner.Mon().MakeBoundAccount(),
-			colinfo.ColTypeInfoFromColumns(tu.returnCols),
+			colinfo.ColTypeInfoFromColumns(&returnCols),
 		)
 
 		// Create the map from colIds to the expected columns.

@@ -225,6 +225,6 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	}
 
 	// Set up the rest of the scanNode.
-	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	n.resultColumns = catalog.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
 	return nil
 }

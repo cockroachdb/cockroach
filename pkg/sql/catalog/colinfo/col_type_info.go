@@ -13,7 +13,7 @@ package colinfo
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogtableelements"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -42,11 +42,8 @@ func ColTypeInfoFromColTypes(colTypes []*types.T) ColTypeInfo {
 }
 
 // ColTypeInfoFromColumns creates a ColTypeInfo from []catalog.Column.
-func ColTypeInfoFromColumns(columns []catalog.Column) ColTypeInfo {
-	colTypes := make([]*types.T, len(columns))
-	for i, col := range columns {
-		colTypes[i] = col.GetType()
-	}
+func ColTypeInfoFromColumns(columns catalogtableelements.Columns) ColTypeInfo {
+	colTypes := columns.GetTypes()
 	return ColTypeInfoFromColTypes(colTypes)
 }
 

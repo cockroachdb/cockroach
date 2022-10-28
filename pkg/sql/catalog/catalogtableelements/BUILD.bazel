@@ -1,0 +1,12 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "catalogtableelements",
+    srcs = ["table_elements.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogtableelements",
+    visibility = ["//visibility:public"],
+    deps = ["//pkg/sql/types"],
+)
+
+get_x_data(name = "get_x_data")

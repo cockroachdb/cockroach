@@ -211,7 +211,7 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 		columnIDs[i] = cols[i].GetID()
 	}
 
-	p.ResultColumns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols)
+	p.ResultColumns = catalog.ResultColumnsFromColumns(tabDesc.GetID(), cols)
 
 	if params.IndexConstraint != nil && params.IndexConstraint.IsContradiction() {
 		// Note that empty rows argument is handled by ConstructValues first -
@@ -764,8 +764,8 @@ func (e *distSQLSpecExecFactory) ConstructZigzagJoin(
 		return nil, err
 	}
 
-	leftResultColumns := colinfo.ResultColumnsFromColumns(sides[0].desc.GetID(), sides[0].cols)
-	rightResultColumns := colinfo.ResultColumnsFromColumns(sides[1].desc.GetID(), sides[1].cols)
+	leftResultColumns := catalog.ResultColumnsFromColumns(sides[0].desc.GetID(), sides[0].cols)
+	rightResultColumns := catalog.ResultColumnsFromColumns(sides[1].desc.GetID(), sides[1].cols)
 	resultColumns := make(colinfo.ResultColumns, 0, len(leftResultColumns)+len(rightResultColumns))
 	resultColumns = append(resultColumns, leftResultColumns...)
 	resultColumns = append(resultColumns, rightResultColumns...)

@@ -15,12 +15,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 // TableElementMaybeMutation is an interface used as a subtype for the various
@@ -241,6 +245,19 @@ type Index interface {
 	// an index being used as the temporary index being used by an
 	// in-progress index backfill.
 	IsTemporaryIndexForBackfill() bool
+}
+
+// Columns is the slice of Column.
+type Columns []Column
+
+// GetTypes returns the type of each column in the slice.
+func (c *Columns) GetTypes() []*types.T {
+	cols := []Column(*c)
+	colTypes := make([]*types.T, len(cols))
+	for i, col := range cols {
+		colTypes[i] = col.GetType()
+	}
+	return colTypes
 }
 
 // Column is an interface around the column descriptor types.
@@ -845,4 +862,90 @@ func ColumnNeedsBackfill(col Column) bool {
 		return false
 	}
 	return col.HasDefault() || !col.IsNullable() || col.IsComputed()
+}
+
+// ProcessTargetColumns returns the column descriptors identified by the
+// given name list. It also checks that a given column name is only
+// listed once. If no column names are given (special case for INSERT)
+// and ensureColumns is set, the descriptors for all visible columns
+// are returned. If allowMutations is set, even columns undergoing
+// mutations are added.
+func ProcessTargetColumns(
+	desc TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
+) ([]Column, error) {
+	if len(nameList) == 0 {
+		if ensureColumns {
+			return desc.VisibleColumns(), nil
+		}
+		return nil, nil
+	}
+	var colIDSet TableColSet
+	cols := make([]Column, len(nameList))
+	for i, colName := range nameList {
+		col, err := desc.FindColumnWithName(colName)
+		if err != nil {
+			return nil, err
+		}
+		if !allowMutations && !col.Public() {
+			err := pgerror.Newf(pgcode.UndefinedColumn, "column %q does not exist", string(colName))
+			return nil, err
+		}
+
+		if colIDSet.Contains(col.GetID()) {
+			return nil, pgerror.Newf(pgcode.Syntax,
+				"multiple assignments to the same column %q", &nameList[i])
+		}
+		colIDSet.Add(col.GetID())
+		cols[i] = col
+	}
+	return cols, nil
+}
+
+// CheckDatumTypeFitsColumnType verifies that a given scalar value
+// type is valid to be stored in a column of the given column type.
+//
+// For the purpose of this analysis, column type aliases are not
+// considered to be different (eg. TEXT and VARCHAR will fit the same
+// scalar type String).
+//
+// This is used by the UPDATE, INSERT and UPSERT code.
+func CheckDatumTypeFitsColumnType(col Column, typ *types.T) error {
+	if typ.Family() == types.UnknownFamily {
+		return nil
+	}
+	if !typ.Equivalent(col.GetType()) {
+		return pgerror.Newf(pgcode.DatatypeMismatch,
+			"value type %s doesn't match type %s of column %q",
+			typ.String(), col.GetType().String(), tree.ErrNameString(col.GetName()))
+	}
+	return nil
+}
+
+// ResultColumnsFromColumns converts []catalog.Column to []ResultColumn.
+func ResultColumnsFromColumns(tableID descpb.ID, columns []Column) colinfo.ResultColumns {
+	return ResultColumnsFromColDescs(tableID, len(columns), func(i int) *descpb.ColumnDescriptor {
+		return columns[i].ColumnDesc()
+	})
+}
+
+// ResultColumnsFromColDescs is used by ResultColumnsFromColumns and by tests.
+func ResultColumnsFromColDescs(
+	tableID descpb.ID, numCols int, getColDesc func(int) *descpb.ColumnDescriptor,
+) colinfo.ResultColumns {
+	cols := make(colinfo.ResultColumns, numCols)
+	for i := range cols {
+		colDesc := getColDesc(i)
+		typ := colDesc.Type
+		if typ == nil {
+			panic(errors.AssertionFailedf("unsupported column type: %s", colDesc.Type.Family()))
+		}
+		cols[i] = colinfo.ResultColumn{
+			Name:           colDesc.Name,
+			Typ:            typ,
+			Hidden:         colDesc.Hidden,
+			TableID:        tableID,
+			PGAttributeNum: uint32(colDesc.GetPGAttributeNum()),
+		}
+	}
+	return cols
 }

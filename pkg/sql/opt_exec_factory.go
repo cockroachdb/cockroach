@@ -660,7 +660,7 @@ func (ef *execFactory) ConstructIndexJoin(
 		input:         input.(planNode),
 		table:         tableScan,
 		cols:          cols,
-		resultColumns: colinfo.ResultColumnsFromColumns(tabDesc.GetID(), cols),
+		resultColumns: catalog.ResultColumnsFromColumns(tabDesc.GetID(), cols),
 		reqOrdering:   ReqOrdering(reqOrdering),
 		limitHint:     limitHint,
 	}
@@ -788,7 +788,7 @@ func (ef *execFactory) constructVirtualTableLookupJoin(
 		return nil, err
 	}
 	tableScan.index = idx
-	vtableCols := colinfo.ResultColumnsFromColumns(tableDesc.GetID(), tableDesc.PublicColumns())
+	vtableCols := catalog.ResultColumnsFromColumns(tableDesc.GetID(), tableDesc.PublicColumns())
 	projectedVtableCols := planColumns(&tableScan)
 	outputCols := make(colinfo.ResultColumns, 0, len(inputCols)+len(projectedVtableCols))
 	outputCols = append(outputCols, inputCols...)
@@ -1345,7 +1345,7 @@ func (ef *execFactory) ConstructInsert(
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
 		returnCols := makeColList(table, returnColOrdSet)
-		ins.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		ins.columns = catalog.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
@@ -1423,7 +1423,7 @@ func (ef *execFactory) ConstructInsertFastPath(
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
 		returnCols := makeColList(table, returnColOrdSet)
-		ins.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		ins.columns = catalog.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Set the tabColIdxToRetIdx for the mutation. Insert always returns
 		// non-mutation columns in the same order they are defined in the table.
@@ -1532,7 +1532,7 @@ func (ef *execFactory) ConstructUpdate(
 	if rowsNeeded {
 		returnCols := makeColList(table, returnColOrdSet)
 
-		upd.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		upd.columns = catalog.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 		// Add the passthrough columns to the returning columns.
 		upd.columns = append(upd.columns, passthrough...)
 
@@ -1638,7 +1638,7 @@ func (ef *execFactory) ConstructUpsert(
 	// If rows are not needed, no columns are returned.
 	if rowsNeeded {
 		returnCols := makeColList(table, returnColOrdSet)
-		ups.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		ups.columns = catalog.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Update the tabColIdxToRetIdx for the mutation. Upsert returns
 		// non-mutation columns specified, in the same order they are defined
@@ -1707,7 +1707,7 @@ func (ef *execFactory) ConstructDelete(
 		returnCols := makeColList(table, returnColOrdSet)
 		// Delete returns the non-mutation columns specified, in the same
 		// order they are defined in the table.
-		del.columns = colinfo.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
+		del.columns = catalog.ResultColumnsFromColumns(tabDesc.GetID(), returnCols)
 
 		// Add the passthrough columns to the returning columns.
 		del.columns = append(del.columns, passthrough...)
