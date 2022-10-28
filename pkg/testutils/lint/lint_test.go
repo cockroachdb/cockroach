@@ -2022,6 +2022,7 @@ func TestLint(t *testing.T) {
 			"../../sql/row",
 			"../../storage",
 			"../../storage/enginepb",
+			"../../storage/pebbleiter",
 			"../../util",
 			"../../util/hlc",
 			"../../util/intsets",
