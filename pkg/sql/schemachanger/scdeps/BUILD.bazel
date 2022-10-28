@@ -18,6 +18,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/telemetry",
