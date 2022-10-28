@@ -537,6 +537,8 @@ var (
 		types.UUIDArray,
 		types.INet,
 		types.Jsonb,
+		types.TSQuery,
+		types.TSVector,
 		types.VarBit,
 		types.AnyEnum,
 		types.AnyEnumArray,

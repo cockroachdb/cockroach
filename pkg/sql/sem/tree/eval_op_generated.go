@@ -181,6 +181,8 @@ type BinaryOpEvaluator interface {
 	EvalRShiftIntOp(context.Context, *RShiftIntOp, Datum, Datum) (Datum, error)
 	EvalRShiftVarBitIntOp(context.Context, *RShiftVarBitIntOp, Datum, Datum) (Datum, error)
 	EvalSimilarToOp(context.Context, *SimilarToOp, Datum, Datum) (Datum, error)
+	EvalTSMatchesQueryVectorOp(context.Context, *TSMatchesQueryVectorOp, Datum, Datum) (Datum, error)
+	EvalTSMatchesVectorQueryOp(context.Context, *TSMatchesVectorQueryOp, Datum, Datum) (Datum, error)
 }
 
 
@@ -867,5 +869,15 @@ func (op *RShiftVarBitIntOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum
 // Eval is part of the BinaryEvalOp interface.
 func (op *SimilarToOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
 	return e.EvalSimilarToOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *TSMatchesQueryVectorOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalTSMatchesQueryVectorOp(ctx, op, a, b)
+}
+
+// Eval is part of the BinaryEvalOp interface.
+func (op *TSMatchesVectorQueryOp) Eval(ctx context.Context, e OpEvaluator, a, b Datum) (Datum, error) {
+	return e.EvalTSMatchesVectorQueryOp(ctx, op, a, b)
 }
 

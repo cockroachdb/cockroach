@@ -583,6 +583,26 @@ func typeToAvroSchema(typ *types.T) (*avroSchemaField, error) {
 				return tree.ParseDJSON(x.(string))
 			},
 		)
+	case types.TSQueryFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DTSQuery).TSQuery.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDTSQuery(x.(string))
+			},
+		)
+	case types.TSVectorFamily:
+		setNullable(
+			avroSchemaString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DTSVector).TSVector.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDTSVector(x.(string))
+			},
+		)
 	case types.EnumFamily:
 		setNullable(
 			avroSchemaString,

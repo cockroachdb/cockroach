@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -238,6 +239,12 @@ func writeTextDatumNotNull(
 
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
+
+	case *tree.DTSQuery:
+		b.writeLengthPrefixedString(v.String())
+
+	case *tree.DTSVector:
+		b.writeLengthPrefixedString(v.String())
 
 	case *tree.DTuple:
 		b.textFormatter.FormatNode(v)
@@ -709,6 +716,14 @@ func writeBinaryDatumNotNull(
 	case *tree.DGeometry:
 		b.putInt32(int32(len(v.EWKB())))
 		b.write(v.EWKB())
+
+	case *tree.DTSVector:
+		ret, err := tsearch.EncodeTSVectorPGBinary(nil, v.TSVector)
+		if err != nil {
+			b.setError(err)
+		} else {
+			b.write(ret)
+		}
 
 	case *tree.DArray:
 		if v.ParamTyp.Family() == types.ArrayFamily {

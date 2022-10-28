@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,6 +81,18 @@ func Encode(appendTo []byte, colID ColumnIDDelta, val tree.Datum, scratch []byte
 			return nil, err
 		}
 		return encoding.EncodeJSONValue(appendTo, uint32(colID), encoded), nil
+	case *tree.DTSQuery:
+		encoded, err := tsearch.EncodeTSQuery(scratch, t.TSQuery)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeTSQueryValue(appendTo, uint32(colID), encoded), nil
+	case *tree.DTSVector:
+		encoded, err := tsearch.EncodeTSVector(scratch, t.TSVector)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeTSVectorValue(appendTo, uint32(colID), encoded), nil
 	case *tree.DArray:
 		a, err := encodeArray(t, scratch)
 		if err != nil {

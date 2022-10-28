@@ -4221,7 +4221,7 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 	return oidZero
 }
 
-// This mapping should be kept sync with PG's categorization.
+// This mapping should be kept in sync with PG's categorization.
 var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.AnyFamily:         typCategoryPseudo,
 	types.BitFamily:         typCategoryBitString,
@@ -4242,6 +4242,8 @@ var datumToTypeCategory = map[types.Family]*tree.DString{
 	types.StringFamily:      typCategoryString,
 	types.TimestampFamily:   typCategoryDateTime,
 	types.TimestampTZFamily: typCategoryDateTime,
+	types.TSQueryFamily:     typCategoryUserDefined,
+	types.TSVectorFamily:    typCategoryUserDefined,
 	types.ArrayFamily:       typCategoryArray,
 	types.TupleFamily:       typCategoryPseudo,
 	types.OidFamily:         typCategoryNumeric,
