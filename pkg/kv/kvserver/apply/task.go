@@ -178,6 +178,12 @@ func (t *Task) assertDecoded() {
 //     it is applied. Because of this, the client can be informed of the success of
 //     a write at this point, but we cannot release that write's latches until the
 //     write has applied. See ProposalData.signalProposalResult/finishApplication.
+//
+//  4. Note that when catching up a follower that is behind, the (etcd/raft)
+//     leader will emit an MsgApp with a commit index that encompasses the entries
+//     in the MsgApp, and Ready() will expose these as present in both the Entries
+//     and CommittedEntries slices (i.e. append and apply). We don't ack these
+//     early - the caller will pass the "old" last index in.
 func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxIndex uint64) error {
 	t.assertDecoded()
 	if !t.anyLocal {
