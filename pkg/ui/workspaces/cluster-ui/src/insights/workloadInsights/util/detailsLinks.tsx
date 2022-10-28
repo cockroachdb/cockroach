@@ -26,7 +26,7 @@ export function TransactionDetailsLink(
   const path = `/transaction/${txnID}`;
   const timeScale: TimeScale = {
     windowSize: moment.duration(65, "minutes"),
-    fixedWindowEnd: startTime.add(1, "hour"),
+    fixedWindowEnd: moment(startTime).add(1, "hour"),
     sampleSize: moment.duration(1, "hour"),
     key: "Custom",
   };
