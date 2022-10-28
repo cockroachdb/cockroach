@@ -93,9 +93,9 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
+    // Refresh every 20 seconds.
     refreshTransactionInsights();
-    const interval = setInterval(refreshTransactionInsights, 10 * 1000);
+    const interval = setInterval(refreshTransactionInsights, 20 * 1000);
     return () => {
       clearInterval(interval);
     };

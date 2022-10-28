@@ -12,7 +12,6 @@ import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
 import {
-  ColumnDescriptor,
   ISortedTablePagination,
   SortSetting,
 } from "src/sortedtable/sortedtable";
@@ -29,6 +28,7 @@ import { Pagination } from "src/pagination";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
+import { isSelectedColumn } from "src/columnsSelector/utils";
 
 import { StatementInsights } from "src/api/insightsApi";
 import {
@@ -37,7 +37,6 @@ import {
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
   populateStatementInsightsFromProblemAndCauses,
-  StatementInsightEvent,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
@@ -74,21 +73,6 @@ export type StatementInsightsViewProps = StatementInsightsViewStateProps &
 
 const INSIGHT_STMT_SEARCH_PARAM = "q";
 const INTERNAL_APP_NAME_PREFIX = "$ internal";
-
-function isSelected(
-  column: ColumnDescriptor<StatementInsightEvent>,
-  selectedColumns: string[],
-): boolean {
-  if (column.alwaysShow) {
-    return true;
-  }
-
-  if (selectedColumns === null || selectedColumns === undefined) {
-    return column.showByDefault;
-  }
-
-  return selectedColumns.includes(column.name);
-}
 
 export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   props: StatementInsightsViewProps,
@@ -199,7 +183,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   const defaultColumns = makeStatementInsightsColumns(setTimeScale);
 
   const visibleColumns = defaultColumns.filter(x =>
-    isSelected(x, selectedColumnNames),
+    isSelectedColumn(selectedColumnNames, x),
   );
 
   const clearFilters = () =>
@@ -227,7 +211,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
       (c): SelectOption => ({
         label: (c.title as React.ReactElement).props.children,
         value: c.name,
-        isSelected: isSelected(c, selectedColumnNames),
+        isSelected: isSelectedColumn(selectedColumnNames, c),
       }),
     );
 

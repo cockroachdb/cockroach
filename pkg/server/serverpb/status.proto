@@ -916,6 +916,10 @@ message ActiveQuery {
   // The compressed plan that can be converted back into the statement's logical plan.
   // Empty if the statement is in the PREPARING state.
   string plan_gist = 12;
+
+  // The placeholders if any.
+  repeated string placeholders = 13;
+
 }
 
 // Request object for ListSessions and ListLocalSessions.
