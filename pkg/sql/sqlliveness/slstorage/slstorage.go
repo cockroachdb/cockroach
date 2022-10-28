@@ -306,7 +306,9 @@ func (s *Storage) deleteOrFetchSession(
 		// The session is expired and needs to be deleted.
 		deleted = true
 		expiration = hlc.Timestamp{}
-		return txn.Del(ctx, k)
+		ba := txn.NewBatch()
+		ba.Del(k)
+		return txn.CommitInBatch(ctx, ba)
 	}); err != nil {
 		return false, hlc.Timestamp{}, errors.Wrapf(err,
 			"could not query session id: %s", sid)
@@ -424,7 +426,9 @@ func (s *Storage) Update(
 			return nil
 		}
 		v := encodeValue(expiration)
-		return txn.Put(ctx, k, &v)
+		ba := txn.NewBatch()
+		ba.Put(k, &v)
+		return txn.CommitInBatch(ctx, ba)
 	})
 	if err != nil || !sessionExists {
 		s.metrics.WriteFailures.Inc(1)
