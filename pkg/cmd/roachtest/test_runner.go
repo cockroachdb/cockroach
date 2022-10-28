@@ -149,10 +149,28 @@ type clustersOpt struct {
 	// test runner will wait for other tests to finish and their cluster to be
 	// destroyed (or reused). Note that this limit is global, not per zone.
 	cpuQuota int
-	// If set, clusters will not be wiped or destroyed when a test using the
-	// respective cluster fails. These cluster will linger around and they'll
-	// continue counting towards the cpuQuota.
-	keepClustersOnTestFailure bool
+
+	// Controls whether the cluster is cleaned up at the end of the test.
+	debugMode debugMode
+}
+
+type debugMode int
+
+const (
+	// NoDebug does not enable any debug behaviour. Clusters will
+	// be destroyed regardless of the test result.
+	NoDebug debugMode = iota
+	// DebugKeepOnFailure does not wipe or destroy a cluster when
+	// a test using the respective cluster fails. These clusters
+	// will linger around and they'll continue counting towards
+	// the cpuQuota.
+	DebugKeepOnFailure
+	// DebugKeepAlways never wipes or destroys a cluster.
+	DebugKeepAlways
+)
+
+func (p debugMode) IsDebug() bool {
+	return p == DebugKeepOnFailure || p == DebugKeepAlways
 }
 
 func (c clustersOpt) validate() error {
@@ -272,7 +290,7 @@ func (r *testRunner) Run(
 			err := r.runWorker(
 				ctx, fmt.Sprintf("w%d", i) /* name */, r.work, qp,
 				r.stopper.ShouldQuiesce(),
-				clustersOpt.keepClustersOnTestFailure,
+				clustersOpt.debugMode,
 				lopt.artifactsDir, lopt.literalArtifactsDir, lopt.tee, lopt.stdout,
 				clusterAllocator,
 				topt,
@@ -449,7 +467,7 @@ func (r *testRunner) runWorker(
 	work *workPool,
 	qp *quotapool.IntPool,
 	interrupt <-chan struct{},
-	debug bool,
+	debugMode debugMode,
 	artifactsRootDir string,
 	literalArtifactsDir string,
 	teeOpt logger.TeeOptType,
@@ -615,7 +633,7 @@ func (r *testRunner) runWorker(
 			l:                      testL,
 			versionsBinaryOverride: topt.versionsBinaryOverride,
 			skipInit:               topt.skipInit,
-			debug:                  debug,
+			debug:                  debugMode.IsDebug(),
 		}
 		// Now run the test.
 		l.PrintfCtx(ctx, "starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
@@ -685,13 +703,14 @@ func (r *testRunner) runWorker(
 				failureMsg += t.failureMsg()
 			}
 			if c != nil {
-				if debug {
+				switch debugMode {
+				case DebugKeepAlways, DebugKeepOnFailure:
 					// Save the cluster for future debugging.
 					c.Save(ctx, failureMsg, l)
 
 					// Continue with a fresh cluster.
 					c = nil
-				} else {
+				case NoDebug:
 					// On any test failure or error, we destroy the cluster. We could be
 					// more selective, but this sounds safer.
 					l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
@@ -706,6 +725,10 @@ func (r *testRunner) runWorker(
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
 			getPerfArtifacts(ctx, l, c, t)
+			if debugMode == DebugKeepAlways {
+				c.Save(ctx, "cluster saved since --debug-always set", l)
+				c = nil
+			}
 		}
 	}
 }
