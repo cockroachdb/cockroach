@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -31,7 +32,7 @@ import (
 // should only be used in one of the two modes.
 type pebbleIterator struct {
 	// Underlying iterator for the DB.
-	iter    *pebble.Iterator
+	iter    pebbleiter.Iterator
 	options pebble.IterOptions
 	// Reusable buffer for MVCCKey or EngineKey encoding.
 	keyBuf []byte
@@ -91,14 +92,17 @@ func newPebbleIterator(
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive
 	p.init(nil, opts, durability, supportsRangeKeys)
-	p.iter = handle.NewIter(&p.options)
+	p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
 	return p
 }
 
 // newPebbleIteratorByCloning creates a new Pebble iterator by cloning the given
 // iterator and reconfiguring it.
 func newPebbleIteratorByCloning(
-	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
+	iter pebbleiter.Iterator,
+	opts IterOptions,
+	durability DurabilityRequirement,
+	supportsRangeKeys bool,
 ) *pebbleIterator {
 	var err error
 	p := pebbleIterPool.Get().(*pebbleIterator)
@@ -128,11 +132,12 @@ func newPebbleSSTIterator(
 		externalIterOpts = append(externalIterOpts, pebble.ExternalIterForwardOnly{})
 	}
 
-	var err error
-	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...); err != nil {
+	iter, err := pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files, externalIterOpts...)
+	if err != nil {
 		p.Close()
 		return nil, err
 	}
+	p.iter = pebbleiter.MaybeWrap(iter)
 	p.external = true
 	return p, nil
 }
@@ -141,7 +146,10 @@ func newPebbleSSTIterator(
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
 // p.iter using p.options, to avoid redundant reconfiguration via SetOptions().
 func (p *pebbleIterator) init(
-	iter *pebble.Iterator, opts IterOptions, durability DurabilityRequirement, supportsRangeKeys bool,
+	iter pebbleiter.Iterator,
+	opts IterOptions,
+	durability DurabilityRequirement,
+	supportsRangeKeys bool,
 ) {
 	*p = pebbleIterator{
 		iter:               iter,
@@ -164,7 +172,7 @@ func (p *pebbleIterator) init(
 // 3. iter == nil: create a new iterator from handle.
 func (p *pebbleIterator) initReuseOrCreate(
 	handle pebble.Reader,
-	iter *pebble.Iterator,
+	iter pebbleiter.Iterator,
 	clone bool,
 	opts IterOptions,
 	durability DurabilityRequirement,
@@ -177,7 +185,7 @@ func (p *pebbleIterator) initReuseOrCreate(
 
 	p.init(nil, opts, durability, supportsRangeKeys)
 	if iter == nil {
-		p.iter = handle.NewIter(&p.options)
+		p.iter = pebbleiter.MaybeWrap(handle.NewIter(&p.options))
 	} else if clone {
 		var err error
 		p.iter, err = iter.Clone(pebble.CloneOptions{
@@ -941,7 +949,7 @@ func (p *pebbleIterator) IsPrefix() bool {
 }
 
 // GetRawIter is part of the EngineIterator interface.
-func (p *pebbleIterator) GetRawIter() *pebble.Iterator {
+func (p *pebbleIterator) GetRawIter() pebbleiter.Iterator {
 	return p.iter
 }
 
