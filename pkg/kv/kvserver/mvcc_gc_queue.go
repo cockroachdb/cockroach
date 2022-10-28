@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
@@ -681,7 +682,10 @@ func (mgcq *mvccGCQueue) process(
 	maxIntentsPerCleanupBatch := gc.MaxIntentsPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	maxIntentKeyBytesPerCleanupBatch := gc.MaxIntentKeyBytesPerCleanupBatch.Get(&repl.store.ClusterSettings().SV)
 	txnCleanupThreshold := gc.TxnCleanupThreshold.Get(&repl.store.ClusterSettings().SV)
-	minKeyNumberForClearRange := gc.ClearRangeMinKeys.Get(&repl.store.ClusterSettings().SV)
+	var clearRangeMinKeys int64 = 0
+	if repl.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V23_1EnableGCClearRange) {
+		clearRangeMinKeys = gc.ClearRangeMinKeys.Get(&repl.store.ClusterSettings().SV)
+	}
 
 	info, err := gc.Run(ctx, desc, snap, gcTimestamp, newThreshold,
 		gc.RunOptions{
@@ -691,7 +695,7 @@ func (mgcq *mvccGCQueue) process(
 			TxnCleanupThreshold:                    txnCleanupThreshold,
 			MaxTxnsPerIntentCleanupBatch:           intentresolver.MaxTxnsPerIntentCleanupBatch,
 			IntentCleanupBatchTimeout:              mvccGCQueueIntentBatchTimeout,
-			ClearRangeMinKeys:                      minKeyNumberForClearRange,
+			ClearRangeMinKeys:                      clearRangeMinKeys,
 		},
 		conf.TTL(),
 		&replicaGCer{

@@ -318,6 +318,11 @@ const (
 	// TenantNames adds a name column to system.tenants.
 	V23_1TenantNames
 
+	// V23_1EnableGCClearRange allows GC to fill and send ClearRange portions of
+	// GC Requests to request removal of multiple keys using pebble tombstones
+	// when applicable.
+	V23_1EnableGCClearRange
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -519,6 +524,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     V23_1EnableGCClearRange,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************
