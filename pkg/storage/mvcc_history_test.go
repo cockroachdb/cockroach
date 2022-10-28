@@ -97,7 +97,7 @@ var (
 // put_rangekey   ts=<int>[,<int>] [localTs=<int>[,<int>]] k=<key> end=<key>
 // get            [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [inconsistent] [skipLocked] [tombstones] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]]
 // scan           [t=<name>] [ts=<int>[,<int>]]                         [resolve [status=<txnstatus>]] k=<key> [end=<key>] [inconsistent] [skipLocked] [tombstones] [reverse] [failOnMoreRecent] [localUncertaintyLimit=<int>[,<int>]] [globalUncertaintyLimit=<int>[,<int>]] [max=<max>] [targetbytes=<target>] [allowEmpty]
-// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey]
+// export         [k=<key>] [end=<key>] [ts=<int>[,<int>]] [kTs=<int>[,<int>]] [startTs=<int>[,<int>]] [maxIntents=<int>] [allRevisions] [targetSize=<int>] [maxSize=<int>] [stopMidKey] [fingerprint]
 //
 // iter_new       [k=<key>] [end=<key>] [prefix] [kind=key|keyAndIntents] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [pointSynthesis] [maskBelow=<int>[,<int>]]
 // iter_new_incremental [k=<key>] [end=<key>] [startTs=<int>[,<int>]] [endTs=<int>[,<int>]] [types=pointsOnly|pointsWithRanges|pointsAndRanges|rangesOnly] [maskBelow=<int>[,<int>]] [intents=error|aggregate|emit]
@@ -1331,21 +1331,43 @@ func cmdExport(e *evalCtx) error {
 	if e.hasArg("maxSize") {
 		e.scanArg("maxSize", &opts.MaxSize)
 	}
+	var shouldFingerprint bool
+	if e.hasArg("fingerprint") {
+		shouldFingerprint = true
+	}
 
 	r := e.newReader()
 	defer r.Close()
 
 	sstFile := &storage.MemFile{}
-	summary, resume, err := storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
-	if err != nil {
-		return err
+
+	var summary roachpb.BulkOpSummary
+	var resume storage.MVCCKey
+	var fingerprint uint64
+	var err error
+	if shouldFingerprint {
+		summary, resume, fingerprint, err = storage.MVCCExportFingerprint(e.ctx, e.st, r, opts, sstFile)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("export: %s", &summary)
+		e.results.buf.Print(" fingerprint=true")
+	} else {
+		summary, resume, err = storage.MVCCExportToSST(e.ctx, e.st, r, opts, sstFile)
+		if err != nil {
+			return err
+		}
+		e.results.buf.Printf("export: %s", &summary)
 	}
 
-	e.results.buf.Printf("export: %s", &summary)
 	if resume.Key != nil {
 		e.results.buf.Printf(" resume=%s", resume)
 	}
 	e.results.buf.Printf("\n")
+
+	if shouldFingerprint {
+		e.results.buf.Printf("fingerprint: %d\n", fingerprint)
+	}
 
 	iter, err := storage.NewMemSSTIterator(sstFile.Bytes(), false /* verify */, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
