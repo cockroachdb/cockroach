@@ -256,7 +256,7 @@ func runDemoInternal(
 
 	initGEOS(ctx)
 
-	if err := c.Start(ctx, runInitialSQL); err != nil {
+	if err := c.Start(ctx); err != nil {
 		return clierrorplus.CheckAndMaybeShout(err)
 	}
 	sqlCtx.ShellCtx.DemoCluster = c

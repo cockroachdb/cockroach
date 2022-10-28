@@ -94,5 +94,5 @@ func runStartSQL(cmd *cobra.Command, args []string) error {
 		return s, nil
 	}
 
-	return runStartInternal(cmd, serverType, initConfig, newServerFn, nil /* maybeRunInitialSQL */)
+	return runStartInternal(cmd, serverType, initConfig, newServerFn, false /* startSingleNode */)
 }

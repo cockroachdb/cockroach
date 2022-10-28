@@ -180,10 +180,7 @@ func NewDemoCluster(
 	return c, nil
 }
 
-func (c *transientCluster) Start(
-	ctx context.Context,
-	runInitialSQL func(ctx context.Context, s *server.Server, startSingleNode bool, adminUser, adminPassword string) error,
-) (err error) {
+func (c *transientCluster) Start(ctx context.Context) (err error) {
 	ctx = logtags.AddTag(ctx, "start-demo-cluster", nil)
 
 	// Initialize the connection database.
@@ -464,7 +461,7 @@ func (c *transientCluster) Start(
 		server := c.firstServer.Server
 		ctx = server.AnnotateCtx(ctx)
 
-		if err := runInitialSQL(ctx, server, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
+		if err := server.RunInitialSQL(ctx, c.demoCtx.NumNodes < 3, demoUsername, demoPassword); err != nil {
 			return err
 		}
 		if c.demoCtx.Insecure {

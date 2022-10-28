@@ -68,7 +68,6 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql",
         "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/log",
