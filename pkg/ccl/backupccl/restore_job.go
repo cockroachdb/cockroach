@@ -1774,12 +1774,12 @@ func revalidateIndexes(
 
 	// We don't actually need the 'historical' read the way the schema change does
 	// since our table is offline.
-	var runner descs.HistoricalInternalExecTxnRunner = func(ctx context.Context, fn descs.InternalExecFn) error {
+	runner := descs.NewHistoricalInternalExecTxnRunner(hlc.Timestamp{}, func(ctx context.Context, fn descs.InternalExecFn) error {
 		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			ie := job.MakeSessionBoundInternalExecutor(sql.NewFakeSessionData(execCfg.SV())).(*sql.InternalExecutor)
 			return fn(ctx, txn, ie, nil /* descriptors */)
 		})
-	}
+	})
 
 	invalidIndexes := make(map[descpb.ID][]descpb.IndexID)
 
@@ -1804,12 +1804,17 @@ func revalidateIndexes(
 		if len(forward) > 0 {
 			if err := sql.ValidateForwardIndexes(
 				ctx,
+				job.ID(),
+				execCfg.Codec,
+				execCfg.DB,
 				tableDesc.MakePublic(),
 				forward,
 				runner,
 				false, /* withFirstMutationPublic */
 				true,  /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				execCfg.ProtectedTimestampProvider,
+				execCfg.SystemConfig,
 			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = invalid.Indexes
@@ -1821,13 +1826,17 @@ func revalidateIndexes(
 		if len(inverted) > 0 {
 			if err := sql.ValidateInvertedIndexes(
 				ctx,
+				job.ID(),
 				execCfg.Codec,
+				execCfg.DB,
 				tableDesc.MakePublic(),
 				inverted,
 				runner,
 				false, /* withFirstMutationPublic */
 				true,  /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
+				execCfg.ProtectedTimestampProvider,
+				execCfg.SystemConfig,
 			); err != nil {
 				if invalid := (sql.InvalidIndexesError{}); errors.As(err, &invalid) {
 					invalidIndexes[tableDesc.ID] = append(invalidIndexes[tableDesc.ID], invalid.Indexes...)
