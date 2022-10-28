@@ -14,12 +14,12 @@ import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
 import { AppState } from "../store";
 import {
-  ActiveStatementDetails,
-  ActiveStatementDetailsDispatchProps,
+  RecentStatementDetails,
+  RecentStatementDetailsDispatchProps,
 } from "./activeStatementDetails";
-import { ActiveStatementDetailsStateProps } from ".";
+import { RecentStatementDetailsStateProps } from ".";
 import {
-  selectActiveStatement,
+  selecteRecentStatement,
   selectContentionDetailsForStatement,
 } from "src/selectors/activeExecutions.selectors";
 import { selectIsTenant } from "src/store/uiConfig";
@@ -29,10 +29,10 @@ import { selectIsTenant } from "src/store/uiConfig";
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
-): ActiveStatementDetailsStateProps => {
+): RecentStatementDetailsStateProps => {
   return {
     contentionDetails: selectContentionDetailsForStatement(state, props),
-    statement: selectActiveStatement(state, props),
+    statement: selecteRecentStatement(state, props),
     match: props.match,
     isTenant: selectIsTenant(state),
   };
@@ -40,10 +40,10 @@ const mapStateToProps = (
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
-): ActiveStatementDetailsDispatchProps => ({
+): RecentStatementDetailsDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
-export const ActiveStatementDetailsPageConnected = withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(ActiveStatementDetails),
+export const RecentStatementDetailsPageConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(RecentStatementDetails),
 );

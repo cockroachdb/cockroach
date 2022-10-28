@@ -14,7 +14,7 @@ import { Link } from "react-router-dom";
 import { Col, Row } from "antd";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import {
-  ActiveStatement,
+  RecentStatement,
   ExecutionContentionDetails,
 } from "src/activeExecutions";
 import { WaitTimeInsightsPanel } from "src/detailsPanels/waitTimeInsightsPanel";
@@ -31,11 +31,11 @@ import styles from "./statementDetails.module.scss";
 const cx = classNames.bind(styles);
 
 type Props = {
-  statement?: ActiveStatement;
+  statement?: RecentStatement;
   contentionDetails?: ExecutionContentionDetails;
 };
 
-export const ActiveStatementDetailsOverviewTab = ({
+export const RecentStatementDetailsOverviewTab = ({
   statement,
   contentionDetails,
 }: Props): React.ReactElement => {

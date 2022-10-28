@@ -11,8 +11,8 @@
 import React, { useMemo } from "react";
 import classNames from "classnames/bind";
 import {
-  ActiveStatement,
-  ActiveStatementFilters,
+  RecentStatement,
+  RecentStatementFilters,
 } from "src/activeExecutions/types";
 import ColumnsSelector, {
   SelectOption,
@@ -27,7 +27,7 @@ import {
 } from "../sortedtable/sortedtable";
 import {
   getColumnOptions,
-  makeActiveStatementsColumns,
+  makeRecentStatementsColumns,
 } from "./activeStatementsTable";
 import { StatementViewType } from "src/statementsPage/statementPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
@@ -35,11 +35,11 @@ import { isSelectedColumn } from "src/columnsSelector/utils";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
-type ActiveStatementsSectionProps = {
-  filters: ActiveStatementFilters;
+type RecentStatementsSectionProps = {
+  filters: RecentStatementFilters;
   pagination: ISortedTablePagination;
   search: string;
-  statements: ActiveStatement[];
+  statements: RecentStatement[];
   selectedColumns?: string[];
   sortSetting: SortSetting;
   isTenant?: boolean;
@@ -48,8 +48,8 @@ type ActiveStatementsSectionProps = {
   onColumnsSelect: (columns: string[]) => void;
 };
 
-export const ActiveStatementsSection: React.FC<
-  ActiveStatementsSectionProps
+export const RecentStatementsSection: React.FC<
+  RecentStatementsSectionProps
 > = ({
   filters,
   isTenant,
@@ -63,7 +63,7 @@ export const ActiveStatementsSection: React.FC<
   onColumnsSelect,
 }) => {
   const columns = useMemo(
-    () => makeActiveStatementsColumns(isTenant),
+    () => makeRecentStatementsColumns(isTenant),
     [isTenant],
   );
 

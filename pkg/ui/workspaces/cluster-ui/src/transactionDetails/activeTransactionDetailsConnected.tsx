@@ -14,12 +14,12 @@ import { Dispatch } from "redux";
 import { actions as sessionsActions } from "src/store/sessions";
 import { AppState } from "../store";
 import {
-  ActiveTransactionDetails,
-  ActiveTransactionDetailsDispatchProps,
+  RecentTransactionDetails,
+  RecentTransactionDetailsDispatchProps,
 } from "./activeTransactionDetails";
-import { ActiveTransactionDetailsStateProps } from ".";
+import { RecentTransactionDetailsStateProps } from ".";
 import {
-  selectActiveTransaction,
+  selectRecentTransaction,
   selectContentionDetailsForTransaction,
 } from "src/selectors/activeExecutions.selectors";
 
@@ -28,9 +28,9 @@ import {
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
-): ActiveTransactionDetailsStateProps => {
+): RecentTransactionDetailsStateProps => {
   return {
-    transaction: selectActiveTransaction(state, props),
+    transaction: selectRecentTransaction(state, props),
     contentionDetails: selectContentionDetailsForTransaction(state, props),
     match: props.match,
   };
@@ -38,10 +38,10 @@ const mapStateToProps = (
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
-): ActiveTransactionDetailsDispatchProps => ({
+): RecentTransactionDetailsDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
 });
 
-export const ActiveTransactionDetailsPageConnected = withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(ActiveTransactionDetails),
+export const RecentTransactionDetailsPageConnected = withRouter(
+  connect(mapStateToProps, mapDispatchToProps)(RecentTransactionDetails),
 );

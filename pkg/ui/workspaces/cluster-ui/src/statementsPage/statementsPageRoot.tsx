@@ -17,15 +17,15 @@ import {
   StatementsPageProps,
 } from "src/statementsPage/statementsPage";
 import {
-  ActiveStatementsView,
-  ActiveStatementsViewProps,
+  RecentStatementsView,
+  RecentStatementsViewProps,
 } from "./activeStatementsView";
 import { statementsSql } from "src/util/docs";
 import { Anchor } from "src/anchor";
 
 export type StatementsPageRootProps = {
   fingerprintsPageProps: StatementsPageProps;
-  activePageProps: ActiveStatementsViewProps;
+  activePageProps: RecentStatementsViewProps;
 };
 
 export const StatementsPageRoot = ({
@@ -49,17 +49,18 @@ export const StatementsPageRoot = ({
     },
     {
       value: StatementViewType.ACTIVE,
-      label: "Active Executions",
+      label: "Recent Executions",
       description: (
         <span>
-          Active executions represent individual statement executions in
-          progress. Use active statement execution details, such as the
+          Recent executions represent individual statement executions in
+          progress or recently completed, timed out, or canceled.
+          Use recent statement execution details, such as the
           application or elapsed time, to understand and tune workload
           performance.
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),
-      component: <ActiveStatementsView {...activePageProps} />,
+      component: <RecentStatementsView {...activePageProps} />,
     },
   ];
 

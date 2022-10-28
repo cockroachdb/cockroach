@@ -9,11 +9,11 @@
 // licenses/APL.txt.
 
 import { RouteComponentProps } from "react-router";
-import { ActiveExecutions, SessionsResponse } from "src/activeExecutions/types";
+import { RecentExecutions, SessionsResponse } from "src/activeExecutions/types";
 import { ClusterLocksResponse } from "src/api";
 import { executionIdAttr, getMatchParamByName } from "src/util";
 import {
-  getActiveExecutionsFromSessions,
+  getRecentExecutionsFromSessions,
   getWaitTimeByTxnIDFromLocks,
 } from "../activeExecutions";
 
@@ -26,14 +26,14 @@ export const selectExecutionID = (
   props: RouteComponentProps,
 ): string | null => getMatchParamByName(props.match, executionIdAttr);
 
-export const selectActiveExecutionsCombiner = (
+export const selectRecentExecutionsCombiner = (
   sessions: SessionsResponse | null,
   clusterLocks: ClusterLocksResponse | null,
-): ActiveExecutions => {
+): RecentExecutions => {
   if (!sessions) return { statements: [], transactions: [] };
 
   const waitTimeByTxnID = getWaitTimeByTxnIDFromLocks(clusterLocks);
-  const execs = getActiveExecutionsFromSessions(sessions);
+  const execs = getRecentExecutionsFromSessions(sessions);
 
   return {
     statements: execs.statements.map(s => ({

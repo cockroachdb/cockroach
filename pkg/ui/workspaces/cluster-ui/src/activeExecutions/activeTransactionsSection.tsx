@@ -11,8 +11,8 @@
 import React, { useMemo } from "react";
 import classNames from "classnames/bind";
 import {
-  ActiveStatementFilters,
-  ActiveTransaction,
+  RecentStatementFilters,
+  RecentTransaction,
 } from "src/activeExecutions/types";
 import ColumnsSelector, {
   SelectOption,
@@ -25,7 +25,7 @@ import {
   SortSetting,
 } from "../sortedtable/sortedtable";
 import {
-  makeActiveTransactionsColumns,
+  makeRecentTransactionsColumns,
   getColumnOptions,
 } from "./activeTransactionsTable";
 import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
@@ -35,12 +35,12 @@ import { SortedTable } from "src/sortedtable";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
-type ActiveTransactionsSectionProps = {
-  filters: ActiveStatementFilters;
+type RecentTransactionsSectionProps = {
+  filters: RecentStatementFilters;
   isTenant?: boolean;
   pagination: ISortedTablePagination;
   search: string;
-  transactions: ActiveTransaction[];
+  transactions: RecentTransaction[];
   selectedColumns?: string[];
   sortSetting: SortSetting;
   onClearFilters: () => void;
@@ -48,8 +48,8 @@ type ActiveTransactionsSectionProps = {
   onColumnsSelect: (columns: string[]) => void;
 };
 
-export const ActiveTransactionsSection: React.FC<
-  ActiveTransactionsSectionProps
+export const RecentTransactionsSection: React.FC<
+  RecentTransactionsSectionProps
 > = ({
   filters,
   isTenant,
@@ -63,7 +63,7 @@ export const ActiveTransactionsSection: React.FC<
   onColumnsSelect,
 }) => {
   const columns = useMemo(
-    () => makeActiveTransactionsColumns(isTenant),
+    () => makeRecentTransactionsColumns(isTenant),
     [isTenant],
   );
   const shownColumns = columns.filter(col =>

@@ -16,14 +16,14 @@ import { TransactionsPageProps } from "./transactionsPage";
 import { TransactionsPage } from ".";
 import { statementsSql } from "../util/docs";
 import {
-  ActiveTransactionsView,
-  ActiveTransactionsViewProps,
+  RecentTransactionsView,
+  RecentTransactionsViewProps,
 } from "./activeTransactionsView";
 import { Anchor } from "src/anchor";
 
 export type TransactionsPageRootProps = {
   fingerprintsPageProps: TransactionsPageProps;
-  activePageProps: ActiveTransactionsViewProps;
+  activePageProps: RecentTransactionsViewProps;
 };
 
 export const TransactionsPageRoot = ({
@@ -48,17 +48,17 @@ export const TransactionsPageRoot = ({
     },
     {
       value: TransactionViewType.ACTIVE,
-      label: "Active Executions",
+      label: "Recent Executions",
       description: (
         <span>
-          Active executions represent individual transactions executions in
-          progress. Use active transaction execution details, such as the
-          application or elapsed time, to understand and tune workload
-          performance.
+          Recent executions represent individual transactions executions in
+          progress or recently completed. Use recent transaction execution
+          details, such as the application or elapsed time, to understand
+          and tune workload performance.
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),
-      component: <ActiveTransactionsView {...activePageProps} />,
+      component: <RecentTransactionsView {...activePageProps} />,
     },
   ];
 
