@@ -55,6 +55,7 @@ func getFirstStoreReplica(
 
 func TestValidationWithProtectedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 90879, "flaky test")
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t, "test takes too long")
 	skip.UnderRace(t, "test takes too long")
