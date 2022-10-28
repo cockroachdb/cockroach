@@ -1,0 +1,211 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package tsearch
+
+import (
+	"fmt"
+	"sort"
+	"strconv"
+	"strings"
+)
+
+// This file defines the TSVector data structure, which is used to implement
+// Postgres's tsvector text search mechanism.
+// See https://www.postgresql.org/docs/current/datatype-textsearch.html for
+// context on what each of the pieces do.
+//
+// TSVector is ultimately used to represent a document as a posting list - a
+// list of lexemes in the doc (typically without stop words like common or short
+// words, and typically stemmed using a stemming algorithm like snowball
+// stemming (https://snowballstem.org/)), along with an associated set of
+// positions that those lexemes occur within the document.
+//
+// Typically, this posting list is then stored in an inverted index within the
+// database to accelerate searches of terms within the document.
+//
+// The key structures are:
+// - tsTerm is a document term (also referred to as lexeme) along with a
+//   position list, which contains the positions within a document that a term
+//   appeared, along with an optional weight, which controls matching.
+// - tsTerm is also used during parsing of both TSQueries and TSVectors, so a
+//   tsTerm also can represent an TSQuery operator.
+// - tsWeight represents the weight of a given lexeme. It's also used for
+//   queries, when a "star" weight is available that matches any weight.
+// - TSVector is a list of tsTerms, ordered by their lexeme.
+
+// tsWeight is a bitfield that represents the weight of a given term. When
+// stored in a TSVector, only 1 of the bits will be set. The default weight is
+// D - as a result, we store 0 for the weight of terms with weight D or no
+// specified weight. The weightStar value is never set in a TSVector weight.
+//
+// tsWeight is also used inside of TSQueries, to specify the weight to search.
+// Within TSQueries, the absence of a weight is the default, and indicates that
+// the search term should match any matching term, regardless of its weight. If
+// one or more of the weights are set in a search term, it indicates that the
+// query should match only terms with the given weights.
+type tsWeight int
+
+const (
+	// These enum values are a bitfield and must be kept in order.
+	weightD tsWeight = 1 << iota
+	weightC
+	weightB
+	weightA
+	// weightStar is a special "weight" that can be specified only in a search
+	// term. It indicates prefix matching, which will allow the term to match any
+	// document term that begins with the search term.
+	weightStar
+)
+
+func (w tsWeight) String() string {
+	var ret strings.Builder
+	if w&weightStar != 0 {
+		ret.WriteByte('*')
+	}
+	if w&weightA != 0 {
+		ret.WriteByte('A')
+	}
+	if w&weightB != 0 {
+		ret.WriteByte('B')
+	}
+	if w&weightC != 0 {
+		ret.WriteByte('C')
+	}
+	if w&weightD != 0 {
+		ret.WriteByte('D')
+	}
+	return ret.String()
+}
+
+// tsPosition is a position within a document, along with an optional weight.
+type tsPosition struct {
+	position int
+	weight   tsWeight
+}
+
+// tsTerm is either a lexeme and position list, or an operator (when parsing a
+// a TSQuery).
+type tsTerm struct {
+	lexeme    string
+	positions []tsPosition
+
+	// The operator and followedN fields are only used when parsing a TSQuery.
+	operator tsOperator
+	// Set only when operator = followedby
+	followedN int
+}
+
+func (t tsTerm) String() string {
+	if t.operator != 0 {
+		switch t.operator {
+		case and:
+			return "&"
+		case or:
+			return "|"
+		case not:
+			return "!"
+		case lparen:
+			return "("
+		case rparen:
+			return ")"
+		case followedby:
+			if t.followedN == 1 {
+				return "<->"
+			}
+			return fmt.Sprintf("<%d>", t.followedN)
+		}
+	}
+
+	var buf strings.Builder
+	buf.WriteByte('\'')
+	for _, r := range t.lexeme {
+		if r == '\'' {
+			// Single quotes are escaped as double single quotes inside of a TSVector.
+			buf.WriteString(`''`)
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	buf.WriteByte('\'')
+	for i, pos := range t.positions {
+		if i > 0 {
+			buf.WriteByte(',')
+		} else {
+			buf.WriteByte(':')
+		}
+		if pos.position > 0 {
+			buf.WriteString(strconv.Itoa(pos.position))
+		}
+		buf.WriteString(pos.weight.String())
+	}
+	return buf.String()
+}
+
+// TSVector is a sorted list of terms, each of which is a lexeme that might have
+// an associated position within an original document.
+type TSVector []tsTerm
+
+func (t TSVector) String() string {
+	var buf strings.Builder
+	for i, term := range t {
+		if i > 0 {
+			buf.WriteByte(' ')
+		}
+		buf.WriteString(term.String())
+	}
+	return buf.String()
+}
+
+// ParseTSVector produces a TSVector from an input string. The input will be
+// sorted by lexeme, but will not be automatically stemmed or stop-worded.
+func ParseTSVector(input string) (TSVector, error) {
+	parser := tsVectorLexer{
+		input: input,
+		state: expectingTerm,
+	}
+	ret, err := parser.lex()
+	if err != nil {
+		return ret, err
+	}
+
+	if len(ret) > 1 {
+		// Sort and de-duplicate the resultant TSVector.
+		sort.Slice(ret, func(i, j int) bool {
+			return ret[i].lexeme < ret[j].lexeme
+		})
+		// Then distinct: (wouldn't it be nice if Go had generics?)
+		lastUniqueIdx := 0
+		for j := 1; j < len(ret); j++ {
+			if ret[j].lexeme != ret[lastUniqueIdx].lexeme {
+				// We found a unique entry, at index i. The last unique entry in the
+				// array was at lastUniqueIdx, so set the entry after that one to our
+				// new unique entry, and bump lastUniqueIdx for the next loop iteration.
+				// First, sort and unique the position list now that we've collapsed all
+				// of the identical lexemes.
+				ret[lastUniqueIdx].positions = sortAndUniqTSPositions(ret[lastUniqueIdx].positions)
+				lastUniqueIdx++
+				ret[lastUniqueIdx] = ret[j]
+			} else {
+				// The last entries were not unique. Collapse their positions into the
+				// first entry's list.
+				ret[lastUniqueIdx].positions = append(ret[lastUniqueIdx].positions, ret[j].positions...)
+			}
+		}
+		ret = ret[:lastUniqueIdx+1]
+	}
+	if len(ret) >= 1 {
+		// Make sure to sort and uniq the position list even if there's only 1
+		// entry.
+		lastIdx := len(ret) - 1
+		ret[lastIdx].positions = sortAndUniqTSPositions(ret[lastIdx].positions)
+	}
+	return ret, nil
+}

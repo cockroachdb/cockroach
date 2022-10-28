@@ -584,15 +584,16 @@ type candidate struct {
 	l0SubLevels    int
 	convergesScore int
 	balanceScore   balanceStatus
+	hasNonVoter    bool
 	rangeCount     int
 	details        string
 }
 
 func (c candidate) String() string {
 	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, highReadAmp: %t, l0SubLevels: %d, converges:%d, "+
-		"balance:%d, rangeCount:%d, queriesPerSecond:%.2f",
+		"balance:%d, hasNonVoter:%t, rangeCount:%d, queriesPerSecond:%.2f",
 		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.highReadAmp, c.l0SubLevels, c.convergesScore,
-		c.balanceScore, c.rangeCount, c.store.Capacity.QueriesPerSecond)
+		c.balanceScore, c.hasNonVoter, c.rangeCount, c.store.Capacity.QueriesPerSecond)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
 	}
@@ -640,54 +641,60 @@ func (c candidate) less(o candidate) bool {
 // candidate is.
 func (c candidate) compare(o candidate) float64 {
 	if !o.valid {
-		return 60
+		return 600
 	}
 	if !c.valid {
-		return -60
+		return -600
 	}
 	if o.fullDisk {
-		return 50
+		return 500
 	}
 	if c.fullDisk {
-		return -50
+		return -500
 	}
 	if c.necessary != o.necessary {
 		if c.necessary {
-			return 40
+			return 400
 		}
-		return -40
+		return -400
 	}
 	if !scoresAlmostEqual(c.diversityScore, o.diversityScore) {
 		if c.diversityScore > o.diversityScore {
-			return 30
+			return 300
 		}
-		return -30
+		return -300
 	}
 	// If both o and c have high read amplification, then we prefer the
 	// canidate with lower read amp.
 	if o.highReadAmp && c.highReadAmp {
 		if o.l0SubLevels > c.l0SubLevels {
-			return 25
+			return 250
 		}
 	}
 	if c.highReadAmp {
-		return -25
+		return -250
 	}
 	if o.highReadAmp {
-		return 25
+		return 250
 	}
 
 	if c.convergesScore != o.convergesScore {
 		if c.convergesScore > o.convergesScore {
-			return 2 + float64(c.convergesScore-o.convergesScore)/10.0
+			return 200 + float64(c.convergesScore-o.convergesScore)/10.0
 		}
-		return -(2 + float64(o.convergesScore-c.convergesScore)/10.0)
+		return -(200 + float64(o.convergesScore-c.convergesScore)/10.0)
 	}
 	if c.balanceScore != o.balanceScore {
 		if c.balanceScore > o.balanceScore {
-			return 1 + (float64(c.balanceScore-o.balanceScore))/10.0
+			return 150 + (float64(c.balanceScore-o.balanceScore))/10.0
 		}
-		return -(1 + (float64(o.balanceScore-c.balanceScore))/10.0)
+		return -(150 + (float64(o.balanceScore-c.balanceScore))/10.0)
+	}
+	if c.hasNonVoter != o.hasNonVoter {
+		if c.hasNonVoter {
+			return 100
+		}
+		return -100
 	}
 	// Sometimes we compare partially-filled in candidates, e.g. those with
 	// diversity scores filled in but not balance scores or range counts. This
@@ -736,6 +743,7 @@ func (c byScoreAndID) Less(i, j int) bool {
 	if scoresAlmostEqual(c[i].diversityScore, c[j].diversityScore) &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore == c[j].balanceScore &&
+		c[i].hasNonVoter == c[j].hasNonVoter &&
 		c[i].rangeCount == c[j].rangeCount &&
 		c[i].necessary == c[j].necessary &&
 		c[i].fullDisk == c[j].fullDisk &&
@@ -770,7 +778,8 @@ func (cl candidateList) best() candidateList {
 		if cl[i].necessary == cl[0].necessary &&
 			scoresAlmostEqual(cl[i].diversityScore, cl[0].diversityScore) &&
 			cl[i].convergesScore == cl[0].convergesScore &&
-			cl[i].balanceScore == cl[0].balanceScore {
+			cl[i].balanceScore == cl[0].balanceScore &&
+			cl[i].hasNonVoter == cl[0].hasNonVoter {
 			continue
 		}
 		return cl[:i]
@@ -938,13 +947,16 @@ func rankedCandidateListForAllocation(
 	candidateStores storepool.StoreList,
 	constraintsCheck constraintsCheckFn,
 	existingReplicas []roachpb.ReplicaDescriptor,
+	nonVoterReplicas []roachpb.ReplicaDescriptor,
 	existingStoreLocalities map[roachpb.StoreID]roachpb.Locality,
 	isStoreValidForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool,
 	allowMultipleReplsPerNode bool,
 	options ScorerOptions,
+	targetType TargetReplicaType,
 ) candidateList {
 	var candidates candidateList
 	existingReplTargets := roachpb.MakeReplicaSet(existingReplicas).ReplicationTargets()
+	var nonVoterReplTargets []roachpb.ReplicationTarget
 	for _, s := range candidateStores.Stores {
 		// Disregard all the stores that already have replicas.
 		if StoreHasReplica(s.StoreID, existingReplTargets) {
@@ -1009,6 +1021,13 @@ func rankedCandidateListForAllocation(
 				}).balanceScore(candidateStores, s.Capacity)
 			}
 		}
+		var hasNonVoter bool
+		if targetType == VoterTarget {
+			if nonVoterReplTargets == nil {
+				nonVoterReplTargets = roachpb.MakeReplicaSet(nonVoterReplicas).ReplicationTargets()
+			}
+			hasNonVoter = StoreHasReplica(s.StoreID, nonVoterReplTargets)
+		}
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          constraintsOK,
@@ -1016,6 +1035,7 @@ func rankedCandidateListForAllocation(
 			diversityScore: diversityScore,
 			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
+			hasNonVoter:    hasNonVoter,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
 	}
