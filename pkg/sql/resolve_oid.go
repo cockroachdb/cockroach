@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -77,7 +78,12 @@ func resolveOID(
 	results, err := ie.QueryRowEx(ctx, "queryOid", txn,
 		sessiondata.NoSessionDataOverride, q, toResolve)
 	if err != nil {
-		if errors.HasType(err, (*tree.MultipleResultsError)(nil)) {
+		if catalog.HasInactiveDescriptorError(err) {
+			// Descriptor is either dropped or offline, so
+			// the OID does not exist.
+			return nil, true, pgerror.Newf(info.errType,
+				"%s %s does not exist", info.objName, toResolve)
+		} else if errors.HasType(err, (*tree.MultipleResultsError)(nil)) {
 			return nil, false, pgerror.Newf(pgcode.AmbiguousAlias,
 				"more than one %s named %s", info.objName, toResolve)
 		}
