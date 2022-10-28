@@ -2083,6 +2083,29 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.consistencyLimiter.UpdateLimit(quotapool.Limit(rate), rate*consistencyCheckRateBurstFactor)
 	})
 
+	// When the server shuts down there may be proposals inflight. They may have
+	// a trace span attached to them, so close those out properly. This is mostly
+	// to appease the span leak check in TestCluster.
+	//
+	// TODO(during review): this doesn't actually fix it, when you make the skip
+	// in TestReplicaRemovalClosesProposalQuota unconditional we still leak the
+	// same spans within ~a minute.
+	stopper.AddCloser(stop.CloserFn(func() {
+		s.VisitReplicas(func(repl *Replica) (wantMore bool) {
+			// NB: we may not need raftMu but doesn't hurt either.
+			repl.raftMu.Lock()
+			defer repl.raftMu.Unlock()
+			repl.mu.Lock()
+			defer repl.mu.Unlock()
+			for _, p := range repl.mu.proposals {
+				p.finishApplication(context.Background(), proposalResult{
+					Err: roachpb.NewError(roachpb.NewAmbiguousResultError(errors.New("shutting down"))),
+				})
+			}
+			return true // want more
+		})
+	}))
+
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
 

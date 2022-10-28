@@ -5443,6 +5443,25 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	if false {
+		t.Skip(`
+    client_raft_test.go:5500: the replica is not the leaseholder, this
+ happens rarely under stressrace
+    testcluster.go:162: condition failed to evaluate within 45s: unexp
+ectedly found 7 active spans:
+ [{5000206999096958072 3160683811823455971 8996100110337704742
+async consensus [{ [{_unfinished 1} {node 1} {store 1} {range 13/1:/Ta
+ble/1{2-3}}]}] 2022-10-17 17:41:45.034683745 +0000 UTC m=+587.68438641
+4 45.517377933s [] false OFF 576073 false [] map[]}]
+
+sort of makes sense if you think about it, if we shut everything down
+and there are still inflight proposals, then they will never finish
+but they have an attached span.
+
+`)
+	}
+
 	ctx := context.Background()
 	// These variables track the request count to make sure that all of the
 	// requests have made it to the Replica.
