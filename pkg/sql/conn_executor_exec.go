@@ -345,7 +345,27 @@ func (ex *connExecutor) execStmtInOpenState(
 			retPayload = eventNonRetriableErrPayload{err: cancelchecker.QueryCanceledError}
 		}
 
+		qm, ok := ex.mu.ActiveQueries[queryID]
 		ex.removeActiveQuery(queryID, ast)
+
+		// If not an internal query, set the correct query phase, and add it
+		// to the RecentStatementsCache.
+		isInternal := ex.executorType == executorTypeInternal || ex.planner.isInternalPlanner
+		if !isInternal {
+			if ok {
+				if queryTimedOut {
+					qm.phase = timedOut
+				} else if res != nil && ctx.Err() != nil && res.Err() != nil {
+					qm.phase = canceled
+				} else if res != nil && ctx.Err() == nil && res.Err() != nil {
+					qm.phase = failed
+				} else {
+					qm.phase = completed
+				}
+				ex.server.addToRecentStatementsCache(ex.Ctx(), ex.sessionID, queryID, qm, timeutil.Now())
+			}
+		}
+
 		cancelQuery()
 		if ex.executorType != executorTypeInternal {
 			ex.metrics.EngineMetrics.SQLActiveStatements.Dec(1)

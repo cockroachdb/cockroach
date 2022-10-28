@@ -3330,6 +3330,195 @@ CREATE USER %s with password 'hunter2';
 	wg.Wait()
 }
 
+// TestRecentStatementsCache tests that statements are being written correctly to the
+// RecentStatementsCache, and that the information is surfaced via the ListSessions API.
+func TestRecentStatementsCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serverParams, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: serverParams,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	user := "user_name"
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'hunter2' VIEWACTIVITY;`, user))
+	require.NoError(t, err)
+
+	expectedCompletedQueries := 4
+	expectedFailedQueries := 3
+	expectedTimedOutQueries := 2
+
+	testCases := []struct {
+		name          string
+		expectedPhase serverpb.ActiveQuery_Phase
+		numQueries    int
+		query         string
+		ops           func(*testing.T, *sqlutils.SQLRunner)
+	}{
+		{
+			name:          "completed",
+			expectedPhase: serverpb.ActiveQuery_COMPLETED,
+			numQueries:    expectedCompletedQueries,
+			query:         "SHOW DATABASES",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				for i := 0; i < expectedCompletedQueries; i++ {
+					sqlRunner.Exec(t, "SHOW DATABASES")
+				}
+			},
+		},
+		{
+			name:          "failed",
+			expectedPhase: serverpb.ActiveQuery_FAILED,
+			numQueries:    expectedFailedQueries,
+			query:         "SELECT bad_query",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				for i := 0; i < expectedFailedQueries; i++ {
+					sqlRunner.ExpectErr(t, `pq: column "bad_query" does not exist`, "SELECT bad_query")
+				}
+			},
+		},
+		{
+			name:          "timed_out",
+			expectedPhase: serverpb.ActiveQuery_TIMED_OUT,
+			numQueries:    expectedTimedOutQueries,
+			query:         "SELECT pg_sleep(5)",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				sqlRunner.Exec(t, "SET statement_timeout = '3s';")
+
+				for i := 0; i < expectedTimedOutQueries; i++ {
+					sqlRunner.ExpectErr(t, `pq: query execution canceled due to statement timeout`, "SELECT pg_sleep(5)")
+				}
+
+				sqlRunner.Exec(t, "RESET statement_timeout;")
+			},
+		},
+	}
+
+	db := getUserConn(t, user, testCluster.Server(0))
+	defer db.Close()
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.ops(t, sqlRunner)
+
+			numQueries := 0
+			sessionsResponse := doSessionsRequest(user)
+			for _, session := range sessionsResponse.Sessions {
+				for _, qm := range session.RecentStatements {
+					if qm.Sql == tc.query {
+						require.Equal(t, tc.expectedPhase, qm.Phase,
+							"Expected %s phase, got %s\n", tc.expectedPhase.String(), qm.Phase.String())
+						numQueries++
+					}
+				}
+			}
+			require.Equal(t, tc.numQueries, numQueries,
+				"Expected %d queries, got %d\n", tc.numQueries, numQueries)
+		})
+	}
+}
+
+// TestRecentStatementsCacheWithCancel tests that a canceled statement gets
+// correctly written to the RecentStatementsCache.
+func TestRecentStatementsCacheWithCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cancelServerArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				BeforeExecute: func(ctx context.Context, stmt string) {
+					if strings.Contains(stmt, "pg_sleep") {
+						cancel()
+					}
+				},
+			},
+		},
+	}
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: cancelServerArgs,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	user := "user_name"
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'hunter2' VIEWACTIVITY;`, user))
+	require.NoError(t, err)
+
+	db := getUserConn(t, user, server)
+	defer db.Close()
+
+	// This query gets canceled.
+	var b bool
+	err = db.QueryRowContext(ctx, "select pg_sleep(5)").Scan(&b)
+	require.EqualError(t, err, "pq: query execution canceled")
+
+	numQueries := 0
+	sessionsResponse := doSessionsRequest(user)
+	for _, session := range sessionsResponse.Sessions {
+		for _, qm := range session.RecentStatements {
+			if strings.Contains(qm.SqlSummary, "pg_sleep") {
+				require.Equal(t, serverpb.ActiveQuery_CANCELED, qm.Phase,
+					"Expected %s phase, got %s\n", serverpb.ActiveQuery_CANCELED.String(), qm.Phase.String())
+				numQueries++
+			}
+		}
+	}
+	require.Equal(t, 1, numQueries, "Expected %d canceled queries, got %d\n", 1, numQueries)
+}
+
 func TestTransactionContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
