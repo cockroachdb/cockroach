@@ -12,6 +12,7 @@ package schemachange
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -72,30 +73,52 @@ type operationGenerator struct {
 	stmtsInTxt []*opStmt
 
 	// opGenLog log of statement used to generate the current statement.
-	opGenLog strings.Builder
+	opGenLog []interface{}
+}
+
+// OpGenLogQuery a query with a single value result.
+type OpGenLogQuery struct {
+	Query     string      `json:"query"`
+	QueryArgs interface{} `json:"queryArgs,omitempty"`
+	Result    interface{} `json:"result,omitempty"`
+}
+
+// OpGenLogMessage an informational message directly written into the OpGen log.
+type OpGenLogMessage struct {
+	Message string `json:"message"`
 }
 
 // LogQueryResults logs a string query result.
-func (og *operationGenerator) LogQueryResults(queryName string, result string) {
-	og.opGenLog.WriteString(fmt.Sprintf("QUERY [%s] :", queryName))
-	og.opGenLog.WriteString(result)
-	og.opGenLog.WriteString("\n")
-}
-
-// LogQueryResultArray logs a query result that is a strng array.
-func (og *operationGenerator) LogQueryResultArray(queryName string, results []string) {
-	og.opGenLog.WriteString(fmt.Sprintf("QUERY [%s] : ", queryName))
-	for _, result := range results {
-		og.opGenLog.WriteString(result)
-		og.opGenLog.WriteString(",")
+func (og *operationGenerator) LogQueryResults(
+	queryName string, result interface{}, queryArgs ...interface{},
+) {
+	formattedQuery := queryName
+	parsedQuery, err := parser.Parse(queryName)
+	if err == nil {
+		formattedQuery = parsedQuery.String()
 	}
 
-	og.opGenLog.WriteString("\n")
+	query := &OpGenLogQuery{
+		Query:  formattedQuery,
+		Result: result,
+	}
+	if len(queryArgs) != 0 {
+		query.QueryArgs = queryArgs
+	}
+	og.opGenLog = append(og.opGenLog, query)
+}
+
+// LogMessage logs an information mesage into the OpGen log.
+func (og *operationGenerator) LogMessage(message string) {
+	query := &OpGenLogMessage{
+		Message: message,
+	}
+	og.opGenLog = append(og.opGenLog, query)
 }
 
 // GetOpGenLog fetches the generated log entries.
-func (og *operationGenerator) GetOpGenLog() string {
-	return og.opGenLog.String()
+func (og *operationGenerator) GetOpGenLog() []interface{} {
+	return og.opGenLog
 }
 
 func makeOperationGenerator(params *operationGeneratorParams) *operationGenerator {
@@ -110,7 +133,6 @@ func makeOperationGenerator(params *operationGeneratorParams) *operationGenerato
 // Reset internal state used per operation within a transaction
 func (og *operationGenerator) resetOpState() {
 	og.candidateExpectedCommitErrors.reset()
-	og.opGenLog = strings.Builder{}
 }
 
 // Reset internal state used per transaction
@@ -655,7 +677,7 @@ func (og *operationGenerator) scanRegionNames(
 	if rows.Err() != nil {
 		return nil, errors.Wrapf(rows.Err(), "failed to get regions: %s", query)
 	}
-	og.LogQueryResultArray(query, regionNamesForLog)
+	og.LogQueryResults(query, regionNamesForLog)
 	return regionNames, nil
 }
 
@@ -2578,6 +2600,18 @@ func (s *opStmt) String() string {
 		s.potentialExecErrors)
 }
 
+func (s *opStmt) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		SQL              string `json:"sql"`
+		ExpectedExecErr  string `json:"expectedExecErr,omitempty"`
+		PotentialExecErr string `json:"potentialExecErr,omitempty"`
+	}{
+		SQL:              s.sql,
+		ExpectedExecErr:  s.expectedExecErrors.String(),
+		PotentialExecErr: s.potentialExecErrors.String(),
+	})
+}
+
 // makeOpStmtForSingleError constructs a statement that will only produce
 // an error.
 func makeOpStmtForSingleError(queryType opStmtType, sql string, codes ...pgcode.Code) *opStmt {
@@ -2598,23 +2632,41 @@ func makeOpStmt(queryType opStmtType) *opStmt {
 	}
 }
 
-// getErrorState dumps the object state when an error is hit
-func (og *operationGenerator) getErrorState(op *opStmt) string {
-	return fmt.Sprintf("Dumping state before death:\n"+
-		"Expected errors: %s\n"+
-		"Potential errors: %s\n"+
-		"Expected commit errors: %s\n"+
-		"Potential commit errors: %s\n"+
-		"===========================\n"+
-		"Executed queries for generating errors: %s\n"+
-		"===========================\n"+
-		"Previous statements %s\n",
-		op.expectedExecErrors,
-		op.potentialExecErrors,
-		og.expectedCommitErrors.String(),
-		og.potentialCommitErrors.String(),
-		og.GetOpGenLog(),
-		og.stmtsInTxt)
+// ErrorState wraps schemachange workload errors to have state information for
+// the purpose of dumping in our JSON log.
+type ErrorState struct {
+	cause                      error
+	ExpectedErrors             []string      `json:"expectedErrors,omitempty"`
+	PotentialErrors            []string      `json:"potentialErrors,omitempty"`
+	ExpectedCommitErrors       []string      `json:"expectedCommitErrors,omitempty"`
+	PotentialCommitErrors      []string      `json:"potentialCommitErrors,omitempty"`
+	QueriesForGeneratingErrors []interface{} `json:"queriesForGeneratingErrors,omitempty"`
+	PreviousStatements         []string      `json:"previousStatements,omitempty"`
+}
+
+func (es *ErrorState) Unwrap() error {
+	return es.cause
+}
+
+func (es *ErrorState) Error() string {
+	return es.cause.Error()
+}
+
+// WrapWithErrorState dumps the object state when an error is hit
+func (og *operationGenerator) WrapWithErrorState(err error, op *opStmt) error {
+	previousStmts := make([]string, 0, len(og.stmtsInTxt))
+	for _, stmt := range og.stmtsInTxt {
+		previousStmts = append(previousStmts, stmt.sql)
+	}
+	return &ErrorState{
+		cause:                      err,
+		ExpectedErrors:             op.expectedExecErrors.StringSlice(),
+		PotentialErrors:            op.potentialExecErrors.StringSlice(),
+		ExpectedCommitErrors:       og.expectedCommitErrors.StringSlice(),
+		PotentialCommitErrors:      og.potentialCommitErrors.StringSlice(),
+		QueriesForGeneratingErrors: og.GetOpGenLog(),
+		PreviousStatements:         previousStmts,
+	}
 }
 
 // executeStmt executes the given operation statement, and validates the result
@@ -2634,8 +2686,7 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		pgErr := new(pgconn.PgError)
 		if !errors.As(err, &pgErr) {
 			return errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED ERROR; Received a non pg error.\n %s",
-					og.getErrorState(s)),
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Received a non pg error."), s),
 				errRunInTxnFatalSentinel,
 			)
 		}
@@ -2645,21 +2696,23 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			return errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED ERROR; Received an unexpected execution error.\n %s",
-					og.getErrorState(s)),
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Received an unexpected execution error."),
+					s),
 				errRunInTxnFatalSentinel,
 			)
 		}
-		return errors.Mark(
-			errors.Wrapf(err, "ROLLBACK; Successfully got expected execution error.\n %s",
-				og.getErrorState(s)),
+		return errors.Mark(errors.Wrap(err, "ROLLBACK; Successfully got expected execution error."),
 			errRunInTxnRbkSentinel,
 		)
 	}
 	if !s.expectedExecErrors.empty() {
+		// Clean up the result set, if we didn't encounter an expected error.
+		if rows != nil {
+			rows.Close()
+		}
 		return errors.Mark(
-			errors.Newf("***FAIL; Failed to receive an execution error when errors were expected. %s",
-				og.getErrorState(s)),
+			og.WrapWithErrorState(errors.New("***FAIL; Failed to receive an execution error when errors were expected"),
+				s),
 			errRunInTxnFatalSentinel,
 		)
 	}
@@ -3532,7 +3585,7 @@ func (og *operationGenerator) pctExisting(shouldAlreadyExist bool) int {
 	return og.params.errorRate
 }
 
-func (og operationGenerator) alwaysExisting() int {
+func (og *operationGenerator) alwaysExisting() int {
 	return 100
 }
 

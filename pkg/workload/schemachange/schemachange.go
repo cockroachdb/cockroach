@@ -285,13 +285,14 @@ var (
 
 // LogEntry and its fields must be public so that the json package can encode this struct.
 type LogEntry struct {
-	WorkerID             int      `json:"workerId"`
-	ClientTimestamp      string   `json:"clientTimestamp"`
-	Ops                  []string `json:"ops"`
-	ExpectedExecErrors   string   `json:"expectedExecErrors"`
-	ExpectedCommitErrors string   `json:"expectedCommitErrors"`
+	WorkerID             int           `json:"workerId"`
+	ClientTimestamp      string        `json:"clientTimestamp"`
+	Ops                  []interface{} `json:"ops"`
+	ExpectedExecErrors   string        `json:"expectedExecErrors"`
+	ExpectedCommitErrors string        `json:"expectedCommitErrors"`
 	// Optional message for errors or if a hook was called.
-	Message string `json:"message"`
+	Message    string      `json:"message"`
+	ErrorState *ErrorState `json:"errorState,omitempty"`
 }
 
 type histBin int
@@ -311,18 +312,18 @@ func (w *schemaChangeWorker) recordInHist(elapsed time.Duration, bin histBin) {
 	w.hists.Get(bin.String()).Record(elapsed)
 }
 
-func (w *schemaChangeWorker) getErrorState() string {
-	return fmt.Sprintf("Dumping state before death:\n"+
-		"Expected commit errors: %s"+
-		"Potential commit errors: %s"+
-		"==========================="+
-		"Executed queries for generating errors: %s"+
-		"==========================="+
-		"Previous statements %s",
-		w.opGen.expectedCommitErrors.String(),
-		w.opGen.potentialCommitErrors.String(),
-		w.opGen.GetOpGenLog(),
-		w.opGen.stmtsInTxt)
+func (w *schemaChangeWorker) WrapWithErrorState(err error) error {
+	previousStmts := make([]string, 0, len(w.opGen.stmtsInTxt))
+	for _, stmt := range w.opGen.stmtsInTxt {
+		previousStmts = append(previousStmts, stmt.sql)
+	}
+	return &ErrorState{
+		cause:                      err,
+		PotentialCommitErrors:      w.opGen.potentialCommitErrors.StringSlice(),
+		ExpectedCommitErrors:       w.opGen.expectedCommitErrors.StringSlice(),
+		QueriesForGeneratingErrors: w.opGen.GetOpGenLog(),
+		PreviousStatements:         previousStmts,
+	}
 }
 
 func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
@@ -354,16 +355,14 @@ func (w *schemaChangeWorker) runInTxn(ctx context.Context, tx pgx.Tx) error {
 			return errors.Mark(err, errRunInTxnRbkSentinel)
 		} else if err != nil {
 			return errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED ERROR; Failed to generate a random operation\n OpGen log: \n%s\nStmts: \n%s\n",
-					w.opGen.GetOpGenLog(),
-					w.opGen.stmtsInTxt,
-				),
+				w.WrapWithErrorState(
+					errors.Wrap(err, "***UNEXPECTED ERROR; Failed to generate a random operation")),
 				errRunInTxnFatalSentinel,
 			)
 		}
 
 		w.logger.addExpectedErrors(op.expectedExecErrors, w.opGen.expectedCommitErrors)
-		w.logger.writeLog(op.String())
+		w.logger.writeLogOp(op)
 		if !w.dryRun {
 			start := timeutil.Now()
 			err := op.executeStmt(ctx, tx, w.opGen)
@@ -420,7 +419,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 			)
 		}
 
-		w.logger.flushLog(tx, err.Error())
+		w.logger.flushLogWithError(tx, err)
 		switch {
 		case errors.Is(err, errRunInTxnFatalSentinel):
 			w.preErrorHook()
@@ -443,7 +442,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 				errors.Wrap(err, "***UNEXPECTED COMMIT ERROR; Received a non pg error"),
 				errRunInTxnFatalSentinel,
 			)
-			w.logger.flushLog(tx, err.Error())
+			w.logger.flushLogWithError(tx, err)
 			w.preErrorHook()
 			return err
 		}
@@ -470,10 +469,11 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		if !w.opGen.expectedCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!w.opGen.potentialCommitErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			err = errors.Mark(
-				errors.Wrapf(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error %s", w.getErrorState()),
+				w.WrapWithErrorState(
+					errors.Wrapf(err, "***UNEXPECTED COMMIT ERROR; Received an unexpected commit error")),
 				errRunInTxnFatalSentinel,
 			)
-			w.logger.flushLog(tx, err.Error())
+			w.logger.flushLogWithError(tx, err)
 			w.preErrorHook()
 			return err
 		}
@@ -484,8 +484,8 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		return nil
 	}
 	if !w.opGen.expectedCommitErrors.empty() {
-		err := errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected %s", w.getErrorState())
-		w.logger.flushLog(tx, err.Error())
+		err := w.WrapWithErrorState(errors.Newf("***FAIL; Failed to receive a commit error when at least one commit error was expected"))
+		w.logger.flushLogWithError(tx, err)
 		w.preErrorHook()
 		return errors.Mark(err, errRunInTxnFatalSentinel)
 	}
@@ -553,6 +553,19 @@ func (l *logger) writeLog(op string) {
 	}
 }
 
+// writeLog appends an op statement to the currentLogEntry of the schemaChangeWorker.
+// It is a noop if l.verbose < 1.
+func (l *logger) writeLogOp(op *opStmt) {
+	if l.verbose < 1 {
+		return
+	}
+	l.currentLogEntry.mu.Lock()
+	defer l.currentLogEntry.mu.Unlock()
+	if l.currentLogEntry.mu.entry != nil {
+		l.currentLogEntry.mu.entry.Ops = append(l.currentLogEntry.mu.entry.Ops, op)
+	}
+}
+
 // addExpectedErrors sets the expected errors in the currentLogEntry of the schemaChangeWorker.
 // It is a noop if l.verbose < 1.
 func (l *logger) addExpectedErrors(execErrors errorCodeSet, commitErrors errorCodeSet) {
@@ -565,6 +578,30 @@ func (l *logger) addExpectedErrors(execErrors errorCodeSet, commitErrors errorCo
 		l.currentLogEntry.mu.entry.ExpectedExecErrors = execErrors.String()
 		l.currentLogEntry.mu.entry.ExpectedCommitErrors = commitErrors.String()
 	}
+}
+
+// flushLogWithError outputs the currentLogEntry of the schemaChangeWorker, with
+// an error message (any available error state information is also added).
+// It is a noop if l.verbose < 0.
+func (l *logger) flushLogWithError(tx pgx.Tx, err error) {
+	if l.verbose < 1 {
+		return
+	}
+
+	// Fetch and apply the error state to the log entry.
+	func() {
+		l.currentLogEntry.mu.Lock()
+		defer l.currentLogEntry.mu.Unlock()
+		if l.currentLogEntry.mu.entry != nil {
+			var state *ErrorState
+			if errors.As(err, &state) {
+				l.currentLogEntry.mu.entry.ErrorState = state
+			}
+		}
+	}()
+
+	l.flushLogAndLock(tx, err.Error(), true)
+	l.currentLogEntry.mu.Unlock()
 }
 
 // flushLog outputs the currentLogEntry of the schemaChangeWorker.
