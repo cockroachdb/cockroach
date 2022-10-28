@@ -3330,6 +3330,143 @@ CREATE USER %s with password 'hunter2';
 	wg.Wait()
 }
 
+// TestRecentStatementsCache tests that statements are being written correctly to the
+// RecentStatementsCache, and that the information is surfaced via the ListSessions API.
+func TestRecentStatementsCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	serverParams, _ := tests.CreateTestServerParams()
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: serverParams,
+	})
+	defer testCluster.Stopper().Stop(ctx)
+
+	server := testCluster.Server(0)
+
+	doSessionsRequest := func(username string) serverpb.ListSessionsResponse {
+		var resp serverpb.ListSessionsResponse
+		path := "/_status/sessions?username=" + username
+		err := serverutils.GetJSONProto(server, path, &resp)
+		require.NoError(t, err)
+		return resp
+	}
+
+	getUserConn := func(t *testing.T, username string, server serverutils.TestServerInterface) *gosql.DB {
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword(username, "hunter2"),
+			Host:   server.ServingSQLAddr(),
+		}
+		db, err := gosql.Open("postgres", pgURL.String())
+		require.NoError(t, err)
+		return db
+	}
+
+	// Create a test user.
+	user := "user_name"
+	conn := testCluster.ServerConn(0)
+	_, err := conn.Exec(fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'hunter2' VIEWACTIVITY;`, user))
+	require.NoError(t, err)
+
+	expectedCompletedQueries := 4
+	expectedFailedQueries := 3
+	expectedTimedOutQueries := 2
+	expectedCanceledQueries := 1
+
+	testCases := []struct {
+		name          string
+		expectedPhase serverpb.ActiveQuery_Phase
+		numQueries    int
+		query         string
+		ops           func(*testing.T, *sqlutils.SQLRunner)
+	}{
+		{
+			name:          "completed",
+			expectedPhase: serverpb.ActiveQuery_COMPLETED,
+			numQueries:    expectedCompletedQueries,
+			query:         "SHOW DATABASES",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				for i := 0; i < expectedCompletedQueries; i++ {
+					sqlRunner.Exec(t, "SHOW DATABASES")
+				}
+			},
+		},
+		{
+			name:          "failed",
+			expectedPhase: serverpb.ActiveQuery_FAILED,
+			numQueries:    expectedFailedQueries,
+			query:         "SELECT bad_query",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				for i := 0; i < expectedFailedQueries; i++ {
+					sqlRunner.ExpectErr(t, `pq: column "bad_query" does not exist`, "SELECT bad_query")
+				}
+			},
+		},
+		{
+			name:          "timed_out",
+			expectedPhase: serverpb.ActiveQuery_TIMED_OUT,
+			numQueries:    expectedTimedOutQueries,
+			query:         "SELECT pg_sleep(5)",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				sqlRunner.Exec(t, "SET statement_timeout = '3s';")
+
+				for i := 0; i < expectedTimedOutQueries; i++ {
+					sqlRunner.ExpectErr(t, `pq: query execution canceled due to statement timeout`, "SELECT pg_sleep(5)")
+				}
+
+				sqlRunner.Exec(t, "RESET statement_timeout;")
+			},
+		},
+		{
+			name:          "canceled",
+			expectedPhase: serverpb.ActiveQuery_CANCELED,
+			numQueries:    expectedCanceledQueries,
+			query:         "SELECT pg_sleep(10)",
+			ops: func(t *testing.T, sqlRunner *sqlutils.SQLRunner) {
+				db2 := getUserConn(t, user, testCluster.Server(0))
+				defer db2.Close()
+				sqlRunner2 := sqlutils.MakeSQLRunner(db2)
+
+				go func() {
+					sqlRunner2.ExpectErr(t, "pq: query execution canceled", "SELECT pg_sleep(10)")
+				}()
+
+				// Make sure the sleep in the go routine has started, then cancel it.
+				queryPattern := "(WITH x AS (SHOW CLUSTER STATEMENTS) SELECT %s FROM x WHERE query = 'SELECT pg_sleep(10)')"
+				sqlRunner.CheckQueryResultsRetry(t, fmt.Sprintf(queryPattern, "count(*)"), [][]string{{strconv.Itoa(expectedCanceledQueries)}})
+				sqlRunner.Exec(t, "CANCEL QUERY "+fmt.Sprintf(queryPattern, "query_id"))
+			},
+		},
+	}
+
+	db := getUserConn(t, user, testCluster.Server(0))
+	defer db.Close()
+
+	sqlRunner := sqlutils.MakeSQLRunner(db)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.ops(t, sqlRunner)
+
+			numQueries := 0
+			sessionsResponse := doSessionsRequest(user)
+			for _, session := range sessionsResponse.Sessions {
+				for _, qm := range session.RecentStatements {
+					if qm.Sql == tc.query {
+						require.Equal(t, tc.expectedPhase, qm.Phase,
+							"Expected %s phase, got %s\n", tc.expectedPhase.String(), qm.Phase.String())
+						numQueries++
+					}
+				}
+			}
+			require.Equal(t, tc.numQueries, numQueries,
+				"Expected %d queries, got %d\n", tc.numQueries, numQueries)
+		})
+	}
+}
+
 func TestTransactionContentionEvents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
