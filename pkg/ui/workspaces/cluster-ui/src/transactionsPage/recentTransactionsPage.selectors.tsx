@@ -11,16 +11,16 @@
 import { Dispatch } from "redux";
 import { createSelector } from "reselect";
 import {
-  ActiveTransactionFilters,
-  ActiveTransactionsViewDispatchProps,
-  ActiveTransactionsViewStateProps,
+  RecentTransactionFilters,
+  RecentTransactionsViewDispatchProps,
+  RecentTransactionsViewStateProps,
   AppState,
   SortSetting,
 } from "src";
 import {
   selectAppName,
-  selectActiveTransactions,
-} from "src/selectors/activeExecutions.selectors";
+  selectRecentTransactions,
+} from "src/selectors/recentExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
 import { localStorageSelector } from "../store/utils/selectors";
@@ -29,7 +29,7 @@ import { selectIsTenant } from "src/store/uiConfig";
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveTransactionsPage"];
 
-export const selectFilters = (state: AppState): ActiveTransactionFilters =>
+export const selectFilters = (state: AppState): RecentTransactionFilters =>
   localStorageSelector(state)["filters/ActiveTransactionsPage"];
 
 const selectLocalStorageColumns = (state: AppState) => {
@@ -46,10 +46,10 @@ export const selectColumns = createSelector(
   },
 );
 
-export const mapStateToActiveTransactionsPageProps = (
+export const mapStateToRecentTransactionsPageProps = (
   state: AppState,
-): ActiveTransactionsViewStateProps => ({
-  transactions: selectActiveTransactions(state),
+): RecentTransactionsViewStateProps => ({
+  transactions: selectRecentTransactions(state),
   sessionsError: state.adminUI.sessions.lastError,
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
@@ -58,9 +58,9 @@ export const mapStateToActiveTransactionsPageProps = (
   isTenant: selectIsTenant(state),
 });
 
-export const mapDispatchToActiveTransactionsPageProps = (
+export const mapDispatchToRecentTransactionsPageProps = (
   dispatch: Dispatch,
-): ActiveTransactionsViewDispatchProps => ({
+): RecentTransactionsViewDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
   onColumnsSelect: columns =>
     dispatch(
@@ -69,7 +69,7 @@ export const mapDispatchToActiveTransactionsPageProps = (
         value: columns ? columns.join(", ") : " ",
       }),
     ),
-  onFiltersChange: (filters: ActiveTransactionFilters) =>
+  onFiltersChange: (filters: RecentTransactionFilters) =>
     dispatch(
       localStorageActions.update({
         key: "filters/ActiveTransactionsPage",

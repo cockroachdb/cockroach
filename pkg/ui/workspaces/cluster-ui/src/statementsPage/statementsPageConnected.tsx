@@ -48,13 +48,13 @@ import {
   StatementsPageRootProps,
 } from "./statementsPageRoot";
 import {
-  ActiveStatementsViewDispatchProps,
-  ActiveStatementsViewStateProps,
-} from "./activeStatementsView";
+  RecentStatementsViewDispatchProps,
+  RecentStatementsViewStateProps,
+} from "./recentStatementsView";
 import {
-  mapDispatchToActiveStatementsPageProps,
-  mapStateToActiveStatementsPageProps,
-} from "./activeStatementsPage.selectors";
+  mapDispatchToRecentStatementsPageProps,
+  mapStateToRecentStatementsPageProps,
+} from "./recentStatementsPage.selectors";
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
@@ -62,12 +62,12 @@ import {
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveStatementsViewStateProps;
+  activePageProps: RecentStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: ActiveStatementsViewDispatchProps;
+  activePageProps: RecentStatementsViewDispatchProps;
 };
 
 export const ConnectedStatementsPage = withRouter(
@@ -98,7 +98,7 @@ export const ConnectedStatementsPage = withRouter(
         statementsError: selectStatementsLastError(state),
         totalFingerprints: selectTotalFingerprints(state),
       },
-      activePageProps: mapStateToActiveStatementsPageProps(state),
+      activePageProps: mapStateToRecentStatementsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
@@ -237,7 +237,7 @@ export const ConnectedStatementsPage = withRouter(
             }),
           ),
       },
-      activePageProps: mapDispatchToActiveStatementsPageProps(dispatch),
+      activePageProps: mapDispatchToRecentStatementsPageProps(dispatch),
     }),
     (stateProps, dispatchProps) => ({
       fingerprintsPageProps: {

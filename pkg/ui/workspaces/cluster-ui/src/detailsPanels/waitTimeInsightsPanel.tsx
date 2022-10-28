@@ -15,11 +15,11 @@ import classNames from "classnames/bind";
 import React from "react";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
-import { ContendedExecution, ExecutionType } from "src/activeExecutions";
+import { ContendedExecution, ExecutionType } from "src/recentExecutions";
 import { capitalize, Duration } from "../util";
 
 import { Heading } from "@cockroachlabs/ui-components";
-import { ExecutionContentionTable } from "../activeExecutions/activeTransactionsTable/execContentionTable";
+import { ExecutionContentionTable } from "../recentExecutions/recentTransactionsTable/execContentionTable";
 import styles from "../statementDetails/statementDetails.module.scss";
 
 const cx = classNames.bind(styles);
