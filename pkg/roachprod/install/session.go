@@ -98,7 +98,7 @@ func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte,
 
 	go func() {
 		b, err = s.Cmd.CombinedOutput()
-		err = s.errWithDebug(rperrors.ClassifyCmdError(err))
+		err = s.errWithDebug(err)
 		close(commandFinished)
 	}()
 
@@ -107,7 +107,7 @@ func (s *remoteSession) CombinedOutput(ctx context.Context, cmd string) ([]byte,
 		s.Close()
 		return nil, ctx.Err()
 	case <-commandFinished:
-		return b, err
+		return b, rperrors.ClassifyCmdError(err)
 	}
 }
 
@@ -117,7 +117,7 @@ func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 	var err error
 	commandFinished := make(chan struct{})
 	go func() {
-		err = s.errWithDebug(rperrors.ClassifyCmdError(s.Cmd.Run()))
+		err = s.errWithDebug(s.Cmd.Run())
 		close(commandFinished)
 	}()
 
@@ -126,7 +126,7 @@ func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 		s.Close()
 		return ctx.Err()
 	case <-commandFinished:
-		return err
+		return rperrors.ClassifyCmdError(err)
 	}
 }
 
@@ -205,7 +205,7 @@ func (s *localSession) CombinedOutput(ctx context.Context, cmd string) ([]byte, 
 		s.Close()
 		return nil, ctx.Err()
 	case <-commandFinished:
-		return b, err
+		return b, rperrors.ClassifyCmdError(err)
 	}
 }
 
@@ -224,13 +224,13 @@ func (s *localSession) Run(ctx context.Context, cmd string) error {
 		s.Close()
 		return ctx.Err()
 	case <-commandFinished:
-		return err
+		return rperrors.ClassifyCmdError(err)
 	}
 }
 
 func (s *localSession) Start(cmd string) error {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return s.Cmd.Start()
+	return rperrors.ClassifyCmdError(s.Cmd.Start())
 }
 
 func (s *localSession) SetStdin(r io.Reader) {
