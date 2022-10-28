@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"math"
 	"runtime"
@@ -5762,6 +5763,35 @@ func MVCCIsSpanEmpty(
 		return false, err
 	}
 	return !valid, nil
+}
+
+// MVCCExportFingerprint exports a fingerprint for point keys in the keyrange
+// [StartKey, EndKey) over the interval (StartTS, EndTS]. Each key/timestamp and
+// value is hashed using a fnv64 hasher, and combined into a running aggregate
+// via a XOR. On completion of the export this aggregate is returned as the
+// fingerprint.
+//
+// Range keys are not fingerprinted but instead written to a pebble SST that is
+// returned to the caller. This is because range keys do not have a stable,
+// discrete identity and so it is up to the caller to define a deterministic
+// fingerprinting scheme across all returned range keys.
+func MVCCExportFingerprint(
+	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, MVCCKey, uint64, error) {
+	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
+	defer span.Finish()
+
+	hasher := fnv.New64()
+	fingerprintWriter := makeFingerprintWriter(ctx, hasher, cs, dest)
+	defer fingerprintWriter.Close()
+
+	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, err
+	}
+
+	fingerprint, err := fingerprintWriter.Finish()
+	return summary, resumeKey, fingerprint, err
 }
 
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
