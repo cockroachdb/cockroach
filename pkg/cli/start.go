@@ -344,6 +344,13 @@ type serverStartupInterface interface {
 	// that depend on certain strings displayed from this when orchestrating
 	// KV-only nodes.
 	InitialStart() bool
+
+	// MaybeRunInitialSQL runs the SQL initialization for brand new clusters,
+	// if the cluster is being started for the first time.
+	// The arguments are:
+	// - startSingleNode is used by 'demo' and 'start-single-node'.
+	// - adminUser/adminPassword is used for 'demo'.
+	MaybeRunInitialSQL(ctx context.Context, startSingleNode bool, adminUser, adminPassword string) error
 }
 
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
@@ -381,8 +388,10 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 // of other active nodes used to join this node to the cockroach
 // cluster, if this is its first time connecting.
 //
-// If the argument startSingleNode is set the replication factor
-// will be set to 1 all zone configs (see initial_sql.go).
+// The argument startSingleNode is needed because we cannot refer to
+// startSingleNodeCmd under runStartInternal (there would be a cyclic
+// dependency between runStart, runStartSingleNode and
+// runStartSingleNodeCmd).
 func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	const serverType redact.SafeString = "node"
 
@@ -399,15 +408,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 		return s, nil
 	}
 
-	maybeRunInitialSQL := func(ctx context.Context, s serverStartupInterface) error {
-		// Run SQL for new clusters.
-		//
-		// The adminUser/adminPassword fields are for the benefit of 'cockroach demo'
-		// only and not used here.
-		return runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */)
-	}
-
-	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, maybeRunInitialSQL)
+	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, startSingleNode)
 }
 
 // runStartInternal contains the code common to start a regular server
@@ -417,7 +418,7 @@ func runStartInternal(
 	serverType redact.SafeString,
 	initConfigFn func(context.Context) error,
 	newServerFn newServerFn,
-	maybeRunInitialSQL func(context.Context, serverStartupInterface) error,
+	startSingleNode bool,
 ) error {
 	tBegin := timeutil.Now()
 
@@ -594,7 +595,7 @@ If problems persist, please see %s.`
 	// if we get stuck on something during initialization (#10138).
 
 	srvStatus, serverShutdownReqC := createAndStartServerAsync(ctx,
-		tBegin, &serverCfg, stopper, startupSpan, newServerFn, maybeRunInitialSQL, serverType)
+		tBegin, &serverCfg, stopper, startupSpan, newServerFn, startSingleNode, serverType)
 
 	return waitForShutdown(
 		// NB: we delay the access to s, as it is assigned
@@ -630,7 +631,7 @@ func createAndStartServerAsync(
 	stopper *stop.Stopper,
 	startupSpan *tracing.Span,
 	newServerFn newServerFn,
-	maybeRunInitialSQL func(context.Context, serverStartupInterface) error,
+	startSingleNode bool,
 	serverType redact.SafeString,
 ) (srvStatus *serverStatus, serverShutdownReqC <-chan server.ShutdownRequest) {
 	var serverStatusMu serverStatus
@@ -708,12 +709,10 @@ func createAndStartServerAsync(
 			if !cluster.TelemetryOptOut() {
 				s.StartDiagnostics(ctx)
 			}
-			initialStart := s.InitialStart()
 
-			if maybeRunInitialSQL != nil {
-				if err := maybeRunInitialSQL(ctx, s); err != nil {
-					return err
-				}
+			// Run one-off cluster initialization.
+			if err := s.MaybeRunInitialSQL(ctx, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
+				return err
 			}
 
 			// Now let SQL clients in.
@@ -724,7 +723,7 @@ func createAndStartServerAsync(
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
-				serverType, initialStart, s.LogicalClusterID())
+				serverType, s.InitialStart(), s.LogicalClusterID())
 		}(); err != nil {
 			shutdownReqC <- server.MakeShutdownRequest(
 				server.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))

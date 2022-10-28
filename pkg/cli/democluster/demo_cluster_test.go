@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -178,17 +177,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	// terminates above.
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 
-	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
-		return s.RunLocalSQL(ctx,
-			func(ctx context.Context, ie *sql.InternalExecutor) error {
-				_, err := ie.Exec(
-					ctx, "admin-user", nil,
-					fmt.Sprintf("CREATE USER %s WITH PASSWORD $1", adminUser),
-					adminPassword,
-				)
-				return err
-			})
-	}))
+	require.NoError(t, c.Start(ctx))
 
 	for _, tc := range []struct {
 		desc    string
@@ -296,14 +285,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	// terminates above.
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 
-	require.NoError(t, c.Start(ctx, func(ctx context.Context, s *server.Server, _ bool, adminUser, adminPassword string) error {
-		return s.RunLocalSQL(ctx,
-			func(ctx context.Context, ie *sql.InternalExecutor) error {
-				_, err := ie.Exec(ctx, "admin-user", nil, fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", adminUser,
-					adminPassword))
-				return err
-			})
-	}))
+	require.NoError(t, c.Start(ctx))
 
 	for i := 0; i < demoCtx.NumNodes; i++ {
 		url, err := c.getNetworkURLForServer(ctx, i,
