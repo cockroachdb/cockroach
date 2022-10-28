@@ -1065,7 +1065,6 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 		l.Printf("Created %s", s)
 	}
 
-	// FIXME: RunResultDetails instead?
 	if err != nil {
 		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
 		for _, f := range failed {

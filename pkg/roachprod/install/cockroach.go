@@ -319,10 +319,8 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
 			return res, err
 		}
 		defer sess.Close()

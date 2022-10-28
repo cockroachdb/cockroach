@@ -869,6 +869,18 @@ func getCombinedResult(f func() ([]byte, error), res *RunResultDetails) {
 	res.RemoteExitStatus, _ = rperrors.GetExitCode(err)
 }
 
+// setupSession is a helper which creates a new session and
+// populates RunResultDetails with an error if one occurrs (unlikely
+// give the code in `newSession`)
+// RunResultDetails is used across all functions which
+// create a session
+func (c *SyncedCluster) setupSession(node Node) (session, RunResultDetails, error) {
+	res := RunResultDetails{Node: node}
+	sess, err := c.newSession(node)
+	res.Err = err
+	return sess, res, err
+}
+
 // SetupSSH configures the cluster for use with SSH. This is generally run after
 // the cloud.Cluster has been synced which resets the SSH credentials on the
 // machines and sets them up for the current user. This method enables the
@@ -898,11 +910,9 @@ func (c *SyncedCluster) SetupSSH(ctx context.Context, l *logger.Logger) error {
 	// cluster in order to allow inter-node ssh.
 	var sshTar []byte
 	if err := c.Parallel(l, "generating ssh key", 1, 0, func(i int) (RunResultDetails, error) {
-		res := RunResultDetails{Node: 1}
-		sess, err := c.newSession(1)
+		sess, res, err := c.setupSession(1)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
@@ -938,11 +948,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	nodes := c.Nodes[1:]
 	if err := c.Parallel(l, "distributing ssh key", len(nodes), 0, func(i int) (RunResultDetails, error) {
 		node := nodes[i]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
@@ -991,11 +999,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	var knownHostsData []byte
 	if err := c.Parallel(l, "scanning hosts", 1, 0, func(i int) (RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
@@ -1041,11 +1047,9 @@ exit 1
 
 	if err := c.Parallel(l, "distributing known_hosts", len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
@@ -1251,11 +1255,9 @@ func (c *SyncedCluster) createTenantCertBundle(
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
 	return c.Parallel(l, display, 1, 0, func(i int) (RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
@@ -1371,11 +1373,9 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	display := fmt.Sprintf("%s: checking %s", c.Name, path)
 	if err := c.Parallel(l, display, 1, 0, func(i int) (RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
@@ -1450,11 +1450,9 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 	display := c.Name + ": distributing certs"
 	return c.Parallel(l, display, len(nodes), 0, func(i int) (RunResultDetails, error) {
 		node := nodes[i]
-		res := RunResultDetails{Node: node}
-		sess, err := c.newSession(node)
+		sess, res, err := c.setupSession(node)
 		if err != nil {
-			res.Err = err
-			return res, res.Err
+			return res, err
 		}
 		defer sess.Close()
 
