@@ -9,29 +9,29 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME } from "../utils";
+import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
 import {
   TransactionInsightEventDetailsRequest,
   TransactionInsightEventDetailsResponse,
 } from "src/api/insightsApi";
 
-export type InsightDetailsState = {
+export type TransactionInsightDetailsState = {
   data: TransactionInsightEventDetailsResponse | null;
   lastUpdated: Moment | null;
   lastError: Error;
   valid: boolean;
 };
 
-const initialState: InsightDetailsState = {
+const initialState: TransactionInsightDetailsState = {
   data: null,
   lastUpdated: null,
   lastError: null,
   valid: true,
 };
 
-const insightDetailsSlice = createSlice({
-  name: `${DOMAIN_NAME}/insightDetailsSlice`,
+const transactionInsightDetailsSlice = createSlice({
+  name: `${DOMAIN_NAME}/transactionInsightDetailsSlice`,
   initialState,
   reducers: {
     received: (
@@ -47,6 +47,9 @@ const insightDetailsSlice = createSlice({
       state.valid = false;
       state.lastError = action.payload;
     },
+    invalidated: state => {
+      state.valid = false;
+    },
     refresh: (
       _,
       action: PayloadAction<TransactionInsightEventDetailsRequest>,
@@ -58,4 +61,4 @@ const insightDetailsSlice = createSlice({
   },
 });
 
-export const { reducer, actions } = insightDetailsSlice;
+export const { reducer, actions } = transactionInsightDetailsSlice;

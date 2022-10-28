@@ -9,26 +9,26 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { DOMAIN_NAME, noopReducer } from "src/store/utils";
 import moment, { Moment } from "moment";
 import { TransactionInsightEventsResponse } from "src/api/insightsApi";
 
-export type InsightsState = {
+export type TransactionInsightsState = {
   data: TransactionInsightEventsResponse;
   lastUpdated: Moment;
   lastError: Error;
   valid: boolean;
 };
 
-const initialState: InsightsState = {
+const initialState: TransactionInsightsState = {
   data: null,
   lastUpdated: null,
   lastError: null,
   valid: true,
 };
 
-const insightsSlice = createSlice({
-  name: `${DOMAIN_NAME}/insightsSlice`,
+const transactionInsightsSlice = createSlice({
+  name: `${DOMAIN_NAME}/transactionInsightsSlice`,
   initialState,
   reducers: {
     received: (
@@ -47,10 +47,9 @@ const insightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state.
     refresh: noopReducer,
     request: noopReducer,
   },
 });
 
-export const { reducer, actions } = insightsSlice;
+export const { reducer, actions } = transactionInsightsSlice;

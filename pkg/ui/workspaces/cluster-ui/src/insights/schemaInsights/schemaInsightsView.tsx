@@ -83,9 +83,9 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   );
 
   useEffect(() => {
-    // Refresh every 5mins.
+    // Refresh every 1 minute.
     refreshSchemaInsights();
-    const interval = setInterval(refreshSchemaInsights, 60 * 1000 * 5);
+    const interval = setInterval(refreshSchemaInsights, 60 * 1000);
     return () => {
       clearInterval(interval);
     };
@@ -202,7 +202,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={schemaInsights == null}
+          loading={schemaInsights === null}
           page="schema insights"
           error={schemaInsightsError}
           renderError={() => InsightsError()}
@@ -227,7 +227,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
                 renderNoResult={
                   <EmptySchemaInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredSchemaInsights?.length == 0
+                      search?.length > 0 && filteredSchemaInsights?.length === 0
                     }
                   />
                 }

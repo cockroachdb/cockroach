@@ -10,7 +10,7 @@
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./insightDetails.reducer";
+import { actions } from "./transactionInsightDetails.reducer";
 import {
   getTransactionInsightEventDetailsState,
   TransactionInsightEventDetailsRequest,
@@ -39,6 +39,7 @@ export function* requestTransactionInsightDetailsSaga(
 
 export function* transactionInsightDetailsSaga() {
   yield all([
+    takeLatest(actions.refresh, refreshTransactionInsightDetailsSaga),
     takeLatest(actions.request, requestTransactionInsightDetailsSaga),
   ]);
 }

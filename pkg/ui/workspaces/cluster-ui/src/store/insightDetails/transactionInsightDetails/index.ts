@@ -8,13 +8,6 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { createSelector } from "reselect";
-import { adminUISelector } from "../utils/selectors";
-
-export const selectInsightDetails = createSelector(
-  adminUISelector,
-  adminUiState => {
-    if (!adminUiState.insights) return [];
-    return adminUiState.insightDetails.data;
-  },
-);
+export * from "./transactionInsightDetails.reducer";
+export * from "./transactionInsightDetails.sagas";
+export * from "./transactionInsightDetails.selectors";

@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -10,25 +10,25 @@
 
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
-import { actions } from "./schemaInsights.reducer";
-import { getSchemaInsights } from "../../api";
+import { actions } from "./statementInsights.reducer";
+import { getStatementInsightsApi } from "src/api/insightsApi";
 
-export function* refreshSchemaInsightsSaga() {
+export function* refreshStatementInsightsSaga() {
   yield put(actions.request());
 }
 
-export function* requestSchemaInsightsSaga(): any {
+export function* requestStatementInsightsSaga(): any {
   try {
-    const result = yield call(getSchemaInsights);
+    const result = yield call(getStatementInsightsApi);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));
   }
 }
 
-export function* schemaInsightsSaga() {
+export function* statementInsightsSaga() {
   yield all([
-    takeLatest(actions.refresh, refreshSchemaInsightsSaga),
-    takeLatest(actions.request, requestSchemaInsightsSaga),
+    takeLatest(actions.refresh, refreshStatementInsightsSaga),
+    takeLatest(actions.request, requestStatementInsightsSaga),
   ]);
 }

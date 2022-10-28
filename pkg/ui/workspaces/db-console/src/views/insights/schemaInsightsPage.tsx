@@ -46,7 +46,7 @@ const mapDispatchToProps = {
   refreshSchemaInsights: refreshSchemaInsights,
 };
 
-const SchemaInsightsPageConnected = withRouter(
+const SchemaInsightsPage = withRouter(
   connect<
     SchemaInsightsViewStateProps,
     SchemaInsightsViewDispatchProps,
@@ -57,4 +57,4 @@ const SchemaInsightsPageConnected = withRouter(
   )(SchemaInsightsView),
 );
 
-export default SchemaInsightsPageConnected;
+export default SchemaInsightsPage;

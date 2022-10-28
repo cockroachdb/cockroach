@@ -12,7 +12,6 @@ import React, { useEffect, useState } from "react";
 import classNames from "classnames/bind";
 import { useHistory } from "react-router-dom";
 import {
-  ColumnDescriptor,
   ISortedTablePagination,
   SortSetting,
 } from "src/sortedtable/sortedtable";
@@ -21,7 +20,6 @@ import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
 import {
   calculateActiveFilters,
-  defaultFilters,
   Filter,
   getFullFiltersAsStringRecord,
 } from "src/queryFilter/filter";
@@ -30,6 +28,7 @@ import { Pagination } from "src/pagination";
 import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
+import { isSelectedColumn } from "src/columnsSelector/utils";
 
 import { StatementInsights } from "src/api/insightsApi";
 import {
@@ -38,7 +37,6 @@ import {
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
   populateStatementInsightsFromProblemAndCauses,
-  StatementInsightEvent,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
@@ -48,6 +46,7 @@ import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../../../columnsSelector/columnsSelector";
 import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
+import { TimeScale } from "../../../timeScaleDropdown";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -66,6 +65,7 @@ export type StatementInsightsViewDispatchProps = {
   onSortChange: (ss: SortSetting) => void;
   refreshStatementInsights: () => void;
   onColumnsChange: (selectedColumns: string[]) => void;
+  setTimeScale: (ts: TimeScale) => void;
 };
 
 export type StatementInsightsViewProps = StatementInsightsViewStateProps &
@@ -73,21 +73,6 @@ export type StatementInsightsViewProps = StatementInsightsViewStateProps &
 
 const INSIGHT_STMT_SEARCH_PARAM = "q";
 const INTERNAL_APP_NAME_PREFIX = "$ internal";
-
-function isSelected(
-  column: ColumnDescriptor<StatementInsightEvent>,
-  selectedColumns: string[],
-): boolean {
-  if (column.alwaysShow) {
-    return true;
-  }
-
-  if (selectedColumns === null || selectedColumns === undefined) {
-    return column.showByDefault;
-  }
-
-  return selectedColumns.includes(column.name);
-}
 
 export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   props: StatementInsightsViewProps,
@@ -101,6 +86,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     onFiltersChange,
     onSortChange,
     onColumnsChange,
+    setTimeScale,
     selectedColumnNames,
     dropDownSelect,
   } = props;
@@ -194,15 +180,15 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     resetPagination();
   };
 
-  const defaultColumns = makeStatementInsightsColumns();
+  const defaultColumns = makeStatementInsightsColumns(setTimeScale);
 
   const visibleColumns = defaultColumns.filter(x =>
-    isSelected(x, selectedColumnNames),
+    isSelectedColumn(selectedColumnNames, x),
   );
 
   const clearFilters = () =>
     onSubmitFilters({
-      app: defaultFilters.app,
+      app: "",
     });
 
   const apps = getAppsFromStatementInsights(
@@ -217,14 +203,15 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     search,
   );
 
-  populateStatementInsightsFromProblemAndCauses(filteredStatements);
+  const statementInsights =
+    populateStatementInsightsFromProblemAndCauses(filteredStatements);
   const tableColumns = defaultColumns
     .filter(c => !c.alwaysShow)
     .map(
       (c): SelectOption => ({
         label: (c.title as React.ReactElement).props.children,
         value: c.name,
-        isSelected: isSelected(c, selectedColumnNames),
+        isSelected: isSelectedColumn(selectedColumnNames, c),
       }),
     );
 
@@ -266,21 +253,21 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
                 <TableStatistics
                   pagination={pagination}
                   search={search}
-                  totalCount={filteredStatements?.length}
+                  totalCount={statementInsights?.length}
                   arrayItemName="statement insights"
                   activeFilters={countActiveFilters}
                   onClearFilters={clearFilters}
                 />
               </div>
               <StatementInsightsTable
-                data={filteredStatements}
+                data={statementInsights}
                 sortSetting={sortSetting}
                 visibleColumns={visibleColumns}
                 onChangeSortSetting={onChangeSortSetting}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && filteredStatements?.length === 0
+                      search?.length > 0 && statementInsights?.length === 0
                     }
                   />
                 }
@@ -290,7 +277,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
             <Pagination
               pageSize={pagination.pageSize}
               current={pagination.current}
-              total={filteredStatements?.length}
+              total={statementInsights?.length}
               onChange={onChangePage}
             />
           </div>

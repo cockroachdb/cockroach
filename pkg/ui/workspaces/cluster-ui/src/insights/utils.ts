@@ -115,9 +115,9 @@ export function getTransactionInsightEventDetailsFromState(
     insightEventDetailsResponse,
   );
   if (insightsForEventDetails.length > 0) {
-    delete insightEventDetailsResponse.insightName;
+    const { insightName, ...resp } = insightEventDetailsResponse;
     insightEventDetails = {
-      ...insightEventDetailsResponse,
+      ...resp,
       insights: insightsForEventDetails,
     };
   }
@@ -330,32 +330,36 @@ export function getAppsFromStatementInsights(
 
 export function populateStatementInsightsFromProblemAndCauses(
   statements: StatementInsightEvent[],
-): void {
+): StatementInsightEvent[] {
   if (!statements || statements?.length === 0) {
-    return;
+    return [];
   }
-  statements.map(x => {
+  const stmts: StatementInsightEvent[] = [];
+  statements.forEach(statement => {
+    const stmt = Object.assign({}, statement);
     // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
-    if (x.problem === "SlowExecution") {
-      if (x.causes?.length === 0) {
-        x.insights = [
+    if (statement.problem === "SlowExecution") {
+      if (statement.causes?.length === 0) {
+        stmt.insights = [
           getInsightFromProblem(
             InsightNameEnum.slowExecution,
             InsightExecEnum.STATEMENT,
           ),
         ];
       } else {
-        x.insights = x.causes?.map(x =>
+        stmt.insights = statement.causes?.map(x =>
           getInsightFromProblem(x, InsightExecEnum.STATEMENT),
         );
       }
-    } else if (x.problem === "FailedExecution") {
-      x.insights = [
+    } else if (statement.problem === "FailedExecution") {
+      stmt.insights = [
         getInsightFromProblem(
           InsightNameEnum.failedExecution,
           InsightExecEnum.STATEMENT,
         ),
       ];
     }
+    stmts.push(stmt);
   });
+  return stmts;
 }
