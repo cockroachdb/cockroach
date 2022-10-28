@@ -402,8 +402,8 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
 	maybeRunInitialSQL := func(ctx context.Context, s serverStartupInterface) error {
 		// Run SQL for new clusters.
 		//
-		// TODO(knz): If/when we want auto-creation of an initial admin user,
-		// this can be achieved here.
+		// The adminUser/adminPassword fields are for the benefit of 'cockroach demo'
+		// only and not used here.
 		return runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */)
 	}
 
@@ -549,7 +549,6 @@ func runStartInternal(
 	}
 
 	// Configure the default storage engine.
-	// NB: we only support one engine type for now.
 	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
 		serverCfg.StorageEngine = enginepb.EngineTypePebble
 	}
