@@ -4443,6 +4443,55 @@ func TestChangefeedDescription(t *testing.T) {
 
 }
 
+func TestChangefeedPanicRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// Panics can mess with the test setup so run these each in their own test.
+
+	prep := func(t *testing.T, sqlDB *sqlutils.SQLRunner) {
+		cdceval.TestingEnableVolatileFunction(`crdb_internal.force_panic`)
+		sqlDB.Exec(t, `CREATE TABLE foo(id int primary key, s string)`)
+		sqlDB.Exec(t, `INSERT INTO foo(id, s) VALUES (0, 'hello'), (1, null)`)
+	}
+
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		prep(t, sqlDB)
+		// Check that disallowed expressions have a good error message.
+		// Also regression test for https://github.com/cockroachdb/cockroach/issues/90416
+		sqlDB.ExpectErr(t, "syntax is unsupported in CREATE CHANGEFEED",
+			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE EXISTS (SELECT true)`)
+	})
+
+	// Check that all panics while evaluating the WHERE clause in an expression are recovered from.
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		prep(t, sqlDB)
+		foo := feed(t, f,
+			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT 1 FROM foo WHERE crdb_internal.force_panic('wat') IS NULL`)
+		defer closeFeed(t, foo)
+		var err error
+		for err == nil {
+			_, err = foo.Next()
+		}
+		require.Error(t, err, "error while evaluating WHERE clause")
+	})
+
+	// Check that all panics while evaluating the SELECT clause in an expression are recovered from.
+	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		prep(t, sqlDB)
+		foo := feed(t, f,
+			`CREATE CHANGEFEED WITH schema_change_policy='stop' AS SELECT crdb_internal.force_panic('wat') FROM foo`)
+		defer closeFeed(t, foo)
+		var err error
+		for err == nil {
+			_, err = foo.Next()
+		}
+		require.Error(t, err, "error while evaluating SELECT clause")
+	})
+}
+
 func TestChangefeedPauseUnpause(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

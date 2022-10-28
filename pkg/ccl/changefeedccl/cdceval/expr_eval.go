@@ -68,7 +68,12 @@ func (e *Evaluator) ComputeVirtualColumns(ctx context.Context, row *cdcevent.Row
 // MatchesFilter returns true if row matches evaluator filter expression.
 func (e *Evaluator) MatchesFilter(
 	ctx context.Context, updatedRow cdcevent.Row, mvccTS hlc.Timestamp, prevRow cdcevent.Row,
-) (bool, error) {
+) (_ bool, err error) {
+	defer func() {
+		if pan := recover(); pan != nil {
+			err = errors.Newf("error while evaluating WHERE clause: %s", pan)
+		}
+	}()
 	if e.where == nil {
 		return true, nil
 	}
@@ -86,7 +91,12 @@ func (e *Evaluator) MatchesFilter(
 // Returns cdcevent.Row representing evalProjection.
 func (e *Evaluator) Projection(
 	ctx context.Context, updatedRow cdcevent.Row, mvccTS hlc.Timestamp, prevRow cdcevent.Row,
-) (cdcevent.Row, error) {
+) (_ cdcevent.Row, err error) {
+	defer func() {
+		if pan := recover(); pan != nil {
+			err = errors.Newf("error while evaluating SELECT clause: %s", pan)
+		}
+	}()
 	if len(e.selectors) == 0 {
 		return updatedRow, nil
 	}
@@ -99,7 +109,12 @@ func (e *Evaluator) Projection(
 }
 
 // initSelectClause configures this evaluator to evaluate specified select clause.
-func (e *Evaluator) initSelectClause(ctx context.Context, sc *tree.SelectClause) error {
+func (e *Evaluator) initSelectClause(ctx context.Context, sc *tree.SelectClause) (err error) {
+	defer func() {
+		if pan := recover(); pan != nil {
+			err = errors.Newf("error while validating CHANGEFEED expression: %s", pan)
+		}
+	}()
 	if len(sc.Exprs) == 0 { // Shouldn't happen, but be defensive.
 		return pgerror.New(pgcode.InvalidParameterValue,
 			"expected at least 1 projection")
