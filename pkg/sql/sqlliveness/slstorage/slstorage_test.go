@@ -183,21 +183,21 @@ func TestStorage(t *testing.T) {
 		require.Equal(t, int64(1), metrics.SessionDeletionsRuns.Count())
 		require.Equal(t, int64(1), metrics.SessionsDeleted.Count())
 
-		// Ensure that we now see the id1 as dead.
+		// Ensure that we now see the id1 as dead. That fact will be cached.
 		{
 			isAlive, err := storage.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.False(t, isAlive)
-			require.Equal(t, int64(3), metrics.IsAliveCacheMisses.Count())
-			require.Equal(t, int64(1), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(2), metrics.IsAliveCacheHits.Count())
 		}
 		// Ensure that the fact that it's dead is cached.
 		{
 			isAlive, err := storage.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.False(t, isAlive)
-			require.Equal(t, int64(3), metrics.IsAliveCacheMisses.Count())
-			require.Equal(t, int64(2), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(2), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(3), metrics.IsAliveCacheHits.Count())
 		}
 		// Ensure that attempts to update the now dead session fail.
 		{
@@ -212,16 +212,16 @@ func TestStorage(t *testing.T) {
 			isAlive, err := storage.IsAlive(ctx, id2)
 			require.NoError(t, err)
 			require.True(t, isAlive)
-			require.Equal(t, int64(4), metrics.IsAliveCacheMisses.Count())
-			require.Equal(t, int64(2), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(3), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(3), metrics.IsAliveCacheHits.Count())
 		}
 		// Ensure that the fact that it's still alive is cached.
 		{
 			isAlive, err := storage.IsAlive(ctx, id1)
 			require.NoError(t, err)
 			require.False(t, isAlive)
-			require.Equal(t, int64(4), metrics.IsAliveCacheMisses.Count())
-			require.Equal(t, int64(3), metrics.IsAliveCacheHits.Count())
+			require.Equal(t, int64(3), metrics.IsAliveCacheMisses.Count())
+			require.Equal(t, int64(4), metrics.IsAliveCacheHits.Count())
 		}
 	})
 	t.Run("delete-expired-on-is-alive", func(t *testing.T) {
