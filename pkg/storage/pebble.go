@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1882,7 +1883,7 @@ type pebbleReadOnly struct {
 	prefixEngineIter pebbleIterator
 	normalEngineIter pebbleIterator
 
-	iter       *pebble.Iterator
+	iter       pebbleiter.Iterator
 	iterUsed   bool // avoids cloning after PinEngineStateForIterators()
 	durability DurabilityRequirement
 	closed     bool
@@ -2056,7 +2057,7 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 		if p.durability == GuaranteedDurability {
 			o = &pebble.IterOptions{OnlyReadGuaranteedDurable: true}
 		}
-		p.iter = p.parent.db.NewIter(o)
+		p.iter = pebbleiter.MaybeWrap(p.parent.db.NewIter(o))
 		// NB: p.iterUsed == false avoids cloning this in NewMVCCIterator(), since
 		// we've just created it.
 	}
