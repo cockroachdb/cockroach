@@ -6371,7 +6371,8 @@ CREATE TABLE crdb_internal.%s (
 	last_retry_reason          STRING,
 	exec_node_ids              INT[] NOT NULL,
 	contention                 INTERVAL,
-	index_recommendations      STRING[] NOT NULL
+	index_recommendations      STRING[] NOT NULL,
+	implicit_txn               BOOL NOT NULL
 )`
 
 var crdbInternalClusterExecutionInsightsTable = virtualSchemaTable{
@@ -6485,6 +6486,7 @@ func populateExecutionInsights(
 			execNodeIDs,
 			contentionTime,
 			indexRecommendations,
+			tree.MakeDBool(tree.DBool(insight.Transaction.ImplicitTxn)),
 		))
 	}
 	return
