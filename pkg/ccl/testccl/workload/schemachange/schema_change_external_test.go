@@ -34,7 +34,7 @@ import (
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
-	skip.WithIssue(t, 78478)
+	skip.UnderRace(t, "test connections can be too slow under race option.")
 
 	dir := t.TempDir()
 	ctx := context.Background()
@@ -90,7 +90,7 @@ func TestWorkload(t *testing.T) {
 	ql, err := wl.Ops(ctx, []string{pgURL.String()}, reg)
 	require.NoError(t, err)
 
-	const N = 100
+	const N = 800
 	workerFn := func(ctx context.Context, fn func(ctx context.Context) error) func() error {
 		return func() error {
 			for i := 0; i < N; i++ {
