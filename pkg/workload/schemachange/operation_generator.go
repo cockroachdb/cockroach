@@ -3612,7 +3612,7 @@ func (og *operationGenerator) typeFromTypeName(
 		return nil, errors.Wrapf(err, "typeFromTypeName: %s", typeName)
 	}
 	typ, err := tree.ResolveType(
-		context.Background(),
+		ctx,
 		stmt.AST.(*tree.Select).Select.(*tree.SelectClause).Exprs[0].Expr.(*tree.CastExpr).Type,
 		&txTypeResolver{tx: tx},
 	)
