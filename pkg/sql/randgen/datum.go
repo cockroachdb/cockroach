@@ -368,6 +368,12 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 		}
 		return &tree.DBitArray{BitArray: datum.(*tree.DBitArray).ToWidth(uint(typ.Width()))}
 
+	case types.StringFamily:
+		if typ.Oid() == oid.T_name {
+			datum = tree.NewDName(string(*datum.(*tree.DString)))
+		}
+		return datum
+
 	default:
 		return datum
 	}
