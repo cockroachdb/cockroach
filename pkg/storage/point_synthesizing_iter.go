@@ -143,13 +143,17 @@ func NewPointSynthesizingIter(parent MVCCIterator) *PointSynthesizingIter {
 
 // NewPointSynthesizingIterAtParent creates a new pointSynthesizingIter and
 // loads the position from the parent iterator.
-func NewPointSynthesizingIterAtParent(parent MVCCIterator) *PointSynthesizingIter {
+func NewPointSynthesizingIterAtParent(parent MVCCIterator) (*PointSynthesizingIter, error) {
 	iter := NewPointSynthesizingIter(parent)
 	iter.rangeKeyChanged = true // force range key detection
-	if ok, err := iter.updateIter(); ok && err == nil {
+	if ok, _ := iter.updateIter(); ok {
 		iter.updateSeekGEPosition(parent.UnsafeKey())
 	}
-	return iter
+	if iter.iterErr != nil {
+		iter.release()
+		return nil, iter.iterErr
+	}
+	return iter, nil
 }
 
 // Close implements MVCCIterator.
