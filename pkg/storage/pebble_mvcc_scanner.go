@@ -447,7 +447,9 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-			p.enablePointSynthesis()
+			if !p.enablePointSynthesis() {
+				return
+			}
 		}
 	}
 
@@ -477,7 +479,9 @@ func (p *pebbleMVCCScanner) scan(
 	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-			p.enablePointSynthesis()
+			if !p.enablePointSynthesis() {
+				return nil, 0, 0, p.err
+			}
 		}
 	}
 
@@ -1199,8 +1203,8 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 // synthesizes MVCC point tombstones for MVCC range tombstones and never emits
 // range keys itself. p.parent must be valid.
 //
-// gcassert:inline
-func (p *pebbleMVCCScanner) enablePointSynthesis() {
+// Returns true if the iterator is valid.
+func (p *pebbleMVCCScanner) enablePointSynthesis() bool {
 	if util.RaceEnabled {
 		if ok, _ := p.parent.Valid(); !ok {
 			panic(errors.AssertionFailedf("enablePointSynthesis called with invalid iter"))
@@ -1213,13 +1217,18 @@ func (p *pebbleMVCCScanner) enablePointSynthesis() {
 				p.parent.UnsafeKey()))
 		}
 	}
-	p.pointIter = NewPointSynthesizingIterAtParent(p.parent)
-	p.parent = p.pointIter
+	pointIter, err := NewPointSynthesizingIterAtParent(p.parent)
+	if err != nil {
+		p.err = err
+		return false
+	}
 	if util.RaceEnabled {
-		if ok, _ := p.parent.Valid(); !ok {
+		if ok, _ := pointIter.Valid(); !ok {
 			panic(errors.AssertionFailedf("invalid pointSynthesizingIter with valid iter"))
 		}
 	}
+	p.pointIter, p.parent = pointIter, pointIter
+	return true
 }
 
 func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
@@ -1260,7 +1269,9 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 	// Since iterValid() is called after every iterator positioning operation, it
 	// is convenient to check for any range keys and enable point synthesis here.
 	if p.parent.RangeKeyChanged() {
-		p.enablePointSynthesis()
+		if !p.enablePointSynthesis() {
+			return false
+		}
 	}
 	if util.RaceEnabled && p.pointIter == nil {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
