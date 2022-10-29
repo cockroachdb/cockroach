@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -280,7 +279,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	var pkColumns []string
 	var pkTypes []*types.T
 	var relationName string
-	var rangeSpan, entirePKSpan roachpb.Span
+	var entirePKSpan roachpb.Span
 	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		desc, err := descsCol.GetImmutableTableByID(
 			ctx,
@@ -324,8 +323,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		}
 
 		relationName = tn.FQString()
-		entirePKSpan = desc.IndexSpan(p.ExecCfg().Codec, desc.GetPrimaryIndex().GetID())
-		rangeSpan = entirePKSpan
+		entirePKSpan = desc.PrimaryIndexSpan(p.ExecCfg().Codec)
 		ttlSettings = *ttl
 		return nil
 	}); err != nil {
@@ -406,7 +404,21 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		})
 	}
 
-	// Iterate over every range to feed work for the goroutine processors.
+	// This job uses the DistSQLPlanner, but is not actually distributing work to DistSQL processors in 22.1.
+	// The DistSQLPlanner is being used instead of a RangeIterator to determine the TTL table's PK span to keep the code
+	// more closely synced with 22.2.
+	distSQLPlanner := p.DistSQLPlanner()
+	evalCtx := p.ExtendedEvalContext()
+	planCtx, _, err := distSQLPlanner.SetupAllNodesPlanning(ctx, evalCtx, p.ExecCfg())
+	if err != nil {
+		return err
+	}
+	spanPartitions, err := distSQLPlanner.PartitionSpans(ctx, planCtx, []roachpb.Span{entirePKSpan})
+	if err != nil {
+		return err
+	}
+
+	// Iterate over every span to feed work for the goroutine processors.
 	if err := func() (retErr error) {
 		defer func() {
 			close(ch)
@@ -414,48 +426,21 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			retErr = errors.CombineErrors(retErr, g.Wait())
 		}()
 
-		ri := kvcoord.MakeRangeIterator(p.ExecCfg().DistSender)
-		done := false
-		ri.Seek(ctx, roachpb.RKey(entirePKSpan.Key), kvcoord.Ascending)
-		for ; ri.Valid() && !done; ri.Next(ctx) {
-			// Send range info to each goroutine worker.
-			rangeDesc := ri.Desc()
-			var nextRange rangeToProcess
-			// A single range can contain multiple tables or indexes.
-			// If this is the case, the rangeDesc.StartKey would be less than entirePKSpan.Key
-			// or the rangeDesc.EndKey would be greater than the entirePKSpan.EndKey, meaning
-			// the range contains the start or the end of the range respectively.
-			// Trying to decode keys outside the PK range will lead to a decoding error.
-			// As such, only populate nextRange.startPK and nextRange.endPK if this is the case
-			// (by default, a 0 element startPK or endPK means the beginning or end).
-			if rangeDesc.StartKey.AsRawKey().Compare(entirePKSpan.Key) > 0 {
-				nextRange.startPK, err = keyToDatums(rangeDesc.StartKey.AsRawKey(), p.ExecCfg().Codec, pkTypes, &alloc)
+		for _, spanParititon := range spanPartitions {
+			for _, span := range spanParititon.Spans {
+				startPK, err := keyToDatums(span.Key, p.ExecCfg().Codec, pkTypes, &alloc)
 				if err != nil {
-					return errors.Wrapf(
-						err,
-						"error decoding starting PRIMARY KEY for range ID %d (start key %x, table start key %x)",
-						rangeDesc.RangeID,
-						rangeDesc.StartKey.AsRawKey(),
-						entirePKSpan.Key,
-					)
+					return err
+				}
+				endPK, err := keyToDatums(span.EndKey, p.ExecCfg().Codec, pkTypes, &alloc)
+				if err != nil {
+					return err
+				}
+				ch <- rangeToProcess{
+					startPK: startPK,
+					endPK:   endPK,
 				}
 			}
-			if rangeDesc.EndKey.AsRawKey().Compare(entirePKSpan.EndKey) < 0 {
-				rangeSpan.Key = rangeDesc.EndKey.AsRawKey()
-				nextRange.endPK, err = keyToDatums(rangeDesc.EndKey.AsRawKey(), p.ExecCfg().Codec, pkTypes, &alloc)
-				if err != nil {
-					return errors.Wrapf(
-						err,
-						"error decoding ending PRIMARY KEY for range ID %d (end key %x, table end key %x)",
-						rangeDesc.RangeID,
-						rangeDesc.EndKey.AsRawKey(),
-						entirePKSpan.EndKey,
-					)
-				}
-			} else {
-				done = true
-			}
-			ch <- nextRange
 		}
 		return nil
 	}(); err != nil {
