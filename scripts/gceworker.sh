@@ -97,6 +97,12 @@ case "${cmd}" in
     echo "waiting for node to finish starting..."
     # Wait for vm and sshd to start up.
     retry gcloud compute ssh "${NAME}" --command=true || true
+
+    # Rewrite the SSH config, since the VM may now be bound to a new ephemeral IP address.
+    if ! gcloud compute config-ssh > /dev/null; then
+      echo "WARNING: Unable to invoke config-ssh, you may not be able to 'ssh ${FQNAME}'"
+    fi
+
     # SSH into the node, since that's probably why we resumed it.
     $0 ssh
     ;;

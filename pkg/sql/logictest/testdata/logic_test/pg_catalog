@@ -426,10 +426,10 @@ query OTOT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
-1445254017  crdb_internal       NULL        NULL
-155990598   information_schema  NULL        NULL
-2154378761  pg_catalog          NULL        NULL
-1098122499  pg_extension        NULL        NULL
+4294967295  crdb_internal       NULL        NULL
+4294967222  information_schema  NULL        NULL
+4294967135  pg_catalog          NULL        NULL
+4294967005  pg_extension        NULL        NULL
 105         public              2310524507  NULL
 
 # Verify that we can still see the schemas even if we don't have any privilege
@@ -445,10 +445,10 @@ query OTOT colnames
 SELECT * FROM pg_catalog.pg_namespace
 ----
 oid         nspname             nspowner    nspacl
-1445254017  crdb_internal       NULL        NULL
-155990598   information_schema  NULL        NULL
-2154378761  pg_catalog          NULL        NULL
-1098122499  pg_extension        NULL        NULL
+4294967295  crdb_internal       NULL        NULL
+4294967222  information_schema  NULL        NULL
+4294967135  pg_catalog          NULL        NULL
+4294967005  pg_extension        NULL        NULL
 105         public              2310524507  NULL
 
 user root
@@ -1284,7 +1284,7 @@ SELECT * FROM pg_collation
 WHERE collname='en-US'
 ----
 oid         collname  collnamespace  collowner  collencoding  collcollate  collctype  collprovider  collversion  collisdeterministic
-3903121477  en-US     591606261      NULL       6             NULL         NULL       NULL          NULL         NULL
+3903121477  en-US     4294967135     NULL       6             NULL         NULL       NULL          NULL         NULL
 
 user testuser
 
@@ -1301,44 +1301,42 @@ user root
 ## pg_catalog.pg_constraint
 ##
 ## These order of this virtual table is non-deterministic, so all queries must
-## explicitly add an ORDER BY clause.
+## explicitly add an ORDER BY clause oor use rowsort.
 
-query OTOTT colnames
-SELECT con.oid, conname, connamespace, contype, condef
+query TOTT colnames,rowsort
+SELECT conname, connamespace, contype, replace(condef, ' ', '_') as condef
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
-ORDER BY con.oid
 ----
-oid         conname        connamespace  contype  condef
-36403682    check_b        109           c        CHECK ((b > 11))
-108480825   uwi_b_c        109           u        UNIQUE WITHOUT INDEX (b, c)
-180431994   t5_pkey        109           p        PRIMARY KEY (rowid ASC)
-192087236   fk_b_c         109           f        FOREIGN KEY (b, c) REFERENCES t4(b, c) MATCH FULL ON UPDATE RESTRICT
-296187876   check_c        109           c        CHECK ((c != ''::STRING))
-1002858066  t6_expr_key    109           u        UNIQUE (lower(c) ASC)
-1034567609  uwi_b_partial  109           u        UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
-1265772734  t2_pkey        109           p        PRIMARY KEY (rowid ASC)
-1525509005  t3_pkey        109           p        PRIMARY KEY (rowid ASC)
-1568726274  index_key      109           u        UNIQUE (b ASC, c ASC)
-1568726275  t1_a_key       109           u        UNIQUE (a ASC)
-1622172050  unique_a       109           u        UNIQUE WITHOUT INDEX (a)
-2044981543  t6_pkey        109           p        PRIMARY KEY (rowid ASC)
-2061447344  fk             109           f        FOREIGN KEY (a, b) REFERENCES t1(b, c)
-2610849745  t1_pkey        109           p        PRIMARY KEY (p ASC)
-3130322283  t4_pkey        109           p        PRIMARY KEY (rowid ASC)
-3390058550  mv1_pkey       109           p        PRIMARY KEY (rowid ASC)
-3764151187  t5_a_fkey      109           f        FOREIGN KEY (a) REFERENCES t4(a) ON DELETE CASCADE
-3836426375  fk             109           f        FOREIGN KEY (t1_id) REFERENCES t1(a)
-3955926752  primary        109           p        PRIMARY KEY (value ASC)
-4215663023  primary        109           p        PRIMARY KEY (value ASC)
+conname        connamespace  contype  condef
+check_b        109           c        CHECK_((b_>_11))
+uwi_b_c        109           u        UNIQUE_WITHOUT_INDEX_(b,_c)
+t5_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+fk_b_c         109           f        FOREIGN_KEY_(b,_c)_REFERENCES_t4(b,_c)_MATCH_FULL_ON_UPDATE_RESTRICT
+check_c        109           c        CHECK_((c_!=_''::STRING))
+t6_expr_key    109           u        UNIQUE_(lower(c)_ASC)
+uwi_b_partial  109           u        UNIQUE_WITHOUT_INDEX_(b)_WHERE_(c_=_'foo'::STRING)
+t2_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+t3_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+index_key      109           u        UNIQUE_(b_ASC,_c_ASC)
+t1_a_key       109           u        UNIQUE_(a_ASC)
+unique_a       109           u        UNIQUE_WITHOUT_INDEX_(a)
+t6_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+fk             109           f        FOREIGN_KEY_(a,_b)_REFERENCES_t1(b,_c)
+t1_pkey        109           p        PRIMARY_KEY_(p_ASC)
+t4_pkey        109           p        PRIMARY_KEY_(rowid_ASC)
+mv1_pkey       109           p        PRIMARY_KEY_(rowid_ASC)
+t5_a_fkey      109           f        FOREIGN_KEY_(a)_REFERENCES_t4(a)_ON_DELETE_CASCADE
+fk             109           f        FOREIGN_KEY_(t1_id)_REFERENCES_t1(a)
+primary        109           p        PRIMARY_KEY_(value_ASC)
+primary        109           p        PRIMARY_KEY_(value_ASC)
 
-query TTBBBOOO colnames
+query TTBBBOOO colnames,rowsort
 SELECT conname, contype, condeferrable, condeferred, convalidated, conrelid, contypid, conindid
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
-ORDER BY con.oid
 ----
 conname        contype  condeferrable  condeferred  convalidated  conrelid  contypid  conindid
 check_b        c        false          false        true          114       0         0
@@ -1371,12 +1369,11 @@ WHERE n.nspname = 'public' AND contype NOT IN ('c', 'f', 'p', 'u')
 ORDER BY con.oid
 ----
 
-query TOTTT colnames
+query TOTTT colnames,rowsort
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
-ORDER BY con.oid
 ----
 conname        confrelid  confupdtype  confdeltype  confmatchtype
 check_b        0          NULL         NULL         NULL
@@ -1397,7 +1394,7 @@ mv1_pkey       0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
 primary        0          NULL         NULL         NULL
 
-query TOTTT colnames
+query TOTTT colnames,rowsort
 SELECT conname, confrelid, confupdtype, confdeltype, confmatchtype
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
@@ -1410,12 +1407,11 @@ fk         110        a            a            s
 t5_a_fkey  116        a            c            s
 fk         110        a            a            s
 
-query TBIBT colnames
+query TBIBT colnames,rowsort
 SELECT conname, conislocal, coninhcount, connoinherit, conkey
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
-ORDER BY con.oid
 ----
 conname        conislocal  coninhcount  connoinherit  conkey
 check_b        true        0            true          {2}
@@ -1445,28 +1441,28 @@ SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, con
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public' AND contype IN ('c', 'p', 'u')
-ORDER BY con.oid
+ORDER BY conname
 ----
 conname        confkey  conpfeqop  conppeqop  conffeqop  conexclop  conbin             consrc             condef
 check_b        NULL     NULL       NULL       NULL       NULL       (b > 11)           (b > 11)           CHECK ((b > 11))
-uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
-t5_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 check_c        NULL     NULL       NULL       NULL       NULL       (c != ''::STRING)  (c != ''::STRING)  CHECK ((c != ''::STRING))
-t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
-uwi_b_partial  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
-t2_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
-t3_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 index_key      NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (b ASC, c ASC)
-t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
-unique_a       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (a)
-t6_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
-t1_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
-t4_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 mv1_pkey       NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
 primary        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (value ASC)
+t1_a_key       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (a ASC)
+t1_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (p ASC)
+t2_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+t3_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+t4_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+t5_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+t6_expr_key    NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE (lower(c) ASC)
+t6_pkey        NULL     NULL       NULL       NULL       NULL       NULL               NULL               PRIMARY KEY (rowid ASC)
+unique_a       NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (a)
+uwi_b_c        NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b, c)
+uwi_b_partial  NULL     NULL       NULL       NULL       NULL       NULL               NULL               UNIQUE WITHOUT INDEX (b) WHERE (c = 'foo'::STRING)
 
-query TTTTTTTT colnames
+query TTTTTTTT colnames,rowsort
 SELECT conname, confkey, conpfeqop, conppeqop, conffeqop, conexclop, conbin, consrc
 FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
@@ -1489,14 +1485,14 @@ ORDER BY objid, refobjid, refobjsubid
 classid     objid       objsubid  refclassid  refobjid    refobjsubid  deptype
 4294967120  111         0         4294967123  110         14           a
 4294967120  112         0         4294967123  110         15           a
-4294967120  192087236   0         4294967123  0           0            n
 4294967077  842401391   0         4294967123  110         1            n
 4294967077  842401391   0         4294967123  110         2            n
 4294967077  842401391   0         4294967123  110         3            n
 4294967077  842401391   0         4294967123  110         4            n
-4294967120  2061447344  0         4294967123  3687884464  0            n
-4294967120  3764151187  0         4294967123  0           0            n
-4294967120  3836426375  0         4294967123  3687884465  0            n
+4294967120  1179276562  0         4294967123  3687884464  0            n
+4294967120  3935750373  0         4294967123  3687884465  0            n
+4294967120  4072017905  0         4294967123  0           0            n
+4294967120  4170826110  0         4294967123  0           0            n
 
 # Some entries in pg_depend are dependency links from the pg_constraint system
 # table to the pg_class system table. Other entries are links to pg_class when it is
@@ -1608,84 +1604,84 @@ FROM pg_catalog.pg_type
 ORDER BY oid
 ----
 oid         typname                                typnamespace  typowner    typlen  typbyval  typtype
-16          bool                                   591606261     NULL        1       true      b
-17          bytea                                  591606261     NULL        -1      false     b
-18          char                                   591606261     NULL        1       true      b
-19          name                                   591606261     NULL        -1      false     b
-20          int8                                   591606261     NULL        8       true      b
-21          int2                                   591606261     NULL        2       true      b
-22          int2vector                             591606261     NULL        -1      false     b
-23          int4                                   591606261     NULL        4       true      b
-24          regproc                                591606261     NULL        8       true      b
-25          text                                   591606261     NULL        -1      false     b
-26          oid                                    591606261     NULL        8       true      b
-30          oidvector                              591606261     NULL        -1      false     b
-700         float4                                 591606261     NULL        4       true      b
-701         float8                                 591606261     NULL        8       true      b
-705         unknown                                591606261     NULL        0       true      b
-869         inet                                   591606261     NULL        24      true      b
-1000        _bool                                  591606261     NULL        -1      false     b
-1001        _bytea                                 591606261     NULL        -1      false     b
-1002        _char                                  591606261     NULL        -1      false     b
-1003        _name                                  591606261     NULL        -1      false     b
-1005        _int2                                  591606261     NULL        -1      false     b
-1006        _int2vector                            591606261     NULL        -1      false     b
-1007        _int4                                  591606261     NULL        -1      false     b
-1008        _regproc                               591606261     NULL        -1      false     b
-1009        _text                                  591606261     NULL        -1      false     b
-1013        _oidvector                             591606261     NULL        -1      false     b
-1014        _bpchar                                591606261     NULL        -1      false     b
-1015        _varchar                               591606261     NULL        -1      false     b
-1016        _int8                                  591606261     NULL        -1      false     b
-1021        _float4                                591606261     NULL        -1      false     b
-1022        _float8                                591606261     NULL        -1      false     b
-1028        _oid                                   591606261     NULL        -1      false     b
-1041        _inet                                  591606261     NULL        -1      false     b
-1042        bpchar                                 591606261     NULL        -1      false     b
-1043        varchar                                591606261     NULL        -1      false     b
-1082        date                                   591606261     NULL        16      true      b
-1083        time                                   591606261     NULL        8       true      b
-1114        timestamp                              591606261     NULL        24      true      b
-1115        _timestamp                             591606261     NULL        -1      false     b
-1182        _date                                  591606261     NULL        -1      false     b
-1183        _time                                  591606261     NULL        -1      false     b
-1184        timestamptz                            591606261     NULL        24      true      b
-1185        _timestamptz                           591606261     NULL        -1      false     b
-1186        interval                               591606261     NULL        24      true      b
-1187        _interval                              591606261     NULL        -1      false     b
-1231        _numeric                               591606261     NULL        -1      false     b
-1266        timetz                                 591606261     NULL        16      true      b
-1270        _timetz                                591606261     NULL        -1      false     b
-1560        bit                                    591606261     NULL        -1      false     b
-1561        _bit                                   591606261     NULL        -1      false     b
-1562        varbit                                 591606261     NULL        -1      false     b
-1563        _varbit                                591606261     NULL        -1      false     b
-1700        numeric                                591606261     NULL        -1      false     b
-2202        regprocedure                           591606261     NULL        8       true      b
-2205        regclass                               591606261     NULL        8       true      b
-2206        regtype                                591606261     NULL        8       true      b
-2207        _regprocedure                          591606261     NULL        -1      false     b
-2210        _regclass                              591606261     NULL        -1      false     b
-2211        _regtype                               591606261     NULL        -1      false     b
-2249        record                                 591606261     NULL        0       true      p
-2277        anyarray                               591606261     NULL        -1      false     p
-2278        void                                   591606261     NULL        0       true      p
-2283        anyelement                             591606261     NULL        -1      false     p
-2287        _record                                591606261     NULL        -1      false     b
-2950        uuid                                   591606261     NULL        16      true      b
-2951        _uuid                                  591606261     NULL        -1      false     b
-3802        jsonb                                  591606261     NULL        -1      false     b
-3807        _jsonb                                 591606261     NULL        -1      false     b
-4089        regnamespace                           591606261     NULL        8       true      b
-4090        _regnamespace                          591606261     NULL        -1      false     b
-4096        regrole                                591606261     NULL        8       true      b
-4097        _regrole                               591606261     NULL        -1      false     b
-90000       geometry                               591606261     NULL        -1      false     b
-90001       _geometry                              591606261     NULL        -1      false     b
-90002       geography                              591606261     NULL        -1      false     b
-90003       _geography                             591606261     NULL        -1      false     b
-90004       box2d                                  591606261     NULL        32      true      b
-90005       _box2d                                 591606261     NULL        -1      false     b
+16          bool                                   4294967135    NULL        1       true      b
+17          bytea                                  4294967135    NULL        -1      false     b
+18          char                                   4294967135    NULL        1       true      b
+19          name                                   4294967135    NULL        -1      false     b
+20          int8                                   4294967135    NULL        8       true      b
+21          int2                                   4294967135    NULL        2       true      b
+22          int2vector                             4294967135    NULL        -1      false     b
+23          int4                                   4294967135    NULL        4       true      b
+24          regproc                                4294967135    NULL        8       true      b
+25          text                                   4294967135    NULL        -1      false     b
+26          oid                                    4294967135    NULL        8       true      b
+30          oidvector                              4294967135    NULL        -1      false     b
+700         float4                                 4294967135    NULL        4       true      b
+701         float8                                 4294967135    NULL        8       true      b
+705         unknown                                4294967135    NULL        0       true      b
+869         inet                                   4294967135    NULL        24      true      b
+1000        _bool                                  4294967135    NULL        -1      false     b
+1001        _bytea                                 4294967135    NULL        -1      false     b
+1002        _char                                  4294967135    NULL        -1      false     b
+1003        _name                                  4294967135    NULL        -1      false     b
+1005        _int2                                  4294967135    NULL        -1      false     b
+1006        _int2vector                            4294967135    NULL        -1      false     b
+1007        _int4                                  4294967135    NULL        -1      false     b
+1008        _regproc                               4294967135    NULL        -1      false     b
+1009        _text                                  4294967135    NULL        -1      false     b
+1013        _oidvector                             4294967135    NULL        -1      false     b
+1014        _bpchar                                4294967135    NULL        -1      false     b
+1015        _varchar                               4294967135    NULL        -1      false     b
+1016        _int8                                  4294967135    NULL        -1      false     b
+1021        _float4                                4294967135    NULL        -1      false     b
+1022        _float8                                4294967135    NULL        -1      false     b
+1028        _oid                                   4294967135    NULL        -1      false     b
+1041        _inet                                  4294967135    NULL        -1      false     b
+1042        bpchar                                 4294967135    NULL        -1      false     b
+1043        varchar                                4294967135    NULL        -1      false     b
+1082        date                                   4294967135    NULL        16      true      b
+1083        time                                   4294967135    NULL        8       true      b
+1114        timestamp                              4294967135    NULL        24      true      b
+1115        _timestamp                             4294967135    NULL        -1      false     b
+1182        _date                                  4294967135    NULL        -1      false     b
+1183        _time                                  4294967135    NULL        -1      false     b
+1184        timestamptz                            4294967135    NULL        24      true      b
+1185        _timestamptz                           4294967135    NULL        -1      false     b
+1186        interval                               4294967135    NULL        24      true      b
+1187        _interval                              4294967135    NULL        -1      false     b
+1231        _numeric                               4294967135    NULL        -1      false     b
+1266        timetz                                 4294967135    NULL        16      true      b
+1270        _timetz                                4294967135    NULL        -1      false     b
+1560        bit                                    4294967135    NULL        -1      false     b
+1561        _bit                                   4294967135    NULL        -1      false     b
+1562        varbit                                 4294967135    NULL        -1      false     b
+1563        _varbit                                4294967135    NULL        -1      false     b
+1700        numeric                                4294967135    NULL        -1      false     b
+2202        regprocedure                           4294967135    NULL        8       true      b
+2205        regclass                               4294967135    NULL        8       true      b
+2206        regtype                                4294967135    NULL        8       true      b
+2207        _regprocedure                          4294967135    NULL        -1      false     b
+2210        _regclass                              4294967135    NULL        -1      false     b
+2211        _regtype                               4294967135    NULL        -1      false     b
+2249        record                                 4294967135    NULL        0       true      p
+2277        anyarray                               4294967135    NULL        -1      false     p
+2278        void                                   4294967135    NULL        0       true      p
+2283        anyelement                             4294967135    NULL        -1      false     p
+2287        _record                                4294967135    NULL        -1      false     b
+2950        uuid                                   4294967135    NULL        16      true      b
+2951        _uuid                                  4294967135    NULL        -1      false     b
+3802        jsonb                                  4294967135    NULL        -1      false     b
+3807        _jsonb                                 4294967135    NULL        -1      false     b
+4089        regnamespace                           4294967135    NULL        8       true      b
+4090        _regnamespace                          4294967135    NULL        -1      false     b
+4096        regrole                                4294967135    NULL        8       true      b
+4097        _regrole                               4294967135    NULL        -1      false     b
+90000       geometry                               4294967135    NULL        -1      false     b
+90001       _geometry                              4294967135    NULL        -1      false     b
+90002       geography                              4294967135    NULL        -1      false     b
+90003       _geography                             4294967135    NULL        -1      false     b
+90004       box2d                                  4294967135    NULL        32      true      b
+90005       _box2d                                 4294967135    NULL        -1      false     b
 100110      t1                                     109           1546506610  -1      false     c
 100111      t1_m_seq                               109           1546506610  -1      false     c
 100112      t1_n_seq                               109           1546506610  -1      false     c
@@ -1705,296 +1701,296 @@ oid         typname                                typnamespace  typowner    typ
 100132      _newtype1                              109           1546506610  -1      false     b
 100133      newtype2                               109           1546506610  -1      false     e
 100134      _newtype2                              109           1546506610  -1      false     b
-4294967002  spatial_ref_sys                        1700435119    2310524507  -1      false     c
-4294967003  geometry_columns                       1700435119    2310524507  -1      false     c
-4294967004  geography_columns                      1700435119    2310524507  -1      false     c
-4294967006  pg_views                               591606261     2310524507  -1      false     c
-4294967007  pg_user                                591606261     2310524507  -1      false     c
-4294967008  pg_user_mappings                       591606261     2310524507  -1      false     c
-4294967009  pg_user_mapping                        591606261     2310524507  -1      false     c
-4294967010  pg_type                                591606261     2310524507  -1      false     c
-4294967011  pg_ts_template                         591606261     2310524507  -1      false     c
-4294967012  pg_ts_parser                           591606261     2310524507  -1      false     c
-4294967013  pg_ts_dict                             591606261     2310524507  -1      false     c
-4294967014  pg_ts_config                           591606261     2310524507  -1      false     c
-4294967015  pg_ts_config_map                       591606261     2310524507  -1      false     c
-4294967016  pg_trigger                             591606261     2310524507  -1      false     c
-4294967017  pg_transform                           591606261     2310524507  -1      false     c
-4294967018  pg_timezone_names                      591606261     2310524507  -1      false     c
-4294967019  pg_timezone_abbrevs                    591606261     2310524507  -1      false     c
-4294967020  pg_tablespace                          591606261     2310524507  -1      false     c
-4294967021  pg_tables                              591606261     2310524507  -1      false     c
-4294967022  pg_subscription                        591606261     2310524507  -1      false     c
-4294967023  pg_subscription_rel                    591606261     2310524507  -1      false     c
-4294967024  pg_stats                               591606261     2310524507  -1      false     c
-4294967025  pg_stats_ext                           591606261     2310524507  -1      false     c
-4294967026  pg_statistic                           591606261     2310524507  -1      false     c
-4294967027  pg_statistic_ext                       591606261     2310524507  -1      false     c
-4294967028  pg_statistic_ext_data                  591606261     2310524507  -1      false     c
-4294967029  pg_statio_user_tables                  591606261     2310524507  -1      false     c
-4294967030  pg_statio_user_sequences               591606261     2310524507  -1      false     c
-4294967031  pg_statio_user_indexes                 591606261     2310524507  -1      false     c
-4294967032  pg_statio_sys_tables                   591606261     2310524507  -1      false     c
-4294967033  pg_statio_sys_sequences                591606261     2310524507  -1      false     c
-4294967034  pg_statio_sys_indexes                  591606261     2310524507  -1      false     c
-4294967035  pg_statio_all_tables                   591606261     2310524507  -1      false     c
-4294967036  pg_statio_all_sequences                591606261     2310524507  -1      false     c
-4294967037  pg_statio_all_indexes                  591606261     2310524507  -1      false     c
-4294967038  pg_stat_xact_user_tables               591606261     2310524507  -1      false     c
-4294967039  pg_stat_xact_user_functions            591606261     2310524507  -1      false     c
-4294967040  pg_stat_xact_sys_tables                591606261     2310524507  -1      false     c
-4294967041  pg_stat_xact_all_tables                591606261     2310524507  -1      false     c
-4294967042  pg_stat_wal_receiver                   591606261     2310524507  -1      false     c
-4294967043  pg_stat_user_tables                    591606261     2310524507  -1      false     c
-4294967044  pg_stat_user_indexes                   591606261     2310524507  -1      false     c
-4294967045  pg_stat_user_functions                 591606261     2310524507  -1      false     c
-4294967046  pg_stat_sys_tables                     591606261     2310524507  -1      false     c
-4294967047  pg_stat_sys_indexes                    591606261     2310524507  -1      false     c
-4294967048  pg_stat_subscription                   591606261     2310524507  -1      false     c
-4294967049  pg_stat_ssl                            591606261     2310524507  -1      false     c
-4294967050  pg_stat_slru                           591606261     2310524507  -1      false     c
-4294967051  pg_stat_replication                    591606261     2310524507  -1      false     c
-4294967052  pg_stat_progress_vacuum                591606261     2310524507  -1      false     c
-4294967053  pg_stat_progress_create_index          591606261     2310524507  -1      false     c
-4294967054  pg_stat_progress_cluster               591606261     2310524507  -1      false     c
-4294967055  pg_stat_progress_basebackup            591606261     2310524507  -1      false     c
-4294967056  pg_stat_progress_analyze               591606261     2310524507  -1      false     c
-4294967057  pg_stat_gssapi                         591606261     2310524507  -1      false     c
-4294967058  pg_stat_database                       591606261     2310524507  -1      false     c
-4294967059  pg_stat_database_conflicts             591606261     2310524507  -1      false     c
-4294967060  pg_stat_bgwriter                       591606261     2310524507  -1      false     c
-4294967061  pg_stat_archiver                       591606261     2310524507  -1      false     c
-4294967062  pg_stat_all_tables                     591606261     2310524507  -1      false     c
-4294967063  pg_stat_all_indexes                    591606261     2310524507  -1      false     c
-4294967064  pg_stat_activity                       591606261     2310524507  -1      false     c
-4294967065  pg_shmem_allocations                   591606261     2310524507  -1      false     c
-4294967066  pg_shdepend                            591606261     2310524507  -1      false     c
-4294967067  pg_shseclabel                          591606261     2310524507  -1      false     c
-4294967068  pg_shdescription                       591606261     2310524507  -1      false     c
-4294967069  pg_shadow                              591606261     2310524507  -1      false     c
-4294967070  pg_settings                            591606261     2310524507  -1      false     c
-4294967071  pg_sequences                           591606261     2310524507  -1      false     c
-4294967072  pg_sequence                            591606261     2310524507  -1      false     c
-4294967073  pg_seclabel                            591606261     2310524507  -1      false     c
-4294967074  pg_seclabels                           591606261     2310524507  -1      false     c
-4294967075  pg_rules                               591606261     2310524507  -1      false     c
-4294967076  pg_roles                               591606261     2310524507  -1      false     c
-4294967077  pg_rewrite                             591606261     2310524507  -1      false     c
-4294967078  pg_replication_slots                   591606261     2310524507  -1      false     c
-4294967079  pg_replication_origin                  591606261     2310524507  -1      false     c
-4294967080  pg_replication_origin_status           591606261     2310524507  -1      false     c
-4294967081  pg_range                               591606261     2310524507  -1      false     c
-4294967082  pg_publication_tables                  591606261     2310524507  -1      false     c
-4294967083  pg_publication                         591606261     2310524507  -1      false     c
-4294967084  pg_publication_rel                     591606261     2310524507  -1      false     c
-4294967085  pg_proc                                591606261     2310524507  -1      false     c
-4294967086  pg_prepared_xacts                      591606261     2310524507  -1      false     c
-4294967087  pg_prepared_statements                 591606261     2310524507  -1      false     c
-4294967088  pg_policy                              591606261     2310524507  -1      false     c
-4294967089  pg_policies                            591606261     2310524507  -1      false     c
-4294967090  pg_partitioned_table                   591606261     2310524507  -1      false     c
-4294967091  pg_opfamily                            591606261     2310524507  -1      false     c
-4294967092  pg_operator                            591606261     2310524507  -1      false     c
-4294967093  pg_opclass                             591606261     2310524507  -1      false     c
-4294967094  pg_namespace                           591606261     2310524507  -1      false     c
-4294967095  pg_matviews                            591606261     2310524507  -1      false     c
-4294967096  pg_locks                               591606261     2310524507  -1      false     c
-4294967097  pg_largeobject                         591606261     2310524507  -1      false     c
-4294967098  pg_largeobject_metadata                591606261     2310524507  -1      false     c
-4294967099  pg_language                            591606261     2310524507  -1      false     c
-4294967100  pg_init_privs                          591606261     2310524507  -1      false     c
-4294967101  pg_inherits                            591606261     2310524507  -1      false     c
-4294967102  pg_indexes                             591606261     2310524507  -1      false     c
-4294967103  pg_index                               591606261     2310524507  -1      false     c
-4294967104  pg_hba_file_rules                      591606261     2310524507  -1      false     c
-4294967105  pg_group                               591606261     2310524507  -1      false     c
-4294967106  pg_foreign_table                       591606261     2310524507  -1      false     c
-4294967107  pg_foreign_server                      591606261     2310524507  -1      false     c
-4294967108  pg_foreign_data_wrapper                591606261     2310524507  -1      false     c
-4294967109  pg_file_settings                       591606261     2310524507  -1      false     c
-4294967110  pg_extension                           591606261     2310524507  -1      false     c
-4294967111  pg_event_trigger                       591606261     2310524507  -1      false     c
-4294967112  pg_enum                                591606261     2310524507  -1      false     c
-4294967113  pg_description                         591606261     2310524507  -1      false     c
-4294967114  pg_depend                              591606261     2310524507  -1      false     c
-4294967115  pg_default_acl                         591606261     2310524507  -1      false     c
-4294967116  pg_db_role_setting                     591606261     2310524507  -1      false     c
-4294967117  pg_database                            591606261     2310524507  -1      false     c
-4294967118  pg_cursors                             591606261     2310524507  -1      false     c
-4294967119  pg_conversion                          591606261     2310524507  -1      false     c
-4294967120  pg_constraint                          591606261     2310524507  -1      false     c
-4294967121  pg_config                              591606261     2310524507  -1      false     c
-4294967122  pg_collation                           591606261     2310524507  -1      false     c
-4294967123  pg_class                               591606261     2310524507  -1      false     c
-4294967124  pg_cast                                591606261     2310524507  -1      false     c
-4294967125  pg_available_extensions                591606261     2310524507  -1      false     c
-4294967126  pg_available_extension_versions        591606261     2310524507  -1      false     c
-4294967127  pg_auth_members                        591606261     2310524507  -1      false     c
-4294967128  pg_authid                              591606261     2310524507  -1      false     c
-4294967129  pg_attribute                           591606261     2310524507  -1      false     c
-4294967130  pg_attrdef                             591606261     2310524507  -1      false     c
-4294967131  pg_amproc                              591606261     2310524507  -1      false     c
-4294967132  pg_amop                                591606261     2310524507  -1      false     c
-4294967133  pg_am                                  591606261     2310524507  -1      false     c
-4294967134  pg_aggregate                           591606261     2310524507  -1      false     c
-4294967136  views                                  198834802     2310524507  -1      false     c
-4294967137  view_table_usage                       198834802     2310524507  -1      false     c
-4294967138  view_routine_usage                     198834802     2310524507  -1      false     c
-4294967139  view_column_usage                      198834802     2310524507  -1      false     c
-4294967140  user_privileges                        198834802     2310524507  -1      false     c
-4294967141  user_mappings                          198834802     2310524507  -1      false     c
-4294967142  user_mapping_options                   198834802     2310524507  -1      false     c
-4294967143  user_defined_types                     198834802     2310524507  -1      false     c
-4294967144  user_attributes                        198834802     2310524507  -1      false     c
-4294967145  usage_privileges                       198834802     2310524507  -1      false     c
-4294967146  udt_privileges                         198834802     2310524507  -1      false     c
-4294967147  type_privileges                        198834802     2310524507  -1      false     c
-4294967148  triggers                               198834802     2310524507  -1      false     c
-4294967149  triggered_update_columns               198834802     2310524507  -1      false     c
-4294967150  transforms                             198834802     2310524507  -1      false     c
-4294967151  tablespaces                            198834802     2310524507  -1      false     c
-4294967152  tablespaces_extensions                 198834802     2310524507  -1      false     c
-4294967153  tables                                 198834802     2310524507  -1      false     c
-4294967154  tables_extensions                      198834802     2310524507  -1      false     c
-4294967155  table_privileges                       198834802     2310524507  -1      false     c
-4294967156  table_constraints_extensions           198834802     2310524507  -1      false     c
-4294967157  table_constraints                      198834802     2310524507  -1      false     c
-4294967158  statistics                             198834802     2310524507  -1      false     c
-4294967159  st_units_of_measure                    198834802     2310524507  -1      false     c
-4294967160  st_spatial_reference_systems           198834802     2310524507  -1      false     c
-4294967161  st_geometry_columns                    198834802     2310524507  -1      false     c
-4294967162  session_variables                      198834802     2310524507  -1      false     c
-4294967163  sequences                              198834802     2310524507  -1      false     c
-4294967164  schema_privileges                      198834802     2310524507  -1      false     c
-4294967165  schemata                               198834802     2310524507  -1      false     c
-4294967166  schemata_extensions                    198834802     2310524507  -1      false     c
-4294967167  sql_sizing                             198834802     2310524507  -1      false     c
-4294967168  sql_parts                              198834802     2310524507  -1      false     c
-4294967169  sql_implementation_info                198834802     2310524507  -1      false     c
-4294967170  sql_features                           198834802     2310524507  -1      false     c
-4294967171  routines                               198834802     2310524507  -1      false     c
-4294967172  routine_privileges                     198834802     2310524507  -1      false     c
-4294967173  role_usage_grants                      198834802     2310524507  -1      false     c
-4294967174  role_udt_grants                        198834802     2310524507  -1      false     c
-4294967175  role_table_grants                      198834802     2310524507  -1      false     c
-4294967176  role_routine_grants                    198834802     2310524507  -1      false     c
-4294967177  role_column_grants                     198834802     2310524507  -1      false     c
-4294967178  resource_groups                        198834802     2310524507  -1      false     c
-4294967179  referential_constraints                198834802     2310524507  -1      false     c
-4294967180  profiling                              198834802     2310524507  -1      false     c
-4294967181  processlist                            198834802     2310524507  -1      false     c
-4294967182  plugins                                198834802     2310524507  -1      false     c
-4294967183  partitions                             198834802     2310524507  -1      false     c
-4294967184  parameters                             198834802     2310524507  -1      false     c
-4294967185  optimizer_trace                        198834802     2310524507  -1      false     c
-4294967186  keywords                               198834802     2310524507  -1      false     c
-4294967187  key_column_usage                       198834802     2310524507  -1      false     c
-4294967188  information_schema_catalog_name        198834802     2310524507  -1      false     c
-4294967189  foreign_tables                         198834802     2310524507  -1      false     c
-4294967190  foreign_table_options                  198834802     2310524507  -1      false     c
-4294967191  foreign_servers                        198834802     2310524507  -1      false     c
-4294967192  foreign_server_options                 198834802     2310524507  -1      false     c
-4294967193  foreign_data_wrappers                  198834802     2310524507  -1      false     c
-4294967194  foreign_data_wrapper_options           198834802     2310524507  -1      false     c
-4294967195  files                                  198834802     2310524507  -1      false     c
-4294967196  events                                 198834802     2310524507  -1      false     c
-4294967197  engines                                198834802     2310524507  -1      false     c
-4294967198  enabled_roles                          198834802     2310524507  -1      false     c
-4294967199  element_types                          198834802     2310524507  -1      false     c
-4294967200  domains                                198834802     2310524507  -1      false     c
-4294967201  domain_udt_usage                       198834802     2310524507  -1      false     c
-4294967202  domain_constraints                     198834802     2310524507  -1      false     c
-4294967203  data_type_privileges                   198834802     2310524507  -1      false     c
-4294967204  constraint_table_usage                 198834802     2310524507  -1      false     c
-4294967205  constraint_column_usage                198834802     2310524507  -1      false     c
-4294967206  columns                                198834802     2310524507  -1      false     c
-4294967207  columns_extensions                     198834802     2310524507  -1      false     c
-4294967208  column_udt_usage                       198834802     2310524507  -1      false     c
-4294967209  column_statistics                      198834802     2310524507  -1      false     c
-4294967210  column_privileges                      198834802     2310524507  -1      false     c
-4294967211  column_options                         198834802     2310524507  -1      false     c
-4294967212  column_domain_usage                    198834802     2310524507  -1      false     c
-4294967213  column_column_usage                    198834802     2310524507  -1      false     c
-4294967214  collations                             198834802     2310524507  -1      false     c
-4294967215  collation_character_set_applicability  198834802     2310524507  -1      false     c
-4294967216  check_constraints                      198834802     2310524507  -1      false     c
-4294967217  check_constraint_routine_usage         198834802     2310524507  -1      false     c
-4294967218  character_sets                         198834802     2310524507  -1      false     c
-4294967219  attributes                             198834802     2310524507  -1      false     c
-4294967220  applicable_roles                       198834802     2310524507  -1      false     c
-4294967221  administrable_role_authorizations      198834802     2310524507  -1      false     c
-4294967223  super_regions                          194902141     2310524507  -1      false     c
-4294967224  pg_catalog_table_is_implemented        194902141     2310524507  -1      false     c
-4294967225  tenant_usage_details                   194902141     2310524507  -1      false     c
-4294967226  active_range_feeds                     194902141     2310524507  -1      false     c
-4294967227  default_privileges                     194902141     2310524507  -1      false     c
-4294967228  regions                                194902141     2310524507  -1      false     c
-4294967229  cluster_inflight_traces                194902141     2310524507  -1      false     c
-4294967230  lost_descriptors_with_data             194902141     2310524507  -1      false     c
-4294967231  cross_db_references                    194902141     2310524507  -1      false     c
-4294967232  cluster_database_privileges            194902141     2310524507  -1      false     c
-4294967233  invalid_objects                        194902141     2310524507  -1      false     c
-4294967234  zones                                  194902141     2310524507  -1      false     c
-4294967235  transaction_statistics                 194902141     2310524507  -1      false     c
-4294967236  node_transaction_statistics            194902141     2310524507  -1      false     c
-4294967237  table_row_statistics                   194902141     2310524507  -1      false     c
-4294967238  tables                                 194902141     2310524507  -1      false     c
-4294967239  table_indexes                          194902141     2310524507  -1      false     c
-4294967240  table_columns                          194902141     2310524507  -1      false     c
-4294967241  statement_statistics                   194902141     2310524507  -1      false     c
-4294967242  session_variables                      194902141     2310524507  -1      false     c
-4294967243  session_trace                          194902141     2310524507  -1      false     c
-4294967244  schema_changes                         194902141     2310524507  -1      false     c
-4294967245  node_runtime_info                      194902141     2310524507  -1      false     c
-4294967246  ranges                                 194902141     2310524507  -1      false     c
-4294967247  ranges_no_leases                       194902141     2310524507  -1      false     c
-4294967248  predefined_comments                    194902141     2310524507  -1      false     c
-4294967249  partitions                             194902141     2310524507  -1      false     c
-4294967250  node_txn_stats                         194902141     2310524507  -1      false     c
-4294967251  node_statement_statistics              194902141     2310524507  -1      false     c
-4294967252  node_metrics                           194902141     2310524507  -1      false     c
-4294967253  node_sessions                          194902141     2310524507  -1      false     c
-4294967254  node_transactions                      194902141     2310524507  -1      false     c
-4294967255  node_queries                           194902141     2310524507  -1      false     c
-4294967256  node_execution_insights                194902141     2310524507  -1      false     c
-4294967257  node_distsql_flows                     194902141     2310524507  -1      false     c
-4294967258  node_contention_events                 194902141     2310524507  -1      false     c
-4294967259  leases                                 194902141     2310524507  -1      false     c
-4294967260  kv_store_status                        194902141     2310524507  -1      false     c
-4294967261  kv_node_status                         194902141     2310524507  -1      false     c
-4294967262  jobs                                   194902141     2310524507  -1      false     c
-4294967263  node_inflight_trace_spans              194902141     2310524507  -1      false     c
-4294967264  index_usage_statistics                 194902141     2310524507  -1      false     c
-4294967265  index_columns                          194902141     2310524507  -1      false     c
-4294967266  transaction_contention_events          194902141     2310524507  -1      false     c
-4294967267  gossip_network                         194902141     2310524507  -1      false     c
-4294967268  gossip_liveness                        194902141     2310524507  -1      false     c
-4294967269  gossip_alerts                          194902141     2310524507  -1      false     c
-4294967270  gossip_nodes                           194902141     2310524507  -1      false     c
-4294967271  kv_node_liveness                       194902141     2310524507  -1      false     c
-4294967272  forward_dependencies                   194902141     2310524507  -1      false     c
-4294967273  feature_usage                          194902141     2310524507  -1      false     c
-4294967274  databases                              194902141     2310524507  -1      false     c
-4294967275  create_type_statements                 194902141     2310524507  -1      false     c
-4294967276  create_statements                      194902141     2310524507  -1      false     c
-4294967277  create_schema_statements               194902141     2310524507  -1      false     c
-4294967278  create_function_statements             194902141     2310524507  -1      false     c
-4294967279  cluster_transaction_statistics         194902141     2310524507  -1      false     c
-4294967280  cluster_statement_statistics           194902141     2310524507  -1      false     c
-4294967281  cluster_settings                       194902141     2310524507  -1      false     c
-4294967282  cluster_sessions                       194902141     2310524507  -1      false     c
-4294967283  cluster_transactions                   194902141     2310524507  -1      false     c
-4294967284  cluster_queries                        194902141     2310524507  -1      false     c
-4294967285  cluster_locks                          194902141     2310524507  -1      false     c
-4294967286  cluster_execution_insights             194902141     2310524507  -1      false     c
-4294967287  cluster_distsql_flows                  194902141     2310524507  -1      false     c
-4294967288  cluster_contention_events              194902141     2310524507  -1      false     c
-4294967289  cluster_contended_tables               194902141     2310524507  -1      false     c
-4294967290  cluster_contended_keys                 194902141     2310524507  -1      false     c
-4294967291  cluster_contended_indexes              194902141     2310524507  -1      false     c
-4294967292  builtin_functions                      194902141     2310524507  -1      false     c
-4294967293  node_build_info                        194902141     2310524507  -1      false     c
-4294967294  backward_dependencies                  194902141     2310524507  -1      false     c
+4294967002  spatial_ref_sys                        4294967005    2310524507  -1      false     c
+4294967003  geometry_columns                       4294967005    2310524507  -1      false     c
+4294967004  geography_columns                      4294967005    2310524507  -1      false     c
+4294967006  pg_views                               4294967135    2310524507  -1      false     c
+4294967007  pg_user                                4294967135    2310524507  -1      false     c
+4294967008  pg_user_mappings                       4294967135    2310524507  -1      false     c
+4294967009  pg_user_mapping                        4294967135    2310524507  -1      false     c
+4294967010  pg_type                                4294967135    2310524507  -1      false     c
+4294967011  pg_ts_template                         4294967135    2310524507  -1      false     c
+4294967012  pg_ts_parser                           4294967135    2310524507  -1      false     c
+4294967013  pg_ts_dict                             4294967135    2310524507  -1      false     c
+4294967014  pg_ts_config                           4294967135    2310524507  -1      false     c
+4294967015  pg_ts_config_map                       4294967135    2310524507  -1      false     c
+4294967016  pg_trigger                             4294967135    2310524507  -1      false     c
+4294967017  pg_transform                           4294967135    2310524507  -1      false     c
+4294967018  pg_timezone_names                      4294967135    2310524507  -1      false     c
+4294967019  pg_timezone_abbrevs                    4294967135    2310524507  -1      false     c
+4294967020  pg_tablespace                          4294967135    2310524507  -1      false     c
+4294967021  pg_tables                              4294967135    2310524507  -1      false     c
+4294967022  pg_subscription                        4294967135    2310524507  -1      false     c
+4294967023  pg_subscription_rel                    4294967135    2310524507  -1      false     c
+4294967024  pg_stats                               4294967135    2310524507  -1      false     c
+4294967025  pg_stats_ext                           4294967135    2310524507  -1      false     c
+4294967026  pg_statistic                           4294967135    2310524507  -1      false     c
+4294967027  pg_statistic_ext                       4294967135    2310524507  -1      false     c
+4294967028  pg_statistic_ext_data                  4294967135    2310524507  -1      false     c
+4294967029  pg_statio_user_tables                  4294967135    2310524507  -1      false     c
+4294967030  pg_statio_user_sequences               4294967135    2310524507  -1      false     c
+4294967031  pg_statio_user_indexes                 4294967135    2310524507  -1      false     c
+4294967032  pg_statio_sys_tables                   4294967135    2310524507  -1      false     c
+4294967033  pg_statio_sys_sequences                4294967135    2310524507  -1      false     c
+4294967034  pg_statio_sys_indexes                  4294967135    2310524507  -1      false     c
+4294967035  pg_statio_all_tables                   4294967135    2310524507  -1      false     c
+4294967036  pg_statio_all_sequences                4294967135    2310524507  -1      false     c
+4294967037  pg_statio_all_indexes                  4294967135    2310524507  -1      false     c
+4294967038  pg_stat_xact_user_tables               4294967135    2310524507  -1      false     c
+4294967039  pg_stat_xact_user_functions            4294967135    2310524507  -1      false     c
+4294967040  pg_stat_xact_sys_tables                4294967135    2310524507  -1      false     c
+4294967041  pg_stat_xact_all_tables                4294967135    2310524507  -1      false     c
+4294967042  pg_stat_wal_receiver                   4294967135    2310524507  -1      false     c
+4294967043  pg_stat_user_tables                    4294967135    2310524507  -1      false     c
+4294967044  pg_stat_user_indexes                   4294967135    2310524507  -1      false     c
+4294967045  pg_stat_user_functions                 4294967135    2310524507  -1      false     c
+4294967046  pg_stat_sys_tables                     4294967135    2310524507  -1      false     c
+4294967047  pg_stat_sys_indexes                    4294967135    2310524507  -1      false     c
+4294967048  pg_stat_subscription                   4294967135    2310524507  -1      false     c
+4294967049  pg_stat_ssl                            4294967135    2310524507  -1      false     c
+4294967050  pg_stat_slru                           4294967135    2310524507  -1      false     c
+4294967051  pg_stat_replication                    4294967135    2310524507  -1      false     c
+4294967052  pg_stat_progress_vacuum                4294967135    2310524507  -1      false     c
+4294967053  pg_stat_progress_create_index          4294967135    2310524507  -1      false     c
+4294967054  pg_stat_progress_cluster               4294967135    2310524507  -1      false     c
+4294967055  pg_stat_progress_basebackup            4294967135    2310524507  -1      false     c
+4294967056  pg_stat_progress_analyze               4294967135    2310524507  -1      false     c
+4294967057  pg_stat_gssapi                         4294967135    2310524507  -1      false     c
+4294967058  pg_stat_database                       4294967135    2310524507  -1      false     c
+4294967059  pg_stat_database_conflicts             4294967135    2310524507  -1      false     c
+4294967060  pg_stat_bgwriter                       4294967135    2310524507  -1      false     c
+4294967061  pg_stat_archiver                       4294967135    2310524507  -1      false     c
+4294967062  pg_stat_all_tables                     4294967135    2310524507  -1      false     c
+4294967063  pg_stat_all_indexes                    4294967135    2310524507  -1      false     c
+4294967064  pg_stat_activity                       4294967135    2310524507  -1      false     c
+4294967065  pg_shmem_allocations                   4294967135    2310524507  -1      false     c
+4294967066  pg_shdepend                            4294967135    2310524507  -1      false     c
+4294967067  pg_shseclabel                          4294967135    2310524507  -1      false     c
+4294967068  pg_shdescription                       4294967135    2310524507  -1      false     c
+4294967069  pg_shadow                              4294967135    2310524507  -1      false     c
+4294967070  pg_settings                            4294967135    2310524507  -1      false     c
+4294967071  pg_sequences                           4294967135    2310524507  -1      false     c
+4294967072  pg_sequence                            4294967135    2310524507  -1      false     c
+4294967073  pg_seclabel                            4294967135    2310524507  -1      false     c
+4294967074  pg_seclabels                           4294967135    2310524507  -1      false     c
+4294967075  pg_rules                               4294967135    2310524507  -1      false     c
+4294967076  pg_roles                               4294967135    2310524507  -1      false     c
+4294967077  pg_rewrite                             4294967135    2310524507  -1      false     c
+4294967078  pg_replication_slots                   4294967135    2310524507  -1      false     c
+4294967079  pg_replication_origin                  4294967135    2310524507  -1      false     c
+4294967080  pg_replication_origin_status           4294967135    2310524507  -1      false     c
+4294967081  pg_range                               4294967135    2310524507  -1      false     c
+4294967082  pg_publication_tables                  4294967135    2310524507  -1      false     c
+4294967083  pg_publication                         4294967135    2310524507  -1      false     c
+4294967084  pg_publication_rel                     4294967135    2310524507  -1      false     c
+4294967085  pg_proc                                4294967135    2310524507  -1      false     c
+4294967086  pg_prepared_xacts                      4294967135    2310524507  -1      false     c
+4294967087  pg_prepared_statements                 4294967135    2310524507  -1      false     c
+4294967088  pg_policy                              4294967135    2310524507  -1      false     c
+4294967089  pg_policies                            4294967135    2310524507  -1      false     c
+4294967090  pg_partitioned_table                   4294967135    2310524507  -1      false     c
+4294967091  pg_opfamily                            4294967135    2310524507  -1      false     c
+4294967092  pg_operator                            4294967135    2310524507  -1      false     c
+4294967093  pg_opclass                             4294967135    2310524507  -1      false     c
+4294967094  pg_namespace                           4294967135    2310524507  -1      false     c
+4294967095  pg_matviews                            4294967135    2310524507  -1      false     c
+4294967096  pg_locks                               4294967135    2310524507  -1      false     c
+4294967097  pg_largeobject                         4294967135    2310524507  -1      false     c
+4294967098  pg_largeobject_metadata                4294967135    2310524507  -1      false     c
+4294967099  pg_language                            4294967135    2310524507  -1      false     c
+4294967100  pg_init_privs                          4294967135    2310524507  -1      false     c
+4294967101  pg_inherits                            4294967135    2310524507  -1      false     c
+4294967102  pg_indexes                             4294967135    2310524507  -1      false     c
+4294967103  pg_index                               4294967135    2310524507  -1      false     c
+4294967104  pg_hba_file_rules                      4294967135    2310524507  -1      false     c
+4294967105  pg_group                               4294967135    2310524507  -1      false     c
+4294967106  pg_foreign_table                       4294967135    2310524507  -1      false     c
+4294967107  pg_foreign_server                      4294967135    2310524507  -1      false     c
+4294967108  pg_foreign_data_wrapper                4294967135    2310524507  -1      false     c
+4294967109  pg_file_settings                       4294967135    2310524507  -1      false     c
+4294967110  pg_extension                           4294967135    2310524507  -1      false     c
+4294967111  pg_event_trigger                       4294967135    2310524507  -1      false     c
+4294967112  pg_enum                                4294967135    2310524507  -1      false     c
+4294967113  pg_description                         4294967135    2310524507  -1      false     c
+4294967114  pg_depend                              4294967135    2310524507  -1      false     c
+4294967115  pg_default_acl                         4294967135    2310524507  -1      false     c
+4294967116  pg_db_role_setting                     4294967135    2310524507  -1      false     c
+4294967117  pg_database                            4294967135    2310524507  -1      false     c
+4294967118  pg_cursors                             4294967135    2310524507  -1      false     c
+4294967119  pg_conversion                          4294967135    2310524507  -1      false     c
+4294967120  pg_constraint                          4294967135    2310524507  -1      false     c
+4294967121  pg_config                              4294967135    2310524507  -1      false     c
+4294967122  pg_collation                           4294967135    2310524507  -1      false     c
+4294967123  pg_class                               4294967135    2310524507  -1      false     c
+4294967124  pg_cast                                4294967135    2310524507  -1      false     c
+4294967125  pg_available_extensions                4294967135    2310524507  -1      false     c
+4294967126  pg_available_extension_versions        4294967135    2310524507  -1      false     c
+4294967127  pg_auth_members                        4294967135    2310524507  -1      false     c
+4294967128  pg_authid                              4294967135    2310524507  -1      false     c
+4294967129  pg_attribute                           4294967135    2310524507  -1      false     c
+4294967130  pg_attrdef                             4294967135    2310524507  -1      false     c
+4294967131  pg_amproc                              4294967135    2310524507  -1      false     c
+4294967132  pg_amop                                4294967135    2310524507  -1      false     c
+4294967133  pg_am                                  4294967135    2310524507  -1      false     c
+4294967134  pg_aggregate                           4294967135    2310524507  -1      false     c
+4294967136  views                                  4294967222    2310524507  -1      false     c
+4294967137  view_table_usage                       4294967222    2310524507  -1      false     c
+4294967138  view_routine_usage                     4294967222    2310524507  -1      false     c
+4294967139  view_column_usage                      4294967222    2310524507  -1      false     c
+4294967140  user_privileges                        4294967222    2310524507  -1      false     c
+4294967141  user_mappings                          4294967222    2310524507  -1      false     c
+4294967142  user_mapping_options                   4294967222    2310524507  -1      false     c
+4294967143  user_defined_types                     4294967222    2310524507  -1      false     c
+4294967144  user_attributes                        4294967222    2310524507  -1      false     c
+4294967145  usage_privileges                       4294967222    2310524507  -1      false     c
+4294967146  udt_privileges                         4294967222    2310524507  -1      false     c
+4294967147  type_privileges                        4294967222    2310524507  -1      false     c
+4294967148  triggers                               4294967222    2310524507  -1      false     c
+4294967149  triggered_update_columns               4294967222    2310524507  -1      false     c
+4294967150  transforms                             4294967222    2310524507  -1      false     c
+4294967151  tablespaces                            4294967222    2310524507  -1      false     c
+4294967152  tablespaces_extensions                 4294967222    2310524507  -1      false     c
+4294967153  tables                                 4294967222    2310524507  -1      false     c
+4294967154  tables_extensions                      4294967222    2310524507  -1      false     c
+4294967155  table_privileges                       4294967222    2310524507  -1      false     c
+4294967156  table_constraints_extensions           4294967222    2310524507  -1      false     c
+4294967157  table_constraints                      4294967222    2310524507  -1      false     c
+4294967158  statistics                             4294967222    2310524507  -1      false     c
+4294967159  st_units_of_measure                    4294967222    2310524507  -1      false     c
+4294967160  st_spatial_reference_systems           4294967222    2310524507  -1      false     c
+4294967161  st_geometry_columns                    4294967222    2310524507  -1      false     c
+4294967162  session_variables                      4294967222    2310524507  -1      false     c
+4294967163  sequences                              4294967222    2310524507  -1      false     c
+4294967164  schema_privileges                      4294967222    2310524507  -1      false     c
+4294967165  schemata                               4294967222    2310524507  -1      false     c
+4294967166  schemata_extensions                    4294967222    2310524507  -1      false     c
+4294967167  sql_sizing                             4294967222    2310524507  -1      false     c
+4294967168  sql_parts                              4294967222    2310524507  -1      false     c
+4294967169  sql_implementation_info                4294967222    2310524507  -1      false     c
+4294967170  sql_features                           4294967222    2310524507  -1      false     c
+4294967171  routines                               4294967222    2310524507  -1      false     c
+4294967172  routine_privileges                     4294967222    2310524507  -1      false     c
+4294967173  role_usage_grants                      4294967222    2310524507  -1      false     c
+4294967174  role_udt_grants                        4294967222    2310524507  -1      false     c
+4294967175  role_table_grants                      4294967222    2310524507  -1      false     c
+4294967176  role_routine_grants                    4294967222    2310524507  -1      false     c
+4294967177  role_column_grants                     4294967222    2310524507  -1      false     c
+4294967178  resource_groups                        4294967222    2310524507  -1      false     c
+4294967179  referential_constraints                4294967222    2310524507  -1      false     c
+4294967180  profiling                              4294967222    2310524507  -1      false     c
+4294967181  processlist                            4294967222    2310524507  -1      false     c
+4294967182  plugins                                4294967222    2310524507  -1      false     c
+4294967183  partitions                             4294967222    2310524507  -1      false     c
+4294967184  parameters                             4294967222    2310524507  -1      false     c
+4294967185  optimizer_trace                        4294967222    2310524507  -1      false     c
+4294967186  keywords                               4294967222    2310524507  -1      false     c
+4294967187  key_column_usage                       4294967222    2310524507  -1      false     c
+4294967188  information_schema_catalog_name        4294967222    2310524507  -1      false     c
+4294967189  foreign_tables                         4294967222    2310524507  -1      false     c
+4294967190  foreign_table_options                  4294967222    2310524507  -1      false     c
+4294967191  foreign_servers                        4294967222    2310524507  -1      false     c
+4294967192  foreign_server_options                 4294967222    2310524507  -1      false     c
+4294967193  foreign_data_wrappers                  4294967222    2310524507  -1      false     c
+4294967194  foreign_data_wrapper_options           4294967222    2310524507  -1      false     c
+4294967195  files                                  4294967222    2310524507  -1      false     c
+4294967196  events                                 4294967222    2310524507  -1      false     c
+4294967197  engines                                4294967222    2310524507  -1      false     c
+4294967198  enabled_roles                          4294967222    2310524507  -1      false     c
+4294967199  element_types                          4294967222    2310524507  -1      false     c
+4294967200  domains                                4294967222    2310524507  -1      false     c
+4294967201  domain_udt_usage                       4294967222    2310524507  -1      false     c
+4294967202  domain_constraints                     4294967222    2310524507  -1      false     c
+4294967203  data_type_privileges                   4294967222    2310524507  -1      false     c
+4294967204  constraint_table_usage                 4294967222    2310524507  -1      false     c
+4294967205  constraint_column_usage                4294967222    2310524507  -1      false     c
+4294967206  columns                                4294967222    2310524507  -1      false     c
+4294967207  columns_extensions                     4294967222    2310524507  -1      false     c
+4294967208  column_udt_usage                       4294967222    2310524507  -1      false     c
+4294967209  column_statistics                      4294967222    2310524507  -1      false     c
+4294967210  column_privileges                      4294967222    2310524507  -1      false     c
+4294967211  column_options                         4294967222    2310524507  -1      false     c
+4294967212  column_domain_usage                    4294967222    2310524507  -1      false     c
+4294967213  column_column_usage                    4294967222    2310524507  -1      false     c
+4294967214  collations                             4294967222    2310524507  -1      false     c
+4294967215  collation_character_set_applicability  4294967222    2310524507  -1      false     c
+4294967216  check_constraints                      4294967222    2310524507  -1      false     c
+4294967217  check_constraint_routine_usage         4294967222    2310524507  -1      false     c
+4294967218  character_sets                         4294967222    2310524507  -1      false     c
+4294967219  attributes                             4294967222    2310524507  -1      false     c
+4294967220  applicable_roles                       4294967222    2310524507  -1      false     c
+4294967221  administrable_role_authorizations      4294967222    2310524507  -1      false     c
+4294967223  super_regions                          4294967295    2310524507  -1      false     c
+4294967224  pg_catalog_table_is_implemented        4294967295    2310524507  -1      false     c
+4294967225  tenant_usage_details                   4294967295    2310524507  -1      false     c
+4294967226  active_range_feeds                     4294967295    2310524507  -1      false     c
+4294967227  default_privileges                     4294967295    2310524507  -1      false     c
+4294967228  regions                                4294967295    2310524507  -1      false     c
+4294967229  cluster_inflight_traces                4294967295    2310524507  -1      false     c
+4294967230  lost_descriptors_with_data             4294967295    2310524507  -1      false     c
+4294967231  cross_db_references                    4294967295    2310524507  -1      false     c
+4294967232  cluster_database_privileges            4294967295    2310524507  -1      false     c
+4294967233  invalid_objects                        4294967295    2310524507  -1      false     c
+4294967234  zones                                  4294967295    2310524507  -1      false     c
+4294967235  transaction_statistics                 4294967295    2310524507  -1      false     c
+4294967236  node_transaction_statistics            4294967295    2310524507  -1      false     c
+4294967237  table_row_statistics                   4294967295    2310524507  -1      false     c
+4294967238  tables                                 4294967295    2310524507  -1      false     c
+4294967239  table_indexes                          4294967295    2310524507  -1      false     c
+4294967240  table_columns                          4294967295    2310524507  -1      false     c
+4294967241  statement_statistics                   4294967295    2310524507  -1      false     c
+4294967242  session_variables                      4294967295    2310524507  -1      false     c
+4294967243  session_trace                          4294967295    2310524507  -1      false     c
+4294967244  schema_changes                         4294967295    2310524507  -1      false     c
+4294967245  node_runtime_info                      4294967295    2310524507  -1      false     c
+4294967246  ranges                                 4294967295    2310524507  -1      false     c
+4294967247  ranges_no_leases                       4294967295    2310524507  -1      false     c
+4294967248  predefined_comments                    4294967295    2310524507  -1      false     c
+4294967249  partitions                             4294967295    2310524507  -1      false     c
+4294967250  node_txn_stats                         4294967295    2310524507  -1      false     c
+4294967251  node_statement_statistics              4294967295    2310524507  -1      false     c
+4294967252  node_metrics                           4294967295    2310524507  -1      false     c
+4294967253  node_sessions                          4294967295    2310524507  -1      false     c
+4294967254  node_transactions                      4294967295    2310524507  -1      false     c
+4294967255  node_queries                           4294967295    2310524507  -1      false     c
+4294967256  node_execution_insights                4294967295    2310524507  -1      false     c
+4294967257  node_distsql_flows                     4294967295    2310524507  -1      false     c
+4294967258  node_contention_events                 4294967295    2310524507  -1      false     c
+4294967259  leases                                 4294967295    2310524507  -1      false     c
+4294967260  kv_store_status                        4294967295    2310524507  -1      false     c
+4294967261  kv_node_status                         4294967295    2310524507  -1      false     c
+4294967262  jobs                                   4294967295    2310524507  -1      false     c
+4294967263  node_inflight_trace_spans              4294967295    2310524507  -1      false     c
+4294967264  index_usage_statistics                 4294967295    2310524507  -1      false     c
+4294967265  index_columns                          4294967295    2310524507  -1      false     c
+4294967266  transaction_contention_events          4294967295    2310524507  -1      false     c
+4294967267  gossip_network                         4294967295    2310524507  -1      false     c
+4294967268  gossip_liveness                        4294967295    2310524507  -1      false     c
+4294967269  gossip_alerts                          4294967295    2310524507  -1      false     c
+4294967270  gossip_nodes                           4294967295    2310524507  -1      false     c
+4294967271  kv_node_liveness                       4294967295    2310524507  -1      false     c
+4294967272  forward_dependencies                   4294967295    2310524507  -1      false     c
+4294967273  feature_usage                          4294967295    2310524507  -1      false     c
+4294967274  databases                              4294967295    2310524507  -1      false     c
+4294967275  create_type_statements                 4294967295    2310524507  -1      false     c
+4294967276  create_statements                      4294967295    2310524507  -1      false     c
+4294967277  create_schema_statements               4294967295    2310524507  -1      false     c
+4294967278  create_function_statements             4294967295    2310524507  -1      false     c
+4294967279  cluster_transaction_statistics         4294967295    2310524507  -1      false     c
+4294967280  cluster_statement_statistics           4294967295    2310524507  -1      false     c
+4294967281  cluster_settings                       4294967295    2310524507  -1      false     c
+4294967282  cluster_sessions                       4294967295    2310524507  -1      false     c
+4294967283  cluster_transactions                   4294967295    2310524507  -1      false     c
+4294967284  cluster_queries                        4294967295    2310524507  -1      false     c
+4294967285  cluster_locks                          4294967295    2310524507  -1      false     c
+4294967286  cluster_execution_insights             4294967295    2310524507  -1      false     c
+4294967287  cluster_distsql_flows                  4294967295    2310524507  -1      false     c
+4294967288  cluster_contention_events              4294967295    2310524507  -1      false     c
+4294967289  cluster_contended_tables               4294967295    2310524507  -1      false     c
+4294967290  cluster_contended_keys                 4294967295    2310524507  -1      false     c
+4294967291  cluster_contended_indexes              4294967295    2310524507  -1      false     c
+4294967292  builtin_functions                      4294967295    2310524507  -1      false     c
+4294967293  node_build_info                        4294967295    2310524507  -1      false     c
+4294967294  backward_dependencies                  4294967295    2310524507  -1      false     c
 
 query OTTBBTOOO colnames
 SELECT oid, typname, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray
@@ -3591,7 +3587,7 @@ FROM pg_catalog.pg_type
 WHERE oid = 1000
 ----
 oid   typname  typnamespace  typowner  typlen  typbyval  typtype
-1000  _bool    591606261     NULL      -1      false     b
+1000  _bool    4294967135    NULL      -1      false     b
 
 query OTOOIBT colnames
 SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
@@ -3645,14 +3641,14 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    pronamespace  proowner  prolang  procost  prorows  provariadic
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
-substring  591606261     NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
+substring  4294967135    NULL      0        NULL     NULL     0
 
 query TTBBBB colnames
 SELECT proname, protransform, proisagg, proiswindow, prosecdef, proleakproof
@@ -4600,7 +4596,7 @@ query OTOOTBBOOOOOOOO colnames
 SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
 ----
 oid       oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
-74817020  +        591606261     NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
+74817020  +        4294967135    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
 
 # Verify proper functionality of system information functions.
 

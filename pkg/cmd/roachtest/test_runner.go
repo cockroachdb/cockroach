@@ -774,9 +774,6 @@ func (r *testRunner) runTest(
 	l *logger.Logger,
 	github *githubIssues,
 ) error {
-	if t.Spec().(*registry.TestSpec).Skip != "" {
-		return fmt.Errorf("can't run skipped test: %s: %s", t.Name(), t.Spec().(*registry.TestSpec).Skip)
-	}
 
 	runID := t.Name()
 	if runCount > 1 {

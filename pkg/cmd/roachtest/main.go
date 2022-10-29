@@ -85,6 +85,7 @@ func main() {
 	var literalArtifacts string
 	var httpPort int
 	var debugEnabled bool
+	var runSkipped bool
 	var skipInit bool
 	var clusterID string
 	var count = 1
@@ -187,7 +188,7 @@ Examples:
 			matchedTests := r.List(context.Background(), args)
 			for _, test := range matchedTests {
 				var skip string
-				if test.Skip != "" {
+				if test.Skip != "" && !runSkipped {
 					skip = " (skipped: " + test.Skip + ")"
 				}
 				fmt.Printf("%s [%s]%s\n", test.Name, test.Owner, skip)
@@ -222,6 +223,7 @@ runner itself.
 				count:                  count,
 				cpuQuota:               cpuQuota,
 				debugEnabled:           debugEnabled,
+				runSkipped:             runSkipped,
 				skipInit:               skipInit,
 				httpPort:               httpPort,
 				parallelism:            parallelism,
@@ -262,6 +264,7 @@ runner itself.
 				count:                  count,
 				cpuQuota:               cpuQuota,
 				debugEnabled:           debugEnabled,
+				runSkipped:             runSkipped,
 				skipInit:               skipInit,
 				httpPort:               httpPort,
 				parallelism:            parallelism,
@@ -287,6 +290,8 @@ runner itself.
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
 			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
+		cmd.Flags().BoolVar(
+			&runSkipped, "run-skipped", runSkipped, "run skipped tests")
 		cmd.Flags().BoolVar(
 			&skipInit, "skip-init", false, "skip initialization step (imports, table creation, etc.) for tests that support it, useful when re-using clusters with --wipe=false")
 		cmd.Flags().IntVarP(
@@ -356,6 +361,7 @@ type cliCfg struct {
 	count                  int
 	cpuQuota               int
 	debugEnabled           bool
+	runSkipped             bool
 	skipInit               bool
 	httpPort               int
 	parallelism            int
@@ -380,7 +386,7 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper, r.buildVersion)
 
-	filter := registry.NewTestFilter(cfg.args)
+	filter := registry.NewTestFilter(cfg.args, cfg.runSkipped)
 	clusterType := roachprodCluster
 	bindTo := ""
 	if local {
@@ -547,11 +553,11 @@ func testRunnerLogger(
 func testsToRun(
 	ctx context.Context, r testRegistryImpl, filter *registry.TestFilter,
 ) []registry.TestSpec {
-	tests := r.GetTests(ctx, filter)
+	tests, tagMismatch := r.GetTests(ctx, filter)
 
 	var notSkipped []registry.TestSpec
 	for _, s := range tests {
-		if s.Skip == "" {
+		if s.Skip == "" || filter.RunSkipped {
 			notSkipped = append(notSkipped, s)
 		} else {
 			if teamCity {
@@ -560,6 +566,13 @@ func testsToRun(
 			}
 			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
 		}
+	}
+	for _, s := range tagMismatch {
+		if teamCity {
+			fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='tag mismatch']\n",
+				s.Name)
+		}
+		fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\ttag mismatch\n", s.Name, "0.00s")
 	}
 	return notSkipped
 }
