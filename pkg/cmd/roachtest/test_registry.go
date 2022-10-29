@@ -160,24 +160,31 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 // are also included but marked as skipped.
 func (r testRegistryImpl) GetTests(
 	ctx context.Context, filter *registry.TestFilter,
-) []registry.TestSpec {
+) ([]registry.TestSpec, []registry.TestSpec) {
 	var tests []registry.TestSpec
+	var tagMismatch []registry.TestSpec
 	for _, t := range r.m {
-		if !t.MatchOrSkip(filter) {
-			continue
+		switch t.Match(filter) {
+		case registry.Matched:
+			tests = append(tests, *t)
+		case registry.FailedTags:
+			tagMismatch = append(tagMismatch, *t)
+		case registry.FailedFilter:
 		}
-		tests = append(tests, *t)
 	}
 	sort.Slice(tests, func(i, j int) bool {
 		return tests[i].Name < tests[j].Name
 	})
-	return tests
+	sort.Slice(tagMismatch, func(i, j int) bool {
+		return tagMismatch[i].Name < tagMismatch[j].Name
+	})
+	return tests, tagMismatch
 }
 
 // List lists tests that match one of the filters.
 func (r testRegistryImpl) List(ctx context.Context, filters []string) []registry.TestSpec {
-	filter := registry.NewTestFilter(filters)
-	tests := r.GetTests(ctx, filter)
+	filter := registry.NewTestFilter(filters, true)
+	tests, _ := r.GetTests(ctx, filter)
 	sort.Slice(tests, func(i, j int) bool { return tests[i].Name < tests[j].Name })
 	return tests
 }

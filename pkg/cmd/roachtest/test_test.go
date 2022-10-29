@@ -52,31 +52,28 @@ func mkReg(t *testing.T) testRegistryImpl {
 
 func TestMatchOrSkip(t *testing.T) {
 	testCases := []struct {
-		filter       []string
-		name         string
-		tags         []string
-		expected     bool
-		expectedSkip string
+		filter   []string
+		name     string
+		tags     []string
+		expected registry.MatchType
 	}{
-		{nil, "foo", nil, true, ""},
-		{nil, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
-		{[]string{"tag:b"}, "foo", []string{"bar"}, true, ""},
-		{[]string{"tag:b"}, "foo", nil, true, "[tag:b] does not match [default]"},
-		{[]string{"tag:default"}, "foo", nil, true, ""},
-		{[]string{"tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
-		{[]string{"f"}, "foo", []string{"bar"}, true, "[tag:default] does not match [bar]"},
-		{[]string{"f"}, "bar", []string{"bar"}, false, ""},
-		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, true, ""},
-		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, true, "[tag:f] does not match [bar]"},
+		{nil, "foo", nil, registry.Matched},
+		{nil, "foo", []string{"bar"}, registry.FailedTags},
+		{[]string{"tag:b"}, "foo", []string{"bar"}, registry.Matched},
+		{[]string{"tag:b"}, "foo", nil, registry.FailedTags},
+		{[]string{"tag:default"}, "foo", nil, registry.Matched},
+		{[]string{"tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
+		{[]string{"f"}, "foo", []string{"bar"}, registry.FailedTags},
+		{[]string{"f"}, "bar", []string{"bar"}, registry.FailedFilter},
+		{[]string{"f", "tag:b"}, "foo", []string{"bar"}, registry.Matched},
+		{[]string{"f", "tag:f"}, "foo", []string{"bar"}, registry.FailedTags},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			f := registry.NewTestFilter(c.filter)
+			f := registry.NewTestFilter(c.filter, false)
 			spec := &registry.TestSpec{Name: c.name, Owner: OwnerUnitTest, Tags: c.tags}
-			if value := spec.MatchOrSkip(f); c.expected != value {
-				t.Fatalf("expected %t, but found %t", c.expected, value)
-			} else if value && c.expectedSkip != spec.Skip {
-				t.Fatalf("expected %s, but found %s", c.expectedSkip, spec.Skip)
+			if value := spec.Match(f); c.expected != value {
+				t.Fatalf("expected %v, but found %v", c.expected, value)
 			}
 		})
 	}
@@ -245,7 +242,7 @@ type runnerTest struct {
 func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *runnerTest {
 	ctx := context.Background()
 
-	tests := testsToRun(ctx, r, registry.NewTestFilter(testFilters))
+	tests := testsToRun(ctx, r, registry.NewTestFilter(testFilters, false))
 	cr := newClusterRegistry()
 
 	stopper := stop.NewStopper()
@@ -439,7 +436,7 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 			}
 		},
 	})
-	tests := testsToRun(ctx, r, registry.NewTestFilter(nil))
+	tests := testsToRun(ctx, r, registry.NewTestFilter(nil, false))
 	lopt := loggingOpt{
 		l:            nilLogger(),
 		tee:          logger.NoTee,

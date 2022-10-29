@@ -301,10 +301,9 @@ var informationSchemaCheckConstraints = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 	schema: vtable.InformationSchemaCheckConstraints,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
-			scName string,
+			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
@@ -313,7 +312,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 				return err
 			}
 			dbNameStr := tree.NewDString(db.GetName())
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			for conName, con := range conInfo {
 				// Only Check constraints are included.
 				if con.Kind != descpb.ConstraintTypeCheck {
@@ -347,7 +346,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 				// We might as well do the same.
 				conNameStr := tree.NewDString(fmt.Sprintf(
 					"%s_%s_%d_not_null",
-					h.NamespaceOid(db, scName),
+					schemaOid(sc.GetID()),
 					tableOid(table.GetID()), column.Ordinal()+1,
 				))
 				chkExprStr := tree.NewDString(fmt.Sprintf(
@@ -374,10 +373,10 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 	schema: vtable.InformationSchemaColumnPrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor,
+			db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
 			privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
 			if err != nil {
@@ -435,10 +434,10 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 		}
 
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(
-			db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor,
+			db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			for _, column := range table.AccessibleColumns() {
 				collationCatalog := tree.DNull
 				collationSchema := tree.DNull
@@ -582,9 +581,9 @@ https://www.postgresql.org/docs/current/infoschema-column-udt-usage.html`,
 	schema: vtable.InformationSchemaColumnUDTUsage,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
-				scNameStr := tree.NewDString(scName)
+				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
 				for _, col := range table.PublicColumns() {
 					if !col.GetType().UserDefined() {
@@ -756,7 +755,7 @@ https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
-			scName string,
+			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
@@ -764,7 +763,7 @@ https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 			if err != nil {
 				return err
 			}
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			dbNameStr := tree.NewDString(db.GetName())
 
 			for conName, con := range conInfo {
@@ -810,7 +809,7 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
-			scName string,
+			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
@@ -819,7 +818,7 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 				return err
 			}
 			dbNameStr := tree.NewDString(db.GetName())
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
 			for conName, con := range conInfo {
 				// Only Primary Key, Foreign Key, and Unique constraints are included.
@@ -914,12 +913,12 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /* no constraints in virtual tables */, func(
 			db catalog.DatabaseDescriptor,
-			scName string,
+			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
 			dbNameStr := tree.NewDString(db.GetName())
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
 			return table.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
 				refTable, err := tableLookup.getTableByID(fk.ReferencedTableID)
@@ -1039,8 +1038,8 @@ var informationSchemaTypePrivilegesTable = virtualSchemaTable{
 				}
 
 				// And for all user defined types.
-				return forEachTypeDesc(ctx, p, db, func(db catalog.DatabaseDescriptor, sc string, typeDesc catalog.TypeDescriptor) error {
-					scNameStr := tree.NewDString(sc)
+				return forEachTypeDesc(ctx, p, db, func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typeDesc catalog.TypeDescriptor) error {
+					scNameStr := tree.NewDString(sc.GetName())
 					typeNameStr := tree.NewDString(typeDesc.GetName())
 					// TODO(knz): This should filter for the current user, see
 					// https://github.com/cockroachdb/cockroach/issues/35572
@@ -1133,13 +1132,13 @@ https://www.postgresql.org/docs/9.5/infoschema-sequences.html`,
 	schema: vtable.InformationSchemaSequences,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* no sequences in virtual schemas */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
 				return addRow(
 					tree.NewDString(db.GetName()),    // catalog
-					tree.NewDString(scName),          // schema
+					tree.NewDString(sc.GetName()),    // schema
 					tree.NewDString(table.GetName()), // name
 					tree.NewDString("bigint"),        // type
 					tree.NewDInt(64),                 // numeric precision
@@ -1163,9 +1162,9 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 	schema: vtable.InformationSchemaStatistics,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables have no indexes */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				dbNameStr := tree.NewDString(db.GetName())
-				scNameStr := tree.NewDString(scName)
+				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
 
 				appendRow := func(index catalog.Index, colName string, sequence int,
@@ -1270,11 +1269,10 @@ var informationSchemaTableConstraintTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 	schema: vtable.InformationSchemaTableConstraint,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables have no constraints */
 			func(
 				db catalog.DatabaseDescriptor,
-				scName string,
+				sc catalog.SchemaDescriptor,
 				table catalog.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
@@ -1284,7 +1282,7 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 				}
 
 				dbNameStr := tree.NewDString(db.GetName())
-				scNameStr := tree.NewDString(scName)
+				scNameStr := tree.NewDString(sc.GetName())
 				tbNameStr := tree.NewDString(table.GetName())
 
 				for conName, c := range conInfo {
@@ -1313,7 +1311,7 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 					// NOT NULL column constraints are implemented as a CHECK in postgres.
 					conNameStr := tree.NewDString(fmt.Sprintf(
 						"%s_%s_%d_not_null",
-						h.NamespaceOid(db, scName),
+						schemaOid(sc.GetID()),
 						tableOid(table.GetID()), col.Ordinal()+1,
 					))
 					if err := addRow(
@@ -1380,9 +1378,9 @@ func populateTablePrivileges(
 	addRow func(...tree.Datum) error,
 ) error {
 	return forEachTableDesc(ctx, p, dbContext, virtualMany,
-		func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+		func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.GetName())
-			scNameStr := tree.NewDString(scName)
+			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
 			// TODO(knz): This should filter for the current user, see
 			// https://github.com/cockroachdb/cockroach/issues/35572
@@ -1442,10 +1440,10 @@ func addTablesTableRow(
 	addRow func(...tree.Datum) error,
 ) func(
 	db catalog.DatabaseDescriptor,
-	scName string,
+	sc catalog.SchemaDescriptor,
 	table catalog.TableDescriptor,
 ) error {
-	return func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+	return func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 		if table.IsSequence() {
 			return nil
 		}
@@ -1461,7 +1459,7 @@ func addTablesTableRow(
 			tableType = tableTypeTemporary
 		}
 		dbNameStr := tree.NewDString(db.GetName())
-		scNameStr := tree.NewDString(scName)
+		scNameStr := tree.NewDString(sc.GetName())
 		tbNameStr := tree.NewDString(table.GetName())
 		return addRow(
 			dbNameStr,  // table_catalog
@@ -1483,7 +1481,7 @@ https://www.postgresql.org/docs/9.5/infoschema-views.html`,
 	schema: vtable.InformationSchemaViews,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				if !table.IsView() {
 					return nil
 				}
@@ -1497,7 +1495,7 @@ https://www.postgresql.org/docs/9.5/infoschema-views.html`,
 				// have a semantic query representation to work with (#10083).
 				return addRow(
 					tree.NewDString(db.GetName()),         // table_catalog
-					tree.NewDString(scName),               // table_schema
+					tree.NewDString(sc.GetName()),         // table_schema
 					tree.NewDString(table.GetName()),      // table_name
 					tree.NewDString(table.GetViewQuery()), // view_definition
 					tree.DNull,                            // check_option
@@ -2362,7 +2360,7 @@ func forEachTypeDesc(
 	ctx context.Context,
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
-	fn func(db catalog.DatabaseDescriptor, sc string, typ catalog.TypeDescriptor) error,
+	fn func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typ catalog.TypeDescriptor) error,
 ) error {
 	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -2375,7 +2373,7 @@ func forEachTypeDesc(
 		if err != nil {
 			continue
 		}
-		scName, err := lCtx.getSchemaNameByID(typ.GetParentSchemaID())
+		sc, err := lCtx.getSchemaByID(typ.GetParentSchemaID())
 		if err != nil {
 			return err
 		}
@@ -2386,7 +2384,7 @@ func forEachTypeDesc(
 		if !canSeeDescriptor {
 			continue
 		}
-		if err := fn(dbDesc, scName, typ); err != nil {
+		if err := fn(dbDesc, sc, typ); err != nil {
 			return err
 		}
 	}
@@ -2410,15 +2408,15 @@ func forEachTableDesc(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts, func(
 		db catalog.DatabaseDescriptor,
-		scName string,
+		sc catalog.SchemaDescriptor,
 		table catalog.TableDescriptor,
 		_ tableLookupFn,
 	) error {
-		return fn(db, scName, table)
+		return fn(db, sc, table)
 	})
 }
 
@@ -2440,15 +2438,15 @@ func forEachTableDescAll(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor) error,
 ) error {
 	return forEachTableDescAllWithTableLookup(ctx, p, dbContext, virtualOpts, func(
 		db catalog.DatabaseDescriptor,
-		scName string,
+		sc catalog.SchemaDescriptor,
 		table catalog.TableDescriptor,
 		_ tableLookupFn,
 	) error {
-		return fn(db, scName, table)
+		return fn(db, sc, table)
 	})
 }
 
@@ -2461,7 +2459,7 @@ func forEachTableDescAllWithTableLookup(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(
 		ctx, p, dbContext, virtualOpts, true /* allowAdding */, fn,
@@ -2482,7 +2480,7 @@ func forEachTableDescWithTableLookup(
 	p *planner,
 	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(
 		ctx, p, dbContext, virtualOpts, false /* allowAdding */, fn,
@@ -2528,7 +2526,7 @@ func forEachTableDescWithTableLookupInternal(
 	dbContext catalog.DatabaseDescriptor,
 	virtualOpts virtualOpts,
 	allowAdding bool,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
 	if err != nil {
@@ -2544,7 +2542,7 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 	dbContext catalog.DatabaseDescriptor,
 	allowAdding bool,
 	c nstree.Catalog,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TypeDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TypeDescriptor, tableLookupFn) error,
 ) error {
 	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
 
@@ -2564,11 +2562,11 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 		if !canSeeDescriptor {
 			continue
 		}
-		scName, err := lCtx.getSchemaNameByID(typDesc.GetParentSchemaID())
+		sc, err := lCtx.getSchemaByID(typDesc.GetParentSchemaID())
 		if err != nil {
 			return err
 		}
-		if err := fn(dbDesc, scName, typDesc, lCtx); err != nil {
+		if err := fn(dbDesc, sc, typDesc, lCtx); err != nil {
 			return err
 		}
 	}
@@ -2582,7 +2580,7 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 	virtualOpts virtualOpts,
 	allowAdding bool,
 	c nstree.Catalog,
-	fn func(catalog.DatabaseDescriptor, string, catalog.TableDescriptor, tableLookupFn) error,
+	fn func(catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TableDescriptor, tableLookupFn) error,
 ) error {
 	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
 
@@ -2590,13 +2588,13 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		// Virtual descriptors first.
 		vt := p.getVirtualTabler()
 		vEntries := vt.getSchemas()
-		vSchemaNames := vt.getSchemaNames()
+		vSchemaOrderedNames := vt.getSchemaNames()
 		iterate := func(dbDesc catalog.DatabaseDescriptor) error {
-			for _, virtSchemaName := range vSchemaNames {
-				e := vEntries[virtSchemaName]
-				for _, tName := range e.orderedDefNames {
-					te := e.defs[tName]
-					if err := fn(dbDesc, virtSchemaName, te.desc, lCtx); err != nil {
+			for _, virtSchemaName := range vSchemaOrderedNames {
+				virtSchemaEntry := vEntries[virtSchemaName]
+				for _, tName := range virtSchemaEntry.orderedDefNames {
+					te := virtSchemaEntry.defs[tName]
+					if err := fn(dbDesc, virtSchemaEntry.desc, te.desc, lCtx); err != nil {
 						return err
 					}
 				}
@@ -2630,32 +2628,24 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 		if table.Dropped() || !canSeeDescriptor {
 			continue
 		}
-		var scName string
+		var sc catalog.SchemaDescriptor
 		if parentExists {
-			var ok bool
-			scName, ok, err = lCtx.GetSchemaName(
-				ctx, table.GetParentSchemaID(), table.GetParentID(), p.ExecCfg().Settings.Version,
-			)
-			if err != nil {
+			sc, err = lCtx.getSchemaByID(table.GetParentSchemaID())
+			if err != nil && !table.IsTemporary() {
 				return err
-			}
-			// Look up the schemas for this database if we discover that there is a
-			// missing temporary schema name. The only schemas which do not have
-			// descriptors are the public schema and temporary schemas. The public
-			// schema does not have a descriptor but will appear in the map. Temporary
-			// schemas do, however, have namespace entries. The below code will go
-			// and lookup schema names from the namespace table if needed to qualify
-			// the name of a temporary table.
-			if !ok && !table.IsTemporary() {
-				return errors.AssertionFailedf("schema id %d not found", table.GetParentSchemaID())
-			}
-			if !ok { // && table.IsTemporary()
+			} else if table.IsTemporary() {
+				// Look up the schemas for this database if we discover that there is a
+				// missing temporary schema name. Temporary schemas have namespace
+				// entries. The below code will go and lookup schema names from the
+				// namespace table if needed to qualify the name of a temporary table.
 				namesForSchema, err := getSchemaNames(ctx, p, dbDesc)
 				if err != nil {
-					return errors.Wrapf(err, "failed to look up schema id %d",
-						table.GetParentSchemaID())
+					return errors.Wrapf(err, "failed to look up schema id %d", table.GetParentSchemaID())
 				}
 				for id, n := range namesForSchema {
+					if id != table.GetParentSchemaID() {
+						continue
+					}
 					_, exists, err := lCtx.GetSchemaName(ctx, id, dbDesc.GetID(), p.ExecCfg().Settings.Version)
 					if err != nil {
 						return err
@@ -2663,19 +2653,19 @@ func forEachTableDescWithTableLookupInternalFromDescriptors(
 					if exists {
 						continue
 					}
-					lCtx.schemaNames[id] = n
-					var found bool
-					scName, found, err = lCtx.GetSchemaName(ctx, id, dbDesc.GetID(), p.ExecCfg().Settings.Version)
-					if err != nil {
-						return err
+					if strings.HasPrefix(n, catconstants.PgTempSchemaName) {
+						sc = schemadesc.NewTemporarySchema(n, id, dbDesc.GetID())
+						lCtx.schemaNames[id] = n
+						lCtx.schemaDescs[id] = sc
+						lCtx.schemaIDs = append(lCtx.schemaIDs, id)
 					}
-					if !found {
-						return errors.AssertionFailedf("schema id %d not found", id)
-					}
+				}
+				if sc == nil {
+					sc = schemadesc.NewTemporarySchema(catconstants.PgTempSchemaName, table.GetParentSchemaID(), dbDesc.GetID())
 				}
 			}
 		}
-		if err := fn(dbDesc, scName, table, lCtx); err != nil {
+		if err := fn(dbDesc, sc, table, lCtx); err != nil {
 			return err
 		}
 	}

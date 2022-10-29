@@ -354,10 +354,11 @@ var pgCatalogAttrDefTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 	vtable.PGCatalogAttrDef,
 	virtualMany, false, /* includesIndexEntries */
-	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, scName string,
-		table catalog.TableDescriptor,
+	func(ctx context.Context, p *planner, h oidHasher,
+		db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
-		addRow func(...tree.Datum) error) error {
+		addRow func(...tree.Datum) error,
+	) error {
 		for _, column := range table.PublicColumns() {
 			if !column.HasDefault() {
 				// pg_attrdef only expects rows for columns with default values.
@@ -388,11 +389,12 @@ var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 	vtable.PGCatalogAttribute,
 	virtualMany, true, /* includesIndexEntries */
-	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, scName string,
+	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 		table catalog.TableDescriptor,
 		lookup simpleSchemaResolver,
-		addRow func(...tree.Datum) error) error {
-		// addColumn adds adds either a table or a index column to the pg_attribute table.
+		addRow func(...tree.Datum) error,
+	) error {
+		// addColumn adds either a table or an index column to the pg_attribute table.
 		addColumn := func(column catalog.Column, attRelID tree.Datum, attNum uint32) error {
 			colTyp := column.GetType()
 			// Sets the attgenerated column to 's' if the column is generated/
@@ -643,8 +645,9 @@ var pgCatalogClassTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 	vtable.PGCatalogClass,
 	virtualMany, true, /* includesIndexEntries */
-	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, scName string,
-		table catalog.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error) error {
+	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
+		table catalog.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error,
+	) error {
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
@@ -676,7 +679,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if err != nil {
 			return err
 		}
-		namespaceOid := h.NamespaceOid(db, scName)
+		namespaceOid := schemaOid(sc.GetID())
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
 			tree.NewDName(table.GetName()), // relname
@@ -787,7 +790,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false /* requiresPrivileges */, func(db catalog.DatabaseDescriptor) error {
-			namespaceOid := h.NamespaceOid(db, pgCatalogName)
+			namespaceOid := tree.NewDOid(catconstants.PgCatalogID)
 			add := func(collName string) error {
 				return addRow(
 					h.CollationOid(collName),  // oid
@@ -861,7 +864,7 @@ func populateTableConstraints(
 	p *planner,
 	h oidHasher,
 	db catalog.DatabaseDescriptor,
-	scName string,
+	sc catalog.SchemaDescriptor,
 	table catalog.TableDescriptor,
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
@@ -870,7 +873,7 @@ func populateTableConstraints(
 	if err != nil {
 		return err
 	}
-	namespaceOid := h.NamespaceOid(db, scName)
+	namespaceOid := schemaOid(sc.GetID())
 	tblOid := tableOid(table.GetID())
 	for conName, con := range conInfo {
 		conoid := tree.DNull
@@ -907,7 +910,7 @@ func populateTableConstraints(
 					continue
 				}
 			}
-			conoid = h.PrimaryKeyConstraintOid(db.GetID(), scName, table.GetID(), con.Index)
+			conoid = h.PrimaryKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.Index)
 			contype = conTypePKey
 			conindid = h.IndexOid(table.GetID(), con.Index.ID)
 
@@ -918,7 +921,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(tabledesc.PrimaryKeyString(table))
 
 		case descpb.ConstraintTypeFK:
-			conoid = h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
+			conoid = h.ForeignKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.FK)
 			contype = conTypeFK
 			// Foreign keys don't have a single linked index. Pick the first one
 			// that matches on the referenced table.
@@ -966,7 +969,7 @@ func populateTableConstraints(
 			contype = conTypeUnique
 			f := tree.NewFmtCtx(tree.FmtSimple)
 			if con.Index != nil {
-				conoid = h.UniqueConstraintOid(db.GetID(), scName, table.GetID(), con.Index.ID)
+				conoid = h.UniqueConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.Index.ID)
 				conindid = h.IndexOid(table.GetID(), con.Index.ID)
 				var err error
 				if conkey, err = colIDArrayToDatum(con.Index.KeyColumnIDs); err != nil {
@@ -988,7 +991,7 @@ func populateTableConstraints(
 				}
 			} else if con.UniqueWithoutIndexConstraint != nil {
 				conoid = h.UniqueWithoutIndexConstraintOid(
-					db.GetID(), scName, table.GetID(), con.UniqueWithoutIndexConstraint,
+					db.GetID(), sc.GetID(), table.GetID(), con.UniqueWithoutIndexConstraint,
 				)
 				f.WriteString("UNIQUE WITHOUT INDEX (")
 				colNames, err := table.NamesForColumnIDs(con.UniqueWithoutIndexConstraint.ColumnIDs)
@@ -1015,7 +1018,7 @@ func populateTableConstraints(
 			condef = tree.NewDString(f.CloseAndGetString())
 
 		case descpb.ConstraintTypeCheck:
-			conoid = h.CheckConstraintOid(db.GetID(), scName, table.GetID(), con.CheckConstraint)
+			conoid = h.CheckConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.CheckConstraint)
 			contype = conTypeCheck
 			if conkey, err = colIDArrayToDatum(con.CheckConstraint.ColumnIDs); err != nil {
 				return err
@@ -1108,15 +1111,15 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	virtualOpts virtualOpts,
 	includesIndexEntries bool,
 	populateFromTable func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor,
-		scName string, table catalog.TableDescriptor, lookup simpleSchemaResolver,
+		sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup simpleSchemaResolver,
 		addRow func(...tree.Datum) error,
 	) error,
 ) virtualSchemaTable {
 	populateAll := func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, virtualOpts,
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor, lookup tableLookupFn) error {
-				return populateFromTable(ctx, p, h, db, scName, table, lookup, addRow)
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup tableLookupFn) error {
+				return populateFromTable(ctx, p, h, db, sc, table, lookup, addRow)
 			})
 	}
 	return virtualSchemaTable{
@@ -1167,7 +1170,7 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					if err != nil {
 						return false, err
 					}
-					if err := populateFromTable(ctx, p, h, db, sc.GetName(), table, scResolver,
+					if err := populateFromTable(ctx, p, h, db, sc, table, scResolver,
 						addRow); err != nil {
 						return false, err
 					}
@@ -1364,7 +1367,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				// TODO(richardjcai): Update this logic once default privileges on
 				//    schemas are supported.
 				//    See: https://github.com/cockroachdb/cockroach/issues/67376.
-				schemaName := ""
+				schemaID := descpb.ID(0)
 				// If ForAllRoles is specified, we use an empty string as the normalized
 				// role name to create the row hash.
 				normalizedName := ""
@@ -1375,7 +1378,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 				}
 				rowOid := h.DBSchemaRoleOid(
 					dbContext.GetID(),
-					schemaName,
+					schemaID,
 					normalizedName,
 				)
 				if err := addRow(
@@ -1463,7 +1466,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db catalog.DatabaseDescriptor,
-			scName string,
+			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
@@ -1539,7 +1542,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				} else if idx, ok := refConstraint.(*descpb.IndexDescriptor); ok {
 					refObjID = h.IndexOid(con.ReferencedTable.ID, idx.ID)
 				}
-				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), scName, table.GetID(), con.FK)
+				constraintOid := h.ForeignKeyConstraintOid(db.GetID(), sc.GetID(), table.GetID(), con.FK)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
@@ -1646,7 +1649,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 						break
 					}
 				}
-				objID = getOIDFromConstraint(constraint, dbContext.GetID(), schema.GetName(), tableDesc)
+				objID = getOIDFromConstraint(constraint, dbContext.GetID(), schema.GetID(), tableDesc)
 				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
 			case keys.IndexCommentType:
@@ -1671,7 +1674,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 func getOIDFromConstraint(
 	constraint descpb.ConstraintDetail,
 	dbID descpb.ID,
-	schemaName string,
+	scID descpb.ID,
 	tableDesc catalog.TableDescriptor,
 ) *tree.DOid {
 	hasher := makeOidHasher()
@@ -1680,20 +1683,20 @@ func getOIDFromConstraint(
 	if constraint.CheckConstraint != nil {
 		oid = hasher.CheckConstraintOid(
 			dbID,
-			schemaName,
+			scID,
 			tableID,
 			constraint.CheckConstraint)
 	} else if constraint.FK != nil {
 		oid = hasher.ForeignKeyConstraintOid(
 			dbID,
-			schemaName,
+			scID,
 			tableID,
 			constraint.FK,
 		)
 	} else if constraint.UniqueWithoutIndexConstraint != nil {
 		oid = hasher.UniqueWithoutIndexConstraintOid(
 			dbID,
-			schemaName,
+			scID,
 			tableID,
 			constraint.UniqueWithoutIndexConstraint,
 		)
@@ -1701,14 +1704,14 @@ func getOIDFromConstraint(
 		if constraint.Index.ID == tableDesc.GetPrimaryIndexID() {
 			oid = hasher.PrimaryKeyConstraintOid(
 				dbID,
-				schemaName,
+				scID,
 				tableID,
 				constraint.Index,
 			)
 		} else {
 			oid = hasher.UniqueConstraintOid(
 				dbID,
-				schemaName,
+				scID,
 				tableID,
 				constraint.Index.ID,
 			)
@@ -1753,7 +1756,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-enum.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 
-		return forEachTypeDesc(ctx, p, dbContext, func(_ catalog.DatabaseDescriptor, _ string, typDesc catalog.TypeDescriptor) error {
+		return forEachTypeDesc(ctx, p, dbContext, func(_ catalog.DatabaseDescriptor, _ catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
 			switch typDesc.GetKind() {
 			case descpb.TypeDescriptor_ENUM, descpb.TypeDescriptor_MULTIREGION_ENUM:
 			// We only want to iterate over ENUM types and multi-region enums.
@@ -1851,7 +1854,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				tableOid := tableOid(table.GetID())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
 					isMutation, isWriteOnly :=
@@ -1969,11 +1972,11 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual, /* virtual tables do not have indexes */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor, _ tableLookupFn) error {
-				scNameName := tree.NewDName(scName)
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, _ tableLookupFn) error {
+				scNameName := tree.NewDName(sc.GetName())
 				tblName := tree.NewDName(table.GetName())
 				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
-					def, err := indexDefFromDescriptor(ctx, p, db, scName, table, index)
+					def, err := indexDefFromDescriptor(ctx, p, db, sc, table, index)
 					if err != nil {
 						return err
 					}
@@ -1997,11 +2000,11 @@ func indexDefFromDescriptor(
 	ctx context.Context,
 	p *planner,
 	db catalog.DatabaseDescriptor,
-	schemaName string,
+	sc catalog.SchemaDescriptor,
 	table catalog.TableDescriptor,
 	index catalog.Index,
 ) (string, error) {
-	tableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(schemaName), tree.Name(table.GetName()))
+	tableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(table.GetName()))
 	partitionStr := ""
 	fmtStr, err := catformat.IndexForDisplay(
 		ctx,
@@ -2058,7 +2061,7 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 	schema: vtable.PGCatalogMatViews,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual,
-			func(db catalog.DatabaseDescriptor, scName string, desc catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, desc catalog.TableDescriptor) error {
 				if !desc.MaterializedView() {
 					return nil
 				}
@@ -2075,7 +2078,7 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDName(scName),         // schemaname
+					tree.NewDName(sc.GetName()),   // schemaname
 					tree.NewDName(desc.GetName()), // matviewname
 					owner,                         // matviewowner
 					tree.DNull,                    // tablespace
@@ -2111,10 +2114,10 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 						ownerOID = h.UserOid(username.MakeSQLUsernameFromPreNormalizedString("admin"))
 					}
 					return addRow(
-						h.NamespaceOid(db, sc.GetName()), // oid
-						tree.NewDString(sc.GetName()),    // nspname
-						ownerOID,                         // nspowner
-						tree.DNull,                       // nspacl
+						schemaOid(sc.GetID()),         // oid
+						tree.NewDString(sc.GetName()), // nspname
+						ownerOID,                      // nspowner
+						tree.DNull,                    // nspacl
 					)
 				})
 			})
@@ -2146,7 +2149,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 	schema: vtable.PGCatalogOperator,
 	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		nspOid := h.NamespaceOid(db, pgCatalogName)
+		nspOid := tree.NewDOid(catconstants.PgCatalogID)
 		addOp := func(opName string, kind tree.Datum, params tree.TypeList, returnTyper tree.ReturnTyper) error {
 			var leftType, rightType *tree.DOid
 			switch params.Length() {
@@ -2318,7 +2321,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 		// builtin function since they don't really belong to any database.
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db, pgCatalogName)
+				nspOid := tree.NewDOid(catconstants.PgCatalogID)
 				for _, name := range builtins.AllBuiltinNames() {
 					// parser.Builtins contains duplicate uppercase and lowercase keys.
 					// Only return the lowercase ones for compatibility with postgres.
@@ -2485,7 +2488,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 						return addRow(
 							tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
 							tree.NewDName(fnDesc.GetName()),                 // proname
-							h.NamespaceOid(dbDesc, scDesc.GetName()),        // pronamespace
+							schemaOid(scDesc.GetID()),                       // pronamespace
 							h.UserOid(fnDesc.GetPrivileges().Owner()),       // proowner
 							// In postgres oid of sql language is 14, need to add a mapping if
 							// we are going to support more languages.
@@ -2548,7 +2551,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-rewrite.html`,
 		evType := tree.NewDString(string(evTypeSelect))
 		return forEachTableDescWithTableLookup(ctx, p, dbContext, hideVirtual /*virtual tables have no constraints*/, func(
 			db catalog.DatabaseDescriptor,
-			scName string,
+			sc catalog.SchemaDescriptor,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
@@ -2648,7 +2651,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-sequence.html`,
 	schema: vtable.PGCatalogSequence,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -2796,7 +2799,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-shdepend.html`,
 
 		// Populating table descriptor dependencies with roles
 		if err = forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				privDesc, err := table.GetPrivilegeDescriptor(ctx, p)
 				if err != nil {
 					return err
@@ -2870,7 +2873,7 @@ https://www.postgresql.org/docs/9.5/view-pg-tables.html`,
 		// empty -- listing tables across databases can yield duplicate
 		// schema/table names.
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				if !table.IsTable() {
 					return nil
 				}
@@ -2879,7 +2882,7 @@ https://www.postgresql.org/docs/9.5/view-pg-tables.html`,
 					return err
 				}
 				return addRow(
-					tree.NewDName(scName),          // schemaname
+					tree.NewDName(sc.GetName()),    // schemaname
 					tree.NewDName(table.GetName()), // tablename
 					owner,                          // tableowner
 					tree.DNull,                     // tablespace
@@ -2974,11 +2977,11 @@ func addPGTypeRowForTable(
 	p eval.Planner,
 	h oidHasher,
 	db catalog.DatabaseDescriptor,
-	scName string,
+	sc catalog.SchemaDescriptor,
 	table catalog.TableDescriptor,
 	addRow func(...tree.Datum) error,
 ) error {
-	nspOid := h.NamespaceOid(db, scName)
+	nspOid := schemaOid(sc.GetID())
 	ownerOID, err := getOwnerOID(ctx, p, table)
 	if err != nil {
 		return err
@@ -3104,14 +3107,14 @@ func addPGTypeRow(
 
 func getSchemaAndTypeByTypeID(
 	ctx context.Context, p *planner, id descpb.ID,
-) (string, catalog.TypeDescriptor, error) {
+) (catalog.SchemaDescriptor, catalog.TypeDescriptor, error) {
 	typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
 	if err != nil {
 		// If the type was not found, it may be a table.
 		if !(errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject) {
-			return "", nil, err
+			return nil, nil, err
 		}
-		return "", nil, nil
+		return nil, nil, nil
 	}
 
 	sc, err := p.Descriptors().GetImmutableSchemaByID(
@@ -3121,9 +3124,9 @@ func getSchemaAndTypeByTypeID(
 		tree.SchemaLookupFlags{Required: true},
 	)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
-	return sc.GetName(), typDesc, nil
+	return sc, typDesc, nil
 }
 
 var pgCatalogTypeTable = virtualSchemaTable{
@@ -3134,7 +3137,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 		h := makeOidHasher()
 		return forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(db catalog.DatabaseDescriptor) error {
-				nspOid := h.NamespaceOid(db, pgCatalogName)
+				nspOid := tree.NewDOid(catconstants.PgCatalogID)
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
@@ -3149,8 +3152,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					p,
 					dbContext,
 					virtualCurrentDB,
-					func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor, lookup tableLookupFn) error {
-						return addPGTypeRowForTable(ctx, p, h, db, scName, table, addRow)
+					func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup tableLookupFn) error {
+						return addPGTypeRowForTable(ctx, p, h, db, sc, table, addRow)
 					},
 				); err != nil {
 					return err
@@ -3161,9 +3164,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					ctx,
 					p,
 					db,
-					func(_ catalog.DatabaseDescriptor, scName string, typDesc catalog.TypeDescriptor) error {
-						nspOid := h.NamespaceOid(db, scName)
-						typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.GetName(), scName, typDesc.GetName()), p)
+					func(_ catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typDesc catalog.TypeDescriptor) error {
+						nspOid := schemaOid(sc.GetID())
+						typ, err := typDesc.MakeTypesT(ctx, tree.NewQualifiedTypeName(db.GetName(), sc.GetName(), typDesc.GetName()), p)
 						if err != nil {
 							return err
 						}
@@ -3184,7 +3187,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				addRow func(...tree.Datum) error) (bool, error) {
 
 				h := makeOidHasher()
-				nspOid := h.NamespaceOid(db, pgCatalogName)
+				nspOid := tree.NewDOid(catconstants.PgCatalogID)
 				coid := tree.MustBeDOid(unwrappedConstraint)
 				ooid := coid.Oid
 
@@ -3212,7 +3215,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, err
 				}
 
-				scName, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
+				sc, typDesc, err := getSchemaAndTypeByTypeID(ctx, p, id)
 				if err != nil || typDesc == nil {
 					return false, err
 				}
@@ -3229,21 +3232,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						}
 						return false, err
 					}
-					sc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx,
-						p.txn,
-						table.GetParentSchemaID(),
-						tree.SchemaLookupFlags{Required: true},
-					)
-					if err != nil {
-						return false, err
-					}
 					if err := addPGTypeRowForTable(
 						ctx,
 						p,
 						h,
 						db,
-						sc.GetName(),
+						sc,
 						table,
 						addRow,
 					); err != nil {
@@ -3252,7 +3246,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return true, nil
 				}
 
-				nspOid = h.NamespaceOid(db, scName)
+				nspOid = schemaOid(sc.GetID())
 				typ, err = typDesc.MakeTypesT(ctx, tree.NewUnqualifiedTypeName(typDesc.GetName()), p)
 				if err != nil {
 					return false, err
@@ -3481,7 +3475,7 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 	schema: vtable.PgCatalogSequences,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas do not have indexes */
-			func(db catalog.DatabaseDescriptor, scName string, table catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor) error {
 				if !table.IsSequence() {
 					return nil
 				}
@@ -3508,7 +3502,7 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 				// SEQUENE sequencename OWNED BY table.column, This is not the expected
 				// value on sequenceowner.
 				return addRow(
-					tree.NewDString(scName),                 // schemaname
+					tree.NewDString(sc.GetName()),           // schemaname
 					tree.NewDString(table.GetName()),        // sequencename
 					owner,                                   // sequenceowner
 					tree.NewDOid(oid.T_int8),                // data_type
@@ -4282,7 +4276,7 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 		// Note: pg_views is not well defined if the dbContext is empty,
 		// because it does not distinguish views in separate databases.
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /*virtual schemas do not have views*/
-			func(db catalog.DatabaseDescriptor, scName string, desc catalog.TableDescriptor) error {
+			func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, desc catalog.TableDescriptor) error {
 				if !desc.IsView() || desc.MaterializedView() {
 					return nil
 				}
@@ -4299,7 +4293,7 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDName(scName),                // schemaname
+					tree.NewDName(sc.GetName()),          // schemaname
 					tree.NewDName(desc.GetName()),        // viewname
 					owner,                                // viewowner
 					tree.NewDString(desc.GetViewQuery()), // definition
@@ -4498,8 +4492,8 @@ func (h oidHasher) writeDB(dbID descpb.ID) {
 	h.writeUInt32(uint32(dbID))
 }
 
-func (h oidHasher) writeSchema(scName string) {
-	h.writeStr(scName)
+func (h oidHasher) writeSchema(scID descpb.ID) {
+	h.writeUInt32(uint32(scID))
 }
 
 func (h oidHasher) writeTable(tableID descpb.ID) {
@@ -4525,16 +4519,6 @@ func (h oidHasher) writeForeignKeyConstraint(fk *descpb.ForeignKeyConstraint) {
 	h.writeStr(fk.Name)
 }
 
-func (h oidHasher) NamespaceOid(db catalog.DatabaseDescriptor, scName string) *tree.DOid {
-	if scID := db.GetSchemaID(scName); scID != 0 {
-		return tree.NewDOid(oid.Oid(scID))
-	}
-	h.writeTypeTag(namespaceTypeTag)
-	h.writeDB(db.GetID())
-	h.writeSchema(scName)
-	return h.getOid()
-}
-
 func (h oidHasher) IndexOid(tableID descpb.ID, indexID descpb.IndexID) *tree.DOid {
 	h.writeTypeTag(indexTypeTag)
 	h.writeTable(tableID)
@@ -4550,55 +4534,55 @@ func (h oidHasher) ColumnOid(tableID descpb.ID, columnID descpb.ColumnID) *tree.
 }
 
 func (h oidHasher) CheckConstraintOid(
-	dbID descpb.ID, scName string, tableID descpb.ID, check *descpb.TableDescriptor_CheckConstraint,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, check *descpb.TableDescriptor_CheckConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(checkConstraintTypeTag)
 	h.writeDB(dbID)
-	h.writeSchema(scName)
+	h.writeSchema(scID)
 	h.writeTable(tableID)
 	h.writeCheckConstraint(check)
 	return h.getOid()
 }
 
 func (h oidHasher) PrimaryKeyConstraintOid(
-	dbID descpb.ID, scName string, tableID descpb.ID, pkey *descpb.IndexDescriptor,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, pkey *descpb.IndexDescriptor,
 ) *tree.DOid {
 	h.writeTypeTag(pKeyConstraintTypeTag)
 	h.writeDB(dbID)
-	h.writeSchema(scName)
+	h.writeSchema(scID)
 	h.writeTable(tableID)
 	h.writeIndex(pkey.ID)
 	return h.getOid()
 }
 
 func (h oidHasher) ForeignKeyConstraintOid(
-	dbID descpb.ID, scName string, tableID descpb.ID, fk *descpb.ForeignKeyConstraint,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, fk *descpb.ForeignKeyConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(fkConstraintTypeTag)
 	h.writeDB(dbID)
-	h.writeSchema(scName)
+	h.writeSchema(scID)
 	h.writeTable(tableID)
 	h.writeForeignKeyConstraint(fk)
 	return h.getOid()
 }
 
 func (h oidHasher) UniqueWithoutIndexConstraintOid(
-	dbID descpb.ID, scName string, tableID descpb.ID, uc *descpb.UniqueWithoutIndexConstraint,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, uc *descpb.UniqueWithoutIndexConstraint,
 ) *tree.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(dbID)
-	h.writeSchema(scName)
+	h.writeSchema(scID)
 	h.writeTable(tableID)
 	h.writeUniqueConstraint(uc)
 	return h.getOid()
 }
 
 func (h oidHasher) UniqueConstraintOid(
-	dbID descpb.ID, scName string, tableID descpb.ID, indexID descpb.IndexID,
+	dbID descpb.ID, scID descpb.ID, tableID descpb.ID, indexID descpb.IndexID,
 ) *tree.DOid {
 	h.writeTypeTag(uniqueConstraintTypeTag)
 	h.writeDB(dbID)
-	h.writeSchema(scName)
+	h.writeSchema(scID)
 	h.writeTable(tableID)
 	h.writeIndex(indexID)
 	return h.getOid()
@@ -4653,16 +4637,20 @@ func (h oidHasher) rewriteOid(source descpb.ID, depended descpb.ID) *tree.DOid {
 // DBSchemaRoleOid creates an OID based on the combination of a db/schema/role.
 // This is used to generate a unique row identifier for pg_default_acl.
 func (h oidHasher) DBSchemaRoleOid(
-	dbID descpb.ID, scName string, normalizedRole string,
+	dbID descpb.ID, scID descpb.ID, normalizedRole string,
 ) *tree.DOid {
 	h.writeTypeTag(dbSchemaRoleTypeTag)
 	h.writeDB(dbID)
-	h.writeSchema(scName)
+	h.writeSchema(scID)
 	h.writeStr(normalizedRole)
 	return h.getOid()
 }
 
 func tableOid(id descpb.ID) *tree.DOid {
+	return tree.NewDOid(oid.Oid(id))
+}
+
+func schemaOid(id descpb.ID) *tree.DOid {
 	return tree.NewDOid(oid.Oid(id))
 }
 
