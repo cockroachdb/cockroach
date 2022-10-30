@@ -230,12 +230,6 @@ type Streamer struct {
 
 	waitGroup sync.WaitGroup
 
-	truncationHelper *kvcoord.BatchTruncationHelper
-	// truncationHelperAccountedFor tracks how much space has been consumed from
-	// the budget in order to account for the memory usage of the truncation
-	// helper.
-	truncationHelperAccountedFor int64
-
 	// requestsToServe contains all single-range sub-requests that have yet
 	// to be served.
 	requestsToServe requestsProvider
@@ -515,21 +509,19 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 		}
 	}()
 	allRequestsAreWithinSingleRange := !ri.NeedAnother(rs)
+	var truncationHelper kvcoord.BatchTruncationHelper
 	if !allRequestsAreWithinSingleRange {
 		// We only need the truncation helper if the requests span multiple
 		// ranges.
-		if s.truncationHelper == nil {
-			// The streamer can process the responses in an arbitrary order, so
-			// we don't require the helper to preserve the order of requests and
-			// allow it to reorder the reqs slice too.
-			const mustPreserveOrder = false
-			const canReorderRequestsSlice = true
-			s.truncationHelper, err = kvcoord.NewBatchTruncationHelper(
-				scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
-			)
-		} else {
-			err = s.truncationHelper.Init(reqs)
-		}
+		//
+		// The streamer can process the responses in an arbitrary order, so we
+		// don't require the helper to preserve the order of requests and allow
+		// it to reorder the reqs slice too.
+		const mustPreserveOrder = false
+		const canReorderRequestsSlice = true
+		truncationHelper, err = kvcoord.MakeBatchTruncationHelper(
+			scanDir, reqs, mustPreserveOrder, canReorderRequestsSlice,
+		)
 		if err != nil {
 			return err
 		}
@@ -555,7 +547,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			if err != nil {
 				return err
 			}
-			singleRangeReqs, positions, rs.Key, err = s.truncationHelper.Truncate(singleRangeSpan)
+			singleRangeReqs, positions, rs.Key, err = truncationHelper.Truncate(singleRangeSpan)
 			if err != nil {
 				return err
 			}
@@ -646,11 +638,6 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	}
 
 	toConsume := totalReqsMemUsage
-	if !allRequestsAreWithinSingleRange {
-		accountedFor := s.truncationHelperAccountedFor
-		s.truncationHelperAccountedFor = s.truncationHelper.MemUsage()
-		toConsume += s.truncationHelperAccountedFor - accountedFor
-	}
 	if newNumRangesPerScanRequestMemoryUsage != 0 && newNumRangesPerScanRequestMemoryUsage != s.numRangesPerScanRequestAccountedFor {
 		toConsume += newNumRangesPerScanRequestMemoryUsage - s.numRangesPerScanRequestAccountedFor
 		s.numRangesPerScanRequestAccountedFor = newNumRangesPerScanRequestMemoryUsage
@@ -665,16 +652,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			// budget, so we'll just give up in order to protect the node.
 			return err
 		}
-		// We have two things (used only to reduce allocations) we could dispose of
-		// without sacrificing the correctness:
-		// - don't reuse the truncation helper (if present)
-		// - clear the overhead of the results buffer.
-		// Once disposed of those, we attempt to consume the budget again.
-		if s.truncationHelper != nil {
-			s.truncationHelper = nil
-			s.budget.release(ctx, s.truncationHelperAccountedFor)
-			s.truncationHelperAccountedFor = 0
-		}
+		// We could clear the overhead of the results buffer (which is just an
+		// optimization to reduce allocations) and see whether we'll have enough
+		// budget then.
 		s.results.clearOverhead(ctx)
 		if err = s.budget.consume(ctx, toConsume, allowDebt); err != nil {
 			return err
