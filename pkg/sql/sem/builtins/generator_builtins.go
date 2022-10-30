@@ -136,7 +136,7 @@ var generators = map[string]builtinDefinition{
 					EndKey: endKey,
 				}), nil
 			},
-			"Returns the raw keys and values from the specified span",
+			"Returns the raw keys and values with their timestamp from the specified span",
 			volatility.Stable,
 		),
 		makeGeneratorOverload(
@@ -2065,13 +2065,13 @@ const spanKeyIteratorChunkBytes = 8 << 20 // 8MiB
 var rangeKeyIteratorType = types.MakeLabeledTuple(
 	// TODO(rohany): These could be bytes if we don't want to display the
 	//  prettified versions of the key and value.
-	[]*types.T{types.String, types.String},
-	[]string{"key", "value"},
+	[]*types.T{types.String, types.String, types.String},
+	[]string{"key", "value", "ts"},
 )
 
 var spanKeyIteratorType = types.MakeLabeledTuple(
-	[]*types.T{types.Bytes, types.Bytes},
-	[]string{"key", "value"},
+	[]*types.T{types.Bytes, types.Bytes, types.String},
+	[]string{"key", "value", "ts"},
 )
 
 // spanKeyIterator is a ValueGenerator that iterates over all
@@ -2092,7 +2092,7 @@ type spanKeyIterator struct {
 	// index maintains the current position of the iterator in kvs.
 	index int
 	// A buffer to avoid allocating an array on every call to Values().
-	buf [2]tree.Datum
+	buf [3]tree.Datum
 }
 
 func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterator {
@@ -2166,6 +2166,7 @@ func (sp *spanKeyIterator) Values() (tree.Datums, error) {
 	kv := sp.kvs[sp.index]
 	sp.buf[0] = tree.NewDBytes(tree.DBytes(kv.Key))
 	sp.buf[1] = tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))
+	sp.buf[2] = tree.NewDString(kv.Value.Timestamp.String())
 	return sp.buf[:], nil
 }
 
@@ -2234,6 +2235,7 @@ func (rk *rangeKeyIterator) Values() (tree.Datums, error) {
 	kv := rk.kvs[rk.index]
 	rk.buf[0] = tree.NewDString(kv.Key.String())
 	rk.buf[1] = tree.NewDString(kv.Value.PrettyPrint())
+	rk.buf[2] = tree.NewDString(kv.Value.Timestamp.String())
 	return rk.buf[:], nil
 }
 
