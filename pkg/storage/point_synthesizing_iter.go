@@ -147,7 +147,25 @@ func NewPointSynthesizingIter(parent MVCCIterator) *PointSynthesizingIter {
 
 // NewPointSynthesizingIterAtParent creates a new pointSynthesizingIter and
 // loads the position from the parent iterator.
-func NewPointSynthesizingIterAtParent(parent MVCCIterator) *PointSynthesizingIter {
+//
+// If reverse is true, the point synthesizing iterator will reposition on
+// a synthetic point tombstone after the current position if appropriate.
+// Consider the following dataset:
+//
+//	2    a2  b2
+//	1    [---)
+//	     a   b
+//
+// If the caller was positioned on b@2, then called Prev() and landed on a@2,
+// where it detected the [a-b)@2 range key and enabled point synthesis, it would
+// appear to have skipped over the synthetic point tombstone at a@1. Setting
+// reverse=true in this case will position the iterator on the synthetic point
+// tombstone a@1.
+//
+// However, the above assumes that the previous positioning operation was from a
+// different key -- if it was e.g. a SeekLT(a@1) then this repositioning will be
+// incorrect. The caller must take care to use reverse only when appropriate.
+func NewPointSynthesizingIterAtParent(parent MVCCIterator, reverse bool) *PointSynthesizingIter {
 	iter := NewPointSynthesizingIter(parent)
 	iter.rangeKeyChanged = true // force range key detection
 	if ok, err := iter.updateIter(); ok && err == nil {
@@ -157,6 +175,22 @@ func NewPointSynthesizingIterAtParent(parent MVCCIterator) *PointSynthesizingIte
 		iter.seekKeyBuf = append(iter.seekKeyBuf[:0], seekKey.Key...)
 		seekKey.Key = iter.seekKeyBuf
 		iter.updateSeekGEPosition(seekKey)
+
+		// If we're on the start key of a range key in the reverse direction, we
+		// must take care not to skip any synthetic point tombstones that the caller
+		// would have expected to be emitted. This essentially means switching the
+		// iterator to reverse iteration and repositioning on the oldest version
+		// (real or synthetic).
+		if reverse && len(iter.rangeKeys) > 0 && iter.rangeKeysPos.Equal(iter.rangeKeysStart) {
+			if !iter.atPoint {
+				if _, err := iter.iterPrev(); err != nil {
+					return iter
+				}
+			}
+			iter.reverse = true
+			iter.rangeKeysIdx = iter.rangeKeysEnd - 1
+			iter.updateAtPoint()
+		}
 	}
 	return iter
 }

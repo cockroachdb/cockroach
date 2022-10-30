@@ -1,0 +1,180 @@
+# Regression test for https://github.com/cockroachdb/cockroach/issues/90642.
+#
+#  REAL DATASET          SYNTHETIC DATASET
+#  3       [b3]          3      [b3]
+#  2    a2               2   a2
+#  1    [---)            1   x
+#       a   b                a   b
+#
+# Recall that pebbleMVCCScanner only enables pointSynthesizingIter when it
+# encounters a range key. In the case above, during a reverse scan, the [a-b)@1
+# range key will first become visible to pebbleMVCCScanner when it lands on a@2,
+# so it enabled point synthesis positioned at the a@2 point key. Notice how the
+# iterator has now skipped over the synthetic point tombstone a@1.
+#
+# This is particularly problematic when combined with pebbleMVCCScanner peeking,
+# which assumes that following a iterPeekPrev() call, an iterNext() call can
+# step the parent iterator forward once to get back to the original position.
+# With the above bug, that is no longer true, as it instead lands on the 
+# synthetic point tombstone which was skipped during reverse iteration. During
+# intent processing for b@3, such an iterNext() call is expected to land on the
+# intent's provisional value at b@3, but it instead lands on the intent itself
+# at b@0. This in turn caused a value checksum or decoding failure, where it was
+# expecting the current key to be b@3, but the actual key was b@0.
+run ok
+del_range_ts k=a end=b ts=1
+put k=a ts=2 v=a2
+with t=A
+  txn_begin k=b ts=3
+  put k=b v=b3
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/3.000000000,0 -> /BYTES/b3
+
+run ok
+scan t=A k=a end=z reverse
+----
+scan: "b" -> /BYTES/b3 @3.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
+
+# We also test the same scenario with a double range tombstone, i.e.:
+#
+#  3       [b3]
+#  2    [---)
+#  1    [---)
+#       a   b
+run ok
+txn_remove t=A
+clear_range k=a end=z
+del_range_ts k=a end=b ts=1
+del_range_ts k=a end=b ts=2
+with t=A
+  txn_begin k=b ts=3
+  put k=b v=b3
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/3.000000000,0 -> /BYTES/b3
+
+run ok
+scan t=A k=a end=z reverse
+----
+scan: "b" -> /BYTES/b3 @3.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones
+----
+scan: "b" -> /BYTES/b3 @3.000000000,0
+scan: "a" -> /<empty> @2.000000000,0
+
+# And with a point between the range tombstone. We place the intent at the
+# lowest timestamp, which is a contrived/unrealistic scenario, and do tombstone
+# scans at all timestamps.
+#
+#  3    [---)
+#  3    a3
+#  2    [---)
+#  1       [b1]
+#       a   b
+run ok
+txn_remove t=A
+clear_range k=a end=z
+del_range_ts k=a end=b ts=2
+put k=a ts=3 v=a3
+del_range_ts k=a end=b ts=4
+with t=A
+  txn_begin k=b ts=1
+  put k=b v=b1
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[4.000000000,0=/<empty> 2.000000000,0=/<empty>]
+data: "a"/3.000000000,0 -> /BYTES/a3
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/1.000000000,0 -> /BYTES/b1
+
+run ok
+scan t=A k=a end=z reverse
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=4
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+scan: "a" -> /<empty> @4.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=3
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+scan: "a" -> /BYTES/a3 @3.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=2
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+scan: "a" -> /<empty> @2.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=1
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+
+# And a point below them.
+#
+#  4       [b4]
+#  3    [---)
+#  2    [---)
+#  1    a1
+#       a   b
+run ok
+txn_remove t=A
+clear_range k=a end=z
+put k=a ts=2 v=a2
+del_range_ts k=a end=b ts=3
+del_range_ts k=a end=b ts=4
+with t=A
+  txn_begin k=b ts=1
+  put k=b v=b1
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=1.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[4.000000000,0=/<empty> 3.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=1.000000000,0 min=0,0 seq=0} ts=1.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/1.000000000,0 -> /BYTES/b1
+
+run ok
+scan t=A k=a end=z reverse
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=4
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+scan: "a" -> /<empty> @4.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=3
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+scan: "a" -> /<empty> @3.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=2
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
+scan: "a" -> /BYTES/a2 @2.000000000,0
+
+run ok
+scan t=A k=a end=z reverse tombstones ts=1
+----
+scan: "b" -> /BYTES/b1 @1.000000000,0
