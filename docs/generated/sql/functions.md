@@ -1252,9 +1252,9 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <tbody>
 <tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(span: <a href="bytes.html">bytes</a>[]) &rarr; tuple{bytes AS key, bytes AS value}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values from the specified span</p>
+<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(span: <a href="bytes.html">bytes</a>[]) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values from the specified span</p>
 </span></td><td>Stable</td></tr>
-<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS key, bytes AS value}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values from the specified span</p>
+<tr><td><a name="crdb_internal.scan"></a><code>crdb_internal.scan(start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{bytes AS key, bytes AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns the raw keys and values with their timestamp from the specified span</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="crdb_internal.testing_callback"></a><code>crdb_internal.testing_callback(name: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>For internal CRDB testing only. The function calls a callback identified by <code>name</code> registered with the server by the test.</p>
 </span></td><td>Volatile</td></tr>
@@ -3081,7 +3081,7 @@ active for the current transaction.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.lease_holder"></a><code>crdb_internal.lease_holder(key: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used to fetch the leaseholder corresponding to a request key</p>
 </span></td><td>Volatile</td></tr>
-<tr><td><a name="crdb_internal.list_sql_keys_in_range"></a><code>crdb_internal.list_sql_keys_in_range(range_id: <a href="int.html">int</a>) &rarr; tuple{string AS key, string AS value}</code></td><td><span class="funcdesc"><p>Returns all SQL K/V pairs within the requested range.</p>
+<tr><td><a name="crdb_internal.list_sql_keys_in_range"></a><code>crdb_internal.list_sql_keys_in_range(range_id: <a href="int.html">int</a>) &rarr; tuple{string AS key, string AS value, string AS ts}</code></td><td><span class="funcdesc"><p>Returns all SQL K/V pairs within the requested range.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="crdb_internal.locality_value"></a><code>crdb_internal.locality_value(key: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the value of the specified locality key.</p>
 </span></td><td>Stable</td></tr>
