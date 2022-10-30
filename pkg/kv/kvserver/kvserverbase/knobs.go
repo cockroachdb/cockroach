@@ -14,6 +14,12 @@
 
 package kvserverbase
 
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+)
+
 // BatchEvalTestingKnobs contains testing helpers that are used during batch evaluation.
 type BatchEvalTestingKnobs struct {
 	// TestingEvalFilter is called before evaluating each command.
@@ -70,4 +76,26 @@ type IntentResolverTestingKnobs struct {
 	// MaxIntentResolutionBatchSize overrides the maximum number of intent
 	// resolution requests which can be sent in a single batch.
 	MaxIntentResolutionBatchSize int
+
+	// InFlightBackpressureLimit overrides the number of batches in flight above
+	// which sending intent resolution batch requests should experience
+	// backpressure.
+	InFlightBackpressureLimit int
+
+	// MaxIntentResolutionSendBatchTimeout overrides the maximum amount of time
+	// that sending an intent resolution batch request can run for before timing
+	// out.
+	MaxIntentResolutionSendBatchTimeout time.Duration
+
+	// EnableBlockingAsyncIntentResolution determines if we should check if we
+	// should block async intent resolution. This field exists to ensure we don't
+	// add overhead from checking if we should block async intent resolution.
+	EnableBlockingAsyncIntentResolution bool
+
+	// BlockAsyncIntentResolution is used to check if we should block async
+	// intent resolution. If EnableBlockingAsyncIntentResolution is true, async
+	// intent resolution will acquire the mutex. If we wish to block async intent
+	// resolution, we need to acquire the mutex before async intent resolution is
+	// executed.
+	BlockAsyncIntentResolution *syncutil.Mutex
 }
