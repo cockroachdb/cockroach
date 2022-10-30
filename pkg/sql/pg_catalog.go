@@ -2972,6 +2972,15 @@ func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
 	return tree.NewDOid(oid.Oid(table.GetID()))
 }
 
+// typeOIDToTableID is the inverse of tableIDToTypeOID. For virtual tables
+// the IDs are the same, to avoid overflow.
+func typeOIDToTableID(typOID oid.Oid) (descpb.ID, error) {
+	if typOID < catconstants.MinVirtualID {
+		return typedesc.UserDefinedTypeOIDToID(typOID)
+	}
+	return descpb.ID(typOID), nil
+}
+
 func addPGTypeRowForTable(
 	ctx context.Context,
 	p eval.Planner,
@@ -3210,7 +3219,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, nil
 				}
 
-				id, err := typedesc.UserDefinedTypeOIDToID(ooid)
+				id, err := typeOIDToTableID(ooid)
 				if err != nil {
 					return false, err
 				}

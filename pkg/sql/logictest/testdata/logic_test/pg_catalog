@@ -3633,6 +3633,19 @@ WHERE oid = $sourceid
 oid     typname       typnamespace  typowner    typlen  typbyval  typtype
 100128  source_table  109           1546506610  -1      false     c
 
+let $vtableSourceId
+SELECT oid
+FROM pg_catalog.pg_type
+WHERE typname = 'pg_proc'
+
+query OTOOIBT colnames
+SELECT oid, typname, typnamespace, typowner, typlen, typbyval, typtype
+FROM pg_catalog.pg_type
+WHERE oid = $vtableSourceId
+----
+oid         typname  typnamespace  typowner    typlen  typbyval  typtype
+4294967085  pg_proc  4294967135    2310524507  -1      false     c
+
 ## pg_catalog.pg_proc
 
 query TOOOTTO colnames

@@ -13,6 +13,7 @@ package typedesc
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -84,7 +85,16 @@ func CreateImplicitRecordTypeFromTableDesc(
 		Version: uint32(descriptor.GetVersion()),
 	}
 
-	tablePrivs := descriptor.GetPrivileges()
+	var tablePrivs *catpb.PrivilegeDescriptor
+	if descriptor.IsVirtualTable() {
+		// Virtual tables don't have privileges attached to them, but we can
+		// fake it here so that the implicit record type gets the USAGE privilege.
+		tablePrivs = catpb.NewPrivilegeDescriptor(
+			username.PublicRoleName(), privilege.List{privilege.USAGE}, privilege.List{}, username.NodeUserName(),
+		)
+	} else {
+		tablePrivs = descriptor.GetPrivileges()
+	}
 	newPrivs := make([]catpb.UserPrivileges, len(tablePrivs.Users))
 	for i := range tablePrivs.Users {
 		newPrivs[i].UserProto = tablePrivs.Users[i].UserProto
