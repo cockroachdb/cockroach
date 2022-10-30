@@ -312,46 +312,79 @@ func TestPanicWithNilStopper(t *testing.T) {
 }
 
 // TestBatchTimeout verifies the RequestBatcher uses the context with the
-// deadline from the latest call to send.
+// deadline from the latest call and max timeout to send.
 func TestBatchTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const timeout = 5 * time.Millisecond
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sc := make(chanSender)
-	t.Run("WithTimeout", func(t *testing.T) {
-		b := New(Config{
-			// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
-			// immediately lead to a batch being sent.
-			MaxMsgsPerBatch: 1,
-			Sender:          sc,
-			Stopper:         stopper,
-		})
-		// This test attempts to verify that a batch with a request with a timeout
-		// will be sent with that timeout. The test faces challenges of timing.
-		// There are several different phases at which the timeout may fire;
-		// the request may time out before it has been sent to the batcher, it
-		// may timeout while it is being sent or it may not time out until after
-		// it has been sent. Each of these cases are handled and verified to ensure
-		// that the request was indeed sent with a timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		respChan := make(chan Response, 1)
-		if err := b.SendWithChan(ctx, respChan, 1, &roachpb.GetRequest{}); err != nil {
-			testutils.IsError(err, context.DeadlineExceeded.Error())
-			return
-		}
-		select {
-		case s := <-sc:
-			deadline, hasDeadline := s.ctx.Deadline()
-			assert.True(t, hasDeadline)
-			assert.True(t, timeutil.Until(deadline) < timeout)
-			s.respChan <- batchResp{}
-		case resp := <-respChan:
-			assert.Nil(t, resp.Resp)
-			testutils.IsError(resp.Err, context.DeadlineExceeded.Error())
-		}
-	})
+	testCases := []struct {
+		requestTimeout  time.Duration
+		maxTimeout      time.Duration
+		expectedTimeout time.Duration
+	}{
+		{
+			requestTimeout:  timeout,
+			maxTimeout:      0,
+			expectedTimeout: timeout,
+		},
+		{
+			requestTimeout:  0,
+			maxTimeout:      timeout,
+			expectedTimeout: timeout,
+		},
+		{
+			requestTimeout:  timeout,
+			maxTimeout:      3 * time.Millisecond,
+			expectedTimeout: 3 * time.Millisecond,
+		},
+		{
+			requestTimeout:  timeout,
+			maxTimeout:      7 * time.Millisecond,
+			expectedTimeout: timeout,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("With%sRequestTimeout%sMaxTimeout", tc.requestTimeout, tc.maxTimeout),
+			func(t *testing.T) {
+				b := New(Config{
+					// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
+					// immediately lead to a batch being sent.
+					MaxMsgsPerBatch: 1,
+					Sender:          sc,
+					Stopper:         stopper,
+					MaxTimeout:      tc.maxTimeout,
+				})
+				// This test attempts to verify that a batch with a request with a
+				// timeout will be sent with that timeout. The test faces challenges of
+				// timing. There are several different phases at which the timeout may
+				// fire; the request may time out before it has been sent to the
+				// batcher, it may timeout while it is being sent or it may not time
+				// out until after it has been sent. Each of these cases are handled
+				// and verified to ensure that the request was indeed sent with a
+				// timeout.
+				ctx, cancel := context.WithTimeout(context.Background(), tc.requestTimeout)
+				defer cancel()
+				respChan := make(chan Response, 1)
+				if err := b.SendWithChan(ctx, respChan, 1, &roachpb.GetRequest{}); err != nil {
+					testutils.IsError(err, context.DeadlineExceeded.Error())
+					return
+				}
+				select {
+				case s := <-sc:
+					deadline, hasDeadline := s.ctx.Deadline()
+					assert.True(t, hasDeadline)
+					assert.True(t, timeutil.Until(deadline) < tc.expectedTimeout)
+					assert.True(t, timeutil.Until(deadline) > tc.expectedTimeout-time.Millisecond)
+					s.respChan <- batchResp{}
+				case resp := <-respChan:
+					assert.Nil(t, resp.Resp)
+					testutils.IsError(resp.Err, context.DeadlineExceeded.Error())
+				}
+			},
+		)
+	}
 	t.Run("NoTimeout", func(t *testing.T) {
 		b := New(Config{
 			// MaxMsgsPerBatch of 2 is chosen so that the second call to Send will
