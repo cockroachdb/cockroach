@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestCleanupTxnIntentsOnGCAsync exercises the code which is used to
@@ -366,7 +368,7 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 		pushed   []string
 		resolved []string
 	}
-	pushOrResolveFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	pushOrResolveFunc := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		switch ba.Requests[0].GetInner().Method() {
 		case kvpb.PushTxn:
 			for _, ru := range ba.Requests {
@@ -374,14 +376,14 @@ func TestCleanupMultipleIntentsAsync(t *testing.T) {
 				reqs.pushed = append(reqs.pushed, string(ru.GetPushTxn().Key))
 				reqs.Unlock()
 			}
-			return pushTxnSendFunc(t, len(ba.Requests))(ba)
+			return pushTxnSendFunc(t, len(ba.Requests))(ctx, ba)
 		case kvpb.ResolveIntent:
 			for _, ru := range ba.Requests {
 				reqs.Lock()
 				reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
 				reqs.Unlock()
 			}
-			return resolveIntentsSendFunc(t)(ba)
+			return resolveIntentsSendFunc(t)(ctx, ba)
 		default:
 			return nil, kvpb.NewErrorf("unexpected")
 		}
@@ -470,7 +472,7 @@ func TestCleanupTxnIntentsAsyncWithPartialRollback(t *testing.T) {
 	txn.IgnoredSeqNums = []enginepb.IgnoredSeqNumRange{{Start: 1, End: 1}}
 
 	var gotResolveIntent, gotResolveIntentRange int32
-	check := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	check := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		for _, r := range ba.Requests {
 			if ri, ok := r.GetInner().(*kvpb.ResolveIntentRequest); ok {
 				atomic.StoreInt32(&gotResolveIntent, 1)
@@ -628,7 +630,7 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 		resolved []string
 		gced     []string
 	}
-	resolveOrGCFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	resolveOrGCFunc := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if len(ba.Requests) != 1 {
 			return nil, kvpb.NewErrorf("unexpected")
 		}
@@ -638,19 +640,19 @@ func TestCleanupMultipleTxnIntentsAsync(t *testing.T) {
 			reqs.Lock()
 			reqs.resolved = append(reqs.resolved, string(ru.GetResolveIntent().Key))
 			reqs.Unlock()
-			return resolveIntentsSendFunc(t)(ba)
+			return resolveIntentsSendFunc(t)(ctx, ba)
 		case kvpb.ResolveIntentRange:
 			reqs.Lock()
 			req := ru.GetResolveIntentRange()
 			reqs.resolved = append(reqs.resolved,
 				fmt.Sprintf("%s-%s", string(req.Key), string(req.EndKey)))
 			reqs.Unlock()
-			return resolveIntentsSendFunc(t)(ba)
+			return resolveIntentsSendFunc(t)(ctx, ba)
 		case kvpb.GC:
 			reqs.Lock()
 			reqs.gced = append(reqs.gced, string(ru.GetGc().Key))
 			reqs.Unlock()
-			return gcSendFunc(t)(ba)
+			return gcSendFunc(t)(ctx, ba)
 		default:
 			return nil, kvpb.NewErrorf("unexpected")
 		}
@@ -756,6 +758,75 @@ func TestCleanupIntents(t *testing.T) {
 	}
 }
 
+// TestIntentResolutionTimeout tests that running intent resolution with an
+// unavailable range eventually times out and finishes, and does not block
+// intent resolution on another available range.
+func TestIntentResolutionTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// c is to ensure that intent resolution on the available range occurs after
+	// intent resolution on the unavailable range.
+	c := make(chan struct{})
+	unavailableRangeSendFunc := func(ctx context.Context, _ *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		c <- struct{}{}
+		<-ctx.Done()
+		return nil, &kvpb.Error{}
+	}
+	sf := func() *sendFuncs {
+		s := newSendFuncs(t)
+		s.pushFrontLocked(
+			singlePushTxnSendFunc(t),
+			unavailableRangeSendFunc,
+			singlePushTxnSendFunc(t),
+			resolveIntentsSendFunc(t),
+		)
+		return s
+	}()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */, base.DefaultMaxClockOffset)
+	cfg := Config{
+		Stopper: stopper,
+		Clock:   clock,
+		TestingKnobs: kvserverbase.IntentResolverTestingKnobs{
+			InFlightBackpressureLimit:           1,
+			MaxIntentResolutionSendBatchTimeout: 1 * time.Second,
+		},
+	}
+	ir := newIntentResolverWithSendFuncsConcurrentSend(cfg, sf, stopper, true)
+
+	// Intent resolution on unavailable range.
+	var cleanupIntentsErrFinished int32
+	go func() {
+		num, err := ir.CleanupIntents(context.Background(), makeTxnIntents(t, clock, 1), clock.Now(), kvpb.PUSH_ABORT)
+		require.Error(t, err)
+		require.Equal(t, num, 0)
+		atomic.StoreInt32(&cleanupIntentsErrFinished, 1)
+	}()
+
+	// Intent resolution on available range.
+	var cleanupIntentsSuccessFinished int32
+	go func() {
+		// Ensure intent resolution occurs after that of the unavailable range.
+		<-c
+		num, err := ir.CleanupIntents(context.Background(), makeTxnIntents(t, clock, 1), clock.Now(), kvpb.PUSH_ABORT)
+		require.NoError(t, err)
+		require.Equal(t, num, 1)
+		atomic.StoreInt32(&cleanupIntentsSuccessFinished, 1)
+	}()
+
+	testutils.SucceedsSoon(t, func() error {
+		if atomic.LoadInt32(&cleanupIntentsErrFinished) != 1 {
+			return errors.New("CleanupIntents of unavailable range did not finish")
+		}
+		if atomic.LoadInt32(&cleanupIntentsSuccessFinished) != 1 {
+			return errors.New("CleanupIntents of available range did not finish")
+		}
+		return nil
+	})
+	assert.Equal(t, ir.Metrics.IntentResolutionFailed.Count(), int64(1))
+}
+
 func newTransaction(
 	name string, baseKey roachpb.Key, userPriority roachpb.UserPriority, clock *hlc.Clock,
 ) *roachpb.Transaction {
@@ -784,17 +855,28 @@ func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.In
 // the IntentResolver tries to send. They are used in conjunction with the below
 // function to create an IntentResolver with a slice of sendFuncs.
 // A library of useful sendFuncs are defined below.
-type sendFunc func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
+type sendFunc func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
 
 func newIntentResolverWithSendFuncs(
 	c Config, sf *sendFuncs, stopper *stop.Stopper,
 ) *IntentResolver {
+	return newIntentResolverWithSendFuncsConcurrentSend(c, sf, stopper, false)
+}
+
+func newIntentResolverWithSendFuncsConcurrentSend(
+	c Config, sf *sendFuncs, stopper *stop.Stopper, allowConcurrentSend bool,
+) *IntentResolver {
 	txnSenderFactory := kv.NonTransactionalFactoryFunc(
-		func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+
+		func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			sf.mu.Lock()
-			defer sf.mu.Unlock()
 			f := sf.popLocked()
-			return f(ba)
+			if allowConcurrentSend {
+				sf.mu.Unlock()
+			} else {
+				defer sf.mu.Unlock()
+			}
+			return f(ctx, ba)
 		})
 	db := kv.NewDB(log.MakeTestingAmbientCtxWithNewTracer(), txnSenderFactory, c.Clock, stopper)
 	c.DB = db
@@ -806,7 +888,7 @@ func newIntentResolverWithSendFuncs(
 func pushTxnSendFuncs(sf *sendFuncs, N int) sendFunc {
 	toPush := int64(N)
 	var f sendFunc
-	f = func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	f = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if remaining := atomic.LoadInt64(&toPush); len(ba.Requests) > int(remaining) {
 			sf.t.Errorf("expected at most %d PushTxnRequests in batch, got %d",
 				remaining, len(ba.Requests))
@@ -821,7 +903,7 @@ func pushTxnSendFuncs(sf *sendFuncs, N int) sendFunc {
 }
 
 func pushTxnSendFunc(t *testing.T, numPushes int) sendFunc {
-	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	return func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if len(ba.Requests) != numPushes {
 			t.Errorf("expected %d PushTxnRequests in batch, got %d",
 				numPushes, len(ba.Requests))
@@ -857,7 +939,7 @@ func resolveIntentsSendFuncsEx(
 	toResolve := int64(numIntents)
 	reqsSeen := int64(0)
 	var f sendFunc
-	f = func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	f = func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		if remaining := atomic.LoadInt64(&toResolve); len(ba.Requests) > int(remaining) {
 			sf.t.Errorf("expected at most %d ResolveIntentRequests in batch, got %d",
 				remaining, len(ba.Requests))
@@ -876,7 +958,7 @@ func resolveIntentsSendFuncsEx(
 }
 
 func resolveIntentsSendFuncEx(t *testing.T, checkTxnStatusOpt checkTxnStatusOpt) sendFunc {
-	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	return func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		return respForResolveIntentBatch(t, ba, checkTxnStatusOpt), nil
 	}
 }
@@ -893,12 +975,12 @@ func resolveIntentsSendFunc(t *testing.T) sendFunc {
 	return resolveIntentsSendFuncEx(t, dontCheckTxnStatus)
 }
 
-func failSendFunc(*kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+func failSendFunc(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 	return nil, kvpb.NewError(fmt.Errorf("boom"))
 }
 
 func gcSendFunc(t *testing.T) sendFunc {
-	return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	return func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 		resp := &kvpb.BatchResponse{}
 		for _, r := range ba.Requests {
 			if _, ok := r.GetInner().(*kvpb.GCRequest); !ok {
