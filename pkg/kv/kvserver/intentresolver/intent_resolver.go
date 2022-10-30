@@ -73,6 +73,10 @@ const (
 	// ResumeSpan and the batcher will send a new range request.
 	intentResolverRangeRequestSize = 200
 
+	// intentResolverSendMaxTimeout is the maximum amount of time an
+	// intent resolution batch request can run for before timeout.
+	intentResolverSendMaxTimeout = time.Minute
+
 	// MaxTxnsPerIntentCleanupBatch is the number of transactions whose
 	// corresponding intents will be resolved at a time. Intents are batched
 	// by transaction to avoid timeouts while resolving intents and ensure that
@@ -225,24 +229,33 @@ func New(c Config) *IntentResolver {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
+	intentResolutionSendMaxTimeout := intentResolverSendMaxTimeout
+	if c.TestingKnobs.IntentResolverSendMaxTimeout != 0 {
+		intentResolutionSendMaxTimeout = c.TestingKnobs.IntentResolverSendMaxTimeout
+	}
+	inFlightBackpressureLimit := c.TestingKnobs.InFlightBackpressureLimit
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
-		AmbientCtx:      c.AmbientCtx,
-		Name:            "intent_resolver_ir_batcher",
-		MaxMsgsPerBatch: intentResolutionBatchSize,
-		MaxWait:         c.MaxIntentResolutionBatchWait,
-		MaxIdle:         c.MaxIntentResolutionBatchIdle,
-		Stopper:         c.Stopper,
-		Sender:          c.DB.NonTransactionalSender(),
+		AmbientCtx:                c.AmbientCtx,
+		Name:                      "intent_resolver_ir_batcher",
+		MaxMsgsPerBatch:           intentResolutionBatchSize,
+		MaxWait:                   c.MaxIntentResolutionBatchWait,
+		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
+		MaxTimeout:                intentResolutionSendMaxTimeout,
+		InFlightBackpressureLimit: inFlightBackpressureLimit,
+		Stopper:                   c.Stopper,
+		Sender:                    c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
-		AmbientCtx:         c.AmbientCtx,
-		Name:               "intent_resolver_ir_range_batcher",
-		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
-		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
-		MaxWait:            c.MaxIntentResolutionBatchWait,
-		MaxIdle:            c.MaxIntentResolutionBatchIdle,
-		Stopper:            c.Stopper,
-		Sender:             c.DB.NonTransactionalSender(),
+		AmbientCtx:                c.AmbientCtx,
+		Name:                      "intent_resolver_ir_range_batcher",
+		MaxMsgsPerBatch:           intentResolutionRangeBatchSize,
+		MaxKeysPerBatchReq:        intentResolverRangeRequestSize,
+		MaxWait:                   c.MaxIntentResolutionBatchWait,
+		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
+		MaxTimeout:                intentResolutionSendMaxTimeout,
+		InFlightBackpressureLimit: inFlightBackpressureLimit,
+		Stopper:                   c.Stopper,
+		Sender:                    c.DB.NonTransactionalSender(),
 	})
 	return ir
 }

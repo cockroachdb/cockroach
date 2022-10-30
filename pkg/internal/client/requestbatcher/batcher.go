@@ -130,6 +130,12 @@ type Config struct {
 	// enforced. It is inadvisable to disable both MaxIdle and MaxWait.
 	MaxIdle time.Duration
 
+	// MaxTimeout is the maximum amount of time that sending a batch request can
+	// run for before timing out. This is used to prevent batch requests from
+	// stalling indefinitely. If MaxTimeout is <= 0 then no send timeout is
+	// enforced.
+	MaxTimeout time.Duration
+
 	// InFlightBackpressureLimit is the number of batches in flight above which
 	// sending clients should experience backpressure. If the batcher has more
 	// requests than this in flight it will not accept new requests until the
@@ -280,11 +286,20 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 			}
 			return nil
 		}
-		if !ba.sendDeadline.IsZero() {
+		if b.cfg.MaxTimeout > 0 || !ba.sendDeadline.IsZero() {
 			actualSend := send
 			send = func(context.Context) error {
-				return contextutil.RunWithTimeout(
-					ctx, b.sendBatchOpName, timeutil.Until(ba.sendDeadline), actualSend)
+				var timeout *time.Duration
+				if b.cfg.MaxTimeout > 0 {
+					timeout = &b.cfg.MaxTimeout
+				}
+				if !ba.sendDeadline.IsZero() {
+					sendDeadlineDuration := timeutil.Until(ba.sendDeadline)
+					if timeout == nil || *timeout > sendDeadlineDuration {
+						timeout = &sendDeadlineDuration
+					}
+				}
+				return contextutil.RunWithTimeout(ctx, b.sendBatchOpName, *timeout, actualSend)
 			}
 		}
 		// Send requests in a loop to support pagination, which may be necessary
