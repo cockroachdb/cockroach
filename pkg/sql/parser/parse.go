@@ -41,6 +41,10 @@ func init() {
 // node along with other information.
 type Statement struct {
 	// AST is the root of the AST tree for the parsed statement.
+	// Note that it is NOT SAFE to access this currently with statement execution,
+	// as unfortunately the AST is not immutable.
+	// See issue https://github.com/cockroachdb/cockroach/issues/22847 for more
+	// details on this problem.
 	AST tree.Statement
 
 	// Comments is the list of parsed SQL comments.
