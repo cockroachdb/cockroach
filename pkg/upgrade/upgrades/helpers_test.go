@@ -34,6 +34,7 @@ var (
 	DoesNotHaveIndex  = doesNotHaveIndex
 	HasColumnFamily   = hasColumnFamily
 	CreateSystemTable = createSystemTable
+	HasPrimaryKey     = hasPrimaryKey
 )
 
 type Schema struct {

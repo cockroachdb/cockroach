@@ -39,8 +39,18 @@ type operation struct {
 	schemaList []string
 	// Schema change query.
 	query string
-	// Function to check existing schema.
-	schemaExistsFn func(catalog.TableDescriptor, catalog.TableDescriptor, string) (bool, error)
+	// The "migrateTable" function skips execution of the operation query if
+	// schemaExistsFn returns true on all elements in schemaList.
+	// Error is returned if schemaExistsFn returned different result on any
+	// element than other elements.
+	//
+	// Parameters
+	// stored: the current descriptor read from storage.
+	// expected: the expected descriptor passed in when `migrateTable` is called.
+	// Normally, it's a predefined system table descriptor.
+	// schemaEleName: name of a schema element (e.g. column or index) from the
+	// "schemaList" this operation works on.
+	schemaExistsFn func(stored catalog.TableDescriptor, expected catalog.TableDescriptor, schemaEleName string) (bool, error)
 }
 
 // waitForJobStatement is the statement used to wait for an ongoing job to
@@ -232,27 +242,52 @@ func hasIndex(storedTable, expectedTable catalog.TableDescriptor, indexName stri
 	}
 	storedCopy := storedIdx.IndexDescDeepCopy()
 	expectedCopy := expectedIdx.IndexDescDeepCopy()
-	// Ignore the fields that don't matter in the comparison.
-	storedCopy.ID = 0
-	expectedCopy.ID = 0
-	storedCopy.Version = 0
-	expectedCopy.Version = 0
-	// CreatedExplicitly is an ignored field because there exists an inconsistency
-	// between CREATE TABLE (... INDEX) and CREATE INDEX.
-	// See https://github.com/cockroachdb/cockroach/issues/65929.
-	storedCopy.CreatedExplicitly = false
-	expectedCopy.CreatedExplicitly = false
-	storedCopy.StoreColumnNames = []string{}
-	expectedCopy.StoreColumnNames = []string{}
-	storedCopy.StoreColumnIDs = []descpb.ColumnID{0, 0, 0}
-	expectedCopy.StoreColumnIDs = []descpb.ColumnID{0, 0, 0}
-	storedCopy.CreatedAtNanos = 0
-	expectedCopy.CreatedAtNanos = 0
+	zeroIrrelevantIndexFields(&storedCopy)
+	zeroIrrelevantIndexFields(&expectedCopy)
 
 	if err = ensureProtoMessagesAreEqual(&expectedCopy, &storedCopy); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// hasPrimaryKey returns true if the storedTable already has a primary key with
+// same key columns. Primary key name and constraint ID are ignored as they can
+// change when primary key is altered.
+func hasPrimaryKey(storedTable, expectedTable catalog.TableDescriptor, _ string) (bool, error) {
+	storedIdx := storedTable.GetPrimaryIndex()
+	expectedIdx := expectedTable.GetPrimaryIndex()
+
+	storedCopy := storedIdx.IndexDescDeepCopy()
+	expectedCopy := expectedIdx.IndexDescDeepCopy()
+	zeroIrrelevantIndexFields(&storedCopy)
+	zeroIrrelevantIndexFields(&expectedCopy)
+
+	storedCopy.Name = ""
+	expectedCopy.Name = ""
+	storedCopy.ConstraintID = 0
+	expectedCopy.ConstraintID = 0
+
+	if err := ensureProtoMessagesAreEqual(&expectedCopy, &storedCopy); err != nil {
+		// Override the error to return false. Meaning, we consider the expected
+		// primary doesn't exist because the existing primary key doesn't match
+		// expectation.
+		return false, nil //nolint:returnerrcheck
+	}
+	return true, nil
+}
+
+// ignore the fields that don't matter in the comparison.
+func zeroIrrelevantIndexFields(idx *descpb.IndexDescriptor) {
+	idx.ID = 0
+	idx.Version = 0
+	// CreatedExplicitly is an ignored field because there exists an inconsistency
+	// between CREATE TABLE (... INDEX) and CREATE INDEX.
+	// See https://github.com/cockroachdb/cockroach/issues/65929.
+	idx.CreatedExplicitly = false
+	idx.StoreColumnNames = []string{}
+	idx.StoreColumnIDs = []descpb.ColumnID{0, 0, 0}
+	idx.CreatedAtNanos = 0
 }
 
 // doesNotHaveIndex returns true if storedTable does not have an index named indexName.

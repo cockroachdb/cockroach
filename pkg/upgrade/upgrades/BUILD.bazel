@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "alter_sql_instances_locality.go",
         "alter_statement_statistics_index_recommendations.go",
+        "alter_system_comments_primary_key.go",
         "descriptor_utils.go",
         "ensure_sql_schema_telemetry_schedule.go",
         "fix_userfile_descriptor_corruption.go",
@@ -72,6 +73,7 @@ go_test(
     srcs = [
         "alter_sql_instances_locality_test.go",
         "alter_statement_statistics_index_recommendations_test.go",
+        "alter_system_comments_primary_key_test.go",
         "builtins_test.go",
         "descriptor_utils_test.go",
         "ensure_sql_schema_telemetry_schedule_test.go",
