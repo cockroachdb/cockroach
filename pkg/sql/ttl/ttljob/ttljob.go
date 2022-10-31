@@ -102,7 +102,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	if knobs.AOSTDuration != nil {
 		aostDuration = *knobs.AOSTDuration
 	}
-	aost := details.Cutoff.Add(aostDuration)
 
 	var rowLevelTTL catpb.RowLevelTTL
 	var relationName string
@@ -120,6 +119,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		// If the AOST timestamp is before the latest descriptor timestamp, exit
 		// early as the delete will not work.
 		modificationTime := desc.GetModificationTime().GoTime()
+		aost := details.Cutoff.Add(aostDuration)
 		if modificationTime.After(aost) {
 			return errors.Newf(
 				"found a recent schema change on the table at %s, aborting",
@@ -229,7 +229,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			return &execinfrapb.TTLSpec{
 				JobID:                       jobID,
 				RowLevelTTLDetails:          details,
-				AOST:                        aost,
+				AOSTDuration:                aostDuration,
 				TTLExpr:                     ttlExpr,
 				Spans:                       spans,
 				SelectBatchSize:             selectBatchSize,

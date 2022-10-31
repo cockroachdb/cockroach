@@ -35,14 +35,10 @@ type selectQueryBuilder struct {
 	selectOpName    string
 	spanToProcess   spanToProcess
 	selectBatchSize int64
-	aost            time.Time
 	ttlExpr         catpb.Expression
 
 	// isFirst is true if we have not invoked a query using the builder yet.
 	isFirst bool
-	// cachedQuery is the cached query, which stays the same from the second
-	// iteration onwards.
-	cachedQuery string
 	// cachedArgs keeps a cache of args to use in the run query.
 	// The cache is of form [cutoff, <endFilterClause...>, <startFilterClause..>].
 	cachedArgs []interface{}
@@ -50,6 +46,8 @@ type selectQueryBuilder struct {
 	pkColumnNamesSQL string
 	// endPKColumnNamesSQL caches the column names of the ending PK.
 	endPKColumnNamesSQL string
+
+	testOverride time.Time
 }
 
 type spanToProcess struct {
@@ -62,7 +60,6 @@ func makeSelectQueryBuilder(
 	pkColumns []string,
 	relationName string,
 	spanToProcess spanToProcess,
-	aost time.Time,
 	selectBatchSize int64,
 	ttlExpr catpb.Expression,
 ) selectQueryBuilder {
@@ -84,7 +81,6 @@ func makeSelectQueryBuilder(
 		pkColumns:       pkColumns,
 		selectOpName:    fmt.Sprintf("ttl select %s", relationName),
 		spanToProcess:   spanToProcess,
-		aost:            aost,
 		selectBatchSize: selectBatchSize,
 		ttlExpr:         ttlExpr,
 
@@ -95,7 +91,7 @@ func makeSelectQueryBuilder(
 	}
 }
 
-func (b *selectQueryBuilder) buildQuery() string {
+func (b *selectQueryBuilder) nextQuery(aost time.Time) string {
 	// Generate the end key clause for SELECT, which always stays the same.
 	// Start from $2 as $1 is for the now clause.
 	// The end key of a span is exclusive, so use <.
@@ -140,37 +136,25 @@ func (b *selectQueryBuilder) buildQuery() string {
 		filterClause += ")"
 	}
 
-	return fmt.Sprintf(
+	query := fmt.Sprintf(
 		ttlbase.SelectTemplate,
 		b.pkColumnNamesSQL,
 		b.tableID,
-		tree.MustMakeDTimestampTZ(b.aost, time.Microsecond),
+		tree.MustMakeDTimestampTZ(aost, time.Microsecond),
 		b.ttlExpr,
 		filterClause,
 		endFilterClause,
 		b.selectBatchSize,
 	)
-}
-
-func (b *selectQueryBuilder) nextQuery() (string, []interface{}) {
 	if b.isFirst {
-		q := b.buildQuery()
 		b.isFirst = false
-		return q, b.cachedArgs
 	}
-	// All subsequent query strings are the same.
-	// Populate the cache once, and then maintain it for all subsequent calls.
-	if b.cachedQuery == "" {
-		b.cachedQuery = b.buildQuery()
-	}
-	return b.cachedQuery, b.cachedArgs
+	return query
 }
 
 func (b *selectQueryBuilder) run(
-	ctx context.Context, ie sqlutil.InternalExecutor,
+	ctx context.Context, ie sqlutil.InternalExecutor, aost time.Time,
 ) ([]tree.Datums, error) {
-	q, args := b.nextQuery()
-
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
 	// the internal executor will treat a passed-in txn as an explicit txn, so
 	// the AOST clause on the SELECT query would not be interpreted correctly.
@@ -183,8 +167,8 @@ func (b *selectQueryBuilder) run(
 			User:             username.RootUserName(),
 			QualityOfService: &qosLevel,
 		},
-		q,
-		args...,
+		b.nextQuery(aost),
+		b.cachedArgs...,
 	)
 	if err != nil {
 		return nil, err
