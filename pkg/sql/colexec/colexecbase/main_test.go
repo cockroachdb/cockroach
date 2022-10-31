@@ -58,6 +58,7 @@ func TestMain(m *testing.M) {
 		testMemAcc = &memAcc
 		evalCtx := eval.MakeTestingEvalContext(st)
 		evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
+		evalCtx.StreamingManager = &faketreeeval.DummyEvalStreamingManager{}
 		testColumnFactory = coldataext.NewExtendedColumnFactory(&evalCtx)
 		testAllocator = colmem.NewAllocator(ctx, testMemAcc, testColumnFactory)
 		defer testMemAcc.Close(ctx)

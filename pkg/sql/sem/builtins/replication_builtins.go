@@ -50,19 +50,15 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
-
 				ingestionJobID := jobspb.JobID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(ctx, evalCtx, evalCtx.Txn, ingestionJobID, cutoverTimestamp)
-				if err != nil {
+				if err := evalCtx.StreamingManager.CompleteStreamIngestion(
+					ctx, ingestionJobID, cutoverTimestamp,
+				); err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(ingestionJobID)), err
+				return tree.NewDInt(tree.DInt(ingestionJobID)), nil
 			},
 			Info: "This function can be used to signal a running stream ingestion job to complete. " +
 				"The job will eventually stop ingesting, revert to the specified timestamp and leave the " +
@@ -91,12 +87,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, errors.New("job_id cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
 				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				stats, err := evalCtx.StreamingManager.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
 				if err != nil {
 					return nil, err
 				}
@@ -131,12 +123,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, errors.New("job_id cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
 				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				stats, err := evalCtx.StreamingManager.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
 				if err != nil {
 					return nil, err
 				}
@@ -164,15 +152,11 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
 				tenantID, err := mustBeDIntInTenantRange(args[0])
 				if err != nil {
 					return nil, err
 				}
-				jobID, err := mgr.StartReplicationStream(ctx, evalCtx, evalCtx.Txn, uint64(tenantID))
+				jobID, err := evalCtx.StreamingManager.StartReplicationStream(ctx, uint64(tenantID))
 				if err != nil {
 					return nil, err
 				}
@@ -201,16 +185,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
 				frontier, err := hlc.ParseTimestamp(string(tree.MustBeDString(args[1])))
 				if err != nil {
 					return nil, err
 				}
 				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				sps, err := mgr.HeartbeatReplicationStream(ctx, evalCtx, streamID, frontier, evalCtx.Txn)
+				sps, err := evalCtx.StreamingManager.HeartbeatReplicationStream(ctx, streamID, frontier)
 				if err != nil {
 					return nil, err
 				}
@@ -243,12 +223,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
-				return mgr.StreamPartition(
-					evalCtx,
+				return evalCtx.StreamingManager.StreamPartition(
+					ctx,
 					streaming.StreamID(tree.MustBeDInt(args[0])),
 					[]byte(tree.MustBeDBytes(args[1])),
 				)
@@ -269,13 +245,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
-
 				streamID := int64(tree.MustBeDInt(args[0]))
-				spec, err := mgr.GetReplicationStreamSpec(ctx, evalCtx, evalCtx.Txn, streaming.StreamID(streamID))
+				spec, err := evalCtx.StreamingManager.GetReplicationStreamSpec(ctx, streaming.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}
@@ -304,19 +275,14 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
-				if err != nil {
-					return nil, err
-				}
-
 				streamID := int64(tree.MustBeDInt(args[0]))
 				successfulIngestion := bool(tree.MustBeDBool(args[1]))
-				if err := mgr.CompleteReplicationStream(
-					ctx, evalCtx, evalCtx.Txn, streaming.StreamID(streamID), successfulIngestion,
+				if err := evalCtx.StreamingManager.CompleteReplicationStream(
+					ctx, streaming.StreamID(streamID), successfulIngestion,
 				); err != nil {
 					return nil, err
 				}
-				return tree.NewDInt(tree.DInt(streamID)), err
+				return tree.NewDInt(tree.DInt(streamID)), nil
 			},
 			Info: "This function can be used on the producer side to complete and clean up a replication stream." +
 				"'successful_ingestion' indicates whether the stream ingestion finished successfully.",

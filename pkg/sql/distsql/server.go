@@ -355,6 +355,7 @@ func (ds *ServerImpl) setupFlow(
 			Locality:                  ds.ServerConfig.Locality,
 			Tracer:                    ds.ServerConfig.Tracer,
 			Planner:                   &faketreeeval.DummyEvalPlanner{Monitor: monitor},
+			StreamingManager:          &faketreeeval.DummyEvalStreamingManager{},
 			PrivilegedAccessor:        &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:           &faketreeeval.DummySessionAccessor{},
 			ClientNoticeSender:        &faketreeeval.DummyClientNoticeSender{},

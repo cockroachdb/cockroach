@@ -158,6 +158,9 @@ func (evalCtx *extendedEvalContext) QueueJob(
 	return job, nil
 }
 
+var _ eval.ReplicationStreamManager = &planner{}
+var _ eval.StreamIngestManager = &planner{}
+
 // planner is the centerpiece of SQL statement execution combining session
 // state and database state with the logic for SQL execution. It is logically
 // scoped to the execution of a single statement, and should not be used to
@@ -376,6 +379,7 @@ func newInternalPlanner(
 
 	p.extendedEvalCtx = internalExtendedEvalCtx(ctx, sds, params.collection, txn, ts, ts, execCfg)
 	p.extendedEvalCtx.Planner = p
+	p.extendedEvalCtx.StreamingManager = p
 	p.extendedEvalCtx.PrivilegedAccessor = p
 	p.extendedEvalCtx.SessionAccessor = p
 	p.extendedEvalCtx.ClientNoticeSender = p

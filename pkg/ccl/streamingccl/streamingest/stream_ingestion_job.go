@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,16 +31,16 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// completeStreamIngestion terminates the stream as of specified time.
-func completeStreamIngestion(
+// CompleteStreamIngestion terminates the stream as of specified time.
+func CompleteStreamIngestion(
 	ctx context.Context,
-	evalCtx *eval.Context,
-	txn *kv.Txn,
+	planner sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
-	jobRegistry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false, /* useReadLock */
+	execCfg := planner.ExecCfg()
+	jobRegistry := execCfg.JobRegistry
+	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, planner.Txn(), false, /* useReadLock */
 		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// TODO(adityamaru): This should change in the future, a user should be
 			// allowed to correct their cutover time if the process of reverting the job
@@ -59,11 +58,12 @@ func completeStreamIngestion(
 		})
 }
 
-func getStreamIngestionStats(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
+func GetStreamIngestionStats(
+	ctx context.Context, planner sql.JobExecContext, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
-	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, txn)
+	registry := planner.ExecCfg().JobRegistry
+	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, planner.Txn())
 	if err != nil {
 		return nil, err
 	}

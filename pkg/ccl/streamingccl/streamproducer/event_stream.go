@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
@@ -514,10 +515,15 @@ func setConfigDefaults(cfg *streampb.StreamPartitionSpec_ExecutionConfig) {
 	}
 }
 
-func streamPartition(
-	evalCtx *eval.Context, streamID streaming.StreamID, opaqueSpec []byte,
+// StreamPartition creates an event stream for partition.
+func StreamPartition(
+	ctx context.Context,
+	planner eval.Planner,
+	sd *sessiondata.SessionData,
+	streamID streaming.StreamID,
+	opaqueSpec []byte,
 ) (eval.ValueGenerator, error) {
-	if !evalCtx.SessionData().AvoidBuffering {
+	if !sd.AvoidBuffering {
 		return nil, errors.New("partition streaming requires 'SET avoid_buffering = true' option")
 	}
 
@@ -532,7 +538,7 @@ func streamPartition(
 
 	setConfigDefaults(&spec.Config)
 
-	execCfg := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
+	execCfg := planner.ExecutorConfig().(*sql.ExecutorConfig)
 
 	var subscribedSpans roachpb.SpanGroup
 	for _, sp := range spec.Spans {
@@ -543,6 +549,6 @@ func streamPartition(
 		spec:            spec,
 		subscribedSpans: subscribedSpans,
 		execCfg:         execCfg,
-		mon:             evalCtx.Planner.Mon(),
+		mon:             planner.Mon(),
 	}, nil
 }

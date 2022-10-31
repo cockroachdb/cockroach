@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -44,7 +43,7 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 		require.NoError(t, protoutil.Unmarshal(sessionSerialized, &sessionData))
 	}
 
-	getManagerForUser := func(u string) (streaming.ReplicationStreamManager, error) {
+	getManagerForUser := func(u string) (eval.ReplicationStreamManager, error) {
 		sqlUser, err := username.MakeSQLUsernameFromUserInput(u, username.PurposeValidation)
 		require.NoError(t, err)
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
