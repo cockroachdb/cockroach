@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -79,8 +78,6 @@ var CacheSize = settings.RegisterIntSetting(
 // Storage deals with reading and writing session records. It implements the
 // sqlliveness.Reader interface, and the slinstace.Writer interface.
 type Storage struct {
-	log.AmbientContext
-
 	settings   *cluster.Settings
 	stopper    *stop.Stopper
 	clock      *hlc.Clock
@@ -94,7 +91,7 @@ type Storage struct {
 	mu struct {
 		syncutil.Mutex
 
-		g singleflight.Group
+		g *singleflight.Group
 
 		started bool
 		// liveSessions caches the current view of expirations of live sessions.
@@ -124,8 +121,6 @@ func NewTestingStorage(
 	newTimer func() timeutil.TimerI,
 ) *Storage {
 	s := &Storage{
-		AmbientContext: ambientCtx,
-
 		settings: settings,
 		stopper:  stopper,
 		clock:    clock,
@@ -149,6 +144,7 @@ func NewTestingStorage(
 	}
 	s.mu.liveSessions = cache.NewUnorderedCache(cacheConfig)
 	s.mu.deadSessions = cache.NewUnorderedCache(cacheConfig)
+	s.mu.g = singleflight.NewGroup("is-alive", "session ID")
 	return s
 }
 
@@ -221,7 +217,7 @@ func (s *Storage) isAlive(
 	}
 
 	// We think that the session is expired; check, and maybe delete it.
-	resChan := s.deleteOrFetchSessionSingleFlightLocked(ctx, sid)
+	future := s.deleteOrFetchSessionSingleFlightLocked(ctx, sid)
 
 	// At this point, we know that the singleflight goroutine has been launched.
 	// Releasing the lock here ensures that callers will either join the single-
@@ -234,15 +230,11 @@ func (s *Storage) isAlive(
 	if syncOrAsync == async {
 		return true, nil
 	}
-	select {
-	case res := <-resChan:
-		if res.Err != nil {
-			return false, res.Err
-		}
-		return res.Val.(bool), nil
-	case <-ctx.Done():
-		return false, ctx.Err()
+	res := future.WaitForResult(ctx)
+	if res.Err != nil {
+		return false, res.Err
 	}
+	return res.Val.(bool), nil
 }
 
 // This function will launch a singleflight goroutine for the session which
@@ -253,35 +245,25 @@ func (s *Storage) isAlive(
 // This method assumes that s.mu is held.
 func (s *Storage) deleteOrFetchSessionSingleFlightLocked(
 	ctx context.Context, sid sqlliveness.SessionID,
-) <-chan singleflight.Result {
+) singleflight.Future {
 	s.mu.AssertHeld()
 
 	// If it is found, we can add it and its expiration to the liveSessions
 	// cache. If it isn't found, we know it's dead, and we can add that to the
 	// deadSessions cache.
-	resChan, _ := s.mu.g.DoChan(string(sid), func() (interface{}, error) {
-
-		// Note that we use a new `context` here to avoid a situation where a cancellation
-		// of the first context cancels other callers to the `acquireNodeLease()` method,
-		// because of its use of `singleflight.Group`. See issue #41780 for how this has
-		// happened.
-		bgCtx := s.AnnotateCtx(context.Background())
-		bgCtx = logtags.AddTags(bgCtx, logtags.FromContext(ctx))
-		newCtx, cancel := s.stopper.WithCancelOnQuiesce(bgCtx)
-		defer cancel()
-
-		// store the result underneath the singleflight to avoid the need
-		// for additional synchronization. Also, use a stopper task to ensure
-		// the goroutine is tracked during shutdown.
-		var live bool
-		const taskName = "sqlliveness-fetch-or-delete-session"
-		if err := s.stopper.RunTaskWithErr(newCtx, taskName, func(
-			ctx context.Context,
-		) (err error) {
+	resChan, _ := s.mu.g.DoChan(ctx, string(sid), singleflight.DoOpts{
+		Stop:               s.stopper,
+		InheritCancelation: false,
+	},
+		func(ctx context.Context) (interface{}, error) {
+			// store the result underneath the singleflight to avoid the need
+			// for additional synchronization. Also, use a stopper task to ensure
+			// the goroutine is tracked during shutdown.
+			var live bool
 			var expiration hlc.Timestamp
-			live, expiration, err = s.deleteOrFetchSession(newCtx, sid)
+			live, expiration, err := s.deleteOrFetchSession(ctx, sid)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			s.mu.Lock()
 			defer s.mu.Unlock()
@@ -290,12 +272,8 @@ func (s *Storage) deleteOrFetchSessionSingleFlightLocked(
 			} else {
 				s.mu.deadSessions.Add(sid, nil)
 			}
-			return nil
-		}); err != nil {
-			return false, err
-		}
-		return live, nil
-	})
+			return live, nil
+		})
 	return resChan
 }
 
@@ -385,7 +363,7 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 		}
 		return
 	}
-	launchSessionCheck := func(id sqlliveness.SessionID) <-chan singleflight.Result {
+	launchSessionCheck := func(id sqlliveness.SessionID) singleflight.Future {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		// We have evidence that the session is expired, so remove any cached
@@ -395,12 +373,8 @@ func (s *Storage) deleteExpiredSessions(ctx context.Context) {
 		return s.deleteOrFetchSessionSingleFlightLocked(ctx, id)
 	}
 	checkSession := func(id sqlliveness.SessionID) error {
-		select {
-		case r := <-launchSessionCheck(id):
-			return r.Err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		future := launchSessionCheck(id)
+		return future.WaitForResult(ctx).Err
 	}
 	for _, id := range toCheck {
 		if err := checkSession(id); err != nil {

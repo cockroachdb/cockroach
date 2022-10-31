@@ -245,7 +245,6 @@ func staticSize(size int64) func() int64 {
 
 func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	db := newTestDescriptorDB()
 	for i, char := range "abcdefghijklmnopqrstuvwx" {
 		// Create splits on each character:
@@ -259,7 +258,7 @@ func initTestDescriptorDB(t *testing.T) *testDescriptorDB {
 	}
 	// TODO(andrei): don't leak this Stopper. Someone needs to Stop() it.
 	db.stopper = stop.NewStopper()
-	db.cache = NewRangeCache(st, db, staticSize(2<<10), db.stopper, tr)
+	db.cache = NewRangeCache(st, db, staticSize(2<<10), db.stopper)
 	return db
 }
 
@@ -482,10 +481,9 @@ func TestLookupByKeyMin(t *testing.T) {
 	ctx := context.Background()
 
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 	startToMeta2Desc := roachpb.RangeDescriptor{
 		StartKey: roachpb.RKeyMin,
 		EndKey:   keys.RangeMetaKey(roachpb.RKey("a")),
@@ -615,6 +613,11 @@ func TestRangeCacheContextCancellation(t *testing.T) {
 	// Cancel the leader and check that it gets an error.
 	cancel()
 	expectContextCancellation(t, errC1)
+	select {
+	case err := <-errC2:
+		t.Fatalf("unexpected err: %v", err)
+	case <-time.After(time.Millisecond):
+	}
 
 	// While lookups are still blocked, launch another one. This new request
 	// should join the flight just like c2.
@@ -890,7 +893,8 @@ func TestRangeCacheHandleDoubleSplit(t *testing.T) {
 					var desc *roachpb.RangeDescriptor
 					// Each request goes to a different key.
 					var err error
-					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, db.cache.tracer, "test")
+					tracer := tracing.NewTracer()
+					ctx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tracer, "test")
 					defer getRecAndFinish()
 					tok, err := db.cache.lookupInternal(
 						ctx, key, oldToken, reverseScan)
@@ -1007,10 +1011,9 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 	cache.addEntryLocked(&CacheEntry{desc: *defDesc})
 
 	// Now, add a new, overlapping set of descriptors.
@@ -1184,10 +1187,9 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			tr := tracing.NewTracer()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeCache(st, nil /* db */, staticSize(2<<10), stopper, tr)
+			cache := NewRangeCache(st, nil /* db */, staticSize(2<<10), stopper)
 			for _, d := range tc.cachedDescs {
 				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
 			}
@@ -1237,10 +1239,9 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 	cache.Insert(ctx,
 		roachpb.RangeInfo{Desc: firstDesc},
 		roachpb.RangeInfo{Desc: restDesc})
@@ -1276,10 +1277,9 @@ func TestGetCachedRangeDescriptorInverted(t *testing.T) {
 	}
 
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 	for _, rd := range testData {
 		cache.Insert(ctx, roachpb.RangeInfo{
 			Desc: rd,
@@ -1415,10 +1415,9 @@ func TestRangeCacheGeneration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			st := cluster.MakeTestingClusterSettings()
-			tr := tracing.NewTracer()
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
-			cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+			cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *descAM2}, roachpb.RangeInfo{Desc: *descMZ4})
 			cache.Insert(ctx, roachpb.RangeInfo{Desc: *tc.insertDesc})
 
@@ -1482,10 +1481,9 @@ func TestRangeCacheEvictAndReplace(t *testing.T) {
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 
 	ri := roachpb.RangeInfo{Desc: desc1}
 	cache.Insert(ctx, ri)
@@ -1614,10 +1612,9 @@ func TestRangeCacheSyncTokenAndMaybeUpdateCache(t *testing.T) {
 	startKey := desc1.StartKey
 
 	st := cluster.MakeTestingClusterSettings()
-	tr := tracing.NewTracer()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper, tr)
+	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
 
 	testCases := []struct {
 		name   string
