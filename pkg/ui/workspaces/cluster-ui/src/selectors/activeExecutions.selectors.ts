@@ -11,10 +11,9 @@
 import { createSelector } from "reselect";
 import { ActiveExecutions } from "src/activeExecutions/types";
 import { AppState } from "src/store";
-import {
-  selectActiveExecutionsCombiner,
-  selectExecutionID,
-} from "./activeExecutionsCommon.selectors";
+import { selectActiveExecutionsCombiner } from "src/selectors/activeExecutionsCommon.selectors";
+import { selectExecutionID } from "src/selectors/common";
+
 import {
   getActiveTransaction,
   getContentionDetailsFromLocksAndTxns,
