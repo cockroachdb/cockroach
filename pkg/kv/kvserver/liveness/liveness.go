@@ -86,11 +86,6 @@ func isErrRetryLiveness(ctx context.Context, err error) bool {
 		// by the cancellation (and in any case it's pointless to retry with a
 		// canceled ctx).
 		return ctx.Err() == nil
-	} else if errors.HasType(err, (*roachpb.TransactionStatusError)(nil)) {
-		// 21.2 nodes can return a TransactionStatusError when they should have
-		// returned an AmbiguousResultError.
-		// TODO(andrei): Remove this in 22.2.
-		return true
 	} else if errors.Is(err, kv.OnePCNotAllowedError{}) {
 		return true
 	}

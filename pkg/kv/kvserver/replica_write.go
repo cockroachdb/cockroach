@@ -516,17 +516,25 @@ func (r *Replica) evaluate1PC(
 			ctx, idKey, rec, ms, &strippedBa, g, st, ui)
 	}
 
-	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
-		if pErr != nil {
-			log.VEventf(ctx, 2,
-				"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())
-		} else {
-			log.VEventf(ctx, 2,
-				"1PC execution failed, falling back to transactional execution; the batch was pushed")
-		}
+	if pErr == nil && (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
+		// For successful non-transactional evaluation we do not expect br.Timestamp
+		// to diverge away from ba.Timestamp. This happens for transactional
+		// evaluation in cases where br.Txn.WriteTooOld is set.
+		// Note that, if ba.ConForwardReadTimestamp, stripperBa.Timestamp and
+		// br.Timestamp might diverge from ba.Timestamp through "server-side
+		// refreshes".
+		log.Fatalf(ctx, "push during 1PC evaluation. strippedBa.Timestamp: %s, br.Timestamp: %s. ba: %s",
+			strippedBa.Timestamp, br.Timestamp, strippedBa)
+	}
+
+	if pErr != nil {
 		if etArg.Require1PC {
+			log.VEventf(ctx, 2,
+				"1PC execution failed and Require1PC is set. pErr: %v", pErr.String())
 			return onePCResult{success: onePCFailed, pErr: pErr}
 		}
+		log.VEventf(ctx, 2,
+			"1PC execution failed, falling back to transactional execution. pErr: %v", pErr.String())
 		return onePCResult{success: onePCFallbackToTransactionalEvaluation}
 	}
 
