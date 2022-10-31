@@ -36,6 +36,8 @@ import {
 import { syncHistory, tableStatsClusterSetting } from "src/util";
 import booleanSettingStyles from "../settings/booleanSetting.module.scss";
 import { CircleFilled } from "../icon";
+import LoadingError from "../sqlActivity/errorComponent";
+import { Loading } from "../loading";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -53,6 +55,7 @@ const booleanSettingCx = classnames.bind(booleanSettingStyles);
 //   interface DatabasesPageData {
 //     loading: boolean;
 //     loaded: boolean;
+//     lastError: Error;
 //     sortSetting: SortSetting;
 //     databases: { // DatabasesPageDataDatabase[]
 //       loading: boolean;
@@ -71,6 +74,7 @@ const booleanSettingCx = classnames.bind(booleanSettingStyles);
 export interface DatabasesPageData {
   loading: boolean;
   loaded: boolean;
+  lastError: Error;
   databases: DatabasesPageDataDatabase[];
   sortSetting: SortSetting;
   automaticStatsCollectionEnabled?: boolean;
@@ -80,6 +84,7 @@ export interface DatabasesPageData {
 export interface DatabasesPageDataDatabase {
   loading: boolean;
   loaded: boolean;
+  lastError: Error;
   name: string;
   sizeInBytes: number;
   tableCount: number;
@@ -122,6 +127,7 @@ export type DatabasesPageProps = DatabasesPageData &
 
 interface DatabasesPageState {
   pagination: ISortedTablePagination;
+  lastDetailsError: Error;
 }
 
 class DatabasesSortedTable extends SortedTable<DatabasesPageDataDatabase> {}
@@ -138,6 +144,7 @@ export class DatabasesPage extends React.Component<
         current: 1,
         pageSize: 20,
       },
+      lastDetailsError: null,
     };
 
     const { history } = this.props;
@@ -173,12 +180,30 @@ export class DatabasesPage extends React.Component<
       this.props.refreshSettings();
     }
 
-    if (!this.props.loaded && !this.props.loading) {
+    if (
+      !this.props.loaded &&
+      !this.props.loading &&
+      this.props.lastError === undefined
+    ) {
       return this.props.refreshDatabases();
     }
 
+    let lastDetailsError: Error;
     this.props.databases.forEach(database => {
-      if (!database.loaded && !database.loading) {
+      if (database.lastError !== undefined) {
+        lastDetailsError = database.lastError;
+      }
+      if (
+        lastDetailsError &&
+        this.state.lastDetailsError?.name != lastDetailsError?.name
+      ) {
+        this.setState({ lastDetailsError: lastDetailsError });
+      }
+      if (
+        !database.loaded &&
+        !database.loading &&
+        database.lastError === undefined
+      ) {
         return this.props.refreshDatabaseDetails(database.name);
       }
 
@@ -230,6 +255,16 @@ export class DatabasesPage extends React.Component<
     );
   };
 
+  checkInfoAvailable = (
+    database: DatabasesPageDataDatabase,
+    cell: React.ReactNode,
+  ): React.ReactNode => {
+    if (database.lastError) {
+      return "(unavailable)";
+    }
+    return cell;
+  };
+
   private columns: ColumnDescriptor<DatabasesPageDataDatabase>[] = [
     {
       title: (
@@ -259,7 +294,8 @@ export class DatabasesPage extends React.Component<
           Size
         </Tooltip>
       ),
-      cell: database => format.Bytes(database.sizeInBytes),
+      cell: database =>
+        this.checkInfoAvailable(database, format.Bytes(database.sizeInBytes)),
       sort: database => database.sizeInBytes,
       className: cx("databases-table__col-size"),
       name: "size",
@@ -273,7 +309,7 @@ export class DatabasesPage extends React.Component<
           Tables
         </Tooltip>
       ),
-      cell: database => database.tableCount,
+      cell: database => this.checkInfoAvailable(database, database.tableCount),
       sort: database => database.tableCount,
       className: cx("databases-table__col-table-count"),
       name: "tableCount",
@@ -287,7 +323,7 @@ export class DatabasesPage extends React.Component<
           Range Count
         </Tooltip>
       ),
-      cell: database => database.rangeCount,
+      cell: database => this.checkInfoAvailable(database, database.rangeCount),
       sort: database => database.rangeCount,
       className: cx("databases-table__col-range-count"),
       name: "rangeCount",
@@ -301,7 +337,11 @@ export class DatabasesPage extends React.Component<
           Regions/Nodes
         </Tooltip>
       ),
-      cell: database => database.nodesByRegionString || "None",
+      cell: database =>
+        this.checkInfoAvailable(
+          database,
+          database.nodesByRegionString || "None",
+        ),
       sort: database => database.nodesByRegionString,
       className: cx("databases-table__col-node-regions"),
       name: "nodeRegions",
@@ -370,23 +410,57 @@ export class DatabasesPage extends React.Component<
             </h4>
           </div>
 
-          <DatabasesSortedTable
-            className={cx("databases-table")}
-            data={this.props.databases}
-            columns={displayColumns}
-            sortSetting={this.props.sortSetting}
-            onChangeSortSetting={this.changeSortSetting}
-            pagination={this.state.pagination}
+          <Loading
             loading={this.props.loading}
-            renderNoResult={
-              <div
-                className={cx("databases-table__no-result", "icon__container")}
-              >
-                <StackIcon className={cx("icon--s")} />
-                This cluster has no databases.
-              </div>
+            page={"databases"}
+            error={this.props.lastError}
+            render={() => (
+              <DatabasesSortedTable
+                className={cx("databases-table")}
+                data={this.props.databases}
+                columns={displayColumns}
+                sortSetting={this.props.sortSetting}
+                onChangeSortSetting={this.changeSortSetting}
+                pagination={this.state.pagination}
+                loading={this.props.loading}
+                renderNoResult={
+                  <div
+                    className={cx(
+                      "databases-table__no-result",
+                      "icon__container",
+                    )}
+                  >
+                    <StackIcon className={cx("icon--s")} />
+                    This cluster has no databases.
+                  </div>
+                }
+              />
+            )}
+            renderError={() =>
+              LoadingError({
+                statsType: "databases",
+                timeout: this.props.lastError?.name
+                  ?.toLowerCase()
+                  .includes("timeout"),
+              })
             }
           />
+          {!this.props.loading && (
+            <Loading
+              loading={this.props.loading}
+              page={"databases"}
+              error={this.state.lastDetailsError}
+              render={() => <></>}
+              renderError={() =>
+                LoadingError({
+                  statsType: "part of the information",
+                  timeout: this.state.lastDetailsError?.name
+                    ?.toLowerCase()
+                    .includes("timeout"),
+                })
+              }
+            />
+          )}
         </section>
 
         <Pagination

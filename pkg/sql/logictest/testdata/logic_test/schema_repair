@@ -95,7 +95,6 @@ SELECT CAST(replace('$json_corrupt','"name": "corruptdesc",', '') AS JSONB)
 statement ok
 SELECT * FROM crdb_internal.unsafe_upsert_descriptor($corrupt_id, crdb_internal.json_to_pb( 'cockroach.sql.sqlbase.Descriptor','$json_t_corrupt'), true)
 
-
 query I
 SELECT count(*) FROM crdb_internal.lost_descriptors_with_data WHERE descid = $t_id;
 ----
@@ -263,7 +262,7 @@ statement error pgcode XXUUU referenced descriptor not found
 ALTER TYPE corrupt_backref_typ DROP VALUE 'b'
 
 # This is required to pass the validation tests when the logic test completes.
-subtest cleanup
+subtest cleanup_corrupt_backref
 
 query TB
 SELECT
@@ -297,3 +296,66 @@ _corrupt_backref_typ  true  true
 corrupt_backref_fk    true  true
 corrupt_backref_typ   true  true
 corrupt_backref_view  true  true
+
+# Check that `SET descriptor_validation = off ` disables validation.
+# We do so by corrupting a table descriptor and assert on the successful
+# execution of DDL statements so as to not acquire a lease on the corrupt
+# descriptor, which would complicate things.
+subtest disable_validation
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v STRING);
+
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'nextColumnId'],
+				'1'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 'kv'
+
+statement error pgcode XX000 internal error: relation "kv" \(\d+\): column "k" invalid ID \(1\) >= next column ID \(1\)
+ALTER TABLE kv RENAME TO kv
+
+statement ok
+SET descriptor_validation = off
+
+statement ok
+ALTER TABLE kv RENAME TO kv
+
+statement ok
+SET descriptor_validation = on
+
+# Undo the corruption prior to dropping the table, to clean up.
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'nextColumnId'],
+				'3'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 'kv'
+
+statement ok
+DROP TABLE kv

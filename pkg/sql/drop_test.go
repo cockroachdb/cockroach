@@ -1374,12 +1374,8 @@ func dropLargeDatabaseGeneric(
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, `
-SET CLUSTER SETTING sql.catalog.descs.validate_on_write.enabled=no;
-`)
-	sqlDB.Exec(t, `
-CREATE DATABASE largedb;
-`)
+	sqlDB.Exec(t, `SET descriptor_validation = read_only`)
+	sqlDB.Exec(t, `CREATE DATABASE largedb`)
 	stmts, err := sqltestutils.GenerateViewBasedGraphSchema(workloadParams)
 	require.NoError(t, err)
 	for _, stmt := range stmts {

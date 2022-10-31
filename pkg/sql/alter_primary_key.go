@@ -18,8 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -544,7 +545,8 @@ func (p *planner) AlterPrimaryKey(
 	}
 	tableDesc.AddPrimaryKeySwapMutation(swapArgs)
 
-	if err := descbuilder.ValidateSelf(tableDesc, version); err != nil {
+	dvmp := catsessiondata.NewDescriptorSessionDataProvider(p.SessionData())
+	if err := descs.ValidateSelf(tableDesc, version, dvmp); err != nil {
 		return err
 	}
 

@@ -229,6 +229,48 @@ func NewSchemaChangerModeFromString(val string) (_ NewSchemaChangerMode, ok bool
 	}
 }
 
+// DescriptorValidationMode controls if and when descriptors are validated.
+type DescriptorValidationMode int64
+
+const (
+	// DescriptorValidationOn means that we always validate descriptors,
+	// both when reading from storage and when writing to storage.
+	DescriptorValidationOn DescriptorValidationMode = iota
+	// DescriptorValidationOff means that we never validate descriptors.
+	DescriptorValidationOff
+	// DescriptorValidationReadOnly means that we validate descriptors when
+	// reading from storage, but not when writing to storage.
+	DescriptorValidationReadOnly
+)
+
+func (m DescriptorValidationMode) String() string {
+	switch m {
+	case DescriptorValidationOn:
+		return "on"
+	case DescriptorValidationOff:
+		return "off"
+	case DescriptorValidationReadOnly:
+		return "read_only"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// DescriptorValidationModeFromString converts a string into a
+// DescriptorValidationMode.
+func DescriptorValidationModeFromString(val string) (_ DescriptorValidationMode, ok bool) {
+	switch strings.ToUpper(val) {
+	case "ON":
+		return DescriptorValidationOn, true
+	case "OFF":
+		return DescriptorValidationOff, true
+	case "READ_ONLY":
+		return DescriptorValidationReadOnly, true
+	default:
+		return 0, false
+	}
+}
+
 // QoSLevel controls the level of admission control to use for new SQL requests.
 type QoSLevel admissionpb.WorkPriority
 

@@ -66,7 +66,7 @@ import { UIConfigState } from "../store";
 import { StatementsRequest } from "src/api/statementsApi";
 import Long from "long";
 import ClearStats from "../sqlActivity/clearStats";
-import SQLActivityError from "../sqlActivity/errorComponent";
+import LoadingError from "../sqlActivity/errorComponent";
 import {
   getValidOption,
   TimeScale,
@@ -744,7 +744,7 @@ export class StatementsPage extends React.Component<
             error={this.props.statementsError}
             render={() => this.renderStatements(regions)}
             renderError={() =>
-              SQLActivityError({
+              LoadingError({
                 statsType: "statements",
                 timeout: this.props.statementsError?.name
                   ?.toLowerCase()

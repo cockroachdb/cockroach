@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -328,7 +329,10 @@ func newInternalPlanner(
 	sds := sessiondata.NewStack(sd)
 
 	if params.collection == nil {
-		params.collection = execCfg.CollectionFactory.NewCollection(ctx, descs.NewTemporarySchemaProvider(sds), nil /* monitor */)
+		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sds)
+		params.collection = execCfg.CollectionFactory.NewCollection(
+			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
+		)
 	}
 
 	var ts time.Time
