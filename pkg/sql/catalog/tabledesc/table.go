@@ -319,6 +319,14 @@ func (desc *wrapper) GetNonDropConstraintInfo() (map[string]descpb.ConstraintDet
 	return desc.collectNonDropConstraintInfo(nil)
 }
 
+// GetAllConstraintInfo implements the TableDescriptor interface.
+func (desc *wrapper) GetAllConstraintInfo() (
+	map[descpb.ConstraintID]descpb.ConstraintDetail,
+	error,
+) {
+	return desc.collectAllConstraintInfo(nil)
+}
+
 // FindConstraintWithID implements the TableDescriptor interface.
 func (desc *wrapper) FindConstraintWithID(
 	id descpb.ConstraintID,
@@ -341,6 +349,13 @@ func (desc *wrapper) GetNonDropConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectNonDropConstraintInfo(tableLookup)
+}
+
+// GetAllConstraintInfoWithLookup implements the TableDescriptor interface.
+func (desc *wrapper) GetAllConstraintInfoWithLookup(
+	tableLookup catalog.TableLookupFn,
+) (map[descpb.ConstraintID]descpb.ConstraintDetail, error) {
+	return desc.collectAllConstraintInfo(tableLookup)
 }
 
 // CheckUniqueConstraints returns a non-nil error if a descriptor contains two
@@ -485,6 +500,140 @@ func (desc *wrapper) collectNonDropConstraintInfo(
 			}
 		}
 		info[c.Name] = detail
+	}
+	return info, nil
+}
+
+// If `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
+// check that constraints have unique ids.
+// It differs from `collectNonDropConstraintInfo` in that this function includes
+// constraints that are being dropped AND it uses constraint ID as the unique
+// identifier.
+func (desc *wrapper) collectAllConstraintInfo(
+	tableLookup catalog.TableLookupFn,
+) (map[descpb.ConstraintID]descpb.ConstraintDetail, error) {
+	info := make(map[descpb.ConstraintID]descpb.ConstraintDetail)
+
+	// Indexes provide PK and Unique constraints that are enforced by an index.
+	for _, indexI := range desc.AllIndexes() {
+		index := indexI.IndexDesc()
+		if index.ID == desc.PrimaryIndex.ID {
+			if _, ok := info[index.ConstraintID]; ok {
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
+					"duplicate constraint id: %q", index.ConstraintID)
+			}
+			detail := descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypePK,
+				ConstraintID: index.ConstraintID,
+			}
+			detail.Columns = index.KeyColumnNames
+			detail.Index = index
+			info[index.ConstraintID] = detail
+		} else if index.Unique {
+			if _, ok := info[index.ConstraintID]; ok {
+				return nil, pgerror.Newf(pgcode.DuplicateObject,
+					"duplicate constraint id: %q", index.ConstraintID)
+			}
+			detail := descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypeUnique,
+				ConstraintID: index.ConstraintID,
+			}
+			detail.Columns = index.KeyColumnNames
+			detail.Index = index
+			info[index.ConstraintID] = detail
+		}
+	}
+
+	// Get the unique constraints that are not enforced by an index.
+	ucs := desc.AllUniqueWithoutIndexConstraints()
+	for _, uc := range ucs {
+		if _, ok := info[uc.ConstraintID]; ok {
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate constraint id: %q", uc.ConstraintID)
+		}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeUnique,
+			ConstraintID: uc.ConstraintID,
+		}
+		// Constraints in the Validating state are considered Unvalidated for this
+		// purpose.
+		detail.Unvalidated = uc.Validity != descpb.ConstraintValidity_Validated
+		var err error
+		detail.Columns, err = desc.NamesForColumnIDs(uc.ColumnIDs)
+		if err != nil {
+			return nil, err
+		}
+		detail.UniqueWithoutIndexConstraint = uc
+		info[uc.ConstraintID] = detail
+	}
+
+	fks := desc.AllForeignKeys()
+	for _, fk := range fks {
+		if _, ok := info[fk.ConstraintID]; ok {
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate constraint id: %q", fk.ConstraintID)
+		}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeFK,
+			ConstraintID: fk.ConstraintID,
+		}
+		// Constraints in the Validating state are considered Unvalidated for this
+		// purpose.
+		detail.Unvalidated = fk.Validity != descpb.ConstraintValidity_Validated
+		var err error
+		detail.Columns, err = desc.NamesForColumnIDs(fk.OriginColumnIDs)
+		if err != nil {
+			return nil, err
+		}
+		detail.FK = fk
+
+		if tableLookup != nil {
+			other, err := tableLookup(fk.ReferencedTableID)
+			if err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"error resolving table %d referenced in foreign key",
+					redact.Safe(fk.ReferencedTableID))
+			}
+			referencedColumnNames, err := other.NamesForColumnIDs(fk.ReferencedColumnIDs)
+			if err != nil {
+				return nil, err
+			}
+			detail.Details = fmt.Sprintf("%s.%v", other.GetName(), referencedColumnNames)
+			detail.ReferencedTable = other.TableDesc()
+		}
+		info[fk.ConstraintID] = detail
+	}
+
+	for _, c := range desc.AllChecks() {
+		if _, ok := info[c.ConstraintID]; ok {
+			return nil, pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate constraint id: %q", c.ConstraintID)
+		}
+		detail := descpb.ConstraintDetail{
+			Kind:         descpb.ConstraintTypeCheck,
+			ConstraintID: c.ConstraintID,
+		}
+		// Constraints in the Validating state are considered Unvalidated for this
+		// purpose.
+		detail.Unvalidated = c.Validity != descpb.ConstraintValidity_Validated
+		detail.CheckConstraint = c
+		detail.Details = c.Expr
+		if tableLookup != nil {
+			colsUsed, err := desc.ColumnsUsed(c)
+			if err != nil {
+				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+					"error computing columns used in check constraint %q", c.Name)
+			}
+			for _, colID := range colsUsed {
+				col, err := desc.FindColumnWithID(colID)
+				if err != nil {
+					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
+						"error finding column %d in table %s", redact.Safe(colID), desc.Name)
+				}
+				detail.Columns = append(detail.Columns, col.GetName())
+			}
+		}
+		info[c.ConstraintID] = detail
 	}
 	return info, nil
 }

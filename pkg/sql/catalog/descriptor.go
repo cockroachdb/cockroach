@@ -635,8 +635,18 @@ type TableDescriptor interface {
 	// GetNonDropConstraintInfoWithLookup returns a summary of all constraints on the
 	// table using the provided function to fetch a TableDescriptor from an ID.
 	GetNonDropConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
+	// GetAllConstraintInfoWithLookup is similar to GetActiveAndInactiveConstraintInfoWithLookup
+	// except that
+	//  - it also includes constraints that are being dropped;
+	//  - the return uses `descpb.ConstraintID` as unique identifier.
+	GetAllConstraintInfoWithLookup(fn TableLookupFn) (map[descpb.ConstraintID]descpb.ConstraintDetail, error)
 	// GetNonDropConstraintInfo returns a summary of all constraints on the table.
 	GetNonDropConstraintInfo() (map[string]descpb.ConstraintDetail, error)
+	// GetAllConstraintInfo is similar to GetActiveAndInactiveConstraint
+	// except that
+	//  - it also includes constraints that are being dropped;
+	//  - the return uses `descpb.ConstraintID` as unique identifier.
+	GetAllConstraintInfo() (map[descpb.ConstraintID]descpb.ConstraintDetail, error)
 	// FindConstraintWithID returns a constraint given a constraint id.
 	FindConstraintWithID(id descpb.ConstraintID) (*descpb.ConstraintDetail, error)
 
