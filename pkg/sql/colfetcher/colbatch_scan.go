@@ -165,8 +165,8 @@ func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 	return s.cf.getBatchRequestsIssued()
 }
 
-// GetCumulativeContentionTime is part of the colexecop.KVReader interface.
-func (s *ColBatchScan) GetCumulativeContentionTime() time.Duration {
+// GetContentionInfo is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetContentionInfo() (time.Duration, []roachpb.ContentionEvent) {
 	return execstats.GetCumulativeContentionTime(s.Ctx, nil /* recording */)
 }
 

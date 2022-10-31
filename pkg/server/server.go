@@ -805,15 +805,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		internalExecutor,
 	)
 
-	// Configure the path to the file that blocks starting background jobs.
-	var jobAdoptionStopFile string
-	for _, spec := range cfg.Stores.Specs {
-		if !spec.InMemory && spec.Path != "" {
-			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
-			break
-		}
-	}
-
 	// Instantiate the KV prober.
 	kvProber := kvprober.NewProber(kvprober.Opts{
 		Tracer:                  cfg.AmbientCtx.Tracer,
@@ -879,7 +870,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		circularInternalExecutor: internalExecutor,
 		internalExecutorFactory:  internalExecutorFactory,
 		circularJobRegistry:      jobRegistry,
-		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
@@ -1804,6 +1794,12 @@ func (s *Server) TempDir() string {
 // PGServer exports the pgwire server. Used by tests.
 func (s *Server) PGServer() *pgwire.Server {
 	return s.sqlServer.pgServer
+}
+
+// LogicalClusterID implements cli.serverStartupInterface. This
+// implementation exports the logical cluster ID of the system tenant.
+func (s *Server) LogicalClusterID() uuid.UUID {
+	return s.sqlServer.LogicalClusterID()
 }
 
 // StartDiagnostics starts periodic diagnostics reporting and update checking.

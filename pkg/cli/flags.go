@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1192,7 +1191,7 @@ func mtStartSQLFlagsInit(cmd *cobra.Command) error {
 		// We assume that we only need to change top level store as temp dir configs are
 		// initialized when start is executed and temp dirs inherit path from first store.
 		tenantID := fs.Lookup(cliflags.TenantID.Name).Value.String()
-		serverCfg.Stores.Specs[0].Path = server.DefaultSQLNodeStorePathPrefix + tenantID
+		serverCfg.Stores.Specs[0].Path += "-tenant-" + tenantID
 	}
 	return nil
 }

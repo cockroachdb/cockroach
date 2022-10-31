@@ -35,6 +35,7 @@ go_test(
     embed = [":execstats"],
     deps = [
         "//pkg/base",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

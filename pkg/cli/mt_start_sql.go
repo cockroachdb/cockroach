@@ -12,17 +12,12 @@ package cli
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"os/signal"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/sdnotify"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/redact"
 	"github.com/spf13/cobra"
 )
 
@@ -61,117 +56,43 @@ well unless it can be verified using a trusted root certificate store. That is,
 }
 
 func runStartSQL(cmd *cobra.Command, args []string) error {
-	tBegin := timeutil.Now()
+	const serverType redact.SafeString = "SQL server"
 
-	// First things first: if the user wants background processing,
-	// relinquish the terminal ASAP by forking and exiting.
-	//
-	// If executing in the background, the function returns ok == true in
-	// the parent process (regardless of err) and the parent exits at
-	// this point.
-	if ok, err := maybeRerunBackground(); ok {
-		return err
-	}
-
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, drainSignals...)
-
-	// Set up a cancellable context for the entire start command.
-	// The context will be canceled at the end.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// The context annotation ensures that server identifiers show up
-	// in the logging metadata as soon as they are known.
-	ambientCtx := serverCfg.AmbientCtx
-	ctx = ambientCtx.AnnotateCtx(ctx)
-
-	stopper, err := setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
-	if err != nil {
-		return err
-	}
-	defer stopper.Stop(ctx)
-	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
-
-	st := serverCfg.BaseConfig.Settings
-
-	// This value is injected in order to have something populated during startup.
-	// In the initial 20.2 release of multi-tenant clusters, no version state was
-	// ever populated in the version cluster setting. A value is populated during
-	// the activation of 21.1. See the documentation attached to the TenantCluster
-	// in upgrade/upgradecluster for more details on the tenant upgrade flow.
-	// Note that a the value of 21.1 is populated when a tenant cluster is created
-	// during 21.1 in crdb_internal.create_tenant.
-	//
-	// Note that the tenant will read the value in the system.settings table
-	// before accepting SQL connections.
-	if err := clusterversion.Initialize(
-		ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
-	); err != nil {
-		return err
-	}
-
-	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
-		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
-	); err != nil {
-		return err
-	}
-
-	initGEOS(ctx)
-
-	tenantServer, err := server.NewTenantServer(
-		ctx,
-		stopper,
-		serverCfg.BaseConfig,
-		serverCfg.SQLConfig,
-	)
-	if err != nil {
-		return err
-	}
-	if err := tenantServer.Start(ctx); err != nil {
-		return err
-	}
-
-	// If another process was waiting on the PID (e.g. using a FIFO),
-	// this is when we can tell them the node has started listening.
-	if startCtx.pidFile != "" {
-		log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
-		if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-			log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
+	initConfig := func(ctx context.Context) error {
+		if err := serverCfg.InitSQLServer(ctx); err != nil {
+			return err
 		}
+		// This value is injected in order to have something populated during startup.
+		// In the initial 20.2 release of multi-tenant clusters, no version state was
+		// ever populated in the version cluster setting. A value is populated during
+		// the activation of 21.1. See the documentation attached to the TenantCluster
+		// in upgrade/upgradecluster for more details on the tenant upgrade flow.
+		// Note that the value of 21.1 is populated when a tenant cluster is created
+		// during 21.1 in crdb_internal.create_tenant.
+		//
+		// Note that the tenant will read the value in the system.settings table
+		// before accepting SQL connections.
+		//
+		// TODO(knz): Check if this special initialization can be removed.
+		// See: https://github.com/cockroachdb/cockroach/issues/90831
+		st := serverCfg.BaseConfig.Settings
+		return clusterversion.Initialize(
+			ctx, st.Version.BinaryMinSupportedVersion(), &st.SV,
+		)
 	}
 
-	// Ensure the configuration logging is written to disk in case a
-	// process is waiting for the sdnotify readiness to read important
-	// information from there.
-	log.Flush()
-
-	// Signal readiness. This unblocks the process when running with
-	// --background or under systemd.
-	if err := sdnotify.Ready(); err != nil {
-		log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
+	newServerFn := func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+		// Beware of not writing simply 'return server.NewServer()'. This is
+		// because it would cause the serverStartupInterface reference to
+		// always be non-nil, even if NewServer returns a nil pointer (and
+		// an error). The code below is dependent on the interface
+		// reference remaining nil in case of error.
+		s, err := server.NewTenantServer(ctx, stopper, serverCfg.BaseConfig, serverCfg.SQLConfig)
+		if err != nil {
+			return nil, err
+		}
+		return s, nil
 	}
 
-	// Start up the diagnostics reporting loop.
-	// We don't do this in (*server.SQLServer).preStart() because we don't
-	// want this overhead and possible interference in tests.
-	if !cluster.TelemetryOptOut() {
-		tenantServer.StartDiagnostics(ctx)
-	}
-
-	tenantClusterID := tenantServer.LogicalClusterID()
-
-	// Report the server identifiers and other server details
-	// in the same format as 'cockroach start'.
-	if err := reportServerInfo(ctx, tBegin, &serverCfg, st, false /* isHostNode */, false /* initialStart */, tenantClusterID); err != nil {
-		return err
-	}
-
-	// TODO(tbg): make the other goodies in `./cockroach start` reusable, such as
-	// logging to files, periodic memory output, heap and goroutine dumps.
-	// Then use them here.
-
-	serverStatus := &serverStatus{}
-	serverStatus.setStarted(tenantServer, stopper)
-	return waitForShutdown(stopper, tenantServer.ShutdownRequested(), signalCh, serverStatus)
+	return runStartInternal(cmd, serverType, initConfig, newServerFn, nil /* maybeRunInitialSQL */)
 }

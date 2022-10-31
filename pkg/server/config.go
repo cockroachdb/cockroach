@@ -64,10 +64,6 @@ const (
 	defaultScanMaxIdleTime   = 1 * time.Second
 
 	DefaultStorePath = "cockroach-data"
-	// DefaultSQLNodeStorePathPrefix is path prefix that is used by default
-	// on tenant sql nodes to separate from server node if running on the
-	// same server without explicit --store location.
-	DefaultSQLNodeStorePathPrefix = "cockroach-data-tenant-"
 	// TempDirPrefix is the filename prefix of any temporary subdirectory
 	// created.
 	TempDirPrefix = "cockroach-temp"
@@ -338,12 +334,6 @@ type KVConfig struct {
 	// The following values can only be set via environment variables and are
 	// for testing only. They are not meant to be set by the end user.
 
-	// Enables linearizable behavior of operations on this node by making sure
-	// that no commit timestamp is reported back to the client until all other
-	// node clocks have necessarily passed it.
-	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
-	Linearizable bool
-
 	// ScanInterval determines a duration during which each range should be
 	// visited approximately once by the range scanner. Set to 0 to disable.
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
@@ -441,6 +431,15 @@ type SQLConfig struct {
 	//
 	// Only applies when the SQL server is deployed individually.
 	TenantKVAddrs []string
+
+	// The following values can only be set via environment variables and are
+	// for testing only. They are not meant to be set by the end user.
+
+	// Enables linearizable behavior of operations on this node by making sure
+	// that no commit timestamp is reported back to the client until all other
+	// node clocks have necessarily passed it.
+	// Environment Variable: COCKROACH_EXPERIMENTAL_LINEARIZABLE
+	Linearizable bool
 }
 
 // MakeSQLConfig returns a SQLConfig with default values.
@@ -754,7 +753,16 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	return enginesCopy, nil
 }
 
-// InitNode parses node attributes and bootstrap addresses.
+// InitSQLServer finalizes the configuration of a SQL-only node.
+// It initializes additional configuration flags from the environment.
+func (cfg *Config) InitSQLServer(ctx context.Context) error {
+	cfg.readSQLEnvironmentVariables()
+	return nil
+}
+
+// InitNode finalizes the configuration of a KV node.
+// It parses node attributes and bootstrap addresses and
+// initializes additional configuration flags from the environment.
 func (cfg *Config) InitNode(ctx context.Context) error {
 	cfg.readEnvironmentVariables()
 
@@ -804,12 +812,16 @@ func (cfg *BaseConfig) RequireWebSession() bool {
 	return !cfg.Insecure && cfg.EnableWebSessionAuthentication
 }
 
+func (cfg *Config) readSQLEnvironmentVariables() {
+	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
+	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
+}
+
 // readEnvironmentVariables populates all context values that are environment
 // variable based. Note that this only happens when initializing a node and not
 // when NewContext is called.
 func (cfg *Config) readEnvironmentVariables() {
-	cfg.SpanConfigsDisabled = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_SPAN_CONFIGS", cfg.SpanConfigsDisabled)
-	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
+	cfg.readSQLEnvironmentVariables()
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
 	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)

@@ -694,6 +694,12 @@ func (s *SQLServerWrapper) StartDiagnostics(ctx context.Context) {
 	s.sqlServer.StartDiagnostics(ctx)
 }
 
+// InitialStart implements cli.serverStartupInterface. For SQL-only servers,
+// no start is an initial cluster start.
+func (s *SQLServerWrapper) InitialStart() bool {
+	return false
+}
+
 // ShutdownRequested returns a channel that is signaled when a subsystem wants
 // the server to be shut down.
 func (s *SQLServerWrapper) ShutdownRequested() <-chan ShutdownRequest {
@@ -789,7 +795,7 @@ func makeTenantSQLServerArgs(
 			Clock:             clock,
 			Stopper:           stopper,
 			HeartbeatInterval: base.DefaultTxnHeartbeatInterval,
-			Linearizable:      false,
+			Linearizable:      sqlCfg.Linearizable,
 			Metrics:           txnMetrics,
 			TestingKnobs:      clientKnobs,
 		},
