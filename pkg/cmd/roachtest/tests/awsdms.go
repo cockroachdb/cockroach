@@ -38,7 +38,7 @@ import (
 )
 
 const (
-	awsdmsWaitTimeLimit  = 30 * time.Minute
+	awsdmsWaitTimeLimit  = 1 * time.Hour
 	awsdmsUser           = "cockroachdbtest"
 	awsdmsDatabase       = "rdsdb"
 	awsdmsCRDBDatabase   = "defaultdb"
