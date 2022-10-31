@@ -1260,6 +1260,10 @@ type ExecutorConfig struct {
 	// Validator is used to validate indexes and check constraints.
 	Validator scexec.Validator
 
+	// ProtectedTimestampManager provides protected timestamp
+	// for jobs only installed after some percentage of the GC interval passes.
+	ProtectedTimestampManager scexec.ProtectedTimestampManager
+
 	// ContentionRegistry is a node-level registry of contention events used for
 	// contention observability.
 	ContentionRegistry *contention.Registry

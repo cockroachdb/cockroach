@@ -19,6 +19,7 @@ go_library(
         "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/jobs/jobsprotectedts",
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/security/username",
