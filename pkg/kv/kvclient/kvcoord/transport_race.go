@@ -54,7 +54,7 @@ type raceTransport struct {
 }
 
 func (tr raceTransport) SendNext(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	// Make a copy of the requests slice, and shallow copies of the requests.
 	// The caller is allowed to mutate the request after the call returns. Since
@@ -69,10 +69,7 @@ func (tr raceTransport) SendNext(
 	}
 	ba.Requests = requestsCopy
 	select {
-	// We have a shallow copy here and so the top level scalar fields can't
-	// really race, but making more copies doesn't make anything more
-	// transparent, so from now on we operate on a pointer.
-	case incoming <- &ba:
+	case incoming <- ba:
 	default:
 		// Avoid slowing down the tests if we're backed up.
 	}
