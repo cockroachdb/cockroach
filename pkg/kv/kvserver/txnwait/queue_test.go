@@ -190,7 +190,7 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 
 	var mockSender kv.SenderFunc
 	cfg := makeConfig(func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return mockSender(ctx, ba)
 	}, stopper)
@@ -203,7 +203,7 @@ func TestMaybeWaitForPushWithContextCancellation(t *testing.T) {
 
 	// Mock out responses to any QueryTxn requests.
 	mockSender = func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)
@@ -277,7 +277,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	var mockSender kv.SenderFunc
 	cfg := makeConfig(func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		return mockSender(ctx, ba)
 	}, stopper)
@@ -295,7 +295,7 @@ func TestPushersReleasedAfterAnyQueryTxnFindsAbortedTxn(t *testing.T) {
 	const numPushees = 3
 	var queryTxnCount int32
 	mockSender = func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		resp := br.Responses[0].GetInner().(*roachpb.QueryTxnResponse)

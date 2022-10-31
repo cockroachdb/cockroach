@@ -679,7 +679,7 @@ func (txn *Txn) commit(ctx context.Context) error {
 	// will be subject to admission control, and the zero CreateTime will give
 	// it preference within the tenant.
 	et := endTxnReq(true, txn.deadline())
-	ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
+	ba := &roachpb.BatchRequest{Requests: et.unionArr[:]}
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
@@ -853,7 +853,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
 		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
-		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
+		ba := &roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_, pErr := txn.Send(ctx, ba)
 		if pErr == nil {
 			return nil
@@ -879,7 +879,7 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		// settings, it will be subject to admission control, and the zero
 		// CreateTime will give it preference within the tenant.
 		et := endTxnReq(false, hlc.Timestamp{} /* deadline */)
-		ba := roachpb.BatchRequest{Requests: et.unionArr[:]}
+		ba := &roachpb.BatchRequest{Requests: et.unionArr[:]}
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", asyncRollbackTimeout,
 			func(ctx context.Context) error {
 				if _, pErr := txn.Send(ctx, ba); pErr != nil {
@@ -1060,7 +1060,7 @@ func (txn *Txn) IsRetryableErrMeantForTxn(
 // commit or clean-up explicitly even when that may not be required
 // (or even erroneous). Returns (nil, nil) for an empty batch.
 func (txn *Txn) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// Fill in the GatewayNodeID on the batch if the txn knows it.
 	// NOTE(andrei): It seems a bit ugly that we're filling in the batches here as
@@ -1152,7 +1152,7 @@ func (txn *Txn) handleRetryableErrLocked(
 // and perform the read. Callers can use this flexibility to trade off increased
 // staleness for reduced latency.
 func (txn *Txn) NegotiateAndSend(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if err := txn.checkNegotiateAndSendPreconditions(ctx, ba); err != nil {
 		return nil, roachpb.NewError(err)
@@ -1215,7 +1215,7 @@ func (txn *Txn) NegotiateAndSend(
 
 // checks preconditions on BatchRequest and Txn for NegotiateAndSend.
 func (txn *Txn) checkNegotiateAndSendPreconditions(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (err error) {
 	assert := func(b bool, s string) {
 		if !b {

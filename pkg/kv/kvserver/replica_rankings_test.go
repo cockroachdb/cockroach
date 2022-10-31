@@ -122,8 +122,8 @@ func TestAddSSTQPSStat(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: start},
 	}
 
-	addSSTBA := roachpb.BatchRequest{}
-	nonSSTBA := roachpb.BatchRequest{}
+	addSSTBA := &roachpb.BatchRequest{}
+	nonSSTBA := &roachpb.BatchRequest{}
 	addSSTBA.Add(sstReq)
 	nonSSTBA.Add(get)
 
@@ -134,7 +134,7 @@ func TestAddSSTQPSStat(t *testing.T) {
 	testCases := []struct {
 		addsstRequestFactor int
 		expectedQPS         float64
-		ba                  roachpb.BatchRequest
+		ba                  *roachpb.BatchRequest
 	}{
 		{0, 1, addSSTBA},
 		{100, 1, nonSSTBA},
@@ -184,9 +184,9 @@ func TestAddSSTQPSStat(t *testing.T) {
 }
 
 // genVariableRead returns a batch request containing, start-end sequential key reads.
-func genVariableRead(ctx context.Context, start, end roachpb.Key) roachpb.BatchRequest {
+func genVariableRead(ctx context.Context, start, end roachpb.Key) *roachpb.BatchRequest {
 	scan := roachpb.NewScan(start, end, false)
-	readBa := roachpb.BatchRequest{}
+	readBa := &roachpb.BatchRequest{}
 	readBa.Add(scan)
 	return readBa
 }
@@ -355,7 +355,7 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		MVCCStats:     storageutils.SSTStats(t, sst, 0),
 	}
 
-	addSSTBA := roachpb.BatchRequest{}
+	addSSTBA := &roachpb.BatchRequest{}
 	addSSTBA.Add(sstReq)
 
 	// Send an AddSSTRequest once to create the key range.
@@ -366,18 +366,18 @@ func TestReadLoadMetricAccounting(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: start},
 	}
 
-	getReadBA := roachpb.BatchRequest{}
+	getReadBA := &roachpb.BatchRequest{}
 	getReadBA.Add(get)
 
 	scan := &roachpb.ScanRequest{
 		RequestHeader: roachpb.RequestHeader{Key: start, EndKey: end},
 	}
 
-	scanReadBA := roachpb.BatchRequest{}
+	scanReadBA := &roachpb.BatchRequest{}
 	scanReadBA.Add(scan)
 
 	testCases := []struct {
-		ba           roachpb.BatchRequest
+		ba           *roachpb.BatchRequest
 		expectedRQPS float64
 		expectedWPS  float64
 		expectedRPS  float64

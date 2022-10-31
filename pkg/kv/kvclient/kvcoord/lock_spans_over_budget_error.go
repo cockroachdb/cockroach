@@ -31,7 +31,7 @@ type lockSpansOverBudgetError struct {
 }
 
 func newLockSpansOverBudgetError(
-	lockSpansBytes, limitBytes int64, ba roachpb.BatchRequest,
+	lockSpansBytes, limitBytes int64, ba *roachpb.BatchRequest,
 ) lockSpansOverBudgetError {
 	return lockSpansOverBudgetError{
 		lockSpansBytes: lockSpansBytes,

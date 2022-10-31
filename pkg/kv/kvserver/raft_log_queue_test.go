@@ -867,7 +867,7 @@ func TestTruncateLogRecompute(t *testing.T) {
 		var v roachpb.Value
 		v.SetBytes(bytes.Repeat([]byte("x"), RaftLogQueueStaleSize*5))
 		put := roachpb.NewPut(key, v)
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(put)
 		ba.RangeID = repl.RangeID
 

@@ -278,7 +278,7 @@ func TestGCJobRetry(t *testing.T) {
 	params := base.TestServerArgs{Settings: cs}
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 			r, ok := request.GetArg(roachpb.DeleteRange)
 			if !ok || !r.(*roachpb.DeleteRangeRequest).UseRangeTombstone {
 				return nil
@@ -551,7 +551,7 @@ func TestDropIndexWithDroppedDescriptor(t *testing.T) {
 		if !beforeDelRange {
 			knobs.Store = &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(
-					ctx context.Context, request roachpb.BatchRequest,
+					ctx context.Context, request *roachpb.BatchRequest,
 				) *roachpb.Error {
 					req, ok := request.GetArg(roachpb.DeleteRange)
 					if !ok {

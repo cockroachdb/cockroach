@@ -87,7 +87,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 	t.Run("a single range is unavailable for all KV ops", func(t *testing.T) {
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(i context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(i context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 					for _, ru := range ba.Requests {
 						key := ru.GetInner().Header().Key
 						if bytes.HasPrefix(key, keys.TimeseriesPrefix) {
@@ -129,7 +129,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(i context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(i context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 					if !dbIsAvailable.Get() {
 						for _, ru := range ba.Requests {
 							if ru.GetGet() != nil {
@@ -174,7 +174,7 @@ func TestProberDoesReadsAndWrites(t *testing.T) {
 
 		s, _, p, cleanup := initTestProber(t, base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(i context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(i context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 					if !dbIsAvailable.Get() {
 						for _, ru := range ba.Requests {
 							if ru.GetPut() != nil {

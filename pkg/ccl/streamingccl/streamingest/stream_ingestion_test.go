@@ -151,7 +151,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		},
 	}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 			for _, req := range ba.Requests {
 				switch r := req.GetInner().(type) {
 				case *roachpb.RevertRangeRequest:

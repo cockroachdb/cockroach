@@ -1157,7 +1157,7 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var s serverutils.TestServerInterface
 	var clockUpdate, restartDone int32
 	testingResponseFilter := func(
-		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 	) *roachpb.Error {
 		for _, ru := range ba.Requests {
 			if req := ru.GetGet(); req != nil {

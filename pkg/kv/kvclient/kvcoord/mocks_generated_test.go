@@ -106,7 +106,7 @@ func (mr *MockTransportMockRecorder) Release() *gomock.Call {
 }
 
 // SendNext mocks base method.
-func (m *MockTransport) SendNext(arg0 context.Context, arg1 roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+func (m *MockTransport) SendNext(arg0 context.Context, arg1 *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendNext", arg0, arg1)
 	ret0, _ := ret[0].(*roachpb.BatchResponse)

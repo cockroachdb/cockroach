@@ -421,9 +421,16 @@ type stopperSessionEventListener struct {
 
 var _ slinstance.SessionEventListener = &stopperSessionEventListener{}
 
-func (s *stopperSessionEventListener) OnSessionDeleted(ctx context.Context) {
+// OnSessionDeleted implements the slinstance.SessionEventListener interface.
+func (s *stopperSessionEventListener) OnSessionDeleted(
+	ctx context.Context,
+) (createAnotherSession bool) {
 	s.trigger.signalStop(ctx,
 		MakeShutdownRequest(ShutdownReasonFatalError, errors.New("sql liveness session deleted")))
+	// Return false in order to prevent the sqlliveness loop from creating a new
+	// session. We're shutting down the server and creating a new session would
+	// only cause confusion.
+	return false
 }
 
 // newSQLServer constructs a new SQLServer. The caller is responsible for

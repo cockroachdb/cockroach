@@ -526,8 +526,8 @@ func (b *batch) rangeID() roachpb.RangeID {
 	return b.reqs[0].rangeID
 }
 
-func (b *batch) batchRequest(cfg *Config) roachpb.BatchRequest {
-	req := roachpb.BatchRequest{
+func (b *batch) batchRequest(cfg *Config) *roachpb.BatchRequest {
+	req := &roachpb.BatchRequest{
 		// Preallocate the Requests slice.
 		Requests: make([]roachpb.RequestUnion, 0, len(b.reqs)),
 	}

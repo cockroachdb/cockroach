@@ -584,7 +584,7 @@ func TestQueryProgress(t *testing.T) {
 				TableReaderBatchBytesLimit: 1500,
 			},
 			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(_ context.Context, req roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(_ context.Context, req *roachpb.BatchRequest) *roachpb.Error {
 					if req.IsSingleRequest() {
 						scan, ok := req.Requests[0].GetInner().(*roachpb.ScanRequest)
 						if ok && getTableSpan().ContainsKey(scan.Key) && atomic.LoadInt64(&queryRunningAtomic) == 1 {
@@ -795,7 +795,7 @@ func TestRetriableErrorDuringUpgradedTransaction(t *testing.T) {
 	testDB.QueryRow(t, "SELECT 'foo'::regclass::oid").Scan(&fooTableId)
 
 	// Inject an error that will happen during execution.
-	filter.setFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	filter.setFilter(func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.Txn == nil {
 			return nil
 		}
@@ -872,7 +872,7 @@ func TestErrorDuringPrepareInExplicitTransactionPropagates(t *testing.T) {
 	require.NoError(t, err)
 
 	// Inject an error that will happen during planning.
-	filter.setFilter(func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	filter.setFilter(func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.Txn == nil {
 			return nil
 		}
@@ -1131,7 +1131,7 @@ func TestTransactionDeadline(t *testing.T) {
 	// This will be used in the tests for accessing mu.
 	locked := func(f func()) { mu.Lock(); defer mu.Unlock(); f() }
 	// Set up a kvserverbase.ReplicaRequestFilter which will extract the deadline for the test transaction.
-	checkTransactionDeadlineFilter := func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	checkTransactionDeadlineFilter := func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		if ba.Txn == nil {
 			return nil
 		}
@@ -1800,13 +1800,13 @@ func (f *dynamicRequestFilter) setFilter(filter kvserverbase.ReplicaRequestFilte
 
 // noopRequestFilter is a kvserverbase.ReplicaRequestFilter.
 func (f *dynamicRequestFilter) filter(
-	ctx context.Context, request roachpb.BatchRequest,
+	ctx context.Context, request *roachpb.BatchRequest,
 ) *roachpb.Error {
 	return f.v.Load().(kvserverbase.ReplicaRequestFilter)(ctx, request)
 }
 
 // noopRequestFilter is a kvserverbase.ReplicaRequestFilter that does nothing.
-func noopRequestFilter(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+func noopRequestFilter(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 	return nil
 }
 

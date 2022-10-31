@@ -54,7 +54,7 @@ var defaultKVBatchSize = rowinfra.KeyLimit(util.ConstantWithMetamorphicTestValue
 // sendFunc is the function used to execute a KV batch; normally
 // wraps (*client.Txn).Send.
 type sendFunc func(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error)
 
 // identifiableSpans is a helper for keeping track of the roachpb.Spans with the
@@ -228,7 +228,7 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) sendFunc {
 	return func(
 		ctx context.Context,
-		ba roachpb.BatchRequest,
+		ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		res, err := txn.Send(ctx, ba)
 		if err != nil {
@@ -394,7 +394,7 @@ func (f *txnKVFetcher) SetupNextFetch(
 
 // fetch retrieves spans from the kv layer.
 func (f *txnKVFetcher) fetch(ctx context.Context) error {
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Header.WaitPolicy = f.lockWaitPolicy
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)

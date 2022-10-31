@@ -102,7 +102,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 		// We just served a follower read. As a sanity check, make sure that we can't write at
 		// that same timestamp.
 		{
-			var baWrite roachpb.BatchRequest
+			baWrite := &roachpb.BatchRequest{}
 			r := &roachpb.DeleteRequest{}
 			r.Key = desc.StartKey.AsRawKey()
 			txn := roachpb.MakeTransaction("testwrite", r.Key, roachpb.NormalUserPriority, ts, 100, int32(tc.Server(0).SQLInstanceID()))
@@ -546,7 +546,7 @@ func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
 	})
 
 	// Create a "nontransactional" read-only batch.
-	var baQueryTxn roachpb.BatchRequest
+	baQueryTxn := &roachpb.BatchRequest{}
 	baQueryTxn.Header.RangeID = desc.RangeID
 	r := &roachpb.QueryTxnRequest{}
 	r.Key = desc.StartKey.AsRawKey()
@@ -812,7 +812,7 @@ SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 				require.NoError(t, err)
 				writeTime := rhsLeaseStart.Prev()
 				require.True(t, mergedLeaseholder.GetCurrentClosedTimestamp(ctx).Less(writeTime))
-				var baWrite roachpb.BatchRequest
+				baWrite := &roachpb.BatchRequest{}
 				baWrite.Header.RangeID = leftDesc.RangeID
 				baWrite.Header.Timestamp = writeTime
 				put := &roachpb.PutRequest{}
@@ -935,7 +935,7 @@ func (filter *mergeFilter) resetBlocker() (*mergeBlocker, bool) {
 // Communication with actors interested in blocked merges is done through
 // BlockNextMerge().
 func (filter *mergeFilter) SuspendMergeTrigger(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
 	for _, req := range ba.Requests {
 		if et := req.GetEndTxn(); et != nil && et.Commit &&
@@ -1064,7 +1064,7 @@ func getTargetStore(
 }
 
 func verifyNotLeaseHolderErrors(
-	t *testing.T, ba roachpb.BatchRequest, repls []*kvserver.Replica, expectedNLEs int,
+	t *testing.T, ba *roachpb.BatchRequest, repls []*kvserver.Replica, expectedNLEs int,
 ) {
 	t.Helper()
 	notLeaseholderErrs, err := countNotLeaseHolderErrors(ba, repls)
@@ -1076,7 +1076,7 @@ func verifyNotLeaseHolderErrors(
 	}
 }
 
-func countNotLeaseHolderErrors(ba roachpb.BatchRequest, repls []*kvserver.Replica) (int64, error) {
+func countNotLeaseHolderErrors(ba *roachpb.BatchRequest, repls []*kvserver.Replica) (int64, error) {
 	g, ctx := errgroup.WithContext(context.Background())
 	var notLeaseholderErrs int64
 	for i := range repls {
@@ -1303,7 +1303,7 @@ func expectRows(expectedRows int) respFunc {
 func verifyCanReadFromAllRepls(
 	ctx context.Context,
 	t *testing.T,
-	baRead roachpb.BatchRequest,
+	baRead *roachpb.BatchRequest,
 	repls []*kvserver.Replica,
 	f respFunc,
 ) error {
@@ -1331,10 +1331,10 @@ func verifyCanReadFromAllRepls(
 	return g.Wait()
 }
 
-func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) roachpb.BatchRequest {
+func makeTxnReadBatchForDesc(desc roachpb.RangeDescriptor, ts hlc.Timestamp) *roachpb.BatchRequest {
 	txn := roachpb.MakeTransaction("txn", nil, 0, ts, 0, 0)
 
-	var baRead roachpb.BatchRequest
+	baRead := &roachpb.BatchRequest{}
 	baRead.Header.RangeID = desc.RangeID
 	baRead.Header.Timestamp = ts
 	baRead.Header.Txn = &txn

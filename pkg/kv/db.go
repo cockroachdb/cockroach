@@ -214,7 +214,7 @@ var _ Sender = &CrossRangeTxnWrapperSender{}
 
 // Send implements the Sender interface.
 func (s *CrossRangeTxnWrapperSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if ba.Txn != nil {
 		log.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
@@ -824,7 +824,7 @@ func sendAndFill(ctx context.Context, send SenderFunc, b *Batch) error {
 	// fails. But send() also returns its own errors, so there's some dancing
 	// here to do because we want to run fillResults() so that the individual
 	// result gets initialized with an error from the corresponding call.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Requests = b.reqs
 	ba.Header = b.Header
 	ba.AdmissionHeader = b.AdmissionHeader
@@ -965,14 +965,14 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
 func (db *DB) send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	return db.sendUsingSender(ctx, ba, db.NonTransactionalSender())
 }
 
 // sendUsingSender uses the specified sender to send the batch request.
 func (db *DB) sendUsingSender(
-	ctx context.Context, ba roachpb.BatchRequest, sender Sender,
+	ctx context.Context, ba *roachpb.BatchRequest, sender Sender,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if len(ba.Requests) == 0 {
 		return nil, nil

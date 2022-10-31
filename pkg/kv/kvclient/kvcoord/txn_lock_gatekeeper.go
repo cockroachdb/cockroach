@@ -30,7 +30,7 @@ type lockedSender interface {
 	// WARNING: because the lock is released when calling this method and
 	// re-acquired before it returned, callers cannot rely on a single mutual
 	// exclusion zone mainted across the call.
-	SendLocked(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+	SendLocked(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
 // txnLockGatekeeper is a lockedSender that sits at the bottom of the
@@ -54,7 +54,7 @@ type txnLockGatekeeper struct {
 
 // SendLocked implements the lockedSender interface.
 func (gs *txnLockGatekeeper) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If so configured, protect against concurrent use of the txn. Concurrent
 	// requests don't work generally because of races between clients sending

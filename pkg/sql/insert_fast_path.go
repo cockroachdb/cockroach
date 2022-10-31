@@ -209,7 +209,8 @@ func (n *insertFastPathNode) runFKChecks(params runParams) error {
 	defer n.run.fkBatch.Reset()
 
 	// Run the FK checks batch.
-	br, err := params.p.txn.Send(params.ctx, n.run.fkBatch)
+	ba := n.run.fkBatch.ShallowCopy()
+	br, err := params.p.txn.Send(params.ctx, ba)
 	if err != nil {
 		return err.GoError()
 	}

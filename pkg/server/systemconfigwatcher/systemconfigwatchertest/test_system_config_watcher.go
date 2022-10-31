@@ -131,7 +131,7 @@ func getSystemDescriptorAndZonesSpans(
 	ctx context.Context, t *testing.T, codec keys.SQLCodec, kvDB *kv.DB,
 ) []roachpb.KeyValue {
 	scanSpanForRows := func(startKey, endKey roachpb.Key) (rows []roachpb.KeyValue) {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(
 			roachpb.NewScan(
 				append(codec.TenantPrefix(), startKey...),

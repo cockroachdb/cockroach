@@ -528,7 +528,7 @@ func (p *pendingLeaseRequest) requestLease(
 	// solution to the below issue:
 	//
 	// https://github.com/cockroachdb/cockroach/issues/37906
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = p.repl.store.Clock().Now()
 	ba.RangeID = p.repl.RangeID
 	// NB:
