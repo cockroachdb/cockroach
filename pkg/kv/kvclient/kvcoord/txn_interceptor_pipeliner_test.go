@@ -209,26 +209,22 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	cputArgs := roachpb.ConditionalPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
 	cputArgs.Sequence = 2
 	ba.Add(&cputArgs)
-	initPutArgs := roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
-	initPutArgs.Sequence = 3
-	ba.Add(&initPutArgs)
-	incArgs := roachpb.IncrementRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
-	incArgs.Sequence = 4
+	incArgs := roachpb.IncrementRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+	incArgs.Sequence = 3
 	ba.Add(&incArgs)
 	// Write at the same key as another write in the same batch. Will only
 	// result in a single in-flight write, at the larger sequence number.
-	delArgs := roachpb.DeleteRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
-	delArgs.Sequence = 5
+	delArgs := roachpb.DeleteRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}}
+	delArgs.Sequence = 4
 	ba.Add(&delArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 5)
+		require.Len(t, ba.Requests, 4)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.ConditionalPutRequest{}, ba.Requests[1].GetInner())
-		require.IsType(t, &roachpb.InitPutRequest{}, ba.Requests[2].GetInner())
-		require.IsType(t, &roachpb.IncrementRequest{}, ba.Requests[3].GetInner())
-		require.IsType(t, &roachpb.DeleteRequest{}, ba.Requests[4].GetInner())
+		require.IsType(t, &roachpb.IncrementRequest{}, ba.Requests[2].GetInner())
+		require.IsType(t, &roachpb.DeleteRequest{}, ba.Requests[3].GetInner())
 
 		qiReq := ba.Requests[0].GetQueryIntent()
 		require.Equal(t, keyA, qiReq.Key)
@@ -248,13 +244,12 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
-	require.Len(t, br.Responses, 4) // QueryIntent response stripped
+	require.Len(t, br.Responses, 3) // QueryIntent response stripped
 	require.IsType(t, &roachpb.ConditionalPutResponse{}, br.Responses[0].GetInner())
-	require.IsType(t, &roachpb.InitPutResponse{}, br.Responses[1].GetInner())
-	require.IsType(t, &roachpb.IncrementResponse{}, br.Responses[2].GetInner())
-	require.IsType(t, &roachpb.DeleteResponse{}, br.Responses[3].GetInner())
+	require.IsType(t, &roachpb.IncrementResponse{}, br.Responses[1].GetInner())
+	require.IsType(t, &roachpb.DeleteResponse{}, br.Responses[2].GetInner())
 	require.Nil(t, pErr)
-	require.Equal(t, 3, tp.ifWrites.len())
+	require.Equal(t, 2, tp.ifWrites.len())
 
 	wMin := tp.ifWrites.t.Min().(*inFlightWrite)
 	require.Equal(t, cputArgs.Key, wMin.Key)
@@ -265,41 +260,35 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 
 	// Send a final write, along with an EndTxn request. Should attempt to prove
 	// all in-flight writes. Should NOT use async consensus.
-	keyD := roachpb.Key("d")
 	ba.Requests = nil
-	putArgs2 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}}
-	putArgs2.Sequence = 6
+	putArgs2 := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}}
+	putArgs2.Sequence = 5
 	ba.Add(&putArgs2)
 	etArgs := roachpb.EndTxnRequest{Commit: true}
-	etArgs.Sequence = 7
+	etArgs.Sequence = 6
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Len(t, ba.Requests, 5)
+		require.Len(t, ba.Requests, 4)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[2].GetInner())
-		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[3].GetInner())
-		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[4].GetInner())
+		require.IsType(t, &roachpb.EndTxnRequest{}, ba.Requests[3].GetInner())
 
 		qiReq1 := ba.Requests[1].GetQueryIntent()
 		qiReq2 := ba.Requests[2].GetQueryIntent()
-		qiReq3 := ba.Requests[3].GetQueryIntent()
 		require.Equal(t, keyA, qiReq1.Key)
 		require.Equal(t, keyB, qiReq2.Key)
-		require.Equal(t, keyC, qiReq3.Key)
 		require.Equal(t, enginepb.TxnSeq(2), qiReq1.Txn.Sequence)
-		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
-		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(4), qiReq2.Txn.Sequence)
 
-		etReq := ba.Requests[4].GetEndTxn()
+		etReq := ba.Requests[3].GetEndTxn()
 		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.LockSpans)
 		expInFlight := []roachpb.SequencedWrite{
 			{Key: keyA, Sequence: 2},
-			{Key: keyB, Sequence: 3},
+			{Key: keyB, Sequence: 4},
 			{Key: keyC, Sequence: 5},
-			{Key: keyD, Sequence: 6},
 		}
 		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
@@ -308,7 +297,6 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		br.Txn.Status = roachpb.COMMITTED
 		br.Responses[1].GetQueryIntent().FoundIntent = true
 		br.Responses[2].GetQueryIntent().FoundIntent = true
-		br.Responses[3].GetQueryIntent().FoundIntent = true
 		return br, nil
 	})
 

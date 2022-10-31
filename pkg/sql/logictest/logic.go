@@ -902,7 +902,6 @@ type logicQuery struct {
 var allowedKVOpTypes = []string{
 	"CPut",
 	"Put",
-	"InitPut",
 	"Del",
 	"DelRange",
 	"ClearRange",

@@ -292,6 +292,11 @@ message ConditionalPutResponse {
 // - If key exists, returns a ConditionFailedError if value != existing value
 //   If failOnTombstones is set to true, tombstone values count as mismatched
 //   values and will cause a ConditionFailedError.
+//
+// NOTE: InitPutRequest is now deprecated and should no longer be used. See
+// #71074. The request type still exists for compatibility with v22.2 and
+// earlier releases. The server-side handling code can be deleted once
+// compatibility with v22.2 is no longer needed.
 message InitPutRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2 [(gogoproto.nullable) = false];

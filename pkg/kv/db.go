@@ -412,6 +412,17 @@ func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue []byte)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// CPutAllowingIfNotExists is like CPut except it also allows the Put when the
+// existing entry does not exist -- i.e. it succeeds if there is no existing
+// entry or the existing entry has the expected value.
+func (db *DB) CPutAllowingIfNotExists(
+	ctx context.Context, key, value interface{}, expValue []byte,
+) error {
+	b := &Batch{}
+	b.CPutAllowingIfNotExists(key, value, expValue)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // CPutInline conditionally sets the value for a key if the existing value is
 // equal to expValue, but does not maintain multi-version values. To
 // conditionally set a value only if the key doesn't currently exist, pass an
@@ -430,20 +441,6 @@ func (db *DB) CPut(ctx context.Context, key, value interface{}, expValue []byte)
 func (db *DB) CPutInline(ctx context.Context, key, value interface{}, expValue []byte) error {
 	b := &Batch{}
 	b.CPutInline(key, value, expValue)
-	return getOneErr(db.Run(ctx, b), b)
-}
-
-// InitPut sets the first value for a key to value. A ConditionFailedError is
-// reported if a value already exists for the key and it's not equal to the
-// value passed in. If failOnTombstones is set to true, tombstones count as
-// mismatched values and will cause a ConditionFailedError.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc). It is illegal to
-// set value to nil.
-func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
-	b := &Batch{}
-	b.InitPut(key, value, failOnTombstones)
 	return getOneErr(db.Run(ctx, b), b)
 }
 

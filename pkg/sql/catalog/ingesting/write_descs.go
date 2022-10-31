@@ -215,7 +215,9 @@ func WriteDescriptors(
 	}
 
 	for _, kv := range extra {
-		b.InitPut(kv.Key, &kv.Value, false)
+		// TODO DURING REVIEW: @dt, why was this an InitPut instead of a
+		// CPut(expect=nil)? This was added in 270d9c8.
+		b.CPutAllowingIfNotExists(kv.Key, &kv.Value, kv.Value.TagAndDataBytes())
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		if errors.HasType(err, (*roachpb.ConditionFailedError)(nil)) {
