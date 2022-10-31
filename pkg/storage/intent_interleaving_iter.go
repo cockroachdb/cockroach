@@ -421,13 +421,64 @@ func (i *intentInterleavingIter) maybeSuppressRangeKeyChanged() {
 	}
 }
 
-// doMaybeSuppressRangeKeyChanges is a helper for maybeSuppressRangeKeyChanged
+// doMaybeSuppressRangeKeyChanged is a helper for maybeSuppressRangeKeyChanged
 // which allows mid-stack inlining of the former.
 func (i *intentInterleavingIter) doMaybeSuppressRangeKeyChanged() {
 	i.rangeKeyChanged = i.iter.RangeBounds().EndKey.Compare(i.intentKey) > 0
 }
 
+// shouldAdjustSeekRangeKeyChanged returns true if a seek (any kind) needs to
+// adjust the RangeKeyChanged signal from the underlying iter. This is necessary
+// when intentInterleavingIter was previously positioned on an intent in the
+// reverse direction, with iter positioned on a previous range key that did
+// not overlap the point key (suppressed via suppressRangeKeyChanged).
+//
+// In this case, a seek may incorrectly emit or omit a RangeKeyChanged signal
+// when iter is seeked, since it's relative to iter's former position rather
+// than the intent's (and thus intentInterleavingIter's) position.
+//
+// This situation is only possible when the intent does not overlap any range
+// keys (otherwise, iter would either have stopped at a point key which overlaps
+// the same range key, or at the range key's start bound). Thus, when this
+// situation occurs, RangeKeyChanged must be set equal to iter's hasRange value
+// after the seek: we know we were not previously positioned on a range key, so
+// if hasRange is true then RangeKeyChanged must be true (we seeked onto a range
+// key), and if hasRange is false then RangeKeyChanged must be false (we did not
+// seek onto a range key).
+//
+// gcassert:inline
+func (i *intentInterleavingIter) shouldAdjustSeekRangeKeyChanged() bool {
+	if i.dir == -1 && i.intentCmp > 0 && i.valid && i.iterValid {
+		return i.doShouldAdjustSeekRangeKeyChanged()
+	}
+	return false
+}
+
+// doShouldAdjustSeekRangeKeyChanged is a shouldAdjustSeekRangeKeyChanged
+// helper, which allows mid-stack inlining of the former.
+func (i *intentInterleavingIter) doShouldAdjustSeekRangeKeyChanged() bool {
+	if _, iterHasRange := i.iter.HasPointAndRange(); iterHasRange {
+		if _, hasRange := i.HasPointAndRange(); !hasRange {
+			return true
+		}
+	}
+	return false
+}
+
+// adjustSeekRangeKeyChanged adjusts i.rangeKeyChanged as described in
+// shouldAdjustSeekRangeKeyChanged.
+func (i *intentInterleavingIter) adjustSeekRangeKeyChanged() {
+	if i.iterValid {
+		_, hasRange := i.iter.HasPointAndRange()
+		i.rangeKeyChanged = hasRange
+	} else {
+		i.rangeKeyChanged = false
+	}
+}
+
 func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
+	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
+
 	i.dir = +1
 	i.valid = true
 	i.err = nil
@@ -440,6 +491,9 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 		return
 	}
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
+	if adjustRangeKeyChanged {
+		i.adjustSeekRangeKeyChanged()
+	}
 	var intentSeekKey roachpb.Key
 	if key.Timestamp.IsEmpty() {
 		// Common case.
@@ -475,6 +529,8 @@ func (i *intentInterleavingIter) SeekGE(key MVCCKey) {
 }
 
 func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID) {
+	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
+
 	i.dir = +1
 	i.valid = true
 
@@ -486,6 +542,9 @@ func (i *intentInterleavingIter) SeekIntentGE(key roachpb.Key, txnUUID uuid.UUID
 		return
 	}
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
+	if adjustRangeKeyChanged {
+		i.adjustSeekRangeKeyChanged()
+	}
 	var engineKey EngineKey
 	engineKey, i.intentKeyBuf = LockTableKey{
 		Key:      key,
@@ -969,6 +1028,8 @@ func (i *intentInterleavingIter) Close() {
 }
 
 func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
+	adjustRangeKeyChanged := i.shouldAdjustSeekRangeKeyChanged()
+
 	i.dir = -1
 	i.valid = true
 	i.err = nil
@@ -1026,6 +1087,9 @@ func (i *intentInterleavingIter) SeekLT(key MVCCKey) {
 	}
 	i.computePos()
 	i.rangeKeyChanged = i.iter.RangeKeyChanged()
+	if adjustRangeKeyChanged {
+		i.adjustSeekRangeKeyChanged()
+	}
 	i.maybeSuppressRangeKeyChanged()
 }
 
