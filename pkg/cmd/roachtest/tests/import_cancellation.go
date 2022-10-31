@@ -305,7 +305,7 @@ func (t *importCancellationTest) runImportSequence(
 	// Up-to-date statistics on the table helps the optimizer during the query
 	// phase of the test. The stats job also requires scanning a large swath of
 	// the keyspace, which results in greater test coverage.
-	stmt := fmt.Sprintf(`CREATE STATISTICS %s_stats FROM csv.%s`, tableName, tableName)
+	stmt := fmt.Sprintf(`ANALYZE csv.%s`, tableName)
 	_, err := conn.ExecContext(ctx, stmt)
 	if err != nil {
 		t.Fatal(err)
