@@ -30,10 +30,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// StartReplicationStreamJob initializes a replication stream producer job on the source cluster that
+// startReplicationStreamJob initializes a replication stream producer job on the source cluster that
 // 1. Tracks the liveness of the replication stream consumption
 // 2. TODO(casper): Updates the protected timestamp for spans being replicated
-func StartReplicationStreamJob(
+func startReplicationStreamJob(
 	ctx context.Context, planner sql.PlanHookState, tenantID uint64,
 ) (streaming.StreamID, error) {
 	execConfig := planner.ExecCfg()
@@ -150,10 +150,10 @@ func updateReplicationStreamProgress(
 	return status, err
 }
 
-// HeartbeatReplicationStream updates replication stream progress and advances protected timestamp
+// heartbeatReplicationStream updates replication stream progress and advances protected timestamp
 // record to the specified frontier. If 'frontier' is hlc.MaxTimestamp, returns the producer job
 // progress without updating it.
-func HeartbeatReplicationStream(
+func heartbeatReplicationStream(
 	ctx context.Context,
 	planner sql.PlanHookState,
 	streamID streaming.StreamID,
@@ -194,8 +194,8 @@ func HeartbeatReplicationStream(
 		streamID, frontier, planner.Txn())
 }
 
-// GetReplicationStreamSpec gets a replication stream specification for the specified stream.
-func GetReplicationStreamSpec(
+// getReplicationStreamSpec gets a replication stream specification for the specified stream.
+func getReplicationStreamSpec(
 	ctx context.Context, planner sql.JobExecContext, streamID streaming.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	// Returns error if the replication stream is not active
@@ -250,10 +250,10 @@ func GetReplicationStreamSpec(
 	return res, nil
 }
 
-// CompleteReplicationStream completes a replication stream job on the producer side.
+// completeReplicationStream completes a replication stream job on the producer side.
 // 'successfulIngestion' indicates whether the stream ingestion finished successfully and
 // determines the fate of the producer job, succeeded or canceled.
-func CompleteReplicationStream(
+func completeReplicationStream(
 	ctx context.Context,
 	planner sql.PlanHookState,
 	streamID streaming.StreamID,
@@ -283,4 +283,36 @@ func CompleteReplicationStream(
 			}
 			return nil
 		})
+}
+
+func init() {
+	sql.StartReplicationStream = func(
+		ctx context.Context, planner sql.PlanHookState, tenantID uint64,
+	) (streaming.StreamID, error) {
+		return startReplicationStreamJob(ctx, planner, tenantID)
+	}
+
+	sql.CompleteReplicationStream = func(
+		ctx context.Context,
+		planner sql.PlanHookState,
+		streamID streaming.StreamID,
+		successfulIngestion bool,
+	) error {
+		return completeReplicationStream(ctx, planner, streamID, successfulIngestion)
+	}
+
+	sql.GetReplicationStreamSpec = func(
+		ctx context.Context, planner sql.JobExecContext, streamID streaming.StreamID,
+	) (*streampb.ReplicationStreamSpec, error) {
+		return getReplicationStreamSpec(ctx, planner, streamID)
+	}
+
+	sql.HeartbeatReplicationStream = func(
+		ctx context.Context,
+		planner sql.PlanHookState,
+		streamID streaming.StreamID,
+		frontier hlc.Timestamp,
+	) (streampb.StreamReplicationStatus, error) {
+		return heartbeatReplicationStream(ctx, planner, streamID, frontier)
+	}
 }

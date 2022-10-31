@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// CompleteStreamIngestion terminates the stream as of specified time.
-func CompleteStreamIngestion(
+// completeStreamIngestion terminates the stream as of specified time.
+func completeStreamIngestion(
 	ctx context.Context,
 	planner sql.JobExecContext,
 	ingestionJobID jobspb.JobID,
@@ -58,8 +58,8 @@ func CompleteStreamIngestion(
 		})
 }
 
-// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
-func GetStreamIngestionStats(
+// getStreamIngestionStats gets a statistics summary for a stream ingestion job.
+func getStreamIngestionStats(
 	ctx context.Context, planner sql.JobExecContext, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
 	registry := planner.ExecCfg().JobRegistry
@@ -522,4 +522,19 @@ func init() {
 		},
 		jobs.UsesTenantCostControl,
 	)
+
+	sql.GetStreamIngestionStats = func(
+		ctx context.Context, planner sql.JobExecContext, ingestionJobID jobspb.JobID,
+	) (*streampb.StreamIngestionStats, error) {
+		return getStreamIngestionStats(ctx, planner, ingestionJobID)
+	}
+
+	sql.CompleteStreamIngestion = func(
+		ctx context.Context,
+		planner sql.JobExecContext,
+		ingestionJobID jobspb.JobID,
+		cutoverTimestamp hlc.Timestamp,
+	) error {
+		return completeStreamIngestion(ctx, planner, ingestionJobID, cutoverTimestamp)
+	}
 }

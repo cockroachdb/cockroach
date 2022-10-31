@@ -552,3 +552,15 @@ func StreamPartition(
 		mon:             planner.Mon(),
 	}, nil
 }
+
+func init() {
+	sql.StreamPartition = func(
+		ctx context.Context,
+		planner eval.Planner,
+		sd *sessiondata.SessionData,
+		streamID streaming.StreamID,
+		opaqueSpec []byte,
+	) (eval.ValueGenerator, error) {
+		return StreamPartition(ctx, planner, sd, streamID, opaqueSpec)
+	}
+}
