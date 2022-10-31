@@ -13,6 +13,7 @@ package catalog
 import (
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -108,3 +109,22 @@ const NumSystemColumns = 2
 // among all system columns (enforced in colinfo package to avoid an import
 // cycle).
 const SmallestSystemColumnColumnID = math.MaxUint32 - NumSystemColumns + 1
+
+func init() {
+	AllSystemColumnDescs := colinfo.GetAllSystemColumnDescs()
+	numSystemColumns := int(colinfo.GetNumSystemColumns())
+	if len(AllSystemColumnDescs) != numSystemColumns {
+		panic("need to update system column IDs or descriptors")
+	}
+	if NumSystemColumns != numSystemColumns {
+		panic("need to update catalog.NumSystemColumns")
+	}
+	if SmallestSystemColumnColumnID != math.MaxUint32-numSystemColumns+1 {
+		panic("need to update catalog.SmallestSystemColumnColumnID")
+	}
+	for _, desc := range AllSystemColumnDescs {
+		if desc.SystemColumnKind != colinfo.GetSystemColumnKindFromColumnID(desc.ID) {
+			panic("system column ID ordering must match SystemColumnKind value ordering")
+		}
+	}
+}

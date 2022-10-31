@@ -11,11 +11,9 @@
 package colinfo
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/errors"
 )
 
 // ResultColumn contains the name and type of a SQL "cell".
@@ -36,35 +34,6 @@ type ResultColumn struct {
 // ResultColumns is the type used throughout the sql module to
 // describe the column types of a table.
 type ResultColumns []ResultColumn
-
-// ResultColumnsFromColumns converts []catalog.Column to []ResultColumn.
-func ResultColumnsFromColumns(tableID descpb.ID, columns []catalog.Column) ResultColumns {
-	return ResultColumnsFromColDescs(tableID, len(columns), func(i int) *descpb.ColumnDescriptor {
-		return columns[i].ColumnDesc()
-	})
-}
-
-// ResultColumnsFromColDescs is used by ResultColumnsFromColumns and by tests.
-func ResultColumnsFromColDescs(
-	tableID descpb.ID, numCols int, getColDesc func(int) *descpb.ColumnDescriptor,
-) ResultColumns {
-	cols := make(ResultColumns, numCols)
-	for i := range cols {
-		colDesc := getColDesc(i)
-		typ := colDesc.Type
-		if typ == nil {
-			panic(errors.AssertionFailedf("unsupported column type: %s", colDesc.Type.Family()))
-		}
-		cols[i] = ResultColumn{
-			Name:           colDesc.Name,
-			Typ:            typ,
-			Hidden:         colDesc.Hidden,
-			TableID:        tableID,
-			PGAttributeNum: uint32(colDesc.GetPGAttributeNum()),
-		}
-	}
-	return cols
-}
 
 // GetTypeModifier returns the type modifier for this column. If it is not set,
 // it defaults to returning -1.

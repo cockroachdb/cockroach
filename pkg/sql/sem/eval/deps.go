@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -371,6 +373,14 @@ type Planner interface {
 	// statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of these
 	// statements.
 	IsANSIDML() bool
+
+	// WithInternalExecutor let user run multiple sql statements within the same
+	// internal executor initialized under a planner context. To run single sql
+	// statements, please use the query functions above.
+	WithInternalExecutor(
+		ctx context.Context,
+		run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal

@@ -43,7 +43,7 @@ func DequalifyAndTypeCheckExpr(
 ) (tree.TypedExpr, error) {
 	nonDropColumns := desc.NonDropColumns()
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+		*tn, catalog.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
@@ -87,7 +87,7 @@ func DequalifyAndValidateExpr(
 	var colIDs catalog.TableColSet
 	nonDropColumns := desc.NonDropColumns()
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		*tn, colinfo.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
+		*tn, catalog.ResultColumnsFromColumns(desc.GetID(), nonDropColumns),
 	)
 	expr, err := dequalifyColumnRefs(ctx, sourceInfo, expr)
 	if err != nil {
@@ -335,7 +335,7 @@ func newNameResolver(
 ) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
-		colinfo.ResultColumnsFromColumns(tableID, cols),
+		catalog.ResultColumnsFromColumns(tableID, cols),
 	)
 	nrc := &nameResolverIVarContainer{append(make([]catalog.Column, 0, len(cols)), cols...)}
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
@@ -361,7 +361,7 @@ func (nr *nameResolver) resolveNames(expr tree.Expr) (tree.Expr, error) {
 func (nr *nameResolver) addColumn(col catalog.Column) {
 	nr.ivarHelper.AppendSlot()
 	nr.nrc.cols = append(nr.nrc.cols, col)
-	newCols := colinfo.ResultColumnsFromColumns(nr.tableID, []catalog.Column{col})
+	newCols := catalog.ResultColumnsFromColumns(nr.tableID, []catalog.Column{col})
 	nr.source.SourceColumns = append(nr.source.SourceColumns, newCols...)
 }
 

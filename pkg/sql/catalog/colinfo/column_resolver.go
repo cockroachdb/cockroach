@@ -15,52 +15,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
-
-// ProcessTargetColumns returns the column descriptors identified by the
-// given name list. It also checks that a given column name is only
-// listed once. If no column names are given (special case for INSERT)
-// and ensureColumns is set, the descriptors for all visible columns
-// are returned. If allowMutations is set, even columns undergoing
-// mutations are added.
-func ProcessTargetColumns(
-	tableDesc catalog.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
-) ([]catalog.Column, error) {
-	if len(nameList) == 0 {
-		if ensureColumns {
-			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES
-			// (...) (as opposed to INSERT INTO <table> (...) VALUES (...)) from
-			// writing hidden columns.
-			return tableDesc.VisibleColumns(), nil
-		}
-		return nil, nil
-	}
-
-	var colIDSet catalog.TableColSet
-	cols := make([]catalog.Column, len(nameList))
-	for i, colName := range nameList {
-		col, err := tableDesc.FindColumnWithName(colName)
-		if err != nil {
-			return nil, err
-		}
-		if !allowMutations && !col.Public() {
-			return nil, NewUndefinedColumnError(string(colName))
-		}
-
-		if colIDSet.Contains(col.GetID()) {
-			return nil, pgerror.Newf(pgcode.Syntax,
-				"multiple assignments to the same column %q", &nameList[i])
-		}
-		colIDSet.Add(col.GetID())
-		cols[i] = col
-	}
-
-	return cols, nil
-}
 
 // sourceNameMatches checks whether a request for table name toFind
 // can be satisfied by the FROM source name srcName.

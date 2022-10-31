@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descriptorlist"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/ingesting"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/rewrite"
@@ -1154,7 +1155,7 @@ func (r *importResumer) checkVirtualConstraints(
 
 		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			ie := execCfg.InternalExecutorFactory.NewInternalExecutor(sql.NewFakeSessionData(execCfg.SV()))
-			return ie.WithSyntheticDescriptors([]catalog.Descriptor{desc}, func() error {
+			return ie.WithSyntheticDescriptors(descriptorlist.CatalogDescriptorList(&catalog.Descriptors{desc}), func() error {
 				return sql.RevalidateUniqueConstraintsInTable(ctx, txn, user, ie, desc)
 			})
 		}); err != nil {

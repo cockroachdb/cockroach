@@ -13,7 +13,6 @@ package colinfo
 import (
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -43,21 +42,14 @@ const (
 	numSystemColumns = iota
 )
 
-func init() {
-	if len(AllSystemColumnDescs) != numSystemColumns {
-		panic("need to update system column IDs or descriptors")
-	}
-	if catalog.NumSystemColumns != numSystemColumns {
-		panic("need to update catalog.NumSystemColumns")
-	}
-	if catalog.SmallestSystemColumnColumnID != math.MaxUint32-numSystemColumns+1 {
-		panic("need to update catalog.SmallestSystemColumnColumnID")
-	}
-	for _, desc := range AllSystemColumnDescs {
-		if desc.SystemColumnKind != GetSystemColumnKindFromColumnID(desc.ID) {
-			panic("system column ID ordering must match SystemColumnKind value ordering")
-		}
-	}
+// GetNumSystemColumns returns the enum of numSystemColumns.
+func GetNumSystemColumns() descpb.ColumnID {
+	return numSystemColumns
+}
+
+// GetAllSystemColumnDescs returns all system column descriptors.
+func GetAllSystemColumnDescs() []descpb.ColumnDescriptor {
+	return AllSystemColumnDescs
 }
 
 // AllSystemColumnDescs contains all registered system columns.

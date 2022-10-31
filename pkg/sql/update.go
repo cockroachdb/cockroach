@@ -407,7 +407,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return colinfo.CheckDatumTypeFitsColumnType(ss.column, typ)
+	return catalog.CheckDatumTypeFitsColumnType(ss.column, typ)
 }
 
 // enforceLocalColumnConstraints asserts the column constraints that do not

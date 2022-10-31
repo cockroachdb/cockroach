@@ -1,5 +1,6 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils/buildutil:buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "colinfo",
@@ -18,12 +19,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogtableelements",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/util/encoding",
@@ -51,6 +51,13 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",
+    ],
+)
+
+disallowed_imports_test(
+    src = "colinfo",
+    disallowed_list = [
+        "//pkg/sql/catalog",
     ],
 )
 

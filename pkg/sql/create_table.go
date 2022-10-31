@@ -1658,7 +1658,7 @@ func NewTableDesc(
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
 	sourceInfo := colinfo.NewSourceInfoForSingleTable(
-		n.Table, colinfo.ResultColumnsFromColumns(desc.GetID(), desc.PublicColumns()),
+		n.Table, catalog.ResultColumnsFromColumns(desc.GetID(), desc.PublicColumns()),
 	)
 
 	for i := range desc.Columns {

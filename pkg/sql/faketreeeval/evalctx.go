@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -467,6 +469,16 @@ func (ep *DummyEvalPlanner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
+}
+
+// WithInternalExecutor let user run multiple sql statements within the same
+// internal executor initialized under a planner context. To run single sql
+// statements, please use the query functions above.
+func (ep *DummyEvalPlanner) WithInternalExecutor(
+	ctx context.Context,
+	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+) error {
+	return nil
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

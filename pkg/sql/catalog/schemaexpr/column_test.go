@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -60,7 +61,7 @@ func TestDequalifyColumnRefs(t *testing.T) {
 			}
 
 			source := colinfo.NewSourceInfoForSingleTable(
-				tn, colinfo.ResultColumnsFromColDescs(
+				tn, catalog.ResultColumnsFromColDescs(
 					descpb.ID(1),
 					len(cols),
 					func(i int) *descpb.ColumnDescriptor {
