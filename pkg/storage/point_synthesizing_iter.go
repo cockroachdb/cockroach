@@ -158,9 +158,9 @@ func NewPointSynthesizingIterAtParent(parent MVCCIterator) (*PointSynthesizingIt
 		seekKey.Key = iter.seekKeyBuf
 		iter.updateSeekGEPosition(seekKey)
 	}
-	if iter.iterErr != nil {
+	if err := iter.iterErr; err != nil {
 		iter.release()
-		return nil, iter.iterErr
+		return nil, err
 	}
 	return iter, nil
 }
