@@ -1697,7 +1697,7 @@ func ValidateInvertedIndexes(
 			span := tableDesc.IndexSpan(codec, idx.GetID())
 			key := span.Key
 			endKey := span.EndKey
-			if err = runHistoricalTxn.Exec(ctx, func(
+			if err := runHistoricalTxn.Exec(ctx, func(
 				ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor, _ *descs.Collection,
 			) error {
 				for {
