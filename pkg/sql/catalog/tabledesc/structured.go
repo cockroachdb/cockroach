@@ -228,6 +228,40 @@ func (desc *wrapper) AllActiveAndInactiveChecks() []*descpb.TableDescriptor_Chec
 	return checks
 }
 
+// AllChecks implements the TableDescriptor interface.
+// It fetches from the table's `Checks` and mutation slice and
+// uses `ConstraintID` to deduplicate. Duplicates might exist due to the lifecycle
+// of check constraint:
+//   - When we are adding a check constraint, we enqueue it onto the mutation slice.
+//     We eventually move it off the mutation slice and into `Checks` slice after it's
+//     validated and ready to go public.
+//   - When we are dropping a check constraint, we enqueue a constraint drop mutation
+//     onto the mutation slice, while letting the check constraint remain in the `Checks`
+//     slice with a `DROPPING` validity.
+func (desc *wrapper) AllChecks() []*descpb.TableDescriptor_CheckConstraint {
+	checks := make([]*descpb.TableDescriptor_CheckConstraint, 0, len(desc.Checks))
+	checkIDs := make(map[descpb.ConstraintID]bool)
+
+	addConstraintIfNotAlreadyAdded := func(c *descpb.TableDescriptor_CheckConstraint) {
+		if _, exist := checkIDs[c.ConstraintID]; exist {
+			return
+		}
+		checks = append(checks, c)
+		checkIDs[c.ConstraintID] = true
+	}
+
+	for _, c := range desc.Checks {
+		addConstraintIfNotAlreadyAdded(c)
+	}
+
+	for _, m := range desc.Mutations {
+		if c := m.GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_CHECK {
+			addConstraintIfNotAlreadyAdded(&c.Check)
+		}
+	}
+	return checks
+}
+
 // GetColumnFamilyForShard returns the column family that a newly added shard column
 // should be assigned to, given the set of columns it's computed from.
 //
@@ -267,6 +301,32 @@ func (desc *wrapper) AllActiveAndInactiveUniqueWithoutIndexConstraints() []*desc
 	return ucs
 }
 
+// AllUniqueWithoutIndexConstraints implements the TableDescriptor interface.
+func (desc *wrapper) AllUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint {
+	ucs := make([]*descpb.UniqueWithoutIndexConstraint, 0, len(desc.UniqueWithoutIndexConstraints))
+	ucsIDs := make(map[descpb.ConstraintID]bool)
+
+	addConstraintIfNotAlreadyAdded := func(c *descpb.UniqueWithoutIndexConstraint) {
+		if _, exist := ucsIDs[c.ConstraintID]; exist {
+			return
+		}
+		ucs = append(ucs, c)
+		ucsIDs[c.ConstraintID] = true
+	}
+
+	for i := range desc.UniqueWithoutIndexConstraints {
+		addConstraintIfNotAlreadyAdded(&desc.UniqueWithoutIndexConstraints[i])
+	}
+
+	for _, m := range desc.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX {
+			addConstraintIfNotAlreadyAdded(&c.UniqueWithoutIndexConstraint)
+		}
+	}
+	return ucs
+}
+
 // AllActiveAndInactiveForeignKeys implements the TableDescriptor interface.
 func (desc *wrapper) AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint {
 	fks := make([]*descpb.ForeignKeyConstraint, 0, len(desc.OutboundFKs))
@@ -283,6 +343,32 @@ func (desc *wrapper) AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConst
 	for i := range desc.Mutations {
 		if c := desc.Mutations[i].GetConstraint(); c != nil && c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
 			fks = append(fks, &c.ForeignKey)
+		}
+	}
+	return fks
+}
+
+// AllForeignKeys implements the TableDescriptor interface.
+func (desc *wrapper) AllForeignKeys() []*descpb.ForeignKeyConstraint {
+	fks := make([]*descpb.ForeignKeyConstraint, 0, len(desc.OutboundFKs))
+	fkIDs := make(map[descpb.ConstraintID]bool)
+
+	addConstraintIfNotAlreadyAdded := func(c *descpb.ForeignKeyConstraint) {
+		if _, exist := fkIDs[c.ConstraintID]; exist {
+			return
+		}
+		fks = append(fks, c)
+		fkIDs[c.ConstraintID] = true
+	}
+
+	for i := range desc.OutboundFKs {
+		addConstraintIfNotAlreadyAdded(&desc.OutboundFKs[i])
+	}
+
+	for _, m := range desc.Mutations {
+		if c := m.GetConstraint(); c != nil &&
+			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
+			addConstraintIfNotAlreadyAdded(&c.ForeignKey)
 		}
 	}
 	return fks

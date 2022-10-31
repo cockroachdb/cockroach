@@ -648,6 +648,11 @@ type TableDescriptor interface {
 	// ones on the table descriptor which are being enforced for all writes, and
 	// "inactive" ones queued in the mutations list.
 	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
+	// AllUniqueWithoutIndexConstraints returns all unique constraints that are
+	// not enforced by an index from both the `UniqueWithoutIndex` slice
+	// and mutation slice. It differs from `AllActiveAndInactiveUniqueWithoutIndexConstraints`
+	// in that the return includes UniqueWithoutIndexConstraints that are being dropped.
+	AllUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
 
 	// ForeachOutboundFK calls f for every outbound foreign key in desc until an
 	// error is returned.
@@ -661,6 +666,10 @@ type TableDescriptor interface {
 	// returned if multiple foreign keys (including mutations) are found for the
 	// same index.
 	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
+	// AllForeignKeys returns all foreign keys from both the `outboundFKs` slice
+	// and mutation slice. It differs from `AllActiveAndInactiveForeignKeys` in
+	// that the return includes FKs that are being dropped.
+	AllForeignKeys() []*descpb.ForeignKeyConstraint
 
 	// GetChecks returns information about this table's check constraints, if
 	// there are any. Only valid if IsTable returns true.
@@ -675,6 +684,10 @@ type TableDescriptor interface {
 	// on writes (including constraints being added/validated). The columns
 	// referenced by the returned checks are writable, but not necessarily public.
 	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
+	// AllChecks returns all checks from both the `Checks` slice and mutation slice.
+	// It differs from `AllActiveAndInactiveChecks` in that the return includes checks
+	// that are being dropped.
+	AllChecks() []*descpb.TableDescriptor_CheckConstraint
 
 	// GetLocalityConfig returns the locality config for this table, which
 	// describes the table's multi-region locality policy if one is set (e.g.
