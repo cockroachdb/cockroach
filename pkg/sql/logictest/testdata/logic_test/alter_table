@@ -2689,3 +2689,33 @@ ALTER TABLE t_89025 ADD COLUMN j INT DEFAULT (crdb_internal.lease_holder('a'));
 
 statement ok
 DROP TABLE t_89025
+
+# Tests for issue #90570 where we did not properly honour mutations on virtual
+# computed columns, which could cause selects to fail. Specifically in a cascaded
+# drop scenario, where the dependent column for a computed one is no longer
+# available.
+subtest drop_column_cascade_with_access
+
+statement ok
+create table t_with_dropped_index_expr (i INT PRIMARY KEY, j INT, INDEX((j+1)));
+
+# Pause at the first PostComit phase in the plan, which is after the PreCommit
+# phase of this plan added mutations in the table descriptors blocking access
+# to the virtual column.
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints="newschemachanger.before.exec";
+
+skipif config local-legacy-schema-changer
+statement error job \d+ was paused before it completed with reason: pause point "newschemachanger.before.exec" hit
+ALTER TABLE t_with_dropped_index_expr DROP COLUMN j CASCADE;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints="";
+
+query I
+SELECT count(*) from t_with_dropped_index_expr;
+----
+0
+
+statement ok
+RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TABLE %t_with_dropped_index_expr DROP COLUMN j CASCADE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);

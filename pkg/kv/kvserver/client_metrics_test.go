@@ -204,7 +204,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	const resolveAbortCount = int64(800)
 	const resolvePoisonCount = int64(2400)
 
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	{
 		repl := store.LookupReplica(keys.MustAddr(span.Key))
 		var err error

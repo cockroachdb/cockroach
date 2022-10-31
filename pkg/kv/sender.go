@@ -63,7 +63,7 @@ type Sender interface {
 	// concurrent requests, it waits for all of them before returning,
 	// even in error cases.
 	//
-	// Once the request reaches the `transport` module, anothern
+	// Once the request reaches the `transport` module, another
 	// restriction applies (particularly relevant for the case when the
 	// node that the transport is talking to is local, and so there's
 	// not gRPC marshaling/unmarshaling):
@@ -86,7 +86,7 @@ type Sender interface {
 	// about what the client should update, as opposed to a full txn
 	// that the client is expected to diff with its copy and apply all
 	// the updates.
-	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+	Send(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
 // TxnSender is the interface used to call into a CockroachDB instance
@@ -394,11 +394,11 @@ type TxnSenderFactory interface {
 
 // SenderFunc is an adapter to allow the use of ordinary functions as
 // Senders.
-type SenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+type SenderFunc func(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // Send calls f(ctx, c).
 func (f SenderFunc) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	return f(ctx, ba)
 }
@@ -450,7 +450,7 @@ func SendWrappedWithAdmission(
 	ah roachpb.AdmissionHeader,
 	args roachpb.Request,
 ) (roachpb.Response, *roachpb.Error) {
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Header = h
 	ba.AdmissionHeader = ah
 	ba.Add(args)
@@ -477,8 +477,8 @@ func SendWrapped(
 
 // Wrap returns a Sender which applies the given function before delegating to
 // the supplied Sender.
-func Wrap(sender Sender, f func(roachpb.BatchRequest) roachpb.BatchRequest) Sender {
-	return SenderFunc(func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+func Wrap(sender Sender, f func(*roachpb.BatchRequest) *roachpb.BatchRequest) Sender {
+	return SenderFunc(func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		return sender.Send(ctx, f(ba))
 	})
 }

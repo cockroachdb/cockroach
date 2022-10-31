@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 var (
@@ -65,7 +67,7 @@ type session struct {
 	start hlc.Timestamp
 
 	mu struct {
-		syncutil.RWMutex
+		syncutil.Mutex
 		exp hlc.Timestamp
 	}
 }
@@ -75,8 +77,8 @@ func (s *session) ID() sqlliveness.SessionID { return s.id }
 
 // Expiration implements the sqlliveness.Session interface.
 func (s *session) Expiration() hlc.Timestamp {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return s.mu.exp
 }
 
@@ -95,8 +97,14 @@ func (s *session) setExpiration(exp hlc.Timestamp) {
 // listeners of some state changes.
 type SessionEventListener interface {
 	// OnSessionDeleted is called when the session liveness record is found to be
-	// missing.
-	OnSessionDeleted(context.Context)
+	// missing, or otherwise when the Instance background worker exits and thus
+	// the current session will not be heartbeated anymore.
+	//
+	// If OnSessionDeleted returns true, the sqlliveness code will continue to
+	// create another session in the background. If it returns false, the
+	// sqlliveness background worker shuts down without creating a new session;
+	// further calls to Instance.Session() will fail.
+	OnSessionDeleted(context.Context) (createAnotherSession bool)
 }
 
 // Instance implements the sqlliveness.Instance interface by storing the
@@ -114,22 +122,36 @@ type Instance struct {
 	ttl           func() time.Duration
 	hb            func() time.Duration
 	testKnobs     sqlliveness.TestingKnobs
-	startErr      error
 	mu            struct {
-		started bool
 		syncutil.Mutex
+		// stopErr, if set, indicates that the heartbeat loop has stopped because of
+		// this error. Calls to Session() will return this error.
+		stopErr error
+		// s is the current session, if any.
+		s *session
+		// blockCh is set when s == nil && stopErr == nil. It is used to wait on
+		// updates to s.
 		blockCh chan struct{}
-		s       *session
 	}
 }
 
-func (l *Instance) getSessionOrBlockCh() (*session, chan struct{}) {
+var _ sqlliveness.Instance = &Instance{}
+
+// getSessionOrBlockCh returns the Instance's session state: if there is
+// currently a session, it is returned. Otherwise, if the heartbeat loop is
+// working on creating a session, a channel to wait on is returned. Finally, if
+// the Instance is not creating sessions any more, an error is returned.
+func (l *Instance) getSessionOrBlockCh() (*session, chan struct{}, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.mu.s != nil {
-		return l.mu.s, nil
+
+	if l.mu.stopErr != nil {
+		return nil, nil, l.mu.stopErr
 	}
-	return nil, l.mu.blockCh
+	if l.mu.s != nil {
+		return l.mu.s, nil, nil
+	}
+	return nil, l.mu.blockCh, nil
 }
 
 func (l *Instance) setSession(s *session) {
@@ -137,17 +159,37 @@ func (l *Instance) setSession(s *session) {
 	l.mu.s = s
 	// Notify all calls to Session that a non-nil session is available.
 	close(l.mu.blockCh)
+	l.mu.blockCh = nil
 	l.mu.Unlock()
 }
 
-func (l *Instance) clearSession(ctx context.Context) {
+// clearSession resets the Instance to a nil session, indicating that we no
+// longer have a usable, non-expired session. Further calls to Session() will
+// block for acquiring a new session.
+//
+// clearSession returns whether a new session should be created. clearSession
+// invokes the sessions events handler, if any, which has the power to say that
+// no new session should be created. In that case, the heartbeat loop will exit
+// and further Session() calls will result in errors.
+func (l *Instance) clearSession(ctx context.Context) (createNewSession bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if expiration := l.mu.s.Expiration(); expiration.Less(l.clock.Now()) {
-		l.sessionEvents.OnSessionDeleted(ctx)
+	return l.clearSessionLocked(ctx)
+}
+
+func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession bool) {
+	if l.mu.s == nil {
+		log.Fatal(ctx, "expected session to be set")
 	}
+	// When the session is set, blockCh should not be set.
+	if l.mu.blockCh != nil {
+		log.Fatal(ctx, "unexpected blockCh")
+	}
+
 	l.mu.s = nil
 	l.mu.blockCh = make(chan struct{})
+
+	return l.sessionEvents.OnSessionDeleted(ctx)
 }
 
 // createSession tries until it can create a new session and returns an error
@@ -194,10 +236,13 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 	return s, nil
 }
 
-// extendSession adds the ttl to the session's expiration.
+// extendSession updates the session record with a new expiration time.
 //
-// Returns false if the session record is not found, meaning that someone
+// Returns false if the session record is not found, meaning that someone else
 // deleted it.
+//
+// extendSession keeps retrying on error until ctx is canceled. Thus, an error
+// is only ever returned when the ctx is canceled.
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
 	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 
@@ -208,6 +253,7 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	var err error
 	var found bool
+	// Retry until success or until the context is canceled.
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		if found, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
@@ -218,6 +264,9 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 		break
 	}
 	if err != nil {
+		if ctx.Err() == nil {
+			log.Fatalf(ctx, "expected canceled ctx on err: %s", err)
+		}
 		return false, err
 	}
 
@@ -230,9 +279,30 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 }
 
 func (l *Instance) heartbeatLoop(ctx context.Context) {
+	err := l.heartbeatLoopInner(ctx)
+	if err == nil {
+		log.Fatal(ctx, "expected heartbeat to always terminate with an error")
+	}
+
+	log.Warning(ctx, "exiting heartbeat loop")
+
+	// Keep track of the fact that this Instance is not usable anymore. Further
+	// Session() calls will return errors.
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.mu.s != nil {
+		_ = l.clearSessionLocked(ctx)
+	}
+	l.mu.stopErr = err
+	close(l.mu.blockCh)
+}
+
+func (l *Instance) heartbeatLoopInner(ctx context.Context) error {
 	defer func() {
 		log.Warning(ctx, "exiting heartbeat loop")
 	}()
+	// Operations below retry endlessly after the stopper started quiescing if we
+	// don't cancel their ctx.
 	ctx, cancel := l.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 	t := timeutil.NewTimer()
@@ -242,43 +312,43 @@ func (l *Instance) heartbeatLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return stop.ErrUnavailable
 		case <-t.C:
 			t.Read = true
-			s, _ := l.getSessionOrBlockCh()
+
+			var s *session
+			l.mu.Lock()
+			s = l.mu.s
+			l.mu.Unlock()
+
+			// If we don't currently have a session, create one.
 			if s == nil {
 				newSession, err := l.createSession(ctx)
 				if err != nil {
-					func() {
-						l.mu.Lock()
-						defer l.mu.Unlock()
-						l.startErr = err
-						// There was an unrecoverable error when trying to
-						// create the session. Notify all calls to Session that
-						// the session failed.
-						close(l.mu.blockCh)
-					}()
-					l.sessionEvents.OnSessionDeleted(ctx)
-					return
+					return err
 				}
 				l.setSession(newSession)
 				t.Reset(l.hb())
 				continue
 			}
+
+			// Extend the session.
 			found, err := l.extendSession(ctx, s)
 			if err != nil {
-				l.clearSession(ctx)
-				return
+				// extendSession only ever returns an error on a canceled ctx.
+				return err
 			}
 			if !found {
-				l.clearSession(ctx)
-				// Start next loop iteration immediately to insert a new session.
+				// Someone deleted our session record. Let's clear our state and proceed
+				// to create a new session, unless the event handler wants to shut down
+				// instead.
+				if !l.clearSession(ctx) {
+					return errors.New("session record deleted")
+				}
 				t.Reset(0)
 				continue
 			}
-			if log.V(2) {
-				log.Infof(ctx, "extended SQL liveness session %s", s.ID())
-			}
+			log.VEventf(ctx, 2, "extended SQL liveness session %s", s.ID())
 			t.Reset(l.hb())
 		}
 	}
@@ -324,12 +394,10 @@ func NewSQLInstance(
 func (l *Instance) Start(ctx context.Context) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.mu.started {
-		return
-	}
 	log.Infof(ctx, "starting SQL liveness instance")
-	_ = l.stopper.RunAsyncTask(ctx, "slinstance", l.heartbeatLoop)
-	l.mu.started = true
+	// Detach from ctx's cancelation.
+	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
+	_ = l.stopper.RunAsyncTask(taskCtx, "slinstance", l.heartbeatLoop)
 }
 
 // Session returns a live session id. For each Sqlliveness instance the
@@ -341,34 +409,24 @@ func (l *Instance) Session(ctx context.Context) (sqlliveness.Session, error) {
 			return s, err
 		}
 	}
-	l.mu.Lock()
-	if !l.mu.started {
-		l.mu.Unlock()
-		return nil, sqlliveness.NotStartedError
-	}
-	l.mu.Unlock()
 
 	for {
-		s, ch := l.getSessionOrBlockCh()
+		s, ch, err := l.getSessionOrBlockCh()
+		if err != nil {
+			return nil, err
+		}
 		if s != nil {
 			return s, nil
 		}
 
+		// Wait for the background worker to create a new session.
 		select {
+		case <-ch:
+			continue
 		case <-l.stopper.ShouldQuiesce():
 			return nil, stop.ErrUnavailable
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ch:
-			var err error
-			func() {
-				l.mu.Lock()
-				defer l.mu.Unlock()
-				err = l.startErr
-			}()
-			if err != nil {
-				return nil, err
-			}
 		}
 	}
 }
@@ -378,4 +436,4 @@ type dummySessionEventListener struct{}
 var _ SessionEventListener = &dummySessionEventListener{}
 
 // OnSessionDeleted implements the slinstance.SessionEventListener interface.
-func (d *dummySessionEventListener) OnSessionDeleted(context.Context) {}
+func (d *dummySessionEventListener) OnSessionDeleted(context.Context) bool { return true }

@@ -169,7 +169,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 	// Arrange to trigger a retry when a ComputeChecksum request arrives.
 	testKnobs.TestingResponseFilter = func(
-		ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+		ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse,
 	) *roachpb.Error {
 		state.Lock()
 		defer state.Unlock()

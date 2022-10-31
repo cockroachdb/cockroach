@@ -43,7 +43,7 @@ import (
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
 func (s *Store) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	var writeBytes *StoreWriteBytes
 	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
@@ -54,7 +54,7 @@ func (s *Store) Send(
 // SendWithWriteBytes is the implementation of Send with an additional
 // *StoreWriteBytes return value.
 func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
@@ -329,7 +329,7 @@ func (s *Store) SendWithWriteBytes(
 // before a request acquires latches on a range. Otherwise, the request could
 // inadvertently block others while being throttled.
 func (s *Store) maybeThrottleBatch(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (limit.Reservation, error) {
 	if !ba.IsSingleRequest() {
 		return nil, nil
@@ -415,8 +415,8 @@ func (s *Store) maybeThrottleBatch(
 // For more information, see the "Server-side negotiation fast-path" section of
 // docs/RFCS/20210519_bounded_staleness_reads.md.
 func (s *Store) executeServerSideBoundedStalenessNegotiation(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (roachpb.BatchRequest, *roachpb.Error) {
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (*roachpb.BatchRequest, *roachpb.Error) {
 	if ba.BoundedStaleness == nil {
 		log.Fatal(ctx, "BoundedStaleness header required for server-side negotiation fast-path")
 	}
@@ -440,7 +440,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 
 	// Use one or more QueryResolvedTimestampRequests to compute a resolved
 	// timestamp over the read spans on the local replica.
-	var queryResBa roachpb.BatchRequest
+	queryResBa := &roachpb.BatchRequest{}
 	queryResBa.RangeID = ba.RangeID
 	queryResBa.Replica = ba.Replica
 	queryResBa.ClientRangeInfo = ba.ClientRangeInfo
@@ -494,6 +494,7 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		resTS = cfg.MaxTimestampBound.Prev()
 	}
 
+	ba = ba.ShallowCopy()
 	ba.Timestamp = resTS
 	ba.BoundedStaleness = nil
 	return ba, nil

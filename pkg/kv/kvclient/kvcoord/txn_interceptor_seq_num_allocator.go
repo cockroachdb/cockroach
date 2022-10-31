@@ -79,7 +79,7 @@ type txnSeqNumAllocator struct {
 
 // SendLocked is part of the txnInterceptor interface.
 func (s *txnSeqNumAllocator) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()

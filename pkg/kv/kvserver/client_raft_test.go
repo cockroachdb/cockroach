@@ -2248,7 +2248,7 @@ func TestQuotaPool(t *testing.T) {
 		// to be the same as what we started with.
 		keyToWrite := key.Next()
 		value := bytes.Repeat([]byte("v"), (3*quota)/4)
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		ba.Add(putArgs(keyToWrite, value))
 		if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 			t.Fatal(err)
@@ -2269,7 +2269,7 @@ func TestQuotaPool(t *testing.T) {
 		})
 
 		go func() {
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.Add(putArgs(keyToWrite, value))
 			if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 				ch <- roachpb.NewError(err)
@@ -2359,7 +2359,7 @@ func TestWedgedReplicaDetection(t *testing.T) {
 	// Send a request to the leader replica. followerRepl is locked so it will
 	// not respond.
 	value := []byte("value")
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(putArgs(key, value))
 	if err := ba.SetActiveTimestamp(tc.Servers[0].Clock()); err != nil {
 		t.Fatal(err)
@@ -2669,7 +2669,7 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 			replica2 := store0.LookupReplica(roachpb.RKey(key2))
 
 			rg2 := func(s *kvserver.Store) kv.Sender {
-				return kv.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
+				return kv.Wrap(s, func(ba *roachpb.BatchRequest) *roachpb.BatchRequest {
 					if ba.RangeID == 0 {
 						ba.RangeID = replica2.RangeID
 					}
@@ -4353,7 +4353,7 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	var filterRangeIDAtomic int64
 
 	ctx := context.Background()
-	testingRequestFilter := func(_ context.Context, ba roachpb.BatchRequest) (retErr *roachpb.Error) {
+	testingRequestFilter := func(_ context.Context, ba *roachpb.BatchRequest) (retErr *roachpb.Error) {
 		if rangeID := roachpb.RangeID(atomic.LoadInt64(&filterRangeIDAtomic)); rangeID != ba.RangeID {
 			return nil
 		}
@@ -5449,14 +5449,14 @@ func TestReplicaRemovalClosesProposalQuota(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
 				DisableReplicaGCQueue: true,
-				TestingRequestFilter: kvserverbase.ReplicaRequestFilter(func(_ context.Context, r roachpb.BatchRequest) *roachpb.Error {
+				TestingRequestFilter: func(_ context.Context, r *roachpb.BatchRequest) *roachpb.Error {
 					if r.RangeID == roachpb.RangeID(atomic.LoadInt64(&rangeID)) {
 						if _, isPut := r.GetArg(roachpb.Put); isPut {
 							atomic.AddInt64(&putRequestCount, 1)
 						}
 					}
 					return nil
-				}),
+				},
 			}},
 			RaftConfig: base.RaftConfig{
 				// Set the proposal quota to a tiny amount so that each write will

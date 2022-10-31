@@ -37,7 +37,7 @@ type txnMetricRecorder struct {
 
 // SendLocked is part of the txnInterceptor interface.
 func (m *txnMetricRecorder) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	if m.txnStartNanos == 0 {
 		m.txnStartNanos = timeutil.Now().UnixNano()

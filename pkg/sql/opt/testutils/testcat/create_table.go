@@ -668,6 +668,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 			ordinal,
 			cat.StableID(1+ordinal),
 			name,
+			kind,
 			typ,
 			nullable,
 			visibility,
@@ -1086,6 +1087,7 @@ func columnForIndexElemExpr(tt *Table, expr tree.Expr) cat.Column {
 		len(tt.Columns),
 		cat.StableID(1+len(tt.Columns)),
 		name,
+		cat.Ordinary,
 		typ,
 		true, /* nullable */
 		cat.Inaccessible,

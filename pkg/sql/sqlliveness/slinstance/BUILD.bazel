@@ -18,19 +18,18 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
 go_test(
     name = "slinstance_test",
     size = "small",
-    srcs = [
-        "helpers_test.go",
-        "slinstance_test.go",
-    ],
+    srcs = ["slinstance_test.go"],
     args = ["-test.timeout=55s"],
-    embed = [":slinstance"],
     deps = [
+        ":slinstance",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
         "//pkg/sql/sqlliveness",

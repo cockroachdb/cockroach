@@ -76,7 +76,8 @@ var CacheSize = settings.RegisterIntSetting(
 	"number of session entries to store in the LRU",
 	1024)
 
-// Storage implements sqlliveness.Storage.
+// Storage deals with reading and writing session records. It implements the
+// sqlliveness.Reader interface, and the slinstace.Writer interface.
 type Storage struct {
 	log.AmbientContext
 
@@ -104,6 +105,8 @@ type Storage struct {
 		deadSessions *cache.UnorderedCache
 	}
 }
+
+var _ sqlliveness.Reader = &Storage{}
 
 // NewTestingStorage constructs a new storage with control for the database
 // in which the `sqlliveness` table should exist.
@@ -445,8 +448,9 @@ func (s *Storage) CachedReader() sqlliveness.Reader {
 	return (*cachedStorage)(s)
 }
 
-// cachedStorage implements sqlliveness.Storage but does not read from the
-// underlying store synchronously during IsAlive.
+// cachedStorage implements the sqlliveness.Reader interface, and the
+// slinstace.Writer interface, but does not read from the underlying store
+// synchronously during IsAlive.
 type cachedStorage Storage
 
 func (s *cachedStorage) IsAlive(

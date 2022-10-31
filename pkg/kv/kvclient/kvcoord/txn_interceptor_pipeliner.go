@@ -258,7 +258,7 @@ func (f rangeIteratorFactory) newRangeIterator() condensableSpanSetRangeIterator
 
 // SendLocked implements the lockedSender interface.
 func (tp *txnPipeliner) SendLocked(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	// If an EndTxn request is part of this batch, attach the in-flight writes
 	// and the lock footprint to it.
@@ -321,7 +321,7 @@ func (tp *txnPipeliner) SendLocked(
 // the transaction commits. If it fails, then we'd add the lock spans to our
 // tracking and exceed the budget. It's easier for this code and more
 // predictable for the user if we just reject this batch, though.
-func (tp *txnPipeliner) maybeRejectOverBudget(ba roachpb.BatchRequest, maxBytes int64) error {
+func (tp *txnPipeliner) maybeRejectOverBudget(ba *roachpb.BatchRequest, maxBytes int64) error {
 	// Bail early if the current request is not locking, even if we are already
 	// over budget. In particular, we definitely want to permit rollbacks. We also
 	// want to permit lone commits, since the damage in taking too much memory has
@@ -354,8 +354,8 @@ func (tp *txnPipeliner) maybeRejectOverBudget(ba roachpb.BatchRequest, maxBytes 
 // provided batch. It augments these sets with locking requests from the current
 // batch.
 func (tp *txnPipeliner) attachLocksToEndTxn(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (roachpb.BatchRequest, *roachpb.Error) {
+	ctx context.Context, ba *roachpb.BatchRequest,
+) (*roachpb.BatchRequest, *roachpb.Error) {
 	args, hasET := ba.GetArg(roachpb.EndTxn)
 	if !hasET {
 		return ba, nil
@@ -420,7 +420,7 @@ func (tp *txnPipeliner) attachLocksToEndTxn(
 
 // canUseAsyncConsensus checks the conditions necessary for this batch to be
 // allowed to set the AsyncConsensus flag.
-func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba roachpb.BatchRequest) bool {
+func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *roachpb.BatchRequest) bool {
 	// Short-circuit for EndTransactions; it's common enough to have batches
 	// containing a prefix of writes (which, by themselves, are all eligible for
 	// async consensus) and then an EndTxn (which is not eligible). Note that
@@ -493,7 +493,7 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba roachpb.Bat
 // a write succeeded before depending on its existence. We later prune down the
 // list of writes we proved to exist that are no longer "in-flight" in
 // updateLockTracking.
-func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
+func (tp *txnPipeliner) chainToInFlightWrites(ba *roachpb.BatchRequest) *roachpb.BatchRequest {
 	// If there are no in-flight writes, there's nothing to chain to.
 	if tp.ifWrites.len() == 0 {
 		return ba
@@ -518,6 +518,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 				// We don't want to modify the batch's request slice directly,
 				// so fork it before modifying it.
 				if !forked {
+					ba = ba.ShallowCopy()
 					ba.Requests = append([]roachpb.RequestUnion(nil), ba.Requests[:i]...)
 					forked = true
 				}
@@ -597,7 +598,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 // transaction cleans up.
 func (tp *txnPipeliner) updateLockTracking(
 	ctx context.Context,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 	br *roachpb.BatchResponse,
 	pErr *roachpb.Error,
 	maxBytes int64,
@@ -641,7 +642,7 @@ func (tp *txnPipeliner) updateLockTracking(
 }
 
 func (tp *txnPipeliner) updateLockTrackingInner(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
 	// If the request failed, add all lock acquisitions attempts directly to the
 	// lock footprint. This reduces the likelihood of dangling locks blocking
@@ -658,7 +659,7 @@ func (tp *txnPipeliner) updateLockTrackingInner(
 		// timeout / queue depth limit. In such cases, this optimization prevents
 		// these transactions from adding even more load to the contended key by
 		// trying to perform unnecessary intent resolution.
-		baStripped := ba
+		baStripped := *ba
 		if roachpb.ErrPriority(pErr.GoError()) <= roachpb.ErrorScoreUnambiguousError && pErr.Index != nil {
 			baStripped.Requests = make([]roachpb.RequestUnion, len(ba.Requests)-1)
 			copy(baStripped.Requests, ba.Requests[:pErr.Index.Index])
@@ -759,7 +760,7 @@ func (tp *txnPipeliner) stripQueryIntents(br *roachpb.BatchResponse) *roachpb.Ba
 // It transforms any IntentMissingError into a TransactionRetryError and fixes
 // the error's index position.
 func (tp *txnPipeliner) adjustError(
-	ctx context.Context, ba roachpb.BatchRequest, pErr *roachpb.Error,
+	ctx context.Context, ba *roachpb.BatchRequest, pErr *roachpb.Error,
 ) *roachpb.Error {
 	// Fix the error index to hide the impact of any QueryIntent requests.
 	if pErr.Index != nil {

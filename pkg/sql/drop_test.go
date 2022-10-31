@@ -1091,7 +1091,7 @@ WHERE
 		defer filterState.Unlock()
 		return filterState.txnID
 	}
-	rf.setFilter(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+	rf.setFilter(func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 		if request.Txn == nil || request.Txn.Name != sql.SQLTxnName {
 			return nil
 		}
@@ -1130,7 +1130,7 @@ WHERE
 	// fail. We'll want to ensure that we get a retriable error. Use the below
 	// pattern to detect when the user transaction has finished planning and is
 	// now executing: we don't want to inject the error during planning.
-	rf.setFilter(func(ctx context.Context, request roachpb.BatchRequest) *roachpb.Error {
+	rf.setFilter(func(ctx context.Context, request *roachpb.BatchRequest) *roachpb.Error {
 		if request.Txn == nil {
 			return nil
 		}

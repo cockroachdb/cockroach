@@ -1380,7 +1380,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	fmtStr := fmt.Sprintf("%%0%dd", keySize)
 
 	// First write 2 * gcKeyVersionChunkBytes different keys (each with two versions).
-	ba1, ba2 := roachpb.BatchRequest{}, roachpb.BatchRequest{}
+	ba1, ba2 := &roachpb.BatchRequest{}, &roachpb.BatchRequest{}
 	for i := 0; i < 2*keyCount; i++ {
 		// Create keys which are
 		key := roachpb.Key(fmt.Sprintf(fmtStr, i))
@@ -1403,7 +1403,7 @@ func TestMVCCGCQueueChunkRequests(t *testing.T) {
 	key1 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount))
 	key2 := roachpb.Key(fmt.Sprintf(fmtStr, 2*keyCount+1))
 	for i := 0; i < 2*keyCount+1; i++ {
-		ba := roachpb.BatchRequest{}
+		ba := &roachpb.BatchRequest{}
 		// Only write keyCount+1 versions of key1.
 		if i < keyCount+1 {
 			pArgs1 := putArgs(key1, []byte(fmt.Sprintf("value%04d", i)))

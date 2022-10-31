@@ -271,7 +271,7 @@ func (ibm *IndexBackfillMerger) scan(
 			}
 			// For now just grab all of the destination KVs and merge the corresponding entries.
 			log.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
-			var ba roachpb.BatchRequest
+			ba := &roachpb.BatchRequest{}
 			ba.TargetBytes = chunkBytes
 			if err := ibm.growBoundAccount(ctx, chunkBytes); err != nil {
 				return errors.Wrap(err, "failed to fetch keys to merge from temp index")

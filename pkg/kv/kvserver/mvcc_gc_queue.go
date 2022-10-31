@@ -525,8 +525,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 	n := atomic.AddInt32(&r.count, 1)
 	log.Eventf(ctx, "sending batch %d (%d keys)", n, len(req.Keys))
 
-	var ba roachpb.BatchRequest
-
+	ba := &roachpb.BatchRequest{}
 	// Technically not needed since we're talking directly to the Replica.
 	ba.RangeID = r.repl.Desc().RangeID
 	ba.Timestamp = r.repl.Clock().Now()
@@ -567,7 +566,7 @@ func (r *replicaGCer) send(ctx context.Context, req roachpb.GCRequest) error {
 		}
 		ba.Replica.StoreID = r.storeID
 		var err error
-		admissionHandle, err = r.admissionController.AdmitKVWork(ctx, roachpb.SystemTenantID, &ba)
+		admissionHandle, err = r.admissionController.AdmitKVWork(ctx, roachpb.SystemTenantID, ba)
 		if err != nil {
 			return err
 		}

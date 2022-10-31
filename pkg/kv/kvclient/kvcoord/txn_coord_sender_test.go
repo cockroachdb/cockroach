@@ -344,7 +344,7 @@ func getTxn(ctx context.Context, txn *kv.Txn) (*roachpb.Transaction, *roachpb.Er
 		Txn: txnMeta,
 	}
 
-	ba := roachpb.BatchRequest{}
+	ba := &roachpb.BatchRequest{}
 	ba.Timestamp = txnMeta.WriteTimestamp
 	ba.Add(qt)
 
@@ -477,7 +477,7 @@ func TestTxnCoordSenderCommitCanceled(t *testing.T) {
 	// a txn ID, and the value is a ready channel (chan struct) that will be
 	// closed when the commit has been received and blocked.
 	var blockCommits sync.Map
-	responseFilter := func(_ context.Context, ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+	responseFilter := func(_ context.Context, ba *roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
 		if arg, ok := ba.GetArg(roachpb.EndTxn); ok && ba.Txn != nil {
 			et := arg.(*roachpb.EndTxnRequest)
 			readyC, ok := blockCommits.Load(ba.Txn.ID)
@@ -529,7 +529,7 @@ func TestTxnCoordSenderCommitCanceled(t *testing.T) {
 	// EndTxn(commit=false) async. We instead replicate what Txn.Rollback() would
 	// do here (i.e. send a EndTxn(commit=false)) and assert that we receive the
 	// expected error.
-	var ba roachpb.BatchRequest
+	ba := &roachpb.BatchRequest{}
 	ba.Add(&roachpb.EndTxnRequest{Commit: false})
 	_, pErr := txn.Send(ctx, ba)
 	require.NotNil(t, pErr)
@@ -672,7 +672,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 		key := roachpb.Key("a")
 		are := roachpb.NewAmbiguousResultErrorf("very ambiguous")
 		knobs := &kvserver.StoreTestingKnobs{
-			TestingResponseFilter: func(ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			TestingResponseFilter: func(ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 				for _, req := range ba.Requests {
 					if putReq, ok := req.GetInner().(*roachpb.PutRequest); ok && putReq.Key.Equal(key) {
 						return roachpb.NewError(are)
@@ -851,7 +851,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			clock := hlc.NewClock(manual, 20*time.Nanosecond /* maxOffset */)
 
 			var senderFn kv.SenderFunc = func(
-				_ context.Context, ba roachpb.BatchRequest,
+				_ context.Context, ba *roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				var reply *roachpb.BatchResponse
 				pErr := test.pErrGen(ba.Txn)
@@ -1046,7 +1046,7 @@ func TestTxnCoordSenderNoDuplicateLockSpans(t *testing.T) {
 
 	var expectedLockSpans []roachpb.Span
 
-	var senderFn kv.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
+	var senderFn kv.SenderFunc = func(_ context.Context, ba *roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
@@ -1587,7 +1587,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(ctx)
 			var senderFn kv.SenderFunc = func(
-				_ context.Context, ba roachpb.BatchRequest,
+				_ context.Context, ba *roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				br := ba.CreateReply()
 				br.Txn = ba.Txn.Clone()
@@ -1650,7 +1650,7 @@ type mockSender struct {
 
 var _ kv.Sender = &mockSender{}
 
-type matcher func(roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
+type matcher func(*roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
 // match adds a matcher to the list of matchers.
 func (s *mockSender) match(m matcher) {
@@ -1659,7 +1659,7 @@ func (s *mockSender) match(m matcher) {
 
 // Send implements the client.Sender interface.
 func (s *mockSender) Send(
-	_ context.Context, ba roachpb.BatchRequest,
+	_ context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	for _, m := range s.matchers {
 		br, pErr := m(ba)
@@ -1697,7 +1697,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	)
 	db := kv.NewDB(ambient, factory, clock, stopper)
 
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.EndTxn); !ok {
 			resp := ba.CreateReply()
 			resp.Txn = ba.Txn
@@ -1767,7 +1767,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 	keyA, keyB, keyC := roachpb.Key("a"), roachpb.Key("b"), roachpb.Key("c")
 
 	// Register a matcher catching the commit attempt.
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if et, ok := ba.GetArg(roachpb.EndTxn); !ok {
 			return nil, nil
 		} else if !et.(*roachpb.EndTxnRequest).Commit {
@@ -1776,7 +1776,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 		return nil, roachpb.NewErrorf("injected err")
 	})
 	// Register a matcher catching the rollback attempt.
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		et, ok := ba.GetArg(roachpb.EndTxn)
 		if !ok {
 			return nil, nil
@@ -1840,7 +1840,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var calls []roachpb.Method
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		return nil, nil
 	})
@@ -1895,7 +1895,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var calls []roachpb.Method
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 
@@ -1998,7 +1998,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var calls []roachpb.Method
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		return nil, nil
 	})
@@ -2039,7 +2039,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var calls []roachpb.Method
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 
@@ -2124,7 +2124,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 
 	keys := []string{"first", "second"}
 	attempt := 0
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
 
@@ -2190,7 +2190,7 @@ func TestSequenceNumbers(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	var expSequence enginepb.TxnSeq
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		for _, ru := range ba.Requests {
 			args := ru.GetInner()
 			if args.Method() == roachpb.QueryIntent {
@@ -2221,7 +2221,7 @@ func TestSequenceNumbers(t *testing.T) {
 	txn := kv.NewTxn(ctx, db, 0 /* gatewayNodeID */)
 
 	for i := 0; i < 5; i++ {
-		var ba roachpb.BatchRequest
+		ba := &roachpb.BatchRequest{}
 		for j := 0; j < i; j++ {
 			ba.Add(roachpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("foo")).(*roachpb.PutRequest))
 		}
@@ -2244,7 +2244,7 @@ func TestConcurrentTxnRequestsProhibited(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	putSync := make(chan struct{})
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Put); ok {
 			// Block the Put until the Get runs.
 			putSync <- struct{}{}
@@ -2324,7 +2324,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 		{hlc.Timestamp{WallTime: 20, Logical: 1}, hlc.Timestamp{WallTime: 20, Logical: 1}},
 	}
 
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		req := requests[curReq]
 		if req.expRequestTS != ba.Txn.WriteTimestamp {
 			return nil, roachpb.NewErrorf("%d: expected ts %s got %s",
@@ -2366,7 +2366,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+	sender.match(func(ba *roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Get); ok {
 			manual.Advance(100)
 			br := ba.CreateReply()
@@ -2437,7 +2437,7 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 
 	var calls []roachpb.Method
 	var senderFn kv.SenderFunc = func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		if et, ok := ba.GetArg(roachpb.EndTxn); ok {
@@ -2512,7 +2512,7 @@ func TestAnchorKey(t *testing.T) {
 	key2 := roachpb.Key("b")
 
 	var senderFn kv.SenderFunc = func(
-		ctx context.Context, ba roachpb.BatchRequest,
+		ctx context.Context, ba *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		if !roachpb.Key(ba.Txn.Key).Equal(key2) {
 			t.Fatalf("expected anchor %q, got %q", key2, ba.Txn.Key)
@@ -2560,7 +2560,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 	// where the first one gets a TransactionAbortedError.
 	errKey := roachpb.Key("a")
 	knobs := &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(_ context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(_ context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 			if g, ok := ba.GetArg(roachpb.Get); ok && g.(*roachpb.GetRequest).Key.Equal(errKey) {
 				txn := ba.Txn.Clone()
 				txn.Status = roachpb.ABORTED
@@ -2647,7 +2647,7 @@ func TestPutsInStagingTxn(t *testing.T) {
 
 	var putInStagingSeen bool
 	var storeKnobs kvserver.StoreTestingKnobs
-	storeKnobs.TestingRequestFilter = func(ctx context.Context, ba roachpb.BatchRequest) *roachpb.Error {
+	storeKnobs.TestingRequestFilter = func(ctx context.Context, ba *roachpb.BatchRequest) *roachpb.Error {
 		put, ok := ba.GetArg(roachpb.Put)
 		if !ok || !put.(*roachpb.PutRequest).Key.Equal(keyB) {
 			return nil
@@ -2711,7 +2711,7 @@ func TestTxnManualRefresh(t *testing.T) {
 		pErr *roachpb.Error
 	}
 	type req struct {
-		ba     roachpb.BatchRequest
+		ba     *roachpb.BatchRequest
 		respCh chan resp
 	}
 	type testCase struct {
@@ -2872,7 +2872,7 @@ func TestTxnManualRefresh(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		reqCh := make(chan req)
-		var senderFn kv.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
+		var senderFn kv.SenderFunc = func(_ context.Context, ba *roachpb.BatchRequest) (
 			*roachpb.BatchResponse, *roachpb.Error) {
 			r := req{
 				ba:     ba,

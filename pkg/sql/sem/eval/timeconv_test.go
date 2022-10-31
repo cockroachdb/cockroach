@@ -48,7 +48,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 
 	clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 	senderFactory := kv.MakeMockTxnSenderFactory(
-		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {
 			panic("unused")
 		})

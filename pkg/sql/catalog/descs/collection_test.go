@@ -155,7 +155,7 @@ func TestTxnClearsCollectionOnRetry(t *testing.T) {
 	var serverArgs base.TestServerArgs
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
-		TestingRequestFilter: func(ctx context.Context, r roachpb.BatchRequest) *roachpb.Error {
+		TestingRequestFilter: func(ctx context.Context, r *roachpb.BatchRequest) *roachpb.Error {
 			if r.Txn == nil || r.Txn.Name != txnName {
 				return nil
 			}

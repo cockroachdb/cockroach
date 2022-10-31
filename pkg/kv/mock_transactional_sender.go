@@ -21,7 +21,7 @@ import (
 // MockTransactionalSender allows a function to be used as a TxnSender.
 type MockTransactionalSender struct {
 	senderFunc func(
-		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error)
 	txn roachpb.Transaction
 }
@@ -30,7 +30,7 @@ type MockTransactionalSender struct {
 // The passed in txn is cloned.
 func NewMockTransactionalSender(
 	f func(
-		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error),
 	txn *roachpb.Transaction,
 ) *MockTransactionalSender {
@@ -39,7 +39,7 @@ func NewMockTransactionalSender(
 
 // Send is part of the TxnSender interface.
 func (m *MockTransactionalSender) Send(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	return m.senderFunc(ctx, &m.txn, ba)
 }
@@ -237,7 +237,7 @@ func (m *MockTransactionalSender) HasPerformedWrites() bool {
 
 // MockTxnSenderFactory is a TxnSenderFactory producing MockTxnSenders.
 type MockTxnSenderFactory struct {
-	senderFunc func(context.Context, *roachpb.Transaction, roachpb.BatchRequest) (
+	senderFunc func(context.Context, *roachpb.Transaction, *roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error)
 	nonTxnSenderFunc Sender
 }
@@ -249,7 +249,7 @@ var _ TxnSenderFactory = MockTxnSenderFactory{}
 // function is responsible for putting the txn inside the batch, if needed.
 func MakeMockTxnSenderFactory(
 	senderFunc func(
-		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error),
 ) MockTxnSenderFactory {
 	return MockTxnSenderFactory{
@@ -262,7 +262,7 @@ func MakeMockTxnSenderFactory(
 // requests.
 func MakeMockTxnSenderFactoryWithNonTxnSender(
 	senderFunc func(
-		context.Context, *roachpb.Transaction, roachpb.BatchRequest,
+		context.Context, *roachpb.Transaction, *roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error),
 	nonTxnSenderFunc SenderFunc,
 ) MockTxnSenderFactory {

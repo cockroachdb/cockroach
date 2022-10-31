@@ -64,7 +64,7 @@ type Transport interface {
 	//
 	// SendNext is also in charge of importing the remotely collected spans (if
 	// any) into the local trace.
-	SendNext(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, error)
+	SendNext(context.Context, *roachpb.BatchRequest) (*roachpb.BatchResponse, error)
 
 	// NextInternalClient returns the InternalClient to use for making RPC
 	// calls.
@@ -178,7 +178,7 @@ func (gt *grpcTransport) IsExhausted() bool {
 // client is ready. On success, the reply is sent on the channel;
 // otherwise an error is sent.
 func (gt *grpcTransport) SendNext(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	r := gt.replicas[gt.nextReplicaIdx]
 	iface, err := gt.NextInternalClient(ctx)
@@ -195,7 +195,7 @@ func (gt *grpcTransport) sendBatch(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	iface rpc.RestrictedInternalClient,
-	ba roachpb.BatchRequest,
+	ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	// Bail out early if the context is already canceled. (GRPC will
 	// detect this pretty quickly, but the first check of the context
@@ -208,7 +208,7 @@ func (gt *grpcTransport) sendBatch(
 	if rpc.IsLocal(iface) {
 		gt.opts.metrics.LocalSentCount.Inc(1)
 	}
-	reply, err := iface.Batch(ctx, &ba)
+	reply, err := iface.Batch(ctx, ba)
 	// If we queried a remote node, perform extra validation and
 	// import trace spans.
 	if reply != nil && !rpc.IsLocal(iface) {
@@ -328,13 +328,14 @@ func (s *senderTransport) IsExhausted() bool {
 }
 
 func (s *senderTransport) SendNext(
-	ctx context.Context, ba roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
 	if s.called {
 		panic("called an exhausted transport")
 	}
 	s.called = true
 
+	ba = ba.ShallowCopy()
 	ba.Replica = s.replica
 	log.Eventf(ctx, "%v", ba.String())
 	br, pErr := s.sender.Send(ctx, ba)
