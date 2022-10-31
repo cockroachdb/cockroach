@@ -663,7 +663,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 		return desc.ImmutableCopy().(catalog.TableDescriptor), nil
 	}
 
-	before, err := desc.GetConstraintInfoWithLookup(lookup)
+	before, err := desc.GetNonDropConstraintInfoWithLookup(lookup)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,7 +672,7 @@ func TestUnvalidateConstraints(t *testing.T) {
 	}
 	desc.InvalidateFKConstraints()
 
-	after, err := desc.GetConstraintInfoWithLookup(lookup)
+	after, err := desc.GetNonDropConstraintInfoWithLookup(lookup)
 	if err != nil {
 		t.Fatal(err)
 	}

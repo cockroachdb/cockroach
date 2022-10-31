@@ -2420,7 +2420,7 @@ func ColumnsSelectors(cols []catalog.Column) tree.SelectExprs {
 
 // InvalidateFKConstraints sets all FK constraints to un-validated.
 func (desc *wrapper) InvalidateFKConstraints() {
-	// We don't use GetConstraintInfo because we want to edit the passed desc.
+	// We don't use GetNonDropConstraintInfo because we want to edit the passed desc.
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
 		fk.Validity = descpb.ConstraintValidity_Unvalidated

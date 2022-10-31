@@ -500,7 +500,7 @@ func (p *planner) IsConstraintActive(
 	if err != nil {
 		return false, err
 	}
-	constraints, err := tableDesc.GetConstraintInfo()
+	constraints, err := tableDesc.GetNonDropConstraintInfo()
 	if err != nil {
 		return false, err
 	}

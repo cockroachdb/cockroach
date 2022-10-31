@@ -353,7 +353,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case *tree.CheckConstraintTableDef:
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-					info, infoErr := n.tableDesc.GetConstraintInfo()
+					info, infoErr := n.tableDesc.GetNonDropConstraintInfo()
 					if infoErr != nil {
 						err = infoErr
 						return
@@ -507,7 +507,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			droppedViews = append(droppedViews, colDroppedViews...)
 		case *tree.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo()
+			info, err := n.tableDesc.GetNonDropConstraintInfo()
 			if err != nil {
 				return err
 			}
@@ -534,7 +534,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo()
+			info, err := n.tableDesc.GetNonDropConstraintInfo()
 			if err != nil {
 				return err
 			}
@@ -787,7 +787,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			info, err := n.tableDesc.GetConstraintInfo()
+			info, err := n.tableDesc.GetNonDropConstraintInfo()
 			if err != nil {
 				return err
 			}
@@ -1037,7 +1037,7 @@ func applyColumnMutation(
 					"constraint in the middle of being dropped")
 			}
 		}
-		info, err := tableDesc.GetConstraintInfo()
+		info, err := tableDesc.GetNonDropConstraintInfo()
 		if err != nil {
 			return err
 		}
@@ -1069,7 +1069,7 @@ func applyColumnMutation(
 }
 
 func addNotNullConstraintMutationForCol(tableDesc *tabledesc.Mutable, col catalog.Column) error {
-	info, err := tableDesc.GetConstraintInfo()
+	info, err := tableDesc.GetNonDropConstraintInfo()
 	if err != nil {
 		return err
 	}
@@ -1474,7 +1474,7 @@ func validateConstraintNameIsNotUsed(
 	if name == "" {
 		return false, nil
 	}
-	info, err := tableDesc.GetConstraintInfo()
+	info, err := tableDesc.GetNonDropConstraintInfo()
 	if err != nil {
 		// Unexpected error: table descriptor should be valid at this point.
 		return false, errors.WithAssertionFailure(err)
@@ -1773,7 +1773,7 @@ func dropColumnImpl(
 
 	// Drop check constraints which reference the column.
 	constraintsToDrop := make([]string, 0, len(tableDesc.Checks))
-	constraintInfo, err := tableDesc.GetConstraintInfo()
+	constraintInfo, err := tableDesc.GetNonDropConstraintInfo()
 	if err != nil {
 		return nil, err
 	}
