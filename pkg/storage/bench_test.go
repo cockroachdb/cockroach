@@ -716,9 +716,10 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 
 type benchScanOptions struct {
 	mvccBenchData
-	numRows   int
-	reverse   bool
-	wholeRows bool
+	numRows    int
+	reverse    bool
+	wholeRows  bool
+	tombstones bool
 }
 
 // runMVCCScan first creates test data (and resets the benchmarking
@@ -783,6 +784,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 			WholeRowsOfSize: wholeRowsOfSize,
 			AllowEmpty:      wholeRowsOfSize != 0,
 			Reverse:         opts.reverse,
+			Tombstones:      opts.tombstones,
 		})
 		if err != nil {
 			b.Fatalf("failed scan: %+v", err)
@@ -794,7 +796,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, opts benchScanOptions) {
 		if !opts.garbage && len(res.KVs) != expectKVs {
 			b.Fatalf("failed to scan: %d != %d", len(res.KVs), expectKVs)
 		}
-		if opts.garbage && len(res.KVs) != 0 {
+		if opts.garbage && !opts.tombstones && len(res.KVs) != 0 {
 			b.Fatalf("failed to scan garbage: found %d keys", len(res.KVs))
 		}
 	}

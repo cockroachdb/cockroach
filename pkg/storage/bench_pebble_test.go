@@ -98,15 +98,20 @@ func BenchmarkMVCCScanGarbage_Pebble(b *testing.B) {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
 					for _, numRangeKeys := range []int{0, 1, 100} {
 						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
-							runMVCCScan(ctx, b, benchScanOptions{
-								mvccBenchData: mvccBenchData{
-									numVersions:  numVersions,
-									numRangeKeys: numRangeKeys,
-									garbage:      true,
-								},
-								numRows: numRows,
-								reverse: false,
-							})
+							for _, tombstones := range []bool{false, true} {
+								b.Run(fmt.Sprintf("tombstones=%t", tombstones), func(b *testing.B) {
+									runMVCCScan(ctx, b, benchScanOptions{
+										mvccBenchData: mvccBenchData{
+											numVersions:  numVersions,
+											numRangeKeys: numRangeKeys,
+											garbage:      true,
+										},
+										numRows:    numRows,
+										tombstones: tombstones,
+										reverse:    false,
+									})
+								})
+							}
 						})
 					}
 				})
