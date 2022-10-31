@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -3181,7 +3182,22 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		if query.hidden {
 			continue
 		}
-		sqlNoConstants := truncateSQL(formatStatementHideConstants(query.stmt.AST))
+		// Note: while it may seem tempting to just use query.stmt.AST instead of
+		// re-parsing the original SQL, it's unfortunately NOT SAFE to do so because
+		// the AST is currently not immutable - doing so will produce data races.
+		// See issue https://github.com/cockroachdb/cockroach/issues/90965 for the
+		// last time this was hit.
+		// This can go away if we resolve https://github.com/cockroachdb/cockroach/issues/22847.
+		parsed, err := parser.ParseOne(query.stmt.SQL)
+		if err != nil {
+			// This shouldn't happen, but might as well not completely give up if we
+			// fail to parse a parseable sql for some reason. We unfortunately can't
+			// just log the SQL either as it could contain sensitive information.
+			log.Warningf(ex.Ctx(), "failed to re-parse sql during session "+
+				"serialization")
+			continue
+		}
+		sqlNoConstants := truncateSQL(formatStatementHideConstants(parsed.AST))
 		nPlaceholders := 0
 		if query.placeholders != nil {
 			nPlaceholders = len(query.placeholders.Values)
@@ -3200,7 +3216,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			ElapsedTime:    timeNow.Sub(queryStart),
 			Sql:            sql,
 			SqlNoConstants: sqlNoConstants,
-			SqlSummary:     formatStatementSummary(query.stmt.AST),
+			SqlSummary:     formatStatementSummary(parsed.AST),
 			Placeholders:   placeholders,
 			IsDistributed:  query.isDistributed,
 			Phase:          (serverpb.ActiveQuery_Phase)(query.phase),
