@@ -314,9 +314,9 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
-// GetConstraintInfo implements the TableDescriptor interface.
-func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
-	return desc.collectConstraintInfo(nil)
+// GetNonDropConstraintInfo implements the TableDescriptor interface.
+func (desc *wrapper) GetNonDropConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
+	return desc.collectNonDropConstraintInfo(nil)
 }
 
 // FindConstraintWithID implements the TableDescriptor interface.
@@ -336,23 +336,23 @@ func (desc *wrapper) FindConstraintWithID(
 	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
 }
 
-// GetConstraintInfoWithLookup implements the TableDescriptor interface.
-func (desc *wrapper) GetConstraintInfoWithLookup(
+// GetNonDropConstraintInfoWithLookup implements the TableDescriptor interface.
+func (desc *wrapper) GetNonDropConstraintInfoWithLookup(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
-	return desc.collectConstraintInfo(tableLookup)
+	return desc.collectNonDropConstraintInfo(tableLookup)
 }
 
 // CheckUniqueConstraints returns a non-nil error if a descriptor contains two
 // constraints with the same name.
 func (desc *wrapper) CheckUniqueConstraints() error {
-	_, err := desc.collectConstraintInfo(nil)
+	_, err := desc.collectNonDropConstraintInfo(nil)
 	return err
 }
 
 // if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
 // check that constraints have unique names.
-func (desc *wrapper) collectConstraintInfo(
+func (desc *wrapper) collectNonDropConstraintInfo(
 	tableLookup catalog.TableLookupFn,
 ) (map[string]descpb.ConstraintDetail, error) {
 	info := make(map[string]descpb.ConstraintDetail)

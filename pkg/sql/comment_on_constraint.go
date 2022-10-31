@@ -67,7 +67,7 @@ func (p *planner) CommentOnConstraint(
 }
 
 func (n *commentOnConstraintNode) startExec(params runParams) error {
-	info, err := n.tableDesc.GetConstraintInfo()
+	info, err := n.tableDesc.GetNonDropConstraintInfo()
 	if err != nil {
 		return err
 	}

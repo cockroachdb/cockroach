@@ -869,7 +869,7 @@ func populateTableConstraints(
 	tableLookup simpleSchemaResolver,
 	addRow func(...tree.Datum) error,
 ) error {
-	conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+	conInfo, err := table.GetNonDropConstraintInfoWithLookup(tableLookup.getTableByID)
 	if err != nil {
 		return err
 	}
@@ -1517,7 +1517,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 				}
 			}
 
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+			conInfo, err := table.GetNonDropConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
@@ -1638,7 +1638,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				if err != nil {
 					return err
 				}
-				constraints, err := tableDesc.GetConstraintInfo()
+				constraints, err := tableDesc.GetNonDropConstraintInfo()
 				if err != nil {
 					return err
 				}

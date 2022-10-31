@@ -307,7 +307,7 @@ https://www.postgresql.org/docs/9.5/infoschema-check-constraints.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+			conInfo, err := table.GetNonDropConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
@@ -759,7 +759,7 @@ https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+			conInfo, err := table.GetNonDropConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
@@ -813,7 +813,7 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+			conInfo, err := table.GetNonDropConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
@@ -1276,7 +1276,7 @@ https://www.postgresql.org/docs/9.5/infoschema-table-constraints.html`,
 				table catalog.TableDescriptor,
 				tableLookup tableLookupFn,
 			) error {
-				conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
+				conInfo, err := table.GetNonDropConstraintInfoWithLookup(tableLookup.getTableByID)
 				if err != nil {
 					return err
 				}

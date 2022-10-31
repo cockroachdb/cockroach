@@ -403,7 +403,7 @@ func showComments(
 	}
 
 	// Get all the constraints for the table and create a map by ID.
-	constraints, err := table.GetConstraintInfo()
+	constraints, err := table.GetNonDropConstraintInfo()
 	if err != nil {
 		return err
 	}

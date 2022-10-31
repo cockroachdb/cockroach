@@ -406,7 +406,7 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	constraints, err := tableDesc.GetConstraintInfoWithLookup(func(id descpb.ID) (catalog.TableDescriptor, error) {
+	constraints, err := tableDesc.GetNonDropConstraintInfoWithLookup(func(id descpb.ID) (catalog.TableDescriptor, error) {
 		return p.Descriptors().GetImmutableTableByID(ctx, p.Txn(), id, tree.ObjectLookupFlagsWithRequired())
 	})
 	if err != nil {

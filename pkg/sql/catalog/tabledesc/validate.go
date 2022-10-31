@@ -892,7 +892,7 @@ func (desc *wrapper) validateConstraintIDs(vea catalog.ValidationErrorAccumulato
 	if !desc.IsTable() {
 		return
 	}
-	constraints, err := desc.GetConstraintInfo()
+	constraints, err := desc.GetNonDropConstraintInfo()
 	if err != nil {
 		vea.Report(err)
 		return

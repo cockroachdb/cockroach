@@ -632,11 +632,11 @@ type TableDescriptor interface {
 	// It's only non-nil if IsView is true.
 	GetDependsOnTypes() []descpb.ID
 
-	// GetConstraintInfoWithLookup returns a summary of all constraints on the
+	// GetNonDropConstraintInfoWithLookup returns a summary of all constraints on the
 	// table using the provided function to fetch a TableDescriptor from an ID.
-	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
-	// GetConstraintInfo returns a summary of all constraints on the table.
-	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
+	GetNonDropConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
+	// GetNonDropConstraintInfo returns a summary of all constraints on the table.
+	GetNonDropConstraintInfo() (map[string]descpb.ConstraintDetail, error)
 	// FindConstraintWithID returns a constraint given a constraint id.
 	FindConstraintWithID(id descpb.ConstraintID) (*descpb.ConstraintDetail, error)
 

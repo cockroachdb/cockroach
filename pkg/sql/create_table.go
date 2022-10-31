@@ -766,7 +766,7 @@ func ResolveUniqueWithoutIndexConstraint(
 	}
 
 	// Verify we are not writing a constraint over the same name.
-	constraintInfo, err := tbl.GetConstraintInfo()
+	constraintInfo, err := tbl.GetNonDropConstraintInfo()
 	if err != nil {
 		return err
 	}
@@ -976,7 +976,7 @@ func ResolveFK(
 	// or else we can hit other checks that break things with
 	// undesired error codes, e.g. #42858.
 	// It may be removable after #37255 is complete.
-	constraintInfo, err := tbl.GetConstraintInfo()
+	constraintInfo, err := tbl.GetNonDropConstraintInfo()
 	if err != nil {
 		return err
 	}

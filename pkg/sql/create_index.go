@@ -118,7 +118,7 @@ func (p *planner) maybeSetupConstraintForShard(
 		return err
 	}
 
-	curConstraintInfos, err := tableDesc.GetConstraintInfo()
+	curConstraintInfos, err := tableDesc.GetNonDropConstraintInfo()
 	if err != nil {
 		return err
 	}
