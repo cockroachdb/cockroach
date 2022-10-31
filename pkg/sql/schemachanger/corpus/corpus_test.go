@@ -15,6 +15,7 @@ import (
 	"flag"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/corpus"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -42,6 +43,7 @@ func TestValidateCorpuses(t *testing.T) {
 		name, state := reader.GetCorpus(corpusIdx)
 		t.Run(name, func(t *testing.T) {
 			_, err := scplan.MakePlan(context.Background(), *state, scplan.Params{
+				ActiveVersion:  clusterversion.TestingClusterVersion,
 				ExecutionPhase: scop.LatestPhase,
 				InRollback:     state.InRollback,
 				SchemaChangerJobIDSupplier: func() jobspb.JobID {

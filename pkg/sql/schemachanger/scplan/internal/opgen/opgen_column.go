@@ -26,7 +26,7 @@ func init() {
 						Column: *protoutil.Clone(this).(*scpb.Column),
 					}
 				}),
-				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.Column, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -40,7 +40,7 @@ func init() {
 			),
 			to(scpb.Status_PUBLIC,
 				revertible(false),
-				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeWriteOnlyColumnPublic {
+				emit(func(this *scpb.Column, md *opGenContext) *scop.MakeWriteOnlyColumnPublic {
 					return &scop.MakeWriteOnlyColumnPublic{
 						EventBase: newLogEventBase(this, md),
 						TableID:   this.TableID,
@@ -63,7 +63,7 @@ func init() {
 						ColumnID: this.ColumnID,
 					}
 				}),
-				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.Column, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -77,7 +77,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Column, md *targetsWithElementMap) *scop.MakeDeleteOnlyColumnAbsent {
+				emit(func(this *scpb.Column, md *opGenContext) *scop.MakeDeleteOnlyColumnAbsent {
 					return &scop.MakeDeleteOnlyColumnAbsent{
 						EventBase: newLogEventBase(this, md),
 						TableID:   this.TableID,

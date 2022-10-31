@@ -26,7 +26,7 @@ func init() {
 						Comment:    this.Comment,
 					}
 				}),
-				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.DatabaseComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -39,7 +39,7 @@ func init() {
 						DatabaseID: this.DatabaseID,
 					}
 				}),
-				emit(func(this *scpb.DatabaseComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.DatabaseComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),

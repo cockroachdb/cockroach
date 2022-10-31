@@ -118,6 +118,10 @@ ElementState:
     comment: implicit partitioning is good
     tableId: 104
   Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 104
+  Status: PUBLIC
 - ColumnName:
     columnId: 1
     name: pk
@@ -371,6 +375,14 @@ ElementState:
     ordinalInKind: 1
     tableId: 104
   Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 104
+  Status: PUBLIC
+- IndexData:
+    indexId: 2
+    tableId: 104
+  Status: PUBLIC
 - Namespace:
     databaseId: 100
     descriptorId: 104
@@ -475,6 +487,10 @@ ElementState:
     sourceIndexId: 0
     tableId: 105
     temporaryIndexId: 0
+  Status: PUBLIC
+- TableData:
+    databaseId: 100
+    tableId: 105
   Status: PUBLIC
 - ColumnName:
     columnId: 1
@@ -653,6 +669,14 @@ ElementState:
     indexId: 2
     kind: KEY
     ordinalInKind: 0
+    tableId: 105
+  Status: PUBLIC
+- IndexData:
+    indexId: 1
+    tableId: 105
+  Status: PUBLIC
+- IndexData:
+    indexId: 2
     tableId: 105
   Status: PUBLIC
 - Namespace:

@@ -85,7 +85,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │   │   └── • IndexPartitioning:{DescID: 104, IndexID: 3}
     │   │         PUBLIC → ABSENT
     │   │
-    │   └── • 6 Mutation operations
+    │   └── • 5 Mutation operations
     │       │
     │       ├── • MakeWriteOnlyIndexDeleteOnly
     │       │     IndexID: 3
@@ -109,14 +109,6 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │       │         SubWorkID: 1
     │       │     TargetStatus: 1
     │       │
-    │       ├── • CreateGCJobForIndex
-    │       │     IndexID: 2
-    │       │     StatementForDropJob:
-    │       │       Rollback: true
-    │       │       Statement: removed secondary index; CREATE INDEX id1 ON defaultdb.public.t1 (id,
-    │       │         name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
-    │       │     TableID: 104
-    │       │
     │       ├── • MakeIndexAbsent
     │       │     IndexID: 2
     │       │     TableID: 104
@@ -127,42 +119,65 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 4 of 7;
     │       └── • UpdateSchemaChangerJob
     │             IsNonCancelable: true
     │             JobID: 1
-    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending
+    │             RunningStatus: PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops pending
     │
     └── • Stage 2 of 2 in PostCommitNonRevertiblePhase
         │
-        ├── • 1 element transitioning toward ABSENT
+        ├── • 3 elements transitioning toward ABSENT
         │   │
-        │   └── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-        │       │ DELETE_ONLY → ABSENT
+        │   ├── • IndexData:{DescID: 104, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
+        │   ├── • TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+        │   │   │ DELETE_ONLY → ABSENT
+        │   │   │
+        │   │   ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+        │   │   │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
+        │   │   │     rule: "dependents removed before index"
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
+        │   │         rule: "dependents removed before index"
+        │   │
+        │   └── • IndexData:{DescID: 104, IndexID: 3}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       ├── • PreviousTransactionPrecedence dependency from DELETE_ONLY TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-        │       │     rule: "TemporaryIndex transitions to ABSENT uphold 2-version invariant: DELETE_ONLY->ABSENT"
+        │       ├── • SameStagePrecedence dependency from DROPPED IndexData:{DescID: 104, IndexID: 2}
+        │       │     rule: "schedule all GC jobs for a descriptor in the same stage"
         │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       ├── • Precedence dependency from ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-        │       │     rule: "dependents removed before index"
-        │       │
-        │       └── • Precedence dependency from ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
-        │             rule: "dependents removed before index"
+        │       └── • Precedence dependency from ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+        │             rule: "index removed before garbage collection"
         │
-        └── • 4 Mutation operations
+        └── • 5 Mutation operations
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 2
+            │     StatementForDropJob:
+            │       Rollback: true
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
+            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
+            │     TableID: 104
+            │
+            ├── • MakeIndexAbsent
+            │     IndexID: 3
+            │     TableID: 104
             │
             ├── • CreateGCJobForIndex
             │     IndexID: 3
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: removed temporary index; CREATE INDEX id1 ON defaultdb.public.t1 (id,
-            │         name) STORING (money) PARTITION BY LIST (id) (PARTITION p1 VALUES IN (1))
-            │     TableID: 104
-            │
-            ├── • MakeIndexAbsent
-            │     IndexID: 3
+            │       Statement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money) PARTITION
+            │         BY LIST (id) (PARTITION p1 VALUES IN (1))
             │     TableID: 104
             │
             ├── • RemoveJobStateFromDescriptor

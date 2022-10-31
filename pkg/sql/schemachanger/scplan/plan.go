@@ -13,6 +13,7 @@ package scplan
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -27,6 +28,9 @@ import (
 
 // Params holds the arguments for planning.
 type Params struct {
+	// ActiveVersion contains the version currently active in the cluster.
+	ActiveVersion clusterversion.ClusterVersion
+
 	// InRollback is used to indicate whether we've already been reverted.
 	// Note that when in rollback, there is no turning back and all work is
 	// non-revertible. Theory dictates that this is fine because of how we
@@ -99,7 +103,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 	}()
 	{
 		start := timeutil.Now()
-		p.Graph = buildGraph(ctx, p.CurrentState)
+		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
@@ -123,8 +127,10 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 	return nil
 }
 
-func buildGraph(ctx context.Context, cs scpb.CurrentState) *scgraph.Graph {
-	g, err := opgen.BuildGraph(ctx, cs)
+func buildGraph(
+	ctx context.Context, activeVersion clusterversion.ClusterVersion, cs scpb.CurrentState,
+) *scgraph.Graph {
+	g, err := opgen.BuildGraph(ctx, activeVersion, cs)
 	if err != nil {
 		panic(errors.Wrapf(err, "build graph op edges"))
 	}

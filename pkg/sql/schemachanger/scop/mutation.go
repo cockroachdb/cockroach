@@ -129,7 +129,8 @@ type MakePublicPrimaryIndexWriteOnly struct {
 // CreateGCJobForTable creates a GC job for a given table, when necessary.
 type CreateGCJobForTable struct {
 	mutationOp
-	TableID descpb.ID
+	TableID    descpb.ID
+	DatabaseID descpb.ID
 	StatementForDropJob
 }
 

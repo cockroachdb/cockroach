@@ -134,3 +134,10 @@ func TestLogic_drop_view(
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "drop_view")
 }
+
+func TestLogic_gc_job_mixed(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "gc_job_mixed")
+}

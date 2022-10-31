@@ -119,6 +119,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   {indexId: 1, name: shipments_pkey, tableId: 109}
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC]
   {comment: pkey is good, indexId: 1, tableId: 109}
+- [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 109}
 - [[ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {columnIds: [4], constraintId: 2, referencedColumnIds: [1], referencedTableId: 104, tableId: 109}
 - [[ConstraintName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT], PUBLIC]
@@ -129,6 +131,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   {columnIds: [4], constraintId: 3, referencedColumnIds: [2], referencedTableId: 105, tableId: 109}
 - [[ConstraintName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT], PUBLIC]
   {constraintId: 3, name: fk_orders, tableId: 109}
+- [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 109}
 - [[Namespace:{DescID: 110, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 110, name: sq1, schemaId: 101}
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]
@@ -141,6 +145,8 @@ DROP TABLE defaultdb.shipments CASCADE;
   {sequenceId: 110}
 - [[ObjectParent:{DescID: 110, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 110, parentSchemaId: 101}
+- [[TableData:{DescID: 110, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 110}
 - [[Namespace:{DescID: 111, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 111, name: v1, schemaId: 101}
 - [[Owner:{DescID: 111}, ABSENT], PUBLIC]

@@ -696,7 +696,7 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
 │                 - 108
 │                 JobID: 1
 │                 NonCancelable: true
-│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
+│                 RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 12 MutationType ops
 │                   pending
 │                 Statements:
 │                 - statement: DROP DATABASE multi_region_test_db CASCADE
@@ -707,13 +707,19 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 5 elements transitioning toward ABSENT
+        ├── • 8 elements transitioning toward ABSENT
         │   │
         │   ├── • Database:{DescID: 104}
         │   │   │ DROPPED → ABSENT
         │   │   │
         │   │   └── • PreviousTransactionPrecedence dependency from DROPPED Database:{DescID: 104}
         │   │         rule: "descriptor DROPPED in transaction before removal"
+        │   │
+        │   ├── • DatabaseData:{DescID: 104}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from ABSENT Database:{DescID: 104}
+        │   │         rule: "descriptor removed right before garbage collection"
         │   │
         │   ├── • Schema:{DescID: 106}
         │   │   │ DROPPED → ABSENT
@@ -733,13 +739,28 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
         │   │   └── • PreviousTransactionPrecedence dependency from DROPPED AliasType:{DescID: 107, ReferencedTypeIDs: [105 107]}
         │   │         rule: "descriptor DROPPED in transaction before removal"
         │   │
-        │   └── • Table:{DescID: 108}
-        │       │ DROPPED → ABSENT
+        │   ├── • Table:{DescID: 108}
+        │   │   │ DROPPED → ABSENT
+        │   │   │
+        │   │   └── • PreviousTransactionPrecedence dependency from DROPPED Table:{DescID: 108}
+        │   │         rule: "descriptor DROPPED in transaction before removal"
+        │   │
+        │   ├── • IndexData:{DescID: 108, IndexID: 1}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   ├── • Precedence dependency from ABSENT PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}
+        │   │   │     rule: "index removed before garbage collection"
+        │   │   │
+        │   │   └── • SameStagePrecedence dependency from DROPPED TableData:{DescID: 108, ReferencedDescID: 104}
+        │   │         rule: "schedule all GC jobs for a descriptor in the same stage"
+        │   │
+        │   └── • TableData:{DescID: 108, ReferencedDescID: 104}
+        │       │ PUBLIC → ABSENT
         │       │
-        │       └── • PreviousTransactionPrecedence dependency from DROPPED Table:{DescID: 108}
-        │             rule: "descriptor DROPPED in transaction before removal"
+        │       └── • SameStagePrecedence dependency from ABSENT Table:{DescID: 108}
+        │             rule: "table removed right before garbage collection"
         │
-        └── • 17 Mutation operations
+        └── • 18 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -755,13 +776,13 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
+            ├── • DeleteDescriptor
+            │     DescriptorID: 104
+            │
             ├── • CreateGCJobForDatabase
             │     DatabaseID: 104
             │     StatementForDropJob:
             │       Statement: DROP DATABASE multi_region_test_db CASCADE
-            │
-            ├── • DeleteDescriptor
-            │     DescriptorID: 104
             │
             ├── • LogEvent
             │     Element:
@@ -844,6 +865,13 @@ EXPLAIN (ddl, verbose) DROP DATABASE multi_region_test_db CASCADE;
             │     TargetStatus: 1
             │
             ├── • CreateGCJobForTable
+            │     DatabaseID: 104
+            │     StatementForDropJob:
+            │       Statement: DROP DATABASE multi_region_test_db CASCADE
+            │     TableID: 108
+            │
+            ├── • CreateGCJobForIndex
+            │     IndexID: 1
             │     StatementForDropJob:
             │       Statement: DROP DATABASE multi_region_test_db CASCADE
             │     TableID: 108

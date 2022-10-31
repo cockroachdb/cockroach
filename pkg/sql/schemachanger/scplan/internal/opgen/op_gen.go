@@ -14,6 +14,7 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
@@ -81,12 +82,14 @@ func IterateTransitions(
 
 // BuildGraph constructs a graph with operation edges populated from an initial
 // state.
-func BuildGraph(ctx context.Context, cs scpb.CurrentState) (*scgraph.Graph, error) {
-	return opRegistry.buildGraph(ctx, cs)
+func BuildGraph(
+	ctx context.Context, activeVersion clusterversion.ClusterVersion, cs scpb.CurrentState,
+) (*scgraph.Graph, error) {
+	return opRegistry.buildGraph(ctx, activeVersion, cs)
 }
 
 func (r *registry) buildGraph(
-	ctx context.Context, cs scpb.CurrentState,
+	ctx context.Context, activeVersion clusterversion.ClusterVersion, cs scpb.CurrentState,
 ) (_ *scgraph.Graph, err error) {
 	start := timeutil.Now()
 	defer func() {
@@ -107,7 +110,7 @@ func (r *registry) buildGraph(
 		n *screl.Node
 	}
 	var edgesToAdd []toAdd
-	md := makeTargetsWithElementMap(cs)
+	md := makeOpgenContext(activeVersion, cs)
 	for _, t := range r.targets {
 		edgesToAdd = edgesToAdd[:0]
 		if err := t.iterateFunc(g.Database(), func(n *screl.Node) error {
