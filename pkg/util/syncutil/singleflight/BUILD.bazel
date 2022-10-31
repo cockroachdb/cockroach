@@ -6,7 +6,14 @@ go_library(
     srcs = ["singleflight.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight",
     visibility = ["//visibility:public"],
-    deps = ["//pkg/util/syncutil"],
+    deps = [
+        "//pkg/util/log",
+        "//pkg/util/stop",
+        "//pkg/util/syncutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@io_opentelemetry_go_otel//attribute",
+    ],
 )
 
 go_test(

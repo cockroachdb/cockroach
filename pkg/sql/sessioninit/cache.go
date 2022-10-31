@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
-	"github.com/cockroachdb/logtags"
 )
 
 // CacheEnabledSettingName is the name of the CacheEnabled cluster setting.
@@ -59,7 +58,7 @@ type Cache struct {
 	settingsCache map[SettingsCacheKey][]string
 	// populateCacheGroup is used to ensure that there is at most one in-flight
 	// request for populating each cache entry.
-	populateCacheGroup singleflight.Group
+	populateCacheGroup *singleflight.Group
 	stopper            *stop.Stopper
 }
 
@@ -93,8 +92,9 @@ type SettingsCacheEntry struct {
 // NewCache initializes a new sessioninit.Cache.
 func NewCache(account mon.BoundAccount, stopper *stop.Stopper) *Cache {
 	return &Cache{
-		boundAccount: account,
-		stopper:      stopper,
+		boundAccount:       account,
+		populateCacheGroup: singleflight.NewGroup("load-value", "key"),
+		stopper:            stopper,
 	}
 }
 
@@ -208,18 +208,17 @@ func (a *Cache) readAuthInfoFromCache(
 func (a *Cache) loadValueOutsideOfCache(
 	ctx context.Context, requestKey string, fn func(loadCtx context.Context) (interface{}, error),
 ) (interface{}, error) {
-	ch, _ := a.populateCacheGroup.DoChan(requestKey, func() (interface{}, error) {
-		// Use a different context to fetch, so that it isn't possible for
-		// one query to timeout and cause all the goroutines that are waiting
-		// to get a timeout error.
-		loadCtx, cancel := a.stopper.WithCancelOnQuiesce(
-			logtags.WithTags(context.Background(), logtags.FromContext(ctx)),
-		)
-		defer cancel()
-		return fn(loadCtx)
-	})
+	ch, _ := a.populateCacheGroup.DoChan(ctx,
+		requestKey,
+		singleflight.DoOpts{
+			Stop:               a.stopper,
+			InheritCancelation: false,
+		},
+		fn,
+	)
+	defer ch.ReaderClose()
 	select {
-	case res := <-ch:
+	case res := <-ch.C():
 		if res.Err != nil {
 			return AuthInfo{}, res.Err
 		}

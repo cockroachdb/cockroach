@@ -63,7 +63,7 @@ type manager struct {
 	db      *kv.DB
 	stopper *stop.Stopper
 	metrics Metrics
-	txns    singleflight.Group
+	txns    *singleflight.Group
 	sem     chan struct{}
 }
 
@@ -76,6 +76,7 @@ func NewManager(ac log.AmbientContext, clock *hlc.Clock, db *kv.DB, stopper *sto
 		db:             db,
 		stopper:        stopper,
 		metrics:        makeMetrics(),
+		txns:           singleflight.NewGroup("resolve indeterminate commit", "txn"),
 		sem:            make(chan struct{}, defaultTaskLimit),
 	}
 }
@@ -92,13 +93,17 @@ func (m *manager) ResolveIndeterminateCommit(
 	// Launch a single-flight task to recover the transaction. This may be
 	// coalesced with other recovery attempts for the same transaction.
 	log.VEventf(ctx, 2, "recovering txn %s from indeterminate commit", txn.ID.Short())
-	resC, _ := m.txns.DoChan(txn.ID.String(), func() (interface{}, error) {
-		return m.resolveIndeterminateCommitForTxn(txn)
-	})
+	resC, _ := m.txns.DoChan(ctx,
+		txn.ID.String(),
+		singleflight.DoOpts{InheritCancelation: true},
+		func(ctx context.Context) (interface{}, error) {
+			return m.resolveIndeterminateCommitForTxn(txn)
+		})
+	defer resC.ReaderClose()
 
 	// Wait for the inflight request.
 	select {
-	case res := <-resC:
+	case res := <-resC.C():
 		if res.Err != nil {
 			log.VEventf(ctx, 2, "recovery error: %v", res.Err)
 			return nil, res.Err
