@@ -83,7 +83,8 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 var MVCCRangeTombstonesEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"storage.mvcc.range_tombstones.enabled",
-	"if true, enable the use of MVCC range tombstones",
+	"experimental: if true, enable the use of MVCC range tombstones. Do not enable "+
+		"unless you're aware of the corruption risk.",
 	false)
 
 // CanUseMVCCRangeTombstones returns true if the caller can begin writing
