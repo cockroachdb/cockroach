@@ -33,14 +33,6 @@ const (
 	RaftCommandIDLen = 8
 	// RaftCommandPrefixLen is the prescribed length of each encoded command's prefix.
 	RaftCommandPrefixLen = 1 + RaftCommandIDLen
-	// RaftCommandNoSplitBit is deprecated.
-	// The no-split bit is now unused, but we still apply the mask to the first
-	// byte of the command for backward compatibility.
-	//
-	// TODO(tschottdorf): predates v1.0 by a significant margin. Remove.
-	RaftCommandNoSplitBit = 1 << 7
-	// RaftCommandNoSplitMask is deprecated.
-	RaftCommandNoSplitMask = RaftCommandNoSplitBit - 1
 )
 
 // EncodeRaftCommand encodes a raft command (including the versioning prefix).
@@ -71,10 +63,6 @@ func EncodeRaftCommandPrefix(b []byte, version RaftCommandEncodingVersion, comma
 // than a real command). Usage is mostly internal to the storage package
 // but is exported for use by debugging tools.
 func DecodeRaftCommand(data []byte) (CmdIDKey, []byte) {
-	v := RaftCommandEncodingVersion(data[0] & RaftCommandNoSplitMask)
-	if v != RaftVersionStandard && v != RaftVersionSideloaded {
-		panic(fmt.Sprintf("unknown command encoding version %v", data[0]))
-	}
 	return CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
 
