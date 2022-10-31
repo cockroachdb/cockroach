@@ -20,6 +20,7 @@ package cockroach.sql.distsqlrun;
 option go_package = "execinfrapb";
 
 import "gogoproto/gogo.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "roachpb/data.proto";
 import "jobs/jobspb/jobs.proto";
@@ -39,6 +40,8 @@ message TTLSpec {
     (gogoproto.customname) = "RowLevelTTLDetails"
   ];
 
+  // Deprecated: AOST has been replaced with AOSTDuration.
+  // TODO(ewall): remove in 24.1
   // AOST is the AS OF SYSTEM TIME value the ttlProcessor uses to select records.
   optional google.protobuf.Timestamp aost = 3 [
     (gogoproto.nullable) = false,
@@ -81,4 +84,12 @@ message TTLSpec {
   // PreSelectStatement is a test setting to run a SQL statement
   // before selecting records.
   optional string pre_select_statement = 12 [(gogoproto.nullable) = false];
+
+  // AOSTDuration is subtracted from the current time to determine the
+  // AS OF SYSTEM TIME value the ttlProcessor uses to select records.
+  optional google.protobuf.Duration aost_duration = 13 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "AOSTDuration",
+    (gogoproto.stdduration) = true
+  ];
 }
