@@ -132,8 +132,10 @@ func TestTableReader(t *testing.T) {
 					Mon:     evalCtx.TestingMon,
 					Cfg: &execinfra.ServerConfig{
 						Settings: st,
-						RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
-							func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer)),
+						RangeCache: rangecache.NewRangeCache(
+							s.ClusterSettings(), nil,
+							func() int64 { return 2 << 10 }, s.Stopper(),
+						),
 					},
 					Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 					NodeID: evalCtx.NodeID,
@@ -383,8 +385,10 @@ func TestLimitScans(t *testing.T) {
 		Mon:     evalCtx.TestingMon,
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
-			RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
-				func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer)),
+			RangeCache: rangecache.NewRangeCache(
+				s.ClusterSettings(), nil,
+				func() int64 { return 2 << 10 }, s.Stopper(),
+			),
 		},
 		Txn:    kv.NewTxn(ctx, kvDB, s.NodeID()),
 		NodeID: evalCtx.NodeID,
@@ -497,8 +501,10 @@ func BenchmarkTableReader(b *testing.B) {
 			Mon:     evalCtx.TestingMon,
 			Cfg: &execinfra.ServerConfig{
 				Settings: st,
-				RangeCache: rangecache.NewRangeCache(s.ClusterSettings(), nil,
-					func() int64 { return 2 << 10 }, s.Stopper(), s.TracerI().(*tracing.Tracer)),
+				RangeCache: rangecache.NewRangeCache(
+					s.ClusterSettings(), nil,
+					func() int64 { return 2 << 10 }, s.Stopper(),
+				),
 			},
 			Txn:    kv.NewTxn(ctx, s.DB(), s.NodeID()),
 			NodeID: evalCtx.NodeID,

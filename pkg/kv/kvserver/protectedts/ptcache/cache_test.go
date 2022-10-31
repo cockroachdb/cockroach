@@ -176,7 +176,7 @@ func TestRefresh(t *testing.T) {
 			return nil
 		})
 		go func() { time.Sleep(time.Millisecond); cancel() }()
-		require.EqualError(t, c.Refresh(withCancel, s.Clock().Now()),
+		require.ErrorContains(t, c.Refresh(withCancel, s.Clock().Now()),
 			context.Canceled.Error())
 		close(done)
 	})

@@ -63,7 +63,7 @@ type manager struct {
 	db      *kv.DB
 	stopper *stop.Stopper
 	metrics Metrics
-	txns    singleflight.Group
+	txns    *singleflight.Group
 	sem     chan struct{}
 }
 
@@ -76,6 +76,7 @@ func NewManager(ac log.AmbientContext, clock *hlc.Clock, db *kv.DB, stopper *sto
 		db:             db,
 		stopper:        stopper,
 		metrics:        makeMetrics(),
+		txns:           singleflight.NewGroup("resolve indeterminate commit", "txn"),
 		sem:            make(chan struct{}, defaultTaskLimit),
 	}
 }
@@ -92,23 +93,23 @@ func (m *manager) ResolveIndeterminateCommit(
 	// Launch a single-flight task to recover the transaction. This may be
 	// coalesced with other recovery attempts for the same transaction.
 	log.VEventf(ctx, 2, "recovering txn %s from indeterminate commit", txn.ID.Short())
-	resC, _ := m.txns.DoChan(txn.ID.String(), func() (interface{}, error) {
-		return m.resolveIndeterminateCommitForTxn(txn)
-	})
-
-	// Wait for the inflight request.
-	select {
-	case res := <-resC:
-		if res.Err != nil {
-			log.VEventf(ctx, 2, "recovery error: %v", res.Err)
-			return nil, res.Err
-		}
-		txn := res.Val.(*roachpb.Transaction)
-		log.VEventf(ctx, 2, "recovered txn %s with status: %s", txn.ID.Short(), txn.Status)
-		return txn, nil
-	case <-ctx.Done():
-		return nil, errors.Wrap(ctx.Err(), "abandoned indeterminate commit recovery")
+	future, _ := m.txns.DoChan(ctx,
+		txn.ID.String(),
+		singleflight.DoOpts{
+			InheritCancelation: false,
+			Stop:               m.stopper,
+		},
+		func(ctx context.Context) (interface{}, error) {
+			return m.resolveIndeterminateCommitForTxn(ctx, txn)
+		})
+	res := future.WaitForResult(ctx)
+	if res.Err != nil {
+		log.VEventf(ctx, 2, "recovery error: %v", res.Err)
+		return nil, errors.Wrap(res.Err, "failed indeterminate commit recovery")
 	}
+	txn = res.Val.(*roachpb.Transaction)
+	log.VEventf(ctx, 2, "recovered txn %s with status: %s", txn.ID.Short(), txn.Status)
+	return txn, nil
 }
 
 // resolveIndeterminateCommitForTxn attempts to to resolve the status of
@@ -120,48 +121,36 @@ func (m *manager) ResolveIndeterminateCommit(
 // is determined, the method issues a RecoverTxn request with a summary of their
 // outcome.
 func (m *manager) resolveIndeterminateCommitForTxn(
-	txn *roachpb.Transaction,
+	ctx context.Context, txn *roachpb.Transaction,
 ) (resTxn *roachpb.Transaction, resErr error) {
 	// Record the recovery attempt in the Manager's metrics.
 	onComplete := m.updateMetrics()
 	defer func() { onComplete(resTxn, resErr) }()
 
-	// TODO(nvanbenschoten): Set up tracing.
-	ctx := m.AnnotateCtx(context.Background())
+	// Grab semaphore with defaultTaskLimit.
+	select {
+	case m.sem <- struct{}{}:
+		defer func() { <-m.sem }()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 
-	// Launch the recovery task.
-	resErr = m.stopper.RunTaskWithErr(ctx,
-		"recovery.manager: resolving indeterminate commit",
-		func(ctx context.Context) error {
-			// Grab semaphore with defaultTaskLimit.
-			select {
-			case m.sem <- struct{}{}:
-				defer func() { <-m.sem }()
-			case <-m.stopper.ShouldQuiesce():
-				return stop.ErrUnavailable
-			}
+	// We probe to determine whether the transaction is implicitly
+	// committed or not. If not, we prevent it from ever becoming
+	// implicitly committed at this (epoch, timestamp) pair.
+	preventedIntent, changedTxn, err := m.resolveIndeterminateCommitForTxnProbe(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+	if changedTxn != nil {
+		return changedTxn, nil
+	}
 
-			// We probe to determine whether the transaction is implicitly
-			// committed or not. If not, we prevent it from ever becoming
-			// implicitly committed at this (epoch, timestamp) pair.
-			preventedIntent, changedTxn, err := m.resolveIndeterminateCommitForTxnProbe(ctx, txn)
-			if err != nil {
-				return err
-			}
-			if changedTxn != nil {
-				resTxn = changedTxn
-				return nil
-			}
-
-			// Now that we know whether the transaction was implicitly committed
-			// or not (implicitly committed = !preventedIntent), we attempt to
-			// recover it. If this succeeds, it will either move the transaction
-			// record to a COMMITTED or ABORTED status.
-			resTxn, err = m.resolveIndeterminateCommitForTxnRecover(ctx, txn, preventedIntent)
-			return err
-		},
-	)
-	return resTxn, resErr
+	// Now that we know whether the transaction was implicitly committed
+	// or not (implicitly committed = !preventedIntent), we attempt to
+	// recover it. If this succeeds, it will either move the transaction
+	// record to a COMMITTED or ABORTED status.
+	return m.resolveIndeterminateCommitForTxnRecover(ctx, txn, preventedIntent)
 }
 
 // resolveIndeterminateCommitForTxnProbe performs the "probing phase" of the
