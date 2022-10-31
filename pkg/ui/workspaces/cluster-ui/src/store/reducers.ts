@@ -52,8 +52,8 @@ import {
   reducer as schemaInsights,
 } from "./schemaInsights";
 import {
-  TransactionInsightDetailsState,
   reducer as transactionInsightDetails,
+  TransactionInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
 
 export type AdminUiState = {
@@ -71,7 +71,7 @@ export type AdminUiState = {
   job: JobState;
   clusterLocks: ClusterLocksReqState;
   transactionInsights: TransactionInsightsState;
-  transactionInsightDetails: TransactionInsightDetailsState;
+  transactionInsightDetails: TransactionInsightDetailsCachedState;
   statementInsights: StatementInsightsState;
   schemaInsights: SchemaInsightsState;
 };
