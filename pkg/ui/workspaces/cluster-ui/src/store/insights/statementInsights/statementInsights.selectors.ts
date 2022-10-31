@@ -9,50 +9,26 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
+import { localStorageSelector } from "src/store/utils/selectors";
+import { AppState } from "src/store/reducers";
+
 import {
-  adminUISelector,
-  localStorageSelector,
-} from "src/store/utils/selectors";
-import { getMatchParamByName } from "../../../util";
-import { RouteComponentProps } from "react-router";
-import { StatementInsightEvent } from "../../../insights";
-import { AppState } from "../../reducers";
-
-const selectStatementInsightsState = createSelector(
-  adminUISelector,
-  adminUiState => {
-    if (!adminUiState.statementInsights) return null;
-    return adminUiState.statementInsights;
-  },
-);
-
+  selectStatementInsightsCombiner,
+  selectStatementInsightDetailsCombiner,
+} from "src/selectors/insightsCommon.selectors";
+import { selectExecutionID } from "src/selectors/common";
 export const selectStatementInsights = createSelector(
-  selectStatementInsightsState,
-  stmtInsightsState => {
-    if (!stmtInsightsState) return [];
-    return stmtInsightsState.data;
-  },
+  (state: AppState) => state.adminUI.statementInsights?.data,
+  selectStatementInsightsCombiner,
 );
 
-export const selectStatementInsightsError = createSelector(
-  selectStatementInsightsState,
-  stmtInsightsState => {
-    if (!stmtInsightsState) return null;
-    return stmtInsightsState.lastError;
-  },
-);
+export const selectStatementInsightsError = (state: AppState) =>
+  state.adminUI.statementInsights?.lastError;
 
 export const selectStatementInsightDetails = createSelector(
-  selectStatementInsightsState,
-  (_state: AppState, props: RouteComponentProps) => props,
-  (statementInsights, props): StatementInsightEvent => {
-    if (!statementInsights) return null;
-
-    const insightId = getMatchParamByName(props.match, "id");
-    return statementInsights.data?.find(
-      statementInsight => statementInsight.statementID === insightId,
-    );
-  },
+  selectStatementInsights,
+  selectExecutionID,
+  selectStatementInsightDetailsCombiner,
 );
 
 export const selectColumns = createSelector(

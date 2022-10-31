@@ -11,6 +11,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
+import { ErrorWithKey } from "src/api/statementsApi";
 import {
   TransactionInsightEventDetailsRequest,
   TransactionInsightEventDetailsResponse,
@@ -23,11 +24,19 @@ export type TransactionInsightDetailsState = {
   valid: boolean;
 };
 
-const initialState: TransactionInsightDetailsState = {
+const txnInitialState: TransactionInsightDetailsState = {
   data: null,
   lastUpdated: null,
   lastError: null,
   valid: true,
+};
+
+export type TransactionInsightDetailsCachedState = {
+  cachedData: Map<string, TransactionInsightDetailsState>;
+};
+
+const initialState: TransactionInsightDetailsCachedState = {
+  cachedData: new Map(),
 };
 
 const transactionInsightDetailsSlice = createSlice({
@@ -38,25 +47,30 @@ const transactionInsightDetailsSlice = createSlice({
       state,
       action: PayloadAction<TransactionInsightEventDetailsResponse>,
     ) => {
-      state.data = action.payload;
-      state.valid = true;
-      state.lastError = null;
-      state.lastUpdated = moment.utc();
+      state.cachedData.set(action.payload.executionID, {
+        data: action.payload,
+        valid: true,
+        lastError: null,
+        lastUpdated: moment.utc(),
+      });
     },
-    failed: (state, action: PayloadAction<Error>) => {
-      state.valid = false;
-      state.lastError = action.payload;
+    failed: (state, action: PayloadAction<ErrorWithKey>) => {
+      const txnInsight =
+        state.cachedData.get(action.payload.key) ?? txnInitialState;
+      txnInsight.valid = false;
+      txnInsight.lastError = action.payload.err;
+      state.cachedData.set(action.payload.key, txnInsight);
     },
-    invalidated: state => {
-      state.valid = false;
+    invalidated: (state, action: PayloadAction<{ key: string }>) => {
+      state.cachedData.delete(action.payload.key);
     },
     refresh: (
       _,
-      action: PayloadAction<TransactionInsightEventDetailsRequest>,
+      _action: PayloadAction<TransactionInsightEventDetailsRequest>,
     ) => {},
     request: (
       _,
-      action: PayloadAction<TransactionInsightEventDetailsRequest>,
+      _action: PayloadAction<TransactionInsightEventDetailsRequest>,
     ) => {},
   },
 });

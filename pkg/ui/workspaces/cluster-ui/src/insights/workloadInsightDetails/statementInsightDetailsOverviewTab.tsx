@@ -22,7 +22,6 @@ import {
   InsightRecommendation,
   StatementInsightEvent,
 } from "../types";
-import { populateStatementInsightsFromProblemAndCauses } from "../utils";
 import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
 
@@ -47,73 +46,69 @@ const insightsTableData = (
 ): InsightRecommendation[] => {
   if (!insightDetails) return [];
 
-  const recs: InsightRecommendation[] = [];
-  let rec: InsightRecommendation;
   const execDetails: executionDetails = {
     statement: insightDetails.query,
     fingerprintID: insightDetails.statementFingerprintID,
     retries: insightDetails.retries,
   };
-  insightDetails.insights.forEach(insight => {
-    switch (insight.name) {
-      case InsightNameEnum.highContention:
-        rec = {
-          type: "HighContention",
-          execution: execDetails,
-          details: {
-            duration: insightDetails.elapsedTimeMillis,
-            description: insight.description,
-          },
-        };
-        break;
-      case InsightNameEnum.failedExecution:
-        rec = {
-          type: "FailedExecution",
-        };
-        break;
-      case InsightNameEnum.highRetryCount:
-        rec = {
-          type: "HighRetryCount",
-          execution: execDetails,
-          details: {
-            description: insight.description,
-          },
-        };
-        break;
-      case InsightNameEnum.planRegression:
-        rec = {
-          type: "PlanRegression",
-          execution: execDetails,
-          details: {
-            description: insight.description,
-          },
-        };
-        break;
-      case InsightNameEnum.suboptimalPlan:
-        rec = {
-          type: "SuboptimalPlan",
-          database: insightDetails.databaseName,
-          execution: {
-            ...execDetails,
-            indexRecommendations: insightDetails.indexRecommendations,
-          },
-          details: {
-            description: insight.description,
-          },
-        };
-        break;
-      default:
-        rec = {
-          type: "Unknown",
-          details: {
-            duration: insightDetails.elapsedTimeMillis,
-            description: insight.description,
-          },
-        };
-        break;
-    }
-    recs.push(rec);
-  });
+
+  const recs: InsightRecommendation[] = insightDetails.insights?.map(
+    insight => {
+      switch (insight.name) {
+        case InsightNameEnum.highContention:
+          return {
+            type: "HighContention",
+            execution: execDetails,
+            details: {
+              duration: insightDetails.elapsedTimeMillis,
+              description: insight.description,
+            },
+          };
+        case InsightNameEnum.failedExecution:
+          return {
+            type: "FailedExecution",
+          };
+        case InsightNameEnum.highRetryCount:
+          return {
+            type: "HighRetryCount",
+            execution: execDetails,
+            details: {
+              description: insight.description,
+            },
+          };
+          break;
+        case InsightNameEnum.planRegression:
+          return {
+            type: "PlanRegression",
+            execution: execDetails,
+            details: {
+              description: insight.description,
+            },
+          };
+        case InsightNameEnum.suboptimalPlan:
+          return {
+            type: "SuboptimalPlan",
+            database: insightDetails.databaseName,
+            execution: {
+              ...execDetails,
+              indexRecommendations: insightDetails.indexRecommendations,
+            },
+            details: {
+              description: insight.description,
+            },
+          };
+        default:
+          return {
+            type: "Unknown",
+            details: {
+              duration: insightDetails.elapsedTimeMillis,
+              description: insight.description,
+            },
+          };
+      }
+    },
+  );
+
   return recs;
 };
 
@@ -132,11 +127,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
     [isCockroachCloud],
   );
 
-  const insightDetailsArr = useMemo(
-    () => populateStatementInsightsFromProblemAndCauses([insightEventDetails]),
-    [insightEventDetails],
-  );
-  const insightDetails = insightDetailsArr.length ? insightDetailsArr[0] : null;
+  const insightDetails = insightEventDetails;
   const tableData = insightsTableData(insightDetails);
 
   return (
