@@ -1,0 +1,268 @@
+# Regression test for https://github.com/cockroachdb/cockroach/issues/90827.
+#
+#  3       [b3]
+#  2    a2
+#  1    [---)
+#       a   b
+#
+# When intentInterleavingeIter is positioned on the intent b@0 in the reverse
+# direction, the underlying iterator will have stepped onto a@2, which is
+# covered by the [a-b)@1 range key. This will cause the underlying iterator to
+# emit RangeKeyChanged, but this is suppressed by intentInterleavingIter.
+# However, a SeekGE(b) would emit RangeKeyChanged, because the underlying
+# iterator's range key did change, although the intentInterleavingIter's didn't.
+# Similarly, this would not emit a RangeKeyChanged when seeking the
+# intentInterleavingIter to a, because the underlying iterator was already
+# positioned on [a-b).
+run ok
+del_range_ts k=a end=b ts=1
+put k=a ts=2 v=a2
+with t=A
+  txn_begin k=b ts=3
+  put k=b v=b3
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/3.000000000,0 -> /BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_next
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next: "b"/3.000000000,0=/BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge k=a
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: {a-b}/[1.000000000,0=/<empty>] !
+
+# Test the same for SeekIntentGE.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge txn=A k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_intent_ge txn=A k=a
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_intent_ge: {a-b}/[1.000000000,0=/<empty>] !
+
+# Test the same for SeekLT.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_lt k=b+
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_lt k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_lt: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
+
+# Test that stepping onto a and then seeking/stepping back to b emits correctly.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_prev
+iter_seek_ge k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_prev
+iter_seek_intent_ge txn=A k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_intent_ge: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true !
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_prev
+iter_seek_lt k=b+
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_prev: "a"/2.000000000,0=/BYTES/a2 {a-b}/[1.000000000,0=/<empty>] !
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3 !
+
+# Add another range tombstone [c-d), and make sure seeking to it also
+# emits RangeKeyChanged.
+run ok
+del_range_ts k=c end=d ts=1
+----
+>> at end:
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {c-d}/[1.000000000,0=/<empty>]
+data: "a"/2.000000000,0 -> /BYTES/a2
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/3.000000000,0 -> /BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge k=c
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: {c-d}/[1.000000000,0=/<empty>] !
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_intent_ge txn=A k=c
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_intent_ge: {c-d}/[1.000000000,0=/<empty>] !
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_lt k=c+
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_lt: {c-d}/[1.000000000,0=/<empty>] !
+
+# We also test the same scenario with a double range tombstone.
+run ok
+txn_remove t=A
+clear_range k=a end=z
+del_range_ts k=a end=b ts=1
+del_range_ts k=a end=b ts=2
+with t=A
+  txn_begin k=b ts=3
+  put k=b v=b3
+----
+>> at end:
+txn: "A" meta={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=3.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>]
+meta: "b"/0,0 -> txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "b"/3.000000000,0 -> /BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_next
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_next: "b"/3.000000000,0=/BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge k=a
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+
+# Test the same for SeekIntentGE.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_ge txn=A k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_ge: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_intent_ge txn=A k=a
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_intent_ge: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>] !
+
+# Test the same for SeekLT.
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_lt k=b+
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+
+run ok
+iter_new types=pointsAndRanges
+iter_seek_lt k=b+
+iter_prev
+iter_seek_lt k=b
+----
+iter_seek_lt: "b"/3.000000000,0=/BYTES/b3
+iter_prev: "b"/0,0=txn={id=00000000 key="b" pri=0.00000000 epo=0 ts=3.000000000,0 min=0,0 seq=0} ts=3.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+iter_seek_lt: {a-b}/[2.000000000,0=/<empty> 1.000000000,0=/<empty>] !
