@@ -400,37 +400,53 @@ func BenchmarkAppend(b *testing.B) {
 	rng, _ := randutil.NewTestRand()
 	sel := rng.Perm(coldata.BatchSize())
 
+	const (
+		shortBytesLen = 8   // will be inlined
+		longBytesLen  = 512 // won't be inlined
+	)
 	benchCases := []struct {
-		name string
-		args coldata.SliceArgs
+		name     string
+		args     coldata.SliceArgs
+		bytesLen int
 	}{
 		{
-			name: "AppendSimple",
-			args: coldata.SliceArgs{},
+			name:     "AppendSimple",
+			args:     coldata.SliceArgs{},
+			bytesLen: shortBytesLen,
 		},
 		{
 			name: "AppendWithSel",
 			args: coldata.SliceArgs{
 				Sel: sel,
 			},
+			bytesLen: shortBytesLen,
+		},
+		{
+			name:     "AppendNoInline",
+			args:     coldata.SliceArgs{},
+			bytesLen: longBytesLen,
 		},
 	}
 
 	for _, typ := range []*types.T{types.Bytes, types.Decimal, types.Int} {
 		for _, nullProbability := range []float64{0, 0.2} {
-			src := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
-			coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
-				Rand:             rng,
-				Vec:              src,
-				N:                coldata.BatchSize(),
-				NullProbability:  nullProbability,
-				BytesFixedLength: 8,
-			})
 			for _, bc := range benchCases {
+				// Only test the AppendNoInline case for bytes.
+				if typ != types.Bytes && bc.bytesLen == longBytesLen {
+					continue
+				}
+				src := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
+				coldatatestutils.RandomVec(coldatatestutils.RandomVecArgs{
+					Rand:             rng,
+					Vec:              src,
+					N:                coldata.BatchSize(),
+					NullProbability:  nullProbability,
+					BytesFixedLength: bc.bytesLen,
+				})
 				bc.args.Src = src
 				bc.args.SrcEndIdx = coldata.BatchSize()
 				b.Run(fmt.Sprintf("%s/%s/NullProbability=%.1f", typ, bc.name, nullProbability), func(b *testing.B) {
-					b.SetBytes(8 * int64(coldata.BatchSize()))
+					b.SetBytes(int64(bc.bytesLen * coldata.BatchSize()))
 					bc.args.DestIdx = 0
 					dest := coldata.NewMemColumn(typ, coldata.BatchSize(), coldata.StandardColumnFactory)
 					for i := 0; i < b.N; i++ {
