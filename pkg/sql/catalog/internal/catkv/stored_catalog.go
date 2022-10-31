@@ -33,6 +33,7 @@ import (
 // a catalogReader and used for direct catalog access, see MakeDirect.
 type StoredCatalog struct {
 	CatalogReader
+	DescriptorValidationModeProvider
 
 	// cache mirrors the descriptors in storage.
 	// This map does not store descriptors by name.
@@ -63,14 +64,27 @@ type StoredCatalog struct {
 	memAcc *mon.BoundAccount
 }
 
+// DescriptorValidationModeProvider encapsulates the descriptor_validation
+// session variable state.
+type DescriptorValidationModeProvider interface {
+
+	// ValidateDescriptorsOnRead returns true iff 'on' or 'read_only'.
+	ValidateDescriptorsOnRead() bool
+
+	// ValidateDescriptorsOnWrite returns true iff 'on'.
+	ValidateDescriptorsOnWrite() bool
+}
+
 // MakeStoredCatalog returns a new instance of StoredCatalog.
-func MakeStoredCatalog(cr CatalogReader, monitor *mon.BytesMonitor) StoredCatalog {
-	sd := StoredCatalog{CatalogReader: cr}
+func MakeStoredCatalog(
+	cr CatalogReader, dvmp DescriptorValidationModeProvider, monitor *mon.BytesMonitor,
+) StoredCatalog {
+	sc := StoredCatalog{CatalogReader: cr, DescriptorValidationModeProvider: dvmp}
 	if monitor != nil {
 		memAcc := monitor.MakeBoundAccount()
-		sd.memAcc = &memAcc
+		sc.memAcc = &memAcc
 	}
-	return sd
+	return sc
 }
 
 // Reset zeroes the object for re-use in a new transaction.
@@ -82,10 +96,11 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 	}
 	old := *sc
 	*sc = StoredCatalog{
-		CatalogReader: old.CatalogReader,
-		cache:         old.cache,
-		nameIndex:     old.nameIndex,
-		memAcc:        old.memAcc,
+		CatalogReader:                    old.CatalogReader,
+		DescriptorValidationModeProvider: old.DescriptorValidationModeProvider,
+		cache:                            old.cache,
+		nameIndex:                        old.nameIndex,
+		memAcc:                           old.memAcc,
 	}
 }
 
@@ -396,10 +411,12 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 			if desc == nil {
 				continue
 			}
-			if err = validate.Self(version, desc); err != nil {
-				return nil, err
+			if c.sc.ValidateDescriptorsOnRead() {
+				if err = validate.Self(version, desc); err != nil {
+					return nil, err
+				}
+				c.sc.UpdateValidationLevel(desc, catalog.ValidationLevelSelfOnly)
 			}
-			c.sc.UpdateValidationLevel(desc, catalog.ValidationLevelSelfOnly)
 			ret[fallbackRetIndexes[j]] = desc
 		}
 	}

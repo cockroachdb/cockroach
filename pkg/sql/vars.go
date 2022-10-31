@@ -1705,6 +1705,25 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	`descriptor_validation`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`descriptor_validation`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			mode, ok := sessiondatapb.DescriptorValidationModeFromString(s)
+			if !ok {
+				return newVarValueError(`descriptor_validation`, s,
+					"off", "on", "read_only")
+			}
+			m.SetDescriptorValidationMode(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return evalCtx.SessionData().DescriptorValidationMode.String(), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return sessiondatapb.DescriptorValidationOn.String()
+		},
+	},
+
 	`enable_experimental_stream_replication`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`enable_experimental_stream_replication`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {

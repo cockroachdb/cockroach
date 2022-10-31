@@ -51,6 +51,8 @@ import { performanceTuningRecipes } from "src/util/docs";
 import { CockroachCloudContext } from "../contexts";
 import IdxRecAction from "../insights/indexActionBtn";
 import { RecommendationType } from "../indexDetailsPage";
+import LoadingError from "../sqlActivity/errorComponent";
+import { Loading } from "../loading";
 
 const cx = classNames.bind(styles);
 const booleanSettingCx = classnames.bind(booleanSettingStyles);
@@ -111,6 +113,7 @@ export interface DatabaseTablePageData {
 export interface DatabaseTablePageDataDetails {
   loading: boolean;
   loaded: boolean;
+  lastError: Error;
   createStatement: string;
   replicaCount: number;
   indexNames: string[];
@@ -124,6 +127,7 @@ export interface DatabaseTablePageDataDetails {
 export interface DatabaseTablePageIndexStats {
   loading: boolean;
   loaded: boolean;
+  lastError: Error;
   stats: IndexStat[];
   lastReset: Moment;
 }
@@ -149,6 +153,7 @@ interface Grant {
 export interface DatabaseTablePageDataStats {
   loading: boolean;
   loaded: boolean;
+  lastError: Error;
   sizeInBytes: number;
   rangeCount: number;
   nodesByRegionString?: string;
@@ -245,14 +250,23 @@ export class DatabaseTablePage extends React.Component<
     if (this.props.refreshNodes != null) {
       this.props.refreshNodes();
     }
-    if (!this.props.details.loaded && !this.props.details.loading) {
+
+    if (
+      !this.props.details.loaded &&
+      !this.props.details.loading &&
+      this.props.details.lastError === undefined
+    ) {
       return this.props.refreshTableDetails(
         this.props.databaseName,
         this.props.name,
       );
     }
 
-    if (!this.props.stats.loaded && !this.props.stats.loading) {
+    if (
+      !this.props.stats.loaded &&
+      !this.props.stats.loading &&
+      this.props.stats.lastError === undefined
+    ) {
       return this.props.refreshTableStats(
         this.props.databaseName,
         this.props.name,
@@ -517,139 +531,188 @@ export class DatabaseTablePage extends React.Component<
               key={indexTabKey}
               className={cx("tab-pane")}
             >
-              <Row gutter={18}>
-                <Col className="gutter-row" span={18}>
-                  <SqlBox value={this.props.details.createStatement} />
-                </Col>
-              </Row>
+              <Loading
+                loading={this.props.details.loading && this.props.stats.loading}
+                page={"table_details"}
+                error={
+                  this.props.details.lastError || this.props.stats.lastError
+                }
+                render={() => (
+                  <>
+                    <Row gutter={18}>
+                      <Col className="gutter-row" span={18}>
+                        <SqlBox value={this.props.details.createStatement} />
+                      </Col>
+                    </Row>
 
-              <Row gutter={18}>
-                <Col className="gutter-row" span={8}>
-                  <SummaryCard className={cx("summary-card")}>
-                    <SummaryCardItem
-                      label="Size"
-                      value={format.Bytes(this.props.stats.sizeInBytes)}
-                    />
-                    <SummaryCardItem
-                      label="Replicas"
-                      value={this.props.details.replicaCount}
-                    />
-                    <SummaryCardItem
-                      label="Ranges"
-                      value={this.props.stats.rangeCount}
-                    />
-                    <SummaryCardItem
-                      label="% of Live Data"
-                      value={this.formatMVCCInfo(this.props.details)}
-                    />
-                    {this.props.details.statsLastUpdated && (
-                      <SummaryCardItem
-                        label="Table Stats Last Updated"
-                        value={this.props.details.statsLastUpdated.format(
-                          DATE_FORMAT_24_UTC,
-                        )}
-                      />
-                    )}
-                    {this.props.automaticStatsCollectionEnabled != null && (
-                      <SummaryCardItemBoolSetting
-                        label="Auto Stats Collection"
-                        value={this.props.automaticStatsCollectionEnabled}
-                        toolTipText={
-                          <span>
-                            {" "}
-                            Automatic statistics can help improve query
-                            performance. Learn how to{" "}
-                            <Anchor
-                              href={tableStatsClusterSetting}
-                              target="_blank"
-                              className={booleanSettingCx(
-                                "crl-hover-text__link-text",
+                    <Row gutter={18}>
+                      <Col className="gutter-row" span={8}>
+                        <SummaryCard className={cx("summary-card")}>
+                          <SummaryCardItem
+                            label="Size"
+                            value={format.Bytes(this.props.stats.sizeInBytes)}
+                          />
+                          <SummaryCardItem
+                            label="Replicas"
+                            value={this.props.details.replicaCount}
+                          />
+                          <SummaryCardItem
+                            label="Ranges"
+                            value={this.props.stats.rangeCount}
+                          />
+                          <SummaryCardItem
+                            label="% of Live Data"
+                            value={this.formatMVCCInfo(this.props.details)}
+                          />
+                          {this.props.details.statsLastUpdated && (
+                            <SummaryCardItem
+                              label="Table Stats Last Updated"
+                              value={this.props.details.statsLastUpdated.format(
+                                DATE_FORMAT_24_UTC,
                               )}
-                            >
-                              manage statistics collection
-                            </Anchor>
-                            .
-                          </span>
-                        }
-                      />
-                    )}
-                  </SummaryCard>
-                </Col>
-
-                <Col className="gutter-row" span={10}>
-                  <SummaryCard className={cx("summary-card")}>
-                    {this.props.showNodeRegionsSection && (
-                      <SummaryCardItem
-                        label="Regions/Nodes"
-                        value={this.props.stats.nodesByRegionString}
-                      />
-                    )}
-                    <SummaryCardItem
-                      label="Database"
-                      value={this.props.databaseName}
-                    />
-                    <SummaryCardItem
-                      label="Indexes"
-                      value={this.props.details.indexNames.join(", ")}
-                      className={cx("database-table-page__indexes--value")}
-                    />
-                  </SummaryCard>
-                </Col>
-              </Row>
-              <Row gutter={18}>
-                <SummaryCard
-                  className={cx("summary-card", "index-stats__summary-card")}
-                >
-                  <div className={cx("index-stats__header")}>
-                    <Heading type="h5">Index Stats</Heading>
-                    <div className={cx("index-stats__reset-info")}>
-                      <Tooltip
-                        placement="bottom"
-                        title="Index stats accumulate from the time the index was created or had its stats reset. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster. Last reset is the timestamp at which the last reset started."
-                      >
-                        <div
-                          className={cx("index-stats__last-reset", "underline")}
-                        >
-                          {this.getLastResetString()}
-                        </div>
-                      </Tooltip>
-                      <div>
-                        <a
-                          className={cx(
-                            "action",
-                            "separator",
-                            "index-stats__reset-btn",
+                            />
                           )}
-                          onClick={() =>
-                            this.props.resetIndexUsageStats(
-                              this.props.databaseName,
-                              this.props.name,
-                            )
-                          }
-                        >
-                          Reset all index stats
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                  <IndexUsageStatsTable
-                    className="index-stats-table"
-                    data={this.props.indexStats.stats}
-                    columns={this.indexStatsColumns}
-                    sortSetting={this.state.indexSortSetting}
-                    onChangeSortSetting={this.changeIndexSortSetting.bind(this)}
-                    loading={this.props.indexStats.loading}
-                  />
-                </SummaryCard>
-              </Row>
+                          {this.props.automaticStatsCollectionEnabled !=
+                            null && (
+                            <SummaryCardItemBoolSetting
+                              label="Auto Stats Collection"
+                              value={this.props.automaticStatsCollectionEnabled}
+                              toolTipText={
+                                <span>
+                                  {" "}
+                                  Automatic statistics can help improve query
+                                  performance. Learn how to{" "}
+                                  <Anchor
+                                    href={tableStatsClusterSetting}
+                                    target="_blank"
+                                    className={booleanSettingCx(
+                                      "crl-hover-text__link-text",
+                                    )}
+                                  >
+                                    manage statistics collection
+                                  </Anchor>
+                                  .
+                                </span>
+                              }
+                            />
+                          )}
+                        </SummaryCard>
+                      </Col>
+
+                      <Col className="gutter-row" span={10}>
+                        <SummaryCard className={cx("summary-card")}>
+                          {this.props.showNodeRegionsSection && (
+                            <SummaryCardItem
+                              label="Regions/Nodes"
+                              value={this.props.stats.nodesByRegionString}
+                            />
+                          )}
+                          <SummaryCardItem
+                            label="Database"
+                            value={this.props.databaseName}
+                          />
+                          <SummaryCardItem
+                            label="Indexes"
+                            value={this.props.details.indexNames.join(", ")}
+                            className={cx(
+                              "database-table-page__indexes--value",
+                            )}
+                          />
+                        </SummaryCard>
+                      </Col>
+                    </Row>
+                    <Row gutter={18}>
+                      <SummaryCard
+                        className={cx(
+                          "summary-card",
+                          "index-stats__summary-card",
+                        )}
+                      >
+                        <div className={cx("index-stats__header")}>
+                          <Heading type="h5">Index Stats</Heading>
+                          <div className={cx("index-stats__reset-info")}>
+                            <Tooltip
+                              placement="bottom"
+                              title="Index stats accumulate from the time the index was created or had its stats reset. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster. Last reset is the timestamp at which the last reset started."
+                            >
+                              <div
+                                className={cx(
+                                  "index-stats__last-reset",
+                                  "underline",
+                                )}
+                              >
+                                {this.getLastResetString()}
+                              </div>
+                            </Tooltip>
+                            <div>
+                              <a
+                                className={cx(
+                                  "action",
+                                  "separator",
+                                  "index-stats__reset-btn",
+                                )}
+                                onClick={() =>
+                                  this.props.resetIndexUsageStats(
+                                    this.props.databaseName,
+                                    this.props.name,
+                                  )
+                                }
+                              >
+                                Reset all index stats
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                        <IndexUsageStatsTable
+                          className="index-stats-table"
+                          data={this.props.indexStats.stats}
+                          columns={this.indexStatsColumns}
+                          sortSetting={this.state.indexSortSetting}
+                          onChangeSortSetting={this.changeIndexSortSetting.bind(
+                            this,
+                          )}
+                          loading={this.props.indexStats.loading}
+                        />
+                      </SummaryCard>
+                    </Row>
+                  </>
+                )}
+                renderError={() =>
+                  LoadingError({
+                    statsType: "databases",
+                    timeout:
+                      this.props.details.lastError?.name
+                        ?.toLowerCase()
+                        .includes("timeout") ||
+                      this.props.stats.lastError?.name
+                        ?.toLowerCase()
+                        .includes("timeout"),
+                  })
+                }
+              />
             </TabPane>
             <TabPane tab="Grants" key={grantsTabKey} className={cx("tab-pane")}>
-              <DatabaseTableGrantsTable
-                data={this.props.details.grants}
-                columns={this.grantsColumns}
-                sortSetting={this.state.grantSortSetting}
-                onChangeSortSetting={this.changeGrantSortSetting.bind(this)}
+              <Loading
                 loading={this.props.details.loading}
+                page={"table_details_grants"}
+                error={this.props.details.lastError}
+                render={() => (
+                  <DatabaseTableGrantsTable
+                    data={this.props.details.grants}
+                    columns={this.grantsColumns}
+                    sortSetting={this.state.grantSortSetting}
+                    onChangeSortSetting={this.changeGrantSortSetting.bind(this)}
+                    loading={this.props.details.loading}
+                  />
+                )}
+                renderError={() =>
+                  LoadingError({
+                    statsType: "databases",
+                    timeout: this.props.details.lastError?.name
+                      ?.toLowerCase()
+                      .includes("timeout"),
+                  })
+                }
               />
             </TabPane>
           </Tabs>

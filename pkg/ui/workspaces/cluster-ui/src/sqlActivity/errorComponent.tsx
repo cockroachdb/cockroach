@@ -19,7 +19,7 @@ interface SQLActivityErrorProps {
   timeout?: boolean;
 }
 
-const SQLActivityError: React.FC<SQLActivityErrorProps> = props => {
+const LoadingError: React.FC<SQLActivityErrorProps> = props => {
   const error = props.timeout ? "a timeout" : "an unexpected error";
   return (
     <div className={cx("row")}>
@@ -37,4 +37,4 @@ const SQLActivityError: React.FC<SQLActivityErrorProps> = props => {
   );
 };
 
-export default SQLActivityError;
+export default LoadingError;

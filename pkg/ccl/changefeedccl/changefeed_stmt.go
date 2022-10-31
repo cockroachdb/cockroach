@@ -1167,7 +1167,7 @@ func getQualifiedTableName(
 func getQualifiedTableNameObj(
 	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, desc catalog.TableDescriptor,
 ) (tree.TableName, error) {
-	col := execCfg.CollectionFactory.NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* monitor */)
+	col := execCfg.CollectionFactory.NewCollection(ctx)
 	dbDesc, err := col.Direct().MustGetDatabaseDescByID(ctx, txn, desc.GetParentID())
 	if err != nil {
 		return tree.TableName{}, err

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -267,7 +268,8 @@ func (c *DatumRowConverter) getSequenceAnnotation(
 	// TODO(postamar): give the eval.Context a useful interface
 	// instead of cobbling a descs.Collection in this way.
 	cf := descs.NewBareBonesCollectionFactory(evalCtx.Settings, evalCtx.Codec)
-	descsCol := cf.NewCollection(ctx, descs.NewTemporarySchemaProvider(evalCtx.SessionDataStack), nil /* monitor */)
+	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(evalCtx.SessionDataStack)
+	descsCol := cf.NewCollection(ctx, descs.WithDescriptorSessionDataProvider(dsdp))
 	err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		seqNameToMetadata = make(map[string]*SequenceMetadata)
 		seqIDToMetadata = make(map[descpb.ID]*SequenceMetadata)

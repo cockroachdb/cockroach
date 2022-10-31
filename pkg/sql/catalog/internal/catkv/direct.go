@@ -148,13 +148,32 @@ type direct struct {
 var _ Direct = &direct{}
 
 // MakeDirect returns an implementation of Direct.
-func MakeDirect(codec keys.SQLCodec, version clusterversion.ClusterVersion) Direct {
+func MakeDirect(
+	codec keys.SQLCodec, version clusterversion.ClusterVersion, dvmp DescriptorValidationModeProvider,
+) Direct {
 	return &direct{
 		StoredCatalog: StoredCatalog{
-			CatalogReader: NewUncachedCatalogReader(codec),
+			CatalogReader:                    NewUncachedCatalogReader(codec),
+			DescriptorValidationModeProvider: dvmp,
 		},
 		version: version,
 	}
+}
+
+// DefaultDescriptorValidationModeProvider is the default implementation of
+// DescriptorValidationModeProvider.
+var DefaultDescriptorValidationModeProvider DescriptorValidationModeProvider = &defaultDescriptorValidationModeProvider{}
+
+type defaultDescriptorValidationModeProvider struct{}
+
+// ValidateDescriptorsOnRead implements DescriptorValidationModeProvider.
+func (d *defaultDescriptorValidationModeProvider) ValidateDescriptorsOnRead() bool {
+	return true
+}
+
+// ValidateDescriptorsOnWrite implements DescriptorValidationModeProvider.
+func (d *defaultDescriptorValidationModeProvider) ValidateDescriptorsOnWrite() bool {
+	return true
 }
 
 // MaybeGetDescriptorByIDUnvalidated is part of the Direct interface.
@@ -178,10 +197,12 @@ func (d *direct) MustGetDescriptorsByID(
 	if err != nil {
 		return nil, err
 	}
-	vd := d.NewValidationDereferencer(txn)
-	ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
-	if err := ve.CombinedError(); err != nil {
-		return nil, err
+	if d.ValidateDescriptorsOnRead() {
+		vd := d.NewValidationDereferencer(txn)
+		ve := validate.Validate(ctx, d.version, vd, catalog.ValidationReadTelemetry, validate.ImmutableRead, descs...)
+		if err := ve.CombinedError(); err != nil {
+			return nil, err
+		}
 	}
 	return descs, nil
 }

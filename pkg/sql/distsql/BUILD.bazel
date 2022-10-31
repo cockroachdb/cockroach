@@ -13,6 +13,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/settings",
+        "//pkg/sql/catalog/catsessiondata",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/colflow",
         "//pkg/sql/execinfra",

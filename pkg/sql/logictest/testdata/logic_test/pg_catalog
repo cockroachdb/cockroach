@@ -4176,6 +4176,7 @@ default_transaction_quality_of_service                regular             NULL  
 default_transaction_read_only                         off                 NULL      NULL        NULL        string
 default_transaction_use_follower_reads                off                 NULL      NULL        NULL        string
 default_with_oids                                     off                 NULL      NULL        NULL        string
+descriptor_validation                                 on                  NULL      NULL        NULL        string
 disable_hoist_projection_in_join_limitation           off                 NULL      NULL        NULL        string
 disable_partially_distributed_plans                   off                 NULL      NULL        NULL        string
 disable_plan_gists                                    off                 NULL      NULL        NULL        string
@@ -4196,7 +4197,7 @@ enforce_home_region                                   off                 NULL  
 escape_string_warning                                 on                  NULL      NULL        NULL        string
 expect_and_ignore_not_visible_columns_in_copy         off                 NULL      NULL        NULL        string
 experimental_distsql_planning                         off                 NULL      NULL        NULL        string
-experimental_enable_auto_rehoming                     off                  NULL      NULL        NULL        string
+experimental_enable_auto_rehoming                     off                 NULL      NULL        NULL        string
 experimental_enable_implicit_column_partitioning      off                 NULL      NULL        NULL        string
 experimental_enable_temp_tables                       off                 NULL      NULL        NULL        string
 experimental_enable_unique_without_index_constraints  on                  NULL      NULL        NULL        string
@@ -4313,6 +4314,7 @@ default_transaction_quality_of_service                regular             NULL  
 default_transaction_read_only                         off                 NULL  user     NULL      off                 off
 default_transaction_use_follower_reads                off                 NULL  user     NULL      off                 off
 default_with_oids                                     off                 NULL  user     NULL      off                 off
+descriptor_validation                                 on                  NULL  user     NULL      on                  on
 disable_hoist_projection_in_join_limitation           off                 NULL  user     NULL      off                 off
 disable_partially_distributed_plans                   off                 NULL  user     NULL      off                 off
 disable_plan_gists                                    off                 NULL  user     NULL      off                 off
@@ -4446,6 +4448,7 @@ default_transaction_quality_of_service                NULL    NULL     NULL     
 default_transaction_read_only                         NULL    NULL     NULL     NULL        NULL
 default_transaction_use_follower_reads                NULL    NULL     NULL     NULL        NULL
 default_with_oids                                     NULL    NULL     NULL     NULL        NULL
+descriptor_validation                                 NULL    NULL     NULL     NULL        NULL
 disable_hoist_projection_in_join_limitation           NULL    NULL     NULL     NULL        NULL
 disable_partially_distributed_plans                   NULL    NULL     NULL     NULL        NULL
 disable_plan_gists                                    NULL    NULL     NULL     NULL        NULL

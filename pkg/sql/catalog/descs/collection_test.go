@@ -70,8 +70,7 @@ func TestCollectionWriteDescToBatch(t *testing.T) {
 	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
 
 	db := s0.DB()
-	descriptors := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		NewCollection(ctx, nil /* TemporarySchemaProvider */, nil /* Monitor */)
+	descriptors := s0.ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.NewCollection(ctx)
 
 	// Note this transaction abuses the mechanisms normally required for updating
 	// tables and is just for testing what this test intends to exercise.
@@ -653,8 +652,9 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 	monitor.Start(ctx, nil, mon.NewStandaloneBudget(math.MaxInt64))
 
 	// Create a `Collection` with monitor hooked up.
-	col := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		NewCollection(ctx, nil /* temporarySchemaProvider */, monitor)
+	col := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.NewCollection(
+		ctx, descs.WithMonitor(monitor),
+	)
 	require.Equal(t, int64(0), monitor.AllocBytes())
 
 	// Read all the descriptors into `col` and assert this read will finish without error.
@@ -672,8 +672,9 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 	require.Equal(t, int64(0), monitor.AllocBytes())
 
 	// Repeat the process again and assert this time memory allocation will err out.
-	col = tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.
-		NewCollection(ctx, nil /* temporarySchemaProvider */, monitor)
+	col = tc.Server(0).ExecutorConfig().(sql.ExecutorConfig).CollectionFactory.NewCollection(
+		ctx, descs.WithMonitor(monitor),
+	)
 	_, err2 := col.GetAllDescriptors(ctx, txn)
 	require.Error(t, err2)
 

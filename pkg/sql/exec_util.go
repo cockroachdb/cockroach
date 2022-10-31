@@ -3173,6 +3173,12 @@ func (m *sessionDataMutator) SetUseNewSchemaChanger(val sessiondatapb.NewSchemaC
 	m.data.NewSchemaChangerMode = val
 }
 
+func (m *sessionDataMutator) SetDescriptorValidationMode(
+	val sessiondatapb.DescriptorValidationMode,
+) {
+	m.data.DescriptorValidationMode = val
+}
+
 func (m *sessionDataMutator) SetQualityOfService(val sessiondatapb.QoSLevel) {
 	m.data.DefaultTxnQualityOfService = val.Validate()
 }

@@ -19,9 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -747,7 +748,8 @@ func NewVirtualSchemaHolder(
 			}
 			td := tabledesc.NewBuilder(&tableDesc).BuildImmutableTable()
 			version := st.Version.ActiveVersionOrEmpty(ctx)
-			if err := descbuilder.ValidateSelf(td, version); err != nil {
+			dvmp := catsessiondata.NewDescriptorSessionDataProvider(nil /* sd */)
+			if err := descs.ValidateSelf(td, version, dvmp); err != nil {
 				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
 					"failed to validate virtual table %s: programmer error", errors.Safe(td.GetName()))
 			}

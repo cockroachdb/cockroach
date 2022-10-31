@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/errors"
 )
@@ -35,7 +36,9 @@ func TestingGetDatabaseDescriptorWithVersion(
 ) catalog.DatabaseDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
-	direct := catkv.MakeDirect(codec, version)
+	direct := catkv.MakeDirect(
+		codec, version, catkv.DefaultDescriptorValidationModeProvider,
+	)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		id, err := direct.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, database)
 		if err != nil {
@@ -73,7 +76,9 @@ func TestingGetSchemaDescriptorWithVersion(
 ) catalog.SchemaDescriptor {
 	ctx := context.Background()
 	var desc catalog.Descriptor
-	direct := catkv.MakeDirect(codec, version)
+	direct := catkv.MakeDirect(
+		codec, version, catkv.DefaultDescriptorValidationModeProvider,
+	)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		schemaID, err := direct.LookupDescriptorID(ctx, txn, dbID, keys.RootNamespaceID, schemaName)
 		if err != nil {
@@ -169,7 +174,9 @@ func testingGetObjectDescriptor(
 	object string,
 ) (desc catalog.Descriptor) {
 	ctx := context.Background()
-	direct := catkv.MakeDirect(codec, version)
+	direct := catkv.MakeDirect(
+		codec, version, catkv.DefaultDescriptorValidationModeProvider,
+	)
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		dbID, err := direct.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, database)
 		if err != nil {
@@ -198,4 +205,10 @@ func testingGetObjectDescriptor(
 		panic(err)
 	}
 	return desc
+}
+
+// TestingValidateSelf is a convenience function for internal descriptor
+// validation.
+func TestingValidateSelf(desc catalog.Descriptor) error {
+	return validate.Self(clusterversion.TestingClusterVersion, desc)
 }

@@ -116,7 +116,6 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/colinfo",
-        "//pkg/sql/catalog/descbuilder",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/desctestutils",

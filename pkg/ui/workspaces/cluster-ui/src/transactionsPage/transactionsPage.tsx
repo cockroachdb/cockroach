@@ -58,7 +58,7 @@ import {
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
 import ClearStats from "../sqlActivity/clearStats";
-import SQLActivityError from "../sqlActivity/errorComponent";
+import LoadingError from "../sqlActivity/errorComponent";
 import { commonStyles } from "../common";
 import {
   TimeScaleDropdown,
@@ -578,7 +578,7 @@ export class TransactionsPage extends React.Component<
               );
             }}
             renderError={() =>
-              SQLActivityError({
+              LoadingError({
                 statsType: "transactions",
                 timeout: this.props?.error?.name
                   ?.toLowerCase()

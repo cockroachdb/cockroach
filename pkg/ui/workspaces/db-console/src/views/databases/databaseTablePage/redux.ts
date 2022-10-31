@@ -133,6 +133,7 @@ export const mapStateToProps = createSelector(
       details: {
         loading: !!details?.inFlight,
         loaded: !!details?.valid,
+        lastError: details?.lastError,
         createStatement: details?.data?.create_table_statement || "",
         replicaCount: details?.data?.zone_config?.num_replicas || 0,
         indexNames: _.uniq(_.map(details?.data?.indexes, index => index.name)),
@@ -149,6 +150,7 @@ export const mapStateToProps = createSelector(
       stats: {
         loading: !!stats?.inFlight,
         loaded: !!stats?.valid,
+        lastError: stats?.lastError,
         sizeInBytes: FixLong(
           stats?.data?.approximate_disk_bytes || 0,
         ).toNumber(),
@@ -158,6 +160,7 @@ export const mapStateToProps = createSelector(
       indexStats: {
         loading: !!indexStats?.inFlight,
         loaded: !!indexStats?.valid,
+        lastError: indexStats?.lastError,
         stats: indexStatsData,
         lastReset: lastReset,
       },
