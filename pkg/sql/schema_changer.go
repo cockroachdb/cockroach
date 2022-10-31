@@ -2502,6 +2502,7 @@ func createSchemaChangeEvalCtx(
 		Context: eval.Context{
 			SessionDataStack:   sessiondata.NewStack(sd),
 			Planner:            &faketreeeval.DummyEvalPlanner{},
+			StreamingManager:   &faketreeeval.DummyEvalStreamingManager{},
 			PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 			SessionAccessor:    &faketreeeval.DummySessionAccessor{},
 			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},

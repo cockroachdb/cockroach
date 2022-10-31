@@ -6,14 +6,6 @@ go_library(
     srcs = ["api.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/streaming",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/ccl/streamingccl/streampb",
-        "//pkg/jobs/jobspb",
-        "//pkg/kv",
-        "//pkg/sql/sem/eval",
-        "//pkg/util/hlc",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
 )
 
 get_x_data(name = "get_x_data")

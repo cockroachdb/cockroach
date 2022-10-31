@@ -39,6 +39,7 @@ func TestCastMap(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	rng, _ := randutil.NewTestRand()
 	evalCtx.Planner = &faketreeeval.DummyEvalPlanner{}
+	evalCtx.StreamingManager = &faketreeeval.DummyEvalStreamingManager{}
 
 	cast.ForEachCast(func(src, tgt oid.Oid, _ cast.Context, _ cast.ContextOrigin, _ volatility.V) {
 		srcType := types.OidToType[src]

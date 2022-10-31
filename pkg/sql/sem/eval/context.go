@@ -138,6 +138,8 @@ type Context struct {
 
 	Planner Planner
 
+	StreamingManager StreamingManager
+
 	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
 	JobExecContext interface{}
 
@@ -335,6 +337,7 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
 	ctx.TestingMon = monitor
 	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
+	ctx.StreamingManager = &fakeStreamingManager{}
 	ctx.deprecatedContext = context.TODO()
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
@@ -345,6 +348,10 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 type fakePlannerWithMonitor struct {
 	Planner
 	monitor *mon.BytesMonitor
+}
+
+type fakeStreamingManager struct {
+	StreamingManager
 }
 
 // Mon is part of the Planner interface.

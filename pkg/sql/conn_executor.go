@@ -2757,6 +2757,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 	*evalCtx = extendedEvalContext{
 		Context: eval.Context{
 			Planner:                        p,
+			StreamingManager:               p,
 			PrivilegedAccessor:             p,
 			SessionAccessor:                p,
 			JobExecContext:                 p,

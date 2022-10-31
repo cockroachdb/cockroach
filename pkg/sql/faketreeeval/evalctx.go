@@ -15,7 +15,9 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -30,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -467,6 +471,60 @@ func (ep *DummyEvalPlanner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
+}
+
+// DummyEvalStreamingManager implements the eval.StreamingManager interface by
+// returning errors.
+type DummyEvalStreamingManager struct {
+}
+
+// StartReplicationStream implements streamingmanagers.ReplicationStreamManager interface.
+func (esm *DummyEvalStreamingManager) StartReplicationStream(
+	ctx context.Context, tenantID uint64,
+) (streaming.StreamID, error) {
+	return 0, errors.WithStack(errEvalPlanner)
+}
+
+// HeartbeatReplicationStream implements streamingmanagers.ReplicationStreamManager interface.
+func (esm *DummyEvalStreamingManager) HeartbeatReplicationStream(
+	ctx context.Context, streamID streaming.StreamID, frontier hlc.Timestamp,
+) (streampb.StreamReplicationStatus, error) {
+	return streampb.StreamReplicationStatus{}, errors.WithStack(errEvalPlanner)
+}
+
+// StreamPartition implements streamingmanagers.ReplicationStreamManager interface.
+func (esm *DummyEvalStreamingManager) StreamPartition(
+	ctx context.Context, streamID streaming.StreamID, opaqueSpec []byte,
+) (eval.ValueGenerator, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// GetReplicationStreamSpec implements streamingmanagers.ReplicationStreamManager interface.
+func (esm *DummyEvalStreamingManager) GetReplicationStreamSpec(
+	ctx context.Context, streamID streaming.StreamID,
+) (*streampb.ReplicationStreamSpec, error) {
+	return nil, errors.WithStack(errEvalPlanner)
+}
+
+// CompleteReplicationStream implements streamingmanagers.ReplicationStreamManager interface.
+func (esm *DummyEvalStreamingManager) CompleteReplicationStream(
+	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// CompleteStreamIngestion implements streamingmanagers.StreamIngestManager interface.
+func (esm *DummyEvalStreamingManager) CompleteStreamIngestion(
+	ctx context.Context, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
+) error {
+	return errors.WithStack(errEvalPlanner)
+}
+
+// GetStreamIngestionStats implements streamingmanagers.StreamIngestManager interface.
+func (esm *DummyEvalStreamingManager) GetStreamIngestionStats(
+	ctx context.Context, ingestionJobID jobspb.JobID,
+) (*streampb.StreamIngestionStats, error) {
+	return nil, errors.WithStack(errEvalPlanner)
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

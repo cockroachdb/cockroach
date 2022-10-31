@@ -49,6 +49,7 @@ func newEvalCtx(ctx context.Context, d Dependencies) *eval.Context {
 		ClusterID:          d.ClusterID(),
 		SessionDataStack:   sessiondata.NewStack(d.SessionData()),
 		Planner:            &faketreeeval.DummyEvalPlanner{},
+		StreamingManager:   &faketreeeval.DummyEvalStreamingManager{},
 		PrivilegedAccessor: &faketreeeval.DummyPrivilegedAccessor{},
 		SessionAccessor:    &faketreeeval.DummySessionAccessor{},
 		ClientNoticeSender: d.ClientNoticeSender(),
