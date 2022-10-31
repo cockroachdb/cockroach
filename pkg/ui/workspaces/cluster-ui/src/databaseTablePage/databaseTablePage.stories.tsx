@@ -30,6 +30,7 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   details: {
     loading: true,
     loaded: false,
+    lastError: undefined,
     createStatement: "",
     replicaCount: 0,
     indexNames: [],
@@ -39,12 +40,14 @@ const withLoadingIndicator: DatabaseTablePageProps = {
   stats: {
     loading: true,
     loaded: false,
+    lastError: undefined,
     sizeInBytes: 0,
     rangeCount: 0,
   },
   indexStats: {
     loading: true,
     loaded: false,
+    lastError: undefined,
     stats: [],
     lastReset: moment("2021-09-04T13:55:00Z"),
   },
@@ -72,6 +75,7 @@ const withData: DatabaseTablePageProps = {
   details: {
     loading: false,
     loaded: true,
+    lastError: null,
     createStatement: `
       CREATE TABLE public.${name} (
         id UUID NOT NULL,
@@ -99,6 +103,7 @@ const withData: DatabaseTablePageProps = {
   stats: {
     loading: false,
     loaded: true,
+    lastError: null,
     sizeInBytes: 44040192,
     rangeCount: 4200,
     nodesByRegionString:
@@ -107,6 +112,7 @@ const withData: DatabaseTablePageProps = {
   indexStats: {
     loading: false,
     loaded: true,
+    lastError: null,
     stats: [
       {
         totalReads: 0,
