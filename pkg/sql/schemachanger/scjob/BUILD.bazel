@@ -23,6 +23,7 @@ go_library(
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scexec/backfiller",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/util/log",
     ],
 )
 

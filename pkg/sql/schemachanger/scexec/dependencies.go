@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -127,6 +128,10 @@ type TransactionalJobRegistry interface {
 	// doesn't yet exist.
 	SchemaChangerJobID() jobspb.JobID
 
+	// CurrentJob returns the schema changer job that is currently, running,
+	// if we are executing within a job.
+	CurrentJob() *jobs.Job
+
 	// CreateJob creates a job in the current transaction and returns the
 	// id which was assigned to that job, or an error otherwise.
 	CreateJob(ctx context.Context, record jobs.Record) error
@@ -202,7 +207,7 @@ type Merger interface {
 type Validator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
-		jobID jobspb.JobID,
+		job *jobs.Job,
 		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
 		override sessiondata.InternalExecutorOverride,
@@ -210,7 +215,7 @@ type Validator interface {
 
 	ValidateInvertedIndexes(
 		ctx context.Context,
-		jobID jobspb.JobID,
+		job *jobs.Job,
 		tbl catalog.TableDescriptor,
 		indexes []catalog.Index,
 		override sessiondata.InternalExecutorOverride,
@@ -390,4 +395,21 @@ type StatsRefresher interface {
 	// NotifyMutation notifies the stats refresher that a table needs its
 	// statistics updated.
 	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
+}
+
+// ProtectedTimestampManager used to install a protected timestamp before
+// the GC interval is encountered.
+type ProtectedTimestampManager interface {
+	// TryToProtectBeforeGC adds a protected timestamp record for a historical
+	// transaction for a specific table, once a certain percentage of the GC time has
+	// elapsed. This is done on a best effort bases using a timer relative to
+	// the GC TTL, and should be done fairy early in the transaction.
+	TryToProtectBeforeGC(
+		ctx context.Context, jobID jobspb.JobID, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+	) jobsprotectedts.Cleaner
+
+	// Unprotect unprotects just based on a job ID, mainly for last resort cleanup.
+	// Note: This should only be used for job cleanup if its not currently,
+	// executing.
+	Unprotect(ctx context.Context, jobID jobspb.JobID) error
 }

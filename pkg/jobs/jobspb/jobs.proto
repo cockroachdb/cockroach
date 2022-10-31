@@ -560,6 +560,13 @@ message NewSchemaChangeDetails {
   // be ongoing.
   repeated MergeProgress merge_progress = 6 [(gogoproto.nullable) = false];
 
+  // ProtectedTimestampRecord is the ID of the protected timestamp record
+  // corresponding to this job.
+  bytes protected_timestamp_record = 7 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
   reserved 1, 2, 3, 5;
 }
 
@@ -759,6 +766,14 @@ message SchemaChangeDetails {
   // WriteTimestamp is the timestamp at which a backfill may want to write, e.g.
   // a time that has been identified via a scan as safe for writing.
   util.hlc.Timestamp write_timestamp = 10 [(gogoproto.nullable) = false];
+
+  // ProtectedTimestampRecord is the ID of the protected timestamp record
+  // corresponding to this job.
+  bytes protected_timestamp_record = 11 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
 }
 
 message SchemaChangeProgress {

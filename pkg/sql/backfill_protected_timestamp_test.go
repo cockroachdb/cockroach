@@ -55,7 +55,6 @@ func getFirstStoreReplica(
 
 func TestValidationWithProtectedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 90879, "flaky test")
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t, "test takes too long")
 	skip.UnderRace(t, "test takes too long")
@@ -110,9 +109,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	for _, sql := range []string{
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
-		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
+		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
 		"CREATE TABLE t(n int)",
-		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 65536, gc.ttlseconds = 1",
+		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 65536, gc.ttlseconds = 5",
 		"INSERT INTO t(n) SELECT * FROM generate_series(1, 250000)",
 	} {
 		_, err := tc.ServerConn(0).Exec(sql)
