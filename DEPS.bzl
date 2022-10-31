@@ -1312,10 +1312,10 @@ def go_deps():
         name = "com_github_cockroachdb_apd_v3",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/apd/v3",
-        sha256 = "0571a4bf35a79df25f1e4a0b807ce3e30f7edbf69412d0272affaa925e25f625",
-        strip_prefix = "github.com/cockroachdb/apd/v3@v3.1.0",
+        sha256 = "dde4e1e0861ab1276363eb60a6f1ac6b9f70e1a5baea1e7c7d3bd2a0b9cffad5",
+        strip_prefix = "github.com/cockroachdb/apd/v3@v3.1.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/apd/v3/com_github_cockroachdb_apd_v3-v3.1.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/apd/v3/com_github_cockroachdb_apd_v3-v3.1.2.zip",
         ],
     )
     go_repository(
@@ -5307,10 +5307,10 @@ def go_deps():
         name = "com_github_lib_pq",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq",
-        sha256 = "7247dc4284bb572dd8bb3932ab1bf8a3de953882ade18c31a240838af8c73ee9",
-        strip_prefix = "github.com/lib/pq@v1.10.6",
+        sha256 = "5d339f4296dcf650b4cec6b58e44988f8bbf7a4ca4bb9fff6e0421464efd7612",
+        strip_prefix = "github.com/lib/pq@v1.10.7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/com_github_lib_pq-v1.10.6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/lib/pq/com_github_lib_pq-v1.10.7.zip",
         ],
     )
     go_repository(
