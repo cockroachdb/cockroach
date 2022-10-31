@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -576,15 +577,51 @@ func (e *virtualDefEntry) getPlanInfo(
 				if err != nil {
 					return nil, err
 				}
+				// If the index has a partial index predicate, we may need to use it to
+				// filter rows from the generator.
+				partialFilter, err := e.maybeGetIndexPredicateFilter(ctx, p, index)
+				if err != nil {
+					return nil, err
+				}
+				if partialFilter != nil {
+					oldNext := next
+					next = func() (tree.Datums, error) {
+						for {
+							datums, err := oldNext()
+							if err != nil {
+								return nil, err
+							}
+							if datums == nil {
+								return nil, nil
+							}
+							matched, err := partialFilter(datums)
+							if err != nil {
+								return nil, err
+							}
+							if matched {
+								return datums, nil
+							}
+						}
+					}
+				}
 				return p.newVirtualTableNode(columns, next, cleanup), nil
 			}
 
 			constrainedScan := idxConstraint != nil && !idxConstraint.IsUnconstrained()
 			if !constrainedScan {
+				filter, err := e.maybeGetIndexPredicateFilter(ctx, p, index)
+				if err != nil {
+					return nil, err
+				}
 				generator, cleanup, setupError := setupGenerator(ctx, func(ctx context.Context, pusher rowPusher) error {
 					return def.populate(ctx, p, dbDesc, func(row ...tree.Datum) error {
 						if err := e.validateRow(row, columns); err != nil {
 							return err
+						}
+						if filter != nil {
+							if matched, err := filter(row); err != nil || !matched {
+								return err
+							}
 						}
 						return pusher.pushRow(row...)
 					})
@@ -596,7 +633,6 @@ func (e *virtualDefEntry) getPlanInfo(
 			}
 
 			// We are now dealing with a constrained virtual index scan.
-
 			if index.GetID() == 1 {
 				return nil, errors.AssertionFailedf(
 					"programming error: can't constrain scan on primary virtual index of table %s", e.desc.GetName())
@@ -636,6 +672,7 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 	def := e.virtualDef.(virtualSchemaTable)
 	return func(ctx context.Context, pusher rowPusher) error {
 		var span constraint.Span
+		var filter func(datums tree.Datums) (matched bool, _ error)
 		addRowIfPassesFilter := func(idxConstraint *constraint.Constraint) func(datums ...tree.Datum) error {
 			return func(datums ...tree.Datum) error {
 				for i := 0; i < index.NumKeyColumns(); i++ {
@@ -648,14 +685,22 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 				// will tell us whether or not to let the current row pass the filter.
 				key := constraint.MakeCompositeKey(indexKeyDatums...)
 				span.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
-				var err error
-				if idxConstraint.ContainsSpan(p.EvalContext(), &span) {
-					if err := e.validateRow(datums, columns); err != nil {
+				if !idxConstraint.ContainsSpan(p.EvalContext(), &span) {
+					return nil
+				}
+				if err := e.validateRow(datums, columns); err != nil {
+					return err
+				}
+				if filter != nil {
+					matched, err := filter(datums)
+					if err != nil {
 						return err
 					}
-					return pusher.pushRow(datums...)
+					if !matched {
+						return nil
+					}
 				}
-				return err
+				return pusher.pushRow(datums...)
 			}
 		}
 
@@ -711,14 +756,70 @@ func (e *virtualDefEntry) makeConstrainedRowsGenerator(
 			newConstraint.Spans.Append(idxConstraint.Spans.Get(currentSpan))
 		}
 
+		// We'd want to walk the expression, figure out the columns we need, then
+		{
+			var err error
+			filter, err = e.maybeGetIndexPredicateFilter(ctx, p, index)
+			if err != nil {
+				return err
+			}
+		}
+
 		// NB: If we allow virtualSchemaTables with generator to perform a constrained scan,
 		// we then need to ensure that we don't call populate without checking, as it may be nil.
 		if def.populate == nil {
 			return errors.AssertionFailedf(
 				"programming error: can't fall back to unconstrained scan on generated vtables")
 		}
+
 		return def.populate(ctx, p, dbDesc, addRowIfPassesFilter(&newConstraint))
 	}
+}
+
+// maybeGetIndexPredicateFilter returns a function which can be used to filter
+// rows of a virtual table which do not match the corresponding index predicate.
+// It will return nil if the index is nil or is not partial. We need this
+// because there are cases the optimizer will choose to scan a virtual index
+// but the index cannot be used to serve the query. Instead, we need to scan
+// the primary index and then constrain it as though the partial index were
+// scanned.
+func (e *virtualDefEntry) maybeGetIndexPredicateFilter(
+	ctx context.Context, p *planner, index catalog.Index,
+) (func(datums tree.Datums) (matched bool, _ error), error) {
+	if index == nil {
+		return nil, nil
+	}
+	pred := index.GetPredicate()
+	if pred == "" {
+		return nil, nil
+	}
+	publicColumns := e.desc.PublicColumns()
+	exprs, _, err := schemaexpr.MakePartialIndexExprs(
+		ctx, []catalog.Index{index}, publicColumns, e.desc, p.EvalContext(), p.SemaCtx(),
+	)
+	if err != nil {
+		return nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to construct partial index constraints")
+	}
+	expr := exprs[index.GetID()]
+	r := schemaexpr.RowIndexedVarContainer{
+		Cols: publicColumns,
+	}
+	for i, c := range publicColumns {
+		r.Mapping.Set(c.GetID(), i)
+	}
+	return func(datums tree.Datums) (matched bool, _ error) {
+		r.CurSourceRow = datums
+		p.EvalContext().PushIVarContainer(&r)
+		defer p.EvalContext().PopIVarContainer()
+		got, err := eval.Expr(ctx, p.EvalContext(), expr)
+		if err != nil {
+			return false, err
+		}
+		if got == tree.DNull {
+			return false, nil
+		}
+		return bool(tree.MustBeDBool(got)), nil
+	}, nil
 }
 
 // NewVirtualSchemaHolder creates a new VirtualSchemaHolder.
