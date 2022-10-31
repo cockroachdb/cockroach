@@ -22,7 +22,7 @@ import {
   insightsTableTitles,
   StatementDetailsLink,
 } from "../util";
-import { StatementInsights } from "../../../api";
+import { StatementInsights } from "src/api";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";

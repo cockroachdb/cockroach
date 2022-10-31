@@ -8,10 +8,8 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { RouteComponentProps } from "react-router";
 import { ActiveExecutions, SessionsResponse } from "src/activeExecutions/types";
 import { ClusterLocksResponse } from "src/api";
-import { executionIdAttr, getMatchParamByName } from "src/util";
 import {
   getActiveExecutionsFromSessions,
   getWaitTimeByTxnIDFromLocks,
@@ -20,11 +18,6 @@ import {
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
 // and combiners that can be reused across both packages.
-
-export const selectExecutionID = (
-  _state: unknown,
-  props: RouteComponentProps,
-): string | null => getMatchParamByName(props.match, executionIdAttr);
 
 export const selectActiveExecutionsCombiner = (
   sessions: SessionsResponse | null,

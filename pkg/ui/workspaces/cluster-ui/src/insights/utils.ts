@@ -31,7 +31,7 @@ import {
   WorkloadInsightEventFilters,
 } from "./types";
 
-export const getTransactionInsights = (
+const getTransactionInsights = (
   eventState: TransactionInsightEventState,
 ): Insight[] => {
   const insights: Insight[] = [];
@@ -57,24 +57,16 @@ export const getTransactionInsights = (
 export const getTransactionInsightsFromDetails = (
   eventState: TransactionInsightEventDetailsState,
 ): Insight[] => {
-  const insights: Insight[] = [];
-  if (eventState) {
-    InsightTypes.forEach(insight => {
-      if (
-        insight(eventState.execType, eventState.contentionThreshold).name ==
-        eventState.insightName
-      ) {
-        insights.push(
-          insight(
-            eventState.execType,
-            eventState.contentionThreshold,
-            eventState.totalContentionTime,
-          ),
-        );
-      }
-    });
+  if (!eventState) {
+    return [];
   }
-  return insights;
+  return InsightTypes.map(insight =>
+    insight(
+      eventState.execType,
+      eventState.contentionThreshold,
+      eventState.totalContentionTime,
+    ),
+  ).filter(insight => insight.name === eventState.insightName);
 };
 
 export function getInsightsFromState(
@@ -107,21 +99,21 @@ export function getInsightsFromState(
   return insightEvents;
 }
 
+// This function adds the insights field to TransactionInsightEventDetailsResponse
 export function getTransactionInsightEventDetailsFromState(
   insightEventDetailsResponse: TransactionInsightEventDetailsResponse,
 ): TransactionInsightEventDetails {
-  let insightEventDetails: TransactionInsightEventDetails = null;
   const insightsForEventDetails = getTransactionInsightsFromDetails(
     insightEventDetailsResponse,
   );
-  if (insightsForEventDetails.length > 0) {
-    const { insightName, ...resp } = insightEventDetailsResponse;
-    insightEventDetails = {
-      ...resp,
-      insights: insightsForEventDetails,
-    };
+  if (!insightsForEventDetails?.length) {
+    return null;
   }
-  return insightEventDetails;
+  const { insightName, ...resp } = insightEventDetailsResponse;
+  return {
+    ...resp,
+    insights: insightsForEventDetails,
+  };
 }
 
 export const filterTransactionInsights = (
@@ -329,37 +321,47 @@ export function getAppsFromStatementInsights(
 }
 
 export function populateStatementInsightsFromProblemAndCauses(
-  statements: StatementInsightEvent[],
-): StatementInsightEvent[] {
-  if (!statements || statements?.length === 0) {
+  statements: StatementInsights,
+): StatementInsights {
+  if (!statements?.length) {
     return [];
   }
-  const stmts: StatementInsightEvent[] = [];
-  statements.forEach(statement => {
-    const stmt = Object.assign({}, statement);
+
+  const stmtsWithInsights: StatementInsights = statements.map(statement => {
     // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
-    if (statement.problem === "SlowExecution") {
-      if (statement.causes?.length === 0) {
-        stmt.insights = [
+    const insights: Insight[] = [];
+    switch (statement.problem) {
+      case "SlowExecution":
+        statement.causes?.forEach(cause =>
+          insights.push(
+            getInsightFromProblem(cause, InsightExecEnum.STATEMENT),
+          ),
+        );
+
+        if (insights.length === 0) {
+          insights.push(
+            getInsightFromProblem(
+              InsightNameEnum.slowExecution,
+              InsightExecEnum.STATEMENT,
+            ),
+          );
+        }
+        break;
+
+      case "FailedExecution":
+        insights.push(
           getInsightFromProblem(
-            InsightNameEnum.slowExecution,
+            InsightNameEnum.failedExecution,
             InsightExecEnum.STATEMENT,
           ),
-        ];
-      } else {
-        stmt.insights = statement.causes?.map(x =>
-          getInsightFromProblem(x, InsightExecEnum.STATEMENT),
         );
-      }
-    } else if (statement.problem === "FailedExecution") {
-      stmt.insights = [
-        getInsightFromProblem(
-          InsightNameEnum.failedExecution,
-          InsightExecEnum.STATEMENT,
-        ),
-      ];
+        break;
+
+      default:
     }
-    stmts.push(stmt);
+
+    return { ...statement, insights };
   });
-  return stmts;
+
+  return stmtsWithInsights;
 }

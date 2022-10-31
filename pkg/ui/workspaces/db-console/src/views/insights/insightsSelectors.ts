@@ -18,11 +18,11 @@ import {
   insightType,
   SchemaInsightEventFilters,
   SortSetting,
-  StatementInsightEvent,
+  selectStatementInsightsCombiner,
+  selectExecutionID,
+  selectStatementInsightDetailsCombiner,
+  selectTxnInsightsCombiner,
 } from "@cockroachlabs/cluster-ui";
-import { RouteComponentProps } from "react-router-dom";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { getMatchParamByName } from "src/util/query";
 
 export const filtersLocalSetting = new LocalSetting<
   AdminUIState,
@@ -40,50 +40,43 @@ export const sortSettingLocalSetting = new LocalSetting<
 });
 
 export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => state.cachedData,
-  adminUiState => {
-    if (!adminUiState.transactionInsights) return [];
-    return adminUiState.transactionInsights.data;
-  },
+  (state: AdminUIState) => state.cachedData.transactionInsights?.data,
+  selectTxnInsightsCombiner,
 );
 
 export const selectTransactionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
-    (_state: AdminUIState, props: RouteComponentProps) => props,
+    selectExecutionID,
   ],
-  (
-    insight,
-    props,
-  ): CachedDataReducerState<api.TransactionInsightEventDetailsResponse> => {
+  (insight, insightId): api.TransactionInsightEventDetailsResponse => {
     if (!insight) {
       return null;
     }
-    const insightId = getMatchParamByName(props.match, "id");
-    return insight[insightId];
+    return insight[insightId]?.data;
+  },
+);
+
+export const selectTransactionInsightDetailsError = createSelector(
+  (state: AdminUIState) => state.cachedData.transactionInsightDetails,
+  selectExecutionID,
+  (insight, insightId): Error | null => {
+    if (!insight) {
+      return null;
+    }
+    return insight[insightId]?.lastError;
   },
 );
 
 export const selectStatementInsights = createSelector(
-  (state: AdminUIState) => state.cachedData,
-  adminUiState => {
-    if (!adminUiState.statementInsights) return [];
-    return adminUiState.statementInsights.data;
-  },
+  (state: AdminUIState) => state.cachedData.statementInsights?.data,
+  selectStatementInsightsCombiner,
 );
 
 export const selectStatementInsightDetails = createSelector(
-  [
-    (state: AdminUIState) => state.cachedData.statementInsights,
-    (_state: AdminUIState, props: RouteComponentProps) => props,
-  ],
-  (insights, props): StatementInsightEvent => {
-    if (!insights) {
-      return null;
-    }
-    const insightId = getMatchParamByName(props.match, "id");
-    return insights.data?.find(insight => insight.statementID === insightId);
-  },
+  selectStatementInsights,
+  selectExecutionID,
+  selectStatementInsightDetailsCombiner,
 );
 
 export const schemaInsightsFiltersLocalSetting = new LocalSetting<

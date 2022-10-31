@@ -27,10 +27,10 @@ import { TransactionInsightEventDetailsRequest } from "src/api";
 
 const mapStateToProps = (
   state: AppState,
-  _props: RouteComponentProps,
+  props: RouteComponentProps,
 ): TransactionInsightDetailsStateProps => {
-  const insightDetails = selectTransactionInsightDetails(state);
-  const insightError = selectTransactionInsightDetailsError(state);
+  const insightDetails = selectTransactionInsightDetails(state, props);
+  const insightError = selectTransactionInsightDetailsError(state, props);
   return {
     insightEventDetails: insightDetails,
     insightError: insightError,
