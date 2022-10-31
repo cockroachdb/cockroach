@@ -49,7 +49,6 @@ func TestSelectQueryBuilder(t *testing.T) {
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 					endPK:   tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
-				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -112,7 +111,6 @@ LIMIT 2`,
 				[]string{"col1", "col2"},
 				"table_name",
 				spanToProcess{},
-				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -174,7 +172,6 @@ LIMIT 2`,
 					startPK: tree.Datums{tree.NewDInt(100)},
 					endPK:   tree.Datums{tree.NewDInt(181)},
 				},
-				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -239,7 +236,6 @@ LIMIT 2`,
 				spanToProcess{
 					endPK: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
-				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -303,7 +299,6 @@ LIMIT 2`,
 				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				},
-				mockTime,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
@@ -359,14 +354,11 @@ LIMIT 2`,
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			for i, it := range tc.iterations {
-				q, args := tc.b.nextQuery()
-				require.Equal(t, it.expectedQuery, q)
-				require.Equal(t, it.expectedArgs, args)
+			for _, it := range tc.iterations {
+				query := tc.b.nextQuery(mockTime)
+				require.Equal(t, it.expectedQuery, query)
+				require.Equal(t, it.expectedArgs, tc.b.cachedArgs)
 				require.NoError(t, tc.b.moveCursor(it.rows))
-				if i >= 1 {
-					require.NotEmpty(t, tc.b.cachedQuery)
-				}
 			}
 		})
 	}

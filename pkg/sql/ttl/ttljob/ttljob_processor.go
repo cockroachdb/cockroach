@@ -279,7 +279,6 @@ func (t *ttlProcessor) runTTLOnSpan(
 		pkColumns,
 		relationName,
 		spanToProcess,
-		ttlSpec.AOST,
 		selectBatchSize,
 		ttlExpr,
 	)
@@ -317,7 +316,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 		// Step 1. Fetch some rows we want to delete using a historical
 		// SELECT query.
 		start := timeutil.Now()
-		expiredRowsPKs, err := selectBuilder.run(ctx, ie)
+		expiredRowsPKs, err := selectBuilder.run(ctx, ie, start.Add(ttlSpec.AOSTDuration))
 		metrics.SelectDuration.RecordValue(int64(timeutil.Since(start)))
 		if err != nil {
 			return spanRowCount, errors.Wrapf(err, "error selecting rows to delete")
