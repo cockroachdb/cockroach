@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -84,7 +85,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) *scop.MakeValidatedPrimaryIndexPublic {
+				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MakeValidatedPrimaryIndexPublic {
 					return &scop.MakeValidatedPrimaryIndexPublic{
 						EventBase: newLogEventBase(this, md),
 						TableID:   this.TableID,
@@ -121,14 +122,17 @@ func init() {
 			equiv(scpb.Status_BACKFILLED),
 			equiv(scpb.Status_BACKFILL_ONLY),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) *scop.CreateGCJobForIndex {
-					return &scop.CreateGCJobForIndex{
-						TableID:             this.TableID,
-						IndexID:             this.IndexID,
-						StatementForDropJob: statementForDropJob(this, md),
+				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.CreateGCJobForIndex {
+					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+						return &scop.CreateGCJobForIndex{
+							TableID:             this.TableID,
+							IndexID:             this.IndexID,
+							StatementForDropJob: statementForDropJob(this, md),
+						}
 					}
+					return nil
 				}),
-				emit(func(this *scpb.PrimaryIndex, md *targetsWithElementMap) *scop.MakeIndexAbsent {
+				emit(func(this *scpb.PrimaryIndex, md *opGenContext) *scop.MakeIndexAbsent {
 					return &scop.MakeIndexAbsent{
 						EventBase: newLogEventBase(this, md),
 						TableID:   this.TableID,

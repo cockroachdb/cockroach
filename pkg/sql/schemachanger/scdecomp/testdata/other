@@ -135,6 +135,9 @@ ElementState:
     comment: db1 is good
     databaseId: 104
   Status: PUBLIC
+- DatabaseData:
+    databaseId: 104
+  Status: PUBLIC
 
 decompose
 typ

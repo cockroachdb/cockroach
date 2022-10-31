@@ -27,7 +27,7 @@ func init() {
 						Comment:      this.Comment,
 					}
 				}),
-				emit(func(this *scpb.ConstraintComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.ConstraintComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),
@@ -41,7 +41,7 @@ func init() {
 						ConstraintID: this.ConstraintID,
 					}
 				}),
-				emit(func(this *scpb.ConstraintComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.ConstraintComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),

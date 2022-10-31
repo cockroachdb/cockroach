@@ -36,7 +36,7 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.AliasType, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
+				emit(func(this *scpb.AliasType, md *opGenContext) *scop.MarkDescriptorAsSyntheticallyDropped {
 					return &scop.MarkDescriptorAsSyntheticallyDropped{
 						DescriptorID: this.TypeID,
 					}
@@ -51,7 +51,7 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.AliasType, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.AliasType, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 				emit(func(this *scpb.AliasType) *scop.DeleteDescriptor {

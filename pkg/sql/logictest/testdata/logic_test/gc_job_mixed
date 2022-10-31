@@ -1,0 +1,45 @@
+# LogicTest: local local-mixed-22.2-23.1
+
+statement ok
+CREATE DATABASE db
+
+statement ok
+CREATE TABLE db.kv (k INT NOT NULL, v STRING);
+INSERT INTO db.kv (k, v) VALUES (1, 'a')
+
+statement ok
+CREATE TABLE db.other(t STRING);
+INSERT INTO db.other (t) VALUES ('other')
+
+statement ok
+ALTER TABLE db.kv ALTER PRIMARY KEY USING COLUMNS (k)
+
+statement ok;
+DROP TABLE db.kv
+
+statement ok
+DROP DATABASE db
+
+# GC jobs in a non-mixed-version cluster, 23.1+ style.
+skipif config local-mixed-22.2-23.1
+query T rowsort
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
+----
+GC for ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+GC for DROP TABLE db.public.kv
+GC for DROP DATABASE db
+
+# GC jobs in a mixed-version cluster, pre-23.1 style.
+skipif config local
+query T rowsort
+SELECT description FROM crdb_internal.jobs WHERE job_type = 'SCHEMA CHANGE GC'
+----
+GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+GC for removed primary index; ALTER TABLE db.public.kv ALTER PRIMARY KEY USING COLUMNS (k)
+GC for DROP TABLE db.public.kv
+GC for DROP DATABASE db
+
+query I
+SELECT count(*) FROM crdb_internal.lost_descriptors_with_data
+----
+0

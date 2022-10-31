@@ -26,7 +26,7 @@ func init() {
 						Comment:  this.Comment,
 					}
 				}),
-				emit(func(this *scpb.SchemaComment, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.SchemaComment, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
 			),

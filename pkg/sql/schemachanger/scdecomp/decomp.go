@@ -138,6 +138,7 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 			RegionEnumTypeID: db.GetRegionConfig().RegionEnumID,
 		})
 	}
+	w.ev(scpb.Status_PUBLIC, &scpb.DatabaseData{DatabaseID: db.GetID()})
 	_ = db.ForEachSchema(func(id descpb.ID, name string) error {
 		w.backRefs.Add(id)
 		return nil
@@ -336,6 +337,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 					TableID: tbl.GetID(),
 				})
 		}
+	}
+	if tbl.IsPhysicalTable() {
+		w.ev(scpb.Status_PUBLIC, &scpb.TableData{TableID: tbl.GetID(), DatabaseID: tbl.GetParentID()})
 	}
 }
 
@@ -563,6 +567,10 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			panic(err)
 		}
 	}
+	w.ev(scpb.Status_PUBLIC, &scpb.IndexData{
+		TableID: tbl.GetID(),
+		IndexID: idx.GetID(),
+	})
 }
 
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(

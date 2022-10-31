@@ -419,6 +419,11 @@ func (d *execDeps) User() username.SQLUsername {
 	return d.user
 }
 
+// ClusterSettings implements the scexec.Dependencies interface.
+func (d *execDeps) ClusterSettings() *cluster.Settings {
+	return d.settings
+}
+
 // DescriptorMetadataUpdater implements the scexec.Dependencies interface.
 func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.DescriptorMetadataUpdater {
 	return d.metadataUpdater

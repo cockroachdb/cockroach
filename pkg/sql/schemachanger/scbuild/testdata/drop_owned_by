@@ -46,6 +46,8 @@ DROP OWNED BY r
   {sequenceId: 106}
 - [[ObjectParent:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {objectId: 106, parentSchemaId: 101}
+- [[TableData:{DescID: 106, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 106}
 - [[Namespace:{DescID: 109, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 109, name: t, schemaId: 101}
 - [[Owner:{DescID: 109}, ABSENT], PUBLIC]
@@ -102,6 +104,10 @@ DROP OWNED BY r
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 109}
 - [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t_pkey, tableId: 109}
+- [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 109}
+- [[TableData:{DescID: 109, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 109}
 - [[Namespace:{DescID: 107, Name: sq, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 107, name: sq, schemaId: 105}
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
@@ -114,6 +120,8 @@ DROP OWNED BY r
   {sequenceId: 107}
 - [[ObjectParent:{DescID: 107, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {objectId: 107, parentSchemaId: 105}
+- [[TableData:{DescID: 107, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 107}
 - [[Namespace:{DescID: 108, Name: t, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 108, name: t, schemaId: 105}
 - [[Owner:{DescID: 108}, ABSENT], PUBLIC]
@@ -170,6 +178,10 @@ DROP OWNED BY r
   {constraintId: 1, indexId: 1, isUnique: true, tableId: 108}
 - [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t_pkey, tableId: 108}
+- [[IndexData:{DescID: 108, IndexID: 1}, ABSENT], PUBLIC]
+  {indexId: 1, tableId: 108}
+- [[TableData:{DescID: 108, ReferencedDescID: 100}, ABSENT], PUBLIC]
+  {databaseId: 100, tableId: 108}
 - [[Namespace:{DescID: 110, Name: v1, ReferencedDescID: 100}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 110, name: v1, schemaId: 105}
 - [[Owner:{DescID: 110}, ABSENT], PUBLIC]

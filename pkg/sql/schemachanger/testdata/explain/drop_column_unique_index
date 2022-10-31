@@ -10,11 +10,12 @@ EXPLAIN (ddl) ALTER TABLE t.test DROP pi;
 Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN ‹pi›; 
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 4 elements transitioning toward PUBLIC
+ │         ├── 5 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106, IndexID: 4, ConstraintID: 5, TemporaryIndexID: 5, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 4}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 4}
- │         │    └── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
+ │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 4, IndexID: 4}
+ │         │    └── ABSENT → PUBLIC        IndexData:{DescID: 106, IndexID: 4}
  │         ├── 4 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → DELETE_ONLY   TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106, ColumnID: 1, IndexID: 5}
@@ -42,8 +43,9 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
  │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 7 in PostCommitPhase
- │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
- │    │    │    └── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
+ │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
+ │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
+ │    │    │    └── ABSENT      → PUBLIC     IndexData:{DescID: 106, IndexID: 5}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":5,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
@@ -116,22 +118,25 @@ Schema change plan for ALTER TABLE ‹t›.‹public›.‹test› DROP COLUMN �
       │    │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 106, IndexID: 5, ConstraintID: 6, SourceIndexID: 1}
       │    ├── 1 element transitioning toward ABSENT
       │    │    └── VALIDATED             → DELETE_ONLY      PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-      │    └── 5 Mutation operations
-      │         ├── CreateGCJobForIndex {"IndexID":5,"TableID":106}
+      │    └── 4 Mutation operations
       │         ├── MakeIndexAbsent {"IndexID":5,"TableID":106}
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106, ColumnID: 3}
-           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
-           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
-           │    └── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
-           └── 6 Mutation operations
+           ├── 1 element transitioning toward TRANSIENT_ABSENT
+           │    └── PUBLIC      → TRANSIENT_ABSENT IndexData:{DescID: 106, IndexID: 5}
+           ├── 5 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 106, ColumnID: 3}
+           │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 3}
+           │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 106, ColumnID: 3}
+           │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 106, IndexID: 1, ConstraintID: 1}
+           │    └── PUBLIC      → ABSENT           IndexData:{DescID: 106, IndexID: 1}
+           └── 7 Mutation operations
                 ├── RemoveColumnDefaultExpression {"ColumnID":3,"TableID":106}
-                ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
                 ├── MakeIndexAbsent {"IndexID":1,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":1,"TableID":106}
+                ├── CreateGCJobForIndex {"IndexID":5,"TableID":106}
                 ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

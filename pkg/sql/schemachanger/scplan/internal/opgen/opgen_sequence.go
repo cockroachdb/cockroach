@@ -11,6 +11,7 @@
 package opgen
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 )
@@ -36,7 +37,7 @@ func init() {
 		),
 		toAbsent(scpb.Status_PUBLIC,
 			to(scpb.Status_TXN_DROPPED,
-				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.MarkDescriptorAsSyntheticallyDropped {
+				emit(func(this *scpb.Sequence, md *opGenContext) *scop.MarkDescriptorAsSyntheticallyDropped {
 					return &scop.MarkDescriptorAsSyntheticallyDropped{
 						DescriptorID: this.SequenceID,
 					}
@@ -56,14 +57,18 @@ func init() {
 				}),
 			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.LogEvent {
+				emit(func(this *scpb.Sequence, md *opGenContext) *scop.LogEvent {
 					return newLogEventOp(this, md)
 				}),
-				emit(func(this *scpb.Sequence, md *targetsWithElementMap) *scop.CreateGCJobForTable {
-					return &scop.CreateGCJobForTable{
-						TableID:             this.SequenceID,
-						StatementForDropJob: statementForDropJob(this, md),
+				emit(func(this *scpb.Sequence, md *opGenContext) *scop.CreateGCJobForTable {
+					if !md.ActiveVersion.IsActive(clusterversion.V23_1) {
+						return &scop.CreateGCJobForTable{
+							TableID:             this.SequenceID,
+							DatabaseID:          databaseIDFromDroppedNamespaceTarget(md, this.SequenceID),
+							StatementForDropJob: statementForDropJob(this, md),
+						}
 					}
+					return nil
 				}),
 			),
 		),

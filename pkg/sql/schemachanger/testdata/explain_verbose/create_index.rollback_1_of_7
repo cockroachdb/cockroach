@@ -12,7 +12,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 6 elements transitioning toward ABSENT
+        ├── • 7 elements transitioning toward ABSENT
         │   │
         │   ├── • IndexColumn:{DescID: 106, ColumnID: 2, IndexID: 2}
         │   │   │ PUBLIC → ABSENT
@@ -41,6 +41,12 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • Precedence dependency from ABSENT IndexName:{DescID: 106, Name: idx1, IndexID: 2}
         │   │         rule: "dependents removed before index"
         │   │
+        │   ├── • IndexData:{DescID: 106, IndexID: 2}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • Precedence dependency from ABSENT SecondaryIndex:{DescID: 106, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+        │   │         rule: "index removed before garbage collection"
+        │   │
         │   ├── • TemporaryIndex:{DescID: 106, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
         │   │   │ DELETE_ONLY → ABSENT
         │   │   │
@@ -65,7 +71,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │       └── • skip PUBLIC → ABSENT operations
         │             rule: "skip index-column removal ops on index removal"
         │
-        └── • 7 Mutation operations
+        └── • 6 Mutation operations
             │
             ├── • LogEvent
             │     Element:
@@ -84,24 +90,15 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
             │         SubWorkID: 1
             │     TargetStatus: 1
             │
-            ├── • CreateGCJobForIndex
-            │     IndexID: 2
-            │     StatementForDropJob:
-            │       Rollback: true
-            │       Statement: removed secondary index; CREATE INDEX idx1 ON defaultdb.public.t (v)
-            │         WHERE (v = 'a')
-            │     TableID: 106
-            │
             ├── • MakeIndexAbsent
             │     IndexID: 2
             │     TableID: 106
             │
             ├── • CreateGCJobForIndex
-            │     IndexID: 3
+            │     IndexID: 2
             │     StatementForDropJob:
             │       Rollback: true
-            │       Statement: removed temporary index; CREATE INDEX idx1 ON defaultdb.public.t (v)
-            │         WHERE (v = 'a')
+            │       Statement: CREATE INDEX idx1 ON defaultdb.public.t (v) WHERE (v = 'a')
             │     TableID: 106
             │
             ├── • MakeIndexAbsent
