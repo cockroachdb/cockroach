@@ -125,6 +125,9 @@ type PointSynthesizingIter struct {
 
 	// seekKeyBuf is used to clone seek keys.
 	seekKeyBuf roachpb.Key
+
+	// rawKeyBuf is used by UnsafeRaw(MVCC)Key.
+	rawKeyBuf []byte
 }
 
 var _ MVCCIterator = (*PointSynthesizingIter)(nil)
@@ -141,6 +144,7 @@ func NewPointSynthesizingIter(parent MVCCIterator) *PointSynthesizingIter {
 		rangeKeysPos:   iter.rangeKeysPos,
 		rangeKeysStart: iter.rangeKeysStart,
 		seekKeyBuf:     iter.seekKeyBuf,
+		rawKeyBuf:      iter.rawKeyBuf,
 	}
 	return iter
 }
@@ -223,6 +227,7 @@ func (i *PointSynthesizingIter) release() {
 		rangeKeysPos:   i.rangeKeysPos[:0],
 		rangeKeysStart: i.rangeKeysStart[:0],
 		seekKeyBuf:     i.seekKeyBuf[:0],
+		rawKeyBuf:      i.rawKeyBuf[:0],
 	}
 	pointSynthesizingIterPool.Put(i)
 }
@@ -678,7 +683,8 @@ func (i *PointSynthesizingIter) UnsafeRawKey() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeRawKey()
 	}
-	return EncodeMVCCKey(i.UnsafeKey())
+	i.rawKeyBuf = EncodeMVCCKeyToBuf(i.rawKeyBuf[:0], i.UnsafeKey())
+	return i.rawKeyBuf
 }
 
 // UnsafeRawMVCCKey implements MVCCIterator.
@@ -686,7 +692,8 @@ func (i *PointSynthesizingIter) UnsafeRawMVCCKey() []byte {
 	if i.atPoint {
 		return i.iter.UnsafeRawMVCCKey()
 	}
-	return EncodeMVCCKey(i.UnsafeKey())
+	i.rawKeyBuf = EncodeMVCCKeyToBuf(i.rawKeyBuf[:0], i.UnsafeKey())
+	return i.rawKeyBuf
 }
 
 // Value implements MVCCIterator.
