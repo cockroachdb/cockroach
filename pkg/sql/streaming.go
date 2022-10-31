@@ -29,6 +29,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -901,4 +904,15 @@ func (s *eventStream) addSST(
 		return 0, err
 	}
 	return size, nil
+}
+
+func init() {
+	streamclient.TestTableCreator = func(
+		ctx context.Context,
+		parentID, id descpb.ID,
+		schema string,
+		privileges *catpb.PrivilegeDescriptor,
+	) (*tabledesc.Mutable, error) {
+		return CreateTestTableDescriptor(ctx, parentID, id, schema, privileges, nil /* txn */, nil /* collection */)
+	}
 }

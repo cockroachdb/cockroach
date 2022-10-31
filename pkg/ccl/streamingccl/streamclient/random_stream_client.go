@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -402,20 +401,26 @@ func (m *RandomStreamClient) Heartbeat(
 	return streampb.StreamReplicationStatus{}, nil
 }
 
+// TestTableCreator converts a SQL string to a table descriptor for test purposes.
+var TestTableCreator func(
+	ctx context.Context,
+	parentID, id descpb.ID,
+	schema string,
+	privileges *catpb.PrivilegeDescriptor,
+) (*tabledesc.Mutable, error)
+
 // getDescriptorAndNamespaceKVForTableID returns the namespace and descriptor
 // KVs for the table with tableID.
 func getDescriptorAndNamespaceKVForTableID(
 	config randomStreamConfig, tableID descpb.ID,
 ) (*tabledesc.Mutable, []roachpb.KeyValue, error) {
 	tableName := fmt.Sprintf("%s%d", IngestionTablePrefix, tableID)
-	testTable, err := sql.CreateTestTableDescriptor(
+	testTable, err := TestTableCreator(
 		context.Background(),
 		IngestionDatabaseID,
 		tableID,
 		fmt.Sprintf(RandomStreamSchemaPlaceholder, tableName),
 		catpb.NewBasePrivilegeDescriptor(username.RootUserName()),
-		nil, /* txn */
-		nil, /* collection */
 	)
 	if err != nil {
 		return nil, nil, err
