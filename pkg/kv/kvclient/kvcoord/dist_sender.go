@@ -1934,13 +1934,11 @@ func noMoreReplicasErr(ambiguousErr, lastAttemptErr error) error {
 func (ds *DistSender) sendToReplicas(
 	ctx context.Context, ba *roachpb.BatchRequest, routing rangecache.EvictionToken, withCommit bool,
 ) (*roachpb.BatchResponse, error) {
-	desc := routing.Desc()
-	ba.RangeID = desc.RangeID
-
 	// If this request can be sent to a follower to perform a consistent follower
 	// read under the closed timestamp, promote its routing policy to NEAREST.
 	if ba.RoutingPolicy == roachpb.RoutingPolicy_LEASEHOLDER &&
 		CanSendToFollower(ds.logicalClusterID.Get(), ds.st, ds.clock, routing.ClosedTimestampPolicy(), ba) {
+		ba = ba.ShallowCopy()
 		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
 	}
 
@@ -1956,6 +1954,7 @@ func (ds *DistSender) sendToReplicas(
 	default:
 		log.Fatalf(ctx, "unknown routing policy: %s", ba.RoutingPolicy)
 	}
+	desc := routing.Desc()
 	leaseholder := routing.Leaseholder()
 	replicas, err := NewReplicaSlice(ctx, ds.nodeDescs, desc, leaseholder, replicaFilter)
 	if err != nil {
@@ -2057,6 +2056,10 @@ func (ds *DistSender) sendToReplicas(
 			}
 		}
 		prevReplica = curReplica
+
+		ba = ba.ShallowCopy()
+		ba.Replica = curReplica
+		ba.RangeID = desc.RangeID
 		// Communicate to the server the information our cache has about the
 		// range. If it's stale, the serve will return an update.
 		ba.ClientRangeInfo = roachpb.ClientRangeInfo{
