@@ -325,7 +325,6 @@ type sqlServerArgs struct {
 	// pointer to an empty struct in this configuration, which newSQLServer
 	// fills.
 	circularJobRegistry *jobs.Registry
-	jobAdoptionStopFile string
 
 	// The executorConfig uses the provider.
 	protectedtsProvider protectedts.Provider
@@ -442,6 +441,15 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			codec = keys.MakeSQLCodec(override)
 		}
 	}
+
+	var jobAdoptionStopFile string
+	for _, spec := range cfg.Stores.Specs {
+		if !spec.InMemory && spec.Path != "" {
+			jobAdoptionStopFile = filepath.Join(spec.Path, jobs.PreventAdoptionFile)
+			break
+		}
+	}
+
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.Settings.ExternalIODir)
 	if err != nil {
@@ -531,7 +539,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				// in sql/jobs/registry.go on planHookMaker.
 				return sql.MakeJobExecContext(opName, user, &sql.MemoryMetrics{}, execCfg)
 			},
-			cfg.jobAdoptionStopFile,
+			jobAdoptionStopFile,
 			td,
 			jobsKnobs,
 		)
