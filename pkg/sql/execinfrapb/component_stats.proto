@@ -15,6 +15,7 @@ option go_package = "execinfrapb";
 import "gogoproto/gogo.proto";
 
 import "util/optional/optional.proto";
+import "roachpb/api.proto";
 
 // ComponentID identifies a component in a flow. There are multiple types of
 // components (e.g. processors, streams); each component of a certain type has
@@ -126,7 +127,7 @@ message KVStats {
   // Cumulated time spent waiting for a KV request. This includes disk IO time
   // and potentially network time (if any of the keys are not local).
   optional util.optional.Duration kv_time = 3 [(gogoproto.customname) = "KVTime",
-                                               (gogoproto.nullable) = false];
+    (gogoproto.nullable) = false];
 
   // ContentionTime is the cumulative time a KV request spent contending with
   // other transactions. This time accounts for a portion of KVTime above.
@@ -136,6 +137,9 @@ message KVStats {
   optional util.optional.Uint num_internal_steps = 6 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_interface_seeks = 7 [(gogoproto.nullable) = false];
   optional util.optional.Uint num_internal_seeks = 8 [(gogoproto.nullable) = false];
+
+  // contention_events hit at the statement level.
+  repeated cockroach.roachpb.ContentionEvent contention_events = 10 [(gogoproto.nullable) = false];
 }
 
 // ExecStats contains statistics about the execution of a component.

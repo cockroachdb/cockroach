@@ -311,6 +311,41 @@ func initTempStorageConfig(
 	return tempStorageConfig, nil
 }
 
+type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error)
+
+type serverStartupInterface interface {
+	serverShutdownInterface
+
+	// ClusterSettings retrieves this server's settings.
+	ClusterSettings() *cluster.Settings
+
+	// LogicalClusterID retrieves this server's logical cluster ID.
+	LogicalClusterID() uuid.UUID
+
+	// PreStart starts the server on the specified port(s) and
+	// initializes subsystems.
+	// It does not activate the pgwire listener over the network / unix
+	// socket, which is done by the AcceptClients() method. The separation
+	// between the two exists so that SQL initialization can take place
+	// before the first client is accepted.
+	PreStart(ctx context.Context) error
+
+	// StartDiagnostics starts periodic diagnostics reporting and update checking.
+	// NOTE: This is not called in PreStart so that it's disabled by default for
+	// testing.
+	StartDiagnostics(ctx context.Context)
+
+	// AcceptClients starts listening for incoming SQL clients over the network.
+	AcceptClients(ctx context.Context) error
+
+	// InitialStart returns whether this node is starting for the first time.
+	// This is (currently) used when displaying the server status report
+	// on the terminal & in logs. We know that some folk have automation
+	// that depend on certain strings displayed from this when orchestrating
+	// KV-only nodes.
+	InitialStart() bool
+}
+
 var errCannotUseJoin = errors.New("cannot use --join with 'cockroach start-single-node' -- use 'cockroach start' instead")
 
 func runStartSingleNode(cmd *cobra.Command, args []string) error {
@@ -348,7 +383,42 @@ func runStartJoin(cmd *cobra.Command, args []string) error {
 //
 // If the argument startSingleNode is set the replication factor
 // will be set to 1 all zone configs (see initial_sql.go).
-func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnErr error) {
+func runStart(cmd *cobra.Command, args []string, startSingleNode bool) error {
+	const serverType redact.SafeString = "node"
+
+	newServerFn := func(_ context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverStartupInterface, error) {
+		// Beware of not writing simply 'return server.NewServer()'. This is
+		// because it would cause the serverStartupInterface reference to
+		// always be non-nil, even if NewServer returns a nil pointer (and
+		// an error). The code below is dependent on the interface
+		// reference remaining nil in case of error.
+		s, err := server.NewServer(serverCfg, stopper)
+		if err != nil {
+			return nil, err
+		}
+		return s, nil
+	}
+
+	maybeRunInitialSQL := func(ctx context.Context, s serverStartupInterface) error {
+		// Run SQL for new clusters.
+		//
+		// The adminUser/adminPassword fields are for the benefit of 'cockroach demo'
+		// only and not used here.
+		return runInitialSQL(ctx, s.(*server.Server), startSingleNode, "" /* adminUser */, "" /* adminPassword */)
+	}
+
+	return runStartInternal(cmd, serverType, serverCfg.InitNode, newServerFn, maybeRunInitialSQL)
+}
+
+// runStartInternal contains the code common to start a regular server
+// or a SQL-only server.
+func runStartInternal(
+	cmd *cobra.Command,
+	serverType redact.SafeString,
+	initConfigFn func(context.Context) error,
+	newServerFn newServerFn,
+	maybeRunInitialSQL func(context.Context, serverStartupInterface) error,
+) error {
 	tBegin := timeutil.Now()
 
 	// First things first: if the user wants background processing,
@@ -388,11 +458,19 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 		return err
 	}
 
+	// If any store has something to say against a server start-up
+	// (e.g. previously detected corruption), listen to them now.
+	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
+		return clierror.NewError(err, exit.FatalError())
+	}
+
 	// Set up a cancellable context for the entire start command.
 	// The context will be canceled at the end.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// The context annotation ensures that server identifiers show up
+	// in the logging metadata as soon as they are known.
 	ambientCtx := serverCfg.AmbientCtx
 
 	// Annotate the context, and set up a tracing span for the start process.
@@ -425,12 +503,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	if err != nil {
 		return err
 	}
-
-	// If any store has something to say against a server start-up
-	// (e.g. previously detected corruption), listen to them now.
-	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
-		return clierror.NewError(err, exit.FatalError())
-	}
+	stopper.SetTracer(serverCfg.BaseConfig.AmbientCtx.Tracer)
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.
@@ -445,7 +518,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	cgroups.AdjustMaxProcs(ctx)
 
 	// Check the --join flag.
-	if !cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name).Changed {
+	if fl := cliflagcfg.FlagSetForCmd(cmd).Lookup(cliflags.Join.Name); fl != nil && !fl.Changed {
 		err := errors.WithHint(
 			errors.New("no --join flags provided to 'cockroach start'"),
 			"Consider using 'cockroach init' or 'cockroach start-single-node' instead")
@@ -455,26 +528,29 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// Now perform additional configuration tweaks specific to the start
 	// command.
 
+	// Initialize the node's configuration from startup parameters.
+	// This also reads the part of the configuration that comes from
+	// environment variables.
+	if err := initConfigFn(ctx); err != nil {
+		return errors.Wrapf(err, "failed to initialize %s", serverType)
+	}
+
+	st := serverCfg.BaseConfig.Settings
+
 	// Derive temporary/auxiliary directory specifications.
-	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
+	if st.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
 
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(
-		ctx, serverCfg.Settings, stopper, serverCfg.Stores,
+	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
+		ctx, st, stopper, serverCfg.Stores,
 	); err != nil {
 		return err
 	}
 
+	// Configure the default storage engine.
 	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
 		serverCfg.StorageEngine = enginepb.EngineTypePebble
-	}
-
-	// Initialize the node's configuration from startup parameters.
-	// This also reads the part of the configuration that comes from
-	// environment variables.
-	if err := serverCfg.InitNode(ctx); err != nil {
-		return errors.Wrap(err, "failed to initialize node")
 	}
 
 	// The configuration is now ready to report to the user and the log
@@ -486,66 +562,7 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	// ReadyFn will be called when the server has started listening on
 	// its network sockets, but perhaps before it has done bootstrapping
 	// and thus before Start() completes.
-	serverCfg.ReadyFn = func(waitForInit bool) {
-		// Inform the user if the network settings are suspicious. We need
-		// to do that after starting to listen because we need to know
-		// which advertise address NewServer() has decided.
-		hintServerCmdFlags(ctx, cmd)
-
-		// If another process was waiting on the PID (e.g. using a FIFO),
-		// this is when we can tell them the node has started listening.
-		if startCtx.pidFile != "" {
-			log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
-			if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
-				log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
-			}
-		}
-
-		// If the invoker has requested an URL update, do it now that
-		// the server is ready to accept SQL connections.
-		// (Note: as stated above, ReadyFn is called after the server
-		// has started listening on its socket, but possibly before
-		// the cluster has been initialized and can start processing requests.
-		// This is OK for SQL clients, as the connection will be accepted
-		// by the network listener and will just wait/suspend until
-		// the cluster initializes, at which point it will be picked up
-		// and let the client go through, transparently.)
-		if startCtx.listeningURLFile != "" {
-			log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
-			// (Re-)compute the client connection URL. We cannot do this
-			// earlier (e.g. above, in the runStart function) because
-			// at this time the address and port have not been resolved yet.
-			clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
-			pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
-			if err != nil {
-				log.Errorf(ctx, "failed computing the URL: %v", err)
-				return
-			}
-
-			if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
-				log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
-			}
-		}
-
-		if waitForInit {
-			log.Ops.Shout(ctx, severity.INFO,
-				"initial startup completed.\n"+
-					"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
-					"Client connections will be accepted after this completes successfully.\n"+
-					"Check the log file(s) for progress. ")
-		}
-
-		// Ensure the configuration logging is written to disk in case a
-		// process is waiting for the sdnotify readiness to read important
-		// information from there.
-		log.Flush()
-
-		// Signal readiness. This unblocks the process when running with
-		// --background or under systemd.
-		if err := sdnotify.Ready(); err != nil {
-			log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
-		}
-	}
+	serverCfg.ReadyFn = func(waitForInit bool) { reportReadinessExternally(ctx, cmd, waitForInit) }
 
 	// DelayedBootstrapFn will be called if the bootstrap process is
 	// taking a bit long.
@@ -571,14 +588,57 @@ If problems persist, please see %s.`
 
 	// Beyond this point, the configuration is set and the server is
 	// ready to start.
-	log.Ops.Info(ctx, "starting cockroach node")
 
 	// Run the rest of the startup process in a goroutine separate from
 	// the main goroutine to avoid preventing proper handling of signals
 	// if we get stuck on something during initialization (#10138).
+
+	srvStatus, serverShutdownReqC := createAndStartServerAsync(ctx,
+		tBegin, &serverCfg, stopper, startupSpan, newServerFn, maybeRunInitialSQL, serverType)
+
+	return waitForShutdown(
+		// NB: we delay the access to s, as it is assigned
+		// asynchronously in a goroutine above.
+		stopper, serverShutdownReqC, signalCh,
+		srvStatus)
+}
+
+// createAndStartServerAsync starts an async goroutine which instantiates
+// the server and starts it.
+// We run it in a separate goroutine because the instantiation&start
+// could block, and we want to retain the option to start shutting down
+// the process (e.g. via Ctrl+C on the terminal) even in that case.
+// The shutdown logic thus starts running asynchronously, via waitForShutdown,
+// concurrently with createAndStartServerAsync.
+//
+// The arguments are as follows:
+//   - tBegin: time when startup began; used to report statistics at the end of startup.
+//   - serverCfg: the server configuration.
+//   - stopper: the stopper used to start all the async tasks. This is the stopper
+//     used by the shutdown logic.
+//   - startupSpan: the tracing span for the context that was started earlier
+//     during startup. It needs to be finalized when the async goroutine completes.
+//   - newServerFn: a constructor function for the server object.
+//   - maybeRunInitialSQL: a callback that will be called after the server has
+//     initialized, but before it starts accepting clients.
+//   - serverType: a title used for the type of server. This is used
+//     when reporting the startup messages on the terminal & logs.
+func createAndStartServerAsync(
+	ctx context.Context,
+	tBegin time.Time,
+	serverCfg *server.Config,
+	stopper *stop.Stopper,
+	startupSpan *tracing.Span,
+	newServerFn newServerFn,
+	maybeRunInitialSQL func(context.Context, serverStartupInterface) error,
+	serverType redact.SafeString,
+) (srvStatus *serverStatus, serverShutdownReqC <-chan server.ShutdownRequest) {
 	var serverStatusMu serverStatus
-	var s *server.Server
+	var s serverStartupInterface
 	shutdownReqC := make(chan server.ShutdownRequest, 1)
+
+	log.Ops.Infof(ctx, "starting cockroach %s", serverType)
+
 	go func() {
 		// Ensure that the log files see the startup messages immediately.
 		defer log.Flush()
@@ -594,15 +654,14 @@ If problems persist, please see %s.`
 				logcrash.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
 			}
 		}()
-		// When the start up goroutine completes, so can the start up span
-		// defined above.
+		// When the start up goroutine completes, so can the start up span.
 		defer startupSpan.Finish()
 
 		// Any error beyond this point is reported through shutdownReqC.
 		if err := func() error {
 			// Instantiate the server.
 			var err error
-			s, err = server.NewServer(serverCfg, stopper)
+			s, err = newServerFn(ctx, *serverCfg, stopper)
 			if err != nil {
 				return errors.Wrap(err, "failed to start server")
 			}
@@ -651,11 +710,10 @@ If problems persist, please see %s.`
 			}
 			initialStart := s.InitialStart()
 
-			// Run SQL for new clusters.
-			// TODO(knz): If/when we want auto-creation of an initial admin user,
-			// this can be achieved here.
-			if err := runInitialSQL(ctx, s, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {
-				return err
+			if maybeRunInitialSQL != nil {
+				if err := maybeRunInitialSQL(ctx, s); err != nil {
+					return err
+				}
 			}
 
 			// Now let SQL clients in.
@@ -665,8 +723,8 @@ If problems persist, please see %s.`
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
-			return reportServerInfo(ctx, tBegin, &serverCfg, s.ClusterSettings(),
-				true /* isHostNode */, initialStart, uuid.UUID{} /* tenantClusterID */)
+			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
+				serverType, initialStart, s.LogicalClusterID())
 		}(); err != nil {
 			shutdownReqC <- server.MakeShutdownRequest(
 				server.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))
@@ -683,7 +741,9 @@ If problems persist, please see %s.`
 		}
 	}()
 
-	return waitForShutdown(stopper, shutdownReqC, signalCh, &serverStatusMu)
+	serverShutdownReqC = shutdownReqC
+	srvStatus = &serverStatusMu
+	return srvStatus, serverShutdownReqC
 }
 
 // serverStatus coordinates the async goroutine that starts the server
@@ -752,6 +812,7 @@ func (s *serverStatus) startShutdown() (bool, serverShutdownInterface, *stop.Sto
 type serverShutdownInterface interface {
 	AnnotateCtx(context.Context) context.Context
 	Drain(ctx context.Context, verbose bool) (uint64, redact.RedactableString, error)
+	ShutdownRequested() <-chan server.ShutdownRequest
 }
 
 // waitForShutdown blocks until interrupted by a shutdown signal, which can come
@@ -766,7 +827,7 @@ type serverShutdownInterface interface {
 func waitForShutdown(
 	stopper *stop.Stopper,
 	shutdownC <-chan server.ShutdownRequest,
-	signalCh chan os.Signal,
+	signalCh <-chan os.Signal,
 	serverStatusMu *serverStatus,
 ) (returnErr error) {
 	shutdownCtx, shutdownSpan := serverCfg.AmbientCtx.AnnotateCtxWithSpan(context.Background(), "server shutdown")
@@ -1000,17 +1061,13 @@ func reportServerInfo(
 	startTime time.Time,
 	serverCfg *server.Config,
 	st *cluster.Settings,
-	isHostNode, initialStart bool,
+	serverType redact.SafeString,
+	initialStart bool,
 	tenantClusterID uuid.UUID,
 ) error {
-	srvS := redact.SafeString("SQL server")
-	if isHostNode {
-		srvS = "node"
-	}
-
 	var buf redact.StringBuilder
 	info := build.GetInfo()
-	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", srvS, timeutil.Now(), timeutil.Since(startTime).Seconds())
+	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", serverType, timeutil.Now(), timeutil.Since(startTime).Seconds())
 	buf.Printf("build:\t%s %s @ %s (%s)\n",
 		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
 	buf.Printf("webui:\t%s\n", log.SafeManaged(serverCfg.AdminURL()))
@@ -1066,14 +1123,14 @@ func reportServerInfo(
 		buf.Printf("cluster name:\t%s\n", log.SafeManaged(baseCfg.ClusterName))
 	}
 	clusterID := serverCfg.BaseConfig.ClusterIDContainer.Get()
-	if tenantClusterID.Equal(uuid.Nil) {
+	if tenantClusterID.Equal(clusterID) {
 		buf.Printf("clusterID:\t%s\n", log.SafeManaged(clusterID))
 	} else {
 		buf.Printf("storage clusterID:\t%s\n", log.SafeManaged(clusterID))
 		buf.Printf("tenant clusterID:\t%s\n", log.SafeManaged(tenantClusterID))
 	}
 	nodeID := serverCfg.BaseConfig.IDContainer.Get()
-	if isHostNode {
+	if serverCfg.SQLConfig.TenantID.IsSystem() {
 		if initialStart {
 			if nodeID == kvserver.FirstNodeID {
 				buf.Printf("status:\tinitialized new cluster\n")
@@ -1108,7 +1165,7 @@ func reportServerInfo(
 		return err
 	}
 	msgS := msg.ToString()
-	log.Ops.Infof(ctx, "%s startup completed:\n%s", srvS, msgS)
+	log.Ops.Infof(ctx, "%s startup completed:\n%s", serverType, msgS)
 	if !startCtx.inBackground && !log.LoggingToStderr(severity.INFO) {
 		fmt.Print(msgS.StripMarkers())
 	}
@@ -1142,8 +1199,13 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 				"This feature will be removed in the next version of CockroachDB.")
 	}
 
-	listenAddrSpecified := pf.Lookup(cliflags.ListenAddr.Name).Changed || pf.Lookup(cliflags.ServerHost.Name).Changed
-	advAddrSpecified := pf.Lookup(cliflags.AdvertiseAddr.Name).Changed || pf.Lookup(cliflags.AdvertiseHost.Name).Changed
+	changed := func(flagName string) bool {
+		fl := pf.Lookup(cliflags.ListenAddr.Name)
+		return fl != nil && fl.Changed
+	}
+
+	listenAddrSpecified := changed(cliflags.ListenAddr.Name) || changed(cliflags.ServerHost.Name)
+	advAddrSpecified := changed(cliflags.AdvertiseAddr.Name) || changed(cliflags.AdvertiseHost.Name)
 	if !listenAddrSpecified && !advAddrSpecified {
 		host, _, _ := net.SplitHostPort(serverCfg.AdvertiseAddr)
 		log.Ops.Shoutf(ctx, severity.WARNING,
@@ -1332,5 +1394,70 @@ func initGEOS(ctx context.Context) {
 			log.SafeManaged(err))
 	} else {
 		log.Ops.Infof(ctx, "GEOS loaded from directory %s", log.SafeManaged(loc))
+	}
+}
+
+// reportReadinessExternally reports when the server has finished initializing
+// and is ready to receive requests. This is useful for other processes on the
+// same machine (e.g. a process manager, a test) that are waiting for a signal
+// that they can start monitoring or using the server process.
+func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForInit bool) {
+	// Inform the user if the network settings are suspicious. We need
+	// to do that after starting to listen because we need to know
+	// which advertise address NewServer() has decided.
+	hintServerCmdFlags(ctx, cmd)
+
+	// If another process was waiting on the PID (e.g. using a FIFO),
+	// this is when we can tell them the node has started listening.
+	if startCtx.pidFile != "" {
+		log.Ops.Infof(ctx, "PID file: %s", startCtx.pidFile)
+		if err := os.WriteFile(startCtx.pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644); err != nil {
+			log.Ops.Errorf(ctx, "failed writing the PID: %v", err)
+		}
+	}
+
+	// If the invoker has requested an URL update, do it now that
+	// the server is ready to accept SQL connections.
+	// (Note: as stated above, ReadyFn is called after the server
+	// has started listening on its socket, but possibly before
+	// the cluster has been initialized and can start processing requests.
+	// This is OK for SQL clients, as the connection will be accepted
+	// by the network listener and will just wait/suspend until
+	// the cluster initializes, at which point it will be picked up
+	// and let the client go through, transparently.)
+	if startCtx.listeningURLFile != "" {
+		log.Ops.Infof(ctx, "listening URL file: %s", startCtx.listeningURLFile)
+		// (Re-)compute the client connection URL. We cannot do this
+		// earlier (e.g. above, in the runStart function) because
+		// at this time the address and port have not been resolved yet.
+		clientConnOptions, serverParams := makeServerOptionsForURL(&serverCfg)
+		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
+		if err != nil {
+			log.Errorf(ctx, "failed computing the URL: %v", err)
+			return
+		}
+
+		if err = os.WriteFile(startCtx.listeningURLFile, []byte(fmt.Sprintf("%s\n", pgURL.ToPQ())), 0644); err != nil {
+			log.Ops.Errorf(ctx, "failed writing the URL: %v", err)
+		}
+	}
+
+	if waitForInit {
+		log.Ops.Shout(ctx, severity.INFO,
+			"initial startup completed.\n"+
+				"Node will now attempt to join a running cluster, or wait for `cockroach init`.\n"+
+				"Client connections will be accepted after this completes successfully.\n"+
+				"Check the log file(s) for progress. ")
+	}
+
+	// Ensure the configuration logging is written to disk in case a
+	// process is waiting for the sdnotify readiness to read important
+	// information from there.
+	log.Flush()
+
+	// Signal readiness. This unblocks the process when running with
+	// --background or under systemd.
+	if err := sdnotify.Ready(); err != nil {
+		log.Ops.Errorf(ctx, "failed to signal readiness using systemd protocol: %s", err)
 	}
 }
