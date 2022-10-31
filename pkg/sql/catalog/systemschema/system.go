@@ -287,7 +287,7 @@ CREATE TABLE system.comments (
    object_id INT NOT NULL,    -- object ID, this will be usually db/table desc ID
    sub_id    INT NOT NULL,    -- sub ID for column or indexes inside table, 0 for pure table
    comment   STRING NOT NULL, -- the comment
-   CONSTRAINT "primary" PRIMARY KEY (type, object_id, sub_id)
+   CONSTRAINT "primary" PRIMARY KEY (object_id, type, sub_id)
 );`
 
 	// reports_meta stores reports metadata
@@ -1554,9 +1554,9 @@ var (
 				Name:                "primary",
 				ID:                  1,
 				Unique:              true,
-				KeyColumnNames:      []string{"type", "object_id", "sub_id"},
+				KeyColumnNames:      []string{"object_id", "type", "sub_id"},
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
-				KeyColumnIDs:        []descpb.ColumnID{1, 2, 3},
+				KeyColumnIDs:        []descpb.ColumnID{2, 1, 3},
 			},
 		),
 		func(tbl *descpb.TableDescriptor) {

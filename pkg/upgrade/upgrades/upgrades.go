@@ -169,6 +169,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		addTenantNameColumnAndSystemTenantEntry,
 	),
+	upgrade.NewTenantUpgrade("alter primary key of system.comments to be (object_id, type, sub_id)",
+		toCV(clusterversion.V23_1CommentsSystemTableUseNewPrimaryKey),
+		NoPrecondition,
+		alterSystemCommentsPrimaryKey,
+	),
 }
 
 func init() {

@@ -318,6 +318,9 @@ const (
 	// TenantNames adds a name column to system.tenants.
 	V23_1TenantNames
 
+	// system.comments table uses (object_id, type, sub_id) as the new primary key.
+	V23_1CommentsSystemTableUseNewPrimaryKey
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -519,6 +522,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     V23_1CommentsSystemTableUseNewPrimaryKey,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************
