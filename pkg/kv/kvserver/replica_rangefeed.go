@@ -708,10 +708,9 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 				// closed timestamps, which would otherwise potentially launch a huge
 				// number of lease acquisitions all at once.
 				select {
-				case <-ctx.Done():
-					// Don't need to do this anymore.
-					return
 				case m.RangeFeedSlowClosedTimestampNudgeSem <- struct{}{}:
+				case <-r.store.stopper.ShouldQuiesce():
+					return
 				}
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
