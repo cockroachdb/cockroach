@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -124,7 +123,6 @@ type RangeDescriptorDB interface {
 type RangeCache struct {
 	st      *cluster.Settings
 	stopper *stop.Stopper
-	tracer  *tracing.Tracer
 	// RangeDescriptorDB is used to retrieve range descriptors from the
 	// database, which will be cached by this structure.
 	db RangeDescriptorDB
@@ -140,7 +138,7 @@ type RangeCache struct {
 	// lookup requests for the same inferred range descriptor to be
 	// multiplexed onto the same database lookup. See makeLookupRequestKey
 	// for details on this inference.
-	lookupRequests singleflight.Group
+	lookupRequests *singleflight.Group
 
 	// coalesced, if not nil, is sent on every time a request is coalesced onto
 	// another in-flight one. Used by tests to block until a lookup request is
@@ -223,13 +221,12 @@ func makeLookupRequestKey(
 // NewRangeCache returns a new RangeCache which uses the given RangeDescriptorDB
 // as the underlying source of range descriptors.
 func NewRangeCache(
-	st *cluster.Settings,
-	db RangeDescriptorDB,
-	size func() int64,
-	stopper *stop.Stopper,
-	tracer *tracing.Tracer,
+	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
 ) *RangeCache {
-	rdc := &RangeCache{st: st, db: db, stopper: stopper, tracer: tracer}
+	rdc := &RangeCache{
+		st: st, db: db, stopper: stopper,
+		lookupRequests: singleflight.NewGroup("range lookup", "lookup"),
+	}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(n int, _, _ interface{}) bool {
@@ -797,23 +794,14 @@ func (rc *RangeCache) tryLookup(
 		}
 	}
 
-	// Fork a context with a new span before reqCtx is captured by the DoChan
-	// closure below; the parent span might get finished by the time the closure
-	// starts. In the "leader" case, the closure will take ownership of the new
-	// span.
-	reqCtx, reqSpan := tracing.EnsureChildSpan(ctx, rc.tracer, "range lookup")
-	resC, leader := rc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
-		defer reqSpan.Finish()
-		var lookupRes lookupResult
-		if err := rc.stopper.RunTaskWithErr(reqCtx, "rangecache: range lookup", func(ctx context.Context) (err error) {
-			// Clear the context's cancelation. This request services potentially many
-			// callers waiting for its result, and using the flight's leader's
-			// cancelation doesn't make sense.
-			ctx, cancel := rc.stopper.WithCancelOnQuiesce(
-				logtags.WithTags(context.Background(), logtags.FromContext(ctx)))
-			defer cancel()
-			ctx = tracing.ContextWithSpan(ctx, reqSpan)
-
+	future, leader := rc.lookupRequests.DoChan(ctx,
+		requestKey,
+		singleflight.DoOpts{
+			Stop:               rc.stopper,
+			InheritCancelation: false,
+		},
+		func(ctx context.Context) (interface{}, error) {
+			var lookupRes lookupResult
 			// Attempt to perform the lookup by reading from a follower. If the
 			// result is too old for the leader of this group, then we'll fall back
 			// to reading from the leaseholder. Note that it's possible that the
@@ -823,21 +811,24 @@ func (rc *RangeCache) tryLookup(
 			// in that goroutine re-fetching.
 			lookupRes.consistency = ReadFromFollower
 			{
+				var err error
 				lookupRes.EvictionToken, err = tryLookupImpl(ctx, rc, key, lookupRes.consistency, useReverseScan)
-				shouldReturnError := err != nil && !errors.Is(err, errFailedToFindNewerDescriptor)
+				if err != nil && !errors.Is(err, errFailedToFindNewerDescriptor) {
+					return nil, err
+				}
 				gotFreshResult := err == nil && !lookupResultIsStale(lookupRes)
-				if shouldReturnError || gotFreshResult {
-					return err
+				if gotFreshResult {
+					return lookupRes, nil
 				}
 			}
+			var err error
 			lookupRes.consistency = ReadFromLeaseholder
 			lookupRes.EvictionToken, err = tryLookupImpl(ctx, rc, key, lookupRes.consistency, useReverseScan)
-			return err
-		}); err != nil {
-			return nil, err
-		}
-		return lookupRes, nil
-	})
+			if err != nil {
+				return nil, err
+			}
+			return lookupRes, nil
+		})
 
 	// We must use DoChan above so that we can always unlock this mutex. This must
 	// be done *after* the request has been added to the lookupRequests group, or
@@ -849,19 +840,10 @@ func (rc *RangeCache) tryLookup(
 		if rc.coalesced != nil {
 			rc.coalesced <- struct{}{}
 		}
-		// In the leader case, the callback takes ownership of reqSpan. If we're not
-		// the leader, we've created the span for no reason and have to finish it.
-		reqSpan.Finish()
 	}
 
 	// Wait for the inflight request.
-	var res singleflight.Result
-	select {
-	case res = <-resC:
-	case <-ctx.Done():
-		return EvictionToken{}, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
-	}
-
+	res := future.WaitForResult(ctx)
 	var s string
 	if res.Err != nil {
 		s = res.Err.Error()
