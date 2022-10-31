@@ -27,6 +27,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	mockTime := time.Date(2000, 1, 1, 13, 30, 45, 0, time.UTC)
+	mockDuration := -10 * time.Second
 
 	type iteration struct {
 		expectedQuery string
@@ -49,14 +50,14 @@ func TestSelectQueryBuilder(t *testing.T) {
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 					endPK:   tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
-				mockTime,
+				mockDuration,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) >= ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
@@ -73,7 +74,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
@@ -90,7 +91,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
@@ -112,14 +113,14 @@ LIMIT 2`,
 				[]string{"col1", "col2"},
 				"table_name",
 				spanToProcess{},
-				mockTime,
+				mockDuration,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 
 ORDER BY col1, col2
@@ -134,7 +135,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
@@ -150,7 +151,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
@@ -174,14 +175,14 @@ LIMIT 2`,
 					startPK: tree.Datums{tree.NewDInt(100)},
 					endPK:   tree.Datums{tree.NewDInt(181)},
 				},
-				mockTime,
+				mockDuration,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1) >= ($3) AND (col1) < ($2)
 ORDER BY col1, col2
@@ -198,7 +199,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
 ORDER BY col1, col2
@@ -215,7 +216,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($3, $4) AND (col1) < ($2)
 ORDER BY col1, col2
@@ -239,14 +240,14 @@ LIMIT 2`,
 				spanToProcess{
 					endPK: tree.Datums{tree.NewDInt(200), tree.NewDInt(15)},
 				},
-				mockTime,
+				mockDuration,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
  AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
@@ -262,7 +263,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
@@ -279,7 +280,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($4, $5) AND (col1, col2) < ($2, $3)
 ORDER BY col1, col2
@@ -303,14 +304,14 @@ LIMIT 2`,
 				spanToProcess{
 					startPK: tree.Datums{tree.NewDInt(100), tree.NewDInt(5)},
 				},
-				mockTime,
+				mockDuration,
 				2,
 				colinfo.TTLDefaultExpirationColumnName,
 			),
 			iterations: []iteration{
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) >= ($2, $3)
 ORDER BY col1, col2
@@ -326,7 +327,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
@@ -342,7 +343,7 @@ LIMIT 2`,
 				},
 				{
 					expectedQuery: `SELECT col1, col2 FROM [1 AS tbl_name]
-AS OF SYSTEM TIME '2000-01-01 13:30:45+00:00'
+AS OF SYSTEM TIME INTERVAL '-10 seconds'
 WHERE crdb_internal_expiration <= $1
 AND (col1, col2) > ($2, $3)
 ORDER BY col1, col2
