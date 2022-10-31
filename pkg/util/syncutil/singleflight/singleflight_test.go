@@ -17,6 +17,7 @@
 package singleflight
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -27,8 +28,9 @@ import (
 )
 
 func TestDo(t *testing.T) {
-	var g Group
-	v, _, err := g.Do("key", func() (interface{}, error) {
+	ctx := context.Background()
+	g := NewGroup("test", "test")
+	v, _, err := g.Do(ctx, "key", func(context.Context) (interface{}, error) {
 		return "bar", nil
 	})
 	res := Result{Val: v, Err: err}
@@ -36,21 +38,24 @@ func TestDo(t *testing.T) {
 }
 
 func TestDoChan(t *testing.T) {
-	var g Group
-	resC, leader := g.DoChan("key", func() (interface{}, error) {
+	ctx := context.Background()
+	g := NewGroup("test", "test")
+	res, leader := g.DoChan(ctx, "key", DoOpts{}, func(context.Context) (interface{}, error) {
 		return "bar", nil
 	})
+	defer res.ReaderClose()
 	if !leader {
 		t.Errorf("DoChan returned not leader, expected leader")
 	}
-	res := <-resC
-	assertRes(t, res, false)
+	result := <-res.C()
+	assertRes(t, result, false)
 }
 
 func TestDoErr(t *testing.T) {
-	var g Group
+	ctx := context.Background()
+	g := NewGroup("test", "test")
 	someErr := errors.New("Some error")
-	v, _, err := g.Do("key", func() (interface{}, error) {
+	v, _, err := g.Do(ctx, "key", func(context.Context) (interface{}, error) {
 		return nil, someErr
 	})
 	if !errors.Is(err, someErr) {
@@ -62,11 +67,12 @@ func TestDoErr(t *testing.T) {
 }
 
 func TestDoDupSuppress(t *testing.T) {
-	var g Group
+	ctx := context.Background()
+	g := NewGroup("test", "key")
 	var wg1, wg2 sync.WaitGroup
 	c := make(chan string, 1)
 	var calls int32
-	fn := func() (interface{}, error) {
+	fn := func(context.Context) (interface{}, error) {
 		if atomic.AddInt32(&calls, 1) == 1 {
 			// First invocation.
 			wg1.Done()
@@ -87,7 +93,7 @@ func TestDoDupSuppress(t *testing.T) {
 		go func() {
 			defer wg2.Done()
 			wg1.Done()
-			v, _, err := g.Do("key", fn)
+			v, _, err := g.Do(ctx, "key", fn)
 			if err != nil {
 				t.Errorf("Do error: %v", err)
 				return
@@ -109,43 +115,49 @@ func TestDoDupSuppress(t *testing.T) {
 
 func TestDoChanDupSuppress(t *testing.T) {
 	c := make(chan struct{})
-	fn := func() (interface{}, error) {
+	fn := func(context.Context) (interface{}, error) {
 		<-c
 		return "bar", nil
 	}
 
-	var g Group
-	resC1, leader1 := g.DoChan("key", fn)
+	ctx := context.Background()
+	g := NewGroup("test", "key")
+	res1, leader1 := g.DoChan(ctx, "key", DoOpts{}, fn)
+	defer res1.ReaderClose()
 	if !leader1 {
 		t.Errorf("DoChan returned not leader, expected leader")
 	}
 
-	resC2, leader2 := g.DoChan("key", fn)
+	res2, leader2 := g.DoChan(ctx, "key", DoOpts{}, fn)
+	defer res2.ReaderClose()
 	if leader2 {
 		t.Errorf("DoChan returned leader, expected not leader")
 	}
 
 	close(c)
-	for _, res := range []Result{<-resC1, <-resC2} {
+	for _, res := range []Result{<-res1.C(), <-res2.C()} {
 		assertRes(t, res, true)
 	}
 }
 
 func TestNumCalls(t *testing.T) {
 	c := make(chan struct{})
-	fn := func() (interface{}, error) {
+	fn := func(ctx context.Context) (interface{}, error) {
 		<-c
 		return "bar", nil
 	}
-	var g Group
+	ctx := context.Background()
+	g := NewGroup("test", "key")
 	assertNumCalls(t, g.NumCalls("key"), 0)
-	resC1, _ := g.DoChan("key", fn)
+	resC1, _ := g.DoChan(ctx, "key", DoOpts{}, fn)
+	defer resC1.ReaderClose()
 	assertNumCalls(t, g.NumCalls("key"), 1)
-	resC2, _ := g.DoChan("key", fn)
+	resC2, _ := g.DoChan(ctx, "key", DoOpts{}, fn)
+	defer resC2.ReaderClose()
 	assertNumCalls(t, g.NumCalls("key"), 2)
 	close(c)
-	<-resC1
-	<-resC2
+	<-resC1.C()
+	<-resC2.C()
 	assertNumCalls(t, g.NumCalls("key"), 0)
 }
 

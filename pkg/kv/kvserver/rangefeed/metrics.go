@@ -46,7 +46,7 @@ type Metrics struct {
 	RangeFeedBudgetBlocked    *metric.Counter
 
 	RangeFeedSlowClosedTimestampLogN  log.EveryN
-	RangeFeedSlowClosedTimestampNudge singleflight.Group
+	RangeFeedSlowClosedTimestampNudge *singleflight.Group
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something

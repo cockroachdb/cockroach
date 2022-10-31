@@ -69,7 +69,7 @@ type Connector struct {
 	rpcContext      *rpc.Context
 	rpcRetryOptions retry.Options
 	rpcDialTimeout  time.Duration // for testing
-	rpcDial         singleflight.Group
+	rpcDial         *singleflight.Group
 	defaultZoneCfg  *zonepb.ZoneConfig
 	addrs           []string
 
@@ -140,6 +140,7 @@ func NewConnector(cfg kvtenant.ConnectorConfig, addrs []string) *Connector {
 		tenantID:        cfg.TenantID,
 		AmbientContext:  cfg.AmbientCtx,
 		rpcContext:      cfg.RPCContext,
+		rpcDial:         singleflight.NewGroup("dial tenant connector", singleflight.NoTags),
 		rpcRetryOptions: cfg.RPCRetryOptions,
 		defaultZoneCfg:  cfg.DefaultZoneConfig,
 		addrs:           addrs,
@@ -584,34 +585,39 @@ func (c *Connector) withClient(
 // blocks until either a connection is successfully established or the provided
 // context is canceled.
 func (c *Connector) getClient(ctx context.Context) (*client, error) {
+	ctx = c.AnnotateCtx(ctx)
 	c.mu.RLock()
 	if client := c.mu.client; client != nil {
 		c.mu.RUnlock()
 		return client, nil
 	}
-	ch, _ := c.rpcDial.DoChan("dial", func() (interface{}, error) {
-		dialCtx := c.AnnotateCtx(context.Background())
-		dialCtx, cancel := c.rpcContext.Stopper.WithCancelOnQuiesce(dialCtx)
-		defer cancel()
-		var client *client
-		err := c.rpcContext.Stopper.RunTaskWithErr(dialCtx, "kvtenant.Connector: dial",
-			func(ctx context.Context) error {
-				var err error
-				client, err = c.dialAddrs(ctx)
-				return err
-			})
-		if err != nil {
-			return nil, err
-		}
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		c.mu.client = client
-		return client, nil
-	})
+	res, _ := c.rpcDial.DoChan(ctx,
+		"dial",
+		singleflight.DoOpts{
+			Stop:               c.rpcContext.Stopper,
+			InheritCancelation: false,
+		},
+		func(ctx context.Context) (interface{}, error) {
+			var client *client
+			err := c.rpcContext.Stopper.RunTaskWithErr(ctx, "kvtenant.Connector: dial",
+				func(ctx context.Context) error {
+					var err error
+					client, err = c.dialAddrs(ctx)
+					return err
+				})
+			if err != nil {
+				return nil, err
+			}
+			c.mu.Lock()
+			defer c.mu.Unlock()
+			c.mu.client = client
+			return client, nil
+		})
+	defer res.ReaderClose()
 	c.mu.RUnlock()
 
 	select {
-	case res := <-ch:
+	case res := <-res.C():
 		if res.Err != nil {
 			return nil, res.Err
 		}

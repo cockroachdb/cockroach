@@ -50,7 +50,7 @@ import (
 // and re-construct the immutable descriptors in most cases.
 type Cache struct {
 	settings *cluster.Settings
-	g        singleflight.Group
+	g        *singleflight.Group
 	metrics  Metrics
 	mu       struct {
 		syncutil.Mutex
@@ -160,6 +160,7 @@ var CacheSize = settings.RegisterIntSetting(
 func NewCache(settings *cluster.Settings) *Cache {
 	c := &Cache{
 		settings: settings,
+		g:        singleflight.NewGroup("get-hydrated-descriptor", "key"),
 		metrics:  makeMetrics(),
 	}
 	c.mu.cache = cache.NewOrderedCache(cache.Config{
@@ -349,7 +350,7 @@ func (c *Cache) GetHydratedDescriptor(
 		// should return it. Other goroutines will have to go back around and
 		// attempt to read from the cache.
 		var called bool
-		res, _, err := c.g.Do(groupKey, func() (interface{}, error) {
+		res, _, err := c.g.Do(ctx, groupKey, func(ctx context.Context) (interface{}, error) {
 			called = true
 			cachedRes := cachedTypeDescriptorResolver{
 				underlying: res,
