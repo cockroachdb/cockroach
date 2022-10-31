@@ -391,3 +391,27 @@ type StatsRefresher interface {
 	// statistics updated.
 	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
 }
+
+// ProtectedTimestampForJobCleaner cleans up any protected timestamp installed
+// or about to be installed for a job.
+type ProtectedTimestampForJobCleaner interface {
+	// WaitAndMaybeUnprotect cleans up the protected timestamp and the go
+	// routine for setting it up
+	WaitAndMaybeUnprotect(ctx context.Context) error
+}
+
+// ProtectedTimestampForJobProvider used to install a protected timestamp before
+// the GC interval is encountered.
+type ProtectedTimestampForJobProvider interface {
+	// Protect adds a protected timestamp record for a historical
+	// transaction for a specific table, once a certain percentage of the GC time has
+	// elapsed.
+	Protect(
+		ctx context.Context, jobID jobspb.JobID, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+	) ProtectedTimestampForJobCleaner
+
+	// Unprotect unprotects just based on a job ID, mainly for last resort cleanup.
+	// Note: This should only be used for job cleanup if its not currently,
+	// executing.
+	Unprotect(ctx context.Context, jobID jobspb.JobID) error
+}
