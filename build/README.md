@@ -167,8 +167,21 @@ file on your local branch, 2) push a commit containing this import to the `vendo
    important and non-optional.
 2. In `cockroachdb/cockroach`, switch to the local branch you plan to import the external package
    into
-3. Run `go get -u <dependency>`. To get a specific version, run `go get -u
+3. Run `go get <dependency>@latest`. To get a specific version, run `go get
    <dependency>@<version|branch|sha>`. You should see changes in `go.mod` when running `git diff`.
+
+   Beware of not using `-u` (e.g. `go get -u`) as the `-u` flag also
+   attempts to upgrade any indirect dependency from yours. We do not
+   want (generally) to bundle indirect dep upgrades, which might
+   include critical infrastructure packages like grpc, in the same PR
+   as specific dep updates/installations. See the wiki page linked
+   above for details.
+
+   If the `go get` command still results in updates to important
+   infrastructure dependencies besides the one you want to install,
+   proceed as per the section "Upgrading important infrastructure
+   dependencies" below.
+
 4. Import the dependency to a go file in `cockroachdb/cockroach`. You may use an anonymous
    import, e.g. `import _ "golang.org/api/compute/v1"`, if you haven't written any code that
    references the dependency. This ensures cockroach's make file will properly add the package(s) to the vendor directory. Note that IDEs may bicker that
@@ -191,6 +204,12 @@ file on your local branch, 2) push a commit containing this import to the `vendo
 
 Follow the instructions for [Installing a Dependency](#installing-a-dependency).
 
+Beware of not using `-u` (e.g. `go get -u`) as the `-u` flag also
+attempts to upgrade any indirect dependency from yours. We do not
+want (generally) to bundle indirect dep upgrades, which might
+include critical infrastructure packages like grpc, in the same PR
+as specific dep upgrades. See the wiki page linked above for details.
+
 Note:
 
 - You will still need to pay extra attention to the licensing step as
@@ -200,9 +219,37 @@ Note:
   re-download the module, step 2 above.
 - If you're only updating the package version, you probably don't need to update the import
   statements, step 3 above.
+- If the `go get` command results in updates to important
+  infrastructure dependencies besides the one you want to install,
+  proceed as per "Upgrading important infrastructure dependencies"
+  below.
 
 When [pushing the dependency to the `vendored` submodule](#pushing-the-dependency-to-the-vendored-submodule), you may either checkout a new branch, or create a new commit in the original branch you used to publicize the vendor
   dependency.
+
+### Updating important infrastructure dependencies
+
+Sometimes a key, infrastructure-like dependency is upgraded as a
+side-effect of (attempting to) installing or upgrading a more
+lightweight dependency. See the [wiki
+page](https://wiki.crdb.io/wiki/spaces/CRDB/pages/181862804/Adding+Updating+and+Deleting+external+dependencies#Reviewing-for-architectural-impact-of-key-dependencies)
+for a list of what we consider key dependencies.
+
+When this happens, we want to solicit more review scrutiny on this change.
+
+To achieve this, proceed as follows:
+
+1. If coming from the sections "Installing a new dep" or "updating a
+   dep" above, check out a branch/commit prior to the original dep
+   install/update you wanted to perform.
+2. Perform the `go get ...@<version>` command only for those
+   key dependencies you want/need to upgrade.
+3. Proceed as per the rest of "Installing a new dependency" from step
+   5 onwards.
+4. Commit the result with a descriptive title, e.g. "deps: upgrade XXX
+   to version YYY".
+5. Push this change in a PR (also with a descriptive title), then
+   solicit a review.
 
 ### Removing a dependency
 
