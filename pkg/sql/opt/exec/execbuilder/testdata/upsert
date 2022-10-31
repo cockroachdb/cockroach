@@ -672,6 +672,11 @@ statement ok
 CREATE TABLE tu (a INT PRIMARY KEY, b INT, c INT, d INT, FAMILY (a), FAMILY (b), FAMILY (c,d));
   INSERT INTO tu VALUES (1, 2, 3, 4)
 
+# Force the leasing of the `tu` descriptor, otherwise the trace below is
+# polluted.
+statement ok
+SELECT 1 FROM tu;
+
 statement ok
 SET tracing = on,kv,results; UPSERT INTO tu VALUES (1, NULL, NULL, NULL); SET tracing = off
 
