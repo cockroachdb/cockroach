@@ -13,10 +13,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -69,4 +73,15 @@ func (p *planner) CompleteReplicationStream(
 	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
 ) error {
 	return streamproducer.CompleteReplicationStream(ctx, p, streamID, successfulIngestion)
+}
+
+func init() {
+	streamclient.TestTableCreator = func(
+		ctx context.Context,
+		parentID, id descpb.ID,
+		schema string,
+		privileges *catpb.PrivilegeDescriptor,
+	) (*tabledesc.Mutable, error) {
+		return CreateTestTableDescriptor(ctx, parentID, id, schema, privileges, nil /* txn */, nil /* collection */)
+	}
 }
