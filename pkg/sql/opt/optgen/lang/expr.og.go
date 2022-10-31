@@ -1133,7 +1133,7 @@ func (e *LetExpr) ChildName(nth int) string {
 	case 1:
 		return "Target"
 	case 2:
-		return "Result"
+		return "WaitForResult"
 	}
 	return ""
 }

@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -491,55 +492,51 @@ func acquireNodeLease(
 	ctx context.Context, m *Manager, id descpb.ID, typ AcquireType,
 ) (bool, error) {
 	start := timeutil.Now()
-	log.VEventf(ctx, 2, "acquiring lease for descriptor %d", id)
+	log.VEventf(ctx, 2, "acquiring lease for descriptor %d...", id)
 	var toRelease *storedLease
-	resultChan, didAcquire := m.storage.group.DoChan(fmt.Sprintf("acquire%d", id), func() (interface{}, error) {
-		// Note that we use a new `context` here to avoid a situation where a cancellation
-		// of the first context cancels other callers to the `acquireNodeLease()` method,
-		// because of its use of `singleflight.Group`. See issue #41780 for how this has
-		// happened.
-		lt := logtags.FromContext(ctx)
-		ctx, cancel := m.stopper.WithCancelOnQuiesce(logtags.AddTags(m.ambientCtx.AnnotateCtx(context.Background()), lt))
-		defer cancel()
-		if m.IsDraining() {
-			return nil, errors.New("cannot acquire lease when draining")
-		}
-		newest := m.findNewest(id)
-		var minExpiration hlc.Timestamp
-		if newest != nil {
-			minExpiration = newest.getExpiration()
-		}
-		desc, expiration, err := m.storage.acquire(ctx, minExpiration, id)
-		if err != nil {
-			return nil, err
-		}
-		t := m.findDescriptorState(id, false /* create */)
-		t.mu.Lock()
-		t.mu.takenOffline = false
-		defer t.mu.Unlock()
-		var newDescVersionState *descriptorVersionState
-		newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration)
-		if err != nil {
-			return nil, err
-		}
-		if newDescVersionState != nil {
-			m.names.insert(newDescVersionState)
-		}
-		if toRelease != nil {
-			releaseLease(ctx, toRelease, m)
-		}
-		return true, nil
-	})
+	future, didAcquire := m.storage.group.DoChan(ctx,
+		strconv.Itoa(int(id)),
+		singleflight.DoOpts{
+			Stop:               m.stopper,
+			InheritCancelation: false,
+		},
+		func(ctx context.Context) (interface{}, error) {
+			if m.IsDraining() {
+				return nil, errors.New("cannot acquire lease when draining")
+			}
+			newest := m.findNewest(id)
+			var minExpiration hlc.Timestamp
+			if newest != nil {
+				minExpiration = newest.getExpiration()
+			}
+			desc, expiration, err := m.storage.acquire(ctx, minExpiration, id)
+			if err != nil {
+				return nil, err
+			}
+			t := m.findDescriptorState(id, false /* create */)
+			t.mu.Lock()
+			t.mu.takenOffline = false
+			defer t.mu.Unlock()
+			var newDescVersionState *descriptorVersionState
+			newDescVersionState, toRelease, err = t.upsertLeaseLocked(ctx, desc, expiration)
+			if err != nil {
+				return nil, err
+			}
+			if newDescVersionState != nil {
+				m.names.insert(newDescVersionState)
+			}
+			if toRelease != nil {
+				releaseLease(ctx, toRelease, m)
+			}
+			return true, nil
+		})
 	if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
 		m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(typ, id)
 	}
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case result := <-resultChan:
-		if result.Err != nil {
-			return false, result.Err
-		}
+	result := future.WaitForResult(ctx)
+	if result.Err != nil {
+		return false, result.Err
+
 	}
 	log.VEventf(ctx, 2, "acquired lease for descriptor %d, took %v", id, timeutil.Since(start))
 	return didAcquire, nil
@@ -718,7 +715,7 @@ func NewLeaseManager(
 			internalExecutor: internalExecutor,
 			settings:         settings,
 			codec:            codec,
-			group:            &singleflight.Group{},
+			group:            singleflight.NewGroup("acquire-lease", "descriptor ID"),
 			testingKnobs:     testingKnobs.LeaseStoreTestingKnobs,
 			outstandingLeases: metric.NewGauge(metric.Metadata{
 				Name:        "sql.leases.active",

@@ -12,9 +12,7 @@ package tracing
 
 import (
 	"fmt"
-	"sort"
 	"strings"
-	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -73,9 +71,19 @@ func (s *spanInner) RecordingType() tracingpb.RecordingType {
 
 func (s *spanInner) SetRecordingType(to tracingpb.RecordingType) {
 	if s.isNoop() {
-		panic(errors.AssertionFailedf("SetVerbose called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
+		panic(errors.AssertionFailedf("SetRecordingType called on NoopSpan; use the WithForceRealSpan option for StartSpan"))
 	}
 	s.crdb.SetRecordingType(to)
+}
+
+// GetTraceRecording returns the span's recording as a Trace.
+//
+// See also GetRecording(), which returns it as a tracingpb.Recording.
+func (s *spanInner) GetTraceRecording(recType tracingpb.RecordingType, finishing bool) Trace {
+	if s.isNoop() {
+		return Trace{}
+	}
+	return s.crdb.GetRecording(recType, finishing)
 }
 
 // GetRecording returns the span's recording.
@@ -85,31 +93,12 @@ func (s *spanInner) SetRecordingType(to tracingpb.RecordingType) {
 func (s *spanInner) GetRecording(
 	recType tracingpb.RecordingType, finishing bool,
 ) tracingpb.Recording {
-	if s.isNoop() {
-		return nil
-	}
-	trace := s.crdb.GetRecording(recType, finishing)
-	spans := trace.Flatten()
-
-	// Sort the spans by StartTime, except the first Span (the root of this
-	// recording) which stays in place.
-	toSort := sortPoolRecordings.Get().(*tracingpb.Recording) // avoids allocations in sort.Sort
-	*toSort = spans[1:]
-	sort.Sort(toSort)
-	*toSort = nil
-	sortPoolRecordings.Put(toSort)
-
-	return spans
+	trace := s.GetTraceRecording(recType, finishing)
+	return trace.ToRecording()
 }
 
-var sortPoolRecordings = sync.Pool{
-	New: func() interface{} {
-		return &tracingpb.Recording{}
-	},
-}
-
-func (s *spanInner) ImportRemoteRecording(remoteRecording tracingpb.Recording) {
-	s.crdb.recordFinishedChildren(treeifyRecording(remoteRecording))
+func (s *spanInner) ImportTrace(trace Trace) {
+	s.crdb.recordFinishedChildren(trace)
 }
 
 func treeifyRecording(rec tracingpb.Recording) Trace {

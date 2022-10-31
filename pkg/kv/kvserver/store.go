@@ -80,6 +80,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/shuffle"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -993,6 +994,8 @@ type Store struct {
 	computeInitialMetrics              sync.Once
 	systemConfigUpdateQueueRateLimiter *quotapool.RateLimiter
 	spanConfigUpdateQueueRateLimiter   *quotapool.RateLimiter
+
+	rangeFeedSlowClosedTimestampNudge *singleflight.Group
 }
 
 var _ kv.Sender = &Store{}
@@ -1213,13 +1216,14 @@ func NewStore(
 	iot := ioThresholds{}
 	iot.Replace(nil, 1.0) // init as empty
 	s := &Store{
-		cfg:          cfg,
-		db:           cfg.DB, // TODO(tschottdorf): remove redundancy.
-		engine:       eng,
-		nodeDesc:     nodeDesc,
-		metrics:      newStoreMetrics(cfg.HistogramWindowInterval),
-		ctSender:     cfg.ClosedTimestampSender,
-		ioThresholds: &iot,
+		cfg:                               cfg,
+		db:                                cfg.DB, // TODO(tschottdorf): remove redundancy.
+		engine:                            eng,
+		nodeDesc:                          nodeDesc,
+		metrics:                           newStoreMetrics(cfg.HistogramWindowInterval),
+		ctSender:                          cfg.ClosedTimestampSender,
+		ioThresholds:                      &iot,
+		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
 	var allocatorStorePool storepool.AllocatorStorePool

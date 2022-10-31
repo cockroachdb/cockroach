@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 )
 
 var (
@@ -45,8 +44,7 @@ type Metrics struct {
 	RangeFeedBudgetExhausted  *metric.Counter
 	RangeFeedBudgetBlocked    *metric.Counter
 
-	RangeFeedSlowClosedTimestampLogN  log.EveryN
-	RangeFeedSlowClosedTimestampNudge singleflight.Group
+	RangeFeedSlowClosedTimestampLogN log.EveryN
 	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
 	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
 	// limit, but it's here to limit the effect on stability in case something
