@@ -24,7 +24,7 @@ const DefaultAOSTDuration = -time.Second * 30
 // SelectTemplate is the format string used to build SELECT queries for the
 // TTL job.
 const SelectTemplate = `SELECT %[1]s FROM [%[2]d AS tbl_name]
-AS OF SYSTEM TIME %[3]s
+AS OF SYSTEM TIME INTERVAL '%[3]d seconds'
 WHERE %[4]s <= $1
 %[5]s%[6]s
 ORDER BY %[1]s

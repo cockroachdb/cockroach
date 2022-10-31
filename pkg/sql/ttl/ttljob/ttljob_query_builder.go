@@ -35,7 +35,7 @@ type selectQueryBuilder struct {
 	selectOpName    string
 	spanToProcess   spanToProcess
 	selectBatchSize int64
-	aost            time.Time
+	aostDuration    time.Duration
 	ttlExpr         catpb.Expression
 
 	// isFirst is true if we have not invoked a query using the builder yet.
@@ -62,7 +62,7 @@ func makeSelectQueryBuilder(
 	pkColumns []string,
 	relationName string,
 	spanToProcess spanToProcess,
-	aost time.Time,
+	aostDuration time.Duration,
 	selectBatchSize int64,
 	ttlExpr catpb.Expression,
 ) selectQueryBuilder {
@@ -84,7 +84,7 @@ func makeSelectQueryBuilder(
 		pkColumns:       pkColumns,
 		selectOpName:    fmt.Sprintf("ttl select %s", relationName),
 		spanToProcess:   spanToProcess,
-		aost:            aost,
+		aostDuration:    aostDuration,
 		selectBatchSize: selectBatchSize,
 		ttlExpr:         ttlExpr,
 
@@ -144,7 +144,7 @@ func (b *selectQueryBuilder) buildQuery() string {
 		ttlbase.SelectTemplate,
 		b.pkColumnNamesSQL,
 		b.tableID,
-		tree.MustMakeDTimestampTZ(b.aost, time.Microsecond),
+		int64(b.aostDuration.Seconds()),
 		b.ttlExpr,
 		filterClause,
 		endFilterClause,

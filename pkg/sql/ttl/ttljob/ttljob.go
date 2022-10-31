@@ -104,6 +104,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 	}
 	aost := details.Cutoff.Add(aostDuration)
 
+	ttlSpecAOST := aost
+	// Set ttlSpec.AOST to 0 to avoid overriding 0 duration in tests.
+	if knobs.AOSTDuration != nil {
+		ttlSpecAOST = time.Time{}
+	}
+
 	var rowLevelTTL catpb.RowLevelTTL
 	var relationName string
 	var entirePKSpan roachpb.Span
@@ -227,9 +233,10 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 		deleteRateLimit := getDeleteRateLimit(settingsValues, rowLevelTTL)
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
-				JobID:                       jobID,
-				RowLevelTTLDetails:          details,
-				AOST:                        aost,
+				JobID:              jobID,
+				RowLevelTTLDetails: details,
+				// Set AOST in case of mixed 22.2.0/22.2.1+ cluster where the job started on a 22.2.1+ node.
+				AOST:                        ttlSpecAOST,
 				TTLExpr:                     ttlExpr,
 				Spans:                       spans,
 				SelectBatchSize:             selectBatchSize,
@@ -238,6 +245,7 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 				LabelMetrics:                rowLevelTTL.LabelMetrics,
 				PreDeleteChangeTableVersion: knobs.PreDeleteChangeTableVersion,
 				PreSelectStatement:          knobs.PreSelectStatement,
+				AOSTDuration:                aostDuration,
 			}
 		}
 

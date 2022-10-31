@@ -218,10 +218,10 @@ func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn *tree.TableName
 		ttlbase.SelectTemplate,
 		pkColumnNamesSQL,
 		tableDesc.GetID(),
-		fmt.Sprintf("'%v'", ttlbase.DefaultAOSTDuration),
+		int64(ttlbase.DefaultAOSTDuration.Seconds()),
 		"<crdb_internal_expiration OR ttl_expiration_expression>",
-		fmt.Sprintf("AND (%s) > (<range start>)", pkColumnNamesSQL),
-		fmt.Sprintf(" AND (%s) < (<range end>)", pkColumnNamesSQL),
+		fmt.Sprintf("AND (%s) > (<span start>)", pkColumnNamesSQL),
+		fmt.Sprintf(" AND (%s) < (<span end>)", pkColumnNamesSQL),
 		"<ttl_select_batch_size>",
 	)
 	deleteQuery := fmt.Sprintf(
@@ -232,7 +232,7 @@ func makeTTLJobDescription(tableDesc catalog.TableDescriptor, tn *tree.TableName
 		"<rows selected above>",
 	)
 	return fmt.Sprintf(`ttl for %s
--- for each range, iterate to find rows:
+-- for each span, iterate to find rows:
 %s
 -- then delete with:
 %s`, tn.FQString(), selectQuery, deleteQuery)
