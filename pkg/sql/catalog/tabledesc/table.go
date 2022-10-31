@@ -331,16 +331,13 @@ func (desc *wrapper) GetAllConstraintInfo() (
 func (desc *wrapper) FindConstraintWithID(
 	id descpb.ConstraintID,
 ) (*descpb.ConstraintDetail, error) {
-	constraintInfo, err := desc.GetConstraintInfo()
+	constraintInfo, err := desc.GetAllConstraintInfo()
 	if err != nil {
 		return nil, err
 	}
-	for _, info := range constraintInfo {
-		if info.ConstraintID == id {
-			return &info, nil
-		}
+	if info, ok := constraintInfo[id]; ok {
+		return &info, nil
 	}
-
 	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
 }
 
