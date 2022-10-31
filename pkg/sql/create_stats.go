@@ -625,13 +625,6 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 				return jobs.MarkAsRetryJobError(err)
 			}
 
-			// We can't re-use the txn from above since it has a fixed timestamp set on
-			// it, and our write will be into the behind.
-			txnForJobProgress := txn
-			if details.AsOf != nil {
-				txnForJobProgress = nil
-			}
-
 			// If the job was canceled, any of the distsql processors could have been
 			// the first to encounter the .Progress error. This error's string is sent
 			// through distsql back here, so we can't examine the err type in this case
@@ -640,7 +633,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
 			if jobErr := r.job.FractionProgressed(
-				ctx, txnForJobProgress,
+				ctx, nil, /* txn */
 				func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
 					// The job failed so the progress value here doesn't really matter.
 					return 0
