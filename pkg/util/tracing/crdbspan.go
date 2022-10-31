@@ -480,8 +480,31 @@ func (t *Trace) appendSpansRecursively(buffer []tracingpb.RecordedSpan) []tracin
 
 // Flatten flattens the trace into a slice of spans. The root is the first span,
 // and parents come before children. Otherwise, the spans are not sorted.
+//
+// See SortSpans() for sorting the result in order to turn it into a
+// tracingpb.Recording.
 func (t *Trace) Flatten() []tracingpb.RecordedSpan {
 	return t.appendSpansRecursively(nil /* buffer */)
+}
+
+// ToRecording converts the Trace to a tracingpb.Recording by flattening it and
+// sorting the spans.
+func (t *Trace) ToRecording() tracingpb.Recording {
+	spans := t.Flatten()
+	// sortSpans sorts the spans by StartTime, except the first Span (the root of
+	// this recording) which stays in place.
+	toSort := sortPoolRecordings.Get().(*tracingpb.Recording) // avoids allocations in sort.Sort
+	*toSort = spans[1:]
+	sort.Sort(toSort)
+	*toSort = nil
+	sortPoolRecordings.Put(toSort)
+	return spans
+}
+
+var sortPoolRecordings = sync.Pool{
+	New: func() interface{} {
+		return &tracingpb.Recording{}
+	},
 }
 
 // PartialClone performs a deep copy of the trace. The immutable slices are not
