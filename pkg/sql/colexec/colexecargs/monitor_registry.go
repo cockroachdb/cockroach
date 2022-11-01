@@ -46,8 +46,8 @@ func (r *MonitorRegistry) NewStreamingMemAccount(flowCtx *execinfra.FlowCtx) *mo
 func (r *MonitorRegistry) getMemMonitorName(
 	opName redact.RedactableString, processorID int32, suffix redact.RedactableString,
 ) redact.RedactableString {
-	return opName + redact.RedactableString(strconv.Itoa(int(processorID))) + suffix +
-		redact.RedactableString(strconv.Itoa(len(r.monitors)))
+	return opName + "-" + redact.RedactableString(strconv.Itoa(int(processorID))) + "-" +
+		suffix + "-" + redact.RedactableString(strconv.Itoa(len(r.monitors)))
 }
 
 // CreateMemAccountForSpillStrategy instantiates a memory monitor and a memory
