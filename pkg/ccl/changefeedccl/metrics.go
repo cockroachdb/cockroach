@@ -378,6 +378,12 @@ var (
 		Measurement: "Count of Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedEventConsumerBufferedSinkEvents = metric.Metadata{
+		Name:        "changefeed.nprocs_buffered_sink_events_count",
+		Help:        "Number of events in the parallel consumer buffered for sink emit",
+		Measurement: "Count of Events",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func newAggregateMetrics(histogramWindow time.Duration) *AggMetrics {
@@ -568,19 +574,20 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 // Metrics are for production monitoring of changefeeds.
 type Metrics struct {
-	AggMetrics                     *AggMetrics
-	KVFeedMetrics                  kvevent.Metrics
-	SchemaFeedMetrics              schemafeed.Metrics
-	Failures                       *metric.Counter
-	ResolvedMessages               *metric.Counter
-	QueueTimeNanos                 *metric.Counter
-	CheckpointHistNanos            *metric.Histogram
-	FrontierUpdates                *metric.Counter
-	ThrottleMetrics                cdcutils.Metrics
-	ReplanCount                    *metric.Counter
-	ParallelConsumerFlushNanos     *metric.Histogram
-	ParallelConsumerConsumeNanos   *metric.Histogram
-	ParallelConsumerInFlightEvents *metric.Gauge
+	AggMetrics                         *AggMetrics
+	KVFeedMetrics                      kvevent.Metrics
+	SchemaFeedMetrics                  schemafeed.Metrics
+	Failures                           *metric.Counter
+	ResolvedMessages                   *metric.Counter
+	QueueTimeNanos                     *metric.Counter
+	CheckpointHistNanos                *metric.Histogram
+	FrontierUpdates                    *metric.Counter
+	ThrottleMetrics                    cdcutils.Metrics
+	ReplanCount                        *metric.Counter
+	ParallelConsumerFlushNanos         *metric.Histogram
+	ParallelConsumerConsumeNanos       *metric.Histogram
+	ParallelConsumerInFlightEvents     *metric.Gauge
+	ParallelConsumerBufferedSinkEvents *metric.Gauge
 
 	mu struct {
 		syncutil.Mutex
@@ -601,19 +608,20 @@ func (m *Metrics) getSLIMetrics(scope string) (*sliMetrics, error) {
 // MakeMetrics makes the metrics for changefeed monitoring.
 func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 	m := &Metrics{
-		AggMetrics:                     newAggregateMetrics(histogramWindow),
-		KVFeedMetrics:                  kvevent.MakeMetrics(histogramWindow),
-		SchemaFeedMetrics:              schemafeed.MakeMetrics(histogramWindow),
-		ResolvedMessages:               metric.NewCounter(metaChangefeedForwardedResolvedMessages),
-		Failures:                       metric.NewCounter(metaChangefeedFailures),
-		QueueTimeNanos:                 metric.NewCounter(metaEventQueueTime),
-		CheckpointHistNanos:            metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow, metric.IOLatencyBuckets),
-		FrontierUpdates:                metric.NewCounter(metaChangefeedFrontierUpdates),
-		ThrottleMetrics:                cdcutils.MakeMetrics(histogramWindow),
-		ReplanCount:                    metric.NewCounter(metaChangefeedReplanCount),
-		ParallelConsumerFlushNanos:     metric.NewHistogram(metaChangefeedEventConsumerFlushNanos, histogramWindow, metric.IOLatencyBuckets),
-		ParallelConsumerConsumeNanos:   metric.NewHistogram(metaChangefeedEventConsumerConsumeNanos, histogramWindow, metric.IOLatencyBuckets),
-		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		AggMetrics:                         newAggregateMetrics(histogramWindow),
+		KVFeedMetrics:                      kvevent.MakeMetrics(histogramWindow),
+		SchemaFeedMetrics:                  schemafeed.MakeMetrics(histogramWindow),
+		ResolvedMessages:                   metric.NewCounter(metaChangefeedForwardedResolvedMessages),
+		Failures:                           metric.NewCounter(metaChangefeedFailures),
+		QueueTimeNanos:                     metric.NewCounter(metaEventQueueTime),
+		CheckpointHistNanos:                metric.NewHistogram(metaChangefeedCheckpointHistNanos, histogramWindow, metric.IOLatencyBuckets),
+		FrontierUpdates:                    metric.NewCounter(metaChangefeedFrontierUpdates),
+		ThrottleMetrics:                    cdcutils.MakeMetrics(histogramWindow),
+		ReplanCount:                        metric.NewCounter(metaChangefeedReplanCount),
+		ParallelConsumerFlushNanos:         metric.NewHistogram(metaChangefeedEventConsumerFlushNanos, histogramWindow, metric.IOLatencyBuckets),
+		ParallelConsumerConsumeNanos:       metric.NewHistogram(metaChangefeedEventConsumerConsumeNanos, histogramWindow, metric.IOLatencyBuckets),
+		ParallelConsumerInFlightEvents:     metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		ParallelConsumerBufferedSinkEvents: metric.NewGauge(metaChangefeedEventConsumerBufferedSinkEvents),
 	}
 
 	m.mu.resolved = make(map[int]hlc.Timestamp)
