@@ -879,6 +879,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
 		eventsServer:             eventsServer,
+		admissionController:      node.storeCfg.KVAdmissionController,
 	})
 	if err != nil {
 		return nil, err
