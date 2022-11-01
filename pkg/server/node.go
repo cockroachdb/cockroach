@@ -276,12 +276,14 @@ func allocateStoreIDs(
 	return roachpb.StoreID(val - count + 1), nil
 }
 
-// GetBootstrapSchema returns the schema which will be used to bootstrap a new
+// GetInitialKeyspace returns the schema which will be used to bootstrap a new
 // server.
-func GetBootstrapSchema(
-	defaultZoneConfig *zonepb.ZoneConfig, defaultSystemZoneConfig *zonepb.ZoneConfig,
+func GetInitialKeyspace(
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	predefineSecondaryTenant bool,
 ) bootstrap.MetadataSchema {
-	return bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
+	return bootstrap.MakeInitialKeyspace(defaultZoneConfig, defaultSystemZoneConfig, predefineSecondaryTenant)
 }
 
 // bootstrapCluster initializes the passed-in engines for a new cluster.
@@ -330,7 +332,12 @@ func bootstrapCluster(
 		// not create the range, just its data. Only do this if this is the
 		// first store.
 		if i == 0 {
-			schema := GetBootstrapSchema(&initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig)
+			var serverKnobs TestingKnobs
+			if kn, ok := initCfg.testingKnobs.Server.(*TestingKnobs); ok {
+				serverKnobs = *kn
+			}
+
+			schema := GetInitialKeyspace(&initCfg.defaultZoneConfig, &initCfg.defaultSystemZoneConfig, !serverKnobs.DisableAppTenantAutoCreation)
 			initialValues, tableSplits := schema.GetInitialValues()
 			splits := append(config.StaticSplits(), tableSplits...)
 			sort.Slice(splits, func(i, j int) bool {

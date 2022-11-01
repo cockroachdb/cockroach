@@ -124,11 +124,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		return counts
 	}
 
-	initialRanges, err := server.ExpectedInitialRangeCount(
-		keys.SystemSQLCodec,
-		zonepb.DefaultZoneConfigRef(),
-		zonepb.DefaultSystemZoneConfigRef(),
-	)
+	initialRanges, err := tc.Servers[0].ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2000,12 +1996,16 @@ func TestPromoteNonVoterInAddVoter(t *testing.T) {
 
 	ctx := context.Background()
 
+	// See: https://github.com/cockroachdb/cockroach/issues/91122
+	knobs := base.TestingKnobs{Server: &server.TestingKnobs{DisableAppTenantAutoCreation: true}}
+
 	// Create 7 stores: 3 in Region 1, 2 in Region 2, and 2 in Region 3.
 	const numNodes = 7
 	serverArgs := make(map[int]base.TestServerArgs)
 	regions := [numNodes]int{1, 1, 1, 2, 2, 3, 3}
 	for i := 0; i < numNodes; i++ {
 		serverArgs[i] = base.TestServerArgs{
+			Knobs: knobs,
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{

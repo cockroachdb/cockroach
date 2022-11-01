@@ -100,8 +100,9 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Add the initial keys for sql.
-	kvs, tableSplits := GetBootstrapSchema(
+	kvs, tableSplits := GetInitialKeyspace(
 		zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		true, /* predefineSecondaryTenant */
 	).GetInitialValues()
 	for _, kv := range kvs {
 		expectedKeys = append(expectedKeys, kv.Key)
@@ -428,7 +429,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	}
 
 	// Wait for full replication of initial ranges.
-	initialRanges, err := ExpectedInitialRangeCount(keys.SystemSQLCodec, &ts.cfg.DefaultZoneConfig, &ts.cfg.DefaultSystemZoneConfig)
+	initialRanges, err := ts.ExpectedInitialRangeCount()
 	if err != nil {
 		t.Fatal(err)
 	}
