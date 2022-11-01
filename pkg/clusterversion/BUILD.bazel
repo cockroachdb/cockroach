@@ -2,7 +2,6 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "clusterversion",
@@ -13,7 +12,6 @@ go_library(
         "setting.go",
         "testutils.go",
         "utilversions.go",
-        ":gen-key-stringer",  # keep
     ],
     embed = [":clusterversion_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/clusterversion",
@@ -73,12 +71,6 @@ go_proto_library(
         "//pkg/roachpb",
         "@com_github_gogo_protobuf//gogoproto",
     ],
-)
-
-stringer(
-    name = "gen-key-stringer",
-    src = "cockroach_versions.go",
-    typ = "Key",
 )
 
 get_x_data(name = "get_x_data")
