@@ -802,7 +802,9 @@ func (r *Replica) AdminMerge(
 		err := runMergeTxn(txn)
 		if err != nil {
 			log.VEventf(ctx, 2, "merge txn failed: %s", err)
-			txn.CleanupOnError(ctx, err)
+			if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
+				log.VEventf(ctx, 2, "merge txn rollback failed: %s", rollbackErr)
+			}
 		}
 		if !errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) {
 			if err != nil {

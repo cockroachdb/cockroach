@@ -2505,7 +2505,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 				return errors.New("forced abort")
 			}
 			if err := txnFn(ctx, txn); err != nil {
-				txn.CleanupOnError(ctx, err)
+				require.NoError(t, txn.Rollback(ctx))
 				if !force && commit {
 					t.Fatalf("expected success with commit == true; got %v", err)
 				}
