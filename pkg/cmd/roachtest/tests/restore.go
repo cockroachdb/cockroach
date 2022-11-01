@@ -531,6 +531,7 @@ func registerRestore(r registry.Registry) {
 
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
+			maxPauses := 3
 			m.Go(func(ctx context.Context) error {
 				// Wait until the restore job has been created.
 				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
@@ -547,7 +548,6 @@ func registerRestore(r registry.Registry) {
 				//
 				// Limit the number of pauses to 3 to ensure that the test doesn't get
 				// into a pause-resume-slowdown spiral that eventually times out.
-				maxPauses := 3
 				pauseJobTick := time.NewTicker(time.Minute * 15)
 				defer pauseJobTick.Stop()
 				for {
@@ -653,6 +653,11 @@ func registerRestore(r registry.Registry) {
 				return nil
 			})
 			m.Wait()
+			// All failures from the above go routines surface via a t.Fatal() within
+			// the m.Wait( ) call above; therefore, at this point, the restore job
+			// should have succeeded. This final check ensures this test is actually
+			// doing its job: causing the restore job to pause at least once.
+			require.NotEqual(t, 3, maxPauses, "the job should have paused at least once")
 		},
 	})
 }

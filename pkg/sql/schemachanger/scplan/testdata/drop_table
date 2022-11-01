@@ -164,6 +164,20 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
       TypeIDs:
       - 107
       - 108
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 2
+      OriginTableID: 109
+      ReferencedTableID: 104
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 2
+      TableID: 109
+    *scop.RemoveForeignKeyBackReference
+      OriginConstraintID: 3
+      OriginTableID: 109
+      ReferencedTableID: 105
+    *scop.RemoveForeignKeyConstraint
+      ConstraintID: 3
+      TableID: 109
     *scop.MarkDescriptorAsDropped
       DescriptorID: 110
     *scop.RemoveAllTableComments
@@ -231,20 +245,6 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
         TargetMetadata:
           SourceElementID: 1
           SubWorkID: 1
-      TableID: 109
-    *scop.RemoveForeignKeyBackReference
-      OriginConstraintID: 2
-      OriginTableID: 109
-      ReferencedTableID: 104
-    *scop.RemoveForeignKeyConstraint
-      ConstraintID: 2
-      TableID: 109
-    *scop.RemoveForeignKeyBackReference
-      OriginConstraintID: 3
-      OriginTableID: 109
-      ReferencedTableID: 105
-    *scop.RemoveForeignKeyConstraint
-      ConstraintID: 3
       TableID: 109
     *scop.DrainDescriptorName
       Namespace:
@@ -740,18 +740,6 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [Column:{DescID: 111, ColumnID: 4294967295}, ABSENT]
   kind: Precedence
   rule: dependents removed before column
-- from: [ConstraintComment:{DescID: 109, ConstraintID: 2, Comment: customer is not god}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: constraint dependent absent right before constraint
-- from: [ConstraintName:{DescID: 109, Name: fk_customers, ConstraintID: 2}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, ConstraintID: 2, ReferencedDescID: 104}, ABSENT]
-  kind: SameStagePrecedence
-  rule: constraint dependent absent right before constraint
-- from: [ConstraintName:{DescID: 109, Name: fk_orders, ConstraintID: 3}, ABSENT]
-  to:   [ForeignKeyConstraint:{DescID: 109, ConstraintID: 3, ReferencedDescID: 105}, ABSENT]
-  kind: SameStagePrecedence
-  rule: constraint dependent absent right before constraint
 - from: [IndexColumn:{DescID: 109, ColumnID: 1, IndexID: 1}, ABSENT]
   to:   [Column:{DescID: 109, ColumnID: 1}, ABSENT]
   kind: Precedence
@@ -1208,6 +1196,7 @@ StatementPhase stage 1 of 1 with 1 MutationType op
     [[Column:{DescID: 114, ColumnID: 4294967294}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[PrimaryIndex:{DescID: 114, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC] -> VALIDATED
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC] -> VALIDATED
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> VALIDATED
   ops:
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 114
@@ -1247,7 +1236,7 @@ PreCommitPhase stage 1 of 1 with 21 MutationType ops
     [[SecondaryIndexPartial:{DescID: 114, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 114, IndexID: 2, ConstraintID: 0}, ABSENT], VALIDATED] -> ABSENT
     [[IndexName:{DescID: 114, Name: i, IndexID: 2}, ABSENT], PUBLIC] -> ABSENT
-    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
+    [[CheckConstraint:{DescID: 114, ReferencedTypeIDs: [112 113], ConstraintID: 2}, ABSENT], VALIDATED] -> ABSENT
     [[ConstraintName:{DescID: 114, Name: check, ConstraintID: 2}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped

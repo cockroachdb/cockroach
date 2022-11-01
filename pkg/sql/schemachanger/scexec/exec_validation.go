@@ -56,7 +56,34 @@ func executeValidateUniqueIndex(
 func executeValidateCheckConstraint(
 	ctx context.Context, deps Dependencies, op *scop.ValidateCheckConstraint,
 ) error {
-	return errors.Errorf("executeValidateCheckConstraint is not implemented")
+	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	desc := descs[0]
+	table, err := catalog.AsTableDescriptor(desc)
+	if err != nil {
+		return err
+	}
+	constraint, err := table.FindConstraintWithID(op.ConstraintID)
+	if err != nil {
+		return err
+	}
+	if constraint.CheckConstraint == nil {
+		return errors.Newf("constraint ID %v does not identify a check constraint in table %v.",
+			op.ConstraintID, op.TableID)
+	}
+
+	// Execute the validation operation as a root user.
+	execOverride := sessiondata.InternalExecutorOverride{
+		User: username.RootUserName(),
+	}
+	err = deps.Validator().ValidateCheckConstraint(ctx, table, constraint, execOverride)
+	if err != nil {
+		return scerrors.SchemaChangerUserError(err)
+	}
+	constraint.CheckConstraint.Validity = descpb.ConstraintValidity_Validated
+	return nil
 }
 
 func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op) (err error) {
