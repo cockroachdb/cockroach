@@ -285,7 +285,8 @@ func (o *routerOutputOp) DrainMeta() []execinfrapb.ProducerMetadata {
 func (o *routerOutputOp) Close(ctx context.Context) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.mu.data.Close(ctx)
+	o.closeLocked(ctx)
+	return nil
 }
 
 func (o *routerOutputOp) initWithHashRouter(r *HashRouter) {
