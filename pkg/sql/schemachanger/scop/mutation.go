@@ -292,6 +292,33 @@ type RemoveCheckConstraint struct {
 	ConstraintID descpb.ConstraintID
 }
 
+// MakeAbsentCheckConstraintWriteOnly adds a non-existent check constraint
+// to the table in the WRITE_ONLY state.
+type MakeAbsentCheckConstraintWriteOnly struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+	ColumnIDs    []descpb.ColumnID
+	scpb.Expression
+	FromHashShardedColumn bool
+}
+
+// MakePublicCheckConstraintValidated moves a public
+// check constraint to VALIDATED.
+type MakePublicCheckConstraintValidated struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakeValidatedCheckConstraintPublic moves a new, validated check
+// constraint from mutation to public.
+type MakeValidatedCheckConstraintPublic struct {
+	mutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
 // RemoveForeignKeyConstraint removes a foreign key from the origin table.
 type RemoveForeignKeyConstraint struct {
 	mutationOp

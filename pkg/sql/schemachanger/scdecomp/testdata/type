@@ -179,6 +179,7 @@ ElementState:
     - 5
     constraintId: 2
     expr: s::STRING = name
+    fromHashShardedColumn: false
     referencedColumnIds:
     - 3
     - 5

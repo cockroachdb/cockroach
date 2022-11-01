@@ -313,6 +313,19 @@ func bazciImpl(cmd *cobra.Command, args []string) (retErr error) {
 		return
 	}
 	args = append(args, fmt.Sprintf("--bes_backend=grpc://127.0.0.1:%d", port))
+	if shouldProcessTestFailures {
+		f, createTempErr := os.CreateTemp(artifactsDir, "test.json.txt")
+		if createTempErr != nil {
+			retErr = createTempErr
+			return
+		}
+		goTestJSONOutputFilePath = f.Name()
+		// Closing the file because we will not use the file pointer.
+		if retErr = f.Close(); retErr != nil {
+			return
+		}
+		args = append(args, "--test_env", goTestJSONOutputFilePath)
+	}
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
 	bazelCmd.Stdout = os.Stdout

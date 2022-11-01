@@ -92,6 +92,11 @@ nodeNotExistsWithStatusIn_VALIDATED_TRANSIENT_WRITE_ONLY_MERGE_ONLY_TRANSIENT_ME
         - $n[Type] = '*screl.Node'
         - $n[Target] = $sharedTarget
         - $n[CurrentStatus] IN [VALIDATED, TRANSIENT_WRITE_ONLY, MERGE_ONLY, TRANSIENT_MERGE_ONLY, MERGED, TRANSIENT_MERGED]
+nodeNotExistsWithStatusIn_WRITE_ONLY($sharedTarget):
+    not-join:
+        - $n[Type] = '*screl.Node'
+        - $n[Target] = $sharedTarget
+        - $n[CurrentStatus] IN [WRITE_ONLY]
 sourceIndexIsSet($index):
     - $index[SourceIndexID] != 0
 toAbsent($target1, $target2):
@@ -149,12 +154,13 @@ oprules
   from: constraint-node
   query:
     - $relation[Type] IN ['*scpb.Table', '*scpb.View']
-    - $constraint[Type] = '*scpb.UniqueWithoutIndexConstraint'
+    - $constraint[Type] IN ['*scpb.CheckConstraint', '*scpb.UniqueWithoutIndexConstraint']
     - joinOnDescID($relation, $constraint, $relation-id)
     - joinTarget($relation, $relation-target)
     - $relation-target[TargetStatus] = ABSENT
     - joinTargetNode($constraint, $constraint-target, $constraint-node)
     - $constraint-target[TargetStatus] = ABSENT
+    - $constraint-node[CurrentStatus] = PUBLIC
 - name: skip element removal ops on descriptor drop
   from: dep-node
   query:
