@@ -272,8 +272,12 @@ func startDistChangefeed(
 
 	execPlan := func(ctx context.Context) error {
 		defer stopReplanner()
+		// Derive a separate context so that we can shut down the changefeed
+		// as soon as we see an error.
+		ctx, cancel := execCtx.ExecCfg().DistSQLSrv.Stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 
-		resultRows := makeChangefeedResultWriter(resultsCh)
+		resultRows := makeChangefeedResultWriter(resultsCh, cancel)
 		recv := sql.MakeDistSQLReceiver(
 			ctx,
 			resultRows,
@@ -446,10 +450,13 @@ type changefeedResultWriter struct {
 	rowsCh       chan<- tree.Datums
 	rowsAffected int
 	err          error
+	cancel       context.CancelFunc
 }
 
-func makeChangefeedResultWriter(rowsCh chan<- tree.Datums) *changefeedResultWriter {
-	return &changefeedResultWriter{rowsCh: rowsCh}
+func makeChangefeedResultWriter(
+	rowsCh chan<- tree.Datums, cancel context.CancelFunc,
+) *changefeedResultWriter {
+	return &changefeedResultWriter{rowsCh: rowsCh, cancel: cancel}
 }
 
 func (w *changefeedResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
@@ -469,7 +476,9 @@ func (w *changefeedResultWriter) IncrementRowsAffected(ctx context.Context, n in
 }
 func (w *changefeedResultWriter) SetError(err error) {
 	w.err = err
+	w.cancel()
 }
+
 func (w *changefeedResultWriter) Err() error {
 	return w.err
 }

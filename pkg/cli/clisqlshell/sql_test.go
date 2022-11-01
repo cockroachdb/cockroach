@@ -175,10 +175,10 @@ func Example_sql_config() {
 	// invalid syntax: \set unknownoption. Try \? for help.
 	// ERROR: -e: invalid syntax
 	// sql --set display_format=invalidvalue -e select 123 as "123"
-	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// \set display_format=invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// sql -e \set display_format=invalidvalue -e select 123 as "123"
-	// \set display_format invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
+	// \set display_format=invalidvalue: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 	// ERROR: -e: invalid table display format: invalidvalue (possible values: tsv, csv, table, records, sql, html, raw)
 }
 

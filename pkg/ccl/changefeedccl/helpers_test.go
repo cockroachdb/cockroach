@@ -539,6 +539,12 @@ var feedTestOmitSinks = func(sinkTypes ...string) feedTestOption {
 	return func(opts *feedTestOptions) { opts.disabledSinkTypes = append(opts.disabledSinkTypes, sinkTypes...) }
 }
 
+func (opts feedTestOptions) omitSinks(sinks ...string) feedTestOptions {
+	res := opts
+	res.disabledSinkTypes = append(opts.disabledSinkTypes, sinks...)
+	return res
+}
+
 // withArgsFn is a feedTestOption that allow the caller to modify the
 // TestServerArgs before they are used to create the test server. Note
 // that in multi-tenant tests, these will only apply to the kvServer
@@ -751,15 +757,15 @@ func randomSinkType(opts ...feedTestOption) string {
 
 func randomSinkTypeWithOptions(options feedTestOptions) string {
 	sinkWeights := map[string]int{
-		"kafka":        2, // run kafka a bit more often
+		"kafka":        3,
 		"enterprise":   1,
 		"webhook":      1,
 		"pubsub":       1,
-		"sinkless":     1,
-		"cloudstorage": 0, // requires externalIODir set
+		"sinkless":     2,
+		"cloudstorage": 0,
 	}
 	if options.externalIODir != "" {
-		sinkWeights["cloudstorage"] = 1
+		sinkWeights["cloudstorage"] = 3
 	}
 	if options.allowedSinkTypes != nil {
 		sinkWeights = map[string]int{}
@@ -821,13 +827,21 @@ func makeFeedFactory(
 }
 
 func makeFeedFactoryWithOptions(
-	t *testing.T,
-	sinkType string,
-	s serverutils.TestTenantInterface,
-	db *gosql.DB,
-	options feedTestOptions,
+	t *testing.T, sinkType string, srvOrCluster interface{}, db *gosql.DB, options feedTestOptions,
 ) (factory cdctest.TestFeedFactory, sinkCleanup func()) {
 	t.Logf("making %s feed factory", sinkType)
+	s := func() serverutils.TestTenantInterface {
+		switch s := srvOrCluster.(type) {
+		case serverutils.TestTenantInterface:
+			return s
+		case serverutils.TestClusterInterface:
+			return s.Server(0)
+		default:
+			t.Fatalf("unexpected argument type %T", s)
+			return nil
+		}
+	}()
+
 	pgURLForUser := func(u string, pass ...string) (url.URL, func()) {
 		t.Logf("pgURL %s %s", sinkType, u)
 		if len(pass) < 1 {
@@ -840,25 +854,25 @@ func makeFeedFactoryWithOptions(
 	}
 	switch sinkType {
 	case "kafka":
-		f := makeKafkaFeedFactory(s, db)
+		f := makeKafkaFeedFactory(srvOrCluster, db)
 		return f, func() {}
 	case "cloudstorage":
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
 		}
-		f := makeCloudFeedFactory(s, db, options.externalIODir)
+		f := makeCloudFeedFactory(srvOrCluster, db, options.externalIODir)
 		return f, func() {
 			TestingSetIncludeParquetMetadata()()
 		}
 	case "enterprise":
 		sink, cleanup := pgURLForUser(username.RootUser)
-		f := makeTableFeedFactory(s, db, sink)
+		f := makeTableFeedFactory(srvOrCluster, db, sink)
 		return f, cleanup
 	case "webhook":
-		f := makeWebhookFeedFactory(s, db)
+		f := makeWebhookFeedFactory(srvOrCluster, db)
 		return f, func() {}
 	case "pubsub":
-		f := makePubsubFeedFactory(s, db)
+		f := makePubsubFeedFactory(srvOrCluster, db)
 		return f, func() {}
 	case "sinkless":
 		sink, cleanup := pgURLForUser(username.RootUser)
