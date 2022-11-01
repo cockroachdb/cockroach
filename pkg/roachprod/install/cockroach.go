@@ -418,6 +418,7 @@ func (c *SyncedCluster) generateStartCmd(
 			fmt.Sprintf("ROACHPROD=%s", c.roachprodEnvValue(node)),
 			"GOTRACEBACK=crash",
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1",
+			"MALLOC_CONF=thp:false",
 		}, c.Env...), getEnvVars()...),
 		Binary:        cockroachNodeBinary(c, node),
 		Args:          args,
