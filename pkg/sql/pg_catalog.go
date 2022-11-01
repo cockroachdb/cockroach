@@ -679,12 +679,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if err != nil {
 			return err
 		}
+		implicitTypOID := typedesc.TableIDToImplicitTypeOID(table.GetID())
 		namespaceOid := schemaOid(sc.GetID())
 		if err := addRow(
 			tableOid(table.GetID()),        // oid
 			tree.NewDName(table.GetName()), // relname
 			namespaceOid,                   // relnamespace
-			tableIDToTypeOID(table),        // reltype (PG creates a composite type in pg_type for each table)
+			tree.NewDOid(implicitTypOID),   // reltype (PG creates a composite type in pg_type for each table)
 			oidZero,                        // reloftype (used for type tables, which is unsupported)
 			ownerOid,                       // relowner
 			relAm,                          // relam
@@ -2961,17 +2962,6 @@ var (
 	commaTypDelim = tree.NewDString(",")
 )
 
-func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
-	// We re-use the type ID to OID logic, as type IDs and table IDs do not share
-	// the same ID space.
-	if !table.IsVirtualTable() {
-		return tree.NewDOid(catid.TypeIDToOID(table.GetID()))
-	}
-	// Virtual table OIDs start at max UInt32, so doing OID math would overflow.
-	// As such, just use the virtual table ID.
-	return tree.NewDOid(oid.Oid(table.GetID()))
-}
-
 func addPGTypeRowForTable(
 	ctx context.Context,
 	p eval.Planner,
@@ -2986,8 +2976,9 @@ func addPGTypeRowForTable(
 	if err != nil {
 		return err
 	}
+	implicitTypOid := typedesc.TableIDToImplicitTypeOID(table.GetID())
 	return addRow(
-		tableIDToTypeOID(table),        // oid
+		tree.NewDOid(implicitTypOid),   // oid
 		tree.NewDName(table.GetName()), // typname
 		nspOid,                         // typnamespace
 		ownerOID,                       // typowner
