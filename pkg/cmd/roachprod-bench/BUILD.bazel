@@ -1,0 +1,31 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "roachprod-bench_lib",
+    srcs = [
+        "main.go",
+        "metadata.go",
+        "remote.go",
+        "report.go",
+        "analysis.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-bench",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/roachprod",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/ssh",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+    ],
+)
+
+go_binary(
+    name = "roachprod-bench",
+    embed = [":roachprod-bench_lib"],
+    visibility = ["//visibility:public"],
+)
+
+get_x_data(name = "get_x_data")
