@@ -593,3 +593,15 @@ INSERT INTO regression_54844 VALUES (-9223372036854775807)
 
 statement error integer out of range for type int2
 ALTER TABLE regression_54844 ALTER COLUMN i TYPE int2
+
+# Regression test for alter column type after setting default to NULL.
+subtest regression_91069
+
+statement ok
+CREATE TABLE t_91069 (i INT PRIMARY KEY, j VARCHAR(64) NULL)
+
+statement ok
+ALTER TABLE t_91069 ALTER COLUMN j SET DEFAULT NULL
+
+statement ok
+ALTER TABLE t_91069 ALTER COLUMN j TYPE VARCHAR(32)

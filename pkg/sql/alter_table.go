@@ -939,6 +939,10 @@ func applyColumnMutation(
 		); err != nil {
 			return err
 		}
+		if col.HasNullDefault() {
+			// `SET DEFAULT NULL` means a nil default expression.
+			col.ColumnDesc().DefaultExpr = nil
+		}
 
 	case *tree.AlterTableSetOnUpdate:
 		// We want to reject uses of ON UPDATE where there is also a foreign key ON
