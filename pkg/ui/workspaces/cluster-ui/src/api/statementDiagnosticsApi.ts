@@ -32,15 +32,15 @@ export function getStatementDiagnosticsReports(): Promise<StatementDiagnosticsRe
     statements: [
       {
         sql: `SELECT
-			id::STRING,
-			statement_fingerprint,
-			completed,
-			statement_diagnostics_id::STRING,
-			requested_at,
-			min_execution_latency,
-			expires_at
-		FROM
-			system.statement_diagnostics_requests
+      id::STRING,
+      statement_fingerprint,
+      completed,
+      statement_diagnostics_id::STRING,
+      requested_at,
+      min_execution_latency,
+      expires_at
+    FROM
+      system.statement_diagnostics_requests
     WHERE
       expires_at > now() OR expires_at IS NULL OR completed = true`,
       },
@@ -137,10 +137,10 @@ function checkExistingDiagRequest(stmtFingerprint: string): Promise<void> {
   // Query to check if there's already a pending request for this fingerprint.
   const checkPendingStmtDiag = {
     sql: `SELECT count(1) FROM system.statement_diagnostics_requests
-				WHERE
-					completed = false AND
-					statement_fingerprint = $1 AND
-					(expires_at IS NULL OR expires_at > now())`,
+        WHERE
+          completed = false AND
+          statement_fingerprint = $1 AND
+          (expires_at IS NULL OR expires_at > now())`,
     arguments: [stmtFingerprint],
   };
 

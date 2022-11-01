@@ -10,9 +10,7 @@
 
 import { Action } from "redux";
 import { PayloadAction } from "src/interfaces/action";
-import { google } from "@cockroachlabs/crdb-protobuf-client";
-import IDuration = google.protobuf.IDuration;
-import { TimeScale } from "@cockroachlabs/cluster-ui";
+import { TimeScale, api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 export const CREATE_STATEMENT_DIAGNOSTICS_REPORT =
   "cockroachui/statements/CREATE_STATEMENT_DIAGNOSTICS_REPORT";
@@ -33,24 +31,12 @@ export type DiagnosticsReportPayload = {
   statementFingerprint: string;
 };
 
-export type CreateStatementDiagnosticsReportPayload = {
-  statementFingerprint: string;
-  minExecLatency: IDuration;
-  expiresAfter: IDuration;
-};
-
 export function createStatementDiagnosticsReportAction(
-  statementFingerprint: string,
-  minExecLatency: IDuration,
-  expiresAfter: IDuration,
-): PayloadAction<CreateStatementDiagnosticsReportPayload> {
+  insertStmtDiagnosticsRequest: clusterUiApi.InsertStmtDiagnosticRequest,
+): PayloadAction<clusterUiApi.InsertStmtDiagnosticRequest> {
   return {
     type: CREATE_STATEMENT_DIAGNOSTICS_REPORT,
-    payload: {
-      statementFingerprint,
-      minExecLatency,
-      expiresAfter,
-    },
+    payload: insertStmtDiagnosticsRequest,
   };
 }
 
@@ -66,18 +52,12 @@ export function createStatementDiagnosticsReportFailedAction(): Action {
   };
 }
 
-export type CancelStatementDiagnosticsReportPayload = {
-  requestID: Long;
-};
-
 export function cancelStatementDiagnosticsReportAction(
-  requestID: Long,
-): PayloadAction<CancelStatementDiagnosticsReportPayload> {
+  cancelStmtDiagnosticsRequest: clusterUiApi.CancelStmtDiagnosticRequest,
+): PayloadAction<clusterUiApi.CancelStmtDiagnosticRequest> {
   return {
     type: CANCEL_STATEMENT_DIAGNOSTICS_REPORT,
-    payload: {
-      requestID,
-    },
+    payload: cancelStmtDiagnosticsRequest,
   };
 }
 

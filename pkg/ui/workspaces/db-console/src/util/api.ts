@@ -187,26 +187,6 @@ export type MetricMetadataRequestMessage =
 export type MetricMetadataResponseMessage =
   protos.cockroach.server.serverpb.MetricMetadataResponse;
 
-export type StatementDiagnosticsReportsRequestMessage =
-  protos.cockroach.server.serverpb.StatementDiagnosticsReportsRequest;
-export type StatementDiagnosticsReportsResponseMessage =
-  protos.cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
-
-export type CreateStatementDiagnosticsReportRequestMessage =
-  protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-export type CreateStatementDiagnosticsReportResponseMessage =
-  protos.cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
-
-export type CancelStatementDiagnosticsReportRequestMessage =
-  protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
-export type CancelStatementDiagnosticsReportResponseMessage =
-  protos.cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
-
-export type StatementDiagnosticsRequestMessage =
-  protos.cockroach.server.serverpb.StatementDiagnosticsRequest;
-export type StatementDiagnosticsResponseMessage =
-  protos.cockroach.server.serverpb.StatementDiagnosticsResponse;
-
 export type StatementsRequestMessage =
   protos.cockroach.server.serverpb.StatementsRequest;
 export type StatementDetailsRequestMessage =
@@ -831,53 +811,6 @@ export function getStatementDetails(
   return timeoutFetch(
     serverpb.StatementDetailsResponse,
     `${STATUS_PREFIX}/stmtdetails/${req.fingerprint_id}?${queryStr}`,
-    null,
-    timeout,
-  );
-}
-
-export function getStatementDiagnosticsReports(
-  timeout?: moment.Duration,
-): Promise<StatementDiagnosticsReportsResponseMessage> {
-  return timeoutFetch(
-    serverpb.StatementDiagnosticsReportsResponse,
-    `${STATUS_PREFIX}/stmtdiagreports`,
-    null,
-    timeout,
-  );
-}
-
-export function createStatementDiagnosticsReport(
-  req: CreateStatementDiagnosticsReportRequestMessage,
-  timeout?: moment.Duration,
-): Promise<CreateStatementDiagnosticsReportResponseMessage> {
-  return timeoutFetch(
-    serverpb.CreateStatementDiagnosticsReportResponse,
-    `${STATUS_PREFIX}/stmtdiagreports`,
-    req as any,
-    timeout,
-  );
-}
-
-export function cancelStatementDiagnosticsReport(
-  req: CancelStatementDiagnosticsReportRequestMessage,
-  timeout?: moment.Duration,
-): Promise<CancelStatementDiagnosticsReportResponseMessage> {
-  return timeoutFetch(
-    serverpb.CancelStatementDiagnosticsReportResponse,
-    `${STATUS_PREFIX}/stmtdiagreports/cancel`,
-    req as any,
-    timeout,
-  );
-}
-
-export function getStatementDiagnostics(
-  req: StatementDiagnosticsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<StatementDiagnosticsResponseMessage> {
-  return timeoutFetch(
-    serverpb.StatementDiagnosticsResponse,
-    `${STATUS_PREFIX}/stmtdiag/${req.statement_diagnostics_id}`,
     null,
     timeout,
   );
