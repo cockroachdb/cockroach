@@ -16,7 +16,7 @@ import Long from "long";
 import { noop } from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "src/util";
-import {StatementDiagnosticsReport} from "../api";
+import { StatementDiagnosticsReport } from "../api";
 
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;

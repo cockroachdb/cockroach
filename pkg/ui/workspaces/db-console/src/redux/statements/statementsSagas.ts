@@ -12,24 +12,15 @@ import { all, call, put, takeEvery, takeLatest } from "redux-saga/effects";
 import { PayloadAction } from "src/interfaces/action";
 
 import {
-  cancelStatementDiagnosticsReport,
-  CancelStatementDiagnosticsReportResponseMessage,
-  createStatementDiagnosticsReport,
-} from "src/util/api";
-import {
   CREATE_STATEMENT_DIAGNOSTICS_REPORT,
-  CreateStatementDiagnosticsReportPayload,
   createStatementDiagnosticsReportCompleteAction,
   createStatementDiagnosticsReportFailedAction,
   SET_GLOBAL_TIME_SCALE,
   CANCEL_STATEMENT_DIAGNOSTICS_REPORT,
   cancelStatementDiagnosticsReportCompleteAction,
   cancelStatementDiagnosticsReportFailedAction,
-  CancelStatementDiagnosticsReportPayload,
 } from "./statementsActions";
 import { cockroach } from "src/js/protos";
-import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-import CancelStatementDiagnosticsReportRequest = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 import CombinedStatementsRequest = cockroach.server.serverpb.StatementsRequest;
 import {
   invalidateStatementDiagnosticsRequests,
@@ -44,22 +35,13 @@ import {
 import { TimeScale, toRoundedDateRange } from "@cockroachlabs/cluster-ui";
 import Long from "long";
 import { setTimeScale } from "src/redux/timeScale";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 export function* createDiagnosticsReportSaga(
-  action: PayloadAction<CreateStatementDiagnosticsReportPayload>,
+  action: PayloadAction<clusterUiApi.InsertStmtDiagnosticRequest>,
 ) {
-  const { statementFingerprint, minExecLatency, expiresAfter } = action.payload;
-  const createDiagnosticsReportRequest =
-    new CreateStatementDiagnosticsReportRequest({
-      statement_fingerprint: statementFingerprint,
-      min_execution_latency: minExecLatency,
-      expires_after: expiresAfter,
-    });
   try {
-    yield call(
-      createStatementDiagnosticsReport,
-      createDiagnosticsReportRequest,
-    );
+    yield call(clusterUiApi.createStatementDiagnosticsReport, action.payload);
     yield put(createStatementDiagnosticsReportCompleteAction());
     yield put(invalidateStatementDiagnosticsRequests());
     // PUT expects action with `type` field which isn't defined in `refresh` ThunkAction interface
@@ -96,23 +78,10 @@ export function* createDiagnosticsReportSaga(
 }
 
 export function* cancelDiagnosticsReportSaga(
-  action: PayloadAction<CancelStatementDiagnosticsReportPayload>,
+  action: PayloadAction<clusterUiApi.CancelStmtDiagnosticRequest>,
 ) {
-  const { requestID } = action.payload;
-  const cancelDiagnosticsReportRequest =
-    new CancelStatementDiagnosticsReportRequest({
-      request_id: requestID,
-    });
   try {
-    const response: CancelStatementDiagnosticsReportResponseMessage =
-      yield call(
-        cancelStatementDiagnosticsReport,
-        cancelDiagnosticsReportRequest,
-      );
-
-    if (response.error !== "") {
-      throw response.error;
-    }
+    yield call(clusterUiApi.cancelStatementDiagnosticsReport, action.payload);
 
     yield put(cancelStatementDiagnosticsReportCompleteAction());
 

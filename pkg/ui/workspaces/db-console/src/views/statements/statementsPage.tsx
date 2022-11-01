@@ -64,11 +64,10 @@ import {
 } from "./activeStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 type ICollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
-type IStatementDiagnosticsReport =
-  protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const {
   aggregateStatementStats,
@@ -301,7 +300,14 @@ const fingerprintsPageActions = {
       );
     };
   },
-  onActivateStatementDiagnostics: createStatementDiagnosticsReportAction,
+  onActivateStatementDiagnostics: (
+    insertStmtDiagnosticRequest: clusterUiApi.InsertStmtDiagnosticRequest,
+  ) => {
+    return (dispatch: AppDispatch) =>
+      dispatch(
+        createStatementDiagnosticsReportAction(insertStmtDiagnosticRequest),
+      );
+  },
   onDiagnosticsModalOpen: createOpenDiagnosticsModalAction,
   onSearchComplete: (query: string) => searchLocalSetting.set(query),
   onPageChanged: trackStatementsPaginationAction,
@@ -316,13 +322,15 @@ const fingerprintsPageActions = {
     }),
   onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
   onSelectDiagnosticsReportDropdownOption: (
-    report: IStatementDiagnosticsReport,
+    report: clusterUiApi.StatementDiagnosticsReport,
   ) => {
     if (report.completed) {
       return trackDownloadDiagnosticsBundleAction(report.statement_fingerprint);
     } else {
       return (dispatch: AppDispatch) => {
-        dispatch(cancelStatementDiagnosticsReportAction(report.id));
+        dispatch(
+          cancelStatementDiagnosticsReportAction({ requestId: report.id }),
+        );
         dispatch(
           trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
         );
