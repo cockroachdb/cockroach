@@ -1205,7 +1205,11 @@ func (r *Registry) stepThroughStateMachine(
 ) error {
 	payload := job.Payload()
 	jobType := payload.Type()
-	log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
+	if jobErr != nil {
+		log.Infof(ctx, "%s job %d: stepping through state %s with error: %+v", jobType, job.ID(), status, jobErr)
+	} else {
+		log.Infof(ctx, "%s job %d: stepping through state %s", jobType, job.ID(), status)
+	}
 	jm := r.metrics.JobMetrics[jobType]
 	onExecutionFailed := func(cause error) error {
 		log.InfofDepth(
