@@ -108,6 +108,8 @@ type Controller interface {
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
+	// NewPacer allocates a new kvadmission.Pacer.
+	NewPacer(tenantID roachpb.TenantID, unit time.Duration, priority admissionpb.WorkPriority) *Pacer
 }
 
 // TenantWeightProvider can be periodically asked to provide the tenant
@@ -172,6 +174,25 @@ func MakeController(
 		elasticCPUWorkQueue: elasticCPUWorkQueue,
 		settings:            settings,
 		every:               log.Every(10 * time.Second),
+	}
+}
+
+// NewPacer implements the Controller interface.
+func (n *controllerImpl) NewPacer(
+	tenantID roachpb.TenantID, unit time.Duration, priority admissionpb.WorkPriority,
+) *Pacer {
+
+	wi := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        priority,
+		CreateTime:      timeutil.Now().UnixNano(),
+		BypassAdmission: false,
+	}
+
+	return &Pacer{
+		unit: unit,
+		wi:   wi,
+		wq:   n.elasticCPUWorkQueue,
 	}
 }
 

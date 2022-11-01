@@ -13,15 +13,19 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -62,6 +66,8 @@ type kvEventToRowConsumer struct {
 
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
+
+	admissionController kvadmission.Controller
 }
 
 func newEventConsumer(
@@ -104,18 +110,19 @@ func newEventConsumer(
 			encoder, details, expr, knobs, topicNamer)
 	}
 
-	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
 	if numWorkers == 0 {
 		// Pick a reasonable default.
 		numWorkers = defaultNumWorkers()
 	}
 
+	// TODO (ganeshb) Add support for parallel encoding
 	// We cannot have a separate encoder and sink for parquet format (see
 	// parquet_sink_cloudstorage.go). Because of this the current nprox solution
 	// does not work for parquet format.
 	//
-	//TODO (ganeshb) Add support for parallel encoding
+	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds.
+	// The setting description should also be updated.
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
@@ -125,16 +132,18 @@ func newEventConsumer(
 	}
 
 	c := &parallelEventConsumer{
-		g:            ctxgroup.WithContext(ctx),
-		hasher:       makeHasher(),
-		metrics:      metrics,
-		termCh:       make(chan struct{}),
-		flushCh:      make(chan struct{}, 1),
-		doneCh:       make(chan struct{}),
-		numWorkers:   numWorkers,
-		workerCh:     make([]chan kvevent.Event, numWorkers),
-		workerChSize: changefeedbase.EventConsumerWorkerQueueSize.Get(&cfg.Settings.SV),
-		spanFrontier: spanFrontier,
+		g:                         ctxgroup.WithContext(ctx),
+		hasher:                    makeHasher(),
+		metrics:                   metrics,
+		termCh:                    make(chan struct{}),
+		flushCh:                   make(chan struct{}, 1),
+		doneCh:                    make(chan struct{}),
+		numWorkers:                numWorkers,
+		workerCh:                  make([]chan kvevent.Event, numWorkers),
+		workerChSize:              changefeedbase.EventConsumerWorkerQueueSize.Get(&cfg.Settings.SV),
+		spanFrontier:              spanFrontier,
+		admissionController:       cfg.AdmissionController,
+		admissionPacerRequestUnit: changefeedbase.EventConsumerPacerRequestSize.Get(&cfg.Settings.SV),
 	}
 	ss := &safeSink{wrapped: sink, beforeFlush: c.Flush}
 	c.makeConsumer = func() (eventConsumer, error) {
@@ -215,6 +224,7 @@ func newKVEventToRowConsumer(
 		evaluator:            evaluator,
 		safeExpr:             safeExpr,
 		encodingFormat:       encodingOpts.Format,
+		admissionController:  cfg.AdmissionController,
 	}, nil
 }
 
@@ -439,6 +449,13 @@ type parallelEventConsumer struct {
 	// that spawned this event consumer.
 	spanFrontier *span.Frontier
 
+	// admissionController is used to create a kvadmission.Pacer
+	// which is used to incorporate event consumption to elastic CPU
+	// control. This helps ensure that event encoding/decoding
+	// does not throttle foreground SQL traffic.
+	admissionController       kvadmission.Controller
+	admissionPacerRequestUnit time.Duration
+
 	// termErr and termCh are used to save the first error that occurs
 	// in any worker and signal all workers to stop.
 	//
@@ -524,9 +541,45 @@ func (c *parallelEventConsumer) startWorkers() error {
 	return nil
 }
 
+type wrappedPacer struct {
+	inner *kvadmission.Pacer
+}
+
+// Close closes the inner kvadmission.Pacer if non-nil.
+func (p *wrappedPacer) Close() {
+	if p.inner != nil {
+		p.inner.Close()
+	}
+}
+
+// Pace calls Pace on the inner kvadmission.Pacer if non-nil.
+func (p *wrappedPacer) Pace(ctx context.Context) error {
+	if p.inner != nil {
+		return p.inner.Pace(ctx)
+	}
+	return nil
+}
+
+// makePacer checks for a nil admission controller (which occurs if the
+// changefeed was started using a tenant server).
+//
+// TODO(jayant): remove wrappedPacer and makePacer once tenant servers come
+// bootstrapped with admission control. call newPacer with the the correct tenantID.
+func makePacer(ac kvadmission.Controller, ru time.Duration) wrappedPacer {
+	pacer := wrappedPacer{}
+
+	if ac != nil {
+		pacer.inner = ac.NewPacer(roachpb.SystemTenantID, ru, admissionpb.BulkNormalPri)
+		defer pacer.Close()
+	}
+	return pacer
+}
+
 func (c *parallelEventConsumer) workerLoop(
 	ctx context.Context, consumer eventConsumer, id int64,
 ) error {
+	pacer := makePacer(c.admissionController, c.admissionPacerRequestUnit)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -538,7 +591,16 @@ func (c *parallelEventConsumer) workerLoop(
 			defer c.mu.Unlock()
 			return c.mu.termErr
 		case e := <-c.workerCh[id]:
+			// Request CPU time to use for event consumption, block if this time is
+			// unavailable. If there is unused CPU time left from the last call to
+			// Pace, then use that time instead of blocking.
+			if err := pacer.Pace(ctx); err != nil {
+				c.decInFlight()
+				return c.setWorkerError(err)
+			}
+
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
+				c.decInFlight()
 				return c.setWorkerError(err)
 			}
 			c.decInFlight()
