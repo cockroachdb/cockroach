@@ -303,6 +303,10 @@ const (
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.
 	FixUserfileRelatedDescriptorCorruption
+
+	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
+	V22_2
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -493,6 +497,10 @@ var rawVersionsSingleton = keyedVersions{
 		Key:     FixUserfileRelatedDescriptorCorruption,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
+	{
+		Key:     V22_2,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 0},
+	},
 	// *************************************************
 	// Step (2): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -511,7 +519,7 @@ const (
 	// finalVersion should be set on a release branch to the minted final cluster
 	// version key, e.g. to V22_2 on the release-22.2 branch once it is minted.
 	// Setting it has the effect of ensuring no versions are subsequently added.
-	finalVersion = invalidVersionKey
+	finalVersion = V22_2
 )
 
 var versionsSingleton = func() keyedVersions {
