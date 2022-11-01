@@ -185,8 +185,6 @@ func (gt *grpcTransport) SendNext(
 	if err != nil {
 		return nil, err
 	}
-
-	ba.Replica = r
 	return gt.sendBatch(ctx, r.NodeID, iface, ba)
 }
 
