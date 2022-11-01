@@ -3006,7 +3006,11 @@ func MVCCPredicateDeleteRange(
 			return false, false, false, roachpb.NewWriteTooOldError(endTime, k.Timestamp.Next(),
 				k.Key.Clone())
 		}
-		if len(vRaw) == 0 {
+		v, err := DecodeMVCCValue(vRaw)
+		if err != nil {
+			return false, false, false, err
+		}
+		if v.IsTombstone() {
 			// The latest version of the key is a point tombstone.
 			return true, true, false, nil
 		}
@@ -3017,10 +3021,6 @@ func MVCCPredicateDeleteRange(
 		}
 
 		// TODO (msbutler): use MVCCValueHeader to match on job ID predicate
-		_, err = DecodeMVCCValue(vRaw)
-		if err != nil {
-			return false, false, false, err
-		}
 		return true, false, false, nil
 	}
 
