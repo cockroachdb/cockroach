@@ -47,11 +47,10 @@ import {
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
 
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
+import { StatementDiagnosticsReport } from "../api";
 const cx = classNames.bind(styles);
 
 function makeCommonColumns(
@@ -230,7 +229,7 @@ export interface AggregateStatistics {
   stats: StatementStatistics;
   drawer?: boolean;
   firstCellBordered?: boolean;
-  diagnosticsReports?: cockroach.server.serverpb.IStatementDiagnosticsReport[];
+  diagnosticsReports?: StatementDiagnosticsReport[];
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload?: Long;
   regionNodes?: string[];
@@ -288,7 +287,7 @@ export function makeStatementsColumns(
   search?: string,
   activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
   onSelectDiagnosticsReportDropdownOption?: (
-    report: IStatementDiagnosticsReport,
+    report: StatementDiagnosticsReport,
   ) => void,
   onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics>[] {

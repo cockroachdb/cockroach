@@ -13,7 +13,7 @@ import { Col, Row, Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import "antd/lib/tabs/style";
-import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Location } from "history";
@@ -71,12 +71,14 @@ import {
 } from "./timeseriesUtils";
 import { Delayed } from "../delayed";
 import moment from "moment";
+import {
+  CancelStmtDiagnosticRequest,
+  InsertStmtDiagnosticRequest,
+  StatementDiagnosticsReport,
+} from "../api";
 
-type IDuration = google.protobuf.IDuration;
 type StatementDetailsResponse =
   cockroach.server.serverpb.StatementDetailsResponse;
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 const { TabPane } = Tabs;
 
@@ -109,16 +111,14 @@ export interface StatementDetailsDispatchProps {
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
   createStatementDiagnosticsReport: (
-    statementFingerprint: string,
-    minExecLatency: IDuration,
-    expiresAfter: IDuration,
+    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
   ) => void;
   dismissStatementDiagnosticsAlertMessage?: () => void;
   onTabChanged?: (tabName: string) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
   onDiagnosticsModalOpen?: (statementFingerprint: string) => void;
   onDiagnosticBundleDownload?: (statementFingerprint?: string) => void;
-  onDiagnosticCancelRequest?: (report: IStatementDiagnosticsReport) => void;
+  onDiagnosticCancelRequest?: (report: StatementDiagnosticsReport) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -135,7 +135,7 @@ export interface StatementDetailsStateProps {
   timeScale: TimeScale;
   nodeNames: { [nodeId: string]: string };
   nodeRegions: { [nodeId: string]: string };
-  diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
+  diagnosticsReports: StatementDiagnosticsReport[];
   uiConfig?: UIConfigState["pages"]["statementDetails"];
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
@@ -784,7 +784,9 @@ export class StatementDetails extends React.Component<
           this.props.statementDetails?.statement?.metadata?.query
         }
         onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
-        onDiagnosticCancelRequestClick={this.props.onDiagnosticCancelRequest}
+        onDiagnosticCancelRequestClick={report =>
+          this.props.onDiagnosticCancelRequest(report)
+        }
         showDiagnosticsViewLink={
           this.props.uiConfig.showStatementDiagnosticsLink
         }

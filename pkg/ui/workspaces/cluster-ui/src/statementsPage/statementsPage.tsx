@@ -80,10 +80,11 @@ import { commonStyles } from "../common";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { StatementViewType } from "./statementPageTypes";
 import moment from "moment";
+import {
+  InsertStmtDiagnosticRequest,
+  StatementDiagnosticsReport,
+} from "../api";
 
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
-type IDuration = google.protobuf.IDuration;
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
@@ -100,9 +101,7 @@ export interface StatementsPageDispatchProps {
   resetSQLStats: (req: StatementsRequest) => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
-    statement: string,
-    minExecLatency: IDuration,
-    expiresAfter: IDuration,
+    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
   ) => void;
   onDiagnosticsModalOpen?: (statement: string) => void;
   onSearchComplete?: (query: string) => void;
@@ -113,7 +112,7 @@ export interface StatementsPageDispatchProps {
     ascending: boolean,
   ) => void;
   onSelectDiagnosticsReportDropdownOption?: (
-    report: IStatementDiagnosticsReport,
+    report: StatementDiagnosticsReport,
   ) => void;
   onFilterChange?: (value: Filters) => void;
   onStatementClick?: (statement: string) => void;

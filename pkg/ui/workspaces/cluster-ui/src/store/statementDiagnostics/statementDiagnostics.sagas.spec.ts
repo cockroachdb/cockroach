@@ -11,8 +11,6 @@
 import { expectSaga } from "redux-saga-test-plan";
 import { throwError } from "redux-saga-test-plan/providers";
 import { call } from "redux-saga/effects";
-import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
-import Long from "long";
 import {
   createDiagnosticsReportSaga,
   requestStatementsDiagnosticsSaga,
@@ -24,51 +22,42 @@ import {
   createStatementDiagnosticsReport,
   cancelStatementDiagnosticsReport,
   getStatementDiagnosticsReports,
+  InsertStmtDiagnosticRequest,
+  InsertStmtDiagnosticResponse,
+  StatementDiagnosticsResponse,
+  CancelStmtDiagnosticRequest,
+  CancelStmtDiagnosticResponse,
 } from "src/api/statementDiagnosticsApi";
-
-const CreateStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-const CreateStatementDiagnosticsReportResponse =
-  cockroach.server.serverpb.CreateStatementDiagnosticsReportResponse;
-
-const CancelStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
-const CancelStatementDiagnosticsReportResponse =
-  cockroach.server.serverpb.CancelStatementDiagnosticsReportResponse;
+import moment from "moment";
 
 describe("statementsDiagnostics sagas", () => {
   describe("createDiagnosticsReportSaga", () => {
     const statementFingerprint = "SELECT * FROM table";
-    const minExecLatency = new google.protobuf.Duration({
-      seconds: new Long(100),
-    });
-    const expiresAfter = new google.protobuf.Duration({
-      seconds: new Long(0), // Setting expiresAfter to 0 means the request won't expire.
-    });
+    const minExecLatency = 100; // num seconds
+    const expiresAfter = 0; // num seconds, setting expiresAfter to 0 means the request won't expire.
 
-    const request = new CreateStatementDiagnosticsReportRequest({
-      statement_fingerprint: statementFingerprint,
-      min_execution_latency: minExecLatency,
-      expires_after: expiresAfter,
-    });
+    const insertRequest: InsertStmtDiagnosticRequest = {
+      stmtFingerprint: statementFingerprint,
+      minExecutionLatencySeconds: minExecLatency,
+      expiresAfterSeconds: expiresAfter,
+    };
 
-    const report = new CreateStatementDiagnosticsReportResponse({
-      report: {
-        completed: false,
-        id: Long.fromNumber(Date.now()),
-        statement_fingerprint: statementFingerprint,
-      },
-    });
+    const insertResponse: InsertStmtDiagnosticResponse = {
+      stmt_diag_req_id: "4132456789089978654",
+    };
 
-    const reportsResponse =
-      new cockroach.server.serverpb.StatementDiagnosticsReportsResponse({
-        reports: [],
-      });
+    const reportsResponse: StatementDiagnosticsResponse = [];
 
     it("successful request", () => {
-      expectSaga(createDiagnosticsReportSaga, actions.createReport(request))
+      expectSaga(
+        createDiagnosticsReportSaga,
+        actions.createReport(insertRequest),
+      )
         .provide([
-          [call(createStatementDiagnosticsReport, request), report],
+          [
+            call(createStatementDiagnosticsReport, insertRequest),
+            insertResponse,
+          ],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
         .put(actions.createReportCompleted())
@@ -84,9 +73,15 @@ describe("statementsDiagnostics sagas", () => {
 
     it("failed request", () => {
       const error = new Error("Failed request");
-      expectSaga(createDiagnosticsReportSaga, actions.createReport(request))
+      expectSaga(
+        createDiagnosticsReportSaga,
+        actions.createReport(insertRequest),
+      )
         .provide([
-          [call(createStatementDiagnosticsReport, request), throwError(error)],
+          [
+            call(createStatementDiagnosticsReport, insertRequest),
+            throwError(error),
+          ],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
         .put(actions.createReportFailed(error))
@@ -96,18 +91,31 @@ describe("statementsDiagnostics sagas", () => {
 
   describe("requestStatementsDiagnosticsSaga", () => {
     const statementFingerprint = "SELECT * FROM table";
-    const reportsResponse =
-      new cockroach.server.serverpb.StatementDiagnosticsReportsResponse({
-        reports: [{ statement_fingerprint: statementFingerprint }],
-      });
+    const requestedAt = moment.now();
+    const expiresAt = 100; // num seconds
+    const minExecutionLatency = 10; // num seconds
+
+    const statementDiagnosticsResponse: StatementDiagnosticsResponse = [
+      {
+        id: "12345367789654",
+        statement_diagnostics_id: "12367543632253",
+        completed: false,
+        requested_at: moment(requestedAt),
+        expires_at: moment(requestedAt + expiresAt),
+        min_execution_latency: moment.duration(minExecutionLatency, "s"),
+        statement_fingerprint: statementFingerprint,
+      },
+    ];
 
     it("successfully requests diagnostics reports", () => {
       expectSaga(requestStatementsDiagnosticsSaga)
-        .provide([[call(getStatementDiagnosticsReports), reportsResponse]])
-        .put(actions.received(reportsResponse))
+        .provide([
+          [call(getStatementDiagnosticsReports), statementDiagnosticsResponse],
+        ])
+        .put(actions.received(statementDiagnosticsResponse))
         .withReducer(reducer)
         .hasFinalState<StatementDiagnosticsState>({
-          data: reportsResponse,
+          data: statementDiagnosticsResponse,
           lastError: null,
           valid: true,
         })
@@ -130,28 +138,24 @@ describe("statementsDiagnostics sagas", () => {
   });
 
   describe("cancelDiagnosticsReportSaga", () => {
-    const requestID = Long.fromNumber(12345);
-    const request = new CancelStatementDiagnosticsReportRequest({
-      request_id: requestID,
-    });
-
-    const report = new CancelStatementDiagnosticsReportResponse({
-      canceled: true,
-      error: "",
-    });
-
-    const reportsResponse =
-      new cockroach.server.serverpb.StatementDiagnosticsReportsResponse({
-        reports: [],
-      });
+    const cancelRequest: CancelStmtDiagnosticRequest = {
+      requestId: "123456789876",
+    };
+    const cancelResponse: CancelStmtDiagnosticResponse = {
+      stmt_diag_req_id: "123456789876",
+    };
+    const reportsResponse: StatementDiagnosticsResponse = [];
 
     it("successful request", () => {
       return expectSaga(
         cancelDiagnosticsReportSaga,
-        actions.cancelReport(request),
+        actions.cancelReport(cancelRequest),
       )
         .provide([
-          [call(cancelStatementDiagnosticsReport, request), report],
+          [
+            call(cancelStatementDiagnosticsReport, cancelRequest),
+            cancelResponse,
+          ],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
         .put(actions.cancelReportCompleted())
@@ -169,10 +173,13 @@ describe("statementsDiagnostics sagas", () => {
       const error = new Error("Failed request");
       return expectSaga(
         cancelDiagnosticsReportSaga,
-        actions.cancelReport(request),
+        actions.cancelReport(cancelRequest),
       )
         .provide([
-          [call(cancelStatementDiagnosticsReport, request), throwError(error)],
+          [
+            call(cancelStatementDiagnosticsReport, cancelRequest),
+            throwError(error),
+          ],
           [call(getStatementDiagnosticsReports), reportsResponse],
         ])
         .put(actions.cancelReportFailed(error))
