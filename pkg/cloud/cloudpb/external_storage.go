@@ -10,6 +10,11 @@
 
 package cloudpb
 
+import (
+	"fmt"
+	"strings"
+)
+
 const (
 	// ExternalStorageAuthImplicit is used by ExternalStorage instances to
 	// indicate access via a node's "implicit" authorization (e.g. machine acct).
@@ -58,4 +63,36 @@ func (m *ExternalStorage) AccessIsWithExplicitAuth() bool {
 	default:
 		return false
 	}
+}
+
+const assumeRoleProviderExternalIDParam = "external_id"
+
+// EncodeAsString returns the string representation of the provider to be used
+// in URIs.
+func (p ExternalStorage_AssumeRoleProvider) EncodeAsString() string {
+	if p.Role == "" {
+		return ""
+	}
+
+	if p.ExternalID == "" {
+		return p.Role
+	}
+
+	return fmt.Sprintf("%s;%s=%s", p.Role, assumeRoleProviderExternalIDParam, p.ExternalID)
+
+}
+
+// DecodeRoleProviderString decodes a string into an
+// ExternalStorage_AssumeRoleProvider.
+func DecodeRoleProviderString(roleProviderString string) (p ExternalStorage_AssumeRoleProvider) {
+	parts := strings.Split(roleProviderString, ";")
+	p.Role = parts[0]
+
+	for pidx := 1; pidx < len(parts); pidx++ {
+		key, value, _ := strings.Cut(parts[pidx], "=")
+		if key == assumeRoleProviderExternalIDParam {
+			p.ExternalID = value
+		}
+	}
+	return p
 }
