@@ -23,6 +23,7 @@ stubComponentInModule(
   "default",
 );
 stubComponentInModule("src/views/statements/statementsPage", "default");
+stubComponentInModule("src/views/statements/statementDetails", "default");
 stubComponentInModule("src/views/transactions/transactionsPage", "default");
 stubComponentInModule(
   "src/views/statements/activeStatementDetailsConnected",
@@ -63,7 +64,6 @@ const NODE_LOG_HEADER = /Logs Node.*/;
 const EVENTS_HEADER = "Events";
 const JOBS_HEADER = "Jobs";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
-const STATEMENTS_DETAILS_HEADER = "Statement Fingerprint";
 const TRANSACTION_DETAILS_HEADER = "Transaction Details";
 const ADVANCED_DEBUG_HEADER = "Advanced Debugging";
 const REDUX_DEBUG_HEADER = "Redux State";
@@ -356,14 +356,14 @@ describe("Routing to", () => {
   describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
     test("routes to <StatementDetails> component", () => {
       navigateToPath("/statements/%24+internal/true");
-      screen.getByText(STATEMENTS_DETAILS_HEADER, { selector: "h3" });
+      screen.getByTestId("statementDetails");
     });
   });
 
   describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
     test("routes to <StatementDetails> component", () => {
       navigateToPath("/statements/implicit-txn-attr/statement-attr");
-      screen.getByText(STATEMENTS_DETAILS_HEADER, { selector: "h3" });
+      screen.getByTestId("statementDetails");
     });
   });
 
@@ -379,7 +379,7 @@ describe("Routing to", () => {
   describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
     test("routes to <StatementDetails> component", () => {
       navigateToPath("/statement/implicit-attr/statement-attr/");
-      screen.getByText(STATEMENTS_DETAILS_HEADER, { selector: "h3" });
+      screen.getByTestId("statementDetails");
     });
   });
 

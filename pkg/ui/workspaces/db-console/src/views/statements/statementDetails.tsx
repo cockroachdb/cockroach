@@ -45,15 +45,12 @@ import {
   trackDownloadDiagnosticsBundleAction,
   trackStatementDetailsSubnavSelectionAction,
 } from "src/redux/analyticsActions";
-import * as protos from "src/js/protos";
 import { StatementDetailsResponseMessage } from "src/util/api";
 import { getMatchParamByName, queryByName } from "src/util/query";
 
 import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
-
-type IStatementDiagnosticsReport =
-  protos.cockroach.server.serverpb.IStatementDiagnosticsReport;
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 const { generateStmtDetailsToID } = util;
 
@@ -127,13 +124,27 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   refreshStatementDiagnosticsRequests,
   dismissStatementDiagnosticsAlertMessage: () =>
     createStatementDiagnosticsAlertLocalSetting.set({ show: false }),
-  createStatementDiagnosticsReport: createStatementDiagnosticsReportAction,
+  createStatementDiagnosticsReport: (
+    insertStatementDiagnosticsRequest: clusterUiApi.InsertStmtDiagnosticRequest,
+  ) => {
+    return (dispatch: AppDispatch) => {
+      dispatch(
+        createStatementDiagnosticsReportAction(
+          insertStatementDiagnosticsRequest,
+        ),
+      );
+    };
+  },
   onTabChanged: trackStatementDetailsSubnavSelectionAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
   onDiagnosticBundleDownload: trackDownloadDiagnosticsBundleAction,
-  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+  onDiagnosticCancelRequest: (
+    report: clusterUiApi.StatementDiagnosticsReport,
+  ) => {
     return (dispatch: AppDispatch) => {
-      dispatch(cancelStatementDiagnosticsReportAction(report.id));
+      dispatch(
+        cancelStatementDiagnosticsReportAction({ requestId: report.id }),
+      );
       dispatch(
         trackCancelDiagnosticsBundleAction(report.statement_fingerprint),
       );

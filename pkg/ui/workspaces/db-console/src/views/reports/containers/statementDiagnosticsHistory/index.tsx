@@ -30,8 +30,7 @@ import {
   refreshStatementDiagnosticsRequests,
 } from "src/redux/apiReducers";
 import "./statementDiagnosticsHistoryView.styl";
-import { cockroach } from "src/js/protos";
-import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trackDownloadDiagnosticsBundle } from "src/util/analytics";
@@ -92,15 +91,15 @@ class StatementDiagnosticsHistoryView extends React.Component<
   StatementDiagnosticsHistoryViewProps,
   StatementDiagnosticsHistoryViewState
 > {
-  columns: ColumnDescriptor<IStatementDiagnosticsReport>[] = [
+  columns: ColumnDescriptor<clusterUiApi.StatementDiagnosticsReport>[] = [
     {
       title: "Activated on",
       name: "activated_on",
       cell: record =>
-        moment
-          .utc(record.requested_at.seconds.toNumber() * 1000)
-          .format(DATE_FORMAT_24_UTC),
-      sort: record => moment(record.requested_at.seconds.toNumber() * 1000),
+        moment.utc(record.requested_at).format(DATE_FORMAT_24_UTC),
+      sort: record => {
+        return moment.utc(record.requested_at).unix();
+      },
     },
     {
       title: "Statement",
@@ -278,14 +277,16 @@ class StatementDiagnosticsHistoryView extends React.Component<
 
 interface MapStateToProps {
   loading: boolean;
-  diagnosticsReports: IStatementDiagnosticsReport[];
+  diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[];
   getStatementByFingerprint: (
     fingerprint: string,
   ) => ReturnType<typeof selectStatementByFingerprint>;
 }
 
 interface MapDispatchToProps {
-  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => void;
+  onDiagnosticCancelRequest: (
+    report: clusterUiApi.StatementDiagnosticsReport,
+  ) => void;
   refresh: () => void;
 }
 
@@ -297,8 +298,10 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
 });
 
 const mapDispatchToProps = (dispatch: AppDispatch): MapDispatchToProps => ({
-  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
-    dispatch(cancelStatementDiagnosticsReportAction(report.id));
+  onDiagnosticCancelRequest: (
+    report: clusterUiApi.StatementDiagnosticsReport,
+  ) => {
+    dispatch(cancelStatementDiagnosticsReportAction({ requestId: report.id }));
     dispatch(trackCancelDiagnosticsBundleAction(report.statement_fingerprint));
   },
   refresh: () => {
