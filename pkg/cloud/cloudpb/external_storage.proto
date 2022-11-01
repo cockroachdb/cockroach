@@ -38,6 +38,10 @@ message ExternalStorage {
   message Http {
     string baseUri = 1;
   }
+  message AssumeRoleProvider {
+    string role = 1;
+    string external_id = 2  [(gogoproto.customname) = "ExternalID"];
+  }
   message S3 {
     string bucket = 1;
     string prefix = 2;
@@ -60,6 +64,9 @@ message ExternalStorage {
     // chain. These roles will be assumed in the order they appear in the list
     // so that the role specified by RoleARN can be assumed.
     repeated string delegate_role_arns = 13 [(gogoproto.customname) = "DelegateRoleARNs"];
+
+    AssumeRoleProvider assume_role_provider = 14 [(gogoproto.nullable) = false];
+    repeated AssumeRoleProvider delegate_role_providers = 15 [(gogoproto.nullable) = false];
   }
   message GCS {
     string bucket = 1;
