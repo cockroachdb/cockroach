@@ -40,19 +40,13 @@ import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as nodeLivenessActions } from "../store/liveness";
 import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
-import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
-import { StatementDetailsRequest } from "../api";
+import {
+  InsertStmtDiagnosticRequest,
+  StatementDetailsRequest,
+  StatementDiagnosticsReport,
+} from "../api";
 import { TimeScale } from "../timeScaleDropdown";
 import { getMatchParamByName, statementAttr } from "../util";
-type IDuration = google.protobuf.IDuration;
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
-
-const CreateStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-
-const CancelStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 
 // For tenant cases, we don't show information about node, regions and
 // diagnostics.
@@ -108,18 +102,10 @@ const mapDispatchToProps = (
       }),
     ),
   createStatementDiagnosticsReport: (
-    statementFingerprint: string,
-    minExecLatency: IDuration,
-    expiresAfter: IDuration,
+    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
   ) => {
     dispatch(
-      statementDiagnosticsActions.createReport(
-        new CreateStatementDiagnosticsReportRequest({
-          statement_fingerprint: statementFingerprint,
-          min_execution_latency: minExecLatency,
-          expires_after: expiresAfter,
-        }),
-      ),
+      statementDiagnosticsActions.createReport(insertStmtDiagnosticsRequest),
     );
     dispatch(
       analyticsActions.track({
@@ -145,13 +131,11 @@ const mapDispatchToProps = (
         action: "Downloaded",
       }),
     ),
-  onDiagnosticCancelRequest: (report: IStatementDiagnosticsReport) => {
+  onDiagnosticCancelRequest: (report: StatementDiagnosticsReport) => {
     dispatch(
-      statementDiagnosticsActions.cancelReport(
-        new CancelStatementDiagnosticsReportRequest({
-          request_id: report.id,
-        }),
-      ),
+      statementDiagnosticsActions.cancelReport({
+        requestId: report.id,
+      }),
     );
     dispatch(
       analyticsActions.track({

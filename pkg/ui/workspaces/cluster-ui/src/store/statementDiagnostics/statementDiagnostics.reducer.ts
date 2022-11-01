@@ -9,18 +9,15 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DOMAIN_NAME, noopReducer } from "../utils";
-
-type CreateStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-type CancelStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
-type StatementDiagnosticsReportsResponse =
-  cockroach.server.serverpb.StatementDiagnosticsReportsResponse;
+import {
+  CancelStmtDiagnosticRequest,
+  InsertStmtDiagnosticRequest,
+  StatementDiagnosticsResponse,
+} from "../../api";
 
 export type StatementDiagnosticsState = {
-  data: StatementDiagnosticsReportsResponse;
+  data: StatementDiagnosticsResponse;
   lastError: Error;
   valid: boolean;
 };
@@ -37,7 +34,7 @@ const statementDiagnosticsSlice = createSlice({
   reducers: {
     received: (
       state: StatementDiagnosticsState,
-      action: PayloadAction<StatementDiagnosticsReportsResponse>,
+      action: PayloadAction<StatementDiagnosticsResponse>,
     ) => {
       state.data = action.payload;
       state.lastError = null;
@@ -55,13 +52,13 @@ const statementDiagnosticsSlice = createSlice({
     invalidated: noopReducer,
     createReport: (
       _state,
-      _action: PayloadAction<CreateStatementDiagnosticsReportRequest>,
+      _action: PayloadAction<InsertStmtDiagnosticRequest>,
     ) => {},
     createReportCompleted: noopReducer,
     createReportFailed: (_state, _action: PayloadAction<Error>) => {},
     cancelReport: (
       _state,
-      _action: PayloadAction<CancelStatementDiagnosticsReportRequest>,
+      _action: PayloadAction<CancelStmtDiagnosticRequest>,
     ) => {},
     cancelReportCompleted: noopReducer,
     cancelReportFailed: (_state, _action: PayloadAction<Error>) => {},
