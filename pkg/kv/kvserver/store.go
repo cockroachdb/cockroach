@@ -365,9 +365,21 @@ func (e *NotBootstrappedError) Error() string {
 type storeReplicaVisitor struct {
 	store   *Store
 	repls   []*Replica // Replicas to be visited
-	ordered bool       // Option to visit replicas in sorted order
 	visited int        // Number of visited ranges, -1 before first call to Visit()
+	order   storeReplicaVisitorOrder
 }
+
+type storeReplicaVisitorOrder byte
+
+const (
+	// visitRandom shuffles the order of the replicas. It is the default.
+	visitRandom storeReplicaVisitorOrder = iota
+	// visitSorted sorts the replicas by their range ID.
+	visitSorted
+	// visitUndefined does not touch the ordering of the replicas, and thus
+	// leaves it undefined
+	visitUndefined
+)
 
 // Len implements sort.Interface.
 func (rs storeReplicaVisitor) Len() int { return len(rs.repls) }
@@ -388,7 +400,13 @@ func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
 
 // InOrder tells the visitor to visit replicas in increasing RangeID order.
 func (rs *storeReplicaVisitor) InOrder() *storeReplicaVisitor {
-	rs.ordered = true
+	rs.order = visitSorted
+	return rs
+}
+
+// UndefinedOrder tells the visitor to visit replicas in any order.
+func (rs *storeReplicaVisitor) UndefinedOrder() *storeReplicaVisitor {
+	rs.order = visitUndefined
 	return rs
 }
 
@@ -402,10 +420,8 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		rs.repls = append(rs.repls, repl)
 	})
 
-	if rs.ordered {
-		// If the replicas were requested in sorted order, perform the sort.
-		sort.Sort(rs)
-	} else {
+	switch rs.order {
+	case visitRandom:
 		// The Replicas are already in "unspecified order" due to map iteration,
 		// but we want to make sure it's completely random to prevent issues in
 		// tests where stores are scanning replicas in lock-step and one store is
@@ -415,6 +431,14 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 		// TODO(peter): Re-evaluate whether this is necessary after we allow
 		// rebalancing away from the leaseholder. See TestRebalance_3To5Small.
 		shuffle.Shuffle(rs)
+	case visitSorted:
+		// If the replicas were requested in sorted order, perform the sort.
+		sort.Sort(rs)
+	case visitUndefined:
+		// Don't touch the ordering.
+
+	default:
+		panic(errors.AssertionFailedf("invalid visit order %v", rs.order))
 	}
 
 	rs.visited = 0
@@ -3463,7 +3487,7 @@ type StoreKeySpanStats struct {
 func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeySpanStats, error) {
 	var result StoreKeySpanStats
 
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+	newStoreReplicaVisitor(s).UndefinedOrder().Visit(func(repl *Replica) bool {
 		desc := repl.Desc()
 		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
 			return true // continue
