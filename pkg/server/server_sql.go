@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -365,6 +366,9 @@ type sqlServerArgs struct {
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
+
+	//
+	admissionController kvadmission.Controller
 }
 
 type monitorAndMetrics struct {
@@ -740,6 +744,8 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		CollectionFactory:        collectionFactory,
 		ExternalIORecorder:       cfg.costController,
 		RangeStatsFetcher:        rangeStatsFetcher,
+
+		AdmissionController: cfg.admissionController,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {

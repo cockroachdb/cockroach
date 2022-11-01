@@ -242,7 +242,8 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_workers",
 	"the number of workers to use when processing events: <0 disables, "+
-		"0 assigns a reasonable default, >0 assigns the setting value",
+		"0 assigns a reasonable default, >0 assigns the setting value. this setting is disabled"+
+		"for experimental/core changefeeds",
 	0,
 ).WithPublic()
 
@@ -254,4 +255,14 @@ var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 		"which a worker can buffer",
 	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
 	settings.NonNegativeInt,
+).WithPublic()
+
+var EventConsumerPacerRequestSize = settings.RegisterDurationSetting(
+	settings.TenantWritable,
+	"changefeed.event_consumer_pacer_request_size",
+	"an event consumer worker will request this amount of CPU time"+
+		"before consuming events. after fully utilizing this CPU time, it will"+
+		"request more. setting a value of 0 disables this feature",
+	20*time.Millisecond,
+	settings.PositiveDuration,
 ).WithPublic()

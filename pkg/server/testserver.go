@@ -814,7 +814,6 @@ func (ts *TestServer) StartTenant(
 	if params.TempStorageConfig != nil {
 		sqlCfg.TempStorageConfig = *params.TempStorageConfig
 	}
-
 	stopper := params.Stopper
 	if stopper == nil {
 		// We don't share the stopper with the server because we want their Tracers
