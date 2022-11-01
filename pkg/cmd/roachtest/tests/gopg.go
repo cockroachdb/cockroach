@@ -116,7 +116,9 @@ func registerGopg(r registry.Registry) {
 				destPath, removeColorCodes, resultsFilePath),
 		)
 
-		if errors.Is(err, rperrors.ErrSSH255) {
+		// Fatal for a roachprod err or SSH error. Roachprod error is when result.Err==nil
+		// Proceed for any other (command) errors
+		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
 			t.Fatal(err)
 		}
 
@@ -145,7 +147,9 @@ func registerGopg(r registry.Registry) {
 				destPath, goPath, resultsFilePath, goPath),
 		)
 
-		if errors.Is(err, rperrors.ErrSSH255) {
+		// Fatal for a roachprod err or SSH error. Roachprod error is when result.Err==nil
+		// Proceed for any other (command) errors
+		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
 			t.Fatal(err)
 		}
 
