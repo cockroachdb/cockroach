@@ -32,9 +32,10 @@ if [[ -z "$build_name" ]] ; then
 fi
 # Hard coded release number used only by the RedHat images
 rhel_release=1
-rhel_registry="scan.connect.redhat.com"
 rhel_project_id=5e61ea74fe2231a0c2860382
-rhel_repository="${rhel_registry}/p194808216984433e18e6e90dd859cb1ea7c738ec50/cockroach"
+rhel_registry="quay.io"
+rhel_registry_username="redhat-isv-containers+${rhel_project_id}-robot"
+rhel_repository="${rhel_registry}/redhat-isv-containers/$rhel_project_id"
 dockerhub_repository="cockroachdb/cockroach"
 
 if ! [[ -z "${DRY_RUN}" ]] ; then
@@ -44,7 +45,7 @@ fi
 tc_end_block "Variable Setup"
 
 tc_start_block "Configure docker"
-docker_login_with_redhat
+echo "${QUAY_REGISTRY_KEY}" | docker login --username $rhel_registry_username --password-stdin $rhel_registry
 tc_end_block "Configure docker"
 
 tc_start_block "Rebuild per-arch docker images"
