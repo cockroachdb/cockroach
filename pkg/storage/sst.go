@@ -269,8 +269,8 @@ func CheckSSTConflicts(
 			allowShadow := !disallowShadowingBelow.IsEmpty() &&
 				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
 			if !allowShadow {
-				return errors.Errorf(
-					"ingested key collides with an existing one: %s", sstKey.Key)
+				panic(errors.Errorf(
+					"ingested key collides with an existing one: %s", sstKey.Key))
 			}
 		}
 

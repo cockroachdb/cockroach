@@ -59,6 +59,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	_ = numQueries
 
 	// Create the tables.
 	conn := c.Conn(ctx, t.L(), 1)
@@ -158,25 +159,26 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// Run the TPCH workload. Note that the TPCH workload asserts equality for
 	// query results. If the import cancellations corrupted table data, running
 	// the TPCH workload should observe it.
-	m.Go(func(ctx context.Context) error {
-		t.WorkerStatus(`running tpch workload`)
-		// maxOps flag will allow us to exit the workload once all the queries
-		// were run 2 times.
-		const numRunsPerQuery = 2
-		const maxLatency = 500 * time.Second
-		maxOps := numRunsPerQuery * numQueries
-		cmd := fmt.Sprintf(
-			"./workload run querybench --db=csv --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d {pgurl%s} "+
-				"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
-			queriesFilename, numRunsPerQuery, maxOps, c.All(), maxLatency.String())
-		if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
-			t.Fatal(err)
-		}
-		return nil
-	})
-	m.Wait()
-
+	/*
+		m.Go(func(ctx context.Context) error {
+			t.WorkerStatus(`running tpch workload`)
+			// maxOps flag will allow us to exit the workload once all the queries
+			// were run 2 times.
+			const numRunsPerQuery = 2
+			const maxLatency = 500 * time.Second
+			maxOps := numRunsPerQuery * numQueries
+			cmd := fmt.Sprintf(
+				"./workload run querybench --db=csv --concurrency=1 --query-file=%s "+
+					"--num-runs=%d --max-ops=%d {pgurl%s} "+
+					"--histograms="+t.PerfArtifactsDir()+"/stats.json --histograms-max-latency=%s",
+				queriesFilename, numRunsPerQuery, maxOps, c.All(), maxLatency.String())
+			if err := c.RunE(ctx, c.Node(1), cmd); err != nil {
+				t.Fatal(err)
+			}
+			return nil
+		})
+		m.Wait()
+	*/
 	// TODO(jackson): Ensure that the number of RangeKeySet falls (—to zero?).
 }
 
