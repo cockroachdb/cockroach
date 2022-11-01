@@ -153,7 +153,9 @@ func registerRubyPG(r registry.Registry) {
 			`cd /mnt/data1/ruby-pg/ && bundle exec rake compile test`,
 		)
 
-		if errors.Is(err, rperrors.ErrSSH255) {
+		// Fatal for a roachprod err or SSH error. Roachprod error is when result.Err==nil
+		// Proceed for any other (command) errors
+		if err != nil && (result.Err == nil || errors.Is(err, rperrors.ErrSSH255)) {
 			t.Fatal(err)
 		}
 
