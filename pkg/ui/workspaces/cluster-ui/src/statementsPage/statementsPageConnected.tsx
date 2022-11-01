@@ -43,7 +43,6 @@ import {
 import { nodeRegionsByIDSelector } from "../store/nodes";
 import { StatementsRequest } from "src/api/statementsApi";
 import { TimeScale } from "../timeScaleDropdown";
-import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import {
   StatementsPageRoot,
   StatementsPageRootProps,
@@ -56,16 +55,10 @@ import {
   mapDispatchToActiveStatementsPageProps,
   mapStateToActiveStatementsPageProps,
 } from "./activeStatementsPage.selectors";
-
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
-type IDuration = google.protobuf.IDuration;
-
-const CreateStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-
-const CancelStatementDiagnosticsReportRequest =
-  cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
+import {
+  InsertStmtDiagnosticRequest,
+  StatementDiagnosticsReport,
+} from "../api";
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps & RouteComponentProps;
@@ -133,17 +126,11 @@ export const ConnectedStatementsPage = withRouter(
             }),
           ),
         onActivateStatementDiagnostics: (
-          statementFingerprint: string,
-          minExecLatency: IDuration,
-          expiresAfter: IDuration,
+          insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
         ) => {
           dispatch(
             statementDiagnosticsActions.createReport(
-              new CreateStatementDiagnosticsReportRequest({
-                statement_fingerprint: statementFingerprint,
-                min_execution_latency: minExecLatency,
-                expires_after: expiresAfter,
-              }),
+              insertStmtDiagnosticsRequest,
             ),
           );
           dispatch(
@@ -155,7 +142,7 @@ export const ConnectedStatementsPage = withRouter(
           );
         },
         onSelectDiagnosticsReportDropdownOption: (
-          report: IStatementDiagnosticsReport,
+          report: StatementDiagnosticsReport,
         ) => {
           if (report.completed) {
             dispatch(
@@ -167,11 +154,9 @@ export const ConnectedStatementsPage = withRouter(
             );
           } else {
             dispatch(
-              statementDiagnosticsActions.cancelReport(
-                new CancelStatementDiagnosticsReportRequest({
-                  request_id: report.id,
-                }),
-              ),
+              statementDiagnosticsActions.cancelReport({
+                requestId: report.id,
+              }),
             );
             dispatch(
               analyticsActions.track({
