@@ -1451,7 +1451,7 @@ func validateConstraintNameIsNotUsed(
 			// If there is no active primary key, then adding one with the exact
 			// same name is allowed.
 			if !tableDesc.HasPrimaryKey() &&
-				tableDesc.PrimaryIndex.Name == name.String() {
+				tableDesc.PrimaryIndex.Name == string(name) {
 				return false, nil
 			}
 		}
