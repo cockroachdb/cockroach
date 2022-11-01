@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/ghemawat/stream"
 	"github.com/jordanlewis/gcassert"
+	"github.com/pkg/profile"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/tools/go/packages"
 )
@@ -1673,6 +1674,8 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestGolint", func(t *testing.T) {
+		defer profile.Start(profile.ProfilePath(".")).Stop()
+
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgScope)
 		if err != nil {
