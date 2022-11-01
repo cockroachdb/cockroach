@@ -226,10 +226,18 @@ func ResolveExistingObject(
 	switch lookupFlags.DesiredObjectKind {
 	case tree.TypeObject:
 		typ, isType := obj.(catalog.TypeDescriptor)
-		if !isType {
+		if isType {
+			return typ, prefix, nil
+		}
+		table, isTable := obj.(catalog.TableDescriptor)
+		if !isTable {
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(getResolvedTn())
 		}
-		return typ, prefix, nil
+		implicitTyp, err := typedesc.CreateImplicitRecordTypeFromTableDesc(table)
+		if err != nil {
+			return nil, prefix, err
+		}
+		return implicitTyp, prefix, nil
 	case tree.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
