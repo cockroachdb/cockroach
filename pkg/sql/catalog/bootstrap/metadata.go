@@ -42,6 +42,7 @@ type MetadataSchema struct {
 	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
+	otherSplits   []roachpb.RKey
 	ids           catalog.DescriptorIDSet
 }
 
@@ -54,6 +55,7 @@ func MakeMetadataSchema(
 ) MetadataSchema {
 	ms := MetadataSchema{codec: codec}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
+	prepopulateAppTenantKeyspace(&ms, defaultZoneConfig, defaultSystemZoneConfig)
 	return ms
 }
 
@@ -235,6 +237,10 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// Other key/value generation that doesn't fit into databases and
 	// tables. This can be used to add initial entries to a table.
 	ret = append(ret, ms.otherKV...)
+
+	// Other split points that don't fit into the primary keyspace.
+	// This is used when pre-populating a secondary tenant.
+	splits = append(splits, ms.otherSplits...)
 
 	// Sort returned key values; this is valuable because it matches the way the
 	// objects would be sorted if read from the engine.
@@ -465,15 +471,27 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
-	addSystemTenantEntry(target)
+	// Pre-populate an entry for the system tenant.
+	addTenantEntry(target, roachpb.SystemTenantID, catconstants.SystemTenantName)
+	// Pre-populate an entry for the app tenant.
+	// Note: the app tenant's keyspace is initialized separately,
+	// in prepopulateAppTenantKeyspace().
+	addTenantEntry(target, roachpb.MakeTenantID(appTenantIDInFreshNewClusters), catconstants.AppTenantName)
 }
 
-// addSystemTenantEntry adds a kv pair to system.tenants to define the initial
-// system tenant entry.
-func addSystemTenantEntry(target *MetadataSchema) {
+// Note: generally the app tenant ID is dynamically allocated. No
+// assumption should be made about its value: the ID is allocated
+// dynamically when migrating from a previous version. If the ID is
+// needed, elswehere it should be looked up from system.tenants by
+// name.
+const appTenantIDInFreshNewClusters = 2
+
+// addTenantEntry adds a kv pair to system.tenants to define an initial
+// tenant entry.
+func addTenantEntry(target *MetadataSchema, tenantID roachpb.TenantID, tenantName string) {
 	info := descpb.TenantInfo{
-		ID:    roachpb.SystemTenantID.ToUint64(),
-		Name:  catconstants.SystemTenantName,
+		ID:    tenantID.ToUint64(),
+		Name:  tenantName,
 		State: descpb.TenantInfo_ACTIVE,
 	}
 	infoBytes, err := protoutil.Marshal(&info)
@@ -495,7 +513,7 @@ func addSystemTenantEntry(target *MetadataSchema) {
 	// this using SQL statements (perhaps as a separate code generator
 	// that would provide raw bytes that I can paste here?)
 	values := []tree.Datum{
-		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
+		tree.NewDInt(tree.DInt(tenantID.ToUint64())),
 		tree.MakeDBool(true),
 		tree.NewDBytes(tree.DBytes(infoBytes)),
 		tree.NewDString(info.Name),
@@ -533,6 +551,29 @@ func addSystemTenantEntry(target *MetadataSchema) {
 				roachpb.KeyValue{Key: k.Key, Value: k.Value})
 		}
 	}
+}
+
+// prepopulateAppTenantKeyspace initializes the keyspace
+// of the app tenant.
+func prepopulateAppTenantKeyspace(
+	ms *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+) {
+	if !ms.codec.ForSystemTenant() {
+		// We're initializing a secondary tenant already. Nothing to do.
+		return
+	}
+	// Recursively initialize a MetadataSchema for the app tenant.
+	codec2 := keys.MakeSQLCodec(roachpb.MakeTenantID(appTenantIDInFreshNewClusters))
+	ms2 := MetadataSchema{codec: codec2}
+	addSystemDatabaseToSchema(&ms2, defaultZoneConfig, defaultSystemZoneConfig)
+
+	// Inject its KV pairs and split points into the target (system)
+	// tenant.
+	kvs, splits := ms2.GetInitialValues()
+	ms.otherKV = append(ms.otherKV, kvs...)
+	ms.otherSplits = append(ms.otherSplits, splits...)
 }
 
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a
