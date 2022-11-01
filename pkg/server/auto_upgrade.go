@@ -21,13 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // startAttemptUpgrade attempts to upgrade cluster version.
-func (s *Server) startAttemptUpgrade(ctx context.Context) {
-	ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
-	if err := s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
+func (s *Server) startAttemptUpgrade(ctx context.Context) error {
+	return s.stopper.RunAsyncTask(ctx, "auto-upgrade", func(ctx context.Context) {
+		ctx, cancel := s.stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
+
 		retryOpts := retry.Options{
 			InitialBackoff: time.Second,
 			MaxBackoff:     30 * time.Second,
@@ -50,14 +52,36 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 		}
 
 		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			clusterVersion, err := s.clusterVersion(ctx)
+			if err != nil {
+				log.Errorf(ctx, "unable to retrieve cluster version: %v", err)
+				continue
+			}
+
 			// Check if we should upgrade cluster version, keep checking upgrade
 			// status, or stop attempting upgrade.
-			if quit, err := s.upgradeStatus(ctx); err != nil {
+			status, err := s.upgradeStatus(ctx, clusterVersion)
+			switch status {
+			case upgradeBlockedDueToError:
 				log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", err)
 				continue
-			} else if quit {
+			case upgradeBlockedDueToMixedVersions:
+				log.Infof(ctx, "failed attempt to upgrade cluster version: %v", err)
+				continue
+			case upgradeDisabledByConfiguration:
+				log.Infof(ctx, "auto upgrade is disabled for current version (preserve_downgrade_option): %s", redact.Safe(clusterVersion))
+				// Note: we do 'continue' here (and not 'return') so that the
+				// auto-upgrade gets a chance to continue/complete if the
+				// operator resets `preserve_downgrade_option` after the node
+				// has started up already.
+				continue
+			case upgradeAlreadyCompleted:
 				log.Info(ctx, "no need to upgrade, cluster already at the newest version")
 				return
+			case upgradeAllowed:
+				// Fall out of the select below.
+			default:
+				panic(errors.AssertionFailedf("unhandled case: %d", status))
 			}
 
 			upgradeRetryOpts := retry.Options{
@@ -83,27 +107,27 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 				}
 			}
 		}
-	}); err != nil {
-		cancel()
-		log.Errorf(ctx, "failed attempt to upgrade cluster version, error: %v", err)
-	}
+	})
 }
+
+type upgradeStatus int8
+
+const (
+	upgradeAllowed upgradeStatus = iota
+	upgradeAlreadyCompleted
+	upgradeDisabledByConfiguration
+	upgradeBlockedDueToError
+	upgradeBlockedDueToMixedVersions
+)
 
 // upgradeStatus lets the main checking loop know if we should do upgrade,
 // keep checking upgrade status, or stop attempting upgrade.
-// Return (true, nil) to indicate we want to stop attempting upgrade.
-// Return (false, nil) to indicate we want to do the upgrade.
-// Return (false, err) to indicate we want to keep checking upgrade status.
-func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
-	// Check if all nodes are running at the newest version.
-	clusterVersion, err := s.clusterVersion(ctx)
-	if err != nil {
-		return false, err
-	}
-
+func (s *Server) upgradeStatus(
+	ctx context.Context, clusterVersion string,
+) (st upgradeStatus, err error) {
 	nodesWithLiveness, err := s.status.nodesStatusWithLiveness(ctx)
 	if err != nil {
-		return false, err
+		return upgradeBlockedDueToError, err
 	}
 
 	var newVersion string
@@ -124,21 +148,23 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		if newVersion == "" {
 			newVersion = version
 		} else if version != newVersion {
-			return false, errors.Newf("not all nodes are running the latest version yet (saw %s and %s)", newVersion, version)
+			return upgradeBlockedDueToMixedVersions, errors.Newf(
+				"not all nodes are running the latest version yet (saw %s and %s)",
+				redact.Safe(newVersion), redact.Safe(version))
 		}
 	}
 
 	if newVersion == "" {
-		return false, errors.Errorf("no live nodes found")
+		return upgradeBlockedDueToError, errors.Errorf("no live nodes found")
 	}
 
 	// Check if we really need to upgrade cluster version.
 	if newVersion == clusterVersion {
-		return true, nil
+		return upgradeAlreadyCompleted, nil
 	}
 
 	if notRunningErr != nil {
-		return false, notRunningErr
+		return upgradeBlockedDueToError, notRunningErr
 	}
 
 	// Check if auto upgrade is enabled at current version. This is read from
@@ -150,18 +176,18 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		"SELECT value FROM system.settings WHERE name = 'cluster.preserve_downgrade_option';",
 	)
 	if err != nil {
-		return false, err
+		return upgradeBlockedDueToError, err
 	}
 
 	if row != nil {
 		downgradeVersion := string(tree.MustBeDString(row[0]))
 
 		if clusterVersion == downgradeVersion {
-			return false, errors.Errorf("auto upgrade is disabled for current version: %s", clusterVersion)
+			return upgradeDisabledByConfiguration, nil
 		}
 	}
 
-	return false, nil
+	return upgradeAllowed, nil
 }
 
 // clusterVersion returns the current cluster version from the SQL subsystem
