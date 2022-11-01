@@ -167,3 +167,17 @@ EXPERIMENTAL SCRUB TABLE t0
 
 statement ok
 DROP TABLE t0
+
+
+# Tests that scrubbing a database that contains a type works fine, previously
+# this would panic due to a lack of descriptor type checking.
+subtest scrub_with_database_with_type
+
+statement ok
+CREATE DATABASE typedb;
+
+statement ok
+CREATE TYPE typedb.e as enum('open', 'closed');
+
+statement ok
+EXPERIMENTAL SCRUB DATABASE typedb;
