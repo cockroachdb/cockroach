@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -876,6 +877,10 @@ func makeTenantSQLServerArgs(
 		eventsServer.TestingKnobs = knobs.(obs.EventServerTestingKnobs)
 	}
 
+	// TODO(jayant): generate admission.NewGrantCoordinators and pass them
+	// as server args, following the same pattern as server.NewServer.
+	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
+
 	return sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
 			nodesStatusServer: serverpb.MakeOptionalNodesStatusServer(nil),
@@ -925,6 +930,7 @@ func makeTenantSQLServerArgs(
 		grpc:                     grpcServer,
 		eventsServer:             eventsServer,
 		externalStorageBuilder:   esb,
+		pacerMaker:               noopElasticCPUGrantCoord,
 	}, nil
 }
 

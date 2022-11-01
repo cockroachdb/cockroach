@@ -13,15 +13,19 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -104,18 +108,19 @@ func newEventConsumer(
 			encoder, details, expr, knobs, topicNamer)
 	}
 
-	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
 	numWorkers := changefeedbase.EventConsumerWorkers.Get(&cfg.Settings.SV)
 	if numWorkers == 0 {
 		// Pick a reasonable default.
 		numWorkers = defaultNumWorkers()
 	}
 
+	// TODO (ganeshb) Add support for parallel encoding when using parquet.
 	// We cannot have a separate encoder and sink for parquet format (see
 	// parquet_sink_cloudstorage.go). Because of this the current nprox solution
 	// does not work for parquet format.
 	//
-	//TODO (ganeshb) Add support for parallel encoding
+	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds.
+	// The setting description should also be updated.
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
 		c, err := makeConsumer(sink, spanFrontier)
 		if err != nil {
@@ -135,6 +140,7 @@ func newEventConsumer(
 		workerCh:     make([]chan kvevent.Event, numWorkers),
 		workerChSize: changefeedbase.EventConsumerWorkerQueueSize.Get(&cfg.Settings.SV),
 		spanFrontier: spanFrontier,
+		pacerMaker:   cfg.PacerMaker,
 	}
 	ss := &safeSink{wrapped: sink, beforeFlush: c.Flush}
 	c.makeConsumer = func() (eventConsumer, error) {
@@ -439,6 +445,13 @@ type parallelEventConsumer struct {
 	// that spawned this event consumer.
 	spanFrontier *span.Frontier
 
+	// pacerMaker is used to create a kvadmission.Pacer
+	// which is used to incorporate event consumption to elastic CPU
+	// control. This helps ensure that event encoding/decoding
+	// does not throttle foreground SQL traffic.
+	pacerMaker       admission.PacerMaker
+	pacerRequestUnit time.Duration
+
 	// termErr and termCh are used to save the first error that occurs
 	// in any worker and signal all workers to stop.
 	//
@@ -527,6 +540,20 @@ func (c *parallelEventConsumer) startWorkers() error {
 func (c *parallelEventConsumer) workerLoop(
 	ctx context.Context, consumer eventConsumer, id int64,
 ) error {
+	tenantID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+	pacer := c.pacerMaker.NewPacer(
+		c.pacerRequestUnit,
+		admission.WorkInfo{
+			TenantID:        tenantID,
+			Priority:        admissionpb.BulkNormalPri,
+			CreateTime:      timeutil.Now().UnixNano(),
+			BypassAdmission: false,
+		})
+	defer pacer.Close()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -538,7 +565,16 @@ func (c *parallelEventConsumer) workerLoop(
 			defer c.mu.Unlock()
 			return c.mu.termErr
 		case e := <-c.workerCh[id]:
+			// Request CPU time to use for event consumption, block if this time is
+			// unavailable. If there is unused CPU time left from the last call to
+			// Pace, then use that time instead of blocking.
+			if err := pacer.Pace(ctx); err != nil {
+				c.decInFlight()
+				return c.setWorkerError(err)
+			}
+
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
+				c.decInFlight()
 				return c.setWorkerError(err)
 			}
 			c.decInFlight()
