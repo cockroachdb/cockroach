@@ -243,12 +243,22 @@ var EventConsumerWorkers = settings.RegisterIntSetting(
 	0,
 ).WithPublic()
 
-// EventConsumerWorkerQueueSize specifies the maximum number of events a worker buffer.
+// EventConsumerWorkerQueueSize specifies the maximum number of events a worker can buffer.
 var EventConsumerWorkerQueueSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.event_consumer_worker_queue_size",
 	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events"+
 		"which a worker can buffer",
 	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_worker_queue_size", 16, 0, 16)),
+	settings.NonNegativeInt,
+).WithPublic()
+
+// EventConsumerDispatcherBufferSize specifies the maximum number of events the dispatcher can buffer.
+var EventConsumerDispatcherBufferSize = settings.RegisterIntSetting(
+	settings.TenantWritable,
+	"changefeed.event_consumer_dispatcher_buffer_size",
+	"if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events"+
+		"which can be buffered by the dispatcher",
+	int64(util.ConstantWithMetamorphicTestRange("changefeed.event_consumer_dispatcher_buffer_size", 64, 0, 64)),
 	settings.NonNegativeInt,
 ).WithPublic()

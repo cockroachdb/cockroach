@@ -13,6 +13,8 @@ import (
 	"hash"
 	"hash/crc32"
 	"runtime"
+	"sync"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -60,6 +62,9 @@ type kvEventToRowConsumer struct {
 	safeExpr       string
 	encodingFormat changefeedbase.FormatType
 
+	// If specified, messages will be emitted to this channel rather than the sink
+	sinkCh chan<- sinkEvent
+
 	topicDescriptorCache map[TopicIdentifier]TopicDescriptor
 	topicNamer           *TopicNamer
 }
@@ -76,16 +81,22 @@ func newEventConsumer(
 	knobs TestingKnobs,
 	metrics *Metrics,
 	isSinkless bool,
-) (eventConsumer, EventSink, error) {
+) (eventConsumer, error) {
 	cfg := flowCtx.Cfg
 	evalCtx := flowCtx.EvalCtx
 
 	encodingOpts, err := feed.Opts.GetEncodingOptions()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	makeConsumer := func(s EventSink, frontier frontier) (eventConsumer, error) {
+	var sinkCh chan sinkEvent
+	if !isSinkless {
+		sinkChSize := changefeedbase.EventConsumerDispatcherBufferSize.Get(&cfg.Settings.SV)
+		sinkCh = make(chan sinkEvent, sinkChSize)
+	}
+
+	makeConsumer := func(frontier frontier) (eventConsumer, error) {
 		var err error
 		encoder, err := getEncoder(encodingOpts, feed.Targets)
 		if err != nil {
@@ -100,8 +111,8 @@ func newEventConsumer(
 			}
 		}
 
-		return newKVEventToRowConsumer(ctx, cfg, evalCtx, frontier, cursor, s,
-			encoder, details, expr, knobs, topicNamer)
+		return newKVEventToRowConsumer(ctx, cfg, evalCtx, frontier, cursor, sink,
+			encoder, details, expr, knobs, topicNamer, sinkCh)
 	}
 
 	// TODO (jayshrivastava) enable parallel consumers for sinkless changefeeds
@@ -117,11 +128,11 @@ func newEventConsumer(
 	//
 	//TODO (ganeshb) Add support for parallel encoding
 	if numWorkers <= 1 || isSinkless || encodingOpts.Format == changefeedbase.OptFormatParquet {
-		c, err := makeConsumer(sink, spanFrontier)
+		c, err := makeConsumer(spanFrontier)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		return c, sink, err
+		return c, err
 	}
 
 	c := &parallelEventConsumer{
@@ -129,22 +140,28 @@ func newEventConsumer(
 		hasher:       makeHasher(),
 		metrics:      metrics,
 		termCh:       make(chan struct{}),
-		flushCh:      make(chan struct{}, 1),
 		doneCh:       make(chan struct{}),
 		numWorkers:   numWorkers,
 		workerCh:     make([]chan kvevent.Event, numWorkers),
 		workerChSize: changefeedbase.EventConsumerWorkerQueueSize.Get(&cfg.Settings.SV),
 		spanFrontier: spanFrontier,
+		sinkCh:       sinkCh,
 	}
-	ss := &safeSink{wrapped: sink, beforeFlush: c.Flush}
 	c.makeConsumer = func() (eventConsumer, error) {
-		return makeConsumer(ss, c)
+		return makeConsumer(c)
+	}
+
+	if sinkCh != nil {
+		dispatcherClosure := func(ctx2 context.Context) error {
+			return c.dispatcher(ctx2, sink)
+		}
+		c.g.GoCtx(dispatcherClosure)
 	}
 
 	if err := c.startWorkers(); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return c, ss, nil
+	return c, nil
 }
 
 func defaultNumWorkers() int64 {
@@ -174,6 +191,7 @@ func newKVEventToRowConsumer(
 	expr execinfrapb.Expression,
 	knobs TestingKnobs,
 	topicNamer *TopicNamer,
+	sinkCh chan sinkEvent,
 ) (*kvEventToRowConsumer, error) {
 	includeVirtual := details.Opts.IncludeVirtual()
 	keyOnly := details.Opts.KeyOnly()
@@ -215,6 +233,7 @@ func newKVEventToRowConsumer(
 		evaluator:            evaluator,
 		safeExpr:             safeExpr,
 		encodingFormat:       encodingOpts.Format,
+		sinkCh:               sinkCh,
 	}, nil
 }
 
@@ -368,14 +387,28 @@ func (c *kvEventToRowConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Even
 	a := ev.DetachAlloc()
 	a.AdjustBytesToTarget(ctx, int64(len(keyCopy)+len(valueCopy)))
 
-	if err := c.sink.EmitRow(
-		ctx, topic, keyCopy, valueCopy, schemaTimestamp, mvccTimestamp, a,
-	); err != nil {
-		return err
+	e := sinkEvent{
+		topic:   topic,
+		key:     keyCopy,
+		value:   valueCopy,
+		updated: schemaTimestamp,
+		mvcc:    mvccTimestamp,
+		alloc:   a,
 	}
-	if log.V(3) {
-		log.Infof(ctx, `r %s: %s -> %s`, updatedRow.TableName, keyCopy, valueCopy)
+	if c.sinkCh != nil {
+		c.sinkCh <- e
+	} else {
+		if err := c.sink.EmitRow(
+			ctx, e.topic, e.key, e.value, e.updated, e.mvcc, e.alloc,
+		); err != nil {
+			return err
+		}
+
+		if log.V(3) {
+			log.Infof(ctx, `r %s: %s -> %s`, e.topic, e.key, e.value)
+		}
 	}
+
 	return nil
 }
 
@@ -410,6 +443,13 @@ func (c *kvEventToRowConsumer) Flush(ctx context.Context) error {
 	return nil
 }
 
+type sinkEvent struct {
+	topic         TopicDescriptor
+	key, value    []byte
+	updated, mvcc hlc.Timestamp
+	alloc         kvevent.Alloc
+}
+
 type parallelEventConsumer struct {
 	// g is a group used to manage worker goroutines.
 	g ctxgroup.Group
@@ -419,9 +459,13 @@ type parallelEventConsumer struct {
 
 	metrics *Metrics
 
-	// doneCh is used to shut down all workers when
-	// parallelEventConsumer.Close() is called.
+	// doneCh is used by parallelEventConsumer.Close() to
+	// shut down all workers.
 	doneCh chan struct{}
+
+	// termCh is used by workers to signal an error and
+	// allow all workers to terminate.
+	termCh chan struct{}
 
 	// makeConsumer creates a single-threaded consumer
 	// which encodes and emits events.
@@ -439,24 +483,23 @@ type parallelEventConsumer struct {
 	// that spawned this event consumer.
 	spanFrontier *span.Frontier
 
-	// termErr and termCh are used to save the first error that occurs
-	// in any worker and signal all workers to stop.
-	//
-	// inFlight, waiting, and flushCh are used to flush the sink.
+	// sinkCh reads out events to synchronously emit to the sink
+	sinkCh chan sinkEvent
+
+	// termErr is used to record the first error that occurs in a worker.
 	//
 	// flushFrontier tracks the local frontier. It is set to the
 	// spanFrontier upon flushing. This guarantees that workers are
 	// not buffering events which have timestamps lower than the frontier.
 	mu struct {
 		syncutil.Mutex
-		termErr error
-
-		inFlight      int
-		waiting       bool
+		termErr       error
 		flushFrontier hlc.Timestamp
 	}
-	termCh  chan struct{}
-	flushCh chan struct{}
+
+	// inFlightWg is used to block until all messages are flushed to the sink
+	inFlightWg      sync.WaitGroup
+	inFlightCounter int32
 }
 
 var _ eventConsumer = (*parallelEventConsumer)(nil)
@@ -470,6 +513,8 @@ func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Eve
 
 	bucket := c.getBucketForEvent(ev)
 
+	c.incInFlight()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -478,7 +523,6 @@ func (c *parallelEventConsumer) ConsumeEvent(ctx context.Context, ev kvevent.Eve
 		defer c.mu.Unlock()
 		return c.mu.termErr
 	case c.workerCh[bucket] <- ev:
-		c.incInFlight()
 		return nil
 	}
 }
@@ -493,6 +537,32 @@ func (c *parallelEventConsumer) getBucketForEvent(ev kvevent.Event) int64 {
 	c.hasher.Reset()
 	c.hasher.Write(ev.KV().Key)
 	return int64(c.hasher.Sum32()) % c.numWorkers
+}
+
+func (c *parallelEventConsumer) dispatcher(ctx context.Context, sink EventSink) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.doneCh:
+			return nil
+		case e := <-c.sinkCh:
+			err := sink.EmitRow(
+				ctx, e.topic, e.key, e.value, e.updated, e.mvcc, e.alloc,
+			)
+			if err != nil {
+				c.setWorkerError(err)
+				c.decInFlight()
+				return err
+			}
+
+			c.decInFlight()
+
+			if log.V(3) {
+				log.Infof(ctx, `r %s: %s -> %s`, e.topic, e.key, e.value)
+			}
+		}
+	}
 }
 
 func (c *parallelEventConsumer) startWorkers() error {
@@ -539,42 +609,32 @@ func (c *parallelEventConsumer) workerLoop(
 			return c.mu.termErr
 		case e := <-c.workerCh[id]:
 			if err := consumer.ConsumeEvent(ctx, e); err != nil {
-				return c.setWorkerError(err)
+				c.setWorkerError(err)
+				c.decInFlight()
+				return err
 			}
-			c.decInFlight()
 		}
 	}
 }
 
 func (c *parallelEventConsumer) incInFlight() {
-	c.mu.Lock()
-	c.mu.inFlight++
-	c.metrics.ParallelConsumerInFlightEvents.Update(int64(c.mu.inFlight))
-	c.mu.Unlock()
+	c.inFlightWg.Add(1)
+	atomic.AddInt32(&c.inFlightCounter, 1)
+	c.metrics.ParallelConsumerInFlightEvents.Update(int64(c.inFlightCounter))
 }
 
 func (c *parallelEventConsumer) decInFlight() {
-	c.mu.Lock()
-	c.mu.inFlight--
-	notifyFlush := c.mu.waiting && c.mu.inFlight == 0
-	c.mu.Unlock()
-
-	// If someone is waiting on a flush, signal to them
-	// that there are no more events.
-	if notifyFlush {
-		c.flushCh <- struct{}{}
-	}
+	c.inFlightWg.Done()
+	atomic.AddInt32(&c.inFlightCounter, -1)
 }
 
-func (c *parallelEventConsumer) setWorkerError(err error) error {
+func (c *parallelEventConsumer) setWorkerError(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.mu.termErr == nil {
 		c.mu.termErr = err
 		close(c.termCh)
 	}
-
-	return err
 }
 
 // Flush flushes the consumer by blocking until all events are consumed,
@@ -586,33 +646,18 @@ func (c *parallelEventConsumer) Flush(ctx context.Context) error {
 		c.metrics.ParallelConsumerFlushNanos.RecordValue(time - startTime)
 	}()
 
-	needFlush := func() bool {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		if c.mu.inFlight > 0 {
-			c.mu.waiting = true
-		}
-		return c.mu.waiting
-	}
-
-	if !needFlush() {
-		return nil
-	}
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-c.termCh:
-		c.mu.Lock()
-		defer c.mu.Unlock()
+	c.mu.Lock()
+	if c.mu.termErr != nil {
 		return c.mu.termErr
-	case <-c.flushCh:
-		c.mu.Lock()
-		c.mu.waiting = false
-		c.mu.flushFrontier = c.spanFrontier.Frontier()
-		c.mu.Unlock()
-		return nil
 	}
+	c.mu.Unlock()
+
+	c.inFlightWg.Wait()
+
+	c.mu.Lock()
+	c.mu.flushFrontier = c.spanFrontier.Frontier()
+	c.mu.Unlock()
+	return nil
 }
 
 func (c *parallelEventConsumer) Frontier() hlc.Timestamp {
@@ -622,9 +667,6 @@ func (c *parallelEventConsumer) Frontier() hlc.Timestamp {
 }
 
 func (c *parallelEventConsumer) Close() error {
-	// Signal the done channel and wait for all workers to finish.
-	// If an error occurred, at least one worker will return an error, so
-	// it will be returned by c.g.Wait().
 	close(c.doneCh)
 	return c.g.Wait()
 }
