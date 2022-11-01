@@ -373,9 +373,6 @@ func (dataBank2TB) runRestoreDetached(
 
 var _ testDataSet = dataBank2TB{}
 
-// TODO(adityamaru): tpccIncData should be replaced by tpccIncDataLatest. The
-// former is an old fixture that lacks certain directory structure optimizations
-// that were added to backup in a future release.
 type tpccIncData struct{}
 
 func (tpccIncData) name() string {
@@ -383,60 +380,17 @@ func (tpccIncData) name() string {
 }
 
 func (tpccIncData) runRestore(ctx context.Context, c cluster.Cluster) {
-	// This data set restores a 1.80TB (replicated) backup consisting of 50
-	// incremental backup layers taken every 15 minutes. 8000 warehouses
-	// were imported and then a workload of 1000 warehouses was run against
-	// the cluster while the incremental backups were being taken.
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE FROM '2021/05/21-020411.00' IN
-				'gs://cockroach-fixtures/tpcc-incrementals?AUTH=implicit'
-				AS OF SYSTEM TIME '2021-05-21 14:40:22'"`)
-}
-
-func (tpccIncData) runRestoreDetached(
-	ctx context.Context, t test.Test, c cluster.Cluster,
-) (jobspb.JobID, error) {
-	// This data set restores a 1.80TB (replicated) backup consisting of 50
-	// incremental backup layers taken every 15 minutes. 8000 warehouses
-	// were imported and then a workload of 1000 warehouses was run against
-	// the cluster while the incremental backups were being taken.
-	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE FROM '2021/05/21-020411.00' IN
-				'gs://cockroach-fixtures/tpcc-incrementals?AUTH=implicit'
-				AS OF SYSTEM TIME '2021-05-21 14:40:22' WITH detached"`)
-	db, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to connect to node 1; running restore detached")
-	}
-
-	var jobID jobspb.JobID
-	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
-		return 0, err
-	}
-
-	return jobID, nil
-}
-
-var _ testDataSet = tpccIncData{}
-
-type tpccIncDataLatest struct{}
-
-func (tpccIncDataLatest) name() string {
-	return "TPCCIncLatest"
-}
-
-func (tpccIncDataLatest) runRestore(ctx context.Context, c cluster.Cluster) {
 	// This data set restores a 1.80TB (replicated) backup consisting of 48
 	// incremental backup layers taken every 15 minutes. 8000 warehouses were
 	// imported and then a workload of 1000 warehouses was run against the cluster
 	// while the incremental backups were being taken.
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				RESTORE FROM '/2022/09/07-000000.00' IN
-				'gs://cockroach-fixtures/tpcc-incrementals-22.2?AUTH=implicit'
-				AS OF SYSTEM TIME '2022-09-07 12:15:00'"`)
+				RESTORE FROM '2022/09/29-000000.00' IN
+				'gs://cockroach-fixtures/backups/tpcc/rev-history=false,inc-count=48,cluster/8000-warehouses/22.2.0-alpha.4?AUTH=implicit'
+				AS OF SYSTEM TIME '2022-09-28 23:42:00'"`)
 }
 
-func (tpccIncDataLatest) runRestoreDetached(
+func (tpccIncData) runRestoreDetached(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) (jobspb.JobID, error) {
 	c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
@@ -472,7 +426,6 @@ func registerRestore(r registry.Registry) {
 		{dataSet: dataBank2TB{}, nodes: 32, timeout: 3 * time.Hour},
 		{dataSet: dataBank2TB{}, nodes: 6, timeout: 4 * time.Hour, cpus: 8, largeVolumes: true},
 		{dataSet: tpccIncData{}, nodes: 10, timeout: 6 * time.Hour},
-		{dataSet: tpccIncDataLatest{}, nodes: 10, timeout: 6 * time.Hour},
 	} {
 		item := item
 		clusterOpts := make([]spec.Option, 0)
@@ -578,6 +531,7 @@ func registerRestore(r registry.Registry) {
 
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
+			maxPauses := 3
 			m.Go(func(ctx context.Context) error {
 				// Wait until the restore job has been created.
 				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
@@ -594,7 +548,6 @@ func registerRestore(r registry.Registry) {
 				//
 				// Limit the number of pauses to 3 to ensure that the test doesn't get
 				// into a pause-resume-slowdown spiral that eventually times out.
-				maxPauses := 3
 				pauseJobTick := time.NewTicker(time.Minute * 15)
 				defer pauseJobTick.Stop()
 				for {
@@ -612,6 +565,17 @@ func registerRestore(r registry.Registry) {
 						t.L().Printf("pausing RESTORE job")
 						// Pause the job and wait for it to transition to a paused state.
 						_, err = conn.ExecContext(ctx, `PAUSE JOB $1`, jobID)
+						if err != nil {
+							// The pause job request should not fail unless the job has already succeeded,
+							// in which case, the test should gracefully succeed.
+							var status string
+							errStatusCheck := conn.QueryRow(
+								`SELECT status FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&status)
+							require.NoError(t, errStatusCheck)
+							if status == "succeeded" {
+								return nil
+							}
+						}
 						require.NoError(t, err)
 						testutils.SucceedsSoon(t, func() error {
 							var status string
@@ -689,6 +653,11 @@ func registerRestore(r registry.Registry) {
 				return nil
 			})
 			m.Wait()
+			// All failures from the above go routines surface via a t.Fatal() within
+			// the m.Wait( ) call above; therefore, at this point, the restore job
+			// should have succeeded. This final check ensures this test is actually
+			// doing its job: causing the restore job to pause at least once.
+			require.NotEqual(t, 3, maxPauses, "the job should have paused at least once")
 		},
 	})
 }
