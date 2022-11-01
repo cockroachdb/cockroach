@@ -156,6 +156,24 @@ func (so *DummyRegionOperator) ResetMultiRegionZoneConfigsForDatabase(
 	return errors.WithStack(errRegionOperator)
 }
 
+// DummyStreamManagerFactory implements the eval.StreamManagerFactory interface by
+// returning errors.
+type DummyStreamManagerFactory struct{}
+
+// GetReplicationStreamManager implements the eval.StreamManagerFactory interface.
+func (smf *DummyStreamManagerFactory) GetReplicationStreamManager(
+	ctx context.Context,
+) (eval.ReplicationStreamManager, error) {
+	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
+}
+
+// GetStreamIngestManager implements the eval.StreamManagerFactory interface.
+func (smf *DummyStreamManagerFactory) GetStreamIngestManager(
+	ctx context.Context,
+) (eval.StreamIngestManager, error) {
+	return nil, errors.WithStack(errors.New("Stream manager factory not implemented"))
+}
+
 // DummyEvalPlanner implements the eval.Planner interface by returning
 // errors.
 type DummyEvalPlanner struct {

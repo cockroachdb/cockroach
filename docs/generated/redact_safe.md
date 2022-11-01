@@ -7,6 +7,7 @@ pkg/base/node_id.go | `*SQLIDContainer`
 pkg/base/node_id.go | `*StoreIDContainer`
 pkg/ccl/backupccl/backuppb/backup.go | `sz`
 pkg/ccl/backupccl/backuppb/backup.go | `timing`
+pkg/ccl/streamingccl/streampb/streamid.go | `StreamID`
 pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `Type`
 pkg/kv/bulk/bulk_metrics.go | `sz`
@@ -51,7 +52,6 @@ pkg/storage/enginepb/mvcc.go | `TxnEpoch`
 pkg/storage/enginepb/mvcc.go | `TxnSeq`
 pkg/storage/enginepb/mvcc3.go | `*MVCCStats`
 pkg/storage/enginepb/mvcc3.go | `MVCCStatsDelta`
-pkg/streaming/api.go | `StreamID`
 pkg/util/hlc/timestamp.go | `ClockTimestamp`
 pkg/util/hlc/timestamp.go | `LegacyTimestamp`
 pkg/util/hlc/timestamp.go | `Timestamp`

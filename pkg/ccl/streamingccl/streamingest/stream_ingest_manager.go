@@ -23,29 +23,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
-type streamIngestManagerImpl struct{}
+type streamIngestManagerImpl struct {
+	evalCtx *eval.Context
+	txn     *kv.Txn
+}
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
-	ctx context.Context,
-	evalCtx *eval.Context,
-	txn *kv.Txn,
-	ingestionJobID jobspb.JobID,
-	cutoverTimestamp hlc.Timestamp,
+	ctx context.Context, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(ctx, evalCtx, txn, ingestionJobID, cutoverTimestamp)
+	return completeStreamIngestion(ctx, r.evalCtx, r.txn, ingestionJobID, cutoverTimestamp)
 }
 
 // GetStreamIngestionStats implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) GetStreamIngestionStats(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+	ctx context.Context, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
-	return getStreamIngestionStats(ctx, evalCtx, txn, ingestionJobID)
+	return getStreamIngestionStats(ctx, r.evalCtx, r.txn, ingestionJobID)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context,
-) (streaming.StreamIngestManager, error) {
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
+) (eval.StreamIngestManager, error) {
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
 		return nil, err
@@ -64,7 +63,7 @@ func newStreamIngestManagerWithPrivilegesCheck(
 			pgcode.InsufficientPrivilege, "replication requires enterprise license")
 	}
 
-	return &streamIngestManagerImpl{}, nil
+	return &streamIngestManagerImpl{evalCtx: evalCtx, txn: txn}, nil
 }
 
 func init() {

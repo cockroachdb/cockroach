@@ -37,9 +37,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl/streamingccl/streampb",
         "//pkg/clusterversion",
         "//pkg/geo",
         "//pkg/geo/geopb",
+        "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvserver/kvserverbase",

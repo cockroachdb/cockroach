@@ -329,6 +329,7 @@ func runPlanInsidePlan(
 		ctx, evalCtx, &plannerCopy, params.p.txn, distributeType)
 	planCtx.planner.curPlan.planComponents = *plan
 	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
+	planCtx.ExtendedEvalCtx.StreamManagerFactory = &plannerCopy
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(

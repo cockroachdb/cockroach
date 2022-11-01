@@ -35,7 +35,10 @@ go_proto_library(
 
 go_library(
     name = "streampb",
-    srcs = ["empty.go"],
+    srcs = [
+        "empty.go",
+        "streamid.go",
+    ],
     embed = [":streampb_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb",
     visibility = ["//visibility:public"],
