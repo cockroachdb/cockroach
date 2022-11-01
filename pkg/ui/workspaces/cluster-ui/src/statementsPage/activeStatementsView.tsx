@@ -20,7 +20,7 @@ import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
 import { ActiveStatement, ActiveStatementFilters } from "src/activeExecutions";
 import { Filter } from "src/queryFilter";
-import SQLActivityError from "src/sqlActivity/errorComponent";
+import LoadingError from "src/sqlActivity/errorComponent";
 import {
   ACTIVE_STATEMENT_SEARCH_PARAM,
   getAppsFromActiveExecutions,
@@ -191,7 +191,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
           page="active statements"
           error={sessionsError}
           renderError={() =>
-            SQLActivityError({
+            LoadingError({
               statsType: "statements",
             })
           }

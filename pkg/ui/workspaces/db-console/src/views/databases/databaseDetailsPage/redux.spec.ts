@@ -125,6 +125,7 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: false,
+      lastError: undefined,
       name: "things",
       showNodeRegionsColumn: false,
       viewMode: ViewMode.Tables,
@@ -144,6 +145,7 @@ describe("Database Details Page", function () {
     driver.assertProperties({
       loading: false,
       loaded: true,
+      lastError: null,
       name: "things",
       showNodeRegionsColumn: false,
       viewMode: ViewMode.Tables,
@@ -155,6 +157,7 @@ describe("Database Details Page", function () {
           details: {
             loading: false,
             loaded: false,
+            lastError: undefined,
             columnCount: 0,
             indexCount: 0,
             userCount: 0,
@@ -169,6 +172,7 @@ describe("Database Details Page", function () {
           stats: {
             loading: false,
             loaded: false,
+            lastError: undefined,
             replicationSizeInBytes: 0,
             rangeCount: 0,
             nodesByRegionString: "",
@@ -179,6 +183,7 @@ describe("Database Details Page", function () {
           details: {
             loading: false,
             loaded: false,
+            lastError: undefined,
             columnCount: 0,
             indexCount: 0,
             userCount: 0,
@@ -193,6 +198,7 @@ describe("Database Details Page", function () {
           stats: {
             loading: false,
             loaded: false,
+            lastError: undefined,
             replicationSizeInBytes: 0,
             rangeCount: 0,
             nodesByRegionString: "",
@@ -326,6 +332,7 @@ describe("Database Details Page", function () {
     driver.assertTableDetails("foo", {
       loading: false,
       loaded: true,
+      lastError: null,
       columnCount: 5,
       indexCount: 3,
       userCount: 2,
@@ -343,6 +350,7 @@ describe("Database Details Page", function () {
     driver.assertTableDetails("bar", {
       loading: false,
       loaded: true,
+      lastError: null,
       columnCount: 4,
       indexCount: 1,
       userCount: 3,
@@ -442,6 +450,7 @@ describe("Database Details Page", function () {
     driver.assertTableStats("foo", {
       loading: false,
       loaded: true,
+      lastError: null,
       replicationSizeInBytes: 44040192,
       rangeCount: 4200,
       nodesByRegionString: "",
@@ -450,6 +459,7 @@ describe("Database Details Page", function () {
     driver.assertTableStats("bar", {
       loading: false,
       loaded: true,
+      lastError: null,
       replicationSizeInBytes: 8675309,
       rangeCount: 1023,
       nodesByRegionString: "",

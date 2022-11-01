@@ -115,6 +115,7 @@ export const mapStateToProps = createSelector(
     return {
       loading: !!databaseDetails[database]?.inFlight,
       loaded: !!databaseDetails[database]?.valid,
+      lastError: databaseDetails[database]?.lastError,
       name: database,
       showNodeRegionsColumn,
       viewMode,
@@ -139,6 +140,7 @@ export const mapStateToProps = createSelector(
           details: {
             loading: !!details?.inFlight,
             loaded: !!details?.valid,
+            lastError: details?.lastError,
             columnCount: details?.data?.columns?.length || 0,
             indexCount: numIndexes,
             userCount: roles.length,
@@ -158,6 +160,7 @@ export const mapStateToProps = createSelector(
           stats: {
             loading: !!stats?.inFlight,
             loaded: !!stats?.valid,
+            lastError: stats?.lastError,
             replicationSizeInBytes: FixLong(
               stats?.data?.approximate_disk_bytes || 0,
             ).toNumber(),
