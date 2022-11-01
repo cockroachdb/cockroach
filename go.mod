@@ -101,7 +101,7 @@ require (
 	github.com/bufbuild/buf v0.56.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/client9/misspell v0.3.4
-	github.com/cockroachdb/apd/v3 v3.1.0
+	github.com/cockroachdb/apd/v3 v3.1.2
 	github.com/cockroachdb/circuitbreaker v2.2.2-0.20190114160014-a614b14ccf63+incompatible
 	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
 	github.com/cockroachdb/cockroach-go/v2 v2.2.6
@@ -164,7 +164,7 @@ require (
 	github.com/kylelemons/godebug v1.1.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lestrrat-go/jwx v1.2.25
-	github.com/lib/pq v1.10.6
+	github.com/lib/pq v1.10.7
 	github.com/linkedin/goavro/v2 v2.10.0
 	github.com/lufia/iostat v1.2.1
 	github.com/maruel/panicparse/v2 v2.2.2
