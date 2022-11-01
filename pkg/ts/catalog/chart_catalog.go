@@ -1475,6 +1475,12 @@ var charts = []sectionDescription{
 				},
 			},
 			{
+				Title: "Nprocs Buffered Sink Event Count",
+				Metrics: []string{
+					"changefeed.nprocs_buffered_sink_events_count",
+				},
+			},
+			{
 				Title: "Flushed Bytes",
 				Metrics: []string{
 					"changefeed.flushed_bytes",

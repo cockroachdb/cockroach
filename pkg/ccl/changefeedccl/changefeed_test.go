@@ -3589,8 +3589,9 @@ func TestChangefeedRetryableError(t *testing.T) {
 		require.NoError(t, err)
 		retryCounter := sli.ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
-			if retryCounter.Value() < 3 {
-				return fmt.Errorf("insufficient error retries detected")
+			retries := retryCounter.Value()
+			if retries < 3 {
+				return fmt.Errorf("insufficient error retries detected: %d", retries)
 			}
 			return nil
 		})
