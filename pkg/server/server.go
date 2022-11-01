@@ -1790,7 +1790,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//
 	// NB: We run this under the startup ctx (not workersCtx) so as to ensure
 	// all the upgrade steps are traced, for use during troubleshooting.
-	s.startAttemptUpgrade(ctx)
+	if err := s.startAttemptUpgrade(ctx); err != nil {
+		return errors.Wrap(err, "cannot start upgrade task")
+	}
 
 	if err := s.node.tenantSettingsWatcher.Start(workersCtx, s.sqlServer.execCfg.SystemTableIDResolver); err != nil {
 		return errors.Wrap(err, "failed to initialize the tenant settings watcher")
