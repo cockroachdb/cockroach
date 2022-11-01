@@ -128,6 +128,10 @@ func (tc *Collection) getTypeByID(
 		// User-defined type.
 		return t, nil
 	case catalog.TableDescriptor:
+		if t.IsVirtualTable() {
+			// Virtual tables do not have implicit record types.
+			break
+		}
 		return typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 	}
 	return nil, pgerror.Newf(

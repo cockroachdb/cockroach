@@ -2972,6 +2972,15 @@ func tableIDToTypeOID(table catalog.TableDescriptor) tree.Datum {
 	return tree.NewDOid(oid.Oid(table.GetID()))
 }
 
+// typeOIDToTableID is the inverse of tableIDToTypeOID. For virtual tables
+// the IDs are the same, to avoid overflow.
+func typeOIDToTableID(typOID oid.Oid) (descpb.ID, error) {
+	if typOID < catconstants.MinVirtualID {
+		return typedesc.UserDefinedTypeOIDToID(typOID)
+	}
+	return descpb.ID(typOID), nil
+}
+
 func addPGTypeRowForTable(
 	ctx context.Context,
 	p eval.Planner,
@@ -3146,13 +3155,16 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					}
 				}
 
-				// Each table has a corresponding pg_type row.
+				// Each non-virtual table has a corresponding pg_type row.
 				if err := forEachTableDescWithTableLookup(
 					ctx,
 					p,
 					dbContext,
 					virtualCurrentDB,
 					func(db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, table catalog.TableDescriptor, lookup tableLookupFn) error {
+						if table.IsVirtualTable() {
+							return nil
+						}
 						return addPGTypeRowForTable(ctx, p, h, db, sc, table, addRow)
 					},
 				); err != nil {
@@ -3210,7 +3222,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					return false, nil
 				}
 
-				id, err := typedesc.UserDefinedTypeOIDToID(ooid)
+				id, err := typeOIDToTableID(ooid)
 				if err != nil {
 					return false, err
 				}
