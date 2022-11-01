@@ -125,6 +125,7 @@ func runWithMaybeRetry(
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		res, err = f()
+		res.Attempt = r.CurrentAttempt() + 1
 		// nil err indicates a potentially retryable res.Err
 		if err == nil && res.Err != nil {
 			if shouldRetryFn != nil && shouldRetryFn(res) {
@@ -624,11 +625,12 @@ type RunResultDetails struct {
 	CombinedOut      []byte
 	Err              error
 	RemoteExitStatus int
+	Attempt          int
 }
 
 // Error vs result
 // An error is an unexpected state within roachprod
-// A result is the output of running a cmd (could be interpreted as an error)
+// A result is the output of running a exitCode (could be interpreted as an error)
 func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context,
 	l *logger.Logger,
