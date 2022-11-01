@@ -1043,6 +1043,9 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 // TODO (janexing): this will be deprecate soon since it's not a good idea
 // to have `extraTxnState` to store the info from a outer txn.
 func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Txn) error {
+	if stmt == nil {
+		return nil
+	}
 	if tree.CanModifySchema(stmt) && txn != nil && ie.extraTxnState == nil {
 		return errors.New("DDL statement is disallowed if internal " +
 			"executor is not bound with txn metadata")
