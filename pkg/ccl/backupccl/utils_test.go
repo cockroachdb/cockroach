@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -151,6 +152,10 @@ func backupRestoreTestSetupEmpty(
 ) (tc *testcluster.TestCluster, sqlDB *sqlutils.SQLRunner, cleanup func()) {
 	// TODO (msbutler): this should be disabled by callers of this function
 	params.ServerArgs.DisableDefaultTestTenant = true
+	if params.ServerArgs.Knobs.Server == nil {
+		params.ServerArgs.Knobs.Server = &server.TestingKnobs{}
+	}
+	params.ServerArgs.Knobs.Server.(*server.TestingKnobs).DisableAppTenantAutoCreation = true
 	return backupRestoreTestSetupEmptyWithParams(t, clusterSize, tempDir, init, params)
 }
 

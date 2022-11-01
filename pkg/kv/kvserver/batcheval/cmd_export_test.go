@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -46,7 +47,15 @@ func TestExportCmd(t *testing.T) {
 	ctx := context.Background()
 	dir, dirCleanupFn := testutils.TempDir(t)
 	defer dirCleanupFn()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			// See: https://github.com/cockroachdb/cockroach/issues/91122
+			// This test doesn't set its expected range boundaries properly when there
+			// are secondary tenants. It should.
+			Server: &server.TestingKnobs{DisableAppTenantAutoCreation: true},
+		},
+	}})
 	defer tc.Stopper().Stop(ctx)
 	kvDB := tc.Server(0).DB()
 

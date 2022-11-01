@@ -2674,6 +2674,11 @@ func TestSystemZoneConfigs(t *testing.T) {
 					// below, it's possible that one of the system ranges trigger a split.
 					DisableLoadBasedSplitting: true,
 				},
+				// See: https://github.com/cockroachdb/cockroach/issues/91122
+				// Even though its test could _legitimately_ want to focus on
+				// only the system ranges, the failure when this knob is removed
+				// seems to uncover an actual concern in the default zone config logic.
+				Server: &server.TestingKnobs{DisableAppTenantAutoCreation: true},
 			},
 			// This test was written for the gossip-backed SystemConfigSpan
 			// infrastructure.

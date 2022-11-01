@@ -157,6 +157,9 @@ func CreateTenantRecord(
 	//      boundaries. Whatever is inserted will get cleared out by the
 	//      tenant's reconciliation process.
 
+	// Note: when modifying this logic, ensure that the bootstrap code for
+	// the initial application tenant does the same. See bootstrap/metadata.go.
+
 	tenantSpanConfig := initialTenantZoneConfig.AsSpanConfig()
 	// Make sure to enable rangefeeds; the tenant will need them on its system
 	// tables as soon as it starts up. It's not unsafe/buggy if we didn't do this,

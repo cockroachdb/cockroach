@@ -1071,6 +1071,11 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
 			},
+			// See: https://github.com/cockroachdb/cockroach/issues/91122
+			// Even though its test could _legitimately_ want to focus on
+			// only the system ranges, the failure when this knob is removed
+			// seems to uncover an actual concern in the default zone config logic.
+			Server: &server.TestingKnobs{DisableAppTenantAutoCreation: true},
 		},
 	})
 	s := serv.(*server.TestServer)

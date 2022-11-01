@@ -604,7 +604,7 @@ func TestRangeCount(t *testing.T) {
 		adminServer := s.(*TestServer).Server.admin
 		stats, err := adminServer.statsForSpan(context.Background(), roachpb.Span{
 			Key:    keys.LocalMax,
-			EndKey: keys.MaxKey,
+			EndKey: keys.TenantPrefix,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -2161,7 +2161,16 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				// See: https://github.com/cockroachdb/cockroach/issues/91122
+				// The "Data distribution" API doesn't compute range boundaries
+				// properly when there are secondary tenants.
+				Server: &TestingKnobs{DisableAppTenantAutoCreation: true},
+			},
+		},
+	})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)
@@ -2266,7 +2275,17 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	skip.UnderShort(b, "TODO: fix benchmark")
-	testCluster := serverutils.StartNewTestCluster(b, 3, base.TestClusterArgs{})
+	testCluster := serverutils.StartNewTestCluster(b, 3,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					// See: https://github.com/cockroachdb/cockroach/issues/91122
+					// The "Data distribution" API doesn't compute range boundaries
+					// properly when there are secondary tenants.
+					Server: &TestingKnobs{DisableAppTenantAutoCreation: true},
+				},
+			},
+		})
 	defer testCluster.Stopper().Stop(context.Background())
 
 	firstServer := testCluster.Server(0)

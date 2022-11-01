@@ -586,16 +586,18 @@ statement ok
 ALTER TABLE foo SPLIT AT VALUES(2)
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>'),
+       split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+start_pretty    regexp_replace   split_enforced_until
+/Table/112/1/2  /Tenant/<start>  2262-04-11 23:47:16.854776 +0000 +0000
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>'),
+       split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2262-04-11 23:47:16.854776 +0000 +0000
+start_pretty    regexp_replace   split_enforced_until
+/Table/112/1/2  /Tenant/<start>  2262-04-11 23:47:16.854776 +0000 +0000
 
 statement ok
 ALTER TABLE foo UNSPLIT AT VALUES(2)
@@ -614,16 +616,18 @@ statement ok
 ALTER TABLE foo SPLIT AT VALUES(2) WITH EXPIRATION '2200-01-01 00:00:00.0'
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>'),
+       split_enforced_until FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+start_pretty    regexp_replace   split_enforced_until
+/Table/112/1/2  /Tenant/<start>  2200-01-01 00:00:00 +0000 +0000
 
 query TTT colnames
-SELECT start_pretty, end_pretty, split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>'),
+       split_enforced_until FROM crdb_internal.ranges_no_leases WHERE split_enforced_until IS NOT NULL AND table_name = 'foo'
 ----
-start_pretty    end_pretty  split_enforced_until
-/Table/112/1/2  /Max        2200-01-01 00:00:00 +0000 +0000
+start_pretty    regexp_replace   split_enforced_until
+/Table/112/1/2  /Tenant/<start>  2200-01-01 00:00:00 +0000 +0000
 
 statement ok
 ALTER TABLE foo SPLIT AT VALUES (1), (2), (3)
@@ -765,15 +769,16 @@ statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
 query TT colnames
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>')
+  FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty
+start_pretty    regexp_replace
 /Table/112/1/1  /Table/112/1/2
 /Table/112/1/2  /Table/112/1/3
 /Table/112/1/3  /Table/112/2/1
 /Table/112/2/1  /Table/112/2/2
 /Table/112/2/2  /Table/112/2/3
-/Table/112/2/3  /Max
+/Table/112/2/3  /Tenant/<start>
 
 # The cleanup we expect in the following truncate requires that the GCJob runs.
 # To avoid this taking 30 seconds, we lower the job adoption interval.
@@ -799,15 +804,16 @@ statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
 query TT colnames,retry
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>')
+  FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty
+start_pretty    regexp_replace
 /Table/112/3/1  /Table/112/3/2
 /Table/112/3/2  /Table/112/3/3
 /Table/112/3/3  /Table/112/4/1
 /Table/112/4/1  /Table/112/4/2
 /Table/112/4/2  /Table/112/4/3
-/Table/112/4/3  /Max
+/Table/112/4/3  /Tenant/<start>
 
 statement ok
 DROP TABLE foo
@@ -827,15 +833,16 @@ statement ok
 ALTER INDEX foo@idx SPLIT AT VALUES (1), (2), (3)
 
 query TT colnames,retry
-SELECT start_pretty, end_pretty FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
+SELECT start_pretty, regexp_replace(end_pretty, '/Tenant/.*', '/Tenant/<start>')
+  FROM crdb_internal.ranges WHERE split_enforced_until IS NOT NULL
 ----
-start_pretty    end_pretty
+start_pretty    regexp_replace
 /Table/114/1/1  /Table/114/1/2
 /Table/114/1/2  /Table/114/1/3
 /Table/114/1/3  /Table/114/2/1
 /Table/114/2/1  /Table/114/2/2
 /Table/114/2/2  /Table/114/2/3
-/Table/114/2/3  /Max
+/Table/114/2/3  /Tenant/<start>
 
 statement ok
 DROP INDEX foo@idx

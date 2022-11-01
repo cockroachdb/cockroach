@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -945,21 +944,15 @@ func (ts *TestServer) StartTenant(
 // assuming no additional information is added outside of the normal bootstrap
 // process.
 func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
-	return ExpectedInitialRangeCount(
-		ts.sqlServer.execCfg.Codec,
+	predefineSecondaryTenant := true
+	if kn, ok := ts.Cfg.TestingKnobs.Server.(*TestingKnobs); ok {
+		predefineSecondaryTenant = !kn.DisableAppTenantAutoCreation
+	}
+	_, splits := bootstrap.MakeInitialKeyspace(
 		&ts.cfg.DefaultZoneConfig,
 		&ts.cfg.DefaultSystemZoneConfig,
-	)
-}
-
-// ExpectedInitialRangeCount returns the expected number of ranges that should
-// be on the server after bootstrap.
-func ExpectedInitialRangeCount(
-	codec keys.SQLCodec,
-	defaultZoneConfig *zonepb.ZoneConfig,
-	defaultSystemZoneConfig *zonepb.ZoneConfig,
-) (int, error) {
-	_, splits := bootstrap.MakeMetadataSchema(codec, defaultZoneConfig, defaultSystemZoneConfig).GetInitialValues()
+		predefineSecondaryTenant,
+	).GetInitialValues()
 	// N splits means N+1 ranges.
 	return len(config.StaticSplits()) + len(splits) + 1, nil
 }

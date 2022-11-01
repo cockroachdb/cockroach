@@ -1828,6 +1828,19 @@ func (c clusterOptTracingOff) apply(args *base.TestServerArgs) {
 	args.TracingDefault = tracing.TracingModeOnDemand
 }
 
+// clusterOptDisableAppTenantAutoCreation disables the auto-creation of
+// an app tenant.
+type clusterOptDisableAppTenantAutoCreation struct{}
+
+var _ clusterOpt = clusterOptDisableAppTenantAutoCreation{}
+
+func (c clusterOptDisableAppTenantAutoCreation) apply(args *base.TestServerArgs) {
+	if args.Knobs.Server == nil {
+		args.Knobs.Server = &server.TestingKnobs{}
+	}
+	args.Knobs.Server.(*server.TestingKnobs).DisableAppTenantAutoCreation = true
+}
+
 // knobOpt is implemented by options for configuring the testing knobs
 // for the cluster under which a test will run.
 type knobOpt interface {
@@ -1990,6 +2003,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "disable-app-tenant":
+			res = append(res, clusterOptDisableAppTenantAutoCreation{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}

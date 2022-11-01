@@ -1584,6 +1584,10 @@ func TestMergeQueueSeesLearnerOrJointConfig(t *testing.T) {
 	// Disable load-based splitting, so that the absence of sufficient QPS
 	// measurements do not prevent ranges from merging.
 	knobs.Store.(*kvserver.StoreTestingKnobs).DisableLoadBasedSplitting = true
+
+	// See: https://github.com/cockroachdb/cockroach/issues/91122
+	knobs.Server = &server.TestingKnobs{DisableAppTenantAutoCreation: true}
+
 	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
 		ServerArgs:      base.TestServerArgs{Knobs: knobs},
 		ReplicationMode: base.ReplicationManual,

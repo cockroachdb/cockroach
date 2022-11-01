@@ -14,6 +14,7 @@ package bootstrap
 
 import (
 	"context"
+	"math"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -42,6 +44,7 @@ type MetadataSchema struct {
 	descs         []catalog.Descriptor
 	otherSplitIDs []uint32
 	otherKV       []roachpb.KeyValue
+	otherSplits   []roachpb.RKey
 	ids           catalog.DescriptorIDSet
 }
 
@@ -54,6 +57,23 @@ func MakeMetadataSchema(
 ) MetadataSchema {
 	ms := MetadataSchema{codec: codec}
 	addSystemDatabaseToSchema(&ms, defaultZoneConfig, defaultSystemZoneConfig)
+	return ms
+}
+
+// MakeInitialKeyspace constructs a new MetadataSchema value which
+// constructs the system database and am optional first secondary tenant.
+func MakeInitialKeyspace(
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	predefineSecondaryTenant bool,
+) MetadataSchema {
+	ms := MakeMetadataSchema(keys.SystemSQLCodec, defaultZoneConfig, defaultSystemZoneConfig)
+
+	if predefineSecondaryTenant {
+		appTenantID := roachpb.MakeTenantID(uint64(appTenantIDInFreshNewClusters))
+		addTenantEntry(&ms, appTenantID, catconstants.AppTenantName, defaultZoneConfig)
+		prepopulateSecondaryTenantKeyspace(&ms, defaultZoneConfig, defaultSystemZoneConfig, appTenantID)
+	}
 	return ms
 }
 
@@ -235,6 +255,10 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// Other key/value generation that doesn't fit into databases and
 	// tables. This can be used to add initial entries to a table.
 	ret = append(ret, ms.otherKV...)
+
+	// Other split points that don't fit into the primary keyspace.
+	// This is used when pre-populating a secondary tenant.
+	splits = append(splits, ms.otherSplits...)
 
 	// Sort returned key values; this is valuable because it matches the way the
 	// objects would be sorted if read from the engine.
@@ -465,15 +489,35 @@ func addSystemDatabaseToSchema(
 	addSystemDescriptorsToSchema(target)
 	addSplitIDs(target)
 	addZoneConfigKVsToSchema(target, defaultZoneConfig, defaultSystemZoneConfig)
-	addSystemTenantEntry(target)
+	// Pre-populate an entry for the system tenant.
+	addTenantEntry(target, roachpb.SystemTenantID, catconstants.SystemTenantName, defaultZoneConfig)
 }
 
-// addSystemTenantEntry adds a kv pair to system.tenants to define the initial
-// system tenant entry.
-func addSystemTenantEntry(target *MetadataSchema) {
+// Note: generally the app tenant ID is dynamically allocated. No
+// assumption should be made about its value: the ID is allocated
+// dynamically when migrating from a previous version. If the ID is
+// needed, elswehere it should be looked up from system.tenants by
+// name.
+var appTenantIDInFreshNewClusters = util.ConstantWithMetamorphicTestRange("app-tenant-id-in-fresh-clusters", 2, 2, math.MaxInt)
+
+// addTenantEntry adds a kv pair to system.tenants to define an initial
+// tenant entry.
+func addTenantEntry(
+	target *MetadataSchema,
+	tenantID roachpb.TenantID,
+	tenantName string,
+	defaultZoneConfig *zonepb.ZoneConfig,
+) {
+	addTenantEntryToSystemTenants(target, tenantID, tenantName)
+	addTenantEntryToSystemSpanConfigs(target, tenantID, defaultZoneConfig)
+}
+
+func addTenantEntryToSystemTenants(
+	target *MetadataSchema, tenantID roachpb.TenantID, tenantName string,
+) {
 	info := descpb.TenantInfo{
-		ID:    roachpb.SystemTenantID.ToUint64(),
-		Name:  catconstants.SystemTenantName,
+		ID:    tenantID.ToUint64(),
+		Name:  tenantName,
 		State: descpb.TenantInfo_ACTIVE,
 	}
 	infoBytes, err := protoutil.Marshal(&info)
@@ -481,37 +525,40 @@ func addSystemTenantEntry(target *MetadataSchema) {
 		panic(err)
 	}
 
-	// Find the system.tenant descriptor in the newly created catalog.
+	// Find the system.tenants descriptor in the newly created catalog.
 	desc := target.FindDescriptorByName(string(catconstants.TenantsTableName))
 	if desc == nil {
-		// No system.tenant table (we're likely in a secondary
+		// No system.tenants table (we're likely in a secondary
 		// tenant). Nothing to do.
 		return
 	}
 	tenantsTableDesc := desc.(catalog.TableDescriptor)
 
-	// TODO(knz): What if more indexes or columns are added to the table
-	// after this code has been written? I sure wish I could express
-	// this using SQL statements (perhaps as a separate code generator
-	// that would provide raw bytes that I can paste here?)
 	values := []tree.Datum{
-		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
+		tree.NewDInt(tree.DInt(tenantID.ToUint64())),
 		tree.MakeDBool(true),
 		tree.NewDBytes(tree.DBytes(infoBytes)),
 		tree.NewDString(info.Name),
 	}
-	if len(tenantsTableDesc.PublicColumns()) != len(values) {
+
+	addKVsForSQLValues(target, tenantsTableDesc, values)
+}
+
+func addKVsForSQLValues(
+	target *MetadataSchema, tableDesc catalog.TableDescriptor, values tree.Datums,
+) {
+	if len(tableDesc.PublicColumns()) != len(values) {
 		panic(errors.New("programming error: update values when adding columns to the tenants table"))
 	}
 	var colIDtoRowIndex catalog.TableColMap
-	for i, c := range tenantsTableDesc.PublicColumns() {
+	for i, c := range tableDesc.PublicColumns() {
 		colIDtoRowIndex.Set(c.GetID(), i)
 	}
 
 	// Encode the PK row.
-	primaryIndex := tenantsTableDesc.GetPrimaryIndex()
+	primaryIndex := tableDesc.GetPrimaryIndex()
 	primaryIndexPairs, err := rowenc.EncodePrimaryIndex(
-		target.codec, tenantsTableDesc, primaryIndex, colIDtoRowIndex, values, true)
+		target.codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		panic(err)
 	}
@@ -521,10 +568,10 @@ func addSystemTenantEntry(target *MetadataSchema) {
 	}
 
 	// Encode the secondary index rows.
-	secondaryIndexes := tenantsTableDesc.PublicNonPrimaryIndexes()
+	secondaryIndexes := tableDesc.PublicNonPrimaryIndexes()
 	for _, secondaryIndex := range secondaryIndexes {
 		secondaryIndexPairs, err := rowenc.EncodeSecondaryIndex(
-			target.codec, tenantsTableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+			target.codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
 		if err != nil {
 			panic(err)
 		}
@@ -533,6 +580,70 @@ func addSystemTenantEntry(target *MetadataSchema) {
 				roachpb.KeyValue{Key: k.Key, Value: k.Value})
 		}
 	}
+}
+
+// addTenantEntryToSystemSpanConfigs adds a predefined span config
+// for the given tenant.
+func addTenantEntryToSystemSpanConfigs(
+	target *MetadataSchema, tenantID roachpb.TenantID, defaultZoneConfig *zonepb.ZoneConfig,
+) {
+	if tenantID.IsSystem() {
+		// The system tenant does not currently have predefined span configs.
+		return
+	}
+
+	// The following logic mirrors that what is done by crdb_internal.create_tenant().
+	// See: sql/tenant.go.
+
+	startKey := keys.MakeTenantPrefix(tenantID)
+	endKey := startKey.Next()
+
+	sc := defaultZoneConfig.AsSpanConfig()
+	sc.RangefeedEnabled = true
+	sc.GCPolicy.IgnoreStrictEnforcement = true
+	marshaled, err := protoutil.Marshal(&sc)
+	if err != nil {
+		panic(err)
+	}
+
+	// Find the system.span_configuration descriptor in the newly created catalog.
+	desc := target.FindDescriptorByName(string(catconstants.SpanConfigurationsTableName))
+	if desc == nil {
+		// No system.span_configurations table. Nothing to do.
+		return
+	}
+	scTableDesc := desc.(catalog.TableDescriptor)
+
+	values := []tree.Datum{
+		tree.NewDBytes(tree.DBytes(startKey)),
+		tree.NewDBytes(tree.DBytes(endKey)),
+		tree.NewDBytes(tree.DBytes(marshaled)),
+	}
+
+	addKVsForSQLValues(target, scTableDesc, values)
+}
+
+// prepopulateSecondaryTenantKeyspace initializes the keyspace for a
+// secondary tenant.
+func prepopulateSecondaryTenantKeyspace(
+	ms *MetadataSchema,
+	defaultZoneConfig *zonepb.ZoneConfig,
+	defaultSystemZoneConfig *zonepb.ZoneConfig,
+	tenantID roachpb.TenantID,
+) {
+	// Recursively initialize a MetadataSchema for the app tenant.
+	codec2 := keys.MakeSQLCodec(tenantID)
+	ms2 := MakeMetadataSchema(codec2, defaultZoneConfig, defaultSystemZoneConfig)
+
+	kvs, splits := ms2.GetInitialValues()
+
+	// Ensure that the secondary tenant starts at a split point.
+	// ms.otherSplits = append(ms.otherSplits, roachpb.RKey(codec2.TenantPrefix()))
+
+	// Inject its KV pairs and split points into the target (system)
+	// tenant.
+	ms.otherKV = append(ms.otherKV, kvs...)
+	ms.otherSplits = append(ms.otherSplits, splits...)
 }
 
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a
