@@ -338,15 +338,14 @@ func TestPutS3AssumeRole(t *testing.T) {
 
 func TestPutS3Endpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
 	q := make(url.Values)
-	expect := map[string]string{
-		"AWS_S3_ENDPOINT":        AWSEndpointParam,
-		"AWS_S3_ENDPOINT_KEY":    AWSAccessKeyParam,
-		"AWS_S3_ENDPOINT_REGION": S3RegionParam,
-		"AWS_S3_ENDPOINT_SECRET": AWSSecretParam,
-	}
-	for env, param := range expect {
+	expectedParams := []string{
+		AWSEndpointParam,
+		AWSAccessKeyParam,
+		AWSSecretParam,
+		S3RegionParam}
+	for _, param := range expectedParams {
+		env := NightlyEnvVarS3Params[param]
 		v := os.Getenv(env)
 		if v == "" {
 			skip.IgnoreLintf(t, "%s env var must be set", env)
@@ -354,9 +353,9 @@ func TestPutS3Endpoint(t *testing.T) {
 		q.Add(param, v)
 	}
 
-	bucket := os.Getenv("AWS_S3_ENDPOINT_BUCKET")
+	bucket := os.Getenv("AWS_S3_BUCKET")
 	if bucket == "" {
-		skip.IgnoreLint(t, "AWS_S3_ENDPOINT_BUCKET env var must be set")
+		skip.IgnoreLint(t, "AWS_S3_BUCKET env var must be set")
 	}
 	user := username.RootUserName()
 

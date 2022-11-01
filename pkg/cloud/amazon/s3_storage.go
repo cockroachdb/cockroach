@@ -85,6 +85,24 @@ const (
 	scheme = "s3"
 )
 
+// NightlyEnvVarS3Params maps param keys that get added to an S3
+// URI to the environment variables hard coded on the VM
+// running the nightly cloud unit tests.
+var NightlyEnvVarS3Params = map[string]string{
+	AWSEndpointParam:  "AWS_S3_ENDPOINT",
+	AWSAccessKeyParam: "AWS_ACCESS_KEY_ID",
+	S3RegionParam:     "AWS_DEFAULT_REGION",
+	AWSSecretParam:    "AWS_SECRET_ACCESS_KEY",
+}
+
+// NightlyEnvVarKMSParams maps param keys that get added to a KMS
+// URI to the environment variables hard coded on the VM
+// running the nightly cloud unit tests.
+var NightlyEnvVarKMSParams = map[string]string{
+	AWSEndpointParam: "AWS_KMS_ENDPOINT",
+	KMSRegionParam:   "AWS_KMS_REGION",
+}
+
 type s3Storage struct {
 	bucket   *string
 	conf     *cloudpb.ExternalStorage_S3
