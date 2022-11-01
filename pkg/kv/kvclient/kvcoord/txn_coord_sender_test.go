@@ -432,7 +432,9 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				err := txn.UpdateDeadline(ctx, pushedTimestamp.Next())
 				require.NoError(t, err, "Deadline update to future failed")
 			}
-			err = txn.CommitOrCleanup(ctx)
+			if err = txn.Commit(ctx); err != nil {
+				require.NoError(t, txn.Rollback(ctx))
+			}
 
 			switch i {
 			case 0:
@@ -624,11 +626,9 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 
 	// Now end the transaction and verify we've cleanup up, even though
 	// end transaction failed.
-	err := txn1.CommitOrCleanup(ctx)
+	err := txn1.Commit(ctx)
 	assertTransactionAbortedError(t, err)
-	if err := txn2.CommitOrCleanup(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn2.Commit(ctx))
 	verifyCleanup(key, s.Eng, t, txn1.Sender().(*kvcoord.TxnCoordSender), txn2.Sender().(*kvcoord.TxnCoordSender))
 }
 
@@ -655,9 +655,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 	txn.Sender().ManualRestart(ctx, txn.UserPriority(), s.Clock.Now())
 
 	// Now immediately commit.
-	if err := txn.CommitOrCleanup(ctx); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn.Commit(ctx))
 	verifyCleanup(key, s.Eng, t, txn.Sender().(*kvcoord.TxnCoordSender))
 }
 
@@ -1322,7 +1320,10 @@ func TestTxnRestartCount(t *testing.T) {
 	})
 
 	// Commit (should cause restart metric to increase).
-	err := txn.CommitOrCleanup(ctx)
+	err := txn.Commit(ctx)
+	if err != nil {
+		require.NoError(t, txn.Rollback(ctx))
+	}
 	assertTransactionRetryError(t, err)
 	checkTxnMetrics(t, metrics, "restart txn", 0, 0, 1 /* aborts */, 1 /* restarts */)
 }
@@ -1620,9 +1621,8 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 			if pErr := txn.Put(ctx, "a", "b"); pErr != nil {
 				t.Fatalf("put failed: %s", pErr)
 			}
-			if pErr := txn.CommitOrCleanup(ctx); pErr == nil {
-				t.Fatalf("unexpected commit success")
-			}
+			require.Error(t, txn.Commit(ctx), "unexpected commit success")
+			require.NoError(t, txn.Rollback(ctx))
 
 			if !commit.Load().(bool) {
 				t.Errorf("%T: failed to find initial commit request", test.err)

@@ -801,11 +801,19 @@ func (p *planner) preparePlannerForCopy(
 			// committing its transactions and the execution didn't already commit it
 			// (through the planner.autoCommit optimization).
 			if autoCommit && !txn.IsCommitted() {
-				return txn.CommitOrCleanup(ctx)
+				err = txn.Commit(ctx)
+				if err != nil {
+					if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
+						log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+					}
+				}
+				return err
 			}
 			return nil
 		}
-		txn.CleanupOnError(ctx, prevErr)
+		if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
+			log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+		}
 		return prevErr
 	}
 }

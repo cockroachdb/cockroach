@@ -951,7 +951,9 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 		return retryable(ctx, txn)
 	})
 	if err != nil {
-		txn.CleanupOnError(ctx, err)
+		if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
+			log.Eventf(ctx, "failure aborting transaction: %s; abort caused by: %s", rollbackErr, err)
+		}
 	}
 	// Terminate TransactionRetryWithProtoRefreshError here, so it doesn't cause a higher-level
 	// txn to be retried. We don't do this in any of the other functions in DB; I

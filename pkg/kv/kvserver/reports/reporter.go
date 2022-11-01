@@ -771,8 +771,11 @@ func (r *meta2RangeIter) handleErr(ctx context.Context, err error) {
 	}
 	if !errIsRetriable(err) {
 		if r.txn != nil {
+			log.Eventf(ctx, "non-retriable error: %s", err)
 			// On any non-retriable error, rollback.
-			r.txn.CleanupOnError(ctx, err)
+			if rollbackErr := r.txn.Rollback(ctx); rollbackErr != nil {
+				log.Eventf(ctx, "rollback failed: %s", rollbackErr)
+			}
 			r.txn = nil
 		}
 		r.reset()

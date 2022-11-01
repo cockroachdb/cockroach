@@ -101,7 +101,10 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 		if err := conflictTxn.Put(ctx, key, "pusher was here"); err != nil {
 			return err
 		}
-		return conflictTxn.CommitOrCleanup(ctx)
+		err = conflictTxn.Commit(ctx)
+		require.NoError(t, err)
+		t.Log(conflictTxn.Rollback(ctx))
+		return err
 	}
 
 	// Make a db with a short heartbeat interval, so that the aborted txn finds
