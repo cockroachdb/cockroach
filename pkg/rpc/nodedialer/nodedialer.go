@@ -308,11 +308,12 @@ type TracingInternalClient struct {
 
 // Batch overrides the Batch RPC client method and fills in tracing information.
 func (tic TracingInternalClient) Batch(
-	ctx context.Context, req *roachpb.BatchRequest, opts ...grpc.CallOption,
+	ctx context.Context, ba *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
 	sp := tracing.SpanFromContext(ctx)
 	if sp != nil && !sp.IsNoop() {
-		req.TraceInfo = sp.Meta().ToProto()
+		ba = ba.ShallowCopy()
+		ba.TraceInfo = sp.Meta().ToProto()
 	}
-	return tic.InternalClient.Batch(ctx, req, opts...)
+	return tic.InternalClient.Batch(ctx, ba, opts...)
 }
