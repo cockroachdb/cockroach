@@ -70,7 +70,7 @@ func CreateImplicitRecordTypeFromTableDesc(
 	// names.
 	typ := types.MakeLabeledTuple(typs, names)
 	tableID := descriptor.GetID()
-	typeOID := catid.TypeIDToOID(tableID)
+	typeOID := TableIDToImplicitTypeOID(tableID)
 	// Setting the type's OID allows us to properly report and display this type
 	// as having ID <tableID> + 100000 in the pg_type table and ::REGTYPE casts.
 	// It will also be used to serialize expressions casted to this type for
@@ -84,6 +84,12 @@ func CreateImplicitRecordTypeFromTableDesc(
 		Version: uint32(descriptor.GetVersion()),
 	}
 
+	// Note: Implicit types for virtual tables are hardcoded to have USAGE
+	// privileges and this can't be modified. The virtual table itself does have
+	// synthetic privileges (as of v22.2), but accessing those requires a planner
+	// by using GetPrivilegeDescriptor(ctx, planner).
+	// It is fine to hardcode USAGE for implicit types for virtual tables since
+	// nothing about those types is sensitive.
 	tablePrivs := descriptor.GetPrivileges()
 	newPrivs := make([]catpb.UserPrivileges, len(tablePrivs.Users))
 	for i := range tablePrivs.Users {
