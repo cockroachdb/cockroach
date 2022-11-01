@@ -104,7 +104,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	pgx "github.com/jackc/pgx/v4"
@@ -834,7 +833,6 @@ func backupAndRestore(
 	restoreURIs []string,
 	numAccounts int,
 ) {
-	ctx = logtags.AddTag(ctx, "backup-client", nil)
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 	storageConn := tc.StorageClusterConn()
@@ -857,7 +855,7 @@ func backupAndRestore(
 		}
 
 		backupURIFmtString, backupURIArgs := uriFmtStringAndArgs(backupURIs)
-		backupQuery := fmt.Sprintf("BACKUP DATABASE data TO %s", backupURIFmtString)
+		backupQuery := fmt.Sprintf("BACKUP DATABASE data INTO %s", backupURIFmtString)
 		sqlDB.QueryRow(t, backupQuery, backupURIArgs...).Scan(
 			&unused, &unused, &unused, &exported.rows, &exported.idx, &exported.bytes,
 		)
@@ -909,51 +907,27 @@ func backupAndRestore(
 		if !found {
 			t.Fatal("scanned job rows did not contain a backup!")
 		}
+
+		// Create an incremental backup to exercise incremental destination code that captures a new
+		// table
+		sqlDB.Exec(t, `CREATE TABLE data.empty (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN %s`, backupURIFmtString),
+			backupURIArgs...)
 	}
 
-	uri, err := url.Parse(backupURIs[0])
-	require.NoError(t, err)
-	if uri.Scheme == "userfile" {
-		sqlDB.Exec(t, `CREATE DATABASE foo`)
-		sqlDB.Exec(t, `USE foo`)
-		sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
-		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
-		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
-		verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, restoreURIArgs, numAccounts)
-	} else {
-		// Start a new cluster to restore into.
-		// If the backup is on nodelocal, we need to determine which node it's on.
-		// Othewise, default to 0.
-		backupNodeID := 0
-		if err != nil {
-			t.Fatal(err)
-		}
-		if uri.Scheme == "nodelocal" && uri.Host != "" {
-			// If the backup is on nodelocal and has specified a host, expect it to
-			// be an integer.
-			var err error
-			backupNodeID, err = strconv.Atoi(uri.Host)
-			if err != nil {
-				t.Fatal(err)
-			}
-		}
-		args := base.TestServerArgs{
-			ExternalIODir: tc.Servers[backupNodeID].ClusterSettings().ExternalIODir,
-		}
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(ctx)
-		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-		storageSQLDBRestore := sqlutils.MakeSQLRunner(tcRestore.StorageClusterConn())
+	sqlDB.Exec(t, `DROP DATABASE data CASCADE`)
 
-		// Create some other descriptors to change up IDs
-		sqlDBRestore.Exec(t, `CREATE DATABASE other`)
-		// Force the ID of the restored bank table to be different.
-		sqlDBRestore.Exec(t, `CREATE TABLE other.empty (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE DATABASE foo`)
+	sqlDB.Exec(t, `USE defaultdb`)
 
-		restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
-		restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM %s", restoreURIFmtString)
-		verifyRestoreData(t, sqlDBRestore, storageSQLDBRestore, restoreQuery, restoreURIArgs, numAccounts)
-	}
+	// Create some other descriptors to change up IDs
+	sqlDB.Exec(t, `CREATE DATABASE other`)
+	// Force the ID of the restored bank table to be different.
+	sqlDB.Exec(t, `CREATE TABLE other.empty (a INT PRIMARY KEY)`)
+
+	restoreURIFmtString, restoreURIArgs := uriFmtStringAndArgs(restoreURIs)
+	restoreQuery := fmt.Sprintf("RESTORE DATABASE DATA FROM LATEST IN %s", restoreURIFmtString)
+	verifyRestoreData(t, sqlDB, storageSQLDB, restoreQuery, restoreURIArgs, numAccounts)
 }
 
 func verifyRestoreData(
