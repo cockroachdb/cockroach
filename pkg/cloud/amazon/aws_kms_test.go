@@ -216,20 +216,24 @@ func TestPutAWSKMSEndpoint(t *testing.T) {
 	ctx := context.Background()
 
 	q := make(url.Values)
-	expect := map[string]string{
-		"AWS_KMS_ENDPOINT":        AWSEndpointParam,
-		"AWS_KMS_ENDPOINT_KEY":    AWSAccessKeyParam,
-		"AWS_KMS_ENDPOINT_REGION": KMSRegionParam,
-		"AWS_KMS_ENDPOINT_SECRET": AWSSecretParam,
-	}
-	for env, param := range expect {
+	expectedS3Params := []string{
+		AWSAccessKeyParam,
+		AWSSecretParam}
+	for _, param := range expectedS3Params {
+		env := NightlyEnvVarS3Params[param]
 		v := os.Getenv(env)
 		if v == "" {
 			skip.IgnoreLintf(t, "%s env var must be set", env)
 		}
 		q.Add(param, v)
 	}
-
+	for kmsParam, env := range NightlyEnvVarKMSParams {
+		v := os.Getenv(env)
+		if v == "" {
+			skip.IgnoreLintf(t, "%s env var must be set", env)
+		}
+		q.Add(kmsParam, v)
+	}
 	keyARN := os.Getenv("AWS_KMS_KEY_ARN")
 	if keyARN == "" {
 		skip.IgnoreLint(t, "AWS_KMS_KEY_ARN env var must be set")
