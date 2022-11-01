@@ -476,6 +476,30 @@ var optionNames = func() []string {
 	return names
 }()
 
+var setArgsRe = regexp.MustCompile(`^\s*` + // zero or more leading space.
+	`(?P<option>(?:[a-zA-Z_.0-9]|-)+)` + // 1 or more non-space option characters.
+	`(?:` +
+	`\s*(?:=\s*|\s+)` + // separator: either some spaces, or an equal sign surrounded by optional spaces.
+	`(?P<value>` +
+	`"(?:[^"]|\\.)*"` + // value is either a double-quoted string, which might be empty; or
+	`|` +
+	`[^\s"]+` + // value may be a string of non-space, non-quote characters.
+	`))?` + // value, as a whole, is optional.
+	`\s*$`, // either a standalone option or the value can be followed by optional spaces.
+)
+
+func getSetArgs(sargs string) (ok bool, option string, hasValue bool, value string) {
+	m := setArgsRe.FindStringSubmatch(sargs)
+	if m == nil {
+		return false, "", false, ""
+	}
+	option = m[1]
+	if len(m) == 2 || m[2] == "" {
+		return true, option, false, ""
+	}
+	return true, option, true, m[2]
+}
+
 // handleSet supports the \set client-side command.
 func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cliStateEnum {
 	if len(args) == 0 {
@@ -496,32 +520,38 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 		return nextState
 	}
 
-	if len(args) == 1 {
-		// Try harder to find a value.
-		args = strings.SplitN(args[0], "=", 2)
+	// For \set, we're not trusting the default field separator which
+	// simply splits at spaces, because it doesn't help us handle
+	// "a=b", "a = b", "a b" and "a =b" effectively.
+	// Regular expressions to the rescue.
+	sargs := strings.Join(args, " ")
+
+	ok, optName, hasValue, val := getSetArgs(sargs)
+	if !ok {
+		return c.invalidSyntax(errState)
 	}
 
-	opt, ok := options[args[0]]
+	opt, ok := options[optName]
 	if !ok {
 		return c.invalidSyntax(errState)
 	}
 	if len(c.partialLines) > 0 && !opt.validDuringMultilineEntry {
-		return c.invalidOptionChange(errState, args[0])
+		return c.invalidOptionChange(errState, optName)
 	}
 
+	var err error
+
 	// Determine which value to use.
-	var val string
-	switch len(args) {
-	case 1:
+	if !hasValue {
 		val = "true"
-	case 2:
-		val = args[1]
-	default:
-		return c.invalidSyntax(errState)
+	} else if len(val) > 0 && val[0] == '"' {
+		val, err = strconv.Unquote(val)
+		if err != nil {
+			return c.invalidSyntax(errState)
+		}
 	}
 
 	// Run the command.
-	var err error
 	if !opt.isBoolean {
 		err = opt.set(c, val)
 	} else if b, e := clisqlclient.ParseBool(val); e != nil {
@@ -533,7 +563,7 @@ func (c *cliState) handleSet(args []string, nextState, errState cliStateEnum) cl
 	}
 
 	if err != nil {
-		fmt.Fprintf(c.iCtx.stderr, "\\set %s: %v\n", strings.Join(args, " "), err)
+		fmt.Fprintf(c.iCtx.stderr, "\\set %s: %v\n", sargs, err)
 		c.exitErr = err
 		return errState
 	}
