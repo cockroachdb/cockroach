@@ -22,6 +22,7 @@ const history = H.createHashHistory();
 const withLoadingIndicator: DatabasesPageProps = {
   loading: true,
   loaded: false,
+  lastError: undefined,
   automaticStatsCollectionEnabled: true,
   databases: [],
   sortSetting: {
@@ -46,6 +47,7 @@ const withLoadingIndicator: DatabasesPageProps = {
 const withoutData: DatabasesPageProps = {
   loading: false,
   loaded: true,
+  lastError: null,
   automaticStatsCollectionEnabled: true,
   databases: [],
   sortSetting: {
@@ -70,6 +72,7 @@ const withoutData: DatabasesPageProps = {
 const withData: DatabasesPageProps = {
   loading: false,
   loaded: true,
+  lastError: null,
   showNodeRegionsColumn: true,
   automaticStatsCollectionEnabled: true,
   sortSetting: {
@@ -80,6 +83,7 @@ const withData: DatabasesPageProps = {
     return {
       loading: false,
       loaded: true,
+      lastError: null,
       name: randomName(),
       sizeInBytes: _.random(1000.0) * 1024 ** _.random(1, 2),
       tableCount: _.random(5, 100),
