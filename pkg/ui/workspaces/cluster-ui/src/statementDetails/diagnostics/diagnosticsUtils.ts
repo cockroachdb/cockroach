@@ -9,14 +9,12 @@
 // licenses/APL.txt.
 
 import { isUndefined } from "lodash";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { DiagnosticStatuses } from "src/statementsDiagnostics";
-
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
+import { StatementDiagnosticsReport } from "../../api";
+import moment from "moment";
 
 export function getDiagnosticsStatus(
-  diagnosticsRequest: IStatementDiagnosticsReport,
+  diagnosticsRequest: StatementDiagnosticsReport,
 ): DiagnosticStatuses {
   if (diagnosticsRequest.completed) {
     return "READY";
@@ -26,11 +24,11 @@ export function getDiagnosticsStatus(
 }
 
 export function sortByRequestedAtField(
-  a: IStatementDiagnosticsReport,
-  b: IStatementDiagnosticsReport,
+  a: StatementDiagnosticsReport,
+  b: StatementDiagnosticsReport,
 ): number {
-  const activatedOnA = a.requested_at?.seconds?.toNumber();
-  const activatedOnB = b.requested_at?.seconds?.toNumber();
+  const activatedOnA = moment(a.requested_at)?.unix();
+  const activatedOnB = moment(b.requested_at)?.unix();
   if (isUndefined(activatedOnA) && isUndefined(activatedOnB)) {
     return 0;
   }
@@ -44,8 +42,8 @@ export function sortByRequestedAtField(
 }
 
 export function sortByCompletedField(
-  a: IStatementDiagnosticsReport,
-  b: IStatementDiagnosticsReport,
+  a: StatementDiagnosticsReport,
+  b: StatementDiagnosticsReport,
 ): number {
   const completedA = a.completed ? 1 : -1;
   const completedB = b.completed ? 1 : -1;
@@ -59,8 +57,8 @@ export function sortByCompletedField(
 }
 
 export function sortByStatementFingerprintField(
-  a: IStatementDiagnosticsReport,
-  b: IStatementDiagnosticsReport,
+  a: StatementDiagnosticsReport,
+  b: StatementDiagnosticsReport,
 ): number {
   const statementFingerprintA = a.statement_fingerprint;
   const statementFingerprintB = b.statement_fingerprint;

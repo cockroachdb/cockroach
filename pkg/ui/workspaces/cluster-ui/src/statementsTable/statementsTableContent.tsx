@@ -24,19 +24,16 @@ import { Button } from "src/button";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   propsToQueryString,
-  TimestampToMoment,
   computeOrUseStmtSummary,
   appNamesAttr,
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { EllipsisVertical } from "@cockroachlabs/icons";
-import { getBasePath } from "../api";
+import { getBasePath, StatementDiagnosticsReport } from "../api";
+import moment from "moment";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export const StatementTableCell = {
   statements:
@@ -63,7 +60,7 @@ export const StatementTableCell = {
     (
       activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>,
       onSelectDiagnosticsReportDropdownOption: (
-        report: IStatementDiagnosticsReport,
+        report: StatementDiagnosticsReport,
       ) => void = noop,
     ) =>
     (stmt: AggregateStatistics): React.ReactElement => {
@@ -102,7 +99,7 @@ export const StatementTableCell = {
             <DiagnosticStatusBadge status="WAITING" />
           )}
           {(!canActivateDiagnosticReport || hasCompletedDiagnosticsReports) && (
-            <Dropdown<IStatementDiagnosticsReport>
+            <Dropdown<StatementDiagnosticsReport>
               items={stmt.diagnosticsReports
                 // Sort diagnostic reports from incomplete to complete. Incomplete reports are cancellable.
                 .sort(function (a, b) {
@@ -135,9 +132,7 @@ export const StatementTableCell = {
                             dr.statement_diagnostics_id
                           }`}
                         >
-                          {`Download ${TimestampToMoment(
-                            dr.requested_at,
-                          ).format(
+                          {`Download ${moment(dr.requested_at).format(
                             "MMM DD, YYYY [at] H:mm [(UTC)] [diagnostic]",
                           )}`}
                         </a>

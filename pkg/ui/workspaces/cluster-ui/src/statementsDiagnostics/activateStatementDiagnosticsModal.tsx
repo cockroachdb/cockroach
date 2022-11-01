@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { Radio, Button, Input, Checkbox, Divider, Select, Alert } from "antd";
+import { Alert, Button, Checkbox, Divider, Input, Radio, Select } from "antd";
 import "antd/lib/radio/style";
 import "antd/lib/button/style";
 import "antd/lib/input/style";
@@ -16,30 +16,21 @@ import "antd/lib/checkbox/style";
 import "antd/lib/divider/style";
 import "antd/lib/select/style";
 import "antd/lib/alert/style";
-import React, { useState, useCallback, useImperativeHandle } from "react";
+import React, { useCallback, useImperativeHandle, useState } from "react";
 import { Modal } from "src/modal";
 import { Anchor } from "src/anchor";
 import { Text } from "src/text";
-import {
-  NumberToDuration,
-  statementDiagnostics,
-  statementsSql,
-} from "src/util";
+import { statementDiagnostics, statementsSql } from "src/util";
 import classNames from "classnames/bind";
 import styles from "./activateStatementDiagnosticsModal.scss";
-import { google } from "@cockroachlabs/crdb-protobuf-client";
 import { InfoCircleFilled } from "@cockroachlabs/icons";
-type IDuration = google.protobuf.IDuration;
+import { InsertStmtDiagnosticRequest } from "../api";
 
 const cx = classNames.bind(styles);
 const { Option } = Select;
 
 export interface ActivateDiagnosticsModalProps {
-  activate: (
-    statement: string,
-    minExecLatency: IDuration,
-    expiresAfter: IDuration,
-  ) => void;
+  activate: (insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest) => void;
   refreshDiagnosticsReports: () => void;
   onOpenModal?: (statement: string) => void;
 }
@@ -72,21 +63,24 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef(
       unit: string,
     ) => {
       const multiplier = unit == "milliseconds" ? 0.001 : 1;
-      const numSeconds = conditional ? value * multiplier : 0;
-      return NumberToDuration(numSeconds);
+      return conditional ? value * multiplier : 0; // num seconds
     };
 
     const getExpiresAfter = (expires: boolean, expiresAfter: number) => {
-      const numSeconds = expires ? expiresAfter : 0;
-      return NumberToDuration(numSeconds * 60);
+      const numMinutes = expires ? expiresAfter : 0;
+      return numMinutes * 60; // num seconds
     };
 
     const onOkHandler = useCallback(() => {
-      activate(
-        statement,
-        getMinExecLatency(conditional, minExecLatency, minExecLatencyUnit),
-        getExpiresAfter(expires, expiresAfter),
-      );
+      activate({
+        stmtFingerprint: statement,
+        minExecutionLatencySeconds: getMinExecLatency(
+          conditional,
+          minExecLatency,
+          minExecLatencyUnit,
+        ),
+        expiresAfterSeconds: getExpiresAfter(expires, expiresAfter),
+      });
       setVisible(false);
     }, [
       activate,

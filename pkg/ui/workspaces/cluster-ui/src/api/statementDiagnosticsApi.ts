@@ -32,15 +32,17 @@ export function getStatementDiagnosticsReports(): Promise<StatementDiagnosticsRe
     statements: [
       {
         sql: `SELECT
-			id,
+			id::STRING,
 			statement_fingerprint,
 			completed,
-			statement_diagnostics_id,
+			statement_diagnostics_id::STRING,
 			requested_at,
 			min_execution_latency,
 			expires_at
 		FROM
-			system.statement_diagnostics_requests`,
+			system.statement_diagnostics_requests
+    WHERE
+      expires_at > now() OR completed = true`,
       },
     ],
     execute: true,
@@ -67,8 +69,8 @@ type CheckPendingStmtDiagnosticRow = {
 export type InsertStmtDiagnosticRequest = {
   stmtFingerprint: string;
   samplingProbability?: number;
-  minExecutionLatencySeconds?: number; // seconds
-  expiresAfterSeconds?: number; // seconds
+  minExecutionLatencySeconds?: number;
+  expiresAfterSeconds?: number;
 };
 
 export type InsertStmtDiagnosticResponse = {
@@ -176,8 +178,7 @@ export type CancelStmtDiagnosticResponse = {
 export function cancelStatementDiagnosticsReport({
   requestId,
 }: CancelStmtDiagnosticRequest): Promise<CancelStmtDiagnosticResponse> {
-  const query = `UPDATE system.statement_diagnostics_requests SET expires_at = '1970-01-01' WHERE completed = false AND id = $1 AND (expires_at IS NULL OR expires_at > now()) RETURNING id as stmt_diag_req_id`;
-
+  const query = `UPDATE system.statement_diagnostics_requests SET expires_at = '1970-01-01' WHERE completed = false AND id = $1::INT8 AND (expires_at IS NULL OR expires_at > now()) RETURNING id as stmt_diag_req_id`;
   const req: SqlExecutionRequest = {
     execute: true,
     statements: [
