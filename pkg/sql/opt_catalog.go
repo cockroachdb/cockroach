@@ -2432,7 +2432,11 @@ func (oi *optVirtualIndex) InvertedColumn() cat.IndexColumn {
 
 // Predicate is part of the cat.Index interface.
 func (oi *optVirtualIndex) Predicate() (string, bool) {
-	return "", false
+	if oi.idx == nil {
+		return "", false
+	}
+	pred := oi.idx.GetPredicate()
+	return pred, pred != ""
 }
 
 // Zone is part of the cat.Index interface.
