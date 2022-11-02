@@ -733,6 +733,17 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			indexJoin.On = c.ExtractUnboundConditions(conditions, onCols)
 		}
 		if pairedJoins {
+			if !projectedVirtualCols.Empty() {
+				// Virtual columns are not stored in the primary index, so the
+				// upper join cannot produce them.
+				// TODO(#90771): Add a Project above the upper join to produce
+				// virtual columns. Take care to ensure that they are
+				// null-extended correctly for left-joins. We'll also need to
+				// ensure that the upper join produces all the columns
+				// referenced by the virtual computed column expressions.
+				return
+			}
+
 			// Create a new ScanPrivate, which will be used below for the first lookup
 			// join in the pair. Note: this must happen before the continuation column
 			// is created to ensure that the continuation column will have the highest
