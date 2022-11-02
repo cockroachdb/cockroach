@@ -181,19 +181,34 @@ func evalExport(
 	var curSizeOfExportedSSTs int64
 	for start := args.Key; start != nil; {
 		destFile := &storage.MemFile{}
-		summary, resume, err := storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader,
-			storage.MVCCExportOptions{
-				StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
-				EndKey:             args.EndKey,
-				StartTS:            args.StartTime,
-				EndTS:              h.Timestamp,
-				ExportAllRevisions: exportAllRevisions,
-				TargetSize:         targetSize,
-				MaxSize:            maxSize,
-				MaxIntents:         maxIntents,
-				StopMidKey:         args.SplitMidKey,
-				ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
-			}, destFile)
+		opts := storage.MVCCExportOptions{
+			StartKey:           storage.MVCCKey{Key: start, Timestamp: resumeKeyTS},
+			EndKey:             args.EndKey,
+			StartTS:            args.StartTime,
+			EndTS:              h.Timestamp,
+			ExportAllRevisions: exportAllRevisions,
+			TargetSize:         targetSize,
+			MaxSize:            maxSize,
+			MaxIntents:         maxIntents,
+			StopMidKey:         args.SplitMidKey,
+			ResourceLimiter:    storage.NewResourceLimiter(storage.ResourceLimiterOptions{MaxRunTime: maxRunTime}, timeutil.DefaultTimeSource{}),
+		}
+		var summary roachpb.BulkOpSummary
+		var resume storage.MVCCKey
+		var fingerprint uint64
+		var err error
+		if args.ExportFingerprint {
+			// Default to stripping the tenant prefix from keys, and checksum from
+			// values before fingerprinting so that the fingerprint is tenant
+			// agnostic.
+			opts.FingerprintOptions = storage.MVCCExportFingerprintOptions{
+				StripTenantPrefix:  true,
+				StripValueChecksum: true,
+			}
+			summary, resume, fingerprint, err = storage.MVCCExportFingerprint(ctx, cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
+		} else {
+			summary, resume, err = storage.MVCCExportToSST(ctx, cArgs.EvalCtx.ClusterSettings(), reader, opts, destFile)
+		}
 		if err != nil {
 			if errors.HasType(err, (*storage.ExceedMaxSizeError)(nil)) {
 				err = errors.WithHintf(err,
@@ -217,10 +232,11 @@ func evalExport(
 			span.EndKey = args.EndKey
 		}
 		exported := roachpb.ExportResponse_File{
-			Span:     span,
-			EndKeyTS: resume.Timestamp,
-			Exported: summary,
-			SST:      data,
+			Span:        span,
+			EndKeyTS:    resume.Timestamp,
+			Exported:    summary,
+			SST:         data,
+			Fingerprint: fingerprint,
 		}
 		reply.Files = append(reply.Files, exported)
 		start = resume.Key

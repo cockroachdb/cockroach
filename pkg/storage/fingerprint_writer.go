@@ -13,11 +13,13 @@ package storage
 import (
 	"context"
 	"hash"
+	"hash/fnv"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 )
 
@@ -179,4 +181,74 @@ func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
 		return key
 	}
 	return remainder
+}
+
+// FingerprintRangekeys iterates over the provided SSTs, that are expected to
+// contain only rangekeys, and maintains a XOR aggregate of each rangekey's
+// fingerprint.
+func FingerprintRangekeys(
+	ctx context.Context, cs *cluster.Settings, opts MVCCExportFingerprintOptions, ssts [][]byte,
+) (uint64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "storage.FingerprintRangekeys")
+	defer sp.Finish()
+	_ = ctx // ctx is currently unused, but this new ctx should be used below in the future.
+
+	iterOpts := IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: keys.LocalMax,
+		UpperBound: keys.MaxKey,
+	}
+	var fingerprint uint64
+	iter, err := NewMultiMemSSTIterator(ssts, false, iterOpts)
+	if err != nil {
+		return fingerprint, err
+	}
+	defer iter.Close()
+
+	destFile := &MemFile{}
+	fw := makeFingerprintWriter(ctx, fnv.New64(), cs, destFile, opts)
+	defer fw.Close()
+	fingerprintRangeKey := func(bounds roachpb.Span, versions MVCCRangeKeyVersions) (uint64, error) {
+		defer fw.hasher.Reset()
+		if err := fw.hashKey(bounds.Key); err != nil {
+			return 0, err
+		}
+		if err := fw.hashKey(bounds.EndKey); err != nil {
+			return 0, err
+		}
+		for _, v := range versions {
+			fw.timestampBuf = EncodeMVCCTimestampToBuf(fw.timestampBuf, v.Timestamp)
+			if err := fw.hash(fw.timestampBuf); err != nil {
+				return 0, err
+			}
+			if err := fw.hashValue(v.Value); err != nil {
+				return 0, err
+			}
+		}
+		return fw.hasher.Sum64(), nil
+	}
+
+	for iter.SeekGE(MVCCKey{Key: keys.MinKey}); ; iter.Next() {
+		if ok, err := iter.Valid(); err != nil {
+			return fingerprint, err
+		} else if !ok {
+			break
+		}
+		hasPoint, _ := iter.HasPointAndRange()
+		if hasPoint {
+			return fingerprint, errors.AssertionFailedf("unexpected point key; ssts should only contain range keys")
+		}
+		rangeKeyStack := iter.RangeKeys()
+		rangekeyFingerprint, err := fingerprintRangeKey(rangeKeyStack.Bounds, rangeKeyStack.Versions)
+		if err != nil {
+			return fingerprint, err
+		}
+		fw.xorAgg.add(rangekeyFingerprint)
+	}
+
+	if len(destFile.Data()) != 0 {
+		return 0, errors.AssertionFailedf("unexpected data found in destFile")
+	}
+
+	return fw.Finish()
 }
