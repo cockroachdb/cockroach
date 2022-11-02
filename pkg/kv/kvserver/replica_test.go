@@ -4647,11 +4647,14 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 
 	// Write a value outside of the txn to cause a WriteTooOldError later.
 	put := putArgs(keyA, []byte("val1"))
-	ba := &roachpb.BatchRequest{}
-	ba.Add(&put)
-	_, pErr := tc.Sender().Send(ctx, ba)
-	require.Nil(t, pErr)
+	{
+		ba := &roachpb.BatchRequest{}
+		ba.Add(&put)
+		_, pErr := tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+	}
 
+	ba := &roachpb.BatchRequest{}
 	// This put will cause the WriteTooOld flag to be set.
 	put = putArgs(keyA, []byte("val2"))
 	// This will cause a ConditionFailedError.
@@ -4660,7 +4663,7 @@ func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
 	ba.Add(&put)
 	ba.Add(&cput)
 	assignSeqNumsForReqs(&txn, &put, &cput)
-	_, pErr = tc.Sender().Send(ctx, ba)
+	_, pErr := tc.Sender().Send(ctx, ba)
 	require.IsType(t, pErr.GetDetail(), &roachpb.ConditionFailedError{})
 	require.False(t, pErr.GetTxn().WriteTooOld)
 }
