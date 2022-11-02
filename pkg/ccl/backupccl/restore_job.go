@@ -12,6 +12,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"math"
 	"sort"
 	"time"
@@ -412,7 +414,7 @@ func restore(
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
-// descriptor, and all the Descriptors for a backup to be restored. It upgrades
+// descriptor, and all the Descriptors for a backup to be restored, and their IDs. It upgrades
 // the table descriptors to the new FK representation if necessary. FKs that
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
@@ -427,16 +429,18 @@ func loadBackupSQLDescs(
 	details jobspb.RestoreDetails,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, int64, error) {
+) ([]backuppb.BackupManifest, backuppb.BackupManifest, []catalog.Descriptor, map[descpb.ID]struct{},
+	int64,
+	error) {
 	backupManifests, sz, err := backupinfo.LoadBackupManifestsAtTime(ctx, mem, details.URIs,
 		p.User(), p.ExecCfg().DistSQLSrv.ExternalStorageFromURI, encryption, kmsEnv, details.EndTime)
 	if err != nil {
-		return nil, backuppb.BackupManifest{}, nil, 0, err
+		return nil, backuppb.BackupManifest{}, nil, nil, 0, err
 	}
 
 	allDescs, latestBackupManifest, err := backupinfo.LoadSQLDescsFromBackupsAtTime(backupManifests, details.EndTime)
 	if err != nil {
-		return nil, backuppb.BackupManifest{}, nil, 0, err
+		return nil, backuppb.BackupManifest{}, nil, nil, 0, err
 	}
 
 	for _, m := range details.DatabaseModifiers {
@@ -446,6 +450,7 @@ func loadBackupSQLDescs(
 	}
 
 	var sqlDescs []catalog.Descriptor
+	newDescIDs := make(map[descpb.ID]struct{})
 	for _, desc := range allDescs {
 		id := desc.GetID()
 		switch desc := desc.(type) {
@@ -454,17 +459,18 @@ func loadBackupSQLDescs(
 				desc.SetRegionConfig(m.RegionConfig)
 			}
 		}
-		if _, ok := details.DescriptorRewrites[id]; ok {
+		if descriptorRewrite, ok := details.DescriptorRewrites[id]; ok {
 			sqlDescs = append(sqlDescs, desc)
+			newDescIDs[descriptorRewrite.ID] = struct{}{}
 		}
 	}
 
 	if err := maybeUpgradeDescriptors(sqlDescs, true /* skipFKsWithNoMatchingTable */); err != nil {
 		mem.Shrink(ctx, sz)
-		return nil, backuppb.BackupManifest{}, nil, 0, err
+		return nil, backuppb.BackupManifest{}, nil, nil, 0, err
 	}
 
-	return backupManifests, latestBackupManifest, sqlDescs, sz, nil
+	return backupManifests, latestBackupManifest, sqlDescs, newDescIDs, sz, nil
 }
 
 // restoreResumer should only store a reference to the job it's running. State
@@ -690,6 +696,31 @@ func backedUpDescriptorWithInProgressImportInto(
 		return false, nil
 	}
 	return true, nil
+}
+
+// validateRestoredDescriptors returns an err if one of the restored descriptors is invalid
+func validateRestoredDescriptors(ctx context.Context, execConfig *sql.ExecutorConfig,
+	newDescIDs map[descpb.ID]struct{}) error {
+	allDescs, err := backupresolver.LoadAllDescs(ctx, execConfig, hlc.Timestamp{WallTime: timeutil.Now().
+		UnixNano()})
+	if err != nil {
+		return err
+	}
+	targetDescs := make([]catalog.Descriptor, 0)
+	for _, desc := range allDescs {
+		if _, ok := newDescIDs[desc.GetID()]; ok {
+			targetDescs = append(targetDescs, desc)
+		}
+	}
+	ok, invalidMsg, err := backuputils.ValidateDescriptors(ctx, targetDescs,
+		execConfig.Settings.Version.BinaryVersion())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.Newf("Failed Descriptor Validation Check: %s", invalidMsg)
+	}
+	return nil
 }
 
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
@@ -1450,7 +1481,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings, &p.ExecCfg().ExternalIODirConfig,
 		p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
-	backupManifests, latestBackupManifest, sqlDescs, memSize, err := loadBackupSQLDescs(
+	backupManifests, latestBackupManifest, sqlDescs, newDescIDs, memSize, err := loadBackupSQLDescs(
 		ctx, &mem, p, details, details.Encryption, &kmsEnv,
 	)
 	if err != nil {
@@ -1489,6 +1520,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	}
+	if err := validateRestoredDescriptors(ctx, p.ExecCfg(), newDescIDs); err != nil {
+		return err
+	}
+
 	var remappedStats []*stats.TableStatisticProto
 	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
 		&kmsEnv, latestBackupManifest)
@@ -1518,7 +1553,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		if err := sql.DescsTxn(ctx, r.execCfg, publishDescriptors); err != nil {
 			return err
 		}
-
+		if err := validateRestoredDescriptors(ctx, p.ExecCfg(), newDescIDs); err != nil {
+			return err
+		}
 		p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
 		if err := p.ExecCfg().JobRegistry.CheckPausepoint(
 			"restore.after_publishing_descriptors"); err != nil {
@@ -1696,6 +1733,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	r.restoreStats = resTotal
 
+	if err := validateRestoredDescriptors(ctx, p.ExecCfg(), newDescIDs); err != nil {
+		return err
+	}
 	// Emit an event now that the restore job has completed.
 	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 
