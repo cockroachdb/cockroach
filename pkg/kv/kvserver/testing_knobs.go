@@ -122,6 +122,8 @@ type StoreTestingKnobs struct {
 	// replica.TransferLease() encounters an in-progress lease extension.
 	// nextLeader is the replica that we're trying to transfer the lease to.
 	LeaseTransferBlockedOnExtensionEvent func(nextLeader roachpb.ReplicaDescriptor)
+	// DisableAutomaticCompactions disable automatic compactions
+	DisableAutomaticCompactions bool
 	// DisableGCQueue disables the GC queue.
 	DisableGCQueue bool
 	// DisableMergeQueue disables the merge queue.

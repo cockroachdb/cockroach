@@ -146,8 +146,14 @@ func (registry *stickyInMemEnginesRegistryImpl) GetOrCreateStickyInMemEngine(
 		storage.ForStickyEngineTesting,
 	}
 
-	if s := cfg.TestingKnobs.Store; s != nil && s.(*kvserver.StoreTestingKnobs).SmallEngineBlocks {
-		options = append(options, storage.BlockSize(1))
+	if s := cfg.TestingKnobs.Store; s != nil {
+		stk := s.(*kvserver.StoreTestingKnobs)
+		if stk.SmallEngineBlocks {
+			options = append(options, storage.BlockSize(1))
+		}
+		if stk.DisableAutomaticCompactions {
+			options = append(options, storage.DisableAutomaticCompactions)
+		}
 	}
 
 	log.Infof(ctx, "creating new sticky in-mem engine %s", spec.StickyInMemoryEngineID)
