@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime/pprof"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -251,6 +252,12 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 			TraceRealSpan: rts.traceRealSpan,
 			OnResume: func(ctx context.Context) error {
 				t.Log("Starting resume")
+				l, ok := pprof.Label(ctx, "job")
+				assert.True(t, ok)
+				assert.Contains(t, l, fmt.Sprintf("%d", job.ID()))
+				payload := job.Payload()
+				jobType := payload.Type().String()
+				assert.Contains(t, l, jobType)
 				if rts.traceRealSpan {
 					// Add a dummy recording so we actually see something in the trace.
 					span := tracing.SpanFromContext(ctx)
