@@ -177,8 +177,8 @@ func checkRaftLog(
 			nodeToMonitor: {
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						TestingApplyFilter: raftFilter,
-						DisableGCQueue:     true,
+						TestingPostApplyFilter: raftFilter,
+						DisableGCQueue:         true,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{{InMemory: true}},

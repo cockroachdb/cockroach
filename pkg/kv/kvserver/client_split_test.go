@@ -599,8 +599,9 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-				DisableSplitQueue: true,
+				DisableMergeQueue:              true,
+				DisableSplitQueue:              true,
+				DisableCanAckBeforeApplication: true,
 			},
 		},
 	})
@@ -760,8 +761,9 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 	serv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
-				DisableMergeQueue: true,
-				DisableSplitQueue: true,
+				DisableMergeQueue:              true,
+				DisableSplitQueue:              true,
+				DisableCanAckBeforeApplication: true,
 			},
 		},
 	})
@@ -843,7 +845,8 @@ func TestStoreRangeSplitMergeStats(t *testing.T) {
 
 	// Merge the ranges back together, and assert that the merged stats
 	// agree with the pre-split stats.
-	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminMergeArgs(repl.Desc().StartKey.AsRawKey()))
+	mergeKey := repl.Desc().StartKey.AsRawKey()
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), adminMergeArgs(mergeKey))
 	require.NoError(t, pErr.GoError())
 
 	repl = store.LookupReplica(roachpb.RKey(keyPrefix))
@@ -1250,10 +1253,11 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 						DefaultZoneConfigOverride: &zoneConfig,
 					},
 					Store: &kvserver.StoreTestingKnobs{
-						DisableGCQueue:       true,
-						DisableMergeQueue:    true,
-						DisableSplitQueue:    true,
-						TestingRequestFilter: testingRequestFilter,
+						DisableCanAckBeforeApplication: true,
+						DisableGCQueue:                 true,
+						DisableMergeQueue:              true,
+						DisableSplitQueue:              true,
+						TestingRequestFilter:           testingRequestFilter,
 					},
 				},
 			})
@@ -2558,6 +2562,9 @@ func TestUnsplittableRange(t *testing.T) {
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue:       true,
 				SplitQueuePurgatoryChan: splitQueuePurgatoryChan,
+				// Without this, the test is flaky: the range does not end up in
+				// purgatory "synchronously".
+				DisableCanAckBeforeApplication: true,
 			},
 			Server: &server.TestingKnobs{
 				WallClock:                       manualClock,
@@ -2768,6 +2775,9 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						WallClock: manualClock,
+					},
+					Store: &kvserver.StoreTestingKnobs{
+						DisableCanAckBeforeApplication: true,
 					},
 				},
 			},

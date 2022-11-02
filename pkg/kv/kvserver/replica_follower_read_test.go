@@ -110,6 +110,7 @@ func TestCheckExecutionCanProceedAllowsFollowerReadWithInvalidLease(t *testing.T
 	manual := timeutil.NewManualTime(timeutil.Unix(5, 0))
 	clock := hlc.NewClock(manual, 1 /* maxOffset */)
 	tsc := TestStoreConfig(clock)
+	tsc.TestingKnobs.DisableCanAckBeforeApplication = true
 	// Permit only one lease attempt. The test is flaky if we allow the lease to
 	// be renewed by background processes.
 	var leaseOnce sync.Once
