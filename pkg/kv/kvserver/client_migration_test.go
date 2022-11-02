@@ -254,7 +254,7 @@ func TestMigrateWaitsForApplication(t *testing.T) {
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					TestingApplyFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+					TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 						if args.StoreID == roachpb.StoreID(n3) && args.State != nil && args.State.Version != nil {
 							<-blockApplicationCh
 						}

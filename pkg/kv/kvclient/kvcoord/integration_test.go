@@ -92,7 +92,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					commitCmdID.Store(args.CmdID)
 					return nil
 				},
-				TestingApplyFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+				TestingApplyCalledTwiceFilter: func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 					// We'll trap the processing of the commit command and return an error
 					// for it.
 					v := commitCmdID.Load()

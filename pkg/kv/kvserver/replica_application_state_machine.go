@@ -152,7 +152,7 @@ func (r *Replica) shouldApplyCommand(
 		ctx, cmd.idKey, &cmd.raftCmd, cmd.IsLocal(), replicaState,
 	)
 	// Consider testing-only filters.
-	if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; cmd.forcedErr != nil || filter != nil {
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.forcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.idKey,
 			ReplicatedEvalResult: *cmd.replicatedResult(),

@@ -857,8 +857,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
 		return stats, getNonDeterministicFailureExplanation(err), err
 	}
-	if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
-		return stats, getNonDeterministicFailureExplanation(err), err
+	if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
+		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
+			return stats, getNonDeterministicFailureExplanation(err), err
+		}
 	}
 
 	// Separate the MsgApp messages from all other Raft message types so that we
