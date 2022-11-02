@@ -10,15 +10,19 @@ package multiregionccl_test
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,6 +30,78 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// startTestCluster starts a 3 node cluster.
+//
+// Note, if a testfeed depends on particular testing knobs, those may
+// need to be applied to each of the servers in the test cluster
+// returned from this function.
+func TestMultiRegionDatabaseStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "times out under race")
+
+	ctx := context.Background()
+	knobs := base.TestingKnobs{}
+
+	regionToNumServers := make(map[string]int, 6)
+	regionToNumServers["us-east"] = 3
+	regionToNumServers["us-west"] = 3
+
+	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+		t,
+		regionToNumServers, /* numServers */
+		knobs,
+		multiregionccltestutils.WithUseDatabase("d"),
+	)
+
+	defer cleanup()
+
+	_, err := db.ExecContext(ctx,
+		`CREATE DATABASE test PRIMARY REGION "us-west";
+    use test;
+    CREATE TABLE a(id uuid primary key);`)
+	require.NoError(t, err)
+
+	s := tc.Server(0)
+
+	testutils.SucceedsWithin(t, func() error {
+		// Get the list of nodes from ranges table
+		row := db.QueryRowContext(ctx,
+			`use test;
+    with x as (show ranges from table a) select replicas from x;`)
+		var nodesStr string
+		err = row.Scan(&nodesStr)
+		if err != nil {
+			return err
+		}
+
+		// string comes back "{1,2,3}".
+		nodesStr = strings.TrimLeft(nodesStr, "{")
+		nodesStr = strings.TrimRight(nodesStr, "}")
+		nodes := strings.Split(nodesStr, ",")
+
+		var resp serverpb.DatabaseDetailsResponse
+		require.NoError(t, serverutils.GetJSONProto(s, "/_admin/v1/databases/test?include_stats=true", &resp))
+
+		if resp.Stats.RangeCount != int64(1) {
+			return errors.Newf("expected range-count=1, got %d", resp.Stats.RangeCount)
+		}
+
+		if len(resp.Stats.NodeIDs) != len(nodes) {
+			return errors.Newf("expected node-ids=%s, got %s", nodes, resp.Stats.NodeIDs)
+		}
+
+		for i, n := range resp.Stats.NodeIDs {
+			if nodes[i] != fmt.Sprint(n) {
+				return errors.Newf("The nodes returned from endpoint do not match nodes listed in the show range from table. expected: %s; actual: %s", nodes, resp.Stats.NodeIDs)
+			}
+		}
+
+		return nil
+	}, 45*time.Second)
+}
 
 // TestConcurrentAddDropRegions tests all combinations of add/drop as if they
 // were executed by two concurrent sessions. The general sketch of the test is

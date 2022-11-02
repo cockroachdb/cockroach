@@ -2694,9 +2694,17 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Locations(ctx, &serverpb.LocationsRequest{})
 			return err
 		}},
-		{"NonTableStats", codes.Internal, func(c serverpb.AdminClient) error {
-			_, err := c.NonTableStats(ctx, &serverpb.NonTableStatsRequest{})
-			return err
+		{"NonTableStats", codes.OK, func(c serverpb.AdminClient) error {
+			res, err := c.NonTableStats(ctx, &serverpb.NonTableStatsRequest{})
+			if err != nil {
+				return err
+			}
+
+			if len(res.InternalUseStats.MissingNodes) == 0 {
+				return errors.Newf("There should be at least 1 missing node. %s", res.InternalUseStats)
+			}
+
+			return nil
 		}},
 		{"QueryPlan", codes.OK, func(c serverpb.AdminClient) error {
 			_, err := c.QueryPlan(ctx, &serverpb.QueryPlanRequest{Query: "SELECT 1"})
