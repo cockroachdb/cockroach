@@ -5,6 +5,7 @@ go_library(
     name = "slstorage",
     srcs = [
         "metrics.go",
+        "sessionid.go",
         "slstorage.go",
         "test_helpers.go",
     ],
@@ -29,6 +30,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/syncutil/singleflight",
         "//pkg/util/timeutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
@@ -41,6 +43,7 @@ go_test(
     size = "small",
     srcs = [
         "main_test.go",
+        "sessionid_test.go",
         "slstorage_test.go",
     ],
     args = ["-test.timeout=55s"],
@@ -56,6 +59,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/systemschema",
+        "//pkg/sql/enum",
         "//pkg/sql/sqlliveness",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

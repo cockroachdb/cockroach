@@ -9,7 +9,9 @@ go_library(
     deps = [
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/enum",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
