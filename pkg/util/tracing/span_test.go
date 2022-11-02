@@ -652,7 +652,7 @@ func TestTrimStructuredLogLimit(t *testing.T) {
 		msg := &types.StringValue{Value: s}
 		any, err := types.MarshalAny(msg)
 		require.NoError(t, err)
-		sr := &tracingpb.StructuredRecord{
+		sr := tracingpb.StructuredRecord{
 			Payload: any,
 		}
 		sp.AddStructuredRecord(sr)

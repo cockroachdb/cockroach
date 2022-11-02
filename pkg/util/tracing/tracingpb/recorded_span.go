@@ -96,9 +96,9 @@ func (s *RecordedSpan) EnsureTagGroup(name string) *TagGroup {
 //
 // Note that the limit on the size of a span's structured records is not
 // enforced here. If it's needed, the caller has to do it.
-func (s *RecordedSpan) AddStructuredRecord(r *StructuredRecord) int64 {
+func (s *RecordedSpan) AddStructuredRecord(r StructuredRecord) int64 {
 	size := int64(r.MemorySize())
-	s.StructuredRecords = append(s.StructuredRecords, *r)
+	s.StructuredRecords = append(s.StructuredRecords, r)
 	s.StructuredRecordsSizeBytes += size
 	return size
 }
