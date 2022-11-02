@@ -3000,17 +3000,15 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
 		%s
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
-	if err == nil {
-		err := nestedTxn.Commit(ctx)
-		if err != nil {
-			return nil, nil, err
+	if err != nil {
+		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
+			err = errors.CombineErrors(err, rbErr)
 		}
-		break
+		return nil, nil, err
 	}
-	if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-		err = errors.CombineErrors(err, rbErr)
+	if err = nestedTxn.Commit(ctx); err != nil {
+		return nil, nil, err
 	}
-	return nil, nil, err
 
 	columnToReturn := column{
 		name:     columnName,
@@ -3021,7 +3019,6 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 		ExplicitSchema: true,
 	}, tree.Name(tableName))
 
-	var err error
 	columnToReturn.typ, err = og.typeFromTypeName(ctx, tx, typName)
 	if err != nil {
 		return nil, nil, err
