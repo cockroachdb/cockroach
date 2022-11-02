@@ -85,11 +85,11 @@ func ScanSST(
 			break
 		}
 		for _, rangeKeyVersion := range rangeIter.RangeKeys().Versions {
-			mvccVal, err := storage.DecodeMVCCValue(rangeKeyVersion.Value)
+			isTombstone, err := storage.EncodedMVCCValueIsTombstone(rangeKeyVersion.Value)
 			if err != nil {
 				return err
 			}
-			if !mvccVal.IsTombstone() {
+			if !isTombstone {
 				return errors.Errorf("only expect range tombstone from MVCC range key: %s", rangeIter.RangeBounds())
 			}
 			intersectedSpan := scanWithin.Intersect(rangeIter.RangeBounds())

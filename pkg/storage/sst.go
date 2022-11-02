@@ -182,10 +182,7 @@ func CheckSSTConflicts(
 		if !sstKey.IsValue() {
 			return errors.New("SST keys must have timestamps")
 		}
-		sstValue, ok, err := tryDecodeSimpleMVCCValue(sstValueRaw)
-		if !ok && err == nil {
-			sstValue, err = decodeExtendedMVCCValue(sstValueRaw)
-		}
+		sstValueIsTombstone, err := EncodedMVCCValueIsTombstone(sstValueRaw)
 		if err != nil {
 			return err
 		}
@@ -211,10 +208,7 @@ func CheckSSTConflicts(
 				return nil
 			}
 		}
-		extValue, ok, err := tryDecodeSimpleMVCCValue(extValueRaw)
-		if !ok && err == nil {
-			extValue, err = decodeExtendedMVCCValue(extValueRaw)
-		}
+		extValueIsTombstone, err := EncodedMVCCValueIsTombstone(extValueRaw)
 		if err != nil {
 			return err
 		}
@@ -240,7 +234,7 @@ func CheckSSTConflicts(
 			// that exists in the SST stats.
 			statsDiff.AgeTo(extKey.Timestamp.WallTime)
 			// Update the skipped stats to account for the skipped meta key.
-			if !sstValue.IsTombstone() {
+			if !sstValueIsTombstone {
 				statsDiff.LiveBytes -= totalBytes
 				statsDiff.LiveCount--
 			}
@@ -250,7 +244,7 @@ func CheckSSTConflicts(
 
 			// Update the stats to account for the skipped versioned key/value.
 			totalBytes = int64(len(sstValueRaw)) + MVCCVersionTimestampSize
-			if !sstValue.IsTombstone() {
+			if !sstValueIsTombstone {
 				statsDiff.LiveBytes -= totalBytes
 			}
 			statsDiff.KeyBytes -= MVCCVersionTimestampSize
@@ -265,7 +259,7 @@ func CheckSSTConflicts(
 		// a WriteTooOldError -- that error implies that the client should
 		// retry at a higher timestamp, but we already know that such a retry
 		// would fail (because it will shadow an existing key).
-		if !extValue.IsTombstone() && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
+		if !extValueIsTombstone && (!disallowShadowingBelow.IsEmpty() || disallowShadowing) {
 			allowShadow := !disallowShadowingBelow.IsEmpty() &&
 				disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
 			if !allowShadow {
@@ -286,14 +280,14 @@ func CheckSSTConflicts(
 
 		// If we are shadowing an existing key, we must update the stats accordingly
 		// to take into account the existing KV pair.
-		if extValue.IsTombstone() {
+		if extValueIsTombstone {
 			statsDiff.AgeTo(extKey.Timestamp.WallTime)
 		} else {
 			statsDiff.AgeTo(sstKey.Timestamp.WallTime)
 		}
 		statsDiff.KeyCount--
 		statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
-		if !extValue.IsTombstone() {
+		if !extValueIsTombstone {
 			statsDiff.LiveCount--
 			statsDiff.LiveBytes -= int64(len(extKey.Key) + 1)
 			statsDiff.LiveBytes -= int64(len(extValueRaw)) + MVCCVersionTimestampSize
