@@ -38,21 +38,56 @@ translate database=db
 translate id=106
 ----
 
-# Mark table t2 as offline, we should still be able to generate a span
-# configuration for it.
-mark-table-offline database=db table=t2
+subtest offline-descriptors
+
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds=10;
 ----
 
-# Should work for both when we start from the table and when we start from the
-# table.
-translate database=db table=t2
+# Mark the database as offline, we should still be able to generate a span
+# configuration for it.
+mark-database-offline database=db
 ----
-/Table/10{7-8}                             range default
+
+translate database=db
+----
+/Table/10{7-8}                             ttl_seconds=10
+
+# Delete the bespoke zone config on db. t2 should fallback to the RANGE DEFAULT
+# zone config even though all descriptors are offline.
+exec-sql
+DELETE FROM system.zones WHERE id = 104;
+----
 
 translate database=db
 ----
 /Table/10{7-8}                             range default
 
+translate database=db table=t2
+----
+/Table/10{7-8}                             range default
+
+mark-database-public database=db
+----
+
+exec-sql
+ALTER DATABASE db CONFIGURE ZONE USING gc.ttlseconds=11;
+----
+
+# Mark table db.t2 as offline, we should still be able to generate a span
+# configuration for it.
+mark-table-offline database=db table=t2
+----
+
+# Should work for both when we start from the table and when we start from the
+# database.
+translate database=db table=t2
+----
+/Table/10{7-8}                             ttl_seconds=11
+
+translate database=db
+----
+/Table/10{7-8}                             ttl_seconds=11
 
 # Mark the table as public again.
 mark-table-public database=db table=t2
@@ -60,7 +95,9 @@ mark-table-public database=db table=t2
 
 translate database=db table=t2
 ----
-/Table/10{7-8}                             range default
+/Table/10{7-8}                             ttl_seconds=11
+
+subtest end
 
 # Test schemas/types don't generate a span configuration.
 exec-sql
