@@ -67,6 +67,10 @@ func TestEngineComparer(t *testing.T) {
 	}
 	require.Equal(t, -1, EngineComparer.Compare(suffix(EncodeMVCCKey(keyA2)), suffix(EncodeMVCCKey(keyA1))),
 		"expected bare suffix with higher timestamp to sort first")
+	for _, k := range []MVCCKey{keyAMetadata, keyA2, keyA1, keyB2} {
+		b := EncodeMVCCKey(k)
+		require.Equal(t, 2, EngineComparer.Split(b))
+	}
 }
 
 func TestPebbleIterReuse(t *testing.T) {
@@ -405,6 +409,14 @@ func BenchmarkMVCCKeyEqual(b *testing.B) {
 	b.ResetTimer()
 	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
 		_ = EngineKeyEqual(keys[i%len(keys)], keys[j%len(keys)])
+	}
+}
+
+func BenchmarkMVCCKeySplit(b *testing.B) {
+	keys := makeRandEncodedKeys()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = EngineComparer.Split(keys[i%len(keys)])
 	}
 }
 
