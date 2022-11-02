@@ -535,7 +535,12 @@ func (ds *DistSender) singleRangeFeed(
 					if !t.ResolvedTS.IsEmpty() && catchupRes != nil {
 						finishCatchupScan()
 					}
-					args.Timestamp.Forward(t.ResolvedTS.Next())
+					// Note that this timestamp means that all rows in the span with
+					// writes at or before the timestamp have now been seen. The
+					// Timestamp field in the request is exclusive, meaning if we send
+					// the request with exactly the ResolveTS, we'll see only rows after
+					// that timestamp.
+					args.Timestamp.Forward(t.ResolvedTS)
 				}
 			case *roachpb.RangeFeedError:
 				err := t.Error.GoError()
