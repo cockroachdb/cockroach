@@ -19,6 +19,32 @@ ALTER DATABASE db CONFIGURE ZONE USING num_replicas=7;
 ALTER TABLE db.t1 CONFIGURE ZONE USING num_voters=5;
 ----
 
+# Mark the database as offline.
+mark-database-offline database=db
+----
+
+# Write a protected timestamp on the offline db.
+protect record-id=9 ts=9
+descs 104
+----
+
+# We should still see the protectedts translate onto the offline db.
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5 protection_policies=[{ts: 9}]
+/Tenant/10/Table/10{7-8}                   num_replicas=7 protection_policies=[{ts: 9}]
+
+release record-id=9
+----
+
+mark-database-public database=db
+----
+
+translate database=db
+----
+/Tenant/10/Table/10{6-7}                   num_replicas=7 num_voters=5
+/Tenant/10/Table/10{7-8}                   num_replicas=7
+
 # Write a protected timestamp on t1.
 protect record-id=1 ts=1
 descs 106

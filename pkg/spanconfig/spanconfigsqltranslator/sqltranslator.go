@@ -535,9 +535,8 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 		return nil, nil
 	}
 
-	// There's nothing for us to do if the descriptor is offline or has been
-	// dropped.
-	if db.Offline() || db.Dropped() {
+	// There's nothing for us to do if the descriptor has been dropped.
+	if db.Dropped() {
 		return nil, nil
 	}
 
