@@ -366,7 +366,12 @@ var EmptySpanPollInterval = settings.RegisterDurationSetting(
 )
 
 func waitForEmptyPrefix(
-	ctx context.Context, db *kv.DB, sv *settings.Values, skipWaiting bool, prefix roachpb.Key,
+	ctx context.Context,
+	db *kv.DB,
+	sv *settings.Values,
+	skipWaiting bool,
+	checkImmediately bool,
+	prefix roachpb.Key,
 ) error {
 	if skipWaiting {
 		log.Infof(ctx, "not waiting for MVCC GC in %v due to testing knob", prefix)
@@ -377,6 +382,13 @@ func waitForEmptyPrefix(
 	// TODO(ajwerner): Allow for settings watchers to be un-registered (#73830),
 	// then observe changes to the setting.
 	for {
+		if checkImmediately {
+			if empty, err := checkForEmptySpan(
+				ctx, db, prefix, prefix.PrefixEnd(),
+			); empty || err != nil {
+				return err
+			}
+		}
 		timer.Reset(EmptySpanPollInterval.Get(sv))
 		select {
 		case <-timer.C:
