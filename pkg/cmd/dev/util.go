@@ -52,6 +52,14 @@ func mustGetFlagString(cmd *cobra.Command, name string) string {
 	return val
 }
 
+func mustGetFlagStringSlice(cmd *cobra.Command, name string) []string {
+	val, err := cmd.Flags().GetStringSlice(name)
+	if err != nil {
+		log.Fatalf("unexpected error: %v", err)
+	}
+	return val
+}
+
 func mustGetFlagBool(cmd *cobra.Command, name string) bool {
 	val, err := cmd.Flags().GetBool(name)
 	if err != nil {
