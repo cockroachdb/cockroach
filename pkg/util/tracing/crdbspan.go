@@ -763,12 +763,14 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 	return result
 }
 
-// getStructuredRecording returns the structured events in this span and in all
-// the children. The returned span will contain all structured events across the
-// receiver and all its children. The returned span will also have its
-// `childrenMetadata` populated with data for all the children.
+// getStructuredRecording returns a shallow copy of the structured events in
+// this span and in all the children. The returned span will contain all
+// structured events across the receiver and all its children. The returned span
+// will also have its `childrenMetadata` populated with data for all the
+// children.
 //
-// The caller does not take ownership of the events.
+// The caller does not take ownership of the events; the event payloads must be
+// treated as immutable since they're shared with the receiver.
 func (s *crdbSpan) getStructuredRecording(includeDetachedChildren bool) tracingpb.RecordedSpan {
 	s.mu.Lock()
 	defer s.mu.Unlock()
