@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupresolver"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -412,7 +414,7 @@ func restore(
 }
 
 // loadBackupSQLDescs extracts the backup descriptors, the latest backup
-// descriptor, and all the Descriptors for a backup to be restored. It upgrades
+// descriptor, and all the Descriptors for a backup to be restored, and their IDs. It upgrades
 // the table descriptors to the new FK representation if necessary. FKs that
 // can't be restored because the necessary tables are missing are omitted; if
 // skip_missing_foreign_keys was set, we should have aborted the RESTORE and
@@ -690,6 +692,32 @@ func backedUpDescriptorWithInProgressImportInto(
 		return false, nil
 	}
 	return true, nil
+}
+
+// validateRestoredDescriptors returns an error if any descriptor in the cluster is invalid.
+func validateRestoredDescriptors(ctx context.Context, execConfig *sql.ExecutorConfig) error {
+	allDescs, err := backupresolver.LoadAllDescs(ctx, execConfig, hlc.Timestamp{WallTime: timeutil.Now().
+		UnixNano()})
+	if err != nil {
+		return err
+	}
+	targetDescs := make([]catalog.Descriptor, 0)
+	for _, desc := range allDescs {
+		if desc.Dropped() {
+			// For some reason, ValidateDescriptors fails on the temp system table
+			// when they're in the dropped stage.
+			continue
+		}
+	}
+	ok, invalidMsg, err := backuputils.ValidateDescriptors(ctx, targetDescs,
+		execConfig.Settings.Version.BinaryVersion())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.Newf("Failed descriptor validation check: %s", invalidMsg)
+	}
+	return nil
 }
 
 // createImportingDescriptors creates the tables that we will restore into and returns up to three
@@ -1489,6 +1517,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	}
+	if err := validateRestoredDescriptors(ctx, p.ExecCfg()); err != nil {
+		return errors.Wrap(err,
+			"Restore likely created invalid offline descriptors")
+	}
+
 	var remappedStats []*stats.TableStatisticProto
 	backupStats, err := backupinfo.GetStatisticsFromBackup(ctx, defaultStore, details.Encryption,
 		&kmsEnv, latestBackupManifest)
@@ -1517,6 +1550,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 		if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* sd */, publishDescriptors); err != nil {
 			return err
+		}
+		if err := validateRestoredDescriptors(ctx, p.ExecCfg()); err != nil {
+			return errors.Wrap(err, "Restore likely attempted to publish invalid descriptors, %s")
 		}
 		p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
 		if err := p.ExecCfg().JobRegistry.CheckPausepoint(
@@ -1675,7 +1711,6 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		}
 		// Reload the details as we may have updated the job.
 		details = r.job.Details().(jobspb.RestoreDetails)
-
 		if err := r.cleanupTempSystemTables(ctx); err != nil {
 			return err
 		}
@@ -1694,6 +1729,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	r.restoreStats = resTotal
 
+	if err := validateRestoredDescriptors(ctx, p.ExecCfg()); err != nil {
+		return errors.Wrap(err, "Restore likely attempted to publish invalid descriptors")
+	}
 	// Emit an event now that the restore job has completed.
 	emitRestoreJobEvent(ctx, p, jobs.StatusSucceeded, r.job)
 
