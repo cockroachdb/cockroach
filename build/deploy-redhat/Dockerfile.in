@@ -1,5 +1,10 @@
 FROM @repository@:@tag@
 
+RUN microdnf install yum && \
+  yum -v -y update --all && \
+  microdnf clean all && \
+  rm -rf /var/cache/yum
+
 LABEL name="CockroachDB"
 LABEL vendor="Cockroach Labs"
 LABEL summary="CockroachDB is a distributed SQL database."
