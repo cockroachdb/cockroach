@@ -26,7 +26,7 @@ const (
 	bigtestFlag  = "bigtest"
 	filesFlag    = "files"
 	subtestsFlag = "subtests"
-	configFlag   = "config"
+	configsFlag  = "config"
 	showSQLFlag  = "show-sql"
 	noGenFlag    = "no-gen"
 )
@@ -50,7 +50,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().Int(countFlag, 1, "run test the given number of times")
 	testLogicCmd.Flags().String(filesFlag, "", "run logic tests for files matching this regex")
 	testLogicCmd.Flags().String(subtestsFlag, "", "run logic test subtests matching this regex")
-	testLogicCmd.Flags().String(configFlag, "", "run logic tests under the specified config")
+	testLogicCmd.Flags().StringSlice(configsFlag, nil, "run logic tests under the specified configs")
 	testLogicCmd.Flags().Bool(bigtestFlag, false, "run long-running sqlite logic tests")
 	testLogicCmd.Flags().Bool(ignoreCacheFlag, false, "ignore cached test runs")
 	testLogicCmd.Flags().Bool(showSQLFlag, false, "show SQL statements/queries immediately before they are tested")
@@ -72,7 +72,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 	var (
 		bigtest       = mustGetFlagBool(cmd, bigtestFlag)
-		config        = mustGetFlagString(cmd, configFlag)
+		configs       = mustGetFlagStringSlice(cmd, configsFlag)
 		files         = mustGetFlagString(cmd, filesFlag)
 		ignoreCache   = mustGetFlagBool(cmd, ignoreCacheFlag)
 		rewrite       = mustGetFlagBool(cmd, rewriteFlag)
@@ -152,20 +152,27 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		// (i.e. not the subdirectory for the config). We'll need this path
 		// to properly build the writable path for rewrite.
 		baseTestsDir := strings.TrimPrefix(testsDir, "//")
-		if config != "" {
-			testsDir = testsDir + "/" + config
-			exists, err := d.os.IsDir(filepath.Join(workspace, strings.TrimPrefix(testsDir, "//")))
-			if err != nil && errors.Is(err, os.ErrNotExist) {
-				// The config isn't supported for this choice.
-				continue
-			} else if err != nil {
-				return err
-			}
-			if !exists {
-				continue
+		testsDirs := []string{testsDir}
+		if len(configs) > 0 {
+			testsDirs = nil
+			for _, config := range configs {
+				configTestsDir := testsDir + "/" + config
+				exists, err := d.os.IsDir(filepath.Join(workspace, strings.TrimPrefix(configTestsDir, "//")))
+				if err != nil && errors.Is(err, os.ErrNotExist) {
+					// The config isn't supported for this choice.
+					continue
+				} else if err != nil {
+					return err
+				}
+				if !exists {
+					continue
+				}
+				testsDirs = append(testsDirs, configTestsDir)
 			}
 		}
-		targets = append(targets, testsDir+"/...")
+		for _, testsDir := range testsDirs {
+			targets = append(targets, testsDir+"/...")
+		}
 
 		if rewrite {
 			dir := filepath.Join(filepath.Dir(baseTestsDir), "testdata")
