@@ -400,6 +400,13 @@ var (
 		Measurement: "Attempts",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaLBLeaseTransferFollowTheWorkload = metric.Metadata{
+		Name: "kv.allocator.load_based_lease_transfers.follow_the_workload",
+		Help: "The number times the allocator determined that the lease should be" +
+			" transferred to another replica for locality.",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Load-based replica rebalances.
 	metaLBReplicaRebalancingCannotFindBetterCandidate = metric.Metadata{
@@ -444,6 +451,7 @@ type loadBasedLeaseTransferMetrics struct {
 	DeltaNotSignificant          *metric.Counter
 	MissingStatsForExistingStore *metric.Counter
 	ShouldTransfer               *metric.Counter
+	FollowTheWorkload            *metric.Counter
 }
 
 type loadBasedReplicaRebalanceMetrics struct {
@@ -481,6 +489,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 			DeltaNotSignificant:          metric.NewCounter(metaLBLeaseTransferDeltaNotSignificant),
 			MissingStatsForExistingStore: metric.NewCounter(metaLBLeaseTransferMissingStatsForExistingStore),
 			ShouldTransfer:               metric.NewCounter(metaLBLeaseTransferShouldTransfer),
+			FollowTheWorkload:            metric.NewCounter(metaLBLeaseTransferFollowTheWorkload),
 		},
 		LoadBasedReplicaRebalanceMetrics: loadBasedReplicaRebalanceMetrics{
 			CannotFindBetterCandidate:    metric.NewCounter(metaLBReplicaRebalancingCannotFindBetterCandidate),
@@ -1769,6 +1778,11 @@ func (a *Allocator) TransferLeaseTarget(
 			}
 		}
 		if repl != (roachpb.ReplicaDescriptor{}) {
+			// We found a lease transfer candidate, using follow the workload.
+			// Update the respective metric and return the replica.
+			// NB: shouldTransferLeaseForAccessLocality will never return the
+			// current leaseholder as a target.
+			a.Metrics.LoadBasedLeaseTransferMetrics.FollowTheWorkload.Inc(1)
 			return repl
 		}
 		// Fall back to logic that doesn't take request counts and latency into
