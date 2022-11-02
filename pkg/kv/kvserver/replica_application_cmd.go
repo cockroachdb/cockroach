@@ -153,7 +153,17 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	// We don't try to ack async consensus writes before application because we
 	// know that there isn't a client waiting for the result.
 	req := c.proposal.Request
-	return req.IsIntentWrite() && !req.AsyncConsensus
+	if !req.IsIntentWrite() || req.AsyncConsensus {
+		return false
+	}
+	if et, ok := req.GetArg(roachpb.EndTxn); ok && et.(*roachpb.EndTxnRequest).InternalCommitTrigger != nil {
+		// Don't early-ack for commit triggers, just to keep things simple - the
+		// caller is reasonably expecting to be able to run another replication
+		// change right away, and some code paths pull the descriptor out of memory
+		// where it may not reflect the previous operation yet.
+		return false
+	}
+	return true
 }
 
 // AckSuccess implements the apply.CheckedCommand interface.
