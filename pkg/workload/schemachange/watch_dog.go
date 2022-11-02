@@ -12,6 +12,7 @@ package schemachange
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"time"
 
@@ -31,9 +32,9 @@ type schemaChangeWatchDog struct {
 	// cmdChannel used to communicate from thread executing commands on the session.
 	cmdChannel chan chan struct{}
 	// activeQuery last active query observed on the monitored connection.
-	activeQuery string
+	activeQuery gosql.NullString
 	// txnID last active transaction ID observed on the target connection.
-	txnID string
+	txnID gosql.NullString
 	// numRetries number of transaction retries observed.
 	numRetries int
 }
@@ -136,8 +137,8 @@ func (w *schemaChangeWatchDog) Start(ctx context.Context, tx pgx.Tx) error {
 // reset prepares the watch dog for re-use.
 func (w *schemaChangeWatchDog) reset() {
 	w.sessionID = ""
-	w.activeQuery = ""
-	w.txnID = ""
+	w.activeQuery = gosql.NullString{}
+	w.txnID = gosql.NullString{}
 }
 
 // Stop stops monitoring the connection and waits for the watch dog thread to
