@@ -2234,7 +2234,7 @@ func (r *restoreResumer) OnFailOrCancel(
 			}
 		}
 
-		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol); err != nil {
+		if err := r.dropDescriptors(ctx, execCfg.JobRegistry, execCfg.Codec, txn, descsCol, ie); err != nil {
 			return err
 		}
 
@@ -2278,6 +2278,7 @@ func (r *restoreResumer) dropDescriptors(
 	codec keys.SQLCodec,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
+	ie sqlutil.InternalExecutor,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 
@@ -2339,13 +2340,29 @@ func (r *restoreResumer) dropDescriptors(
 			}
 		}
 
-		// If the DropTime is set, a table uses RangeClear for fast data removal. This
-		// operation starts at DropTime + the GC TTL. If we used now() here, it would
-		// not clean up data until the TTL from the time of the error. Instead, use 1
-		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
-		// possible. This is safe since the table data was never visible to users,
-		// and so we don't need to preserve MVCC semantics.
+		// Arrange for fast GC of table data.
+		//
+		// The new (09-2022) GC job uses range deletion tombstones to clear data and
+		// then waits for the MVCC GC process to clear the data before removing any
+		// descriptors. To ensure that this happens quickly, we install a zone
+		// configuration for every table that we are going to drop with a small GC TTL.
+		//
+		// NB: We can't set GC TTLs for non-system tenants currently.
+		if codec.ForSystemTenant() {
+			if err := setGCTTLForDroppingTable(ctx, txn, descsCol, tableToDrop, ie); err != nil {
+				return errors.Wrapf(err, "setting low GC TTL for table %q", tableToDrop.GetName())
+			}
+		}
+
+		// In the legacy GC job, setting DropTime ensures a table uses RangeClear
+		// for fast data removal. This operation starts at DropTime + the GC TTL. If
+		// we used now() here, it would not clean up data until the TTL from the
+		// time of the error. Instead, use 1 (that is, 1ns past the epoch) to allow
+		// this to be cleaned up as soon as possible. This is safe since the table
+		// data was never visible to users, and so we don't need to preserve MVCC
+		// semantics.
 		tableToDrop.DropTime = dropTime
+
 		b.Del(catalogkeys.EncodeNameKey(codec, tableToDrop))
 		descsCol.NotifyOfDeletedDescriptor(tableToDrop.GetID())
 	}
@@ -2567,6 +2584,66 @@ func (r *restoreResumer) dropDescriptors(
 	}
 
 	return nil
+}
+
+func setGCTTLForDroppingTable(
+	ctx context.Context,
+	txn *kv.Txn,
+	descsCol *descs.Collection,
+	tableToDrop *tabledesc.Mutable,
+	ie sqlutil.InternalExecutor,
+) error {
+	log.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
+	// We get a mutable descriptor here because we are going to construct a
+	// synthetic descriptor collection in which they are online.
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, tableToDrop.GetParentID(),
+		tree.DatabaseLookupFlags{
+			Required:       true,
+			IncludeOffline: true,
+			IncludeDropped: true,
+			AvoidLeased:    true,
+		})
+	if err != nil {
+		return err
+	}
+
+	schemaDesc, err := descsCol.GetImmutableSchemaByID(ctx, txn, tableToDrop.GetParentSchemaID(),
+		tree.SchemaLookupFlags{
+			Required:       true,
+			IncludeDropped: true,
+			IncludeOffline: true,
+			AvoidLeased:    true,
+		})
+	if err != nil {
+		return err
+	}
+	tableName := tree.NewTableNameWithSchema(
+		tree.Name(dbDesc.GetName()),
+		tree.Name(schemaDesc.GetName()),
+		tree.Name(tableToDrop.GetName()))
+
+	// Set the db and table to public so that we can use ALTER TABLE below.  At
+	// this point,they may be offline.
+	mutDBDesc := dbdesc.NewBuilder(dbDesc.DatabaseDesc()).BuildCreatedMutable()
+	mutTableDesc := tabledesc.NewBuilder(tableToDrop.TableDesc()).BuildCreatedMutable()
+	mutDBDesc.SetPublic()
+	mutTableDesc.SetPublic()
+
+	syntheticDescriptors := []catalog.Descriptor{
+		mutTableDesc,
+		mutDBDesc,
+	}
+	if schemaDesc.SchemaKind() == catalog.SchemaUserDefined {
+		mutSchemaDesc := schemadesc.NewBuilder(schemaDesc.SchemaDesc()).BuildCreatedMutable()
+		mutSchemaDesc.SetPublic()
+		syntheticDescriptors = append(syntheticDescriptors, mutSchemaDesc)
+	}
+
+	alterStmt := fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING gc.ttlseconds = 1", tableName.FQString())
+	return ie.WithSyntheticDescriptors(syntheticDescriptors, func() error {
+		_, err := ie.Exec(ctx, "set-low-gcttl", txn, alterStmt)
+		return err
+	})
 }
 
 // removeExistingTypeBackReferences removes back references from types that
