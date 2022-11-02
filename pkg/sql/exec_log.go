@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -164,6 +165,8 @@ func (p *planner) maybeLogStatement(
 ) {
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
 }
+
+var errTxnIsNotOpen = errors.New("txn is already committed or rolled back")
 
 func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
@@ -328,7 +331,13 @@ func (p *planner) maybeLogStatementInternal(
 				// only audit tables. If/when the mechanisms are extended to
 				// audit databases and schema, we need more logic here to
 				// extract a name to include in the logging events.
-				tn, err := p.getQualifiedTableName(ctx, t)
+				var tn *tree.TableName
+				if p.txn != nil && p.txn.IsOpen() {
+					// Only open txn accepts further commands.
+					tn, err = p.getQualifiedTableName(ctx, t)
+				} else {
+					err = errTxnIsNotOpen
+				}
 				if err != nil {
 					log.Warningf(ctx, "name for audited table ID %d not found: %v", ev.desc.GetID(), err)
 				} else {
