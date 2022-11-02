@@ -306,9 +306,17 @@ var EngineComparer = &pebble.Comparer{
 	},
 
 	Split: func(k []byte) int {
-		key, ok := GetKeyPartFromEngineKey(k)
-		if !ok {
-			return len(k)
+		keyLen := len(k)
+		if keyLen == 0 {
+			return 0
+		}
+		// Last byte is the version length + 1 when there is a version,
+		// else it is 0.
+		versionLen := int(k[keyLen-1])
+		// keyPartEnd points to the sentinel byte.
+		keyPartEnd := keyLen - 1 - versionLen
+		if keyPartEnd < 0 {
+			return keyLen
 		}
 		// Pebble requires that keys generated via a split be comparable with
 		// normal encoded engine keys. Encoded engine keys have a suffix
@@ -317,7 +325,7 @@ var EngineComparer = &pebble.Comparer{
 		// that the user-key always has a trailing 0. If there is no version this
 		// falls out naturally. If there is a version we prepend a 0 to the
 		// encoded version data.
-		return len(key) + 1
+		return keyPartEnd + 1
 	},
 
 	Name: "cockroach_comparator",
