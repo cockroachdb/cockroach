@@ -26,6 +26,7 @@ go_test(
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/dbdesc",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
