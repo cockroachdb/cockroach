@@ -1538,9 +1538,10 @@ func ValidateCheckConstraint(
 		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, descriptors *descs.Collection,
 	) error {
 		// Use the DistSQLTypeResolver because we need to resolve types by ID.
-		resolver := descs.NewDistSQLTypeResolver(descriptors, txn)
+		resolver := NewSkippingCacheSchemaResolver(descriptors, sessiondata.NewStack(sessionData), txn, nil)
 		semaCtx := tree.MakeSemaContext()
-		semaCtx.TypeResolver = &resolver
+		semaCtx.TypeResolver = resolver
+		semaCtx.TableNameResolver = resolver
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
 		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
