@@ -20,6 +20,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// ErrMarkConsistencyCheckFailed marks errors that indicate a replica divergence
+// problem detected in CheckReplicaDivergenceOnDB.
+var ErrMarkConsistencyCheckFailed = errors.New("consistency check failed")
+
 // CheckReplicaDivergenceOnDB runs a stats-only consistency check via the
 // provided DB. It ignores any errors running the checks and will only propagate
 // an error resulting from an actual detected discrepancy. In other words, a nil
@@ -64,5 +68,9 @@ WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`, statsOnly))
 		l.Printf("consistency check failed with %v; ignoring", err)
 		return nil
 	}
-	return finalErr
+
+	if finalErr != nil {
+		return errors.Mark(finalErr, ErrMarkConsistencyCheckFailed)
+	}
+	return nil
 }

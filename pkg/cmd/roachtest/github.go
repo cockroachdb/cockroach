@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -32,14 +33,6 @@ type githubIssues struct {
 	issuePoster  func(ctx context.Context, formatter issues.IssueFormatter, req issues.PostRequest) error
 	teamLoader   func() (team.Map, error)
 }
-
-type issueCategory int
-
-const (
-	otherErr issueCategory = iota
-	clusterCreationErr
-	sshErr
-)
 
 func newGithubIssues(
 	disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts, l *logger.Logger,
@@ -68,26 +61,27 @@ func (g *githubIssues) shouldPost(t test.Test) bool {
 		t.Spec().(*registry.TestSpec).Cluster.NodeCount > 0
 }
 
+type issueOverride struct {
+	owner     registry.Owner
+	testName  string
+	msgPrefix string
+}
+
 func (g *githubIssues) createPostRequest(
-	t test.Test, cat issueCategory, message string,
+	t test.Test, override issueOverride, message string,
 ) issues.PostRequest {
 	var mention []string
 	var projColID int
 
 	issueOwner := t.Spec().(*registry.TestSpec).Owner
-	issueName := t.Name()
-
-	messagePrefix := ""
-	// Overrides to shield eng teams from potential flakes
-	if cat == clusterCreationErr {
-		issueOwner = registry.OwnerDevInf
-		issueName = "cluster_creation"
-		messagePrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
-	} else if cat == sshErr {
-		issueOwner = registry.OwnerTestEng
-		issueName = "ssh_problem"
-		messagePrefix = fmt.Sprintf("test %s failed due to ", t.Name())
+	if o := override.owner; o != "" {
+		issueOwner = o
 	}
+	issueName := t.Name()
+	if n := override.testName; n != "" {
+		issueName = n
+	}
+	messagePrefix := override.msgPrefix
 
 	teams, err := g.teamLoader()
 	if err != nil {
@@ -161,19 +155,36 @@ func (g *githubIssues) MaybePost(t *testImpl, message string) error {
 		return nil
 	}
 
-	cat := otherErr
-
+	var o issueOverride
 	// Overrides to shield eng teams from potential flakes
 	firstFailure := t.firstFailure()
 	if failureContainsError(firstFailure, errClusterProvisioningFailed) {
-		cat = clusterCreationErr
+		o.owner = registry.OwnerDevInf
+		o.testName = "cluster_creation"
+		o.msgPrefix = fmt.Sprintf("test %s was skipped due to ", t.Name())
 	} else if failureContainsError(firstFailure, rperrors.ErrSSH255) {
-		cat = sshErr
+		o.owner = registry.OwnerTestEng
+		o.testName = "ssh_problem"
+		o.msgPrefix = fmt.Sprintf("test %s failed due to ", t.Name())
+	} else if failureContainsError(firstFailure, roachtestutil.ErrMarkConsistencyCheckFailed) {
+		o.owner = registry.OwnerKV
+		o.testName = "consistency_check"
+		o.msgPrefix = fmt.Sprintf("consistency check failed after running %s", t.Name())
+	} else {
+		for _, err := range firstFailure.errors {
+			owner, ok := registry.OwnerFromErr(err)
+			if !ok {
+				continue
+			}
+			o.owner = owner
+			o.msgPrefix = "owner overridden by error"
+			break
+		}
 	}
 
 	return g.issuePoster(
 		context.Background(),
 		issues.UnitTestFormatter,
-		g.createPostRequest(t, cat, message),
+		g.createPostRequest(t, o, message),
 	)
 }
