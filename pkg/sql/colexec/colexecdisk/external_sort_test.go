@@ -163,7 +163,20 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	}
 	// We cannot guarantee a fixed value, so we use an allowed range.
 	expMin := memoryLimit
-	expMax := int64(float64(memoryLimit) * 2.5)
+	// The factor of 2.8 is necessary due to the following setup:
+	// - 0.8x is used by the limited monitor of the in-memory sorter
+	// - 0.8x is used by the unlimited monitor that "supports" the limited
+	//      monitor of the in-memory sorter. This part is needed since we
+	//      perform the accounting after the fact. See
+	//      colmem.NewLimitedAllocator for details.
+	// - 1x is used by the unlimited monitor of the external sort.
+	//
+	// 0.8 is the fraction of the memory limit that we give to the spooler while
+	// keeping the remaining 0.2 for the output batch (which is never utilized).
+	// This logic lives in createDiskBackedSorter in execplan.go.
+	//
+	// To allow some drift we add another 0.2.
+	expMax := int64(float64(memoryLimit) * 2.8)
 	require.GreaterOrEqualf(t, totalMaxMemUsage, expMin, "minimum memory bound not satisfied: "+
 		"actual %d, expected min %d", totalMaxMemUsage, expMin)
 	require.GreaterOrEqualf(t, expMax, totalMaxMemUsage, "maximum memory bound not satisfied: "+
