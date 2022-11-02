@@ -146,12 +146,12 @@ type TestServerArgs struct {
 	// config span.
 	DisableSpanConfigs bool
 
-	// TestServer will probabilistically start a single test tenant on each
-	// node for multi-tenant testing, and default all connections through that
-	// tenant. Use this flag to disable that behavior. You might want/need to
-	// disable this behavior if your test case is already leveraging tenants,
-	// or if some of the functionality being tested is not accessible from
-	// within tenants.
+	// TestServer will probabilistically start an extra SQL server on
+	// each node for multi-tenant testing, and default all connections
+	// through that SQL server. Use this flag to disable that behavior. You
+	// might want/need to disable this behavior if your test case is
+	// already leveraging tenants, or if some of the functionality being
+	// tested is not accessible from within tenants.
 	DisableDefaultTestTenant bool
 }
 

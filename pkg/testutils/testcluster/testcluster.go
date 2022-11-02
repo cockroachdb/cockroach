@@ -30,14 +30,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,7 +53,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/raft/v3"
+	raft "go.etcd.io/etcd/raft/v3"
 )
 
 // TestCluster represents a set of TestServers. The hope is that it can be used
@@ -468,6 +471,31 @@ func (tc *TestCluster) Start(t testing.TB) {
 		}
 		return err
 	})
+
+	// Create the app tenant, unless disabled by configuration.
+	// TODO(knz): subsume the other "test tenant" mechanism to use the
+	// app tenant.
+	if kn, ok := tc.Servers[0].Cfg.TestingKnobs.Server.(*server.TestingKnobs); !ok || !kn.DisableAppTenantAutoCreation {
+		availableTenantIDs := security.EmbeddedTenantIDs()
+		// The first available tenant ID is already taken by the test tenant,
+		// if enabled.
+		startAvailIdx := 1
+		endAvailIdx := len(availableTenantIDs)
+		chosenIdx := util.ConstantWithMetamorphicTestRange("app-tenant-id-choice", startAvailIdx, startAvailIdx, endAvailIdx)
+		appTenantID := availableTenantIDs[chosenIdx]
+		// Note: we are conditionally running this, because it's possible
+		// for a TestCluster to be instantiated over stores that were
+		// initialized earlier (using a previous TestCluster).
+		if _, err := tc.storageConn.Exec(`
+WITH tid AS (
+  SELECT id FROM (VALUES ($1::INT)) AS u(id)
+   WHERE NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name=$2)
+) SELECT crdb_internal.create_tenant(id, $2) FROM tid`,
+			appTenantID, catconstants.AppTenantName,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 type checkType bool

@@ -13,9 +13,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -54,12 +57,42 @@ func (s *Server) RunInitialSQL(
 		}
 	}
 
+	if kn, ok := s.cfg.TestingKnobs.Server.(*TestingKnobs); !ok || !kn.DisableAppTenantAutoCreation {
+		if err := s.createAppTenant(ctx); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 // RunInitialSQL implements cli.serverStartupInterface.
 func (s *SQLServerWrapper) RunInitialSQL(context.Context, bool, string, string) error {
 	return nil
+}
+
+// createAppTenant creates an application tenant if it does
+// not exist yet.
+// Note: this is for the creation of fresh new clusters.
+// When migrating from previous versions, a cluster
+// migration is responsible for creating the new tenant.
+func (s *Server) createAppTenant(ctx context.Context) error {
+	// Note: generally the app tenant ID is dynamically allocated. No
+	// assumption should be made about its value: the ID is allocated
+	// dynamically when migrating from a previous version. If the ID is
+	// needed, elswehere it should be looked up from system.tenants by
+	// name.
+	//
+	// For example, the app tenant ID in test clusters will be different
+	// than this.
+	appTenantIDInFreshNewClusters := util.ConstantWithMetamorphicTestRange("app-tenant-id", 2, 2, math.MaxInt)
+
+	ie := s.sqlServer.internalExecutor
+	_, err := ie.Exec(
+		ctx, "create-app-tenant", nil, /* txn */
+		`SELECT crdb_internal.create_tenant($1, $2)`,
+		appTenantIDInFreshNewClusters, catconstants.AppTenantName)
+	return err
 }
 
 // createAdminUser creates an admin user with the given name.

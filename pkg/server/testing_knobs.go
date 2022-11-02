@@ -45,6 +45,9 @@ type TestingKnobs struct {
 	ContextTestingKnobs rpc.ContextTestingKnobs
 	// DiagnosticsTestingKnobs allows customization of diagnostics testing knobs.
 	DiagnosticsTestingKnobs diagnostics.TestingKnobs
+	// DisableAppTenantAutoCreation disables the auto-creation of an app tenant
+	// in fresh clusters.
+	DisableAppTenantAutoCreation bool
 
 	// If set, use this listener for RPC (and possibly SQL, depending on
 	// the SplitListenSQL setting), instead of binding a new listener.

@@ -1,4 +1,5 @@
 # LogicTest: !3node-tenant-default-configs
+# cluster-opt: disable-app-tenant
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----

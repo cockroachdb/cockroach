@@ -169,6 +169,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		addTenantNameColumnAndSystemTenantEntry,
 	),
+	upgrade.NewTenantUpgrade("populate an app tenant entry",
+		toCV(clusterversion.V23_1AppTenant),
+		NoPrecondition,
+		addAppTenantEntry,
+	),
 }
 
 func init() {

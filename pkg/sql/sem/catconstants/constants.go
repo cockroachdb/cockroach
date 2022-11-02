@@ -43,6 +43,9 @@ type SystemTableName string
 // SystemTenantName is the tenant name of the system tenant.
 const SystemTenantName = "system"
 
+// AppTenantName is the tenant name of the application tenant.
+const AppTenantName = "app"
+
 // Names of tables in the system database.
 const (
 	NamespaceTableName                     SystemTableName = "namespace"

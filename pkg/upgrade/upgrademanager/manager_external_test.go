@@ -71,6 +71,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					DisableAppTenantAutoCreation:   true, // done by migration
 				},
 				DistSQL: &execinfra.TestingKnobs{
 					// See the TODO below for why we need this.
@@ -222,6 +223,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					DisableAppTenantAutoCreation:   true, // done by migration
 				},
 				UpgradeManager: &upgrade.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -340,6 +342,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          versions[0].Version,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					DisableAppTenantAutoCreation:   true, // done by migration
 				},
 				UpgradeManager: &upgrade.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -422,6 +425,7 @@ func TestPauseMigration(t *testing.T) {
 				Server: &server.TestingKnobs{
 					BinaryVersionOverride:          startCV.Version,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
+					DisableAppTenantAutoCreation:   true, // done by migration
 				},
 				UpgradeManager: &upgrade.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
@@ -543,6 +547,7 @@ func TestPrecondition(t *testing.T) {
 		Server: &server.TestingKnobs{
 			DisableAutomaticVersionUpgrade: make(chan struct{}),
 			BinaryVersionOverride:          v0.Version,
+			DisableAppTenantAutoCreation:   true, // done by migration
 		},
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.
