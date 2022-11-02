@@ -57,6 +57,9 @@ type ColumnDefDescs struct {
 // hash-sharded index or primary key.
 const MaxBucketAllowed = 2048
 
+// Ensure that schemaexpr.HashShardPrime > MaxBucketAllowed.
+const _ uint = uint(schemaexpr.HashShardPrime) - 1 - uint(MaxBucketAllowed)
+
 // ColExprKind is an enum type of possible expressions on a column
 // (e.g. 'DEFAULT' expression or 'ON UPDATE' expression).
 type ColExprKind string

@@ -12,11 +12,17 @@ package schemaexpr
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
+// HashShardPrime is the first prime number larger than MaxBucketAllowed. We
+// modulo by HashShardPrime in the hash bucket calculation to include more bits
+// of the hash value, in case the user has picked a power-of-two number of
+// buckets.
+const HashShardPrime uint32 = 2053
+
 // MakeHashShardComputeExpr creates the serialized computed expression for a hash shard
 // column based on the column names and the number of buckets. The expression will be
 // of the form:
 //
-//	mod(fnv32(crdb_internal.datums_to_bytes(...)),buckets)
+//	mod(mod(fnv32(crdb_internal.datums_to_bytes(...)),prime),buckets)
 func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 	unresolvedFunc := func(funcName string) tree.ResolvableFunctionReference {
 		return tree.ResolvableFunctionReference{
@@ -44,6 +50,15 @@ func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 			},
 		}
 	}
+	modPrime := func(expr tree.Expr) tree.Expr {
+		return &tree.FuncExpr{
+			Func: unresolvedFunc("mod"),
+			Exprs: tree.Exprs{
+				expr,
+				tree.NewDInt(tree.DInt(HashShardPrime)),
+			},
+		}
+	}
 	modBuckets := func(expr tree.Expr) tree.Expr {
 		return &tree.FuncExpr{
 			Func: unresolvedFunc("mod"),
@@ -53,6 +68,6 @@ func MakeHashShardComputeExpr(colNames []string, buckets int) *string {
 			},
 		}
 	}
-	res := tree.Serialize(modBuckets(hashedColumnsExpr()))
+	res := tree.Serialize(modBuckets(modPrime(hashedColumnsExpr())))
 	return &res
 }
