@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -407,6 +408,17 @@ type ProtectedTimestampManager interface {
 	TryToProtectBeforeGC(
 		ctx context.Context, jobID jobspb.JobID, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
 	) jobsprotectedts.Cleaner
+
+	// Protect adds a protected timestamp record for a historical transaction for
+	// a specific target immediately. If an existing record is found, it will be
+	// updated with a new timestamp. Returns a Cleaner function to remove the
+	// protected timestamp, if one was installed.
+	Protect(
+		ctx context.Context,
+		jobID jobspb.JobID,
+		target *ptpb.Target,
+		readAsOf hlc.Timestamp,
+	) (jobsprotectedts.Cleaner, error)
 
 	// Unprotect unprotects just based on a job ID, mainly for last resort cleanup.
 	// Note: This should only be used for job cleanup if its not currently,
