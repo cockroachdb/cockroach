@@ -1841,10 +1841,9 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&QPSScorerOptions{
-				StoreHealthOptions:                a.StoreHealthOptions(ctx),
-				DeprecatedRangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
-				QPSRebalanceThreshold:             allocator.QPSRebalanceThreshold.Get(&a.StorePool.St.SV),
-				MinRequiredQPSDiff:                allocator.MinQPSDifferenceForTransfers.Get(&a.StorePool.St.SV),
+				StoreHealthOptions:    a.StoreHealthOptions(ctx),
+				QPSRebalanceThreshold: allocator.QPSRebalanceThreshold.Get(&a.StorePool.St.SV),
+				MinRequiredQPSDiff:    allocator.MinQPSDifferenceForTransfers.Get(&a.StorePool.St.SV),
 			},
 		)
 
