@@ -177,10 +177,10 @@ func (f *ReadAsOfIterator) advance(seeked bool) {
 		if key := f.iter.UnsafeKey(); f.asOf.Less(key.Timestamp) {
 			// Skip keys above the asOf timestamp.
 			f.iter.Next()
-		} else if value, err := DecodeMVCCValue(f.iter.UnsafeValue()); err != nil {
+		} else if isTombstone, err := EncodedMVCCValueIsTombstone(f.iter.UnsafeValue()); err != nil {
 			f.valid, f.err = false, err
 			return
-		} else if value.IsTombstone() {
+		} else if isTombstone {
 			// Skip to the next MVCC key if we find a point tombstone.
 			f.iter.NextKey()
 		} else if key.Timestamp.LessEq(f.newestRangeTombstone) {
@@ -232,9 +232,9 @@ func (f *ReadAsOfIterator) assertInvariants() error {
 	}
 
 	// Tombstones should not be emitted.
-	if value, err := DecodeMVCCValue(f.UnsafeValue()); err != nil {
+	if isTombstone, err := EncodedMVCCValueIsTombstone(f.UnsafeValue()); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid value")
-	} else if value.IsTombstone() {
+	} else if isTombstone {
 		return errors.AssertionFailedf("emitted tombstone for key %s", key)
 	}
 

@@ -203,16 +203,11 @@ func (r *legacySSTIterator) UnsafeValue() []byte {
 
 // MVCCValueLenAndIsTombstone implements the SimpleMVCCIterator interface.
 func (r *legacySSTIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
-	// NB: don't move the following code into a helper since we desire inlining
-	// of tryDecodeSimpleMVCCValue.
-	v, ok, err := tryDecodeSimpleMVCCValue(r.value)
-	if err == nil && !ok {
-		v, err = decodeExtendedMVCCValue(r.value)
-	}
+	isTombstone, err := EncodedMVCCValueIsTombstone(r.value)
 	if err != nil {
 		return 0, false, err
 	}
-	return len(r.value), v.IsTombstone(), nil
+	return len(r.value), isTombstone, nil
 
 }
 

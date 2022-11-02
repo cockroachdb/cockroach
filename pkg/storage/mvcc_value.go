@@ -265,6 +265,28 @@ func decodeExtendedMVCCValue(buf []byte) (MVCCValue, error) {
 	return v, nil
 }
 
+// EncodedMVCCValueIsTombstone is faster than decoding a MVCCValue and then
+// calling MVCCValue.IsTombstone. It should be used when the caller does not
+// need a decoded value.
+//
+//gcassert:inline
+func EncodedMVCCValueIsTombstone(buf []byte) (bool, error) {
+	if len(buf) == 0 {
+		return true, nil
+	}
+	if len(buf) <= tagPos {
+		return false, errMVCCValueMissingTag
+	}
+	if buf[tagPos] != extendedEncodingSentinel {
+		return false, nil
+	}
+	headerSize := extendedPreludeSize + binary.BigEndian.Uint32(buf)
+	if len(buf) < int(headerSize) {
+		return false, errMVCCValueMissingHeader
+	}
+	return len(buf) == int(headerSize), nil
+}
+
 func init() {
 	// Inject the format dependency into the enginepb package.
 	enginepb.FormatBytesAsValue = func(v []byte) redact.RedactableString {
