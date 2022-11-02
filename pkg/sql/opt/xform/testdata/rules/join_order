@@ -2955,3 +2955,168 @@ inner-join (lookup t88659)
  │    └── filters (true)
  └── filters
       └── c:9 = c:15 [outer=(9,15), immutable, constraints=(/9: (/NULL - ]; /15: (/NULL - ]), fd=(9)==(15), (15)==(9)]
+
+# Regression test for #90761 - don't drop LeftJoin filter when there are enough
+# InnerJoin edges to "link" all relations and the LeftJoin doesn't get
+# simplified.
+exec-ddl
+CREATE TABLE t90761 (a INT, b INT, c INT);
+----
+
+# The 't2.b > t4.b' filter should not be dropped.
+reorderjoins disable=RejectNullsLeftJoin
+SELECT 1
+FROM t90761 AS t1
+JOIN t90761 AS t2
+  LEFT JOIN t90761 AS t3
+    JOIN t90761 AS t4 ON true
+  ON t2.b > t4.b
+ON t1.a = t4.a AND t1.c = t2.c;
+----
+--------------------------------------------------------------------------------
+Join Tree #1
+--------------------------------------------------------------------------------
+  inner-join (cross)
+   ├── scan t90761 [as=t3]
+   ├── scan t90761 [as=t4]
+   └── filters (true)
+Vertexes
+  A:
+    scan t90761 [as=t3]
+  B:
+    scan t90761 [as=t4]
+Edges
+  cross [inner, ses=, tes=AB, rules=()]
+Joining AB
+  A B [inner, refs=]
+  B A [inner, refs=]
+Joins Considered: 2
+--------------------------------------------------------------------------------
+Join Tree #2
+--------------------------------------------------------------------------------
+  left-join (cross)
+   ├── scan t90761 [as=t2]
+   ├── inner-join (cross)
+   │    ├── scan t90761 [as=t3]
+   │    ├── scan t90761 [as=t4]
+   │    └── filters (true)
+   └── filters
+        └── t2.b > t4.b
+Vertexes
+  C:
+    scan t90761 [as=t2]
+  A:
+    scan t90761 [as=t3]
+  B:
+    scan t90761 [as=t4]
+Edges
+  cross [inner, ses=, tes=AB, rules=()]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=()]
+Joining AB
+  A B [inner, refs=]
+  B A [inner, refs=]
+Joining CAB
+  C AB [left, refs=CB]
+Joins Considered: 3
+--------------------------------------------------------------------------------
+Join Tree #3
+--------------------------------------------------------------------------------
+  inner-join (hash)
+   ├── scan t90761 [as=t1]
+   ├── left-join (cross)
+   │    ├── scan t90761 [as=t2]
+   │    ├── inner-join (cross)
+   │    │    ├── scan t90761 [as=t3]
+   │    │    ├── scan t90761 [as=t4]
+   │    │    └── filters (true)
+   │    └── filters
+   │         └── t2.b > t4.b
+   └── filters
+        ├── t1.a = t4.a
+        └── t1.c = t2.c
+Vertexes
+  D:
+    scan t90761 [as=t1]
+  C:
+    scan t90761 [as=t2]
+  A:
+    scan t90761 [as=t3]
+  B:
+    scan t90761 [as=t4]
+Edges
+  cross [inner, ses=, tes=AB, rules=()]
+  t2.b > t4.b [left, ses=CB, tes=CAB, rules=()]
+  t1.a = t4.a [inner, ses=DB, tes=DCB, rules=()]
+  t1.c = t2.c [inner, ses=DC, tes=DC, rules=()]
+Joining DC
+  D C [inner, refs=DC]
+  C D [inner, refs=DC]
+Joining DCB
+  DC B [inner, refs=DB]
+  B DC [inner, refs=DB]
+Joining AB
+  A B [inner, refs=]
+  B A [inner, refs=]
+Joining CAB
+  C AB [left, refs=CB]
+Joining DCAB
+  D CAB [inner, refs=DCB]
+  CAB D [inner, refs=DCB]
+  DC AB [left, refs=CB] [select, refs=DB]
+Joins Considered: 10
+================================================================================
+Final Plan
+================================================================================
+project
+ ├── columns: "?column?":25!null
+ ├── fd: ()-->(25)
+ ├── inner-join (hash)
+ │    ├── columns: t1.a:1!null t1.c:3!null t2.b:8 t2.c:9!null t4.a:19!null t4.b:20
+ │    ├── fd: (1)==(19), (19)==(1), (3)==(9), (9)==(3)
+ │    ├── right-join (cross)
+ │    │    ├── columns: t2.b:8 t2.c:9 t4.a:19 t4.b:20
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── columns: t4.a:19 t4.b:20
+ │    │    │    ├── scan t90761 [as=t3]
+ │    │    │    ├── scan t90761 [as=t4]
+ │    │    │    │    └── columns: t4.a:19 t4.b:20
+ │    │    │    └── filters (true)
+ │    │    ├── scan t90761 [as=t2]
+ │    │    │    └── columns: t2.b:8 t2.c:9
+ │    │    └── filters
+ │    │         └── t2.b:8 > t4.b:20 [outer=(8,20), constraints=(/8: (/NULL - ]; /20: (/NULL - ])]
+ │    ├── scan t90761 [as=t1]
+ │    │    └── columns: t1.a:1 t1.c:3
+ │    └── filters
+ │         ├── t1.a:1 = t4.a:19 [outer=(1,19), constraints=(/1: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(19), (19)==(1)]
+ │         └── t1.c:3 = t2.c:9 [outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
+ └── projections
+      └── 1 [as="?column?":25]
+
+# The 't2.b > t4.b' filter should not be dropped. Case with 'IS NOT NULL'
+# instead of a disabled rule.
+opt format=hide-all
+SELECT 1
+FROM t90761 AS t1
+JOIN t90761 AS t2
+  LEFT JOIN t90761 AS t3
+    JOIN t90761 AS t4 ON true
+  ON t2.b > t4.b
+ON (t1.a = t4.a OR t4.a IS NULL) AND t1.c = t2.c;
+----
+project
+ ├── inner-join (hash)
+ │    ├── right-join (cross)
+ │    │    ├── inner-join (cross)
+ │    │    │    ├── scan t90761 [as=t3]
+ │    │    │    ├── scan t90761 [as=t4]
+ │    │    │    └── filters (true)
+ │    │    ├── scan t90761 [as=t2]
+ │    │    └── filters
+ │    │         └── t2.b > t4.b
+ │    ├── scan t90761 [as=t1]
+ │    └── filters
+ │         ├── (t1.a = t4.a) OR (t4.a IS NULL)
+ │         └── t1.c = t2.c
+ └── projections
+      └── 1
