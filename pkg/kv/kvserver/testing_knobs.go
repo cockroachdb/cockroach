@@ -40,7 +40,7 @@ type StoreTestingKnobs struct {
 	TxnWaitKnobs            txnwait.TestingKnobs
 	ConsistencyTestingKnobs ConsistencyTestingKnobs
 	TenantRateKnobs         tenantrate.TestingKnobs
-	StorageKnobs            storage.TestingKnobs
+	EngineKnobs             []storage.ConfigOption
 	AllocatorKnobs          *allocator.TestingKnobs
 
 	// TestingRequestFilter is called before evaluating each request on a
