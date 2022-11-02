@@ -3655,3 +3655,29 @@ TIMESTAMP '2000-01-01 00:00:00',
 INTERVAL '2 days',
 DATE '2000-01-01',
 TIMESTAMPTZ '2000-01-01 01:30:00');
+
+query T
+SELECT encode(decompress(compress('Hello World', 'gzip'), 'gzip'), 'escape');
+----
+Hello World
+
+query T
+SELECT encode(decompress(compress('Hello World', 'zstd'), 'zstd'), 'escape');
+----
+Hello World
+
+query T
+SELECT encode(decompress(compress('Hello World', 'snappy'), 'snappy'), 'escape');
+----
+Hello World
+
+query T
+SELECT encode(decompress(compress('Hello World', 'lz4'), 'LZ4'), 'escape');
+----
+Hello World
+
+query error pq: decompress\(\): lz4: bad magic number
+SELECT encode(decompress(compress('Hello World', 'snappy'), 'lz4'), 'escape');
+
+query error pq: compress\(\): only 'gzip', 'lz4', 'snappy', or 'zstd' compression codecs are supported
+SELECT compress('Hello World', 'infiniteCompressionCodec');
