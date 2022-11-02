@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
@@ -1106,59 +1107,26 @@ func (s *adminServer) NonTableStats(
 func (s *adminServer) statsForSpan(
 	ctx context.Context, span roachpb.Span,
 ) (*serverpb.TableStatsResponse, error) {
-	startKey, err := keys.Addr(span.Key)
-	if err != nil {
-		return nil, err
-	}
-	endKey, err := keys.Addr(span.EndKey)
-	if err != nil {
-		return nil, err
-	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	// Get current range descriptors for table. This is done by scanning over
-	// meta2 keys for the range. A special case occurs if we wish to include
-	// the meta1 key range itself, in which case we'll get KeyMin back and that
-	// cannot be scanned (due to range-local addressing confusion). This is
-	// handled appropriately by adjusting the bounds to grab the descriptors
-	// for all ranges (including range1, which is not only gossiped but also
-	// persisted in meta1).
-	startMetaKey := keys.RangeMetaKey(startKey)
-	if bytes.Equal(startMetaKey, roachpb.RKeyMin) {
-		// This is the special case described above. The following key instructs
-		// the code below to scan all of the addressing, i.e. grab all of the
-		// descriptors including that for r1.
-		startMetaKey = keys.RangeMetaKey(keys.MustAddr(keys.Meta2Prefix))
-	}
-
-	rangeDescKVs, err := s.server.db.Scan(ctx, startMetaKey, keys.RangeMetaKey(endKey), 0)
+	rSpan, err := keys.SpanAddr(span)
 	if err != nil {
 		return nil, err
 	}
 
-	// This map will store the nodes we need to fan out to.
-	nodeIDs := make(map[roachpb.NodeID]struct{})
-	for _, kv := range rangeDescKVs {
-		var rng roachpb.RangeDescriptor
-		if err := kv.Value.GetProto(&rng); err != nil {
-			return nil, err
-		}
-		for _, repl := range rng.Replicas().Descriptors() {
-			nodeIDs[repl.NodeID] = struct{}{}
-		}
+	// Get a list of node ids and range count for the specified span.
+	nodeIDs, rangeCount, err := nodeIDsAndRangeCountForSpan(
+		ctx, s.server.distSender, rSpan,
+	)
+	if err != nil {
+		return nil, err
 	}
-
-	nodeIDList := make([]roachpb.NodeID, 0, len(nodeIDs))
-	for id := range nodeIDs {
-		nodeIDList = append(nodeIDList, id)
-	}
-	sort.Slice(nodeIDList, func(i, j int) bool {
-		return nodeIDList[i] < nodeIDList[j]
-	})
 
 	// Construct TableStatsResponse by sending an RPC to every node involved.
 	tableStatResponse := serverpb.TableStatsResponse{
 		NodeCount: int64(len(nodeIDs)),
-		NodeIDs:   nodeIDList,
+		NodeIDs:   nodeIDs,
 		// TODO(mrtracy): The "RangeCount" returned by TableStats is more
 		// accurate than the "RangeCount" returned by TableDetails, because this
 		// method always consistently queries the meta2 key range for the table;
@@ -1173,7 +1141,7 @@ func (s *adminServer) statsForSpan(
 		// the advantage of populating the cache (without the disadvantage of
 		// potentially returning stale data).
 		// See GitHub #5435 for some discussion.
-		RangeCount: int64(len(rangeDescKVs)),
+		RangeCount: rangeCount,
 	}
 	type nodeResponse struct {
 		nodeID roachpb.NodeID
@@ -1183,7 +1151,7 @@ func (s *adminServer) statsForSpan(
 
 	// Send a SpanStats query to each node.
 	responses := make(chan nodeResponse, len(nodeIDs))
-	for nodeID := range nodeIDs {
+	for _, nodeID := range nodeIDs {
 		nodeID := nodeID // avoid data race
 		if err := s.server.stopper.RunAsyncTaskEx(
 			ctx, stop.TaskOpts{
@@ -1199,8 +1167,8 @@ func (s *adminServer) statsForSpan(
 						client, err := s.server.status.dialNode(ctx, nodeID)
 						if err == nil {
 							req := serverpb.SpanStatsRequest{
-								StartKey: startKey,
-								EndKey:   endKey,
+								StartKey: rSpan.Key,
+								EndKey:   rSpan.EndKey,
 								NodeID:   nodeID.String(),
 							}
 							spanResponse, err = client.SpanStats(ctx, &req)
@@ -1224,6 +1192,10 @@ func (s *adminServer) statsForSpan(
 			// For nodes which returned an error, note that the node's data
 			// is missing. For successful calls, aggregate statistics.
 			if resp.err != nil {
+				if s, ok := status.FromError(errors.UnwrapAll(resp.err)); ok && s.Code() == codes.PermissionDenied {
+					return nil, serverError(ctx, resp.err)
+				}
+
 				tableStatResponse.MissingNodes = append(
 					tableStatResponse.MissingNodes,
 					serverpb.TableStatsResponse_MissingNode{
@@ -1243,6 +1215,36 @@ func (s *adminServer) statsForSpan(
 	}
 
 	return &tableStatResponse, nil
+}
+
+// Returns the list of node ids for the specified span.
+func nodeIDsAndRangeCountForSpan(
+	ctx context.Context, ds *kvcoord.DistSender, rSpan roachpb.RSpan,
+) (nodeIDList []roachpb.NodeID, rangeCount int64, _ error) {
+	nodeIDs := make(map[roachpb.NodeID]struct{})
+	ri := kvcoord.MakeRangeIterator(ds)
+	ri.Seek(ctx, rSpan.Key, kvcoord.Ascending)
+	for ; ri.Valid(); ri.Next(ctx) {
+		rangeCount++
+		for _, repl := range ri.Desc().Replicas().Descriptors() {
+			nodeIDs[repl.NodeID] = struct{}{}
+		}
+		if !ri.NeedAnother(rSpan) {
+			break
+		}
+	}
+	if err := ri.Error(); err != nil {
+		return nil, 0, err
+	}
+
+	nodeIDList = make([]roachpb.NodeID, 0, len(nodeIDs))
+	for id := range nodeIDs {
+		nodeIDList = append(nodeIDList, id)
+	}
+	sort.Slice(nodeIDList, func(i, j int) bool {
+		return nodeIDList[i] < nodeIDList[j]
+	})
+	return nodeIDList, rangeCount, nil
 }
 
 // Users returns a list of users, stripped of any passwords.
