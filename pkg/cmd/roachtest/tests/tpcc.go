@@ -209,7 +209,8 @@ func runTPCC(ctx context.Context, t test.Test, c cluster.Cluster, opts tpccOptio
 		workloadInstances = append(
 			workloadInstances,
 			workloadInstance{
-				nodes: c.Range(1, c.Spec().NodeCount-1),
+				nodes:          c.Range(1, c.Spec().NodeCount-1),
+				prometheusPort: 2112,
 			},
 		)
 	}
