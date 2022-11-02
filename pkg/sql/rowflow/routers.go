@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
@@ -262,7 +263,7 @@ func (rb *routerBase) setupStreams(
 // init must be called after setupStreams but before Start.
 func (rb *routerBase) init(ctx context.Context, flowCtx *execinfra.FlowCtx, types []*types.T) {
 	// Check if we're recording stats.
-	if s := tracing.SpanFromContext(ctx); s != nil && s.IsVerbose() {
+	if s := tracing.SpanFromContext(ctx); s != nil && s.RecordingType() != tracingpb.RecordingOff {
 		rb.statsCollectionEnabled = true
 	}
 
@@ -313,7 +314,9 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 			if rb.statsCollectionEnabled {
 				ctx, span = execinfra.ProcessorSpan(ctx, "router output")
 				defer span.Finish()
-				span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(ro.streamID)))
+				if span.IsVerbose() {
+					span.SetTag(execinfrapb.StreamIDTagKey, attribute.IntValue(int(ro.streamID)))
+				}
 				ro.stats.Inputs = make([]execinfrapb.InputStats, 1)
 			}
 
