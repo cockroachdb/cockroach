@@ -779,6 +779,13 @@ func TestLogic_feature_counts(
 	runLogicTest(t, "feature_counts")
 }
 
+func TestLogic_fingerprint(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fingerprint")
+}
+
 func TestLogic_fk(
 	t *testing.T,
 ) {

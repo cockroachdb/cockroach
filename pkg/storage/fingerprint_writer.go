@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -95,6 +96,7 @@ func (f *fingerprintWriter) PutRawMVCCRangeKey(key MVCCRangeKey, bytes []byte) e
 	// This is because range keys do not have a stable, discrete identity and so
 	// it is up to the caller to define a deterministic fingerprinting scheme
 	// across all returned range keys.ler to decide how to fingerprint them.
+	log.Infof(context.Background(), "putting range key %s", key.Timestamp.String())
 	return f.sstWriter.PutRawMVCCRangeKey(key, bytes)
 }
 
@@ -108,16 +110,19 @@ func (f *fingerprintWriter) PutRawMVCC(key MVCCKey, value []byte) error {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`"It never returns an error." -- https://golang.org/pkg/hash: %T`, f)
 	}
+	log.Infof(context.Background(), "key %s", key.Key.String())
 	_, err = f.hasher.Write([]byte(key.Timestamp.String()))
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`"It never returns an error." -- https://golang.org/pkg/hash: %T`, f)
 	}
+	log.Infof(context.Background(), "ts %s", key.Timestamp.String())
 	_, err = f.hasher.Write(value)
 	if err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err,
 			`"It never returns an error." -- https://golang.org/pkg/hash: %T`, f)
 	}
+	log.Infof(context.Background(), "value %s", string(value))
 
 	f.xorAgg.add(f.hasher.Sum64())
 	return nil

@@ -1,0 +1,64 @@
+# LogicTest: local
+
+statement ok
+SET CLUSTER SETTING sql.query_cache.enabled = false;
+
+statement ok
+SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true;
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, FAMILY (x, y));
+
+let $before_insert
+SELECT now()
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 2), (3, 3)
+
+let $after_insert
+SELECT now()
+
+# Fingerprint with time bounds (before_insert, now()]. Since there are no
+# revisions we expect the fingerprint generated via a `crdb_internal.scan` and
+# `crdb_internal.fingerprint` to be the same.
+query I
+WITH sfp AS (SELECT xor_agg(fnv64(key, ts::BYTES, value)) AS scanfp from crdb_internal.scan(crdb_internal.table_span('t'::regclass::int)))
+  SELECT count(*) FROM crdb_internal.fingerprint(crdb_internal.table_span('t'::regclass::int),'$before_insert'::TIMESTAMPTZ, false) AS efp, sfp WHERE efp = sfp.scanfp;
+----
+1
+
+# Fingerprint with all revisions, shouldn't matter as there are no revisions at
+# this point.
+query I
+WITH sfp AS (SELECT xor_agg(fnv64(key, ts::BYTES, value)) AS scanfp from crdb_internal.scan(crdb_internal.table_span('t'::regclass::int)))
+  SELECT count(*) FROM crdb_internal.fingerprint(crdb_internal.table_span('t'::regclass::int),'$before_insert'::TIMESTAMPTZ, true) AS efp, sfp WHERE efp = sfp.scanfp;
+----
+1
+
+# Fingerprint with time bounds (after_insert, now()]. We should see no KVs in
+# time interval.
+query I
+SELECT crdb_internal.fingerprint(crdb_internal.table_span('t'::regclass::int),'$after_insert'::TIMESTAMPTZ, false);
+----
+0
+
+# Insert some revisions.
+statement ok
+UPSERT INTO t VALUES (1, 2);
+
+let $after_upsert_1
+SELECT now()
+
+statement ok
+UPSERT INTO t VALUES (2, 3);
+
+let $after_upsert_2
+SELECT now()
+
+# Fingerprint with time bounds (before_insert, after_upsert_1]. The fingerprints with and without
+# revisions should be different.
+query I
+WITH norev AS (SELECT crdb_internal.fingerprint(crdb_internal.table_span('t'::regclass::int),'$before_insert'::TIMESTAMPTZ, false) AS fp)
+  SELECT count(*) FROM crdb_internal.fingerprint(crdb_internal.table_span('t'::regclass::int),'$before_insert'::TIMESTAMPTZ, true) AS withrev, norev WHERE withrev = norev.fp;
+----
+0
