@@ -218,9 +218,6 @@ func NewRebalanceContext(
 // individual ranges. This means that there are two different workers that
 // could potentially be making decisions about a given range, so they have to
 // be careful to avoid stepping on each others' toes.
-//
-// TODO(a-robinson): Expose metrics to make this understandable without having
-// to dive into logspy.
 func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 	ctx = sr.AnnotateCtx(ctx)
 
