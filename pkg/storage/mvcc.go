@@ -5833,7 +5833,7 @@ func MVCCIsSpanEmpty(
 func MVCCExportFingerprint(
 	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
 ) (roachpb.BulkOpSummary, MVCCKey, uint64, error) {
-	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
+	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportFingerprint")
 	defer span.Finish()
 
 	hasher := fnv.New64()

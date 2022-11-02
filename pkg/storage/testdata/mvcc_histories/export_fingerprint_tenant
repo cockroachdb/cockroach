@@ -7,12 +7,16 @@ put k=/a ts=2 v=a localTs=2 tenant-prefix=10 init-checksum
 put k=/b ts=2 v=b tenant-prefix=10 init-checksum
 put k=/c ts=2 v=c tenant-prefix=10 init-checksum
 put k=/d ts=2 v=d tenant-prefix=10 init-checksum
+del_range_ts k=/b end=/d ts=3 localTS=2 tenant-prefix=10
 put k=/a ts=2 v=a tenant-prefix=11 init-checksum
 put k=/b ts=2 v=b localTs=4 tenant-prefix=11 init-checksum
 put k=/c ts=2 v=c tenant-prefix=11 init-checksum
 put k=/d ts=2 v=d tenant-prefix=11 init-checksum
+del_range_ts k=/b end=/d ts=3 tenant-prefix=11
 ----
 >> at end:
+rangekey: /Tenant/10/Table/1/1/"{b"/0-d"/0}/[3.000000000,0=/<empty>]
+rangekey: /Tenant/11/Table/1/1/"{b"/0-d"/0}/[3.000000000,0=/<empty>]
 data: /Tenant/10/Table/1/1/"a"/0/2.000000000,0 -> /BYTES/a
 data: /Tenant/10/Table/1/1/"b"/0/2.000000000,0 -> /BYTES/b
 data: /Tenant/10/Table/1/1/"c"/0/2.000000000,0 -> /BYTES/c
@@ -26,27 +30,27 @@ data: /Tenant/11/Table/1/1/"d"/0/2.000000000,0 -> /BYTES/d
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=10
 ----
-export: data_size:60 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
-fingerprint: 9662827328792920765
+export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
+fingerprint: 9925016972726554372
 
 # Fingerprint tenant 11
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=11
 ----
-export: data_size:60 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
-fingerprint: 17513934348803083905
+export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
+fingerprint: 11108963465360970374
 
 # Fingerprint tenant 10 with tenant prefix stripped
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=10 stripTenantPrefix stripValueChecksum
 ----
-export: data_size:60 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
-fingerprint: 6565009613709557332
+export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
+fingerprint: 18366154626077700017
 
 # Fingerprint tenant 11 with tenant prefix stripped
 # NOTE: This fingerprint should match the tenant 10 fingerprint.
 run ok
 export fingerprint k=/a end=/z ts=0 allRevisions tenant-prefix=11 stripTenantPrefix stripValueChecksum
 ----
-export: data_size:60 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
-fingerprint: 6565009613709557332
+export: data_size:78 deprecated_rows:4 entry_counts:<key:4294967297 value:4 > fingerprint=true
+fingerprint: 18366154626077700017
