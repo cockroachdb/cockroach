@@ -110,7 +110,7 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.datestyle	enumeration	iso, mdy	"default value for DateStyle session setting [iso, mdy = 0, iso, dmy = 1, iso, ymd = 2]
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
-sql.defaults.default_hash_sharded_index_bucket_count	integer	16	"used as bucket count if bucket count is not specified in hash sharded index definition
+sql.defaults.default_hash_sharded_index_bucket_count	integer	17	"used as bucket count if bucket count is not specified in hash sharded index definition; we recommend picking a prime number
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"
 sql.defaults.default_int_size	integer	8	"the size, in bytes, of an INT type

@@ -298,8 +298,9 @@ func EvalShardBucketCount(
 var DefaultHashShardedIndexBucketCount = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"sql.defaults.default_hash_sharded_index_bucket_count",
-	"used as bucket count if bucket count is not specified in hash sharded index definition",
-	16,
+	"used as bucket count if bucket count is not specified in hash sharded index definition; "+
+		"we recommend picking a prime number to avoid uneven distributions",
+	17,
 	settings.NonNegativeInt,
 ).WithPublic()
 
