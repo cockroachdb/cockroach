@@ -592,6 +592,8 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 		return errors.New("already using disk")
 	}
 	drc := MakeDiskRowContainer(f.diskMonitor, f.mrc.types, f.mrc.ordering, f.engine)
+	f.src = &drc
+	f.drc = &drc
 	if f.deDuplicate {
 		drc.DoDeDuplicate()
 		// After spilling to disk we don't need this map to de-duplicate. The
@@ -616,9 +618,6 @@ func (f *DiskBackedRowContainer) SpillToDisk(ctx context.Context) error {
 		}
 	}
 	f.mrc.Clear(ctx)
-
-	f.src = &drc
-	f.drc = &drc
 	f.spilled = true
 	return nil
 }
