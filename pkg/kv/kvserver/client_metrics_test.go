@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -259,7 +259,6 @@ func TestStoreResolveMetrics(t *testing.T) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.WithIssue(t, 90631, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
@@ -286,6 +285,7 @@ func TestStoreMetrics(t *testing.T) {
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableRaftLogQueue: true,
+					EngineKnobs:         []storage.ConfigOption{storage.DisableAutomaticCompactions},
 				},
 			},
 		}
