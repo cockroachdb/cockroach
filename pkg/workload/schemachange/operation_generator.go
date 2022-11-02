@@ -246,7 +246,7 @@ func init() {
 var opWeights = []int{
 	addColumn:               1,
 	addConstraint:           0, // TODO(spaskob): unimplemented
-	addForeignKeyConstraint: 1,
+	addForeignKeyConstraint: 0, // Disabled and tracked with #91195
 	addRegion:               1,
 	addUniqueConstraint:     0,
 	alterTableLocality:      1,
@@ -2992,41 +2992,25 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	var typName string
 	var nullable string
 
-	for {
-		nestedTxn, err := tx.Begin(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		err = nestedTxn.QueryRow(ctx, fmt.Sprintf(`
+	nestedTxn, err := tx.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = nestedTxn.QueryRow(ctx, fmt.Sprintf(`
 	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
 		%s
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
-		if err == nil {
-			err := nestedTxn.Commit(ctx)
-			if err != nil {
-				return nil, nil, err
-			}
-			break
-		}
-		pgErr := (*pgconn.PgError)(nil)
-		if !errors.As(err, &pgErr) {
+	if err == nil {
+		err := nestedTxn.Commit(ctx)
+		if err != nil {
 			return nil, nil, err
 		}
-		// Intermittent undefined table errors are valid for the query above, since
-		// we are not leasing out the tables, when picking our random table.
-		if code := pgcode.MakeCode(pgErr.Code); code == pgcode.UndefinedTable ||
-			code == pgcode.UndefinedSchema {
-			err := nestedTxn.Rollback(ctx)
-			if err != nil {
-				return nil, nil, err
-			}
-			continue
-		}
-		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(err, rbErr)
-		}
-		return nil, nil, err
+		break
 	}
+	if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
+		err = errors.CombineErrors(err, rbErr)
+	}
+	return nil, nil, err
 
 	columnToReturn := column{
 		name:     columnName,
@@ -3566,6 +3550,10 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 	// TODO(fqazi): Temporarily allow out of memory errors on select queries. Not
 	// sure where we are hitting these, need to investigate further.
 	stmt.potentialExecErrors.add(pgcode.OutOfMemory)
+	// Disk errors can happen since there are limits on spill, and cross
+	// joins which are deep cannot do much of the FETCH FIRST X ROWS ONLY
+	// limit
+	stmt.potentialExecErrors.add(pgcode.DiskFull)
 	return stmt, nil
 }
 
