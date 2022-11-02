@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -166,6 +167,8 @@ func (p *planner) maybeLogStatement(
 ) {
 	p.maybeLogStatementInternal(ctx, execType, isCopy, numRetries, txnCounter, rows, err, queryReceived, hasAdminRoleCache, telemetryLoggingMetrics, stmtFingerprintID, queryStats)
 }
+
+var errTxnIsNotOpen = errors.New("txn is already committed or rolled back")
 
 func (p *planner) maybeLogStatementInternal(
 	ctx context.Context,
@@ -323,13 +326,19 @@ func (p *planner) maybeLogStatementInternal(
 				mode = "rw"
 			}
 			tableName := ""
+			var tn *tree.TableName
 			// We only have a valid *table* name if the object being
 			// audited is table-like (includes view, sequence etc). For
 			// now, this is sufficient because the auditing feature can
 			// only audit tables. If/when the mechanisms are extended to
 			// audit databases and schema, we need more logic here to
 			// extract a name to include in the logging events.
-			tn, err := p.getQualifiedTableName(ctx, ev.desc)
+			if p.txn != nil && p.txn.IsOpen() {
+				// Only open txn accepts further commands.
+				tn, err = p.getQualifiedTableName(ctx, ev.desc)
+			} else {
+				err = errTxnIsNotOpen
+			}
 			if err != nil {
 				log.Warningf(ctx, "name for audited table ID %d not found: %v", ev.desc.GetID(), err)
 			} else {
