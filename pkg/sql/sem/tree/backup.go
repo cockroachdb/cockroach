@@ -131,6 +131,7 @@ type RestoreOptions struct {
 	SkipMissingSequences      bool
 	SkipMissingSequenceOwners bool
 	SkipMissingViews          bool
+	SkipDescriptorCheck       bool
 	Detached                  bool
 	SkipLocalitiesCheck       bool
 	DebugPauseOn              Expr
@@ -392,6 +393,11 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("skip_missing_views")
 	}
 
+	if o.SkipDescriptorCheck {
+		maybeAddSep()
+		ctx.WriteString("skip_descriptor_check")
+	}
+
 	if o.Detached {
 		maybeAddSep()
 		ctx.WriteString("detached")
@@ -482,6 +488,14 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.SkipMissingViews = other.SkipMissingViews
 	}
 
+	if o.SkipDescriptorCheck {
+		if other.SkipDescriptorCheck {
+			return errors.New("skip_descriptor_check specified multiple times")
+		}
+	} else {
+		o.SkipDescriptorCheck = other.SkipDescriptorCheck
+	}
+
 	if o.Detached {
 		if other.Detached {
 			return errors.New("detached option specified multiple times")
@@ -546,6 +560,7 @@ func (o RestoreOptions) IsDefault() bool {
 		o.SkipMissingSequences == options.SkipMissingSequences &&
 		o.SkipMissingSequenceOwners == options.SkipMissingSequenceOwners &&
 		o.SkipMissingViews == options.SkipMissingViews &&
+		o.SkipDescriptorCheck == options.SkipDescriptorCheck &&
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.IntoDB == options.IntoDB &&

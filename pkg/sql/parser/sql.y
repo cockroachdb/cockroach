@@ -933,7 +933,8 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %token <str> SEARCH SECOND SECONDARY SECURITY SELECT SEQUENCE SEQUENCES
 %token <str> SERIALIZABLE SERVER SESSION SESSIONS SESSION_USER SET SETOF SETS SETTING SETTINGS
 %token <str> SHARE SHOW SIMILAR SIMPLE SKIP SKIP_LOCALITIES_CHECK SKIP_MISSING_FOREIGN_KEYS
-%token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
+%token <str> SKIP_MISSING_SEQUENCES SKIP_MISSING_SEQUENCE_OWNERS SKIP_MISSING_VIEWS
+%token <str> SKIP_DESCRIPTOR_CHECK SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 %token <str> SQLLOGIN
 
 %token <str> STABLE START STATE STATISTICS STATUS STDIN STREAM STRICT STRING STORAGE STORE STORED STORING SUBSTRING SUPER
@@ -3489,6 +3490,7 @@ drop_external_connection_stmt:
 //    skip_missing_sequences: ignore sequence dependencies
 //    skip_missing_views: skip restoring views because of dependencies that cannot be restored
 //    skip_missing_sequence_owners: remove sequence-table ownership dependencies before restoring
+//    skip_descriptor_check: doesn't fail the restore if the cluster contains an invalid descriptor
 //    encryption_passphrase=passphrase: decrypt BACKUP with specified passphrase
 //    kms="[kms_provider]://[kms_host]/[master_key_identifier]?[parameters]" : decrypt backups using KMS
 //    detached: execute restore job asynchronously, without waiting for its completion
@@ -3663,6 +3665,10 @@ restore_options:
 | SKIP_MISSING_VIEWS
   {
     $$.val = &tree.RestoreOptions{SkipMissingViews: true}
+  }
+| SKIP_DESCRIPTOR_CHECK
+  {
+    $$.val = &tree.RestoreOptions{SkipDescriptorCheck: true}
   }
 | DETACHED
   {
@@ -15600,6 +15606,7 @@ unreserved_keyword:
 | SKIP_MISSING_SEQUENCES
 | SKIP_MISSING_SEQUENCE_OWNERS
 | SKIP_MISSING_VIEWS
+| SKIP_DESCRIPTOR_CHECK
 | SNAPSHOT
 | SPLIT
 | SQL

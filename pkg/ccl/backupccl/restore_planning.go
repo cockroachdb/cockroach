@@ -1699,6 +1699,9 @@ func doRestorePlan(
 		return err
 	}
 
+	if err := validateRestoredDescriptors(ctx, p.ExecCfg(), restoreStmt.Options.SkipDescriptorCheck, "restoring cluster contains invalid descriptors"); err != nil {
+		return err
+	}
 	// When running a full cluster restore, we drop the defaultdb and postgres
 	// databases that are present in a new cluster.
 	// This is done so that they can be restored the same way any other user

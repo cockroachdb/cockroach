@@ -394,7 +394,11 @@ message RestoreDetails {
 
   bool VerifyData = 26;
 
-  // NEXT ID: 28.
+  // SkipDescriptorCheck allows the restore to continue if an invalid descriptor is found in the
+  // cluster.
+  bool skip_descriptor_check = 28;
+
+  // NEXT ID: 29.
 }
 
 

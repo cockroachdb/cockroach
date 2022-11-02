@@ -9,10 +9,18 @@
 package backuputils
 
 import (
+	"context"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/doctor"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // URLSeparator represents the standard separator used in backup URLs.
@@ -84,4 +92,57 @@ func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 		retval[i] = parsed.String()
 	}
 	return retval, nil
+}
+
+// ValidateDescriptors ensures that the passed in descriptors are in a valid
+// state. The first returned parameter is true if all descriptors are valid;
+// the second provides a description of any descriptors in an invalid state; the
+// third returns an error if the descriptors could not be properly validated.
+// Note that this function does not check any references to the jobs table in
+// the descriptors.
+func ValidateDescriptors(
+	ctx context.Context, descriptors catalog.Descriptors, version roachpb.Version,
+) (bool, string, error) {
+	descTable := make(doctor.DescriptorTable, 0, len(descriptors))
+	namespaceTable := make(doctor.NamespaceTable, 0, len(descriptors))
+
+	for _, desc := range descriptors {
+		bytes, err := protoutil.Marshal(desc.DescriptorProto())
+		if err != nil {
+			return false, "", err
+		}
+		descTable = append(descTable,
+			doctor.DescriptorTableRow{
+				ID:        int64(desc.GetID()),
+				DescBytes: bytes,
+				ModTime:   desc.GetModificationTime(),
+			})
+		if !desc.Dropped() {
+			// Descriptors in the process of getting dropped do not appear in the namespace table.
+			namespaceTable = append(namespaceTable,
+				doctor.NamespaceTableRow{
+					ID: int64(desc.GetID()),
+					NameInfo: descpb.NameInfo{
+						Name:           desc.GetName(),
+						ParentID:       desc.GetParentID(),
+						ParentSchemaID: desc.GetParentSchemaID(),
+					},
+				})
+		}
+	}
+	validationMessages := strings.Builder{}
+	// Don't validate any jobs, since
+	// these will be synthesized by the restore process.
+	ok, err := doctor.Examine(ctx,
+		clusterversion.ClusterVersion{Version: version},
+		descTable, namespaceTable,
+		nil,
+		false, /*validateJobs*/
+		false,
+		&validationMessages)
+	if err != nil {
+		return false, "", err
+
+	}
+	return ok, validationMessages.String(), nil
 }
