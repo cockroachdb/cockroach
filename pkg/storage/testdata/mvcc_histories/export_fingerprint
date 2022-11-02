@@ -98,15 +98,7 @@ run ok
 export fingerprint k=a end=z ts=6 allRevisions
 ----
 export: data_size:165 fingerprint=true
-fingerprint: 17693463359975730253
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {h-k}/[1.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 5365582849259392589
 
 # Export the full revision history, at increasing end time and then at
 # increasing start time.
@@ -114,105 +106,61 @@ run ok
 export fingerprint k=a end=z ts=1 allRevisions
 ----
 export: data_size:14 fingerprint=true
-fingerprint: 0
-export: {a-k}/[1.000000000,0=/<empty>]
+fingerprint: 18439002723302260100
 
 run ok
 export fingerprint k=a end=z ts=2 allRevisions
 ----
 export: data_size:38 fingerprint=true
-fingerprint: 7394159293535633020
-export: {a-k}/[1.000000000,0=/<empty>]
+fingerprint: 11058918721068991480
 
 run ok
 export fingerprint k=a end=z ts=3 allRevisions
 ----
 export: data_size:77 fingerprint=true
-fingerprint: 7213511226611827020
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {d-f}/[1.000000000,0=/<empty>]
-export: {f-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {h-k}/[1.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 2602917904105174708
 
 run ok
 export fingerprint k=a end=z ts=4 allRevisions
 ----
 export: data_size:104 fingerprint=true
-fingerprint: 12311975366333312460
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {d-f}/[1.000000000,0=/<empty>]
-export: {f-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {h-k}/[1.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 16922287050921925172
 
 run ok
 export fingerprint k=a end=z ts=5 allRevisions
 ----
 export: data_size:157 fingerprint=true
-fingerprint: 17505735789188331755
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {h-k}/[1.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 5552221397240994539
 
 run ok
 export fingerprint k=a end=z ts=6 allRevisions
 ----
 export: data_size:165 fingerprint=true
-fingerprint: 17693463359975730253
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {h-k}/[1.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 5365582849259392589
 
 run ok
 export fingerprint k=a end=z startTs=1 ts=6 allRevisions
 ----
 export: data_size:151 fingerprint=true
-fingerprint: 17693463359975730253
-export: {b-c}/[3.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 946475881303659630
 
 run ok
 export fingerprint k=a end=z startTs=2 ts=6 allRevisions
 ----
 export: data_size:127 fingerprint=true
-fingerprint: 10598829871782564401
-export: {b-c}/[3.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 7764164522449594898
 
 run ok
 export fingerprint k=a end=z startTs=3 ts=6 allRevisions
 ----
 export: data_size:88 fingerprint=true
-fingerprint: 10488959482011561217
-export: {c-g}/[5.000000000,0=/<empty>]
+fingerprint: 10779548886881917074
 
 run ok
 export fingerprint k=a end=z startTs=4 ts=6 allRevisions
 ----
 export: data_size:61 fingerprint=true
-fingerprint: 6869998736090988929
-export: {c-g}/[5.000000000,0=/<empty>]
+fingerprint: 6584193357887075346
 
 run ok
 export fingerprint k=a end=z startTs=5 ts=6 allRevisions
@@ -268,35 +216,25 @@ run ok
 export fingerprint k=a end=z startTs=1 ts=6
 ----
 export: data_size:91 fingerprint=true
-fingerprint: 5843921525122089813
-export: {b-c}/[3.000000000,0=/<empty>]
-export: {c-g}/[5.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 14856019629603104558
 
 run ok
 export fingerprint k=a end=z startTs=2 ts=6
 ----
 export: data_size:91 fingerprint=true
-fingerprint: 5843921525122089813
-export: {b-c}/[3.000000000,0=/<empty>]
-export: {c-g}/[5.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 14856019629603104558
 
 run ok
 export fingerprint k=a end=z startTs=3 ts=6
 ----
 export: data_size:72 fingerprint=true
-fingerprint: 5843921525122089813
-export: {c-g}/[5.000000000,0=/<empty>]
+fingerprint: 6129720291936908998
 
 run ok
 export fingerprint k=a end=z startTs=4 ts=6
 ----
 export: data_size:61 fingerprint=true
-fingerprint: 6869998736090988929
-export: {c-g}/[5.000000000,0=/<empty>]
+fingerprint: 6584193357887075346
 
 run ok
 export fingerprint k=a end=z startTs=5 ts=6
@@ -316,8 +254,7 @@ run ok
 export fingerprint k=a end=z startTs=0 ts=1 allRevisions
 ----
 export: data_size:14 fingerprint=true
-fingerprint: 0
-export: {a-k}/[1.000000000,0=/<empty>]
+fingerprint: 18439002723302260100
 
 run ok
 export fingerprint k=a end=z startTs=1 ts=2 allRevisions
@@ -329,10 +266,7 @@ run ok
 export fingerprint k=a end=z startTs=2 ts=3 allRevisions
 ----
 export: data_size:39 fingerprint=true
-fingerprint: 182077538345271088
-export: {b-d}/[3.000000000,0=/<empty>]
-export: {f-h}/[3.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 9794532764335352076
 
 run ok
 export fingerprint k=a end=z startTs=3 ts=4 allRevisions
@@ -344,8 +278,7 @@ run ok
 export fingerprint k=a end=z startTs=4 ts=5 allRevisions
 ----
 export: data_size:53 fingerprint=true
-fingerprint: 6353507799313519911
-export: {c-g}/[5.000000000,0=/<empty>]
+fingerprint: 6639662805036294324
 
 run ok
 export fingerprint k=a end=z startTs=5 ts=6 allRevisions
@@ -369,10 +302,7 @@ run ok
 export fingerprint k=a end=z startTs=2 ts=3
 ----
 export: data_size:39 fingerprint=true
-fingerprint: 182077538345271088
-export: {b-d}/[3.000000000,0=/<empty>]
-export: {f-h}/[3.000000000,0=/<empty>]
-export: {m-n}/[3.000000000,0=/<empty>]
+fingerprint: 9794532764335352076
 
 run ok
 export fingerprint k=a end=z startTs=3 ts=4
@@ -384,8 +314,7 @@ run ok
 export fingerprint k=a end=z startTs=4 ts=5
 ----
 export: data_size:53 fingerprint=true
-fingerprint: 6353507799313519911
-export: {c-g}/[5.000000000,0=/<empty>]
+fingerprint: 6639662805036294324
 
 run ok
 export fingerprint k=a end=z startTs=5 ts=6
@@ -400,15 +329,13 @@ run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=1
 ----
 export: data_size:11 fingerprint=true resume="b"/0,0
-fingerprint: 3503808496681756163
-export: {a-b}/[1.000000000,0=/<empty>]
+fingerprint: 12041835729191260634
 
 run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=1 stopMidKey
 ----
 export: data_size:11 fingerprint=true resume="b"/0,0
-fingerprint: 3503808496681756163
-export: {a-b}/[1.000000000,0=/<empty>]
+fingerprint: 12041835729191260634
 
 run ok
 export fingerprint k=a end=z ts=6 targetSize=1
@@ -454,15 +381,13 @@ run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=10 maxSize=10 stopMidKey
 ----
 export: data_size:4 fingerprint=true resume="a"/2.000000000,0
-fingerprint: 14380066247656349095
-export: a{-\x00}/[1.000000000,0=/<empty>]
+fingerprint: 11851341178915128883
 
 run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=12 maxSize=12
 ----
 export: data_size:11 fingerprint=true resume="b"/0,0
-fingerprint: 3503808496681756163
-export: {a-b}/[1.000000000,0=/<empty>]
+fingerprint: 12041835729191260634
 
 run error
 export fingerprint k=a end=z ts=6 allRevisions targetSize=17 maxSize=17
@@ -475,8 +400,7 @@ run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=4 maxSize=12
 ----
 export: data_size:11 fingerprint=true resume="b"/0,0
-fingerprint: 3503808496681756163
-export: {a-b}/[1.000000000,0=/<empty>]
+fingerprint: 12041835729191260634
 
 # Hitting MaxSize right after including a range key with the same start key as
 # the exceeding point key will emit a point-sized range key, unfortunately. This
@@ -486,23 +410,19 @@ run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=3 maxSize=3 stopMidKey
 ----
 export: data_size:3 fingerprint=true resume="a"/4.000000000,0
-fingerprint: 0
-export: a{-\x00}/[1.000000000,0=/<empty>]
+fingerprint: 7199054663005903764
 
 run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=4 maxSize=4 stopMidKey
 ----
 export: data_size:4 fingerprint=true resume="a"/2.000000000,0
-fingerprint: 14380066247656349095
-export: a{-\x00}/[1.000000000,0=/<empty>]
+fingerprint: 11851341178915128883
 
 run ok
 export fingerprint k=a end=z ts=6 allRevisions targetSize=17 maxSize=17 stopMidKey
 ----
 export: data_size:17 fingerprint=true resume="b"/4.000000000,0
-fingerprint: 3503808496681756163
-export: {a-b}/[1.000000000,0=/<empty>]
-export: b{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+fingerprint: 8639514828284166680
 
 run error
 export fingerprint k=a end=z ts=6 allRevisions targetSize=17 maxSize=17
@@ -514,92 +434,66 @@ run ok
 export fingerprint k=b end=k ts=6 allRevisions
 ----
 export: data_size:131 fingerprint=true
-fingerprint: 11315287205977104233
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
-export: {h-k}/[1.000000000,0=/<empty>]
+fingerprint: 10865321421180682268
 
 run ok
 export fingerprint k=bbb end=ggg startTs=2 ts=5 allRevisions
 ----
 export: data_size:89 fingerprint=true
-fingerprint: 10270839490468725004
-export: {bbb-c}/[3.000000000,0=/<empty>]
-export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-export: {d-f}/[5.000000000,0=/<empty>]
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-export: g{-gg}/[3.000000000,0=/<empty>]
+fingerprint: 6817002685485552522
 
 run ok
 export fingerprint k=bbb end=ggg startTs=2 ts=5
 ----
 export: data_size:61 fingerprint=true
-fingerprint: 9001940358411271625
-export: {bbb-c}/[3.000000000,0=/<empty>]
-export: {c-g}/[5.000000000,0=/<empty>]
-export: g{-gg}/[3.000000000,0=/<empty>]
+fingerprint: 14656254332489462551
 
 # Resuming from a specific key version.
 run ok
 export fingerprint k=a kTs=4 end=c ts=6 allRevisions
 ----
 export: data_size:16 fingerprint=true
-fingerprint: 6905610633035313899
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+fingerprint: 4767297673038595971
 
 run ok
 export fingerprint k=a kTs=3 end=c ts=6 allRevisions
 ----
 export: data_size:15 fingerprint=true
-fingerprint: 10972433733941915468
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+fingerprint: 9635616233104022052
 
 run ok
 export fingerprint k=a kTs=2 end=c ts=6 allRevisions
 ----
 export: data_size:15 fingerprint=true
-fingerprint: 10972433733941915468
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+fingerprint: 9635616233104022052
 
 run ok
 export fingerprint k=a kTs=1 end=c ts=6 allRevisions
 ----
 export: data_size:7 fingerprint=true
-fingerprint: 8031517972374541544
-export: {a-b}/[1.000000000,0=/<empty>]
-export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+fingerprint: 8253075815272882560
 
 run ok
 export fingerprint k=f kTs=4 end=g ts=6 allRevisions
 ----
 export: data_size:35 fingerprint=true
-fingerprint: 11595862564133433257
-export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+fingerprint: 161323050777799952
 
 run ok
 export fingerprint k=f kTs=4 end=g startTs=2 ts=4 allRevisions
 ----
 export: data_size:10 fingerprint=true
-fingerprint: 12786325629015412061
-export: {f-g}/[3.000000000,0=/<empty>]
+fingerprint: 4437240507819253077
 
 run ok
 export fingerprint k=f kTs=3 end=g startTs=2 ts=4 allRevisions
 ----
 export: data_size:2 fingerprint=true
-fingerprint: 0
-export: {f-g}/[3.000000000,0=/<empty>]
+fingerprint: 10152830796741054472
 
 # Resuming from a specific key version at or below startTS.
 run ok
 export fingerprint k=a kTs=2 end=c startTs=2 ts=6
 ----
 export: data_size:3 fingerprint=true
-fingerprint: 8031517972374541544
-export: {b-c}/[3.000000000,0=/<empty>]
+fingerprint: 3715938509994402376
