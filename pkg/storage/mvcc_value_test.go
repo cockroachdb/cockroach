@@ -143,6 +143,10 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 				dec.Value.RawBytes = nil // normalize
 			}
 			require.Equal(t, tc.val, dec)
+			require.Equal(t, tc.val.IsTombstone(), dec.IsTombstone())
+			isTombstone, err := EncodedMVCCValueIsTombstone(enc)
+			require.NoError(t, err)
+			require.Equal(t, tc.val.IsTombstone(), isTombstone)
 		})
 	}
 }
@@ -162,6 +166,9 @@ func TestDecodeMVCCValueErrors(t *testing.T) {
 			dec, err := DecodeMVCCValue(tc.enc)
 			require.Equal(t, tc.expect, err)
 			require.Zero(t, dec)
+			isTombstone, err := EncodedMVCCValueIsTombstone(tc.enc)
+			require.Equal(t, tc.expect, err)
+			require.False(t, isTombstone)
 		})
 	}
 }
@@ -231,6 +238,27 @@ func BenchmarkDecodeMVCCValue(b *testing.B) {
 					}
 				})
 			}
+		}
+	}
+}
+
+func BenchmarkMVCCValueIsTombstone(b *testing.B) {
+	cfg := mvccValueBenchmarkConfigs
+	for hDesc, h := range cfg.headers {
+		for vDesc, v := range cfg.values {
+			name := fmt.Sprintf("header=%s/value=%s", hDesc, vDesc)
+			mvccValue := MVCCValue{MVCCValueHeader: h, Value: v}
+			buf, err := EncodeMVCCValue(mvccValue)
+			require.NoError(b, err)
+			b.Run(name, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					isTombstone, err := EncodedMVCCValueIsTombstone(buf)
+					if err != nil { // for performance
+						require.NoError(b, err)
+					}
+					_ = isTombstone
+				}
+			})
 		}
 	}
 }

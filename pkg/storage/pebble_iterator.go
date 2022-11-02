@@ -557,16 +557,11 @@ func (p *pebbleIterator) UnsafeValue() []byte {
 // MVCCValueLenAndIsTombstone implements the MVCCIterator interface.
 func (p *pebbleIterator) MVCCValueLenAndIsTombstone() (int, bool, error) {
 	val := p.iter.Value()
-	// NB: don't move the following code into a helper since we desire inlining
-	// of tryDecodeSimpleMVCCValue.
-	v, ok, err := tryDecodeSimpleMVCCValue(val)
-	if err == nil && !ok {
-		v, err = decodeExtendedMVCCValue(val)
-	}
+	isTombstone, err := EncodedMVCCValueIsTombstone(val)
 	if err != nil {
 		return 0, false, err
 	}
-	return len(val), v.IsTombstone(), nil
+	return len(val), isTombstone, nil
 }
 
 // ValueLen implements the MVCCIterator interface.
