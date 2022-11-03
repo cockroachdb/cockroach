@@ -15,6 +15,7 @@ SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES FROM sys
 public  comments                         table     NULL  NULL
 public  database_role_settings           table     NULL  NULL
 public  descriptor                       table     NULL  NULL
+public  descriptor_id_seq                sequence  NULL  NULL
 public  eventlog                         table     NULL  NULL
 public  external_connections             table     NULL  NULL
 public  jobs                             table     NULL  NULL
@@ -108,6 +109,7 @@ SELECT id FROM system.descriptor
 4
 5
 6
+7
 8
 11
 12
@@ -338,6 +340,8 @@ system  public  database_role_settings           root    SELECT  true
 system  public  database_role_settings           root    UPDATE  true
 system  public  descriptor                       admin   SELECT  true
 system  public  descriptor                       root    SELECT  true
+system  public  descriptor_id_seq                admin   SELECT  true
+system  public  descriptor_id_seq                root    SELECT  true
 system  public  eventlog                         admin   DELETE  true
 system  public  eventlog                         admin   INSERT  true
 system  public  eventlog                         admin   SELECT  true

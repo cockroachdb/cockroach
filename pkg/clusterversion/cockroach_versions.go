@@ -317,6 +317,11 @@ const (
 	// TenantNames adds a name column to system.tenants.
 	V23_1TenantNames
 
+	// V23_1DescIDSequenceForSystemTenant migrates the descriptor ID generator
+	// counter from a meta key to the system.descriptor_id_seq sequence for the
+	// system tenant.
+	V23_1DescIDSequenceForSystemTenant
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -518,6 +523,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1TenantNames,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 4},
+	},
+	{
+		Key:     V23_1DescIDSequenceForSystemTenant,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
 	},
 
 	// *************************************************

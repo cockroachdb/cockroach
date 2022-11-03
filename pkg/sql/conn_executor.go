@@ -2595,6 +2595,7 @@ func errIsRetriable(err error) bool {
 	return errors.HasType(err, (*roachpb.TransactionRetryWithProtoRefreshError)(nil)) ||
 		scerrors.ConcurrentSchemaChangeDescID(err) != descpb.InvalidID ||
 		errors.Is(err, retriableMinTimestampBoundUnsatisfiableError) ||
+		errors.Is(err, descidgen.ErrDescIDSequenceMigrationInProgress) ||
 		descs.IsTwoVersionInvariantViolationError(err)
 }
 
@@ -2932,6 +2933,13 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				return advanceInfo{}, err
 			}
 		}
+		// Similarly, if the descriptor ID generator is not available because of
+		// an ongoing migration, wait for the migration to complete first.
+		if errors.Is(p.errorCause(), descidgen.ErrDescIDSequenceMigrationInProgress) {
+			if err := ex.handleWaitingForDescriptorIDGeneratorMigration(ex.Ctx()); err != nil {
+				return advanceInfo{}, err
+			}
+		}
 	}
 
 	// Handle transaction events which cause updates to txnState.
@@ -3057,6 +3065,13 @@ func (ex *connExecutor) handleWaitingForConcurrentSchemaChanges(
 	if err := ex.planner.waitForDescriptorSchemaChanges(
 		ctx, descID, *ex.extraTxnState.schemaChangerState,
 	); err != nil {
+		return err
+	}
+	return ex.resetTransactionOnSchemaChangeRetry(ctx)
+}
+
+func (ex *connExecutor) handleWaitingForDescriptorIDGeneratorMigration(ctx context.Context) error {
+	if err := ex.planner.waitForDescriptorIDGeneratorMigration(ctx); err != nil {
 		return err
 	}
 	return ex.resetTransactionOnSchemaChangeRetry(ctx)
@@ -3352,7 +3367,9 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 func (ex *connExecutor) getDescIDGenerator() eval.DescIDGenerator {
 	if ex.server.cfg.TestingKnobs.UseTransactionalDescIDGenerator &&
 		ex.state.mu.txn != nil {
-		return descidgen.NewTransactionalGenerator(ex.server.cfg.Codec, ex.state.mu.txn)
+		return descidgen.NewTransactionalGenerator(
+			ex.server.cfg.Settings, ex.server.cfg.Codec, ex.state.mu.txn,
+		)
 	}
 	return ex.server.cfg.DescIDGenerator
 }

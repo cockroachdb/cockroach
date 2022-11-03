@@ -5411,16 +5411,14 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		INTEGER NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		maxDescIDKeyVal, err := p.execCfg.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
-		if err != nil {
-			return err
-		}
-		descIDCounter, err := maxDescIDKeyVal.Value.GetInt()
-		if err != nil {
-			return err
-		}
 		minID := descpb.ID(keys.MaxReservedDescID + 1)
-		maxID := descpb.ID(descIDCounter)
+		maxID, err := p.ExecCfg().DescIDGenerator.PeekNextUniqueDescID(ctx)
+		if err != nil {
+			return err
+		}
+		if err != nil {
+			return err
+		}
 		if minID >= maxID {
 			return nil
 		}
