@@ -12,7 +12,8 @@ package stats
 
 import (
 	"context"
-	"math"
+  "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+  "math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -76,6 +77,26 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 	latest := observed[0].CreatedAt
 	at := latest.Add(avgRefreshTime(observed))
 
+	forecastCols, observedByCols := groupObservedStatistics(observed)
+
+	forecasts := make([]*TableStatistic, 0, len(forecastCols))
+	for _, colKey := range forecastCols {
+		forecast, err := forecastColumnStatistics(ctx, observedByCols[colKey], at, minGoodnessOfFit)
+		if err != nil {
+			log.VEventf(
+				ctx, 2, "could not forecast statistics for table %v columns %s: %v",
+				observed[0].TableID, redact.SafeString(colKey), err,
+			)
+			continue
+		}
+		forecasts = append(forecasts, forecast)
+	}
+	return forecasts
+}
+
+// groupObservedStatistics groups all observed statistics by their columnID set, returning a
+// map and a slice of all the unique column ID sets.
+func groupObservedStatistics(observed []*TableStatistic) ([]string, map[string][]*TableStatistic) {
 	// Group observed statistics by column set, and remove statistics with
 	// inverted histograms.
 	var forecastCols []string
@@ -95,20 +116,119 @@ func ForecastTableStatistics(ctx context.Context, observed []*TableStatistic) []
 		}
 		observedByCols[colKey] = append(obs, stat)
 	}
+	return forecastCols, observedByCols
+}
 
-	forecasts := make([]*TableStatistic, 0, len(forecastCols))
+// mergeStatistics merges a full table statistic with a partial table statistic
+// and returns a new full table statistic. The stats must be at the same time
+// and on the same column set.
+func mergeStatistics(
+	ctx context.Context, fullStat *TableStatistic, partialStat *TableStatistic,
+) *TableStatistic {
+	fullStatColKey := MakeSortedColStatKey(fullStat.ColumnIDs)
+	partialStatColKey := MakeSortedColStatKey(partialStat.ColumnIDs)
+	if fullStatColKey != partialStatColKey {
+		log.VEventf(ctx, 2, "Column sets for full table statistics and partial table statistics column sets do not match")
+		return fullStat
+	}
+
+	// Merge the histograms
+	// Currently, since we don't merge non-multi-column statistics, each
+	// statistic passed through should have a histogram
+	// TODO (faizaanmadhani): Add support for multi-column partial statistics.
+	fullHistogram := fullStat.Histogram
+	partialHistogram := partialStat.Histogram
+	// Merge the partial histogram into the full histogram,
+	// overriding the partial value with the full value
+
+	var cmpCtx *eval.Context
+	p_idx := 0
+	for p_idx < len(partialHistogram) {
+		mergeBucketIdx := -1
+		curr_bucket := 0
+
+		start := 0
+		end := len(fullHistogram)
+		mid := 0
+		searchBucket := partialHistogram[p_idx].UpperBound
+		for start < end {
+			mid = (start + end) / 2
+      var prevBucket := fullHistogram[]
+      if mid - 1 > 0 {
+        prevBucket := fullHistogram[mid - 1]
+      }
+			if cmpVal, err := fullHistogram[mid].UpperBound.CompareError(cmpCtx, searchBucket); err == nil {
+				switch cmpVal {
+				case 0:
+          if
+				}
+			}
+		}
+
+	}
+}
+
+// ForecastTableStatisticsUsingPartial is like ForecastTableStatistics but instead
+// uses the newer partial table statistics as part of the forecast.
+func ForecastTableStatisticsUsingPartial(
+	ctx context.Context, partialStatsList []*TableStatistic, fullStatsList []*TableStatistic,
+) []*TableStatistic {
+	// Check that there are enough full table stats to perform
+	// a forecast
+	if len(fullStatsList) < minObservationsForForecast {
+		return nil
+	}
+
+	// Iterate through partialTableStats and construct a map
+	// mapping the columnID set to the latest partial table stat.
+	partialStatsMap := make(map[string]*TableStatistic)
+	for _, stat := range partialStatsList {
+		colKey := MakeSortedColStatKey(stat.ColumnIDs)
+		if _, ok := partialStatsMap[MakeSortedColStatKey(stat.ColumnIDs)]; !ok {
+			partialStatsMap[colKey] = stat
+		}
+	}
+	forecastCols, fullStatsMap := groupObservedStatistics(fullStatsList)
+	// Store the forecasts as a map where the colKey maps to the forecasted table statistic
+	forecasts := make(map[string]*TableStatistic)
 	for _, colKey := range forecastCols {
-		forecast, err := forecastColumnStatistics(ctx, observedByCols[colKey], at, minGoodnessOfFit)
+		forecast, err := forecastColumnStatistics(ctx, fullStatsMap[colKey], partialStatsMap[colKey].CreatedAt, minGoodnessOfFit)
 		if err != nil {
 			log.VEventf(
 				ctx, 2, "could not forecast statistics for table %v columns %s: %v",
-				observed[0].TableID, redact.SafeString(colKey), err,
+				fullStatsList[0].TableID, redact.SafeString(colKey), err,
 			)
 			continue
 		}
-		forecasts = append(forecasts, forecast)
+		forecasts[colKey] = forecast
 	}
-	return forecasts
+
+	mergedStats := make([]*TableStatistic, 0, len(forecastCols))
+	// Merge the histograms from each column key with the associated partial table
+	// statistic.
+	for _, colKey := range forecastCols {
+
+		// Since we don't collect multi-column partial
+		// statistics right now, return the current
+		// forecasted stat for them and don't merge
+		// those statistics.
+		// TODO (faizaanmadhani): Add support for multi-column
+		// partial statistics
+		if len(colKey) > 1 {
+			mergedStats = append(mergedStats, forecasts[colKey])
+			continue
+		}
+
+		forecast := forecasts[colKey]
+		partialStat := partialStatsMap[colKey]
+		mergedStatistic, err := mergeStatistics(forecast, partialStat)
+		if err != nil {
+			log.VEventf(ctx, 2, "could not merge statistics for table %v columns %s: %v", fullStatsList[0].TableID, redact.SafeString(colKey), err)
+			continue
+		}
+		mergedStats = append(mergedStats, mergedStatistic)
+	}
+	return mergedStats
 }
 
 // forecastColumnStatistics produces a statistics forecast at the given time,
@@ -245,6 +365,7 @@ func forecastColumnStatistics(
 			DistinctCount: uint64(distinctCount),
 			NullCount:     uint64(nullCount),
 			AvgSize:       uint64(avgSize),
+			IsForecast:    true,
 		},
 	}
 

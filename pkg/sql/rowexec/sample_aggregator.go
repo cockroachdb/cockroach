@@ -489,6 +489,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			columnIDs := make([]descpb.ColumnID, len(si.spec.Columns))
 			for i, c := range si.spec.Columns {
 				columnIDs[i] = s.sampledCols[c]
+
 			}
 
 			// Delete old stats that have been superseded,
