@@ -1163,11 +1163,8 @@ func mvccGetMetadata(
 	}
 
 	// We're now on a point key. Decode its value.
-	var unsafeVal MVCCValue
 	unsafeValRaw := iter.UnsafeValue()
-	if unsafeVal, ok, err = tryDecodeSimpleMVCCValue(unsafeValRaw); !ok && err == nil {
-		unsafeVal, err = decodeExtendedMVCCValue(unsafeValRaw)
-	}
+	isTombstone, err := EncodedMVCCValueIsTombstone(unsafeValRaw)
 	if err != nil {
 		return false, 0, 0, hlc.Timestamp{}, err
 	}
@@ -1183,7 +1180,7 @@ func mvccGetMetadata(
 			meta.Deleted = true
 			meta.Timestamp = rangeKeys.Versions[0].Timestamp.ToLegacyTimestamp()
 			keyLastSeen := v.Timestamp
-			if unsafeVal.IsTombstone() {
+			if isTombstone {
 				keyLastSeen = unsafeKey.Timestamp
 			}
 			return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, keyLastSeen, nil
@@ -1192,7 +1189,7 @@ func mvccGetMetadata(
 
 	// Synthesize metadata for a regular point key.
 	meta.ValBytes = int64(len(unsafeValRaw))
-	meta.Deleted = unsafeVal.IsTombstone()
+	meta.Deleted = isTombstone
 	meta.Timestamp = unsafeKey.Timestamp.ToLegacyTimestamp()
 
 	return true, int64(EncodedMVCCKeyPrefixLength(metaKey.Key)), 0, unsafeKey.Timestamp, nil
@@ -2998,11 +2995,11 @@ func MVCCPredicateDeleteRange(
 			return false, false, false, roachpb.NewWriteTooOldError(endTime, k.Timestamp.Next(),
 				k.Key.Clone())
 		}
-		v, err := DecodeMVCCValue(vRaw)
+		isTombstone, err := EncodedMVCCValueIsTombstone(vRaw)
 		if err != nil {
 			return false, false, false, err
 		}
-		if v.IsTombstone() {
+		if isTombstone {
 			// The latest version of the key is a point tombstone.
 			return true, true, false, nil
 		}
