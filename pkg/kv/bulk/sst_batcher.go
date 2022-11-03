@@ -656,6 +656,7 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
 	b.mem.Close(ctx)
+	log.Infof(ctx, "closed the SSTBatcher %s", b.name)
 }
 
 // GetBatchSummary returns this batcher's total added rows/bytes/etc.
@@ -845,6 +846,9 @@ func (b *SSTBatcher) addSSTable(
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)
 					return nil
+				}
+				if err != nil {
+					log.Infof(ctx, "retrying AddSSTable with error %s", err.Error())
 				}
 			}
 			return err

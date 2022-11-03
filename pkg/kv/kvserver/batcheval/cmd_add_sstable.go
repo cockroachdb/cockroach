@@ -136,7 +136,8 @@ func EvalAddSSTable(
 	var err error
 	ctx, span = tracing.ChildSpan(ctx, "AddSSTable")
 	defer span.Finish()
-	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", start.Key, end.Key)
+	log.Infof(ctx, "evaluating AddSSTable [%s,%s); request timestamp: %s; SSTTimestampToRequestTimestamp: %s",
+		start.Key, end.Key, h.Timestamp.String(), sstToReqTS.String())
 
 	if min := addSSTableCapacityRemainingLimit.Get(&cArgs.EvalCtx.ClusterSettings().SV); min > 0 {
 		cap, err := cArgs.EvalCtx.GetEngineCapacity()

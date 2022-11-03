@@ -286,6 +286,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	res, err := ingestWithRetry(ctx, p, r.job, tables, typeDescs, files, format, details.Walltime,
 		r.testingKnobs, procsPerNode)
 	if err != nil {
+		log.Infof(ctx, "ingestWithRetry returning with error")
 		return err
 	}
 
@@ -1429,6 +1430,7 @@ func createNonDropDatabaseChangeJob(
 // by adding the table descriptors in DROP state, which causes the schema change
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{}, _ error) error {
+	log.Infof(ctx, "starting OnFailOrCancel")
 	p := execCtx.(sql.JobExecContext)
 
 	// Emit to the event log that the job has started reverting.
