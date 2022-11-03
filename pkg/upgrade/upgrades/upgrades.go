@@ -169,10 +169,16 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		addTenantNameColumnAndSystemTenantEntry,
 	),
+
 	upgrade.NewTenantUpgrade("set the value or system.descriptor_id_seq for the system tenant",
 		toCV(clusterversion.V23_1DescIDSequenceForSystemTenant),
 		NoPrecondition,
 		descIDSequenceForSystemTenant,
+	),
+	upgrade.NewTenantUpgrade("add a partial predicate column to system.table_statistics",
+		toCV(clusterversion.V23_1AddPartialPredicateCol),
+		NoPrecondition,
+		alterSystemTableStatisticsAddPartialPredicate,
 	),
 }
 
