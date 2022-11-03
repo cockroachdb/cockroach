@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -59,7 +60,8 @@ func TestReconciler(t *testing.T) {
 			toRemove map[string]struct{}
 		}{}
 		state.toRemove = map[string]struct{}{}
-		r := ptreconcile.New(settings, s0.DB(), ptp,
+		ief := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+		r := ptreconcile.New(settings, s0.DB(), ief, ptp,
 			ptreconcile.StatusFuncs{
 				testTaskType: func(
 					ctx context.Context, txn *kv.Txn, meta []byte,

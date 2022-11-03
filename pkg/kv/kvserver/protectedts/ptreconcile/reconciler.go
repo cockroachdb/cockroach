@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -53,6 +54,7 @@ type StatusFuncs map[string]StatusFunc
 type Reconciler struct {
 	settings    *cluster.Settings
 	db          *kv.DB
+	ief         sqlutil.InternalExecutorFactory
 	pts         protectedts.Storage
 	metrics     Metrics
 	statusFuncs StatusFuncs
@@ -60,11 +62,16 @@ type Reconciler struct {
 
 // New constructs a Reconciler.
 func New(
-	st *cluster.Settings, db *kv.DB, storage protectedts.Storage, statusFuncs StatusFuncs,
+	st *cluster.Settings,
+	db *kv.DB,
+	ief sqlutil.InternalExecutorFactory,
+	storage protectedts.Storage,
+	statusFuncs StatusFuncs,
 ) *Reconciler {
 	return &Reconciler{
 		settings:    st,
 		db:          db,
+		ief:         ief,
 		pts:         storage,
 		metrics:     makeMetrics(),
 		statusFuncs: statusFuncs,
@@ -119,7 +126,7 @@ func (r *Reconciler) run(ctx context.Context, stopper *stop.Stopper) {
 func (r *Reconciler) reconcile(ctx context.Context) {
 	// Load protected timestamp records.
 	var state ptpb.State
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := r.ief.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var err error
 		state, err = r.pts.GetState(ctx, txn)
 		return err

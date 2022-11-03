@@ -53,7 +53,7 @@ func New(cfg Config) (protectedts.Provider, error) {
 		return nil, err
 	}
 	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, cfg.Knobs)
-	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
+	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, cfg.InternalExecutorFactory, storage, cfg.ReconcileStatusFuncs)
 	cache := ptcache.New(ptcache.Config{
 		DB:        cfg.DB,
 		IeFactory: cfg.InternalExecutorFactory,
