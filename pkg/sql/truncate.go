@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
@@ -552,7 +552,7 @@ func (p *planner) reassignIndexComments(
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
 		table.ID,
-		keys.IndexCommentType,
+		catalogkeys.IndexCommentType,
 	)
 	if err != nil {
 		return err
@@ -571,7 +571,7 @@ func (p *planner) reassignIndexComments(
 				new,
 				old,
 				table.ID,
-				keys.IndexCommentType,
+				catalogkeys.IndexCommentType,
 			); err != nil {
 				return err
 			}

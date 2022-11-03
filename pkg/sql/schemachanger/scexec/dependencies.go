@@ -17,12 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -113,6 +113,19 @@ type CatalogChangeBatcher interface {
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
+
+	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
+	UpdateComment(
+		ctx context.Context, key catalogkeys.CommentKey, cmt string,
+	) error
+
+	// DeleteComment deletes a comment with (objID, subID, cmtType) key.
+	DeleteComment(
+		ctx context.Context, key catalogkeys.CommentKey,
+	) error
+
+	// DeleteTableComments deletes all comments created on the table.
+	DeleteTableComments(ctx context.Context, tblID descpb.ID) error
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.
@@ -351,10 +364,10 @@ type BackfillerProgressFlusher interface {
 // for example comments associated with a schema.
 type DescriptorMetadataUpdater interface {
 	// UpsertDescriptorComment updates a comment associated with a schema object.
-	UpsertDescriptorComment(id int64, subID int64, commentType keys.CommentType, comment string) error
+	UpsertDescriptorComment(id int64, subID int64, commentType catalogkeys.CommentType, comment string) error
 
 	// DeleteDescriptorComment deletes a comment for schema object.
-	DeleteDescriptorComment(id int64, subID int64, commentType keys.CommentType) error
+	DeleteDescriptorComment(id int64, subID int64, commentType catalogkeys.CommentType) error
 
 	//UpsertConstraintComment upserts a comment associated with a constraint.
 	UpsertConstraintComment(tableID descpb.ID, constraintID descpb.ConstraintID, comment string) error
@@ -366,7 +379,7 @@ type DescriptorMetadataUpdater interface {
 	DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error
 
 	// SwapDescriptorSubComment moves a comment from one sub ID to another.
-	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType keys.CommentType) error
+	SwapDescriptorSubComment(id int64, oldSubID int64, newSubID int64, commentType catalogkeys.CommentType) error
 
 	// DeleteAllCommentsForTables deletes all table-bound comments for the tables
 	// with the specified IDs.

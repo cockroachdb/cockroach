@@ -10,6 +10,7 @@ go_library(
         "descriptor.go",
         "descriptor_id_set.go",
         "errors.go",
+        "metadata.go",
         "post_deserialization_changes.go",
         "privilege_object.go",
         "schema.go",
@@ -23,6 +24,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/clusterversion",
+        "//pkg/config/zonepb",
         "//pkg/geo/geoindex",
         "//pkg/keys",
         "//pkg/kv",

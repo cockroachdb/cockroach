@@ -37,6 +37,7 @@ add synthetic descriptor #108:
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 10 MutationType ops
+delete all comments for table descriptor 108
 delete object namespace entry {104 105 table_regional_by_table} -> 108
 upsert descriptor #106
    type:
@@ -85,7 +86,6 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
-delete all comments for table descriptors [108]
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_table CASCADE"
   descriptor IDs: [106 108]
 # end PreCommitPhase

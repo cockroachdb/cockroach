@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -87,13 +87,13 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 func (n *commentOnSchemaNode) startExec(params runParams) error {
 	if n.n.Comment != nil {
 		err := n.metadataUpdater.UpsertDescriptorComment(
-			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType, *n.n.Comment)
+			int64(n.schemaDesc.GetID()), 0, catalogkeys.SchemaCommentType, *n.n.Comment)
 		if err != nil {
 			return err
 		}
 	} else {
 		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.schemaDesc.GetID()), 0, keys.SchemaCommentType)
+			int64(n.schemaDesc.GetID()), 0, catalogkeys.SchemaCommentType)
 		if err != nil {
 			return err
 		}

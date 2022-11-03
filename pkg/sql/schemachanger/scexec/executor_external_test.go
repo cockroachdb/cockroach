@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -519,14 +519,14 @@ var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpsertDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType, comment string,
+	id int64, subID int64, commentType catalogkeys.CommentType, comment string,
 ) error {
 	return nil
 }
 
 // DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType,
+	id int64, subID int64, commentType catalogkeys.CommentType,
 ) error {
 	return nil
 }
@@ -557,7 +557,7 @@ func (noopMetadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID 
 
 // SwapDescriptorSubComment implements  scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) SwapDescriptorSubComment(
-	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
+	id int64, oldSubID int64, newSubID int64, commentType catalogkeys.CommentType,
 ) error {
 	return nil
 }

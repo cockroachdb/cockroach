@@ -249,6 +249,22 @@ func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, e
 	return roachpb.MustMakeTenantID(id), nil
 }
 
+// DecodeZoneConfigMetadataID decodes a descriptor id from zones key.
+func (d sqlDecoder) DecodeZoneConfigMetadataID(key roachpb.Key) ([]byte, uint32, error) {
+	remaining, tableID, indexID, err := d.DecodeIndexPrefix(key)
+	if err != nil {
+		return nil, 0, err
+	}
+	if tableID != ZonesTableID || indexID != ZonesTablePrimaryIndexID {
+		return nil, 0, errors.Errorf("key is not a zones table entry: %v", key)
+	}
+	remaining, id, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return nil, 0, err
+	}
+	return remaining, uint32(id), nil
+}
+
 // RewriteSpanToTenantPrefix updates the passed Span, potentially in-place, to
 // ensure the Key and EndKey have the passed tenant prefix, regardless of what
 // prior tenant prefix, if any, they had before, and returns the updated Span.

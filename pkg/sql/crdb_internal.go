@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -4892,7 +4893,7 @@ CREATE TABLE crdb_internal.predefined_comments (
 		// NB if ever anyone were to extend this table to carry column
 		// comments, make sure to update pg_catalog.col_description to
 		// retrieve those comments.
-		tableCommentKey := tree.NewDInt(tree.DInt(keys.TableCommentType))
+		tableCommentKey := tree.NewDInt(tree.DInt(catalogkeys.TableCommentType))
 		vt := p.getVirtualTabler()
 		vEntries := vt.getSchemas()
 		vSchemaNames := vt.getSchemaNames()

@@ -13,8 +13,8 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -65,7 +65,7 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 		err := n.metadataUpdater.UpsertDescriptorComment(
 			int64(n.tableDesc.ID),
 			int64(n.index.GetID()),
-			keys.IndexCommentType,
+			catalogkeys.IndexCommentType,
 			*n.n.Comment,
 		)
 		if err != nil {
@@ -73,7 +73,7 @@ func (n *commentOnIndexNode) startExec(params runParams) error {
 		}
 	} else {
 		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.tableDesc.ID), int64(n.index.GetID()), keys.IndexCommentType)
+			int64(n.tableDesc.ID), int64(n.index.GetID()), catalogkeys.IndexCommentType)
 		if err != nil {
 			return err
 		}

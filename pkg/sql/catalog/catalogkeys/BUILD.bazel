@@ -1,9 +1,13 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "catalogkeys",
-    srcs = ["keys.go"],
+    srcs = [
+        "keys.go",
+        ":gen-comment-type-stringer",  #keep
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys",
     visibility = ["//visibility:public"],
     deps = [
@@ -31,6 +35,12 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/util/leaktest",
     ],
+)
+
+stringer(
+    name = "gen-comment-type-stringer",
+    src = "keys.go",
+    typ = "CommentType",
 )
 
 get_x_data(name = "get_x_data")

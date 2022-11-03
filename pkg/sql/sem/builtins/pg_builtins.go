@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1051,7 +1051,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					`
 SELECT comment FROM system.comments c
 WHERE c.type=$1::int AND c.object_id=$2::int AND c.sub_id=$3::int LIMIT 1
-`, keys.ColumnCommentType, args[0], args[1])
+`, catalogkeys.ColumnCommentType, args[0], args[1])
 				if err != nil {
 					return nil, err
 				}

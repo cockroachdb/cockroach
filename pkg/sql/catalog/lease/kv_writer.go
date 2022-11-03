@@ -49,11 +49,15 @@ func leaseTableWithID(id descpb.ID) catalog.TableDescriptor {
 }
 
 func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	return w.do(ctx, txn, l, w.w.Insert)
+	return w.do(ctx, txn, l, func(b *kv.Batch, datum ...tree.Datum) error {
+		return w.w.Insert(ctx, b, false /* kvTrace */, datum...)
+	})
 }
 
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	return w.do(ctx, txn, l, w.w.Delete)
+	return w.do(ctx, txn, l, func(b *kv.Batch, datum ...tree.Datum) error {
+		return w.w.Delete(ctx, b, false /* kvTrace */, datum...)
+	})
 }
 
 type addToBatchFunc = func(*kv.Batch, ...tree.Datum) error

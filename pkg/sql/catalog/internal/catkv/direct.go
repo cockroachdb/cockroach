@@ -142,11 +142,8 @@ func MakeDirect(
 	codec keys.SQLCodec, version clusterversion.ClusterVersion, dvmp DescriptorValidationModeProvider,
 ) Direct {
 	return &direct{
-		StoredCatalog: StoredCatalog{
-			CatalogReader:                    NewUncachedCatalogReader(codec),
-			DescriptorValidationModeProvider: dvmp,
-		},
-		version: version,
+		StoredCatalog: MakeStoredCatalog(NewUncachedCatalogReader(codec), dvmp, nil /* monitor */),
+		version:       version,
 	}
 }
 

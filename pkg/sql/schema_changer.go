@@ -1335,13 +1335,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 	type commentToDelete struct {
 		id          int64
 		subID       int64
-		commentType keys.CommentType
+		commentType catalogkeys.CommentType
 	}
 	type commentToSwap struct {
 		id          int64
 		oldSubID    int64
 		newSubID    int64
-		commentType keys.CommentType
+		commentType catalogkeys.CommentType
 	}
 	var commentsToDelete []commentToDelete
 	var commentsToSwap []commentToSwap
@@ -1500,7 +1500,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 					commentToDelete{
 						id:          int64(scTable.GetID()),
 						subID:       int64(id),
-						commentType: keys.IndexCommentType,
+						commentType: catalogkeys.IndexCommentType,
 					})
 				for i := range pkSwap.PrimaryKeySwapDesc().OldIndexes {
 					// Skip the primary index.
@@ -1513,7 +1513,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 							id:          int64(scTable.GetID()),
 							oldSubID:    int64(pkSwap.PrimaryKeySwapDesc().OldIndexes[i]),
 							newSubID:    int64(pkSwap.PrimaryKeySwapDesc().NewIndexes[i]),
-							commentType: keys.IndexCommentType,
+							commentType: catalogkeys.IndexCommentType,
 						},
 					)
 				}

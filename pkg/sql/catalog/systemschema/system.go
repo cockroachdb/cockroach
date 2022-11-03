@@ -1639,11 +1639,11 @@ var (
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []descpb.ColumnID{1, 2, 3}},
-				{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
+				{Name: "fam_4_comment", ID: keys.CommentsTableCommentColFamID, ColumnNames: []string{"comment"}, ColumnIDs: []descpb.ColumnID{4}, DefaultColumnID: 4},
 			},
 			descpb.IndexDescriptor{
 				Name:                "primary",
-				ID:                  1,
+				ID:                  keys.CommentsTablePrimaryKeyIndexID,
 				Unique:              true,
 				KeyColumnNames:      []string{"type", "object_id", "sub_id"},
 				KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
