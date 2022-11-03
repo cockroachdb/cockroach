@@ -1481,6 +1481,8 @@ system              public             29_44_3_not_null                         
 system              public             primary                                                                                                         system         public        database_role_settings           PRIMARY KEY      NO             NO
 system              public             29_3_1_not_null                                                                                                 system         public        descriptor                       CHECK            NO             NO
 system              public             primary                                                                                                         system         public        descriptor                       PRIMARY KEY      NO             NO
+system              public             29_7_1_not_null                                                                                                 system         public        descriptor_id_seq                CHECK            NO             NO
+system              public             primary                                                                                                         system         public        descriptor_id_seq                PRIMARY KEY      NO             NO
 system              public             29_12_1_not_null                                                                                                system         public        eventlog                         CHECK            NO             NO
 system              public             29_12_2_not_null                                                                                                system         public        eventlog                         CHECK            NO             NO
 system              public             29_12_3_not_null                                                                                                system         public        eventlog                         CHECK            NO             NO
@@ -1861,6 +1863,7 @@ system              public             29_5_1_not_null                          
 system              public             29_6_1_not_null                                                                                                 name IS NOT NULL
 system              public             29_6_2_not_null                                                                                                 value IS NOT NULL
 system              public             29_6_3_not_null                                                                                                 lastUpdated IS NOT NULL
+system              public             29_7_1_not_null                                                                                                 value IS NOT NULL
 system              public             29_8_1_not_null                                                                                                 id IS NOT NULL
 system              public             29_8_2_not_null                                                                                                 active IS NOT NULL
 system              public             check_bounds                                                                                                    ((start_key < end_key))
@@ -1881,6 +1884,7 @@ system         public        comments                         type              
 system         public        database_role_settings           database_id                                                                                               system              public             primary
 system         public        database_role_settings           role_name                                                                                                 system              public             primary
 system         public        descriptor                       id                                                                                                        system              public             primary
+system         public        descriptor_id_seq                value                                                                                                     system              public             primary
 system         public        eventlog                         timestamp                                                                                                 system              public             primary
 system         public        eventlog                         uniqueID                                                                                                  system              public             primary
 system         public        external_connections             connection_name                                                                                           system              public             primary
@@ -2054,6 +2058,7 @@ system         public        database_role_settings           role_name         
 system         public        database_role_settings           settings                                                                                                  3
 system         public        descriptor                       descriptor                                                                                                2
 system         public        descriptor                       id                                                                                                        1
+system         public        descriptor_id_seq                value                                                                                                     1
 system         public        eventlog                         eventType                                                                                                 2
 system         public        eventlog                         info                                                                                                      5
 system         public        eventlog                         reportingID                                                                                               4
@@ -3056,6 +3061,8 @@ NULL     root     system         public              database_role_settings     
 NULL     root     system         public              database_role_settings                 UPDATE          YES           NO
 NULL     admin    system         public              descriptor                             SELECT          YES           YES
 NULL     root     system         public              descriptor                             SELECT          YES           YES
+NULL     admin    system         public              descriptor_id_seq                      SELECT          YES           YES
+NULL     root     system         public              descriptor_id_seq                      SELECT          YES           YES
 NULL     admin    system         public              eventlog                               DELETE          YES           NO
 NULL     admin    system         public              eventlog                               INSERT          YES           NO
 NULL     admin    system         public              eventlog                               SELECT          YES           YES
@@ -3635,6 +3642,8 @@ NULL     root     system         public              settings                   
 NULL     root     system         public              settings                               INSERT          YES           NO
 NULL     root     system         public              settings                               SELECT          YES           YES
 NULL     root     system         public              settings                               UPDATE          YES           NO
+NULL     admin    system         public              descriptor_id_seq                      SELECT          YES           YES
+NULL     root     system         public              descriptor_id_seq                      SELECT          YES           YES
 NULL     admin    system         public              tenants                                SELECT          YES           YES
 NULL     root     system         public              tenants                                SELECT          YES           YES
 NULL     admin    system         public              lease                                  DELETE          YES           NO

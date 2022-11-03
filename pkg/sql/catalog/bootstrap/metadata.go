@@ -166,11 +166,13 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		value := roachpb.Value{}
 		value.SetInt(int64(ms.FirstNonSystemDescriptorID()))
 		add(ms.codec.SequenceKey(keys.DescIDSequenceID), value)
-		// We need to also set the value of the legacy descriptor ID generator
-		// until clusterversion.V23_1DescIDSequenceForSystemTenant is removed.
-		legacyValue := roachpb.Value{}
-		legacyValue.SetInt(int64(ms.FirstNonSystemDescriptorID()))
-		add(keys.LegacyDescIDGenerator, legacyValue)
+		if ms.codec.ForSystemTenant() {
+			// We need to also set the value of the legacy descriptor ID generator
+			// until clusterversion.V23_1DescIDSequenceForSystemTenant is removed.
+			legacyValue := roachpb.Value{}
+			legacyValue.SetInt(int64(ms.FirstNonSystemDescriptorID()))
+			add(keys.LegacyDescIDGenerator, legacyValue)
+		}
 	}
 
 	// Generate initial values for system databases and tables, which have
@@ -367,7 +369,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 // NumSystemTablesForSystemTenant is the number of system tables defined on
 // the system tenant. This constant is only defined to avoid having to manually
 // update auto stats tests every time a new system table is added.
-const NumSystemTablesForSystemTenant = 40
+const NumSystemTablesForSystemTenant = 41
 
 // addSplitIDs adds a split point for each of the PseudoTableIDs to the supplied
 // MetadataSchema.
