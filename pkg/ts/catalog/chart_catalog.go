@@ -1671,6 +1671,7 @@ var charts = []sectionDescription{
 					"leases.expiration",
 					"replicas.leaseholders",
 					"replicas.leaders_not_leaseholders",
+					"replicas.leaders_invalid_lease",
 				},
 			},
 			{
