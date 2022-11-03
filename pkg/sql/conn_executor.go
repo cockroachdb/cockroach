@@ -3352,7 +3352,9 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 func (ex *connExecutor) getDescIDGenerator() eval.DescIDGenerator {
 	if ex.server.cfg.TestingKnobs.UseTransactionalDescIDGenerator &&
 		ex.state.mu.txn != nil {
-		return descidgen.NewTransactionalGenerator(ex.server.cfg.Codec, ex.state.mu.txn)
+		return descidgen.NewTransactionalGenerator(
+			ex.server.cfg.Settings, ex.server.cfg.Codec, ex.state.mu.txn,
+		)
 	}
 	return ex.server.cfg.DescIDGenerator
 }

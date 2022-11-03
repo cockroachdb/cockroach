@@ -900,7 +900,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		SystemTableIDResolver:      descs.MakeSystemTableIDResolver(collectionFactory, cfg.internalExecutorFactory, cfg.db),
 		ConsistencyChecker:         consistencychecker.NewConsistencyChecker(cfg.db),
 		RangeProber:                rangeprober.NewRangeProber(cfg.db),
-		DescIDGenerator:            descidgen.NewGenerator(codec, cfg.db),
+		DescIDGenerator:            descidgen.NewGenerator(cfg.Settings, codec, cfg.db),
 		RangeStatsFetcher:          rangeStatsFetcher,
 		EventsExporter:             cfg.eventsServer,
 	}

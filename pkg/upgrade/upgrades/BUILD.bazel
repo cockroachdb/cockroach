@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "alter_sql_instances_locality.go",
         "alter_statement_statistics_index_recommendations.go",
+        "desc_id_sequence_for_system_tenant.go",
         "descriptor_utils.go",
         "ensure_sql_schema_telemetry_schedule.go",
         "fix_userfile_descriptor_corruption.go",
@@ -34,6 +35,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/security/username",
+        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catalogkeys",
@@ -73,6 +75,7 @@ go_test(
         "alter_sql_instances_locality_test.go",
         "alter_statement_statistics_index_recommendations_test.go",
         "builtins_test.go",
+        "desc_id_sequence_for_system_tenant_test.go",
         "descriptor_utils_test.go",
         "ensure_sql_schema_telemetry_schedule_test.go",
         "fix_userfile_descriptor_corruption_test.go",

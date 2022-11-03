@@ -917,7 +917,8 @@ func parseAndCreateBundleTableDescs(
 	}}
 	switch format.Format {
 	case roachpb.IOFileFormat_Mysqldump:
-		id, err := descidgen.PeekNextUniqueDescID(ctx, p.ExecCfg().DB, p.ExecCfg().Codec)
+		idgen := descidgen.NewGenerator(p.ExecCfg().Settings, p.ExecCfg().Codec, p.ExecCfg().DB)
+		id, err := idgen.PeekNextUniqueDescID(ctx)
 		if err != nil {
 			return tableDescs, schemaDescs, err
 		}

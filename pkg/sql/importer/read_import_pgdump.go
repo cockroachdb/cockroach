@@ -462,7 +462,8 @@ func getNextPlaceholderDescID(
 	ctx context.Context, execCfg *sql.ExecutorConfig,
 ) (_ descpb.ID, err error) {
 	if placeholderID == 0 {
-		placeholderID, err = descidgen.PeekNextUniqueDescID(ctx, execCfg.DB, execCfg.Codec)
+		idgen := descidgen.NewGenerator(execCfg.Settings, execCfg.Codec, execCfg.DB)
+		placeholderID, err = idgen.PeekNextUniqueDescID(ctx)
 		if err != nil {
 			return descpb.InvalidID, err
 		}

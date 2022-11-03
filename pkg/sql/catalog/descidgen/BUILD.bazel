@@ -7,10 +7,15 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/eval",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
