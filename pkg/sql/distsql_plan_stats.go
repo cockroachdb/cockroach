@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -224,7 +225,17 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// be the latest due to the newest to oldest ordering property of the
 	// cache.
 	for _, t := range tableStats {
-		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] && t.PartialPredicate == "" && t.Name != jobspb.ForecastStatsName {
+		// TODO (faizaanmadhani): Ideally, we don't want to verify that
+		// a statistic is forecasted or merged based on the name because
+		// someone could create a statistic named __forecast__ or __merged__.
+		// Update system.table_statistics to add an enum to indicate which
+		// type of statistic it is.
+		if len(t.ColumnIDs) == 1 &&
+			column.GetID() == t.ColumnIDs[0] &&
+			t.PartialPredicate == "" &&
+			t.Name != jobspb.ForecastStatsName &&
+			t.Name != jobspb.MergedStatsName &&
+			(!colinfo.ColumnTypeIsInvertedIndexable(column.GetType()) || t.HistogramData.ColumnType.Family() != types.BytesFamily) {
 			histogram = t.Histogram
 			break
 		}
@@ -270,6 +281,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		Columns:             make([]uint32, len(reqStat.columns)),
 		StatName:            reqStat.name,
 		PartialPredicate:    extremesPredicate,
+		PrevLowerBound:      tree.Serialize(lowerBound),
 	}
 	// For now, this loop should iterate only once, as we only
 	// handle single-column partial statistics.
