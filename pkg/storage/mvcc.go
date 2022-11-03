@@ -863,12 +863,14 @@ func MVCCBlindPutProto(
 // table (i.e. unreplicated locks) and locks only stored in the persistent lock
 // table keyspace (i.e. replicated locks that have yet to be "discovered").
 type LockTableView interface {
-	// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
-	// a conflicting transaction, given the caller's own desired locking strength.
-	// If so, the lock holder is returned. A transaction's own lock does not
-	// appear to be locked to itself (false is returned). The method is used by
-	// requests in conjunction with the SkipLocked wait policy to determine which
-	// keys they should skip over during evaluation.
+	// IsKeyLockedByConflictingTxn returns whether the specified key is locked or
+	// reserved (see lockTable "reservations") by a conflicting transaction, given
+	// the caller's own desired locking strength. If so, true is returned. If the
+	// key is locked, the lock holder is also returned. Otherwise, if the key is
+	// reserved, nil is also returned. A transaction's own lock or reservation
+	// does not appear to be locked to itself (false is returned). The method is
+	// used by requests in conjunction with the SkipLocked wait policy to
+	// determine which keys they should skip over during evaluation.
 	IsKeyLockedByConflictingTxn(roachpb.Key, lock.Strength) (bool, *enginepb.TxnMeta)
 }
 
@@ -3613,6 +3615,9 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 		}
 		if err := protoutil.Unmarshal(reader.Value(), &meta); err != nil {
 			return nil, err
+		}
+		if meta.Txn == nil {
+			return nil, errors.AssertionFailedf("unexpected nil MVCCMetadata.Txn: %v", meta)
 		}
 		intents = append(intents, roachpb.MakeIntent(meta.Txn, key.Key))
 	}
