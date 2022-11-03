@@ -322,6 +322,10 @@ const (
 	// system tenant.
 	V23_1DescIDSequenceForSystemTenant
 
+	// AddPartialPredicateCol adds a column to store the predicate
+	// for a partial statistics collection
+	V23_1AddPartialPredicateCol
+
 	// *************************************************
 	// Step (1): Add new versions here.
 	// Do not add new versions to a patch release.
@@ -527,6 +531,10 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V23_1DescIDSequenceForSystemTenant,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 6},
+	},
+	{
+		Key:     V23_1AddPartialPredicateCol,
+		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 8},
 	},
 
 	// *************************************************
