@@ -123,7 +123,7 @@ func (s *SQLTranslator) Translate(
 	// timestamp subsystem, and the internal limits to limit the size of this
 	// table, there is scope for improvement in the future. One option could be
 	// a rangefeed-backed materialized view of the system table.
-	ptsState, err := s.ptsProvider.GetState(ctx, s.GetTxn())
+	ptsState, err := s.ptsProvider.GetState(ctx, s.GetTxn(), s.GetInternalExecutor())
 	if err != nil {
 		return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to get protected timestamp state")
 	}
