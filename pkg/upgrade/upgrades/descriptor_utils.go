@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -28,10 +29,14 @@ import (
 // createSystemTable is a function to inject a new system table. If the table
 // already exists, ths function is a no-op.
 func createSystemTable(
-	ctx context.Context, db *kv.DB, codec keys.SQLCodec, desc catalog.TableDescriptor,
+	ctx context.Context,
+	db *kv.DB,
+	settings *cluster.Settings,
+	codec keys.SQLCodec,
+	desc catalog.TableDescriptor,
 ) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, _, err := CreateSystemTableInTxn(ctx, db, txn, codec, desc)
+		_, _, err := CreateSystemTableInTxn(ctx, settings, txn, codec, desc)
 		return err
 	})
 }
@@ -39,7 +44,11 @@ func createSystemTable(
 // CreateSystemTableInTxn is a function to inject a new system table. If the table
 // already exists, ths function is a no-op.
 func CreateSystemTableInTxn(
-	ctx context.Context, db *kv.DB, txn *kv.Txn, codec keys.SQLCodec, desc catalog.TableDescriptor,
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	desc catalog.TableDescriptor,
 ) (descpb.ID, bool, error) {
 	// We install the table at the KV layer so that we have tighter control over the
 	// placement and fewer deep dependencies. Most new system table descriptors will
@@ -55,7 +64,7 @@ func CreateSystemTableInTxn(
 		return descpb.InvalidID, false, nil
 	}
 	if desc.GetID() == descpb.InvalidID {
-		id, err := descidgen.NewTransactionalGenerator(codec, txn).
+		id, err := descidgen.NewTransactionalGenerator(settings, codec, txn).
 			GenerateUniqueDescID(ctx)
 		if err != nil {
 			return descpb.InvalidID, false, err

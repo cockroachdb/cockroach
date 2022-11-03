@@ -15,15 +15,27 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
-// roleIDSequenceMigration creates the system.role_id_sequence sequence.
-func roleIDSequenceMigration(
+func descIDSequenceForSystemTenant(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
-	return createSystemTable(
-		ctx, d.DB, d.Settings, d.Codec, systemschema.RoleIDSequence,
-	)
+	if !d.Codec.ForSystemTenant() {
+		return nil
+	}
+	mut := tabledesc.NewBuilder(systemschema.DescIDSequence.TableDesc()).BuildCreatedMutableTable()
+	return d.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		oldEntry, err := txn.GetForUpdate(ctx, keys.LegacyDescIDGenerator)
+		if err != nil {
+			return err
+		}
+		mut.SequenceOpts.Start = oldEntry.ValueInt()
+		_, _, err = CreateSystemTableInTxn(ctx, d.Settings, txn, keys.SystemSQLCodec, mut)
+		return err
+	})
 }

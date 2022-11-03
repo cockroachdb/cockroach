@@ -165,7 +165,12 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	{
 		value := roachpb.Value{}
 		value.SetInt(int64(ms.FirstNonSystemDescriptorID()))
-		add(ms.codec.DescIDSequenceKey(), value)
+		add(ms.codec.SequenceKey(keys.DescIDSequenceID), value)
+		// We need to also set the value of the legacy descriptor ID generator
+		// until clusterversion.V23_1DescIDSequenceForSystemTenant is removed.
+		legacyValue := roachpb.Value{}
+		legacyValue.SetInt(int64(ms.FirstNonSystemDescriptorID()))
+		add(keys.LegacyDescIDGenerator, legacyValue)
 	}
 
 	// Generate initial values for system databases and tables, which have
@@ -290,9 +295,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.UsersTable)
 	target.AddDescriptor(systemschema.ZonesTable)
 	target.AddDescriptor(systemschema.SettingsTable)
-	// Only add the descriptor ID sequence if this is a non-system tenant.
-	// System tenants use the global descIDGenerator key. See #48513.
-	target.AddDescriptorForNonSystemTenant(systemschema.DescIDSequence)
+	target.AddDescriptor(systemschema.DescIDSequence)
 	target.AddDescriptorForSystemTenant(systemschema.TenantsTable)
 
 	// Add all the other system tables.

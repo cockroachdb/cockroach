@@ -281,10 +281,12 @@ var (
 	// > 1.0 persist the version at which they were bootstrapped.
 	BootstrapVersionKey = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("bootstrap-version")))
 	//
-	// descIDGenerator is the global descriptor ID generator sequence used for
-	// table and namespace IDs for the system tenant. All other tenants use a
-	// SQL sequence for this purpose. See sqlEncoder.DescIDSequenceKey.
-	descIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
+	// LegacyDescIDGenerator is the legacy global descriptor ID generator sequence
+	// used for table and namespace IDs for the system tenant in clusters <23.1.
+	// Otherwise, a SQL sequence is used for this purpose.
+	//
+	// TODO(postamar): remove along with clusterversion.V23_1DescIDSequenceForSystemTenant
+	LegacyDescIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("desc-idgen")))
 	// NodeIDGenerator is the global node ID generator sequence.
 	NodeIDGenerator = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("node-idgen")))
 	// RangeIDGenerator is the global range ID generator sequence.

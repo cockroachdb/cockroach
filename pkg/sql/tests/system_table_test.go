@@ -86,7 +86,7 @@ func TestInitialKeys(t *testing.T) {
 
 		// Verify that IDGenerator value is correct.
 		found := false
-		idgen := codec.DescIDSequenceKey()
+		idgen := codec.SequenceKey(keys.DescIDSequenceID)
 		var idgenkv roachpb.KeyValue
 		for _, v := range kv {
 			if v.Key.Equal(idgen) {
