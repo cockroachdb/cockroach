@@ -13,8 +13,8 @@ package scmutationexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -96,34 +96,35 @@ func (m *visitor) RemoveAllTableComments(_ context.Context, op scop.RemoveAllTab
 }
 
 func (m *visitor) RemoveTableComment(_ context.Context, op scop.RemoveTableComment) error {
-	m.s.DeleteComment(op.TableID, 0, keys.TableCommentType)
+	m.s.DeleteComment(op.TableID, 0, catalogkeys.TableCommentType)
 	return nil
 }
 
 func (m *visitor) RemoveDatabaseComment(_ context.Context, op scop.RemoveDatabaseComment) error {
-	m.s.DeleteComment(op.DatabaseID, 0, keys.DatabaseCommentType)
+	m.s.DeleteComment(op.DatabaseID, 0, catalogkeys.DatabaseCommentType)
 	return nil
 }
 
 func (m *visitor) RemoveSchemaComment(_ context.Context, op scop.RemoveSchemaComment) error {
-	m.s.DeleteComment(op.SchemaID, 0, keys.SchemaCommentType)
+	m.s.DeleteComment(op.SchemaID, 0, catalogkeys.SchemaCommentType)
 	return nil
 }
 
 func (m *visitor) RemoveIndexComment(_ context.Context, op scop.RemoveIndexComment) error {
-	m.s.DeleteComment(op.TableID, int(op.IndexID), keys.IndexCommentType)
+	m.s.DeleteComment(op.TableID, int(op.IndexID), catalogkeys.IndexCommentType)
 	return nil
 }
 
 func (m *visitor) RemoveColumnComment(_ context.Context, op scop.RemoveColumnComment) error {
-	m.s.DeleteComment(op.TableID, int(op.PgAttributeNum), keys.ColumnCommentType)
+	m.s.DeleteComment(op.TableID, int(op.PgAttributeNum), catalogkeys.ColumnCommentType)
 	return nil
 }
 
 func (m *visitor) RemoveConstraintComment(
-	ctx context.Context, op scop.RemoveConstraintComment,
+	_ context.Context, op scop.RemoveConstraintComment,
 ) error {
-	return m.s.DeleteConstraintComment(ctx, op.TableID, op.ConstraintID)
+	m.s.DeleteComment(op.TableID, int(op.ConstraintID), catalogkeys.ConstraintCommentType)
+	return nil
 }
 
 func (m *visitor) RemoveDatabaseRoleSettings(

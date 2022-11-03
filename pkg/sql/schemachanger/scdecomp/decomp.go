@@ -33,7 +33,7 @@ type walkCtx struct {
 	lookupFn             func(id catid.DescID) catalog.Descriptor
 	cachedTypeIDClosures map[catid.DescID]map[catid.DescID]struct{}
 	backRefs             catalog.DescriptorIDSet
-	commentCache         CommentGetter
+	commentReader        CommentGetter
 	zoneConfigReader     ZoneConfigGetter
 }
 
@@ -61,7 +61,7 @@ func WalkDescriptor(
 	desc catalog.Descriptor,
 	lookupFn func(id catid.DescID) catalog.Descriptor,
 	ev ElementVisitor,
-	commentCache CommentGetter,
+	commentReader CommentGetter,
 	zoneConfigReader ZoneConfigGetter,
 ) (backRefs catalog.DescriptorIDSet) {
 	w := walkCtx{
@@ -70,7 +70,7 @@ func WalkDescriptor(
 		ev:                   ev,
 		lookupFn:             lookupFn,
 		cachedTypeIDClosures: make(map[catid.DescID]map[catid.DescID]struct{}),
-		commentCache:         commentCache,
+		commentReader:        commentReader,
 		zoneConfigReader:     zoneConfigReader,
 	}
 	w.walkRoot()
@@ -126,13 +126,11 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		DatabaseID: db.GetID(),
 		RoleName:   scpb.PlaceHolderRoleName,
 	})
-	if comment, ok, err := w.commentCache.GetDatabaseComment(w.ctx, db.GetID()); err == nil && ok {
+	if comment, ok := w.commentReader.GetDatabaseComment(db.GetID()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseComment{
 			DatabaseID: db.GetID(),
 			Comment:    comment,
 		})
-	} else if err != nil {
-		panic(err)
 	}
 	if db.IsMultiRegion() {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseRegionConfig{
@@ -158,13 +156,11 @@ func (w *walkCtx) walkSchema(sc catalog.SchemaDescriptor) {
 		SchemaID:         sc.GetID(),
 		ParentDatabaseID: sc.GetParentID(),
 	})
-	if comment, ok, err := w.commentCache.GetSchemaComment(w.ctx, sc.GetID()); err == nil && ok {
+	if comment, ok := w.commentReader.GetSchemaComment(sc.GetID()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.SchemaComment{
 			SchemaID: sc.GetID(),
 			Comment:  comment,
 		})
-	} else if err != nil {
-		panic(err)
 	}
 }
 
@@ -279,13 +275,11 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.walkLocality(tbl, l)
 	}
 	{
-		if comment, ok, err := w.commentCache.GetTableComment(w.ctx, tbl.GetID()); err == nil && ok {
+		if comment, ok := w.commentReader.GetTableComment(tbl.GetID()); ok {
 			w.ev(scpb.Status_PUBLIC, &scpb.TableComment{
 				TableID: tbl.GetID(),
 				Comment: comment,
 			})
-		} else if err != nil {
-			panic(err)
 		}
 	}
 	if !tbl.IsSequence() {
@@ -333,10 +327,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	// operations on tables. To minimize RTT impact limit
 	// this to only tables and materialized views.
 	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() {
-		zoneCfg, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
-		if err != nil {
-			panic(err)
-		}
+		zoneCfg := w.zoneConfigReader.GetZoneConfig(tbl.GetID())
 		if zoneCfg != nil {
 			w.ev(scpb.Status_PUBLIC,
 				&scpb.TableZoneConfig{
@@ -453,15 +444,13 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			Expression: *expr,
 		})
 	}
-	if comment, ok, err := w.commentCache.GetColumnComment(w.ctx, tbl.GetID(), col.GetPGAttributeNum()); err == nil && ok {
+	if comment, ok := w.commentReader.GetColumnComment(tbl.GetID(), col.GetPGAttributeNum()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnComment{
 			TableID:        tbl.GetID(),
 			ColumnID:       col.GetID(),
 			Comment:        comment,
 			PgAttributeNum: col.GetPGAttributeNum(),
 		})
-	} else if err != nil {
-		panic(err)
 	}
 	owns := catalog.MakeDescriptorIDSet(col.ColumnDesc().OwnsSequenceIds...)
 	owns.Remove(catid.InvalidDescID)
@@ -563,24 +552,20 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		IndexID: idx.GetID(),
 		Name:    idx.GetName(),
 	})
-	if comment, ok, err := w.commentCache.GetIndexComment(w.ctx, tbl.GetID(), idx.GetID()); err == nil && ok {
+	if comment, ok := w.commentReader.GetIndexComment(tbl.GetID(), idx.GetID()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.IndexComment{
 			TableID: tbl.GetID(),
 			IndexID: idx.GetID(),
 			Comment: comment,
 		})
-	} else if err != nil {
-		panic(err)
 	}
 	if constraintID := idx.GetConstraintID(); constraintID != 0 {
-		if comment, ok, err := w.commentCache.GetConstraintComment(w.ctx, tbl.GetID(), constraintID); err == nil && ok {
+		if comment, ok := w.commentReader.GetConstraintComment(tbl.GetID(), constraintID); ok {
 			w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
 				TableID:      tbl.GetID(),
 				ConstraintID: constraintID,
 				Comment:      comment,
 			})
-		} else if err != nil {
-			panic(err)
 		}
 	}
 	w.ev(scpb.Status_PUBLIC, &scpb.IndexData{
@@ -604,7 +589,7 @@ func (w *walkCtx) walkUniqueWithoutIndexConstraint(
 		ConstraintID: c.GetConstraintID(),
 		Name:         c.GetName(),
 	})
-	if comment, ok, err := w.commentCache.GetConstraintComment(w.ctx, tbl.GetID(), c.GetConstraintID()); err == nil && ok {
+	if comment, ok := w.commentReader.GetConstraintComment(tbl.GetID(), c.GetConstraintID()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
@@ -632,14 +617,12 @@ func (w *walkCtx) walkCheckConstraint(tbl catalog.TableDescriptor, c catalog.Che
 		ConstraintID: c.GetConstraintID(),
 		Name:         c.GetName(),
 	})
-	if comment, ok, err := w.commentCache.GetConstraintComment(w.ctx, tbl.GetID(), c.GetConstraintID()); err == nil && ok {
+	if comment, ok := w.commentReader.GetConstraintComment(tbl.GetID(), c.GetConstraintID()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
 			Comment:      comment,
 		})
-	} else if err != nil {
-		panic(err)
 	}
 }
 
@@ -659,13 +642,11 @@ func (w *walkCtx) walkForeignKeyConstraint(
 		ConstraintID: c.GetConstraintID(),
 		Name:         c.GetName(),
 	})
-	if comment, ok, err := w.commentCache.GetConstraintComment(w.ctx, tbl.GetID(), c.GetConstraintID()); err == nil && ok {
+	if comment, ok := w.commentReader.GetConstraintComment(tbl.GetID(), c.GetConstraintID()); ok {
 		w.ev(scpb.Status_PUBLIC, &scpb.ConstraintComment{
 			TableID:      tbl.GetID(),
 			ConstraintID: c.GetConstraintID(),
 			Comment:      comment,
 		})
-	} else if err != nil {
-		panic(err)
 	}
 }

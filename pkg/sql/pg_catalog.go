@@ -21,9 +21,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -1568,27 +1568,27 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 			objID := comment[0]
 			objSubID := comment[1]
 			description := comment[2]
-			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
+			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
 
 			classOid := oidZero
 
 			switch commentType {
-			case keys.DatabaseCommentType:
+			case catalogkeys.DatabaseCommentType:
 				// Database comments are exported in pg_shdescription.
 				continue
-			case keys.SchemaCommentType:
+			case catalogkeys.SchemaCommentType:
 				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
 				// for this, but it's not ideal. The backing column for objId should be
 				// changed to use the OID type.
 				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogNamespaceTableID)
-			case keys.ColumnCommentType, keys.TableCommentType:
+			case catalogkeys.ColumnCommentType, catalogkeys.TableCommentType:
 				// TODO: The type conversion to oid.Oid is safe since we use desc IDs
 				// for this, but it's not ideal. The backing column for objId should be
 				// changed to use the OID type.
 				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
-			case keys.ConstraintCommentType:
+			case catalogkeys.ConstraintCommentType:
 				tableDesc, err := p.Descriptors().GetImmutableTableByID(
 					ctx,
 					p.txn,
@@ -1614,7 +1614,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				objID = getOIDFromConstraint(c, dbContext.GetID(), schema.GetID(), tableDesc)
 				objSubID = tree.DZero
 				classOid = tree.NewDOid(catconstants.PgCatalogConstraintTableID)
-			case keys.IndexCommentType:
+			case catalogkeys.IndexCommentType:
 				objID = makeOidHasher().IndexOid(
 					descpb.ID(tree.MustBeDInt(objID)),
 					descpb.IndexID(tree.MustBeDInt(objSubID)))
@@ -1691,8 +1691,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 			return err
 		}
 		for _, comment := range comments {
-			commentType := keys.CommentType(tree.MustBeDInt(comment[3]))
-			if commentType != keys.DatabaseCommentType {
+			commentType := catalogkeys.CommentType(tree.MustBeDInt(comment[3]))
+			if commentType != catalogkeys.DatabaseCommentType {
 				// Only database comments are exported in this table.
 				continue
 			}
