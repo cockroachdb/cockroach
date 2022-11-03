@@ -9,6 +9,7 @@
 // licenses/APL.txt.
 
 import { stubComponentInModule } from "./test-utils/mockComponent";
+stubComponentInModule("src/views/databases/databasesPage", "DatabasesPage");
 stubComponentInModule(
   "src/views/databases/databaseDetailsPage",
   "DatabaseDetailsPage",
@@ -61,7 +62,6 @@ const LOADING_CLUSTER_STATUS = /Loading cluster status.*/;
 const NODE_LOG_HEADER = /Logs Node.*/;
 const EVENTS_HEADER = "Events";
 const JOBS_HEADER = "Jobs";
-const DATABASES_HEADER = "Databases";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
 const STATEMENTS_DETAILS_HEADER = "Statement Fingerprint";
 const TRANSACTION_DETAILS_HEADER = "Transaction Details";
@@ -269,7 +269,7 @@ describe("Routing to", () => {
   describe("'/databases' path", () => {
     test("routes to <DatabasesPage> component", () => {
       navigateToPath("/databases");
-      screen.getByText(DATABASES_HEADER, { selector: "h3" });
+      screen.getByTestId("DatabasesPage");
     });
   });
 

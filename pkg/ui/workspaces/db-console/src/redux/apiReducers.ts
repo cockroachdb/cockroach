@@ -92,7 +92,7 @@ export const locationsReducerObj = new CachedDataReducer(
 export const refreshLocations = locationsReducerObj.refresh;
 
 const databasesReducerObj = new CachedDataReducer(
-  api.getDatabaseList,
+  clusterUiApi.getDatabasesList,
   "databases",
   null,
   moment.duration(10, "m"),
@@ -492,7 +492,7 @@ export interface APIReducersState {
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
-  databases: CachedDataReducerState<api.DatabasesResponseMessage>;
+  databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
   databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
