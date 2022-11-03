@@ -52,6 +52,7 @@ $dropdown-hover-color: darken($colors--background, 2.5%);
       letter-spacing: 0.3px;
       font-style: normal;
       margin-bottom: 8px;
+      color: $colors--neutral-7;
 
       &__transaction-type {
         margin-top: 25px;
