@@ -183,7 +183,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		c.Run(ctx, c.Node(controller), s.wl.initCmd(pgURL, dbName))
 
 		if s.rangeSizeMB > 0 {
-			err = setDBRangeLimits(db, dbName, s.rangeSizeMB*(1<<20))
+			err = setDBRangeLimits(ctx, db, dbName, s.rangeSizeMB*(1<<20))
 			require.NoError(t, err, "failed to set range limits configuration")
 		}
 
@@ -260,7 +260,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 					if ctx.Err() != nil {
 						return &recoveryImpossibleError{testOutcome: restartFailed}
 					}
-					err = setDBRangeLimits(db, dbName, 0 /* zero restores default size */)
+					err = setDBRangeLimits(ctx, db, dbName, 0 /* zero restores default size */)
 					if err == nil {
 						break
 					}
@@ -293,7 +293,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		t.L().Printf("workload finished")
 
 		t.L().Printf("ensuring nodes are decommissioned")
-		if err := setSnapshotRate(db, 512); err != nil {
+		if err := setSnapshotRate(ctx, db, 512); err != nil {
 			// Set snapshot executes SQL query against cluster, if query failed then
 			// cluster is not healthy after recovery and that means restart failed.
 			return &recoveryImpossibleError{testOutcome: restartFailed}
@@ -335,18 +335,18 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	}
 }
 
-func setDBRangeLimits(db *gosql.DB, dbName string, size int64) error {
+func setDBRangeLimits(ctx context.Context, db *gosql.DB, dbName string, size int64) error {
 	query := fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING range_max_bytes=%d, range_min_bytes=1024",
 		dbName, size)
 	if size == 0 {
 		query = fmt.Sprintf("ALTER DATABASE %s CONFIGURE ZONE USING range_max_bytes = COPY FROM PARENT, range_min_bytes = COPY FROM PARENT",
 			dbName)
 	}
-	_, err := db.Exec(query)
+	_, err := db.ExecContext(ctx, query)
 	return err
 }
 
-func setSnapshotRate(db *gosql.DB, sizeMB int64) error {
+func setSnapshotRate(ctx context.Context, db *gosql.DB, sizeMB int64) error {
 	queries := []string{
 		"RESET CLUSTER SETTING kv.snapshot_rebalance.max_rate",
 		"RESET CLUSTER SETTING kv.snapshot_recovery.max_rate",
@@ -358,7 +358,7 @@ func setSnapshotRate(db *gosql.DB, sizeMB int64) error {
 		}
 	}
 	for _, query := range queries {
-		_, err := db.Exec(query)
+		_, err := db.ExecContext(ctx, query)
 		if err != nil {
 			return err
 		}
