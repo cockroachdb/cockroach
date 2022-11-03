@@ -21,6 +21,7 @@ option go_package = "execinfrapb";
 
 import "sql/catalog/descpb/structured.proto";
 import "gogoproto/gogo.proto";
+import "sql/execinfrapb/data.proto";
 
 enum SketchType {
   // This is the github.com/axiomhq/hyperloglog binary format (as of commit
@@ -54,6 +55,14 @@ message SketchSpec {
   // PartialPredicate is a string representing the predicate for a partial statistic,
   // and is the empty string for a full table statistic.
   optional string partial_predicate = 7 [(gogoproto.nullable) = false];
+
+  // PrevLowerBound is a tree.Datum serialized into a string representing
+  // the minimum bucket value of the previous full statistic histogram.
+  // It is used as the boundary between the lower extreme histogram and
+  // the upper extreme histogram when partial statistics USING EXTREMES
+  // are collected and the histogram is constructed. For full table
+  // statistics, it is the empty string.
+  optional string prev_lower_bound = 8 [(gogoproto.nullable) = false];
 }
 
 // SamplerSpec is the specification of a "sampler" processor which
