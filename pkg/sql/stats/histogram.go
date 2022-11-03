@@ -92,6 +92,7 @@ func EquiDepthHistogram(
 	samples tree.Datums,
 	numRows, distinctCount int64,
 	maxBuckets int,
+	partial bool,
 ) (HistogramData, []cat.HistogramBucket, error) {
 	numSamples := len(samples)
 	if numSamples == 0 {
@@ -168,6 +169,35 @@ func EquiDepthHistogram(
 		lowerBound = getNextLowerBound(compareCtx, upper)
 	}
 
+	if !partial {
+		h.adjustCounts(compareCtx, colType, float64(numRows), float64(distinctCount))
+	}
+	histogramData, err := h.toHistogramData(colType)
+	return histogramData, h.buckets, err
+}
+
+func ConstructExtremesHistogram(
+	compareCtx tree.CompareContext,
+	colType *types.T,
+	numTotalSamples int64,
+	lowerSamples tree.Datums,
+	upperSamples tree.Datums,
+	numRows, distinctCount int64,
+	maxBuckets int,
+) (HistogramData, []cat.HistogramBucket, error) {
+	estNumRowsLower := (int64(lowerSamples.Len()) * numRows) / numTotalSamples
+	estNumRowsUpper := (int64(upperSamples.Len()) * numRows) / numTotalSamples
+	_, lowerHist, err := EquiDepthHistogram(compareCtx, colType, lowerSamples, estNumRowsLower, distinctCount, maxBuckets, true /* partial */)
+	if err != nil {
+		return HistogramData{}, nil, err
+	}
+	_, upperHist, err := EquiDepthHistogram(compareCtx, colType, upperSamples, estNumRowsUpper, distinctCount, maxBuckets, true /* partial */)
+	if err != nil {
+		return HistogramData{}, nil, err
+	}
+	//lowerHist = lowerHist[:len(lowerHist)-1]
+	//upperHist = upperHist[1:]
+	h := histogram{buckets: append(lowerHist, upperHist...)}
 	h.adjustCounts(compareCtx, colType, float64(numRows), float64(distinctCount))
 	histogramData, err := h.toHistogramData(colType)
 	return histogramData, h.buckets, err

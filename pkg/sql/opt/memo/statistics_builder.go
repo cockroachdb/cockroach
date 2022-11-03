@@ -4724,6 +4724,7 @@ func (sb *statisticsBuilder) buildStatsFromCheckConstraints(
 					numRows,
 					int64(numValues),              /* distinctCount */
 					stats.DefaultHistogramBuckets, /* maxBuckets */
+					false,
 				)
 				// This shouldn't error out, but if it does, let's not punish the user.
 				// Just build stats without the histogram in that case.

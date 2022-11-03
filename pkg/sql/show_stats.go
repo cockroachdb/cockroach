@@ -59,8 +59,25 @@ var showTableStatsJSONColumns = colinfo.ResultColumns{
 
 const showTableStatsOptForecast = "forecast"
 
+const showTableStatsOptMerge = "merge"
+
 var showTableStatsOptValidate = map[string]exprutil.KVStringOptValidate{
 	showTableStatsOptForecast: exprutil.KVStringOptRequireNoValue,
+	showTableStatsOptMerge:    exprutil.KVStringOptRequireNoValue,
+}
+
+func ignoreDroppedColumn(colIDs tree.Datums, desc catalog.TableDescriptor) (bool, error) {
+	for _, colID := range colIDs {
+		cid := descpb.ColumnID(*colID.(*tree.DInt))
+		if _, err := desc.FindColumnWithID(cid); err != nil {
+			if sqlerrors.IsUndefinedColumnError(err) {
+				return true, nil
+			} else {
+				return false, err
+			}
+		}
+	}
+	return false, nil
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
@@ -171,22 +188,64 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 			}()
 
+			if _, withMerge := opts[showTableStatsOptMerge]; withMerge {
+				obsFullStats := make([]*stats.TableStatistic, 0, len(rows))
+				obsPartialStats := make([]*stats.TableStatistic, 0, len(rows))
+				for _, row := range rows {
+					colIDs := row[columnIDsIdx].(*tree.DArray).Array
+					ignoreStatsRowWithDroppedColumn, err := ignoreDroppedColumn(colIDs, desc)
+					if err != nil {
+						return nil, err
+					}
+					if ignoreStatsRowWithDroppedColumn {
+						continue
+					}
+					stat, err := stats.NewTableStatisticProto(row, partialPredColVerActive)
+					if err != nil {
+						return nil, err
+					}
+					obs := &stats.TableStatistic{TableStatisticProto: *stat}
+					if obs.HistogramData != nil && !obs.HistogramData.ColumnType.UserDefined() {
+						if err := stats.DecodeHistogramBuckets(obs); err != nil {
+							return nil, err
+						}
+					}
+
+					if obs.PartialPredicate != "" {
+						obsPartialStats = append(obsPartialStats, obs)
+					} else {
+						obsFullStats = append(obsFullStats, obs)
+					}
+				}
+				// Reverse the partial and full stats lists to
+				// sort by createdAt time
+				for i := 0; i < len(obsFullStats)/2; i++ {
+					j := len(obsFullStats) - i - 1
+					obsFullStats[i], obsFullStats[j] = obsFullStats[j], obsFullStats[i]
+				}
+				for i := 0; i < len(obsPartialStats)/2; i++ {
+					j := len(obsPartialStats) - i - 1
+					obsPartialStats[i], obsPartialStats[j] = obsPartialStats[j], obsPartialStats[i]
+				}
+
+				merged := stats.CreateMergedStatistics(ctx, obsPartialStats, obsFullStats)
+				for i := len(merged) - 1; i >= 0; i-- {
+					mergedRow, err := tableStatisticProtoToRow(&merged[i].TableStatisticProto)
+					if err != nil {
+						return nil, err
+					}
+					rows = append(rows, mergedRow)
+				}
+			}
+
 			if _, withForecast := opts[showTableStatsOptForecast]; withForecast {
 				observed := make([]*stats.TableStatistic, 0, len(rows))
 				for _, row := range rows {
 					// Skip stats on dropped columns.
 					colIDs := row[columnIDsIdx].(*tree.DArray).Array
-					ignoreStatsRowWithDroppedColumn := false
-					for _, colID := range colIDs {
-						cid := descpb.ColumnID(*colID.(*tree.DInt))
-						if _, err := desc.FindColumnWithID(cid); err != nil {
-							if sqlerrors.IsUndefinedColumnError(err) {
-								ignoreStatsRowWithDroppedColumn = true
-								break
-							} else {
-								return nil, err
-							}
-						}
+					ignoreStatsRowWithDroppedColumn, err := ignoreDroppedColumn(colIDs, desc)
+					if err != nil {
+						return nil, err
 					}
 					if ignoreStatsRowWithDroppedColumn {
 						continue
