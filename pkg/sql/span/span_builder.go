@@ -240,6 +240,24 @@ func (s *Builder) SpansFromConstraint(
 	return spans, nil
 }
 
+// SpansFromConstraintSpan generates spans from optimizer
+// spans. A span.Splitter can be used to generate more specific
+// family spans from constraints, datums and encdatums.
+func (s *Builder) SpansFromConstraintSpan(
+	cs *constraint.Spans, splitter Splitter,
+) (roachpb.Spans, error) {
+	var spans roachpb.Spans
+	var err error
+	spans = make(roachpb.Spans, 0, cs.Count())
+	for i := 0; i < cs.Count(); i++ {
+		spans, err = s.appendSpansFromConstraintSpan(spans, cs.Get(i), splitter)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return spans, nil
+}
+
 // UnconstrainedSpans returns the full span corresponding to the Builder's
 // table and index.
 func (s *Builder) UnconstrainedSpans() (roachpb.Spans, error) {

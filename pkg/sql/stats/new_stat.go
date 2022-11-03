@@ -13,6 +13,7 @@ package stats
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -46,6 +47,7 @@ func InsertNewStats(
 			int64(statistic.NullCount),
 			int64(statistic.AvgSize),
 			statistic.HistogramData,
+			statistic.PartialPredicate,
 		)
 		if err != nil {
 			return err
@@ -68,6 +70,7 @@ func InsertNewStat(
 	columnIDs []descpb.ColumnID,
 	rowCount, distinctCount, nullCount, avgSize int64,
 	h *HistogramData,
+	partialPredicate string,
 ) error {
 	// We must pass a nil interface{} if we want to insert a NULL.
 	var nameVal, histogramVal interface{}
@@ -88,6 +91,39 @@ func InsertNewStat(
 			return err
 		}
 	}
+
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol) {
+		_, err := executor.Exec(
+			ctx, "insert-statistic", txn,
+			`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"avgSize",
+					histogram,
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			tableID,
+			nameVal,
+			columnIDsVal,
+			rowCount,
+			distinctCount,
+			nullCount,
+			avgSize,
+			histogramVal,
+		)
+		return err
+	}
+
+	// Need to assign to a nil interface{} to be able
+	// to insert NULL value.
+	var predicateValue interface{}
+	if partialPredicate != "" {
+		predicateValue = partialPredicate
+	}
+
 	_, err := executor.Exec(
 		ctx, "insert-statistic", txn,
 		`INSERT INTO system.table_statistics (
@@ -98,8 +134,9 @@ func InsertNewStat(
 					"distinctCount",
 					"nullCount",
 					"avgSize",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+					histogram,
+					"partialPredicate"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tableID,
 		nameVal,
 		columnIDsVal,
@@ -108,6 +145,7 @@ func InsertNewStat(
 		nullCount,
 		avgSize,
 		histogramVal,
+		predicateValue,
 	)
 	return err
 }

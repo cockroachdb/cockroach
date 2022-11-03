@@ -1002,6 +1002,9 @@ message CreateStatsDetails {
 
   // If true, delete old stats for columns not included in this message.
   bool delete_other_stats = 8;
+
+  // If true, will collect partial table statistics at extreme values.
+  bool using_extremes = 9;
 }
 
 message CreateStatsProgress {

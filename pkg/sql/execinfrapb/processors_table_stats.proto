@@ -50,6 +50,10 @@ message SketchSpec {
   // Index is needed by some types (for example the geo types) when generating
   // inverted index entries, since it may contain configuration.
   optional sqlbase.IndexDescriptor index = 6 [(gogoproto.nullable) = true];
+
+  // PartialPredicate is a string representing the predicate for a partial statistic,
+  // and is the empty string for a full table statistic.
+  optional string partial_predicate = 7 [(gogoproto.nullable) = false];
 }
 
 // SamplerSpec is the specification of a "sampler" processor which
@@ -173,4 +177,8 @@ message SampleAggregatorSpec {
 
   // If true, delete old stats for columns not included in this message.
   optional bool delete_other_stats = 10 [(gogoproto.nullable) = false];
+
+  // If true, calculate partial table statistics on the extreme values of
+  // the previous full table stat.
+  optional bool using_extremes = 11 [(gogoproto.nullable) = false];
 }
