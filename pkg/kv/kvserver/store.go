@@ -3189,6 +3189,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseExpirationCount          int64
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
+		raftLeaderInvalidLeaseCount   int64
 		quiescentCount                int64
 		uninitializedCount            int64
 		averageQueriesPerSecond       float64
@@ -3242,6 +3243,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {
 				raftLeaderNotLeaseHolderCount++
+			}
+			if !metrics.LeaseValid {
+				raftLeaderInvalidLeaseCount++
 			}
 		}
 		if metrics.Leaseholder {
@@ -3314,6 +3318,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 
 	s.metrics.RaftLeaderCount.Update(raftLeaderCount)
 	s.metrics.RaftLeaderNotLeaseHolderCount.Update(raftLeaderNotLeaseHolderCount)
+	s.metrics.RaftLeaderInvalidLeaseCount.Update(raftLeaderInvalidLeaseCount)
 	s.metrics.LeaseHolderCount.Update(leaseHolderCount)
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
