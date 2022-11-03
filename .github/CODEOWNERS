@@ -228,6 +228,7 @@
 /pkg/clusterversion/         @cockroachdb/kv-prs-noreview
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
+/pkg/cmd/cloudupload/        @cockroachdb/dev-inf
 /pkg/cmd/cmdutil/            @cockroachdb/dev-inf
 /pkg/cmd/cmp-protocol/       @cockroachdb/sql-experience
 /pkg/cmd/cmp-sql/            @cockroachdb/sql-experience
