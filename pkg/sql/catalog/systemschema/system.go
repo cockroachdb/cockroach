@@ -243,18 +243,19 @@ CREATE TABLE system.web_sessions (
 	// average size of the column group in bytes.
 	TableStatisticsTableSchema = `
 CREATE TABLE system.table_statistics (
-	"tableID"       INT8       NOT NULL,
-	"statisticID"   INT8       NOT NULL DEFAULT unique_rowid(),
-	name            STRING,
-	"columnIDs"     INT8[]     NOT NULL,
-	"createdAt"     TIMESTAMP  NOT NULL DEFAULT now(),
-	"rowCount"      INT8       NOT NULL,
-	"distinctCount" INT8       NOT NULL,
-	"nullCount"     INT8       NOT NULL,
-	histogram       BYTES,
-	"avgSize"       INT8       NOT NULL DEFAULT 0,
+	"tableID"            INT8       NOT NULL,
+	"statisticID"        INT8       NOT NULL DEFAULT unique_rowid(),
+	name                 STRING,
+	"columnIDs"          INT8[]     NOT NULL,
+	"createdAt"          TIMESTAMP  NOT NULL DEFAULT now(),
+	"rowCount"           INT8       NOT NULL,
+	"distinctCount"      INT8       NOT NULL,
+	"nullCount"          INT8       NOT NULL,
+	histogram            BYTES,
+	"avgSize"            INT8       NOT NULL DEFAULT 0,
+	"partialPredicate"   STRING,
 	CONSTRAINT "primary" PRIMARY KEY ("tableID", "statisticID"),
-	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize")
+	FAMILY "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram" ("tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram, "avgSize", "partialPredicate")
 );`
 
 	// locations are used to map a locality specified by a node to geographic
@@ -1416,6 +1417,7 @@ var (
 				{Name: "nullCount", ID: 8, Type: types.Int},
 				{Name: "histogram", ID: 9, Type: types.Bytes, Nullable: true},
 				{Name: "avgSize", ID: 10, Type: types.Int, DefaultExpr: &zeroIntString},
+				{Name: "partialPredicate", ID: 11, Type: types.String, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
@@ -1432,8 +1434,9 @@ var (
 						"nullCount",
 						"histogram",
 						"avgSize",
+						"partialPredicate",
 					},
-					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+					ColumnIDs: []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
 				},
 			},
 			descpb.IndexDescriptor{
