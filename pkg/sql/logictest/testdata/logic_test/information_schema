@@ -2234,6 +2234,7 @@ system         public        table_statistics                 distinctCount     
 system         public        table_statistics                 histogram                                                                                                 9
 system         public        table_statistics                 name                                                                                                      3
 system         public        table_statistics                 nullCount                                                                                                 8
+system         public        table_statistics                 partialPredicate                                                                                          11
 system         public        table_statistics                 rowCount                                                                                                  6
 system         public        table_statistics                 statisticID                                                                                               2
 system         public        table_statistics                 tableID                                                                                                   1
