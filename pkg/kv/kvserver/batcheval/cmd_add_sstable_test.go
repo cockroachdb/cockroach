@@ -1711,7 +1711,11 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 
 	ctx := context.Background()
 	si, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{},
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableCanAckBeforeApplication: true,
+			},
+		},
 	})
 	defer si.Stopper().Stop(ctx)
 	s := si.(*server.TestServer)
