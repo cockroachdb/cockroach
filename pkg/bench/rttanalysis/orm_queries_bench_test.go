@@ -316,7 +316,8 @@ LEFT JOIN LATERAL
 		},
 
 		{
-			Name: "hasura column descriptions 8 tables",
+			Name:      "hasura column descriptions 8 tables",
+			SkipIssue: 88885,
 			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
