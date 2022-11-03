@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -359,10 +360,20 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 				t.Fatalf("failed to rewrite key: %s", reqMidKey2)
 			}
 
-			if err := kvDB.AdminSplit(ctx, reqMidKey1, hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(
+				ctx,
+				reqMidKey1,
+				hlc.MaxTimestamp, /* expirationTime */
+				oppurpose.SplitBackup,
+			); err != nil {
 				t.Fatal(err)
 			}
-			if err := kvDB.AdminSplit(ctx, reqMidKey2, hlc.MaxTimestamp /* expirationTime */); err != nil {
+			if err := kvDB.AdminSplit(
+				ctx,
+				reqMidKey2,
+				hlc.MaxTimestamp, /* expirationTime */
+				oppurpose.SplitBackup,
+			); err != nil {
 				t.Fatal(err)
 			}
 
