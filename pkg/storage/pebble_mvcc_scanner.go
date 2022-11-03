@@ -309,6 +309,11 @@ func extractResultKey(repr []byte) roachpb.Key {
 // by switching to a pointSynthesizingIter.
 type pebbleMVCCScanner struct {
 	parent MVCCIterator
+	// parentReverse is true if the previous parent positioning operation was a
+	// reverse operation (SeekLT or Prev). This is needed to correctly initialize
+	// pointIter when encountering an MVCC range tombstone in reverse.
+	// TODO(erikgrinaker): Consider adding MVCCIterator.IsReverse() instead.
+	parentReverse bool
 	// pointIter is a point synthesizing iterator that wraps and replaces parent
 	// when an MVCC range tombstone is encountered. A separate reference to it is
 	// kept in order to release it back to its pool when the scanner is done.
@@ -447,10 +452,13 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-			p.enablePointSynthesis()
+			if !p.enablePointSynthesis() {
+				return
+			}
 		}
 	}
 
+	p.parentReverse = false
 	p.parent.SeekGE(MVCCKey{Key: p.start})
 	if !p.updateCurrent() {
 		return
@@ -477,7 +485,9 @@ func (p *pebbleMVCCScanner) scan(
 	// HasPointAndRange() call.
 	if ok, _ := p.parent.Valid(); ok {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-			p.enablePointSynthesis()
+			if !p.enablePointSynthesis() {
+				return nil, 0, 0, p.err
+			}
 		}
 	}
 
@@ -959,6 +969,7 @@ func (p *pebbleMVCCScanner) advanceKeyAtEnd() bool {
 		// Iterating to the next key might have caused the iterator to reach the
 		// end of the key space. If that happens, back up to the very last key.
 		p.peeked = false
+		p.parentReverse = true
 		p.parent.SeekLT(MVCCKey{Key: p.end})
 		if !p.updateCurrent() {
 			return false
@@ -1199,8 +1210,8 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 // synthesizes MVCC point tombstones for MVCC range tombstones and never emits
 // range keys itself. p.parent must be valid.
 //
-// gcassert:inline
-func (p *pebbleMVCCScanner) enablePointSynthesis() {
+// Returns true if the iterator is valid.
+func (p *pebbleMVCCScanner) enablePointSynthesis() bool {
 	if util.RaceEnabled {
 		if ok, _ := p.parent.Valid(); !ok {
 			panic(errors.AssertionFailedf("enablePointSynthesis called with invalid iter"))
@@ -1213,13 +1224,18 @@ func (p *pebbleMVCCScanner) enablePointSynthesis() {
 				p.parent.UnsafeKey()))
 		}
 	}
-	p.pointIter = NewPointSynthesizingIterAtParent(p.parent)
-	p.parent = p.pointIter
+	pointIter, err := NewPointSynthesizingIterAtParent(p.parent, p.parentReverse)
+	if err != nil {
+		p.err = err
+		return false
+	}
 	if util.RaceEnabled {
-		if ok, _ := p.parent.Valid(); !ok {
+		if ok, _ := pointIter.Valid(); !ok {
 			panic(errors.AssertionFailedf("invalid pointSynthesizingIter with valid iter"))
 		}
 	}
+	p.pointIter, p.parent = pointIter, pointIter
+	return true
 }
 
 func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
@@ -1260,7 +1276,9 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 	// Since iterValid() is called after every iterator positioning operation, it
 	// is convenient to check for any range keys and enable point synthesis here.
 	if p.parent.RangeKeyChanged() {
-		p.enablePointSynthesis()
+		if !p.enablePointSynthesis() {
+			return false
+		}
 	}
 	if util.RaceEnabled && p.pointIter == nil {
 		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
@@ -1273,6 +1291,7 @@ func (p *pebbleMVCCScanner) iterValid() bool {
 
 // iterSeek seeks to the latest revision of the specified key (or a greater key).
 func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
+	p.parentReverse = false
 	p.clearPeeked()
 	p.parent.SeekGE(key)
 	return p.updateCurrent()
@@ -1280,6 +1299,7 @@ func (p *pebbleMVCCScanner) iterSeek(key MVCCKey) bool {
 
 // iterSeekReverse seeks to the latest revision of the key before the specified key.
 func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
+	p.parentReverse = true
 	p.clearPeeked()
 	p.parent.SeekLT(key)
 	if !p.updateCurrent() {
@@ -1298,6 +1318,7 @@ func (p *pebbleMVCCScanner) iterSeekReverse(key MVCCKey) bool {
 
 // iterNext advances to the next MVCC key.
 func (p *pebbleMVCCScanner) iterNext() bool {
+	p.parentReverse = false
 	if p.reverse && p.peeked {
 		// If we have peeked at the previous entry, we need to advance the iterator
 		// twice.
@@ -1323,6 +1344,7 @@ func (p *pebbleMVCCScanner) iterNext() bool {
 
 // iterPrev advances to the previous MVCC Key.
 func (p *pebbleMVCCScanner) iterPrev() bool {
+	p.parentReverse = true
 	if p.peeked {
 		p.peeked = false
 		return p.updateCurrent()
@@ -1337,6 +1359,7 @@ func (p *pebbleMVCCScanner) iterPrev() bool {
 func (p *pebbleMVCCScanner) iterPeekPrev() ([]byte, bool) {
 	if !p.peeked {
 		p.peeked = true
+		p.parentReverse = true
 		// We need to save a copy of the current iterator key and value and adjust
 		// curRawKey, curKey and curValue to point to this saved data. We use a
 		// single buffer for this purpose: savedBuf.
