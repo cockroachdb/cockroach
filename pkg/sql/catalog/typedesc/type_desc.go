@@ -117,11 +117,28 @@ func UpdateCachedFieldsOnModifiedMutable(desc catalog.TypeDescriptor) (*Mutable,
 	return mutable, nil
 }
 
-// UserDefinedTypeOIDToID converts a user defined type OID into a
-// descriptor ID. OID of a user-defined type must be greater than
-// CockroachPredefinedOIDMax. The function returns an error if the
-// given OID is less than or equals to CockroachPredefinedMax.
+// TableIDToImplicitTypeOID converts the given ID into the ID for the implicit
+// reccord type for that table. We re-use the type ID to OID logic, as type IDs
+// and table IDs do not share the same ID space. For virtual tables, we just use
+// the virtual table ID itself, to avoid addition overflow.
+func TableIDToImplicitTypeOID(id descpb.ID) oid.Oid {
+	if descpb.IsVirtualTable(id) {
+		// Virtual table OIDs start at max UInt32, so doing OID math would overflow.
+		return oid.Oid(id)
+	}
+	return catid.TypeIDToOID(id)
+}
+
+// UserDefinedTypeOIDToID converts a user defined type OID into a descriptor ID.
+// OID of a user-defined type must be greater than CockroachPredefinedOIDMax.
+// The function returns an error if the given OID is less than or equals to
+// CockroachPredefinedMax. If the OID is for a virtual table, then the ID itself
+// is returned, since the type can then be assumed to be the implict record type
+// for that table.
 func UserDefinedTypeOIDToID(oid oid.Oid) (descpb.ID, error) {
+	if descpb.IsVirtualTable(descpb.ID(oid)) {
+		return descpb.ID(oid), nil
+	}
 	return catid.UserDefinedOIDToID(oid)
 }
 

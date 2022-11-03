@@ -17,8 +17,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -31,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -187,7 +190,12 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		id,
 		nil,       /* regionConfig */
 		startTime, /* creationTime */
-		nil,
+		catpb.NewPrivilegeDescriptor(
+			username.PublicRoleName(),
+			privilege.List{privilege.SELECT},
+			privilege.List{},
+			username.NodeUserName(),
+		),
 		nil,                        /* affected */
 		&semaCtx,                   /* semaCtx */
 		nil,                        /* evalCtx */
@@ -308,7 +316,12 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		id,
 		columns,
 		startTime,
-		nil,
+		catpb.NewPrivilegeDescriptor(
+			username.PublicRoleName(),
+			privilege.List{privilege.SELECT},
+			privilege.List{},
+			username.NodeUserName(),
+		),
 		nil, // semaCtx
 		nil, // evalCtx
 		st,
@@ -412,6 +425,34 @@ func (v *virtualSchemaEntry) GetObjectByName(
 	name string, flags tree.ObjectLookupFlags,
 ) (catalog.VirtualObject, error) {
 	switch flags.DesiredObjectKind {
+	case tree.TypeObject:
+		// Currently, we don't allow creation of types in virtual schemas, so
+		// the only types present in the virtual schemas that have types (i.e.
+		// pg_catalog) are types that are known at parse time or implicit record
+		// types for each table. So, first attempt to
+		// parse the input object as a statically known type. Note that an
+		// invalid input type like "notatype" will be parsed successfully as
+		// a ResolvableTypeReference, so the error here does not need to be
+		// intercepted and inspected.
+		if v.containsTypes {
+			typRef, err := parser.GetTypeReferenceFromName(tree.Name(name))
+			if err != nil {
+				return nil, err
+			}
+			// If the parsed reference is actually a statically known type, then
+			// we can return it. We return a simple wrapping of this type as
+			// TypeDescriptor that represents an alias of the result type.
+			typ, ok := tree.GetStaticallyKnownType(typRef)
+			if ok {
+				return &virtualTypeEntry{
+					desc:    typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
+					mutable: flags.RequireMutable,
+				}, nil
+			}
+		}
+		// If the type could not be found statically, then search for a table with
+		// this name so the implicit record type can be used.
+		fallthrough
 	case tree.TableObject:
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
@@ -425,33 +466,6 @@ func (v *virtualSchemaEntry) GetObjectByName(
 			return nil, newUnimplementedVirtualTableError(v.desc.GetName(), name)
 		}
 		return nil, nil
-	case tree.TypeObject:
-		if !v.containsTypes {
-			return nil, nil
-		}
-		// Currently, we don't allow creation of types in virtual schemas, so
-		// the only types present in the virtual schemas that have types (i.e.
-		// pg_catalog) are types that are known at parse time. So, attempt to
-		// parse the input object as a statically known type. Note that an
-		// invalid input type like "notatype" will be parsed successfully as
-		// a ResolvableTypeReference, so the error here does not need to be
-		// intercepted and inspected.
-		typRef, err := parser.GetTypeReferenceFromName(tree.Name(name))
-		if err != nil {
-			return nil, err
-		}
-		// If the parsed reference is actually a statically known type, then
-		// we can return it. We return a simple wrapping of this type as
-		// TypeDescriptor that represents an alias of the result type.
-		typ, ok := tree.GetStaticallyKnownType(typRef)
-		if !ok {
-			return nil, nil
-		}
-
-		return &virtualTypeEntry{
-			desc:    typedesc.MakeSimpleAlias(typ, catconstants.PgCatalogID),
-			mutable: flags.RequireMutable,
-		}, nil
 	default:
 		return nil, errors.AssertionFailedf("unknown desired object kind %d", flags.DesiredObjectKind)
 	}
