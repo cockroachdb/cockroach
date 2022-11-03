@@ -491,15 +491,18 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded.
-			if err := stats.DeleteOldStatsForColumns(
-				ctx,
-				s.FlowCtx.Cfg.Executor,
-				txn,
-				s.tableID,
-				columnIDs,
-			); err != nil {
-				return err
+			// Delete old stats that have been superseded,
+			// if the new statistic is not partial
+			if si.spec.PartialPredicate == "" {
+				if err := stats.DeleteOldStatsForColumns(
+					ctx,
+					s.FlowCtx.Cfg.Executor,
+					txn,
+					s.tableID,
+					columnIDs,
+				); err != nil {
+					return err
+				}
 			}
 
 			// Insert the new stat.
@@ -515,7 +518,9 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				s.getDistinctCount(&si, true /* includeNulls */),
 				si.numNulls,
 				s.getAvgSize(&si),
-				histogram); err != nil {
+				histogram,
+				si.spec.PartialPredicate,
+			); err != nil {
 				return err
 			}
 
