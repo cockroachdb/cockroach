@@ -405,6 +405,26 @@ message RestoreProgress {
   bytes high_water = 1;
 }
 
+// The ProcessDDLStmtStage consists of 3 major steps:
+// 1. Create the temporary database for importing pgdump.
+// 2. Parse the DDL statement from the dump file, and collect the ddl stmts in a buffer.
+// 3. Start a transaction to run all the buffered DDL statement which creates
+// corresponding schema descriptors.
+// We need to set breakpoint to specify where to restart if the import job get
+// resumed.
+enum ProcessDDLStmtStage {
+  // InitStage corresponds to before the step 1 above.
+  InitStage = 0;
+  // TempDbCreated corresponds to the stage after 1 is finished while 2 is not
+  // yet done.
+  TempDbCreated = 1;
+  // DDLParsed corresponds to the stage after 2 is finished while 3 is not yet
+  // done.
+  DDLParsed = 2;
+  // DDLFinished corresponds to the stage when step 3 is finished.
+  DDLFinished = 3;
+}
+
 message ImportDetails {
   message Table {
     sqlbase.TableDescriptor desc = 1;
@@ -479,7 +499,9 @@ message ImportDetails {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.RegionName"
   ];
 
-  // next val: 28
+  ProcessDDLStmtStage pgdump_ddl_progress = 28;
+
+  // next val: 29
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated

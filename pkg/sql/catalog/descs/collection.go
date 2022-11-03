@@ -524,6 +524,33 @@ func (tc *Collection) GetAllTableDescriptorsInDatabase(
 	return ret, nil
 }
 
+// GetAllSchemaDescriptorsInDatabase returns all the schema descriptors visible
+// to the transaction under the database with the given ID. It first checks the
+// collection's cached descriptors before defaulting to a key-value scan, if
+// necessary.
+func (tc *Collection) GetAllSchemaDescriptorsInDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) ([]catalog.SchemaDescriptor, error) {
+	all, err := tc.GetAllDescriptors(ctx, txn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Ensure the given ID does indeed belong to a database.
+	if desc := all.LookupDescriptorEntry(db.GetID()); desc == nil || desc.DescriptorType() != catalog.Database {
+		return nil, sqlerrors.NewUndefinedDatabaseError(db.GetName())
+	}
+	var ret []catalog.SchemaDescriptor
+	for _, desc := range all.OrderedDescriptors() {
+		if desc.GetParentID() == db.GetID() {
+			if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+				ret = append(ret, schema)
+			}
+		}
+	}
+	return ret, nil
+}
+
 // GetSchemasForDatabase returns the schemas for a given database
 // visible by the transaction.
 func (tc *Collection) GetSchemasForDatabase(
