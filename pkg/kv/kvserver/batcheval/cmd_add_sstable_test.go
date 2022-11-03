@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1707,6 +1708,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 // with SSTTimestampToRequestTimestamp respects the closed timestamp.
 func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 91211, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
