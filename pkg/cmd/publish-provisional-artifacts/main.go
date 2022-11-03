@@ -154,9 +154,15 @@ func run(providers []release.ObjectPutGetter, flags runFlags, execFn release.Exe
 		updateLatest = true
 	}
 
+	// For release builds (that generate release archives) we use the ".unsigned" suffix in the file name.
+	// The edge uploads will still use the same name (without the "unsigned" suffix) in case there are external consumers.
+	macOSPlatform := release.PlatformMacOS
+	if flags.isRelease {
+		macOSPlatform = release.PlatformMacOSUnsigned
+	}
 	platforms := []release.Platform{
 		release.PlatformLinux,
-		release.PlatformMacOS,
+		macOSPlatform,
 		release.PlatformMacOSArm,
 		release.PlatformWindows,
 		release.PlatformLinuxArm,
