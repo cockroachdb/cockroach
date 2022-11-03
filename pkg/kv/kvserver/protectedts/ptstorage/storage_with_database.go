@@ -16,19 +16,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // WithDatabase wraps s such that any calls made with a nil *Txn will be wrapped
 // in a call to db.Txn. This is often convenient in testing.
-func WithDatabase(s protectedts.Storage, db *kv.DB) protectedts.Storage {
-	return &storageWithDatabase{s: s, db: db}
+func WithDatabase(
+	s protectedts.Storage, db *kv.DB, ief sqlutil.InternalExecutorFactory,
+) protectedts.Storage {
+	return &storageWithDatabase{s: s, db: db, ief: ief}
 }
 
 type storageWithDatabase struct {
-	db *kv.DB
-	s  protectedts.Storage
+	db  *kv.DB
+	ief sqlutil.InternalExecutorFactory
+	s   protectedts.Storage
 }
 
 func (s *storageWithDatabase) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
