@@ -250,6 +250,7 @@ query TT colnames
 SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_schema  sequence_name
+public           descriptor_id_seq
 public           role_id_seq
 
 query TTTTT colnames,rowsort
@@ -293,6 +294,7 @@ public       rangelog                         table     NULL   NULL
 public       eventlog                         table     NULL   NULL
 public       lease                            table     NULL   NULL
 public       tenants                          table     NULL   NULL
+public       descriptor_id_seq                sequence  NULL   NULL
 public       settings                         table     NULL   NULL
 public       zones                            table     NULL   NULL
 public       users                            table     NULL   NULL
@@ -311,6 +313,7 @@ public       jobs                             table     NULL   NULL      ·
 public       ui                               table     NULL   NULL      ·
 public       eventlog                         table     NULL   NULL      ·
 public       tenants                          table     NULL   NULL      ·
+public       descriptor_id_seq                sequence  NULL   NULL      ·
 public       settings                         table     NULL   NULL      ·
 public       zones                            table     NULL   NULL      ·
 public       users                            table     NULL   NULL      ·

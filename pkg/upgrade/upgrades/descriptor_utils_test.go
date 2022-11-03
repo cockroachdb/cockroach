@@ -90,7 +90,7 @@ SELECT *
 	}
 	require.Len(t, checkEntries(t), 0)
 	require.NoError(t, upgrades.CreateSystemTable(
-		ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table,
+		ctx, tc.Server(0).DB(), tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table,
 	))
 	require.Len(t, checkEntries(t), 1)
 	sqlDB.CheckQueryResults(t,
@@ -99,7 +99,7 @@ SELECT *
 
 	// Make sure it's idempotent.
 	require.NoError(t, upgrades.CreateSystemTable(
-		ctx, tc.Server(0).DB(), keys.SystemSQLCodec, table,
+		ctx, tc.Server(0).DB(), tc.Server(0).ClusterSettings(), keys.SystemSQLCodec, table,
 	))
 	require.Len(t, checkEntries(t), 1)
 

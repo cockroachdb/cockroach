@@ -550,6 +550,9 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 		customRestoreFunc:            roleIDSeqRestoreFunc,
 		restoreInOrder:               roleIDSequenceRestoreOrder,
 	},
+	systemschema.DescIDSequence.GetName(): {
+		shouldIncludeInClusterBackup: optOutOfClusterBackup,
+	},
 }
 
 func rekeySystemTable(

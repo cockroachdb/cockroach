@@ -694,6 +694,8 @@ system         public        settings                         root     DELETE   
 system         public        settings                         root     INSERT          true
 system         public        settings                         root     SELECT          true
 system         public        settings                         root     UPDATE          true
+system         public        descriptor_id_seq                admin    SELECT          true
+system         public        descriptor_id_seq                root     SELECT          true
 system         public        tenants                          admin    SELECT          true
 system         public        tenants                          root     SELECT          true
 system         public        lease                            admin    DELETE          true
@@ -1304,6 +1306,7 @@ system         public       database_role_settings           root     INSERT    
 system         public       database_role_settings           root     SELECT          true
 system         public       database_role_settings           root     UPDATE          true
 system         public       descriptor                       root     SELECT          true
+system         public       descriptor_id_seq                root     SELECT          true
 system         public       eventlog                         root     DELETE          true
 system         public       eventlog                         root     INSERT          true
 system         public       eventlog                         root     SELECT          true
