@@ -5,7 +5,8 @@
 
   "builders": [{
       "type": "googlecompute",
-      "project_id": "cockroach-teamcity",
+      "account_file": "gcp_credentials.json",
+      "project_id": "crl-teamcity-agents",
       "source_image_family": "ubuntu-2004-lts",
       "zone": "us-east1-b",
       "machine_type": "n2-standard-32",

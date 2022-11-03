@@ -1,34 +1,32 @@
 # build/packer
 
-This directory contains [Packer] templates that automate building VM images.
+This directory contains Packer templates that automate building VM images.
 Each `.json` file is a packer template.
 
 ## To use
 
-1. Install Packer:
-    ```bash
-    brew install packer
-    ```
-2. Configure `gcloud` with your personal [User Application Default Credentials][gauth].
-3. Run:
-   ```bash
-   packer build <VM_TEMPLATE>.json
-   ```
+1. Find the build configuration you need in TeamCity under `Internal > Cockroach > Build > Infrastructure`
+2. Trigger a run on the right branch
 
-The location of the created VM image will be printed when the build completes.
+## To rotate GCP credentials
+1. Authenticate using your `-a` account and generate a new key.
+    ```
+    gcloud iam service-accounts keys create new_packer_key.json \
+        --iam-account=packer@crl-teamcity-agents.iam.gserviceaccount.com
+    ```
+2. Base64 encode the JSON content and copy it.
+    ```
+    cat new_packer_key.json | base64 | pbcopy
+    ```
+3. In TeamCity, update the value of `env.PACKER_SA_FILE` parameter under `GCP Service Account for Packer in crl-teamcity-agents` template
+in `Internal > Cockroach > Build > Infrastructure` project.
+4. Delete the key from your disk.
+    ```
+    rm new_packer_key.json
+    ```
+5. Remember to delete the old key from GCP to deactivate it.
 
 ## Template Basics
 
 Each template specifies which cloud to build the image in, a base VM image
 and one or more scripts that are run to configure the VM image.
-
-## Available VMs
-
-At present, there is only VM template available and it builds TeamCity agent
-images for Google Compute Engine. You'll need to be either authenticated with
-the `gcloud` tool or provide your Google Cloud JSON credentials in a
-[known location][gauth].
-
-
-[Packer]: https://www.packer.io
-[gauth]: https://www.packer.io/docs/builders/googlecompute#running-locally-on-your-workstation
