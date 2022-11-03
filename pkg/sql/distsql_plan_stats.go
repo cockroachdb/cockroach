@@ -19,16 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -159,6 +157,18 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	return p
 }
 
+// isFullStatValidToCreatePartial is a helper function that returns true if the input
+// table statistic can be used as the base full statistic for a new partial
+// statistic collection, for the specified column.
+func isFullStatValidToCreatePartial(column catalog.Column, t *stats.TableStatistic) bool {
+	return len(t.ColumnIDs) == 1 &&
+		column.GetID() == t.ColumnIDs[0] &&
+		t.PartialPredicate == "" &&
+		t.Name != jobspb.ForecastStatsName &&
+		t.Name != jobspb.MergedStatsName &&
+		(!colinfo.ColumnTypeIsInvertedIndexable(column.GetType()) || t.HistogramData == nil || t.HistogramData.ColumnType == nil || t.HistogramData.ColumnType.Family() != types.BytesFamily)
+}
+
 func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	ctx context.Context,
 	planCtx *PlanningCtx,
@@ -224,7 +234,12 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// be the latest due to the newest to oldest ordering property of the
 	// cache.
 	for _, t := range tableStats {
-		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] && t.PartialPredicate == "" && t.Name != jobspb.ForecastStatsName {
+		// TODO (faizaanmadhani): Ideally, we don't want to verify that
+		// a statistic is forecasted or merged based on the name because
+		// someone could create a statistic named __forecast__ or __merged__.
+		// Update system.table_statistics to add an enum to indicate which
+		// type of statistic it is.
+		if isFullStatValidToCreatePartial(column, t) {
 			histogram = t.Histogram
 			break
 		}
@@ -236,15 +251,15 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 				"or the prior histogram has no buckets and a partial statistic cannot be collected",
 			column.GetName())
 	}
-	lowerBound, upperBound, err := getUsingExtremesBounds(planCtx, histogram)
+	lowerBound, upperBound, err := stats.GetUsingExtremesBounds(planCtx.EvalContext(), histogram)
 	if err != nil {
 		return nil, err
 	}
-	extremesSpans, err := constructUsingExtremesSpans(lowerBound, upperBound, scan.index)
+	extremesSpans, err := stats.ConstructUsingExtremesSpans(lowerBound, upperBound, scan.index)
 	if err != nil {
 		return nil, err
 	}
-	extremesPredicate := constructUsingExtremesPredicate(lowerBound, upperBound, column.GetName(), scan.index)
+	extremesPredicate := stats.ConstructUsingExtremesPredicate(lowerBound, upperBound, column.GetID())
 	// Get roachpb.Spans from constraint.Spans
 	scan.spans, err = sb.SpansFromConstraintSpan(&extremesSpans, span.NoopSplitter())
 	if err != nil {
@@ -270,6 +285,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		Columns:             make([]uint32, len(reqStat.columns)),
 		StatName:            reqStat.name,
 		PartialPredicate:    extremesPredicate,
+		PrevLowerBound:      tree.Serialize(lowerBound),
 	}
 	// For now, this loop should iterate only once, as we only
 	// handle single-column partial statistics.
@@ -506,85 +522,4 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 	return resultWriter.Err()
-}
-
-// getUsingExtremesBounds returns a tree.Datum representing the upper and lower
-// bounds of the USING EXTREMES span for partial statistics.
-func getUsingExtremesBounds(
-	planCtx *PlanningCtx, histogram []cat.HistogramBucket,
-) (tree.Datum, tree.Datum, error) {
-	lowerBound := histogram[0].UpperBound
-	upperBound := histogram[len(histogram)-1].UpperBound
-	// Pick the earliest lowerBound that is not null,
-	// but if none exist, return error
-	for i := range histogram {
-		hist := &histogram[i]
-		if hist.UpperBound.Compare(planCtx.EvalContext(), tree.DNull) != 0 {
-			lowerBound = hist.UpperBound
-			break
-		}
-	}
-	if lowerBound.Compare(planCtx.EvalContext(), tree.DNull) == 0 {
-		return tree.DNull, tree.DNull,
-			pgerror.Newf(
-				pgcode.ObjectNotInPrerequisiteState,
-				"only NULL values exist in the index, so partial stats cannot be collected")
-	}
-	return lowerBound, upperBound, nil
-}
-
-// constructUsingExtremesPredicate returns string of a predicate identifying
-// the upper and lower bounds of the stats collection.
-func constructUsingExtremesPredicate(
-	lowerBound tree.Datum, upperBound tree.Datum, columnName string, index catalog.Index,
-) string {
-	lbExpr := tree.ComparisonExpr{
-		Operator: treecmp.MakeComparisonOperator(treecmp.LT),
-		Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
-		Right:    lowerBound,
-	}
-
-	ubExpr := tree.ComparisonExpr{
-		Operator: treecmp.MakeComparisonOperator(treecmp.GT),
-		Left:     &tree.ColumnItem{ColumnName: tree.Name(columnName)},
-		Right:    upperBound,
-	}
-	nullExpr := tree.IsNullExpr{
-		Expr: &tree.ColumnItem{ColumnName: tree.Name(columnName)},
-	}
-
-	pred := tree.OrExpr{
-		Left: &nullExpr,
-		Right: &tree.OrExpr{
-			Left:  &lbExpr,
-			Right: &ubExpr,
-		},
-	}
-	return tree.Serialize(&pred)
-}
-
-// constructExtremesSpans returns a constraint.Spans consisting of a
-// lowerbound and upperbound span covering the extremes of an index.
-func constructUsingExtremesSpans(
-	lowerBound tree.Datum, upperBound tree.Datum, index catalog.Index,
-) (constraint.Spans, error) {
-	var lbSpan constraint.Span
-	var ubSpan constraint.Span
-	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
-		lbSpan.Init(constraint.EmptyKey, constraint.IncludeBoundary, constraint.MakeKey(lowerBound), constraint.ExcludeBoundary)
-		ubSpan.Init(constraint.MakeKey(upperBound), constraint.ExcludeBoundary, constraint.EmptyKey, constraint.IncludeBoundary)
-	} else {
-		lbSpan.Init(constraint.MakeKey(lowerBound), constraint.ExcludeBoundary, constraint.EmptyKey, constraint.IncludeBoundary)
-		ubSpan.Init(constraint.EmptyKey, constraint.IncludeBoundary, constraint.MakeKey(upperBound), constraint.ExcludeBoundary)
-	}
-	var extremesSpans constraint.Spans
-	if index.GetKeyColumnDirection(0) == catpb.IndexColumn_ASC {
-		extremesSpans.InitSingleSpan(&lbSpan)
-		extremesSpans.Append(&ubSpan)
-	} else {
-		extremesSpans.InitSingleSpan(&ubSpan)
-		extremesSpans.Append(&lbSpan)
-	}
-
-	return extremesSpans, nil
 }
