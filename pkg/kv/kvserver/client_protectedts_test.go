@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -61,6 +62,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, args)
 	defer tc.Stopper().Stop(ctx)
 	s0 := tc.Server(0)
+	ief := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 
 	conn := tc.ServerConn(0)
 	_, err := conn.Exec("CREATE TABLE foo (k INT PRIMARY KEY, v BYTES)")
@@ -182,7 +184,7 @@ func TestProtectedTimestamps(t *testing.T) {
 
 	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor),
 		nil /* knobs */)
-	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
+	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB(), ief)
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
