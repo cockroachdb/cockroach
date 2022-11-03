@@ -326,7 +326,17 @@ func (ih *instrumentationHelper) Setup(
 	}
 
 	ih.collectExecStats = true
-	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(tracingpb.RecordingVerbose))
+	// Execution stats are propagated as structured metadata, so we definitely
+	// need to enable the tracing. We default to the RecordingStructured level
+	// in order to reduce the overhead of EXPLAIN ANALYZE.
+	recType := tracingpb.RecordingStructured
+	if ih.collectBundle || ih.withStatementTrace != nil {
+		// Use the verbose recording only if we're collecting the bundle (the
+		// verbose trace is very helpful during debugging) or if we have a
+		// testing callback.
+		recType = tracingpb.RecordingVerbose
+	}
+	newCtx, ih.sp = tracing.EnsureChildSpan(ctx, cfg.AmbientCtx.Tracer, "traced statement", tracing.WithRecording(recType))
 	ih.shouldFinishSpan = true
 	return newCtx, true
 }

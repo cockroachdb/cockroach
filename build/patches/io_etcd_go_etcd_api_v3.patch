@@ -1,0 +1,48 @@
+diff -urN a/versionpb/BUILD.bazel b/versionpb/BUILD.bazel
+--- a/versionpb/BUILD.bazel	1970-01-01 00:00:00.000000000 +0000
++++ b/versionpb/BUILD.bazel	2000-01-01 00:00:00.000000000 -0000
+@@ -1,4 +1,16 @@
+ load("@io_bazel_rules_go//go:def.bzl", "go_library")
++load("@rules_proto//proto:defs.bzl", "proto_library")
++
++proto_library(
++  name = "versionpb_proto",
++  visibility = ["//visibility:public"],
++  deps = [
++      "@com_github_gogo_protobuf//gogoproto:gogo_proto",
++      "@com_google_protobuf//:descriptor_proto",
++  ],
++  import_prefix = "etcd/api",
++  srcs = ["@io_etcd_go_etcd_api_v3//versionpb:version.proto"],
++)
+ 
+ go_library(
+     name = "versionpb",
+diff -urN a/versionpb/version.proto b/versionpb/version.proto
+--- a/versionpb/version.proto	1970-01-01 00:00:00.000000000 +0000
++++ b/versionpb/version.proto	2000-01-01 00:00:00.000000000 -0000
+@@ -9,20 +9,20 @@
+ 
+ // Indicates etcd version that introduced the message, used to determine minimal etcd version required to interpret wal that includes this message.
+ extend google.protobuf.MessageOptions {
+-  optional string etcd_version_msg = 50000;
++  string etcd_version_msg = 50000;
+ }
+ 
+ // Indicates etcd version that introduced the field, used to determine minimal etcd version required to interpret wal that sets this field.
+ extend google.protobuf.FieldOptions {
+-  optional string etcd_version_field = 50001;
++  string etcd_version_field = 50001;
+ }
+ 
+ // Indicates etcd version that introduced the enum, used to determine minimal etcd version required to interpret wal that uses this enum.
+ extend google.protobuf.EnumOptions {
+-  optional string etcd_version_enum = 50002;
++  string etcd_version_enum = 50002;
+ }
+ 
+ // Indicates etcd version that introduced the enum value, used to determine minimal etcd version required to interpret wal that sets this enum value.
+ extend google.protobuf.EnumValueOptions {
+-  optional string etcd_version_enum_value = 50003;
++  string etcd_version_enum_value = 50003;
+ }

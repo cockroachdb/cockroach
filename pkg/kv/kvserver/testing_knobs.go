@@ -61,16 +61,25 @@ type StoreTestingKnobs struct {
 	// reproposed due to ticks.
 	TestingProposalSubmitFilter func(*ProposalData) (drop bool, err error)
 
-	// TestingApplyFilter is called before applying the results of a command on
+	// TestingApplyCalledTwiceFilter is called before applying the results of a command on
 	// each replica assuming the command was cleared for application (i.e. no
 	// forced error occurred; the supplied AppliedFilterArgs will have a nil
 	// ForcedError field). If this function returns an error, it is treated as
 	// a forced error and the command will not be applied. If it returns an error
 	// on some replicas but not others, the behavior is poorly defined. The
 	// returned int is interpreted as a proposalReevaluationReason.
-	TestingApplyFilter kvserverbase.ReplicaApplyFilter
-	// TestingApplyForcedErrFilter is like TestingApplyFilter, but it is only
-	// invoked when there is a pre-existing forced error. The returned int and
+	//
+	// Users have to expect the filter to be invoked twice for each command, once
+	// from ephemerealReplicaAppBatch.Stage, and once from replicaAppBatch.Stage;
+	// this has to do with wanting to early-ack successful proposals. The second
+	// call is conditional on the first call succeeding.
+	//
+	// Consider using a TestPostApplyFilter instead, and use a
+	// TestingApplyCalledTwiceFilter only to inject forced errors.
+	TestingApplyCalledTwiceFilter kvserverbase.ReplicaApplyFilter
+	// TestingApplyForcedErrFilter is like TestingApplyCalledTwiceFilter, but it
+	// is only invoked when there is a pre-existing forced error (and in
+	// particular, it will be invoked only once per command). The returned int and
 	// *Error replace the existing proposalReevaluationReason (if initially zero
 	// only) and forced error.
 	TestingApplyForcedErrFilter kvserverbase.ReplicaApplyFilter
@@ -78,6 +87,10 @@ type StoreTestingKnobs struct {
 	// TestingPostApplyFilter is called after a command is applied to
 	// rocksdb but before in-memory side effects have been processed.
 	// It is only called on the replica the proposed the command.
+	//
+	// Filters need to handle the case in which the command applies
+	// with a forced error. That is, the "command" will apply as a
+	// no-op write, and the ForcedError field will be set.
 	TestingPostApplyFilter kvserverbase.ReplicaApplyFilter
 
 	// TestingResponseErrorEvent is called when an error is returned applying
@@ -438,6 +451,11 @@ type StoreTestingKnobs struct {
 	// MVCCGCQueueLeaseCheckInterceptor intercepts calls to Replica.LeaseStatusAt when
 	// making high priority replica scans.
 	MVCCGCQueueLeaseCheckInterceptor func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp) bool
+
+	// DisableCanAckBeforeApplication disables acknowledging committed entries
+	// before they apply. This can simplify some tests by making sure that a write
+	// is on the engine when the request returns.
+	DisableCanAckBeforeApplication bool
 
 	// SmallEngineBlocks will configure the engine with a very small block size of
 	// 1 byte, resulting in each key having its own block. This can provoke bugs

@@ -123,6 +123,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
 			Req:                  cmd.proposal.Request,
+			ForcedError:          cmd.forcedErr,
 		})
 		if cmd.proposalRetry == 0 {
 			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)

@@ -206,9 +206,11 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{
+	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
-	})
+	}
+	args.ServerArgs.Knobs.Store = &StoreTestingKnobs{DisableCanAckBeforeApplication: true}
+	tc := serverutils.StartNewTestCluster(t, 1, args)
 
 	const epsilonAllowed = 4
 

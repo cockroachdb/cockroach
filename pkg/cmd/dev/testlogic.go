@@ -247,7 +247,8 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	}
 
 	if files != "" || subtests != "" {
-		args = append(args, "--test_filter", munge(files)+"/"+subtests)
+		filesRegexp := spaceSeparatedRegexpsToRegexp(files)
+		args = append(args, "--test_filter", filesRegexp+"/"+subtests)
 		args = append(args, "--test_sharding_strategy=disabled")
 	}
 	args = append(args, d.getTestOutputArgs(stress, verbose, showLogs, streamOutput)...)
@@ -257,6 +258,21 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		return err
 	}
 	return nil
+}
+
+// We know that the regular expressions for files should not contain whitespace
+// because the file names do not contain whitespace. We support users passing
+// whitespace separated regexps for multiple files.
+func spaceSeparatedRegexpsToRegexp(s string) string {
+	s = munge(s)
+	split := strings.Fields(s)
+	if len(split) < 2 {
+		return s
+	}
+	for i, s := range split {
+		split[i] = "(" + s + ")"
+	}
+	return "(" + strings.Join(split, "|") + ")"
 }
 
 func munge(s string) string {

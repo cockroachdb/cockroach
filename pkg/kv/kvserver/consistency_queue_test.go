@@ -158,7 +158,7 @@ func TestCheckConsistencyReplay(t *testing.T) {
 	}
 	// Arrange to count the number of times each checksum command applies to each
 	// store.
-	testKnobs.TestingApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
+	testKnobs.TestingPostApplyFilter = func(args kvserverbase.ApplyFilterArgs) (int, *roachpb.Error) {
 		state.Lock()
 		defer state.Unlock()
 		if ccr := args.ComputeChecksum; ccr != nil {

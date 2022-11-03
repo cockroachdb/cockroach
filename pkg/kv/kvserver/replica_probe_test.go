@@ -62,7 +62,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 		// We set an ApplyFilter even though the probe should never
 		// show up there (since it always catches a forced error),
 		// precisely to ensure that it doesn't.
-		TestingApplyFilter: filter,
+		TestingApplyCalledTwiceFilter: filter,
 		// This is the main workhorse that counts probes and injects
 		// errors.
 		TestingApplyForcedErrFilter: filter,
