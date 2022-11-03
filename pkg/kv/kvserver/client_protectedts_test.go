@@ -276,7 +276,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	// Release the failed record.
 	require.NoError(t, ptsWithDB.Release(ctx, nil, failedRec.ID.GetUUID()))
 	require.NoError(t, ptsWithDB.Release(ctx, nil, laterRec.ID.GetUUID()))
-	state, err := ptsWithDB.GetState(ctx, nil)
+	ie := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
+	state, err := ptsWithDB.GetState(ctx, nil /* txn */, ie)
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)
 	require.Equal(t, int(state.NumRecords), len(state.Records))

@@ -128,7 +128,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 	var state ptpb.State
 	if err := r.ief.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var err error
-		state, err = r.pts.GetState(ctx, txn)
+		state, err = r.pts.GetState(ctx, txn, ie)
 		return err
 	}); err != nil {
 		r.metrics.ReconciliationErrors.Inc(1)

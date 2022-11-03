@@ -17,6 +17,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/spanconfig",
+        "//pkg/sql/sqlutil",
         "//pkg/util/hlc",
         "//pkg/util/metric",
         "//pkg/util/stop",

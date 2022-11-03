@@ -248,7 +248,7 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 		if versionChanged = md.Version != prev.Version; !versionChanged {
 			return nil
 		}
-		if state, err = c.storage.GetState(ctx, txn); err != nil {
+		if state, err = c.storage.GetState(ctx, txn, ie); err != nil {
 			return errors.Wrap(err, "failed to fetch protectedts state")
 		}
 		return nil

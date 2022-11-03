@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -410,8 +411,8 @@ func isTenantProtected(
 
 	isProtected := false
 	ptsProvider := execCfg.ProtectedTimestampProvider
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		ptsState, err := ptsProvider.GetState(ctx, txn)
+	if err := execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		ptsState, err := ptsProvider.GetState(ctx, txn, ie)
 		if err != nil {
 			return errors.Wrap(err, "failed to get protectedts State")
 		}

@@ -89,16 +89,16 @@ func (s *storageWithDatabase) GetMetadata(
 }
 
 func (s *storageWithDatabase) GetState(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
 ) (state ptpb.State, err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			state, err = s.s.GetState(ctx, txn)
+		err = s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+			state, err = s.s.GetState(ctx, newTxn, ie)
 			return err
 		})
 		return state, err
 	}
-	return s.s.GetState(ctx, txn)
+	return s.s.GetState(ctx, txn, executor)
 }
 
 func (s *storageWithDatabase) UpdateTimestamp(

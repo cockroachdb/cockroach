@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -97,7 +98,7 @@ type Storage interface {
 
 	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
-	GetState(context.Context, *kv.Txn) (ptpb.State, error)
+	GetState(context.Context, *kv.Txn, sqlutil.InternalExecutor) (ptpb.State, error)
 
 	// UpdateTimestamp updates the timestamp protected by the record with the
 	// specified UUID.

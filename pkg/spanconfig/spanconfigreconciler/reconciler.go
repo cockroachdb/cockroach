@@ -491,7 +491,7 @@ func (r *incrementalReconciler) reconcile(
 				}
 
 				missingProtectedTimestampTargets, err = r.filterForMissingProtectedTimestampSystemTargets(
-					ctx, txn, sqlUpdates,
+					ctx, txn, sqlUpdates, ie,
 				)
 				if err != nil {
 					return err
@@ -549,7 +549,7 @@ func (r *incrementalReconciler) reconcile(
 // correspond to cluster or tenant target protected timestamp records that are
 // no longer found, because they've been released.
 func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
-	ctx context.Context, txn *kv.Txn, updates []spanconfig.SQLUpdate,
+	ctx context.Context, txn *kv.Txn, updates []spanconfig.SQLUpdate, ie sqlutil.InternalExecutor,
 ) ([]spanconfig.SystemTarget, error) {
 	seen := make(map[spanconfig.SystemTarget]struct{})
 	var missingSystemTargets []spanconfig.SystemTarget
@@ -568,7 +568,7 @@ func (r *incrementalReconciler) filterForMissingProtectedTimestampSystemTargets(
 	// timestamp subsystem, and the internal limits to limit the size of this
 	// table, there is scope for improvement in the future. One option could be
 	// a rangefeed-backed materialized view of the system table.
-	ptsState, err := r.execCfg.ProtectedTimestampProvider.GetState(ctx, txn)
+	ptsState, err := r.execCfg.ProtectedTimestampProvider.GetState(ctx, txn, ie)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get protected timestamp state")
 	}
