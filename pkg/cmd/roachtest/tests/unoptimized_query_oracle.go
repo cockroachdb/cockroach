@@ -46,7 +46,7 @@ func registerUnoptimizedQueryOracle(r registry.Registry) {
 			var clusterSpec spec.ClusterSpec
 			switch setupName {
 			case sqlsmith.SeedMultiRegionSetupName:
-				clusterSpec = r.MakeClusterSpec(4, spec.Geo())
+				clusterSpec = r.MakeClusterSpec(9, spec.Geo())
 			default:
 				clusterSpec = r.MakeClusterSpec(1)
 			}
