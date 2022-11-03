@@ -4024,6 +4024,13 @@ func (n *KVAdmissionControllerImpl) AdmitKVWork(
 	if source == roachpb.AdmissionHeader_OTHER {
 		bypassAdmission = true
 	}
+	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
+	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
+		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
+			bypassAdmission = true
+		}
+	}
+
 	createTime := ba.AdmissionHeader.CreateTime
 	if !bypassAdmission && createTime == 0 {
 		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
