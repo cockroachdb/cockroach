@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -32,6 +33,7 @@ import (
 // Cache implements protectedts.Cache.
 type Cache struct {
 	db       *kv.DB
+	ief      sqlutil.InternalExecutorFactory
 	storage  protectedts.Storage
 	stopper  *stop.Stopper
 	settings *cluster.Settings
@@ -56,15 +58,17 @@ type Cache struct {
 
 // Config configures a Cache.
 type Config struct {
-	DB       *kv.DB
-	Storage  protectedts.Storage
-	Settings *cluster.Settings
+	DB        *kv.DB
+	IeFactory sqlutil.InternalExecutorFactory
+	Storage   protectedts.Storage
+	Settings  *cluster.Settings
 }
 
 // New returns a new cache.
 func New(config Config) *Cache {
 	c := &Cache{
 		db:       config.DB,
+		ief:      config.IeFactory,
 		storage:  config.Storage,
 		settings: config.Settings,
 	}
@@ -226,7 +230,9 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 		state          ptpb.State
 		ts             hlc.Timestamp
 	)
-	err := c.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	err := c.ief.TxnWithExecutor(ctx, c.db, nil /* sessionData */, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) (err error) {
 		// NB: because this is a read-only transaction, the commit will be a no-op;
 		// returning nil here means the transaction will commit and will never need
 		// to change its read timestamp.

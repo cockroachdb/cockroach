@@ -56,6 +56,7 @@ func TestCacheBasic(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -67,9 +68,10 @@ func TestCacheBasic(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Microsecond)
 
 	c := ptcache.New(ptcache.Config{
-		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		Settings:  s.ClusterSettings(),
+		DB:        s.DB(),
+		IeFactory: ief,
+		Storage:   p,
 	})
 	require.NoError(t, c.Start(ctx, tc.Stopper()))
 
@@ -133,6 +135,7 @@ func TestRefresh(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(
 			s.ClusterSettings(),
@@ -145,9 +148,10 @@ func TestRefresh(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
-		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		Settings:  s.ClusterSettings(),
+		DB:        s.DB(),
+		IeFactory: ief,
+		Storage:   p,
 	})
 	require.NoError(t, c.Start(ctx, tc.Stopper()))
 	t.Run("already up-to-date", func(t *testing.T) {
@@ -254,13 +258,15 @@ func TestStart(t *testing.T) {
 			},
 		})
 		s := tc.Server(0)
+		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		p := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 		c := ptcache.New(ptcache.Config{
-			Settings: s.ClusterSettings(),
-			DB:       s.DB(),
-			Storage:  p,
+			Settings:  s.ClusterSettings(),
+			DB:        s.DB(),
+			IeFactory: ief,
+			Storage:   p,
 		})
 		return tc, c
 	}
@@ -286,6 +292,7 @@ func TestQueryRecord(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(
 			s.ClusterSettings(),
@@ -296,9 +303,10 @@ func TestQueryRecord(t *testing.T) {
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 	c := ptcache.New(ptcache.Config{
-		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		Settings:  s.ClusterSettings(),
+		DB:        s.DB(),
+		IeFactory: ief,
+		Storage:   p,
 	})
 	require.NoError(t, c.Start(ctx, tc.Stopper()))
 
@@ -348,6 +356,7 @@ func TestIterate(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -359,9 +368,10 @@ func TestIterate(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
-		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		Settings:  s.ClusterSettings(),
+		DB:        s.DB(),
+		IeFactory: ief,
+		Storage:   p,
 	})
 	require.NoError(t, c.Start(ctx, tc.Stopper()))
 
@@ -426,6 +436,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	// Set the poll interval to be very long.
 	s := tc.Server(0)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	ts := func(nanos int) hlc.Timestamp {
@@ -505,9 +516,10 @@ func TestGetProtectionTimestamps(t *testing.T) {
 			)
 
 			c := ptcache.New(ptcache.Config{
-				Settings: s.ClusterSettings(),
-				DB:       s.DB(),
-				Storage:  p,
+				Settings:  s.ClusterSettings(),
+				DB:        s.DB(),
+				IeFactory: ief,
+				Storage:   p,
 			})
 			require.NoError(t, c.Start(ctx, tc.Stopper()))
 
@@ -525,6 +537,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.Server(0)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
 		ptstorage.New(s.ClusterSettings(),
 			s.InternalExecutor().(sqlutil.InternalExecutor),
@@ -536,9 +549,10 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
-		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		Settings:  s.ClusterSettings(),
+		DB:        s.DB(),
+		IeFactory: ief,
+		Storage:   p,
 	})
 	require.NoError(t, c.Start(ctx, tc.Stopper()))
 

@@ -30,12 +30,13 @@ import (
 
 // Config configures the Provider.
 type Config struct {
-	Settings             *cluster.Settings
-	DB                   *kv.DB
-	Stores               *kvserver.Stores
-	ReconcileStatusFuncs ptreconcile.StatusFuncs
-	InternalExecutor     sqlutil.InternalExecutor
-	Knobs                *protectedts.TestingKnobs
+	Settings                *cluster.Settings
+	DB                      *kv.DB
+	Stores                  *kvserver.Stores
+	ReconcileStatusFuncs    ptreconcile.StatusFuncs
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
+	InternalExecutor        sqlutil.InternalExecutor
+	Knobs                   *protectedts.TestingKnobs
 }
 
 // Provider is the concrete implementation of protectedts.Provider interface.
@@ -54,9 +55,10 @@ func New(cfg Config) (protectedts.Provider, error) {
 	storage := ptstorage.New(cfg.Settings, cfg.InternalExecutor, cfg.Knobs)
 	reconciler := ptreconcile.New(cfg.Settings, cfg.DB, storage, cfg.ReconcileStatusFuncs)
 	cache := ptcache.New(ptcache.Config{
-		DB:       cfg.DB,
-		Storage:  storage,
-		Settings: cfg.Settings,
+		DB:        cfg.DB,
+		IeFactory: cfg.InternalExecutorFactory,
+		Storage:   storage,
+		Settings:  cfg.Settings,
 	})
 
 	return &Provider{

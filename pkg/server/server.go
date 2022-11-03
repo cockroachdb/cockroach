@@ -499,10 +499,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	protectedtsKnobs, _ := cfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	protectedtsProvider, err := ptprovider.New(ptprovider.Config{
-		DB:               db,
-		InternalExecutor: internalExecutor,
-		Settings:         st,
-		Knobs:            protectedtsKnobs,
+		DB:                      db,
+		InternalExecutor:        internalExecutor,
+		InternalExecutorFactory: internalExecutorFactory,
+		Settings:                st,
+		Knobs:                   protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				jobRegistry, internalExecutor, jobsprotectedts.Jobs),

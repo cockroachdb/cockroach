@@ -822,10 +822,11 @@ func makeTenantSQLServerArgs(
 	var protectedTSProvider protectedts.Provider
 	protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	pp, err := ptprovider.New(ptprovider.Config{
-		DB:               db,
-		InternalExecutor: circularInternalExecutor,
-		Settings:         st,
-		Knobs:            protectedtsKnobs,
+		DB:                      db,
+		InternalExecutor:        circularInternalExecutor,
+		InternalExecutorFactory: internalExecutorFactory,
+		Settings:                st,
+		Knobs:                   protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
 				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Jobs),
