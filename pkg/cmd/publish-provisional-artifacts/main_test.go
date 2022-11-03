@@ -109,7 +109,7 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 				case "crosslinuxarmbase":
 					platform = release.PlatformLinuxArm
 				case "crossmacosbase":
-					platform = release.PlatformMacOS
+					platform = release.PlatformMacOSUnsigned
 				case "crossmacosarmbase":
 					platform = release.PlatformMacOSArm
 				case "crosswindowsbase":
@@ -186,10 +186,10 @@ func TestProvisional(t *testing.T) {
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
 				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.linux-amd64.tgz CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.linux-amd64.tgz.sha256sum CONTENTS <sha256sum>",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
-				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
-				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.tgz CONTENTS <binary stuff>",
-				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.tgz.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.unsigned.tgz CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-10.9-amd64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.unsigned.tgz CONTENTS <binary stuff>",
+				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-10.9-amd64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz CONTENTS <binary stuff>",
 				"s3://binaries.cockroachdb.com/cockroach-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz.sha256sum CONTENTS <sha256sum>",
 				"s3://binaries.cockroachdb.com/cockroach-sql-v0.0.1-alpha.darwin-11.0-aarch64.unsigned.tgz CONTENTS <binary stuff>",
@@ -372,10 +372,10 @@ func TestBless(t *testing.T) {
 					"REDIRECT /cockroach-v0.0.1.linux-amd64.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.linux-amd64.tgz.sha256sum/no-cache " +
 					"REDIRECT /cockroach-v0.0.1.linux-amd64.tgz.sha256sum",
-				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz/no-cache " +
-					"REDIRECT /cockroach-v0.0.1.darwin-10.9-amd64.tgz",
-				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.tgz.sha256sum/no-cache " +
-					"REDIRECT /cockroach-v0.0.1.darwin-10.9-amd64.tgz.sha256sum",
+				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.unsigned.tgz/no-cache " +
+					"REDIRECT /cockroach-v0.0.1.darwin-10.9-amd64.unsigned.tgz",
+				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-10.9-amd64.unsigned.tgz.sha256sum/no-cache " +
+					"REDIRECT /cockroach-v0.0.1.darwin-10.9-amd64.unsigned.tgz.sha256sum",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-11.0-aarch64.unsigned.tgz/no-cache " +
 					"REDIRECT /cockroach-v0.0.1.darwin-11.0-aarch64.unsigned.tgz",
 				"s3://binaries.cockroachdb.com/cockroach-latest.darwin-11.0-aarch64.unsigned.tgz.sha256sum/no-cache " +
