@@ -1,0 +1,353 @@
+// Copyright 2021 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package stats
+
+import (
+	"context"
+	"reflect"
+	"strconv"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+)
+
+// TestMergeStatistics calls mergeStatistics with various observed
+// stats, that include full statistics and partial statistics.
+func TestMergeStatistics(t *testing.T) {
+	testCases := []struct {
+		initial  *testStat
+		partial  *testStat
+		expected *testStat
+		err      bool
+	}{
+		{
+			// Single partial at the extremes of full.
+			initial: &testStat{
+				at: 1, row: 14, dist: 9, null: 4, size: 1,
+				hist: testHistogram{{0, 0, 0, 30}, {1, 9, 7, 40}},
+			},
+			partial: &testStat{
+				at: 1, row: 19, dist: 3, null: 0, size: 1,
+				hist: testHistogram{{3, 2, 0, 20}, {3, 11, 8, 50}},
+			},
+			expected: &testStat{
+				at: 1, row: 29, dist: 18, null: 0, size: 1,
+				hist: testHistogram{{3, 2, 0, 20}, {0, 0, 0, 30}, {1, 9, 7, 40}, {3, 11, 8, 50}},
+			},
+		},
+		{
+			// Multiple buckets at extremes.
+			initial: &testStat{
+				at: 1, row: 12, dist: 6, null: 0, size: 2,
+				hist: testHistogram{
+					{1, 0, 0, 2},
+					{1, 1, 0, 4},
+					{1, 1, 0, 6},
+				},
+			},
+			partial: &testStat{
+				at: 2, row: 8, dist: 3, null: 0, size: 2,
+				hist: testHistogram{
+					{2, 0, 0, 0},
+					{2, 0, 0, 1},
+					{2, 0, 0, 7},
+					{2, 0, 0, 8},
+				},
+			},
+			expected: &testStat{
+				at: 2, row: 13, dist: 7, null: 0, size: 2,
+				hist: testHistogram{
+					{2, 0, 0, 0},
+					{2, 0, 0, 1},
+					{1, 0, 0, 2},
+					{1, 1, 0, 4},
+					{1, 1, 0, 6},
+					{2, 0, 0, 7},
+					{2, 0, 0, 8},
+				},
+			},
+		},
+		{
+			// Multiple buckets at lower bound.
+			initial: &testStat{
+				at: 2, row: 23, dist: 12, null: 2, size: 3,
+				hist: testHistogram{
+					{3, 3, 2, 5},
+					{3, 3, 2, 8},
+					{3, 3, 2, 12},
+					{3, 2, 2, 15},
+				},
+			},
+			partial: &testStat{
+				at: 3, row: 4, dist: 4, null: 3, size: 5,
+				hist: testHistogram{
+					{1, 0, 0, 2},
+					{1, 0, 0, 3},
+					{1, 0, 0, 4},
+				},
+			},
+			expected: &testStat{
+				at: 3, row: 24, dist: 13, null: 3, size: 3,
+				hist: testHistogram{
+					{1, 0, 0, 2},
+					{1, 0, 0, 3},
+					{1, 0, 0, 4},
+					{3, 3, 2, 8},
+					{3, 3, 2, 12},
+					{3, 2, 2, 15},
+				},
+			},
+		},
+		{
+			// Multiple buckets at upper bound.
+			initial: &testStat{
+				at: 2, row: 19, dist: 10, null: 0, size: 3,
+				hist: testHistogram{
+					{1, 0, 0, 0},
+					{3, 3, 2, 5},
+					{3, 3, 2, 8},
+					{3, 3, 2, 15},
+				},
+			},
+			partial: &testStat{
+				at: 2, row: 18, dist: 11, null: 0, size: 8,
+				hist: testHistogram{
+					{4, 4, 4, 19},
+					{5, 5, 5, 21},
+				},
+			},
+			expected: &testStat{
+				at: 2, row: 37, dist: 21, null: 0, size: 4,
+				hist: testHistogram{
+					{1, 0, 0, 0},
+					{3, 3, 2, 5},
+					{3, 3, 2, 8},
+					{3, 3, 2, 15},
+					{4, 4, 4, 19},
+					{5, 5, 5, 21},
+				},
+			},
+		},
+		{
+			// Multiple buckets at both upper and lower bounds.
+			initial: &testStat{
+				at: 2, row: 37, dist: 22, null: 0, size: 6,
+				hist: testHistogram{
+					{1, 0, 0, 9},
+					{5, 5, 5, 11},
+					{6, 6, 6, 15},
+					{7, 7, 7, 18},
+				},
+			},
+			partial: &testStat{
+				at: 5, row: 48, dist: 26, null: 0, size: 2,
+				hist: testHistogram{
+					{3, 3, 2, 0},
+					{3, 3, 2, 5},
+					{3, 3, 2, 8},
+					{7, 7, 7, 21},
+					{8, 8, 8, 42},
+				},
+			},
+			expected: &testStat{
+				at: 5, row: 85, dist: 48, size: 4,
+				hist: testHistogram{
+					{3, 3, 2, 0},
+					{3, 3, 2, 5},
+					{3, 3, 2, 8},
+					{1, 0, 0, 9},
+					{5, 5, 5, 11},
+					{6, 6, 6, 15},
+					{7, 7, 7, 18},
+					{7, 7, 7, 21},
+					{8, 8, 8, 42},
+				},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			initial := tc.initial.toTableStatistic("stat", i, descpb.ColumnIDs{1})
+			partial := tc.partial.toTableStatistic("stat", i, descpb.ColumnIDs{1})
+			expected := tc.expected.toTableStatistic("__merged__", i, descpb.ColumnIDs{1})
+			merged, err := mergeExtremesStatistic(initial, partial)
+			if err != nil {
+				if !tc.err {
+					t.Errorf("test case %d unexpected mergeStatistics err: %v", i, err)
+				}
+				return
+			}
+			if tc.err {
+				t.Errorf("test case %d expected mergeStatistics err, was:\n%s", i, merged)
+				return
+			}
+			if !reflect.DeepEqual(merged, expected) {
+				t.Errorf("test case %d incorrect merge\n%s\nexpected\n%s", i, merged, expected)
+			}
+		})
+	}
+}
+
+// TestCreateMergedStatistics tests CreateMergedStatistics which
+// merges an array of full statistics with partial statistics.
+func TestCreateMergedStatistics(t *testing.T) {
+
+	ctx := context.Background()
+	// Array of one or more full statistics and one or more partial
+	// statistics for different column sets.
+	testCases := []struct {
+		full     []*testStat
+		partial  []*testStat
+		expected []*testStat
+	}{
+		{
+			// Simplest case, one newer partial stat for each new full stat.
+			full: []*testStat{
+				{
+					at: 5, row: 14, dist: 9, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 9, 7, 40}},
+				},
+				{
+					at: 5, row: 10, dist: 6, null: 0, size: 1, colID: 2,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 6, 4, 40}},
+				},
+				{
+					at: 5, row: 6, dist: 3, null: 0, size: 1, colID: 3,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 3, 1, 40}},
+				},
+				{
+					at: 5, row: 6, dist: 3, null: 0, size: 1, colID: 4,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 3, 1, 40}},
+				},
+			},
+			partial: []*testStat{
+				{
+					at: 6, row: 14, dist: 9, null: 0, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 50}, {1, 9, 7, 60}},
+				},
+				{
+					at: 6, row: 10, dist: 6, null: 0, size: 1, colID: 2,
+					hist: testHistogram{{0, 0, 0, 10}, {1, 6, 4, 20}},
+				},
+				{
+					at: 6, row: 6, dist: 3, null: 0, size: 1, colID: 3,
+					hist: testHistogram{{0, 0, 0, 10}, {1, 3, 1, 50}},
+				},
+				{
+					at: 6, row: 6, dist: 3, null: 0, size: 1, colID: 4,
+					hist: testHistogram{{0, 0, 0, 0}, {0, 0, 0, 10}, {1, 3, 1, 50}, {0, 0, 0, 60}},
+				},
+			},
+			expected: []*testStat{
+				{
+					at: 6, row: 20, dist: 16, null: 0, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 30.0}, {1, 9, 7, 40.0}, {0, 0, 0, 50.0}, {1, 9, 7, 60.0}},
+				},
+				{
+					at: 6, row: 14, dist: 10, null: 0, size: 1, colID: 2,
+					hist: testHistogram{{0, 0, 0, 10.0}, {1, 6, 4, 20.0}, {0, 0, 0, 30.0}, {1, 6, 4, 40.0}},
+				},
+				{
+					at: 6, row: 8, dist: 4, null: 0, size: 1, colID: 3,
+					hist: testHistogram{{0, 0, 0, 10.0}, {0, 0, 0, 30.0}, {1, 3, 1, 40.0}, {1, 3, 1, 50.0}},
+				},
+				{
+					at: 6, row: 8, dist: 4, size: 1, colID: 4,
+					hist: testHistogram{{0, 0, 0, 0.0}, {0, 0, 0, 10.0}, {0, 0, 0, 30.0}, {1, 3, 1, 40.0}, {1, 3, 1, 50.0}, {0, 0, 0, 60.0}},
+				},
+			},
+		},
+		{
+			// Multiple partial stats for a full statistic.
+			// Ensure it picks the latest for each respective set of column keys.
+			full: []*testStat{
+				{
+					at: 5, row: 14, dist: 9, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 9, 7, 40}},
+				},
+				{
+					at: 5, row: 14, dist: 9, null: 4, size: 1, colID: 2,
+					hist: testHistogram{{1, 0, 0, 20}, {1, 9, 7, 30}},
+				},
+			},
+			partial: []*testStat{
+				{
+					at: 8, row: 14, dist: 9, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{2, 0, 0, 50}, {1, 9, 8, 60}, {1, 9, 7, 70}},
+				},
+				{
+					at: 7, row: 14, dist: 9, null: 4, size: 1, colID: 2,
+					hist: testHistogram{{0, 0, 0, 40}, {0, 0, 0, 50}},
+				},
+				{
+					at: 7, row: 14, dist: 9, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{1, 0, 0, 50}, {1, 9, 7, 60}},
+				},
+				{
+					at: 6, row: 14, dist: 9, null: 4, size: 1, colID: 2,
+					hist: testHistogram{{0, 0, 0, 50}},
+				},
+			},
+			expected: []*testStat{
+				{
+					at: 8, row: 36, dist: 26, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 30.0}, {1, 9, 7, 40.0}, {2, 0, 0, 50.0}, {1, 9, 8, 60.0}, {1, 9, 7, 70.0}},
+				},
+				{
+					at: 7, row: 15, dist: 9, null: 4, size: 1, colID: 2,
+					hist: testHistogram{{1, 0, 0, 20.0}, {1, 9, 7, 30.0}, {0, 0, 0, 40.0}, {0, 0, 0, 50.0}},
+				},
+			},
+		},
+		{
+			// Ensure it returns nothing when the latest partial statistic
+			// is earlier than the latest full or doesn't exist for that column,
+			// as the merged stats are prepended to combined list of full statistics.
+			full: []*testStat{
+				{
+					at: 5, row: 14, dist: 9, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 9, 7, 40}},
+				},
+				{
+					at: 5, row: 14, dist: 9, null: 4, size: 1, colID: 2,
+					hist: testHistogram{{0, 0, 0, 30}, {1, 9, 7, 40}},
+				},
+			},
+			partial: []*testStat{
+				{
+					at: 4, row: 14, dist: 9, null: 4, size: 1, colID: 1,
+					hist: testHistogram{{0, 0, 0, 50}, {1, 9, 7, 60}},
+				},
+			},
+			expected: []*testStat{},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			fullStatList := make([]*TableStatistic, 0, len(tc.full))
+			partialStatList := make([]*TableStatistic, 0, len(tc.full))
+			expected := make([]*TableStatistic, 0, len(tc.expected))
+			for _, s := range tc.full {
+				fullStatList = append(fullStatList, s.toTableStatistic("full", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}))
+			}
+			for _, s := range tc.partial {
+				partialStatList = append(partialStatList, s.toTableStatistic("partial", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}))
+			}
+			for _, s := range tc.expected {
+				expected = append(expected, s.toTableStatistic("__merged__", i, descpb.ColumnIDs{descpb.ColumnID(s.colID)}))
+			}
+			observed := CreateMergedStatistics(ctx, partialStatList, fullStatList)
+			if !reflect.DeepEqual(observed, expected) {
+				t.Errorf("test case %d incorrect merge\n%s\nexpected\n%s", i, observed, expected)
+			}
+		})
+	}
+}
