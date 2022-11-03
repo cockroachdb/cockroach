@@ -17,6 +17,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/util/hlc",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -38,6 +39,7 @@ proto_library(
         "//pkg/storage/enginepb:enginepb_proto",
         "//pkg/util/hlc:hlc_proto",
         "//pkg/util/tracing/tracingpb:tracingpb_proto",
+        "@com_github_cockroachdb_errors//errorspb:errorspb_proto",
         "@com_github_gogo_protobuf//gogoproto:gogo_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@io_etcd_go_etcd_raft_v3//raftpb:raftpb_proto",
@@ -59,6 +61,7 @@ go_proto_library(
         "//pkg/util/hlc",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/uuid",  # keep
+        "@com_github_cockroachdb_errors//errorspb",
         "@com_github_gogo_protobuf//gogoproto",
         "@io_etcd_go_etcd_raft_v3//raftpb",
     ],

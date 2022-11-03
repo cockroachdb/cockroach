@@ -16,6 +16,7 @@ var hibernateBlocklists = blocklistsForVersion{
 	{"v21.2", "hibernateBlockList21_2", hibernateBlockList21_2, "hibernateIgnoreList21_2", hibernateIgnoreList21_2},
 	{"v22.1", "hibernateBlockList22_1", hibernateBlockList22_1, "hibernateIgnoreList22_1", hibernateIgnoreList22_1},
 	{"v22.2", "hibernateBlockList22_2", hibernateBlockList22_2, "hibernateIgnoreList22_2", hibernateIgnoreList22_2},
+	{"v23.1", "hibernateBlockList23_1", hibernateBlockList23_1, "hibernateIgnoreList23_1", hibernateIgnoreList23_1},
 }
 
 var hibernateSpatialBlocklists = blocklistsForVersion{
@@ -23,11 +24,14 @@ var hibernateSpatialBlocklists = blocklistsForVersion{
 	{"v21.2", "hibernateSpatialBlockList21_2", hibernateSpatialBlockList21_2, "", nil},
 	{"v22.1", "hibernateSpatialBlockList22_1", hibernateSpatialBlockList22_1, "", nil},
 	{"v22.2", "hibernateSpatialBlockList22_2", hibernateSpatialBlockList22_2, "", nil},
+	{"v23.1", "hibernateSpatialBlockList23_1", hibernateSpatialBlockList23_1, "", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
+var hibernateSpatialBlockList23_1 = blocklist{}
+
 var hibernateSpatialBlockList22_2 = blocklist{}
 
 var hibernateSpatialBlockList22_1 = blocklist{}
@@ -35,6 +39,8 @@ var hibernateSpatialBlockList22_1 = blocklist{}
 var hibernateSpatialBlockList21_2 = blocklist{}
 
 var hibernateSpatialBlockList21_1 = blocklist{}
+
+var hibernateBlockList23_1 = hibernateBlockList22_2
 
 var hibernateBlockList22_2 = hibernateBlockList22_1
 
@@ -237,6 +243,8 @@ var hibernateBlockList20_2 = blocklist{
 	"org.hibernate.test.naturalid.inheritance.cache.InheritedNaturalIdNoCacheTest.testLoadExtendedByNormal":                                                                                      "unknown",
 	"org.hibernate.test.where.annotations.EagerManyToOneFetchModeSelectWhereTest.testAssociatedWhereClause":                                                                                      "unknown",
 }
+
+var hibernateIgnoreList23_1 = hibernateIgnoreList22_2
 
 var hibernateIgnoreList22_2 = hibernateIgnoreList22_1
 

@@ -2911,7 +2911,8 @@ func TestSendSnapshotThrottling(t *testing.T) {
 	{
 		sp := &fakeStorePool{}
 		resp := &kvserverpb.SnapshotResponse{
-			Status: kvserverpb.SnapshotResponse_ERROR,
+			Status:       kvserverpb.SnapshotResponse_ERROR,
+			EncodedError: errors.EncodeError(ctx, errors.New("boom")),
 		}
 		c := fakeSnapshotStream{resp, nil}
 		err := sendSnapshot(

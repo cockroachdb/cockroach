@@ -15,6 +15,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// errMarkSnapshotError is used as an error mark for errors that get returned
+// to the initiator of a snapshot. This generally classifies errors as transient,
+// i.e. communicates an intention for the caller to retry.
+//
 // NB: don't change the string here; this will cause cross-version issues
 // since this singleton is used as a marker.
 var errMarkSnapshotError = errors.New("snapshot failed")
