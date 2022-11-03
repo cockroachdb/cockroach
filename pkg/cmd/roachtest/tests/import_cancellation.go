@@ -72,10 +72,6 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	if _, err := conn.Exec(`SET CLUSTER SETTING kv.bulk_ingest.max_index_buffer_size = '2gb'`); err != nil {
 		t.Fatal(err)
 	}
-	// Enable MVCC Range tombstones.
-	if _, err := conn.Exec(`SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = 't'`); err != nil {
-		t.Fatal(err)
-	}
 	// Increase AddSSTable concurrency to speed up the imports. Otherwise the
 	// lineitem (the largest tpch table) IMPORT will extend the test duration
 	// significantly.
@@ -84,7 +80,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	}
 
 	seed := int64(1666467482296309000)
-	rng := randutil.NewTestRandWithSeed(seed)
+	rng := rand.New(rand.NewSource(seed))
 
 	tablesToNumFiles := map[string]int{
 		"region":   1,
@@ -107,8 +103,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 			t.Fatal(err)
 		}
 		// Set a random GC TTL that is relatively short. We want to exercise GC
-		// of MVCC range tombstones, and would like a mix of live MVCC Range
-		// Tombstones and the Pebble RangeKeyUnset tombstones that clear them.
+		// while importing.
 		ttl := randutil.RandIntInRange(rng, 10*60 /* 10m */, 60*20 /* 20m */)
 		stmt := fmt.Sprintf(`ALTER TABLE csv.%s CONFIGURE ZONE USING gc.ttlseconds = $1`, tbl)
 		_, err = conn.ExecContext(ctx, stmt, ttl)
@@ -209,26 +204,23 @@ func (t *importCancellationTest) runImportSequence(
 
 	// The following loop runs between 1-4 times. Each time, it selects a random
 	// subset of the table's fixture files and begins importing them with an
-	// IMPORT INTO. after a random duration, it cancels the import job. If the
-	// job has not yet completed, the import will be reverted and a MVCC range
-	// tombstone will be written over the imported data. If the job has already
-	// completed, the successfully imported files are removed from
-	// consideration.
+	// IMPORT INTO. after a random duration, it cancels the import job. If the job
+	// has not yet completed, the import will be reverted. If the job has already
+	// completed, the successfully imported files are removed from consideration.
 	//
 	// The loop stops when there's no longer any un-imported files remaining. On
 	// the last run, all un-imported files are included in the import and the
 	// import is not cancelled. As such, when this function returns all files
 	// should have successfully been imported. There may be additional versions
-	// of some of the keys remnant from failed imports, and MVCC range
-	// tombstones at various timestamps deleting them.
+	// of some of the keys remnant from failed imports.
 
 	attempts := randutil.RandIntInRange(rng, 2, 5)
 	for i := 0; i < attempts && len(filesToImport) > 0; i++ {
 		t.WorkerStatus(fmt.Sprintf(`attempt %d/%d for table %q`, i+1, attempts, tableName))
 		files := filesToImport
 		// If not the last attempt, import a subset of the files available.
-		// This will create MVCC range tombstones across separate regions of
-		// the table's keyspace.
+		// This will create deletion tombstones across separate regions of the
+		// table's keyspace.
 		if i != attempts-1 {
 			rng.Shuffle(len(files), func(i, j int) {
 				files[i], files[j] = files[j], files[i]
