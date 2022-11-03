@@ -279,7 +279,12 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 
 	// Force a range split in between near past and far past. This guarantees
 	// that the pruning operation will issue a DeleteRange which spans ranges.
-	if err := db.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+	if err := db.AdminSplit(
+		context.Background(),
+		splitKey,
+		hlc.MaxTimestamp, /* expirationTime */
+		roachpb.AdminSplitRequest_INGESTION,
+	); err != nil {
 		t.Fatal(err)
 	}
 

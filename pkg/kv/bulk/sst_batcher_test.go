@@ -277,7 +277,12 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			}
 
 			t.Logf("splitting at %s", key(split1))
-			require.NoError(t, kvDB.AdminSplit(ctx, key(split1), hlc.MaxTimestamp /* expirationTime */))
+			require.NoError(t, kvDB.AdminSplit(
+				ctx,
+				key(split1),
+				hlc.MaxTimestamp, /* expirationTime */
+				roachpb.AdminSplitRequest_INGESTION,
+			))
 
 			// We want to make sure our range-aware batching knows about one of our
 			// splits to exercise that code path, but we also want to make sure we
@@ -293,7 +298,12 @@ func runTestImport(t *testing.T, batchSizeValue int64) {
 			}
 
 			t.Logf("splitting at %s", key(split2))
-			require.NoError(t, kvDB.AdminSplit(ctx, key(split2), hlc.MaxTimestamp /* expirationTime */))
+			require.NoError(t, kvDB.AdminSplit(
+				ctx,
+				key(split2),
+				hlc.MaxTimestamp, /* expirationTime */
+				roachpb.AdminSplitRequest_INGESTION,
+			))
 
 			ts := hlc.Timestamp{WallTime: 100}
 			mem := mon.NewUnlimitedMonitor(ctx, "lots", mon.MemoryResource, nil, nil, 0, nil)

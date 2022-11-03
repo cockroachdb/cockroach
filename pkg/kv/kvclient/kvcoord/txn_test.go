@@ -429,7 +429,12 @@ func TestTxnRepeatGetWithRangeSplit(t *testing.T) {
 		}
 		s.Manual.Advance(time.Second)
 		// Split range by keyB.
-		if err := s.DB.AdminSplit(context.Background(), splitKey, hlc.MaxTimestamp /* expirationTime */); err != nil {
+		if err := s.DB.AdminSplit(
+			context.Background(),
+			splitKey,
+			hlc.MaxTimestamp, /* expirationTime */
+			roachpb.AdminSplitRequest_INGESTION,
+		); err != nil {
 			t.Fatal(err)
 		}
 		// Wait till split complete.

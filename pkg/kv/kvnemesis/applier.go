@@ -86,7 +86,7 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		*DeleteRangeOperation:
 		applyClientOp(ctx, db, op, false /* inTxn */)
 	case *SplitOperation:
-		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp)
+		err := db.AdminSplit(ctx, o.Key, hlc.MaxTimestamp, roachpb.AdminSplitRequest_INGESTION)
 		o.Result = resultInit(ctx, err)
 	case *MergeOperation:
 		err := db.AdminMerge(ctx, o.Key)

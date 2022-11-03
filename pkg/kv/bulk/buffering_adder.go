@@ -403,7 +403,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 		}
 		predicateKey := b.curBuf.Key(predicateAt)
 		log.VEventf(ctx, 1, "pre-splitting span %d of %d at %s", i, b.initialSplits, splitKey)
-		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, predicateKey); err != nil {
+		if err := b.sink.db.AdminSplit(ctx, splitKey, expire, roachpb.AdminSplitRequest_INGESTION, predicateKey); err != nil {
 			// TODO(dt): a typed error would be nice here.
 			if strings.Contains(err.Error(), "predicate") {
 				log.VEventf(ctx, 1, "%s adder split at %s rejected, had previously split and no longer included %s",
