@@ -288,11 +288,13 @@ sudo systemd-run --unit prometheus --same-dir \
 		if err := c.RepeatRun(ctx, l,
 			l.Stdout,
 			l.Stderr, cfg.PrometheusNode, "install grafana",
-			`sudo apt-get install -qqy apt-transport-https &&
+			`
+sudo apt-get install -qqy apt-transport-https &&
 sudo apt-get install -qqy software-properties-common wget &&
-wget -q -O - https://packages.grafana.com/gpg.key | sudo apt-key add - &&
-echo "deb https://packages.grafana.com/enterprise/deb stable main" | sudo tee -a /etc/apt/sources.list.d/grafana.list &&
-sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo mkdir -p /var/lib/grafana/dashboards`,
+sudo apt-get install -y adduser libfontconfig1 &&
+wget https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_amd64.deb -O grafana-enterprise_9.2.3_amd64.deb &&
+sudo dpkg -i grafana-enterprise_9.2.3_amd64.deb &&
+sudo mkdir -p /var/lib/grafana/dashboards`,
 		); err != nil {
 			return nil, err
 		}
@@ -301,7 +303,7 @@ sudo apt-get update -qqy && sudo apt-get install -qqy grafana-enterprise && sudo
 		if err := c.RepeatRun(ctx, l,
 			l.Stdout,
 			l.Stderr, cfg.PrometheusNode, "permissions",
-			`sudo chmod 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
+			`sudo chmod -R 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
 		); err != nil {
 			return nil, err
 		}
