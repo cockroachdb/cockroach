@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -224,6 +226,45 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 		return err
 	}
 
+	// Set up the rest of the scanNode.
+	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	return nil
+}
+
+// initDescSpecificCol initializes the column structures with the
+// index that the provided column is the prefix for.
+func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catalog.Column) error {
+	n.colCfg = colCfg
+	indexes := n.desc.ActiveIndexes()
+	prefixColID := prefixCol.GetID()
+
+	// Currently, we pick the first index that we find, even if there exist multiple in the
+	// table where prefixCol is the key column.
+	foundIndex := false
+	for _, idx := range indexes {
+		if idx.GetType() != descpb.IndexDescriptor_FORWARD || idx.IsPartial() {
+			continue
+		}
+		columns := n.desc.IndexKeyColumns(idx)
+		if len(columns) > 0 {
+			if columns[0].GetID() == prefixColID {
+				n.index = idx
+				foundIndex = true
+				break
+			}
+		}
+	}
+	if !foundIndex {
+		return pgerror.Newf(pgcode.InvalidColumnReference,
+			"table %s does not contain a non-partial forward index with %s as a prefix column",
+			n.desc.GetName(),
+			prefixCol.GetName())
+	}
+	var err error
+	n.cols, err = initColsForScan(n.desc, n.colCfg)
+	if err != nil {
+		return err
+	}
 	// Set up the rest of the scanNode.
 	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
 	return nil

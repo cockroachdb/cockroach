@@ -1342,9 +1342,10 @@ func insertJSONStatistic(
 	histogram interface{},
 ) error {
 	var (
-		ctx = params.ctx
-		ie  = params.ExecCfg().InternalExecutor
-		txn = params.p.Txn()
+		ctx      = params.ctx
+		ie       = params.ExecCfg().InternalExecutor
+		txn      = params.p.Txn()
+		settings = params.ExecCfg().Settings
 	)
 
 	var name interface{}
@@ -1352,6 +1353,33 @@ func insertJSONStatistic(
 		name = s.Name
 	}
 
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol) {
+		_ /* rows */, err := ie.Exec(
+			ctx,
+			"insert-stats",
+			txn,
+			`INSERT INTO system.table_statistics (
+					"tableID",
+					"name",
+					"columnIDs",
+					"createdAt",
+					"rowCount",
+					"distinctCount",
+					"nullCount",
+					"avgSize",
+					histogram
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			tableID,
+			name,
+			columnIDs,
+			s.CreatedAt,
+			s.RowCount,
+			s.DistinctCount,
+			s.NullCount,
+			s.AvgSize,
+			histogram)
+		return err
+	}
 	_ /* rows */, err := ie.Exec(
 		ctx,
 		"insert-stats",
@@ -1365,8 +1393,9 @@ func insertJSONStatistic(
 					"distinctCount",
 					"nullCount",
 					"avgSize",
-					histogram
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+					histogram,
+					"partialPredicate"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		tableID,
 		name,
 		columnIDs,
@@ -1375,7 +1404,9 @@ func insertJSONStatistic(
 		s.DistinctCount,
 		s.NullCount,
 		s.AvgSize,
-		histogram)
+		histogram,
+		s.PartialPredicate,
+	)
 	return err
 }
 

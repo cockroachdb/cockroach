@@ -56,4 +56,7 @@ message TableStatisticProto {
   HistogramData histogram_data = 9;
   // The average row size of the columns in ColumnIDs.
   uint64 avg_size = 10;
+  // A predicate representing the range of a partial statistic,
+  // and the empty string for a full table statistic.
+  string partial_predicate = 11 [(gogoproto.nullable) = true];
 }

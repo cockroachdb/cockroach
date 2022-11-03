@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -504,6 +505,7 @@ const (
 	distinctCountIndex
 	nullCountIndex
 	avgSizeIndex
+	partialPredicateIndex
 	histogramIndex
 	statsLen
 )
@@ -511,14 +513,22 @@ const (
 // NewTableStatisticProto converts a row of datums from system.table_statistics
 // into a TableStatisticsProto. Note that any user-defined types in the
 // HistogramData will be unresolved.
-func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
+func NewTableStatisticProto(
+	datums tree.Datums, partialPredColVerActive bool,
+) (*TableStatisticProto, error) {
 	if datums == nil || datums.Len() == 0 {
 		return nil, nil
 	}
 
+	hgIndex := histogramIndex
+	numStats := statsLen
+	if !partialPredColVerActive {
+		hgIndex = histogramIndex - 1
+		numStats = statsLen - 1
+	}
 	// Validate the input length.
-	if datums.Len() != statsLen {
-		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), statsLen)
+	if datums.Len() != numStats {
+		return nil, errors.Errorf("%d values returned from table statistics lookup. Expected %d", datums.Len(), numStats)
 	}
 
 	// Validate the input types.
@@ -537,8 +547,25 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		{"distinctCount", distinctCountIndex, types.Int, false},
 		{"nullCount", nullCountIndex, types.Int, false},
 		{"avgSize", avgSizeIndex, types.Int, false},
-		{"histogram", histogramIndex, types.Bytes, true},
+		{"histogram", hgIndex, types.Bytes, true},
 	}
+
+	// It's ok for expectedTypes to be in a different order than the input datums
+	// since we don't rely on a precise order of expectedTypes when we check them
+	// below.
+	if partialPredColVerActive {
+		expectedTypes = append(expectedTypes,
+			struct {
+				fieldName    string
+				fieldIndex   int
+				expectedType *types.T
+				nullable     bool
+			}{
+				"partialPredicate", partialPredicateIndex, types.String, true,
+			},
+		)
+	}
+
 	for _, v := range expectedTypes {
 		if !datums[v.fieldIndex].ResolvedType().Equivalent(v.expectedType) &&
 			(!v.nullable || datums[v.fieldIndex].ResolvedType().Family() != types.UnknownFamily) {
@@ -565,10 +592,13 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 	if datums[nameIndex] != tree.DNull {
 		res.Name = string(*datums[nameIndex].(*tree.DString))
 	}
-	if datums[histogramIndex] != tree.DNull {
+	if partialPredColVerActive && datums[partialPredicateIndex] != tree.DNull {
+		res.PartialPredicate = string(*datums[partialPredicateIndex].(*tree.DString))
+	}
+	if datums[hgIndex] != tree.DNull {
 		res.HistogramData = &HistogramData{}
 		if err := protoutil.Unmarshal(
-			[]byte(*datums[histogramIndex].(*tree.DBytes)),
+			[]byte(*datums[hgIndex].(*tree.DBytes)),
 			res.HistogramData,
 		); err != nil {
 			return nil, err
@@ -580,9 +610,15 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 // parseStats converts the given datums to a TableStatistic object. It might
 // need to run a query to get user defined type metadata.
 func (sc *TableStatisticsCache) parseStats(
-	ctx context.Context, datums tree.Datums,
+	ctx context.Context, datums tree.Datums, partialPredicateVerColActive bool,
 ) (*TableStatistic, error) {
-	tsp, err := NewTableStatisticProto(datums)
+	var tsp *TableStatisticProto
+	var err error
+	if partialPredicateVerColActive {
+		tsp, err = NewTableStatisticProto(datums, true /* partialPredColVerActive */)
+	} else {
+		tsp, err = NewTableStatisticProto(datums, false /* partialPredColVerActive */)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +737,13 @@ func (tabStat *TableStatistic) String() string {
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool,
 ) ([]*TableStatistic, error) {
-	const getTableStatisticsStmt = `
+	partialPredicateColVerActive := sc.Settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol)
+	var partialPredicate string
+	if partialPredicateColVerActive {
+		partialPredicate = `
+"partialPredicate",`
+	}
+	getTableStatisticsStmt := fmt.Sprintf(`
 SELECT
 	"tableID",
 	"statisticID",
@@ -712,11 +754,12 @@ SELECT
 	"distinctCount",
 	"nullCount",
 	"avgSize",
+	%s
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1
 ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
-`
+`, partialPredicate)
 	// TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
 	// columnIDs, statisticID).
 
@@ -730,7 +773,7 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 	var statsList []*TableStatistic
 	var ok bool
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
-		stats, err := sc.parseStats(ctx, it.Cur())
+		stats, err := sc.parseStats(ctx, it.Cur(), partialPredicateColVerActive)
 		if err != nil {
 			log.Warningf(ctx, "could not decode statistic for table %d: %v", tableID, err)
 			continue

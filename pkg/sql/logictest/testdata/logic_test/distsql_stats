@@ -1955,3 +1955,237 @@ query T
 SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
 ----
 {100}
+
+# Test single column partial statistics creation.
+
+# Disable auto stats collection to avoid new full stats collection
+# when inserting values into the extremes in the table.
+statement ok
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false;
+
+statement ok
+CREATE TABLE abcd (a INT PRIMARY KEY, b INT, c INT, d INT, INDEX (c, d));
+
+statement ok
+CREATE TABLE xy (x INT, y INT, INDEX (x, y))
+
+statement ok
+INSERT INTO xy VALUES (0, 10), (1, 11), (2, 12), (3, 13)
+
+statement ok
+INSERT INTO abcd VALUES
+(1, 10, 100, 1000),
+(2, 20, 200, 2000),
+(3, 30, 300, 3000),
+(4, 40, 400, 4000),
+(5, 50, 500, 5000),
+(6, 60, 600, 6000),
+(7, 70, 700, 7000),
+(8, 80, 800, 8000);
+
+statement ok
+CREATE STATISTICS abcd_a ON a FROM abcd;
+
+statement ok
+CREATE STATISTICS abcd_c ON c FROM abcd;
+
+statement ok
+CREATE STATISTICS xy_x ON x FROM xy;
+
+# insert values at the extremes of column a and c.
+statement ok
+INSERT INTO abcd VALUES
+(-2, -20, 900, 9000),
+(-1, -10, 920, 9200),
+(0, -9, 920, 9300);
+
+# insert values at the extremes of column x.
+statement ok
+INSERT INTO xy VALUES (-1, 9), (-2, 8), (5, 15), (6, 16)
+
+statement ok
+CREATE STATISTICS abcd_a_partial ON a FROM abcd USING EXTREMES;
+
+statement ok
+CREATE STATISTICS abcd_c_partial ON c FROM abcd USING EXTREMES;
+
+statement ok
+CREATE STATISTICS xy_x_partial ON x FROM xy USING EXTREMES;
+
+let $hist_abcd_a_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE abcd] WHERE statistics_name = 'abcd_a_partial';
+
+let $hist_abcd_c_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE abcd] WHERE statistics_name = 'abcd_c_partial';
+
+let $hist_xy_x_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE xy] WHERE statistics_name = 'xy_x_partial';
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_abcd_a_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+-2           0           0                    1
+-1           0           0                    1
+0            0           0                    1
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_abcd_c_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+900          0           0                    1
+920          0           0                    2
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_xy_x_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+-2           0           0                    1
+-1           0           0                    1
+5            0           0                    1
+6            0           0                    1
+
+query TT colnames
+SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='abcd_a_partial';
+----
+name            partialPredicate
+abcd_a_partial  a < 1 OR a > 8 OR a is NULL
+
+query TT colnames
+SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='abcd_c_partial';
+----
+name            partialPredicate
+abcd_c_partial  c < 100 OR c > 800 OR c is NULL
+
+query TT colnames
+SELECT "name", "partialPredicate" FROM system.table_statistics WHERE name='xy_x_partial';
+----
+name          partialPredicate
+xy_x_partial  x < 0 OR x > 3 OR x is NULL
+
+# Test if requesting a partial stat again uses the previous full stat and not the previous partial stat.
+statement ok
+CREATE STATISTICS xy_x_partial_2 ON x FROM xy USING EXTREMES
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE xy];
+----
+statistics_name  partial_predicate            row_count  null_count
+xy_x             NULL                         4          0
+xy_x_partial     x < 0 OR x > 3 OR x is NULL  4          0
+xy_x_partial_2   x < 0 OR x > 3 OR x is NULL  4          0
+
+# Test null values.
+statement ok
+CREATE TABLE a_null (a INT, INDEX (a));
+
+statement ok
+INSERT INTO a_null VALUES (NULL), (1), (2);
+
+statement ok
+CREATE STATISTICS a_null_stat ON a FROM a_null;
+
+statement ok
+INSERT INTO a_null VALUES (NULL), (NULL), (NULL);
+
+statement ok
+CREATE STATISTICS a_null_stat_partial ON a FROM a_null USING EXTREMES;
+
+let $hist_a_null_stat_partial
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE a_null] WHERE statistics_name = 'a_null_stat_partial';
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_a_null_stat_partial
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE a_null];
+----
+statistics_name      partial_predicate            row_count  null_count
+a_null_stat          NULL                         3          1
+a_null_stat_partial  a < 1 OR a > 2 OR a is NULL  4          4
+
+# Test descending indexes.
+statement ok
+CREATE TABLE d_desc (a INT, b INT, index (a DESC, b));
+
+statement ok
+INSERT INTO d_desc VALUES (1, 10), (2, 20), (3, 30), (4, 40);
+
+statement ok
+CREATE STATISTICS sd ON a FROM d_desc;
+
+statement ok
+INSERT INTO d_desc VALUES (0, 0), (5, 50);
+
+statement ok
+CREATE STATISTICS sdp ON a FROM d_desc USING EXTREMES;
+
+let $hist_d_desc
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE d_desc] WHERE statistics_name = 'sdp';
+
+query TIRI colnames
+SHOW HISTOGRAM $hist_d_desc
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+0            0           0                    1
+5            0           0                    1
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE d_desc];
+----
+statistics_name  partial_predicate            row_count  null_count
+sd               NULL                         4          0
+sdp              a < 1 OR a > 4 OR a is NULL  2          0
+
+# Test descending index with NULL
+statement ok
+INSERT INTO d_desc VALUES (NULL, NULL), (NULL, 2);
+
+statement ok
+CREATE STATISTICS sdn ON a FROM d_desc;
+
+statement ok
+CREATE STATISTICS sdnp ON a FROM d_desc USING EXTREMES;
+
+query TTII colnames
+SELECT "statistics_name", "partial_predicate", "row_count", "null_count" FROM [SHOW STATISTICS FOR TABLE d_desc];
+----
+statistics_name  partial_predicate            row_count  null_count
+sdn              NULL                         8          2
+sdnp             a < 0 OR a > 5 OR a is NULL  2          2
+
+# Verify errors.
+statement error pq: cannot process multiple partial statistics at once
+CREATE STATISTICS abcd_defaults FROM abcd USING EXTREMES;
+
+statement error pq: multi-column partial statistics are not currently supported
+CREATE STATISTICS abcd_a_b ON a, c FROM abcd USING EXTREMES;
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
+
+statement error pq: column x does not have a prior statistic
+CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
+
+statement error pq: column a does not have a prior statistic, or the prior histogram has no buckets and a partial statistic cannot be collected
+CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
+
+statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
+CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
+
+statement ok
+DELETE FROM a_null WHERE a IS NOT NULL;
+
+statement ok
+CREATE STATISTICS a_null_stat ON a FROM a_null;
+
+statement error pq: only NULL values exist in the index, so partial stats cannot be collected
+CREATE STATISTICS only_null_partial ON a FROM a_null USING EXTREMES;
+
+statement ok
+CREATE INDEX ON xy (y) WHERE y > 5;
+
+statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
+CREATE STATISTICS xy_partial_idx ON y FROM xy USING EXTREMES;
