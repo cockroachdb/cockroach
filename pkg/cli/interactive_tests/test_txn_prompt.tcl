@@ -43,7 +43,11 @@ eexpect abcdefaultdbdef
 
 # Check prompt with no formatting code.
 send "\\set prompt1 woo \r"
-eexpect woo
+# use a regular expression to match the `woo` prompt (beginning of
+# line). If we use `eexpect` here, the match would happen
+# instantaneously as it would match the previous `set prompt1 woo`
+# command, as it also contains the string `woo`.
+eexpect_re "(?n)^woo $"
 
 send "SET database \r"
 eexpect "\r\n -> "
