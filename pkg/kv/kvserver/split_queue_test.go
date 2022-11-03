@@ -18,12 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/require"
 )
 
 // TestSplitQueueShouldQueue verifies shouldSplitRange method correctly
@@ -35,7 +37,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
-	tc.Start(ctx, t, stopper)
+	sc := TestStoreConfig(nil)
+	sc.TestingKnobs.DisableCanAckBeforeApplication = true
+	tc.StartWithStoreConfig(ctx, t, stopper, sc)
 
 	// Set zone configs.
 	config.TestingSetZoneConfig(2000, zonepb.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
@@ -74,6 +78,17 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	{
+		// This test plays fast and loose and if there are raft commands ongoing then
+		// we'll hit internal assertions in the tests below. Sending a write through
+		// before mucking with internals and waiting for it to show up in the state
+		// machine appears to be good enough.
+		put := putArgs(tc.repl.Desc().EndKey.AsRawKey().Prevish(5), []byte("foo"))
+		_, pErr := kv.SendWrapped(ctx, tc.Sender(), &put)
+		require.NoError(t, pErr.GoError())
+	}
+
 	for i, test := range testCases {
 		// Create a replica for testing that is not hooked up to the store. This
 		// ensures that the store won't be mucking with our replica concurrently

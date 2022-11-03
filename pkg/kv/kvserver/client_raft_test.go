@@ -4413,7 +4413,7 @@ func TestFailedConfChange(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
 					Store: &kvserver.StoreTestingKnobs{
-						TestingApplyFilter: testingApplyFilter,
+						TestingApplyCalledTwiceFilter: testingApplyFilter,
 					},
 				},
 			},
@@ -4957,11 +4957,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 		repls            int
 		expAckBeforeAppl bool
 	}{
-		// In a single-replica Range, each handleRaftReady iteration will append
-		// new entries to the Raft log and immediately apply them. This prevents
-		// "early acknowledgement" from being possible or useful. See the comment
-		// on apply.Task.AckCommittedEntriesBeforeApplication.
-		{1, false},
+
 		// In a three-replica Range, each handleRaftReady iteration will append
 		// a set of entries to the Raft log and then apply the previous set of
 		// entries. This makes "early acknowledgement" a major optimization, as
@@ -4969,6 +4965,9 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 		// to the Raft log out of the client-perceived latency of the previous
 		// set of entries.
 		{3, true},
+		// In the past, single-replica groups behaved differently but as of #89632
+		// they too rely on early-acks as a major performance improvement.
+		{1, true},
 	} {
 		t.Run(fmt.Sprintf("numRepls=%d", testcase.repls), func(t *testing.T) {
 			var filterActive int32
@@ -4990,8 +4989,8 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 					ServerArgs: base.TestServerArgs{
 						Knobs: base.TestingKnobs{
 							Store: &kvserver.StoreTestingKnobs{
-								TestingApplyFilter:     applyFilterFn(blockPreApplication),
-								TestingPostApplyFilter: applyFilterFn(blockPostApplication),
+								TestingApplyCalledTwiceFilter: applyFilterFn(blockPreApplication),
+								TestingPostApplyFilter:        applyFilterFn(blockPostApplication),
 							},
 						},
 					},
@@ -5020,7 +5019,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 			expResult := func() {
 				t.Helper()
 				if pErr := <-ch; pErr != nil {
-					t.Fatalf("unexpected proposal result error: %v", pErr)
+					t.Errorf("unexpected proposal result error: %v", pErr)
 				}
 			}
 			dontExpResult := func() {
@@ -5029,7 +5028,7 @@ func TestAckWriteBeforeApplication(t *testing.T) {
 				case <-time.After(10 * time.Millisecond):
 					// Expected.
 				case pErr := <-ch:
-					t.Fatalf("unexpected proposal acknowledged before TestingApplyFilter: %v", pErr)
+					t.Errorf("unexpected proposal acknowledged before TestingApplyCalledTwiceFilter: %v", pErr)
 				}
 			}
 

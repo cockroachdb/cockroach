@@ -838,17 +838,13 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// entries and acknowledge as many as we can trivially prove will not be
 	// rejected beneath raft.
 	//
-	// Note that we only acknowledge up to the current last index in the Raft
-	// log. The CommittedEntries slice may contain entries that are also in the
-	// Entries slice (to be appended in this ready pass), and we don't want to
-	// acknowledge them until they are durably in our local Raft log. This is
-	// most common in single node replication groups, but it is possible when a
-	// follower in a multi-node replication group is catching up after falling
-	// behind. In the first case, the entries are not yet committed so
-	// acknowledging them would be a lie. In the second case, the entries are
-	// committed so we could acknowledge them at this point, but doing so seems
-	// risky. To avoid complications in either case, we pass lastIndex for the
-	// maxIndex argument to AckCommittedEntriesBeforeApplication.
+	// Note that the CommittedEntries slice may contain entries that are also in
+	// the Entries slice (to be appended in this ready pass). This can happen when
+	// a follower is being caught up on committed commands. We could acknowledge
+	// these commands early even though they aren't durably in the local raft log
+	// yet (since they're committed via a quorum elsewhere), but we chose to be
+	// conservative and avoid it by passing the last Ready cycle's `lastIndex` for
+	// the maxIndex argument to AckCommittedEntriesBeforeApplication.
 	sm := r.getStateMachine()
 	dec := r.getDecoder()
 	appTask := apply.MakeTask(sm, dec)
@@ -857,8 +853,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
 		return stats, getNonDeterministicFailureExplanation(err), err
 	}
-	if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
-		return stats, getNonDeterministicFailureExplanation(err), err
+	if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
+		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
+			return stats, getNonDeterministicFailureExplanation(err), err
+		}
 	}
 
 	// Separate the MsgApp messages from all other Raft message types so that we
