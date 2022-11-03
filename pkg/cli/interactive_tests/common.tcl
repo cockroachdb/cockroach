@@ -69,6 +69,15 @@ proc eexpect {text} {
     }
 }
 
+# eexpect_re is like eexpect, but takes a regular expression argument
+# instead of a text string
+proc eexpect_re {text} {
+  expect {
+    -re $text {}
+    timeout { handle_timeout $text }
+  }
+}
+
 # Convenience function that sends Ctrl+C to the monitored process.
 proc interrupt {} {
     report "INTERRUPT TO FOREGROUND PROCESS"
@@ -178,4 +187,3 @@ proc stop_tenant {tenant_id argv} {
 
     report "END STOP TENANT $tenant_id"
 }
-
