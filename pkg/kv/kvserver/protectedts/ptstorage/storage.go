@@ -311,7 +311,9 @@ func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, 
 	}, nil
 }
 
-func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error) {
+func (p *storage) GetState(
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
+) (ptpb.State, error) {
 	if txn == nil {
 		return ptpb.State{}, errNoTxn
 	}
@@ -319,7 +321,7 @@ func (p *storage) GetState(ctx context.Context, txn *kv.Txn) (ptpb.State, error)
 	if err != nil {
 		return ptpb.State{}, err
 	}
-	records, err := p.getRecords(ctx, txn)
+	records, err := p.getRecords(ctx, txn, executor)
 	if err != nil {
 		return ptpb.State{}, err
 	}
@@ -352,12 +354,14 @@ func (p *storage) deprecatedGetRecords(ctx context.Context, txn *kv.Txn) ([]ptpb
 	return records, nil
 }
 
-func (p *storage) getRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
+func (p *storage) getRecords(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+) ([]ptpb.Record, error) {
 	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
 		return p.deprecatedGetRecords(ctx, txn)
 	}
 
-	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
+	it, err := ie.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, getRecordsQuery)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read records")

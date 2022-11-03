@@ -301,6 +301,7 @@ var testCases = []testCase{
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx, tCtx.tc.Server(0).Clock().Now(), "", nil, tableTarget(42), tableSpan(42))
+				ie := tCtx.tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
 				const msg = "must provide a non-nil transaction"
 				require.Regexp(t, msg, tCtx.pts.Protect(ctx, nil /* txn */, &rec).Error())
 				require.Regexp(t, msg, tCtx.pts.Release(ctx, nil /* txn */, uuid.MakeV4()).Error())
@@ -309,7 +310,7 @@ var testCases = []testCase{
 				require.Regexp(t, msg, err.Error())
 				_, err = tCtx.pts.GetMetadata(ctx, nil /* txn */)
 				require.Regexp(t, msg, err.Error())
-				_, err = tCtx.pts.GetState(ctx, nil /* txn */)
+				_, err = tCtx.pts.GetState(ctx, nil, ie)
 				require.Regexp(t, msg, err.Error())
 			}),
 		},
@@ -483,6 +484,7 @@ func (test testCase) run(t *testing.T) {
 	s := tc.Server(0)
 	pts := ptstorage.New(s.ClusterSettings(), s.InternalExecutor().(*sql.InternalExecutor), ptsKnobs)
 	db := s.DB()
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	tCtx := testContext{
 		pts:                    pts,
 		db:                     db,
@@ -491,12 +493,12 @@ func (test testCase) run(t *testing.T) {
 	}
 	verify := func(t *testing.T) {
 		var state ptpb.State
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			state, err = pts.GetState(ctx, txn)
+		require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+			state, err = pts.GetState(ctx, txn, ie)
 			return err
 		}))
 		var md ptpb.Metadata
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 			md, err = pts.GetMetadata(ctx, txn)
 			return err
 		}))
@@ -641,8 +643,9 @@ func TestCorruptData(t *testing.T) {
 				return err
 			}).Error())
 		require.Nil(t, got)
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			_, err = pts.GetState(ctx, txn)
+		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+		require.NoError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+			_, err = pts.GetState(ctx, txn, ie)
 			return err
 		}))
 		log.Flush()
@@ -731,8 +734,9 @@ func TestCorruptData(t *testing.T) {
 				return err
 			}))
 		require.Nil(t, got)
-		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-			_, err = pts.GetState(ctx, txn)
+		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+		require.NoError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+			_, err = pts.GetState(ctx, txn, ie)
 			return err
 		}))
 		log.Flush()
@@ -782,8 +786,9 @@ func TestErrorsFromSQL(t *testing.T) {
 		_, err := pts.GetMetadata(ctx, txn)
 		return err
 	}), "failed to read metadata: boom")
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := pts.GetState(ctx, txn)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		_, err := pts.GetState(ctx, txn, ie)
 		return err
 	}), "failed to read metadata: boom")
 	// Test that we get an error retrieving the records in GetState.
@@ -797,8 +802,8 @@ func TestErrorsFromSQL(t *testing.T) {
 		}
 		return errors.New("boom")
 	})
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := pts.GetState(ctx, txn)
+	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		_, err := pts.GetState(ctx, txn, ie)
 		return err
 	}), "failed to read records: boom")
 }
