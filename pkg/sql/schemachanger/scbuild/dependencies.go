@@ -69,9 +69,9 @@ type Dependencies interface {
 	// partitioning descriptors for indexes.
 	IndexPartitioningCCLCallback() CreatePartitioningCCLCallback
 
-	// DescriptorCommentCache returns a CommentCache
+	// DescriptorCommentGetter returns a CommentCache
 	// Implementation.
-	DescriptorCommentCache() CommentCache
+	DescriptorCommentGetter() scdecomp.CommentGetter
 
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() ZoneConfigGetter
@@ -183,16 +183,6 @@ type AstFormatter interface {
 	// FormatAstAsRedactableString formats a tree.Statement into SQL with fully
 	// qualified names, where parts can be redacted.
 	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
-}
-
-// CommentCache represent an interface to fetch and cache comments for
-// descriptors.
-type CommentCache interface {
-	scdecomp.CommentGetter
-
-	// LoadCommentsForObjects explicitly loads commentCache into the cache give a list
-	// of object id of a descriptor type.
-	LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error
 }
 
 // ZoneConfigGetter see scdecomp.ZoneConfigGetter

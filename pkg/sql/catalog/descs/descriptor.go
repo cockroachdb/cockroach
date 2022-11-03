@@ -77,6 +77,45 @@ func (tc *Collection) GetImmutableDescriptorByID(
 	return tc.getDescriptorByID(ctx, txn, flags, id)
 }
 
+// GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
+func (tc *Collection) GetComment(
+	descID descpb.ID, subID uint32, cmtType keys.CommentType,
+) (string, bool, error) {
+	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(descID, subID, cmtType); cached {
+		return cmt, hasCmt, nil
+	}
+
+	if cmt, hasCmt, cached := tc.stored.GetCachedComment(descID, subID, cmtType); cached {
+		return cmt, hasCmt, nil
+	}
+
+	// This should never happen because comments information (either has comment
+	// or not) are always read together with descriptors. Which means the
+	// descriptor should have been read before the effort to read comment here. It
+	// should rarely (or never) reach this point.
+	return "", false, errors.Newf("Comments information on object %d should have been cached", descID)
+}
+
+// AddUncommittedComment adds a comment to uncommitted cache.
+func (tc *Collection) AddUncommittedComment(
+	descID descpb.ID, subID uint32, cmtType keys.CommentType, cmt string,
+) {
+	tc.uncommittedComments.upsert(descID, subID, cmtType, cmt)
+}
+
+// MarkUncommittedCommentDeleted adds the key to uncommitted cache, but indicates
+// that the comment has been dropped, therefore the cached information is that
+// "there is no comment for this key".
+func (tc *Collection) MarkUncommittedCommentDeleted(
+	descID descpb.ID, subID uint32, cmtType keys.CommentType,
+) {
+	tc.uncommittedComments.markNoComment(descID, subID, cmtType)
+}
+
+func (tc *Collection) MarkUncommittedCommentDeletedForTable(tblID descpb.ID) {
+	tc.uncommittedComments.markTableDeleted(tblID)
+}
+
 // getDescriptorsByID returns a descriptor by ID according to the provided
 // lookup flags.
 //

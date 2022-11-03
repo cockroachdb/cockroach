@@ -40,6 +40,9 @@ type StoredCatalog struct {
 	// This map does not store descriptors by name.
 	cache nstree.IDMap
 
+	// comments mirrors the comments in storage.
+	comments *comments
+
 	// nameIndex is a subset of cache which allows lookups by name.
 	nameIndex nstree.NameMap
 
@@ -83,7 +86,11 @@ type DescriptorValidationModeProvider interface {
 func MakeStoredCatalog(
 	cr CatalogReader, dvmp DescriptorValidationModeProvider, monitor *mon.BytesMonitor,
 ) StoredCatalog {
-	sc := StoredCatalog{CatalogReader: cr, DescriptorValidationModeProvider: dvmp}
+	sc := StoredCatalog{
+		CatalogReader:                    cr,
+		DescriptorValidationModeProvider: dvmp,
+		comments:                         NewCommentCache(),
+	}
 	if monitor != nil {
 		memAcc := monitor.MakeBoundAccount()
 		sc.memAcc = &memAcc
@@ -105,6 +112,7 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 		cache:                            old.cache,
 		nameIndex:                        old.nameIndex,
 		memAcc:                           old.memAcc,
+		comments:                         NewCommentCache(),
 	}
 }
 
@@ -124,6 +132,18 @@ func (sc *StoredCatalog) ensure(ctx context.Context, desc catalog.Descriptor) er
 	return nil
 }
 
+// putCommentObjIDs must be called to ensure the comment cache has seen the
+// object ids before any comment on the object can be upserted.
+func (sc *StoredCatalog) putCommentObjID(id descpb.ID) {
+	sc.comments.PutObj(id)
+}
+
+// upsertComment can only be called after the objectID in the key has been seen
+// by the comment cache.
+func (sc *StoredCatalog) upsertComment(key keys.CommentKey, cmt string) error {
+	return sc.comments.Put(key, cmt)
+}
+
 // GetCachedByID looks up a descriptor by ID.
 // The system database descriptor is given special treatment to speed up lookups
 // and validations by avoiding an unnecessary round-trip to storage, as this
@@ -133,6 +153,12 @@ func (sc *StoredCatalog) GetCachedByID(id descpb.ID) catalog.Descriptor {
 		return e.(catalog.Descriptor)
 	}
 	return nil
+}
+
+func (sc *StoredCatalog) GetCachedComment(
+	descID descpb.ID, subID uint32, cmtType keys.CommentType,
+) (string, bool, bool) {
+	return sc.comments.Get(descID, subID, cmtType)
 }
 
 // getCachedIDByName looks up a descriptor ID by name in the cache.
@@ -176,7 +202,13 @@ func (sc *StoredCatalog) EnsureAllDescriptors(ctx context.Context, txn *kv.Txn) 
 		return err
 	}
 	if err = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		sc.putCommentObjID(desc.GetID())
 		return sc.ensure(ctx, desc)
+	}); err != nil {
+		return err
+	}
+	if err = c.ForEachComment(func(key keys.CommentKey, cmt string) error {
+		return sc.upsertComment(key, cmt)
 	}); err != nil {
 		return err
 	}
@@ -310,7 +342,8 @@ func (sc *StoredCatalog) LookupDescriptorID(
 
 // EnsureFromStorageByIDs actually reads a batch of descriptors from storage
 // and adds them to the cache. It assumes (without checking) that they are not
-// already present in the cache.
+// already present in the cache. It also caches descriptor metadata (e.g.
+// comment) which is read together with from a same kv batch.
 func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -324,9 +357,20 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	if err != nil {
 		return err
 	}
-	return c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		sc.putCommentObjID(desc.GetID())
 		return sc.ensure(ctx, desc)
-	})
+	}); err != nil {
+		return err
+	}
+
+	if err := c.ForEachComment(func(key keys.CommentKey, cmt string) error {
+		return sc.upsertComment(key, cmt)
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // IterateCachedByID applies fn to all known descriptors in the cache in
@@ -434,6 +478,7 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 		}
 		// Add all descriptors to the cache BEFORE validating them.
 		err = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+			c.sc.putCommentObjID(desc.GetID())
 			return c.sc.ensure(ctx, desc)
 		})
 		if err != nil {
@@ -473,4 +518,54 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptorIDs(
 		}
 	}
 	return ret, nil
+}
+
+type comments struct {
+	comments      map[keys.CommentKey]string
+	descIDsCached catalog.DescriptorIDSet
+}
+
+func NewCommentCache() *comments {
+	return &comments{
+		comments: make(map[keys.CommentKey]string),
+	}
+}
+
+// Get checks if comments of an object is cached and return the comment if there
+// is a comment exists for the key.
+// 1. False is returned for "cached" if the object is never seen by this cache.
+// 2. comment may not exist for a (objID, subID, cmtType) tuple even an object
+// has been seen, in this case, "cached" will be true, and "hasCmt" will be
+// false.
+func (c *comments) Get(
+	objID descpb.ID, subID uint32, cmtType keys.CommentType,
+) (cmt string, hasCmt bool, cached bool) {
+	if !c.descIDsCached.Contains(objID) {
+		return "", false, false
+	}
+	key := keys.CommentKey{
+		ObjectID:    uint32(objID),
+		SubID:       subID,
+		CommentType: cmtType,
+	}
+	if cmt, ok := c.comments[key]; ok {
+		return cmt, ok, true
+	}
+	return "", false, true
+}
+
+// PutObj makes object as seen by the cache. This is an prerequisite of calling
+// Put to actually cache comments on this object.
+func (c *comments) PutObj(objID descpb.ID) {
+	c.descIDsCached.Add(objID)
+}
+
+// Put upserts the comment into cache. This can only be done after the objID has
+// been added to the cache through PutObj.
+func (c *comments) Put(key keys.CommentKey, cmt string) error {
+	if !c.descIDsCached.Contains(descpb.ID(key.ObjectID)) {
+		return errors.Newf("Object ID %d has not been added to the cache", key.ObjectID)
+	}
+	c.comments[key] = cmt
+	return nil
 }

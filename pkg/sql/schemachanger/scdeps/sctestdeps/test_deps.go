@@ -723,6 +723,25 @@ func (b *testCatalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id desc
 	return nil
 }
 
+func (b *testCatalogChangeBatcher) UpdateComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType, cmt string,
+) error {
+	// TODO(chengxiong): fullfill this method.
+	return nil
+}
+
+func (b *testCatalogChangeBatcher) DeleteComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType,
+) error {
+	// TODO(chengxiong): fullfill this method.
+	return nil
+}
+
+func (b *testCatalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
+	// TODO(chengxiong): fullfill this method.
+	return nil
+}
+
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	names := make([]descpb.NameInfo, 0, len(b.namesToDelete))

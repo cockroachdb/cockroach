@@ -64,7 +64,8 @@ type CatalogReader interface {
 	) (nstree.Catalog, error)
 
 	// GetDescriptorEntries gets the descriptors for the desired IDs, but looks in
-	// the system database cache first if there is one.
+	// the system database cache first if there is one. It also reads all metadata
+	// (e.g. comments and zoneconfig) of the descriptors.
 	GetDescriptorEntries(
 		ctx context.Context,
 		txn *kv.Txn,
@@ -133,6 +134,8 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 		b.Scan(descsPrefix, descsPrefix.PrefixEnd())
 		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
+		commentPrefix := catalogkeys.CommentsMetadataPrefix(codec)
+		b.Scan(commentPrefix, commentPrefix.PrefixEnd())
 	})
 	if err != nil {
 		return nstree.Catalog{}, err
@@ -225,6 +228,11 @@ func (cr catalogReader) GetDescriptorEntries(
 			for _, id := range ids {
 				if id != descpb.InvalidID && mc.LookupDescriptorEntry(id) == nil {
 					b.Get(catalogkeys.MakeDescMetadataKey(codec, id))
+					// Fetch all the comments on the descriptor in same batch.
+					for _, t := range keys.AllCommentTypes {
+						cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, id)
+						b.Scan(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd())
+					}
 				}
 			}
 		})

@@ -25,10 +25,11 @@ import (
 )
 
 // Catalog is used to store an in-memory copy of the whole catalog, or a portion
-// thereof.
+// thereof, as well as metadata like comment and zone configs.
 type Catalog struct {
 	underlying NameMap
 	byteSize   int64
+	comments   map[keys.CommentKey]string
 }
 
 // ForEachDescriptorEntry iterates over all descriptor table entries in an
@@ -40,6 +41,21 @@ func (c Catalog) ForEachDescriptorEntry(fn func(desc catalog.Descriptor) error) 
 	return c.underlying.byID.ascend(func(e catalog.NameEntry) error {
 		return fn(e.(catalog.Descriptor))
 	})
+}
+
+// ForEachComment iterate through all descriptor comments.
+func (c Catalog) ForEachComment(fn func(key keys.CommentKey, cmt string) error) error {
+	if !c.IsInitialized() {
+		return nil
+	}
+
+	for k, c := range c.comments {
+		if err := fn(k, c); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // NamespaceEntry is a catalog.NameEntry augmented with an MVCC timestamp.
@@ -294,6 +310,16 @@ func (mc *MutableCatalog) DeleteNamespaceEntry(key catalog.NameKey) {
 	if removed := mc.underlying.byName.delete(key); removed != nil {
 		mc.byteSize -= removed.(*namespaceEntry).ByteSize()
 	}
+}
+
+func (mc *MutableCatalog) UpsertComment(key keys.CommentKey, cmt string) {
+	// TODO (chengxiong): count byte size changes.
+	if mc.comments == nil {
+		// TODO (chengxiong): consolidate the "initialize" and "maybeInitialized"
+		// logic.
+		mc.comments = make(map[keys.CommentKey]string)
+	}
+	mc.comments[key] = cmt
 }
 
 // Clear empties the MutableCatalog.

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -72,6 +73,8 @@ type Collection struct {
 	// These descriptors are local to this Collection and their state is thus
 	// not visible to other transactions.
 	uncommitted uncommittedDescriptors
+
+	uncommittedComments *uncommittedComments
 
 	// A collection of descriptors which mirrors the descriptors committed to
 	// storage. This acts as a cache by accumulating every descriptor ever read
@@ -163,6 +166,7 @@ func (tc *Collection) ReleaseLeases(ctx context.Context) {
 func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ReleaseLeases(ctx)
 	tc.uncommitted.reset(ctx)
+	tc.uncommittedComments.reset()
 	tc.stored.Reset(ctx)
 	tc.ResetSyntheticDescriptors()
 	tc.deletedDescs = catalog.DescriptorIDSet{}
@@ -267,6 +271,41 @@ func (tc *Collection) WriteDescToBatch(
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, proto)
 	}
 	b.CPut(descKey, proto, expected)
+	return nil
+}
+
+func (tc *Collection) WriteCommentToBatch(
+	ctx context.Context,
+	kvTrace bool,
+	b *kv.Batch,
+	objID descpb.ID,
+	subID uint32,
+	cmtType keys.CommentType,
+	cmt string,
+) error {
+	var expectedRawByte []byte
+	oldCmt, found, err := tc.GetComment(objID, subID, cmtType)
+	if err != nil {
+		return err
+	}
+	if found {
+		var v roachpb.Value
+		v.SetBytes([]byte(oldCmt))
+		expectedRawByte = v.TagAndDataBytes()
+	}
+
+	cmtKey := catalogkeys.MakeCommentsMetadataCmtFamKey(tc.codec(), cmtType, objID, subID)
+	b.CPut(cmtKey, cmt, expectedRawByte)
+	if kvTrace {
+		log.VEventf(ctx, 2, "Put %s -> %s", cmtKey, cmt)
+	}
+
+	v := roachpb.Value{}
+	v.SetTuple([]byte{})
+	cmtKey = catalogkeys.MakeCommentsMetadataPkFamKey(tc.codec(), cmtType, objID, subID)
+	b.CPutAllowingIfNotExists(cmtKey, &v, nil)
+
+	tc.AddUncommittedComment(objID, subID, cmtType, cmt)
 	return nil
 }
 

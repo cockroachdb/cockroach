@@ -274,6 +274,36 @@ func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	return nil
 }
 
+func (b *catalogChangeBatcher) UpdateComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType, cmt string,
+) error {
+	return b.descsCollection.WriteCommentToBatch(ctx, b.kvTrace, b.batch, descpb.ID(objID), uint32(subID), cmtType, cmt)
+}
+
+func (b *catalogChangeBatcher) DeleteComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType,
+) error {
+	cmtKeyPrefix := catalogkeys.MakeSubObjectCommentsMetadataPrefix(b.codec, cmtType, descpb.ID(objID), uint32(subID))
+	if b.kvTrace {
+		log.VEventf(ctx, 2, "DelRange %s", cmtKeyPrefix)
+	}
+	b.batch.DelRange(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd(), false)
+	b.descsCollection.MarkUncommittedCommentDeleted(descpb.ID(objID), uint32(subID), cmtType)
+	return nil
+}
+
+func (b *catalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
+	for _, t := range keys.AllTableCommentTypes {
+		cmtKeyPrefix := catalogkeys.MakeObjectCommentsMetadataPrefix(b.codec, t, tblID)
+		b.batch.DelRange(cmtKeyPrefix, cmtKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		if b.kvTrace {
+			log.VEventf(ctx, 2, "DelRange %s", cmtKeyPrefix)
+		}
+	}
+	b.descsCollection.MarkUncommittedCommentDeletedForTable(tblID)
+	return nil
+}
+
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)
 
 func (d *txnDeps) MakeJobID() jobspb.JobID {

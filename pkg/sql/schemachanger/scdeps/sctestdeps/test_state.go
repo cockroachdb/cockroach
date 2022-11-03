@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -32,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps/sctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -199,11 +199,6 @@ func (s *TestState) FeatureChecker() scbuild.FeatureChecker {
 	return s
 }
 
-// LoadCommentsForObjects implements scdecomp.CommentGetter interface.
-func (s *TestState) LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error {
-	return nil
-}
-
 // Get implements DescriptorCommentCache interface.
 func (s *TestState) get(
 	ctx context.Context, objID catid.DescID, subID uint32, commentType keys.CommentType,
@@ -260,7 +255,7 @@ func (s *TestState) GetConstraintComment(
 }
 
 // DescriptorCommentCache implements scbuild.Dependencies interface.
-func (s *TestState) DescriptorCommentCache() scbuild.CommentCache {
+func (s *TestState) DescriptorCommentGetter() scdecomp.CommentGetter {
 	return s
 }
 

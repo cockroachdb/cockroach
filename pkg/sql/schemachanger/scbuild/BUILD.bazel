@@ -7,6 +7,7 @@ go_library(
         "ast_annotator.go",
         "build.go",
         "builder_state.go",
+        "comment_getter.go",
         "dependencies.go",
         "event_log_state.go",
         "tree_context_builder.go",

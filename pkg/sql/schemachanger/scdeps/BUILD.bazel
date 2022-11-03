@@ -33,6 +33,7 @@ go_library(
         "//pkg/sql/descmetadata",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scbuild",
+        "//pkg/sql/schemachanger/scdecomp",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scexec/backfiller",
         "//pkg/sql/schemachanger/scexec/scmutationexec",

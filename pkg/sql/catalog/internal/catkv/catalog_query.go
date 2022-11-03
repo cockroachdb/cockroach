@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
 )
 
@@ -71,6 +72,8 @@ func (cq catalogQuery) query(
 				err = cq.processNamespaceResultRow(row, out)
 			case keys.DescriptorTableID:
 				err = cq.processDescriptorResultRow(row, out)
+			case keys.CommentsTableID:
+				err = cq.processCommentsResultRow(row, out)
 			default:
 				err = errors.AssertionFailedf("unexpected catalog key %s", row.Key.String())
 			}
@@ -111,6 +114,24 @@ func (cq catalogQuery) processDescriptorResultRow(
 		return wrapError(expectedType, id, err)
 	}
 	cb.UpsertDescriptorEntry(desc)
+	return nil
+}
+
+func (cq catalogQuery) processCommentsResultRow(row kv.KeyValue, cb *nstree.MutableCatalog) error {
+	remaining, cmtKey, err := cq.codec.DecodeCommentMetadataID(row.Key)
+	if err != nil {
+		return err
+	}
+	_, famID, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return err
+	}
+
+	//Skip the primary column family since only the comment string is interested.
+	if famID == keys.CommentsTablePrimaryColFamID {
+		return nil
+	}
+	cb.UpsertComment(cmtKey, string(row.ValueBytes()))
 	return nil
 }
 

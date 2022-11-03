@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -397,8 +398,8 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 }
 
-func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
-	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+func (d *buildDeps) DescriptorCommentGetter() scdecomp.CommentGetter {
+	return scbuild.NewCommentGetter(d.descsCollection)
 }
 
 func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {

@@ -24,6 +24,7 @@ go_library(
         "txn.go",
         "type.go",
         "uncommitted_descriptors.go",
+        "uncommitted_metadata.go",
         "validate.go",
         "virtual_descriptors.go",
     ],
