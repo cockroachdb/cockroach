@@ -30,7 +30,6 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
-        "//pkg/sql/descmetadata",
         "//pkg/sql/oppurpose",
         "//pkg/sql/rowenc",
         "//pkg/sql/schemachanger/scbuild",

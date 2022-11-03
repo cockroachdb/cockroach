@@ -261,6 +261,47 @@ func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, e
 	return roachpb.MakeTenantID(id), nil
 }
 
+// DecodeCommentMetadataID decodes a CommentKey from comments metadata key.
+func (d sqlDecoder) DecodeCommentMetadataID(key roachpb.Key) ([]byte, CommentKey, error) {
+	remaining, tableID, indexID, err := d.DecodeIndexPrefix(key)
+	if err != nil {
+		return nil, CommentKey{}, err
+	}
+	if tableID != CommentsTableID || indexID != CommentsTablePrimaryKeyIndexID {
+		return nil, CommentKey{}, errors.Errorf("key is not a comments table entry: %v", key)
+	}
+
+	remaining, cmtType, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return nil, CommentKey{}, err
+	}
+	remaining, objID, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return nil, CommentKey{}, err
+	}
+	remaining, subID, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return nil, CommentKey{}, err
+	}
+	return remaining, CommentKey{ObjectID: uint32(objID), SubID: uint32(subID), CommentType: CommentType(cmtType)}, nil
+}
+
+// DecodeZoneConfigMetadataID decodes a descriptor id from zones key.
+func (d sqlDecoder) DecodeZoneConfigMetadataID(key roachpb.Key) ([]byte, uint32, error) {
+	remaining, tableID, indexID, err := d.DecodeIndexPrefix(key)
+	if err != nil {
+		return nil, 0, err
+	}
+	if tableID != ZonesTableID || indexID != ZonesTablePrimaryIndexID {
+		return nil, 0, errors.Errorf("key is not a zones table entry: %v", key)
+	}
+	remaining, id, err := encoding.DecodeUvarintAscending(remaining)
+	if err != nil {
+		return nil, 0, err
+	}
+	return remaining, uint32(id), nil
+}
+
 // RewriteSpanToTenantPrefix updates the passed Span, potentially in-place, to
 // ensure the Key and EndKey have the passed tenant prefix, regardless of what
 // prior tenant prefix, if any, they had before, and returns the updated Span.

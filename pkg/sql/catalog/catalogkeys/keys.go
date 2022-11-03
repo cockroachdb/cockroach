@@ -230,3 +230,27 @@ func MakeAllDescsMetadataKey(codec keys.SQLCodec) roachpb.Key {
 func MakeDescMetadataKey(codec keys.SQLCodec, descID descpb.ID) roachpb.Key {
 	return codec.DescMetadataKey(uint32(descID))
 }
+
+// CommentsMetadataPrefix returns the key prefix for all comments in the
+// system.comments table.
+func CommentsMetadataPrefix(codec keys.SQLCodec) roachpb.Key {
+	return codec.IndexPrefix(keys.CommentsTableID, keys.CommentsTablePrimaryKeyIndexID)
+}
+
+// MakeObjectCommentsMetadataPrefix returns the key prefix for a type of comments
+// of a descriptor.
+func MakeObjectCommentsMetadataPrefix(
+	codec keys.SQLCodec, cmtKey keys.CommentType, descID descpb.ID,
+) roachpb.Key {
+	k := CommentsMetadataPrefix(codec)
+	k = encoding.EncodeUvarintAscending(k, uint64(cmtKey))
+	return encoding.EncodeUvarintAscending(k, uint64(descID))
+}
+
+// MakeSubObjectCommentsMetadataPrefix returns the key
+func MakeSubObjectCommentsMetadataPrefix(
+	codec keys.SQLCodec, cmtKey keys.CommentType, descID descpb.ID, subID uint32,
+) roachpb.Key {
+	k := MakeObjectCommentsMetadataPrefix(codec, cmtKey, descID)
+	return encoding.EncodeUvarintAscending(k, uint64(subID))
+}

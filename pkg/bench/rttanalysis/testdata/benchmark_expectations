@@ -33,8 +33,8 @@ exp,benchmark
 13,CreateRole/create_role_with_no_options
 12,DropDatabase/drop_database_0_tables
 14,DropDatabase/drop_database_1_table
-16,DropDatabase/drop_database_2_tables
-18,DropDatabase/drop_database_3_tables
+14,DropDatabase/drop_database_2_tables
+15,DropDatabase/drop_database_3_tables
 18,DropRole/drop_1_role
 26,DropRole/drop_2_roles
 34,DropRole/drop_3_roles
@@ -42,8 +42,8 @@ exp,benchmark
 15,DropSequence/drop_2_sequences
 17,DropSequence/drop_3_sequences
 14,DropTable/drop_1_table
-17,DropTable/drop_2_tables
-20,DropTable/drop_3_tables
+15,DropTable/drop_2_tables
+17,DropTable/drop_3_tables
 15,DropView/drop_1_view
 16,DropView/drop_2_views
 16,DropView/drop_3_views

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -198,8 +197,8 @@ func ReadSessionDataFromDB(
 
 // ReadCommentsFromDB reads all comments from system.comments table and return
 // them as a CommentCache.
-func ReadCommentsFromDB(t *testing.T, tdb *sqlutils.SQLRunner) map[descmetadata.CommentKey]string {
-	comments := make(map[descmetadata.CommentKey]string)
+func ReadCommentsFromDB(t *testing.T, tdb *sqlutils.SQLRunner) map[keys.CommentKey]string {
+	comments := make(map[keys.CommentKey]string)
 	commentRows := tdb.QueryStr(t, `SELECT type, object_id, sub_id, comment FROM system.comments`)
 	for _, row := range commentRows {
 		typeVal, err := strconv.Atoi(row[0])
@@ -216,8 +215,8 @@ func ReadCommentsFromDB(t *testing.T, tdb *sqlutils.SQLRunner) map[descmetadata.
 			t.Fatal(err)
 		}
 		comment := row[3]
-		commentKey := descmetadata.CommentKey{
-			ObjectID:    catid.DescID(objID),
+		commentKey := keys.CommentKey{
+			ObjectID:    uint32(objID),
 			SubID:       uint32(subID),
 			CommentType: commentType,
 		}
