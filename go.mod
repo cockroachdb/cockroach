@@ -48,7 +48,7 @@ require (
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.13.0
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
-	github.com/cockroachdb/pebble v0.0.0-20220701231217-36e8e9214699
+	github.com/cockroachdb/pebble v0.0.0-20221028163947-441910e2cef5
 	github.com/cockroachdb/redact v1.1.3
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20170808184505-29b5d31b4c3a

@@ -733,8 +733,8 @@ def go_deps():
         name = "com_github_cockroachdb_pebble",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/pebble",
-        sum = "h1:tHoVW9i9oRYCG/p0fhqd8vToBWNnaM9oriF058L8elE=",
-        version = "v0.0.0-20220701231217-36e8e9214699",
+        sum = "h1:iytq3LdG0eeUCi8LMu9N+J9pnM2z6fPpEyrGYgNTiaU=",
+        version = "v0.0.0-20221028163947-441910e2cef5",
     )
 
     go_repository(
@@ -2749,6 +2749,7 @@ def go_deps():
         name = "com_github_lib_pq",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/lib/pq",
+        sum = "h1:jbk+ZieJ0D7EVGJYpL9QTz7/YW6UHbmdnZWYyK5cdBs=",
         version = "v1.10.6",
     )
     go_repository(
