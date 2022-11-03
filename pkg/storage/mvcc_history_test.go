@@ -259,11 +259,15 @@ func TestMVCCHistories(t *testing.T) {
 				return err
 			}
 			defer func() { _ = iter.Close() }()
-			for k, v := iter.SeekGE(nil, sstable.SeekGEFlags(0)); k != nil; k, v = iter.Next() {
+			for k, lv := iter.SeekGE(nil, sstable.SeekGEFlags(0)); k != nil; k, lv = iter.Next() {
 				if err := iter.Error(); err != nil {
 					return err
 				}
 				key, err := storage.DecodeMVCCKey(k.UserKey)
+				if err != nil {
+					return err
+				}
+				v, _, err := lv.Value(nil)
 				if err != nil {
 					return err
 				}
