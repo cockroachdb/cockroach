@@ -406,6 +406,8 @@ const (
 	DescriptorTableDescriptorColFamID        = 2
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
+	CommentsTablePrimaryKeyIndexID           = 1
+	CommentsTableCommentColFamID             = 4
 
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
@@ -476,27 +478,6 @@ const (
 )
 
 var _ = reservedSystemTableID // defeat the unused linter
-
-// CommentType the type of the schema object on which a comment has been
-// applied.
-type CommentType int
-
-//go:generate stringer --type CommentType
-
-const (
-	// DatabaseCommentType comment on a database.
-	DatabaseCommentType CommentType = 0
-	// TableCommentType comment on a table/view/sequence.
-	TableCommentType CommentType = 1
-	// ColumnCommentType comment on a column.
-	ColumnCommentType CommentType = 2
-	// IndexCommentType comment on an index.
-	IndexCommentType CommentType = 3
-	// SchemaCommentType comment on a schema.
-	SchemaCommentType CommentType = 4
-	// ConstraintCommentType comment on a constraint.
-	ConstraintCommentType CommentType = 5
-)
 
 const (
 	// SequenceIndexID is the ID of the single index on each special single-column,

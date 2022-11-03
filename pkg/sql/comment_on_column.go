@@ -13,9 +13,9 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -67,7 +67,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
+			catalogkeys.ColumnCommentType,
 			n.tableDesc.GetID(),
 			col.GetPGAttributeNum(),
 			*n.n.Comment)
@@ -81,7 +81,7 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 			params.p.Txn(),
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-			keys.ColumnCommentType,
+			catalogkeys.ColumnCommentType,
 			n.tableDesc.GetID(),
 			col.GetPGAttributeNum())
 		if err != nil {

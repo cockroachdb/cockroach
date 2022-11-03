@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -529,7 +529,7 @@ func (p *planner) dropIndexByName(
 		p.SessionData(),
 	)
 	if err := metadataUpdater.DeleteDescriptorComment(
-		int64(tableDesc.ID), int64(idxDesc.ID), keys.IndexCommentType); err != nil {
+		int64(tableDesc.ID), int64(idxDesc.ID), catalogkeys.IndexCommentType); err != nil {
 		return err
 	}
 

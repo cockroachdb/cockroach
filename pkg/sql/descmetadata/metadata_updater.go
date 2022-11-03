@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -67,7 +68,7 @@ func NewMetadataUpdater(
 
 // UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) UpsertDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType, comment string,
+	id int64, subID int64, commentType catalogkeys.CommentType, comment string,
 ) error {
 	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),
@@ -85,7 +86,7 @@ func (mu metadataUpdater) UpsertDescriptorComment(
 
 // DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteDescriptorComment(
-	id int64, subID int64, commentType keys.CommentType,
+	id int64, subID int64, commentType catalogkeys.CommentType,
 ) error {
 	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),
@@ -112,8 +113,8 @@ func (mu metadataUpdater) DeleteAllCommentsForTables(idSet catalog.DescriptorIDS
 DELETE FROM system.comments
       WHERE type IN (%d, %d, %d, %d)
         AND object_id IN (%d`,
-		keys.TableCommentType, keys.ColumnCommentType, keys.ConstraintCommentType,
-		keys.IndexCommentType, ids[0],
+		catalogkeys.TableCommentType, catalogkeys.ColumnCommentType, catalogkeys.ConstraintCommentType,
+		catalogkeys.IndexCommentType, ids[0],
 	)
 	for _, id := range ids[1:] {
 		_, _ = fmt.Fprintf(&buf, ", %d", id)
@@ -133,14 +134,14 @@ DELETE FROM system.comments
 func (mu metadataUpdater) UpsertConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
 ) error {
-	return mu.UpsertDescriptorComment(int64(tableID), int64(constraintID), keys.ConstraintCommentType, comment)
+	return mu.UpsertDescriptorComment(int64(tableID), int64(constraintID), catalogkeys.ConstraintCommentType, comment)
 }
 
 // DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteConstraintComment(
 	tableID descpb.ID, constraintID descpb.ConstraintID,
 ) error {
-	return mu.DeleteDescriptorComment(int64(tableID), int64(constraintID), keys.ConstraintCommentType)
+	return mu.DeleteDescriptorComment(int64(tableID), int64(constraintID), catalogkeys.ConstraintCommentType)
 }
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
@@ -184,7 +185,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 
 // SwapDescriptorSubComment implements scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) SwapDescriptorSubComment(
-	id int64, oldSubID int64, newSubID int64, commentType keys.CommentType,
+	id int64, oldSubID int64, newSubID int64, commentType catalogkeys.CommentType,
 ) error {
 	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
 	_, err := ie.ExecEx(context.Background(),

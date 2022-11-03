@@ -14,9 +14,11 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -75,6 +77,66 @@ func (tc *Collection) GetImmutableDescriptorByID(
 ) (catalog.Descriptor, error) {
 	flags.RequireMutable = false
 	return tc.getDescriptorByID(ctx, txn, flags, id)
+}
+
+// GetComment fetches comment from uncommitted cache if it exists, otherwise from storage.
+func (tc *Collection) GetComment(key catalogkeys.CommentKey) (string, bool) {
+	if cmt, hasCmt, cached := tc.uncommittedComments.getUncommitted(key); cached {
+		return cmt, hasCmt
+	}
+	if cmt, hasCmt, cached := tc.stored.GetCachedComment(key); cached {
+		return cmt, hasCmt
+	}
+	return "", false
+}
+
+// AddUncommittedComment adds a comment to uncommitted cache.
+func (tc *Collection) AddUncommittedComment(key catalogkeys.CommentKey, cmt string) {
+	tc.uncommittedComments.upsert(key, cmt)
+}
+
+// GetZoneConfig fetches zone config from uncommitted cache if it exists,
+// otherwise the cached storage version.
+func (tc *Collection) GetZoneConfig(descID descpb.ID) catalog.ZoneConfig {
+	return tc.GetZoneConfigWithRawByte(descID)
+}
+
+// GetZoneConfigWithRawByte fetches zone config together with its raw bytes from
+// uncommitted cache if it exists, otherwise the cached storage version is
+// returned.
+func (tc *Collection) GetZoneConfigWithRawByte(descID descpb.ID) catalog.ZoneConfig {
+	if zc, cached := tc.uncommittedZoneConfigs.getUncommitted(descID); cached {
+		return zc
+	}
+	if zc, cached := tc.stored.GetCachedZoneConfig(descID); cached {
+		return zc
+	}
+	return nil
+}
+
+// AddUncommittedZoneConfig adds a zone config to the uncommitted cache.
+func (tc *Collection) AddUncommittedZoneConfig(id descpb.ID, zc *zonepb.ZoneConfig) error {
+	return tc.uncommittedZoneConfigs.upsert(id, zc)
+}
+
+// MarkUncommittedZoneConfigDeleted adds the descriptor id to the uncommitted zone config layer, but indicates
+// that the zone config has been dropped or does not exist for this descriptor id.
+func (tc *Collection) MarkUncommittedZoneConfigDeleted(id descpb.ID) {
+	tc.uncommittedZoneConfigs.markNoZoneConfig(id)
+}
+
+// MarkUncommittedCommentDeleted adds the key to uncommitted cache, but indicates
+// that the comment has been dropped, therefore the cached information is that
+// "there is no comment for this key".
+func (tc *Collection) MarkUncommittedCommentDeleted(key catalogkeys.CommentKey) {
+	tc.uncommittedComments.markNoComment(key)
+}
+
+// MarkUncommittedCommentDeletedForTable is similar to
+// MarkUncommittedCommentDeleted, but it marks all comments on the table as
+// deleted.
+func (tc *Collection) MarkUncommittedCommentDeletedForTable(tblID descpb.ID) {
+	tc.uncommittedComments.markTableDeleted(tblID)
 }
 
 // getDescriptorsByID returns a descriptor by ID according to the provided
