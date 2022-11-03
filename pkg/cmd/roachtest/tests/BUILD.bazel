@@ -49,6 +49,7 @@ go_library(
         "drt.go",
         "encryption.go",
         "event_log.go",
+        "example.go",
         "fixtures.go",
         "flowable.go",
         "follower_reads.go",
