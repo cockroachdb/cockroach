@@ -33,10 +33,11 @@ import (
 // Reset must drop any remaining objects after the current database is dropped
 // so Setup and Stmt can be run again.
 type RoundTripBenchTestCase struct {
-	Name  string
-	Setup string
-	Stmt  string
-	Reset string
+	Name      string
+	Setup     string
+	Stmt      string
+	Reset     string
+	SkipIssue int
 }
 
 func runRoundTripBenchmark(b testingB, tests []RoundTripBenchTestCase, cc ClusterConstructor) {
@@ -83,6 +84,9 @@ func runRoundTripBenchmarkTestCase(
 	numRuns int,
 	limit *quotapool.IntPool,
 ) {
+	if tc.SkipIssue != 0 {
+		skip.WithIssue(t, tc.SkipIssue)
+	}
 	var wg sync.WaitGroup
 	for i := 0; i < numRuns; i++ {
 		alloc, err := limit.Acquire(context.Background(), 1)
