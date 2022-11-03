@@ -14,6 +14,7 @@ import (
 	"context"
 	encjson "encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -41,7 +42,7 @@ var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "histogram_id", Typ: types.Int},
 }
 
-var showTableStatsColumnsPartialPredVer = colinfo.ResultColumns{
+var showTableStatsColumnsPartialStatisticsVer = colinfo.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
 	{Name: "column_names", Typ: types.StringArray},
 	{Name: "created", Typ: types.Timestamp},
@@ -50,6 +51,7 @@ var showTableStatsColumnsPartialPredVer = colinfo.ResultColumns{
 	{Name: "null_count", Typ: types.Int},
 	{Name: "avg_size", Typ: types.Int},
 	{Name: "partial_predicate", Typ: types.String},
+	{Name: "full_statistics_id", Typ: types.Int},
 	{Name: "histogram_id", Typ: types.Int},
 }
 
@@ -59,8 +61,25 @@ var showTableStatsJSONColumns = colinfo.ResultColumns{
 
 const showTableStatsOptForecast = "forecast"
 
+const showTableStatsOptMerge = "merge"
+
 var showTableStatsOptValidate = map[string]exprutil.KVStringOptValidate{
 	showTableStatsOptForecast: exprutil.KVStringOptRequireNoValue,
+	showTableStatsOptMerge:    exprutil.KVStringOptRequireNoValue,
+}
+
+func containsDroppedColumn(colIDs tree.Datums, desc catalog.TableDescriptor) (bool, error) {
+	for _, colID := range colIDs {
+		cid := descpb.ColumnID(*colID.(*tree.DInt))
+		if _, err := desc.FindColumnWithID(cid); err != nil {
+			if sqlerrors.IsUndefinedColumnError(err) {
+				return true, nil
+			} else {
+				return false, err
+			}
+		}
+	}
+	return false, nil
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
@@ -82,9 +101,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
 		return nil, err
 	}
-	partialPredColVerActive := p.ExtendedEvalContext().ExecCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsPredicateCol)
-	columns := showTableStatsColumnsPartialPredVer
-	if !partialPredColVerActive {
+	partialStatsVerActive := p.ExtendedEvalContext().ExecCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns)
+	columns := showTableStatsColumnsPartialStatisticsVer
+	if !partialStatsVerActive {
 		columns = showTableStatsColumns
 	}
 	if n.UsingJSON {
@@ -101,10 +120,11 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
-			var partialPred string
-			if partialPredColVerActive {
-				partialPred = `
-"partialPredicate",`
+			var partialStatsCols string
+			if partialStatsVerActive {
+				partialStatsCols = `
+"partialPredicate",
+"fullStatisticsID",`
 			}
 			stmt := fmt.Sprintf(`SELECT
 							"tableID",
@@ -120,7 +140,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 							histogram
 						FROM system.table_statistics
 						WHERE "tableID" = $1
-						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialPred)
+						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialStatsCols)
 			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
 				ctx,
 				"read-table-stats",
@@ -143,15 +163,16 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				nullCountIdx
 				avgSizeIdx
 				partialPredicateIdx
+				fullStatisticsIdx
 				histogramIdx
 				numCols
 			)
 
 			histIdx := histogramIdx
 			nCols := numCols
-			if !partialPredColVerActive {
-				histIdx = histogramIdx - 1
-				nCols = numCols - 1
+			if !partialStatsVerActive {
+				histIdx = histogramIdx - 2
+				nCols = numCols - 2
 			}
 
 			// Guard against crashes in the code below (e.g. #56356).
@@ -171,27 +192,23 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 			}()
 
-			if _, withForecast := opts[showTableStatsOptForecast]; withForecast {
-				observed := make([]*stats.TableStatistic, 0, len(rows))
+			_, withMerge := opts[showTableStatsOptMerge]
+			_, withForecast := opts[showTableStatsOptForecast]
+
+			obsFullStats := make([]*stats.TableStatistic, 0, len(rows))
+			obsPartialStats := make([]*stats.TableStatistic, 0, len(rows))
+			if withMerge || withForecast {
 				for _, row := range rows {
 					// Skip stats on dropped columns.
 					colIDs := row[columnIDsIdx].(*tree.DArray).Array
-					ignoreStatsRowWithDroppedColumn := false
-					for _, colID := range colIDs {
-						cid := descpb.ColumnID(*colID.(*tree.DInt))
-						if _, err := desc.FindColumnWithID(cid); err != nil {
-							if sqlerrors.IsUndefinedColumnError(err) {
-								ignoreStatsRowWithDroppedColumn = true
-								break
-							} else {
-								return nil, err
-							}
-						}
+					ignoreStatsRowWithDroppedColumn, err := containsDroppedColumn(colIDs, desc)
+					if err != nil {
+						return nil, err
 					}
 					if ignoreStatsRowWithDroppedColumn {
 						continue
 					}
-					stat, err := stats.NewTableStatisticProto(row, partialPredColVerActive)
+					stat, err := stats.NewTableStatisticProto(row, partialStatsVerActive)
 					if err != nil {
 						return nil, err
 					}
@@ -201,17 +218,41 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 							return nil, err
 						}
 					}
-					observed = append(observed, obs)
+					if obs.PartialPredicate != "" {
+						obsPartialStats = append(obsPartialStats, obs)
+					} else {
+						obsFullStats = append(obsFullStats, obs)
+					}
 				}
 
-				// Reverse the list to sort by CreatedAt descending.
-				for i := 0; i < len(observed)/2; i++ {
-					j := len(observed) - i - 1
-					observed[i], observed[j] = observed[j], observed[i]
+				// Reverse the lists to sort by CreatedAt descending.
+				for i := 0; i < len(obsFullStats)/2; i++ {
+					j := len(obsFullStats) - i - 1
+					obsFullStats[i], obsFullStats[j] = obsFullStats[j], obsFullStats[i]
 				}
+				for i := 0; i < len(obsPartialStats)/2; i++ {
+					j := len(obsPartialStats) - i - 1
+					obsPartialStats[i], obsPartialStats[j] = obsPartialStats[j], obsPartialStats[i]
+				}
+			}
 
-				forecasts := stats.ForecastTableStatistics(ctx, observed)
+			if withMerge {
+				merged := stats.MergedStatistics(ctx, obsPartialStats, obsFullStats)
+				obsFullStats = append(obsFullStats, merged...)
+				sort.Slice(obsFullStats, func(i, j int) bool {
+					return obsFullStats[i].CreatedAt.After(obsFullStats[j].CreatedAt)
+				})
+				for i := len(merged) - 1; i >= 0; i-- {
+					mergedRow, err := tableStatisticProtoToRow(&merged[i].TableStatisticProto)
+					if err != nil {
+						return nil, err
+					}
+					rows = append(rows, mergedRow)
+				}
+			}
 
+			if withForecast {
+				forecasts := stats.ForecastTableStatistics(ctx, obsFullStats)
 				// Iterate in reverse order to match the ORDER BY "columnIDs".
 				for i := len(forecasts) - 1; i >= 0; i-- {
 					forecastRow, err := tableStatisticProtoToRow(&forecasts[i].TableStatisticProto)
@@ -248,8 +289,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					if r[nameIdx] != tree.DNull {
 						statsRow.Name = string(*r[nameIdx].(*tree.DString))
 					}
-					if partialPredColVerActive && r[partialPredicateIdx] != tree.DNull {
+					if partialStatsVerActive && r[partialPredicateIdx] != tree.DNull && r[fullStatisticsIdx] != tree.DNull {
 						statsRow.PartialPredicate = string(*r[partialPredicateIdx].(*tree.DString))
+						statsRow.FullStatisticsID = (uint64)(*r[fullStatisticsIdx].(*tree.DInt))
 					}
 					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
@@ -303,7 +345,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				var res tree.Datums
-				if partialPredColVerActive {
+				if partialStatsVerActive {
 					res = tree.Datums{
 						r[nameIdx],
 						colNames,
@@ -313,6 +355,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						r[nullCountIdx],
 						r[avgSizeIdx],
 						r[partialPredicateIdx],
+						r[fullStatisticsIdx],
 						histogramID,
 					}
 				} else {
@@ -354,8 +397,12 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 		name = tree.NewDString(stat.Name)
 	}
 	partialPredicate := tree.DNull
+	FullStatisticsID := tree.DNull
 	if stat.PartialPredicate != "" {
 		partialPredicate = tree.NewDString(stat.PartialPredicate)
+	}
+	if stat.FullStatisticsID != 0 {
+		FullStatisticsID = tree.NewDInt(tree.DInt(stat.FullStatisticsID))
 	}
 	columnIDs := tree.NewDArray(types.Int)
 	for _, c := range stat.ColumnIDs {
@@ -374,6 +421,7 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 		tree.NewDInt(tree.DInt(stat.NullCount)),
 		tree.NewDInt(tree.DInt(stat.AvgSize)),
 		partialPredicate,
+		FullStatisticsID,
 	}
 	if stat.HistogramData == nil {
 		row = append(row, tree.DNull)
