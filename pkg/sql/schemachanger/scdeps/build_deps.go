@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -397,12 +396,12 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 }
 
-func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
-	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
+func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {
+	return d.descsCollection
 }
 
 func (d *buildDeps) ZoneConfigGetter() scbuild.ZoneConfigGetter {
-	return descmetadata.NewZoneConfigGetter(d.txn, d.internalExecutor)
+	return d.descsCollection
 }
 
 // ClientNoticeSender implements the scbuild.Dependencies interface.

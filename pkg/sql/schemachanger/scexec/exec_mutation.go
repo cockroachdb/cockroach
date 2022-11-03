@@ -63,6 +63,9 @@ func executeDescriptorMutationOps(ctx context.Context, deps Dependencies, ops []
 		dbZoneConfigsToDelete,
 		mvs.modifiedDescriptors,
 		mvs.drainedNames,
+		mvs.commentsToUpdate,
+		mvs.constraintCommentsToUpdate,
+		mvs.tableCommentsToDelete,
 		deps.Catalog(),
 	); err != nil {
 		return err
@@ -96,6 +99,9 @@ func performBatchedCatalogWrites(
 	dbZoneConfigsToDelete catalog.DescriptorIDSet,
 	modifiedDescriptors nstree.IDMap,
 	drainedNames map[descpb.ID][]descpb.NameInfo,
+	commentsToUpdate []commentToUpdate,
+	constraintCommentsToUpdate []constraintCommentToUpdate,
+	tableCommentsToDelete catalog.DescriptorIDSet,
 	cat Catalog,
 ) error {
 	b := cat.NewCatalogChangeBatcher()
@@ -128,6 +134,44 @@ func performBatchedCatalogWrites(
 		dbZoneConfigsToDelete.ForEach(func(id descpb.ID) {
 			if err == nil {
 				err = b.DeleteZoneConfig(ctx, id)
+			}
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	{
+		// TODO(chengxiong): looks like we don't need "constraintCommentsToUpdate"
+		// at all, and can just use "commentsToUpdate" to hold comment updates.
+		for _, u := range commentsToUpdate {
+			if len(u.comment) > 0 {
+				if err := b.UpdateComment(ctx, u.id, u.subID, u.commentType, u.comment); err != nil {
+					return err
+				}
+			} else {
+				if err := b.DeleteComment(ctx, u.id, u.subID, u.commentType); err != nil {
+					return err
+				}
+			}
+		}
+
+		for _, u := range constraintCommentsToUpdate {
+			if len(u.comment) > 0 {
+				if err := b.UpdateComment(ctx, int64(u.tblID), int64(u.constraintID), keys.ConstraintCommentType, u.comment); err != nil {
+					return err
+				}
+			} else {
+				if err := b.DeleteComment(ctx, int64(u.tblID), int64(u.constraintID), keys.ConstraintCommentType); err != nil {
+					return err
+				}
+			}
+		}
+
+		var err error
+		tableCommentsToDelete.ForEach(func(id descpb.ID) {
+			if err == nil {
+				err = b.DeleteTableComments(ctx, id)
 			}
 		})
 		if err != nil {
@@ -255,37 +299,6 @@ func eventLogEntriesForStatement(statementEvents []eventPayload) (logEntries []e
 func updateDescriptorMetadata(
 	ctx context.Context, mvs *mutationVisitorState, m DescriptorMetadataUpdater,
 ) error {
-	for _, comment := range mvs.commentsToUpdate {
-		if len(comment.comment) > 0 {
-			if err := m.UpsertDescriptorComment(
-				comment.id, comment.subID, comment.commentType, comment.comment); err != nil {
-				return err
-			}
-		} else {
-			if err := m.DeleteDescriptorComment(
-				comment.id, comment.subID, comment.commentType); err != nil {
-				return err
-			}
-		}
-	}
-	for _, comment := range mvs.constraintCommentsToUpdate {
-		if len(comment.comment) > 0 {
-			if err := m.UpsertConstraintComment(
-				comment.tblID, comment.constraintID, comment.comment); err != nil {
-				return err
-			}
-		} else {
-			if err := m.DeleteConstraintComment(
-				comment.tblID, comment.constraintID); err != nil {
-				return err
-			}
-		}
-	}
-	if !mvs.tableCommentsToDelete.Empty() {
-		if err := m.DeleteAllCommentsForTables(mvs.tableCommentsToDelete); err != nil {
-			return err
-		}
-	}
 	for _, dbRoleSetting := range mvs.databaseRoleSettingsToDelete {
 		err := m.DeleteDatabaseRoleSettings(ctx, dbRoleSetting.dbID)
 		if err != nil {

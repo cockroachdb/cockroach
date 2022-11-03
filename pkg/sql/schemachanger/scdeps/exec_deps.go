@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -258,12 +257,7 @@ func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.I
 
 // DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.ID) error {
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(b.codec, id)
-	if b.kvTrace {
-		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
-	}
-	b.batch.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-	return nil
+	return b.descsCollection.DeleteZoneConfig(ctx, b.kvTrace, b.batch, id)
 }
 
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
@@ -275,6 +269,25 @@ func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		return errors.Wrap(err, "writing descriptors")
 	}
 	return nil
+}
+
+// UpdateComment implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) UpdateComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType, cmt string,
+) error {
+	return b.descsCollection.WriteCommentToBatch(ctx, b.kvTrace, b.batch, descpb.ID(objID), uint32(subID), cmtType, cmt)
+}
+
+// DeleteComment implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType,
+) error {
+	return b.descsCollection.DeleteComment(ctx, b.kvTrace, b.batch, descpb.ID(objID), uint32(subID), cmtType)
+}
+
+// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
+func (b *catalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
+	return b.descsCollection.DeleteTableComments(ctx, b.kvTrace, b.batch, tblID)
 }
 
 var _ scexec.TransactionalJobRegistry = (*txnDeps)(nil)

@@ -723,6 +723,28 @@ func (b *testCatalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id desc
 	return nil
 }
 
+// UpdateComment implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) UpdateComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType, cmt string,
+) error {
+	b.s.LogSideEffectf("upsert comment (objID: %d, subID %d, cmtType: %d, cmt: %s)", objID, subID, cmtType, cmt)
+	return nil
+}
+
+// DeleteComment implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) DeleteComment(
+	ctx context.Context, objID int64, subID int64, cmtType keys.CommentType,
+) error {
+	b.s.LogSideEffectf("delete all comments for (objID: %d, subID %d, cmtType: %d)", objID, subID, cmtType)
+	return nil
+}
+
+// DeleteTableComments implements the scexec.CatalogChangeBatcher interface.
+func (b *testCatalogChangeBatcher) DeleteTableComments(ctx context.Context, tblID descpb.ID) error {
+	b.s.LogSideEffectf("delete all comments for table descriptor %v", tblID)
+	return nil
+}
+
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 	names := make([]descpb.NameInfo, 0, len(b.namesToDelete))
@@ -1182,6 +1204,6 @@ func (s *TestState) ZoneConfigGetter() scbuild.ZoneConfigGetter {
 }
 
 // GetZoneConfig implements scexec.Dependencies.
-func (s *TestState) GetZoneConfig(ctx context.Context, id descpb.ID) (*zonepb.ZoneConfig, error) {
-	return s.zoneConfigs[id], nil
+func (s *TestState) GetZoneConfig(id descpb.ID) *zonepb.ZoneConfig {
+	return s.zoneConfigs[id]
 }

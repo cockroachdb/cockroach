@@ -69,9 +69,9 @@ type Dependencies interface {
 	// partitioning descriptors for indexes.
 	IndexPartitioningCCLCallback() CreatePartitioningCCLCallback
 
-	// DescriptorCommentCache returns a CommentCache
+	// DescriptorCommentGetter returns a CommentCache
 	// Implementation.
-	DescriptorCommentCache() CommentCache
+	DescriptorCommentGetter() CommentGetter
 
 	// ZoneConfigGetter returns a zone config reader.
 	ZoneConfigGetter() ZoneConfigGetter
@@ -185,18 +185,11 @@ type AstFormatter interface {
 	FormatAstAsRedactableString(statement tree.Statement, annotations *tree.Annotations) redact.RedactableString
 }
 
-// CommentCache represent an interface to fetch and cache comments for
-// descriptors.
-type CommentCache interface {
-	scdecomp.CommentGetter
-
-	// LoadCommentsForObjects explicitly loads commentCache into the cache give a list
-	// of object id of a descriptor type.
-	LoadCommentsForObjects(ctx context.Context, objIDs []descpb.ID) error
-}
-
-// ZoneConfigGetter see scdecomp.ZoneConfigGetter
+// ZoneConfigGetter see scdecomp.ZoneConfigGetter.
 type ZoneConfigGetter scdecomp.ZoneConfigGetter
+
+// CommentGetter see scdecomp.CommentGetter.
+type CommentGetter scdecomp.CommentGetter
 
 // SchemaResolverFactory is used to construct a new schema resolver with
 // injected dependencies.

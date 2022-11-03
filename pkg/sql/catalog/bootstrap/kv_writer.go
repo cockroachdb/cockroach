@@ -11,6 +11,8 @@
 package bootstrap
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -86,25 +89,57 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 
 // Insert updates a batch with the KV operations required to insert a new record
 // into the table.
-func (w KVWriter) Insert(b *kv.Batch, values ...tree.Datum) error {
+func (w KVWriter) Insert(
+	ctx context.Context, b *kv.Batch, kvTrace bool, values ...tree.Datum,
+) error {
+	return w.Upsert(ctx, b, kvTrace, values, nil)
+}
+
+// Upsert updates a batch with the KV operations required to upsert a new record
+// into the table. expValues is required if there is existing data on the table
+// to overwrite, otherwise it should be nil.
+func (w KVWriter) Upsert(
+	ctx context.Context, b *kv.Batch, kvTrace bool, values []tree.Datum, expValues []tree.Datum,
+) error {
 	kvs, err := w.RecordToKeyValues(values...)
 	if err != nil {
 		return err
 	}
-	for _, kv := range kvs {
-		b.CPutAllowingIfNotExists(kv.Key, &kv.Value, nil /* expValue */)
+
+	var expKvs []roachpb.KeyValue
+	if expValues != nil {
+		expKvs, err = w.RecordToKeyValues(expValues...)
+		if err != nil {
+			return err
+		}
+	}
+	for i, keyVal := range kvs {
+		if expKvs == nil {
+			b.CPutAllowingIfNotExists(keyVal.Key, &keyVal.Value, nil /* expValue */)
+			continue
+		}
+		expVal := expKvs[i].Value.TagAndDataBytes()
+		if kvTrace {
+			log.VEventf(ctx, 2, "Put %s -> %s", keyVal.Key, keyVal.Value)
+		}
+		b.CPut(keyVal.Key, &keyVal.Value, expVal)
 	}
 	return nil
 }
 
 // Delete updates a batch with the KV operations required to delete an existing
 // record from the table.
-func (w KVWriter) Delete(b *kv.Batch, values ...tree.Datum) error {
+func (w KVWriter) Delete(
+	ctx context.Context, b *kv.Batch, kvTrace bool, values ...tree.Datum,
+) error {
 	kvs, err := w.RecordToKeyValues(values...)
 	if err != nil {
 		return err
 	}
 	for _, kv := range kvs {
+		if kvTrace {
+			log.VEventf(ctx, 2, "Del %s", kv.Key)
+		}
 		b.Del(kv.Key)
 	}
 	return nil

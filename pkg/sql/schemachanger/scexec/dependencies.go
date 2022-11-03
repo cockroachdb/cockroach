@@ -112,6 +112,19 @@ type CatalogChangeBatcher interface {
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
+
+	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
+	UpdateComment(
+		ctx context.Context, objID int64, subID int64, cmtType keys.CommentType, cmt string,
+	) error
+
+	// DeleteComment deletes a comment with (objID, subID, cmtType) key.
+	DeleteComment(
+		ctx context.Context, objID int64, subID int64, cmtType keys.CommentType,
+	) error
+
+	// DeleteTableComments deletes all comments created on the table.
+	DeleteTableComments(ctx context.Context, tblID descpb.ID) error
 }
 
 // TransactionalJobRegistry creates and updates jobs in the current transaction.

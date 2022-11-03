@@ -412,6 +412,8 @@ const (
 	DescriptorTableDescriptorColFamID        = 2
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
+	CommentsTablePrimaryKeyIndexID           = 1
+	CommentsTableCommentColFamID             = 4
 
 	// Reserved IDs for other system tables. Note that some of these IDs refer
 	// to "Ranges" instead of a Table - these IDs are needed to store custom
@@ -489,6 +491,7 @@ type CommentType int
 
 //go:generate stringer --type CommentType
 
+// Note: please add the new comment types to AllCommentTypes as well.
 const (
 	// DatabaseCommentType comment on a database.
 	DatabaseCommentType CommentType = 0
@@ -503,6 +506,38 @@ const (
 	// ConstraintCommentType comment on a constraint.
 	ConstraintCommentType CommentType = 5
 )
+
+// AllCommentTypes is a slice of all valid schema comment types.
+var AllCommentTypes = []CommentType{
+	DatabaseCommentType,
+	TableCommentType,
+	ColumnCommentType,
+	IndexCommentType,
+	SchemaCommentType,
+	ConstraintCommentType,
+}
+
+// AllTableCommentTypes is a slice of all valid comment types on table elements.
+var AllTableCommentTypes = []CommentType{
+	TableCommentType,
+	ColumnCommentType,
+	IndexCommentType,
+	ConstraintCommentType,
+}
+
+// CommentKey represents the primary index key of system.comments table.
+type CommentKey struct {
+	ObjectID    uint32
+	SubID       uint32
+	CommentType CommentType
+}
+
+// SubCommentKey represents the key space of all comments belong to and
+// ObjectID.
+type SubCommentKey struct {
+	SubID       uint32
+	CommentType CommentType
+}
 
 const (
 	// SequenceIndexID is the ID of the single index on each special single-column,

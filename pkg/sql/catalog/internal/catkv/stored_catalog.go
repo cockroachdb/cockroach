@@ -40,6 +40,12 @@ type StoredCatalog struct {
 	// This map does not store descriptors by name.
 	cache nstree.IDMap
 
+	// comments mirrors the comments in storage.
+	comments map[keys.CommentKey]string
+
+	// zoneConfigs mirrors the zone configurations in storage.
+	zoneConfigs *storedZoneConfigs
+
 	// nameIndex is a subset of cache which allows lookups by name.
 	nameIndex nstree.NameMap
 
@@ -83,7 +89,12 @@ type DescriptorValidationModeProvider interface {
 func MakeStoredCatalog(
 	cr CatalogReader, dvmp DescriptorValidationModeProvider, monitor *mon.BytesMonitor,
 ) StoredCatalog {
-	sc := StoredCatalog{CatalogReader: cr, DescriptorValidationModeProvider: dvmp}
+	sc := StoredCatalog{
+		CatalogReader:                    cr,
+		DescriptorValidationModeProvider: dvmp,
+		comments:                         make(map[keys.CommentKey]string),
+		zoneConfigs:                      newStoredZoneConfigs(),
+	}
 	if monitor != nil {
 		memAcc := monitor.MakeBoundAccount()
 		sc.memAcc = &memAcc
@@ -105,6 +116,8 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 		cache:                            old.cache,
 		nameIndex:                        old.nameIndex,
 		memAcc:                           old.memAcc,
+		comments:                         make(map[keys.CommentKey]string),
+		zoneConfigs:                      newStoredZoneConfigs(),
 	}
 }
 
@@ -124,6 +137,36 @@ func (sc *StoredCatalog) ensure(ctx context.Context, desc catalog.Descriptor) er
 	return nil
 }
 
+func (sc *StoredCatalog) upsertComment(ctx context.Context, key keys.CommentKey, cmt string) error {
+	if existing, ok := sc.comments[key]; ok {
+		sc.memAcc.Shrink(ctx, int64(len(existing)))
+	}
+	sc.comments[key] = cmt
+	if err := sc.memAcc.Grow(ctx, int64(len(cmt))); err != nil {
+		return err
+	}
+	return nil
+}
+
+// markZoneConfigInfoSeen see storedZoneConfigs.markSeen
+func (sc *StoredCatalog) markZoneConfigInfoSeen(id descpb.ID) {
+	sc.zoneConfigs.markSeen(id)
+}
+
+// upsertZoneConfig see storedZoneConfigs.upsert
+func (sc *StoredCatalog) upsertZoneConfig(
+	ctx context.Context, id descpb.ID, zc *catalog.ZoneConfigWithRawBytes,
+) error {
+	if existing, _ := sc.zoneConfigs.get(id); existing != nil {
+		sc.memAcc.Shrink(ctx, int64(existing.Size()))
+	}
+	sc.zoneConfigs.upsert(id, zc)
+	if err := sc.memAcc.Grow(ctx, int64(zc.Size())); err != nil {
+		return err
+	}
+	return nil
+}
+
 // GetCachedByID looks up a descriptor by ID.
 // The system database descriptor is given special treatment to speed up lookups
 // and validations by avoiding an unnecessary round-trip to storage, as this
@@ -133,6 +176,40 @@ func (sc *StoredCatalog) GetCachedByID(id descpb.ID) catalog.Descriptor {
 		return e.(catalog.Descriptor)
 	}
 	return nil
+}
+
+// GetCachedComment checks if comments of an object is cached and return the comment if there
+// is a comment exists for the key.
+// 1. False is returned for "cached" if the object is never seen by this cache.
+// 2. comment may not exist for a (objID, subID, cmtType) tuple even an object
+// has been seen, in this case, "cached" will be true, and "hasCmt" will be
+// false.
+func (sc *StoredCatalog) GetCachedComment(
+	descID descpb.ID, subID uint32, cmtType keys.CommentType,
+) (cmt string, hasCmt bool, cached bool) {
+	if sc.cache.Get(descID) == nil {
+		return "", false, false
+	}
+	key := keys.CommentKey{
+		ObjectID:    uint32(descID),
+		SubID:       subID,
+		CommentType: cmtType,
+	}
+	if cmt, ok := sc.comments[key]; ok {
+		return cmt, ok, true
+	}
+	return "", false, true
+}
+
+// GetCachedZoneConfig checks if zone config of an object is cached and returns
+// the zone config if so.
+// 1. False is returned for "cached" if the object is never seen by this cache.
+// 2. zone config record may not exist for a seen object. True for "cached" and
+// False for "hasZoneConfig" will be return in that case.
+func (sc *StoredCatalog) GetCachedZoneConfig(
+	id descpb.ID,
+) (zc *catalog.ZoneConfigWithRawBytes, cached bool) {
+	return sc.zoneConfigs.get(id)
 }
 
 // getCachedIDByName looks up a descriptor ID by name in the cache.
@@ -176,10 +253,29 @@ func (sc *StoredCatalog) EnsureAllDescriptors(ctx context.Context, txn *kv.Txn) 
 		return err
 	}
 	if err = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		sc.markZoneConfigInfoSeen(desc.GetID())
 		return sc.ensure(ctx, desc)
 	}); err != nil {
 		return err
 	}
+	if err = c.ForEachCommentUnordered(func(key keys.CommentKey, cmt string) error {
+		return sc.upsertComment(ctx, key, cmt)
+	}); err != nil {
+		return err
+	}
+
+	// These ids don't have corresponding descriptors but some of them may have
+	// zone configs. So need to explicitly mark them as seen.
+	sc.markZoneConfigInfoSeen(keys.RootNamespaceID)
+	for _, id := range keys.PseudoTableIDs {
+		sc.markZoneConfigInfoSeen(descpb.ID(id))
+	}
+	if err := c.ForEachZoneConfigUnordered(func(id descpb.ID, zoneConfig *catalog.ZoneConfigWithRawBytes) error {
+		return sc.upsertZoneConfig(ctx, id, zoneConfig)
+	}); err != nil {
+		return err
+	}
+
 	sc.hasAllDescriptors = true
 	return nil
 }
@@ -310,7 +406,8 @@ func (sc *StoredCatalog) LookupDescriptorID(
 
 // EnsureFromStorageByIDs actually reads a batch of descriptors from storage
 // and adds them to the cache. It assumes (without checking) that they are not
-// already present in the cache.
+// already present in the cache. It also caches descriptor metadata (e.g.
+// comment) which is read together with from a same kv batch.
 func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -324,9 +421,28 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	if err != nil {
 		return err
 	}
-	return c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+	if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
 		return sc.ensure(ctx, desc)
+	}); err != nil {
+		return err
+	}
+
+	if err := c.ForEachCommentUnordered(func(key keys.CommentKey, cmt string) error {
+		return sc.upsertComment(ctx, key, cmt)
+	}); err != nil {
+		return err
+	}
+
+	ids.ForEach(func(id descpb.ID) {
+		sc.markZoneConfigInfoSeen(id)
 	})
+	if err := c.ForEachZoneConfigUnordered(func(id descpb.ID, zoneConfig *catalog.ZoneConfigWithRawBytes) error {
+		return sc.upsertZoneConfig(ctx, id, zoneConfig)
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // IterateCachedByID applies fn to all known descriptors in the cache in
@@ -436,6 +552,19 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 		if err != nil {
 			return nil, err
 		}
+
+		if err := read.ForEachCommentUnordered(func(key keys.CommentKey, cmt string) error {
+			return c.sc.upsertComment(ctx, key, cmt)
+		}); err != nil {
+			return nil, err
+		}
+
+		if err := read.ForEachZoneConfigUnordered(func(id descpb.ID, zoneConfig *catalog.ZoneConfigWithRawBytes) error {
+			return c.sc.upsertZoneConfig(ctx, id, zoneConfig)
+		}); err != nil {
+			return nil, err
+		}
+
 		for j, id := range fallbackReqs {
 			desc := read.LookupDescriptorEntry(id)
 			if desc == nil {
@@ -470,4 +599,42 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptorIDs(
 		}
 	}
 	return ret, nil
+}
+
+type storedZoneConfigs struct {
+	zcs     map[descpb.ID]*catalog.ZoneConfigWithRawBytes
+	seenIDs catalog.DescriptorIDSet
+}
+
+func newStoredZoneConfigs() *storedZoneConfigs {
+	return &storedZoneConfigs{
+		zcs: make(map[descpb.ID]*catalog.ZoneConfigWithRawBytes),
+	}
+}
+
+// upsert needs to be called an id has been marked as seen with markSeen,
+// otherwise the upsert would be a no-op. It's possible that a table is dropped,
+// its zone config stays in system.zones before it's gc'ed. In this case, we
+// should just ignore the zone config since we won't see the descriptor anyway.
+// Maybe it's fine to put the zone config in cache anyway, but it's good to keep
+// data sane.
+func (szc *storedZoneConfigs) upsert(id descpb.ID, zc *catalog.ZoneConfigWithRawBytes) {
+	if szc.seenIDs.Contains(id) {
+		szc.zcs[id] = zc
+	}
+}
+
+// markSeen should be called before upsert is called to put a zone config in
+// cache.
+func (szc *storedZoneConfigs) markSeen(id descpb.ID) {
+	szc.seenIDs.Add(id)
+}
+
+// get returns a boolean indicating the zone config information is cached or
+// not, together with a zone config (which can be nil) when it's cached.
+func (szc *storedZoneConfigs) get(id descpb.ID) (zc *catalog.ZoneConfigWithRawBytes, cached bool) {
+	if szc.seenIDs.Contains(id) {
+		return szc.zcs[id], true
+	}
+	return nil, false
 }
