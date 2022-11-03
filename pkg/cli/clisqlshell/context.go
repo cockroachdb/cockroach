@@ -91,10 +91,6 @@ type internalContext struct {
 	// current database name, if known. This is maintained on a best-effort basis.
 	dbName string
 
-	// displayPrompt indicates that the prompt should still be displayed,
-	// even when the line editor is disabled.
-	displayPrompt bool
-
 	// hook to run once, then clear, after running the next batch of statements.
 	afterRun func()
 
