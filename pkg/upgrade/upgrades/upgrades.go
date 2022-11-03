@@ -174,6 +174,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		descIDSequenceForSystemTenant,
 	),
+	upgrade.NewTenantUpgrade("add a partial predicate column to system.table_statistics",
+		toCV(clusterversion.V23_1AddPartialStatisticsPredicateCol),
+		NoPrecondition,
+		alterSystemTableStatisticsAddPartialPredicate,
+	),
 }
 
 func init() {
