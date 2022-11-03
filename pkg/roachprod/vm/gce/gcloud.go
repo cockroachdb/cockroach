@@ -246,10 +246,18 @@ type ProjectsVal struct {
 
 // defaultZones is the list of  zones used by default for cluster creation.
 // If the geo flag is specified, nodes are distributed between zones.
+// These are GCP zones available according to this page:
+// https://cloud.google.com/compute/docs/regions-zones#available
 var defaultZones = []string{
 	"us-east1-b",
 	"us-west1-b",
 	"europe-west2-b",
+	"us-east1-c",
+	"us-west1-c",
+	"europe-west2-c",
+	"us-east1-d",
+	"us-west1-a",
+	"europe-west2-a",
 }
 
 // Set is part of the pflag.Value interface.
