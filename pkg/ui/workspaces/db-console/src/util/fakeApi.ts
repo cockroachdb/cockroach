@@ -10,12 +10,12 @@
 
 import * as $protobuf from "protobufjs";
 
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { cockroach } from "src/js/protos";
 import { API_PREFIX, STATUS_PREFIX } from "src/util/api";
 import fetchMock from "src/util/fetch-mock";
 
 const {
-  DatabasesResponse,
   DatabaseDetailsResponse,
   SettingsResponse,
   TableDetailsResponse,
@@ -65,10 +65,88 @@ export function stubClusterSettings(
   );
 }
 
-export function stubDatabases(
-  response: cockroach.server.serverpb.IDatabasesResponse,
-) {
-  stubGet("/databases", DatabasesResponse.encode(response), API_PREFIX);
+export function buildSQLApiDatabasesResponse(databases: string[]) {
+  const rows: clusterUiApi.DatabasesColumns[] = [];
+  databases.forEach(database => {
+    rows.push({
+      database_name: database,
+      owner: "root",
+      primary_region: null,
+      secondary_region: null,
+      regions: [],
+      survival_goal: null,
+    });
+  });
+  return {
+    num_statements: 1,
+    execution: {
+      txn_results: [
+        {
+          statement: 1,
+          tag: "SHOW DATABASES",
+          start: "2022-10-27T17:42:05.582744Z",
+          end: "2022-10-27T17:42:05.588454Z",
+          rows_affected: 0,
+          columns: [
+            {
+              name: "database_name",
+              type: "STRING",
+              oid: 25,
+            },
+            {
+              name: "owner",
+              type: "NAME",
+              oid: 19,
+            },
+            {
+              name: "primary_region",
+              type: "STRING",
+              oid: 25,
+            },
+            {
+              name: "secondary_region",
+              type: "STRING",
+              oid: 25,
+            },
+            {
+              name: "regions",
+              type: "STRING[]",
+              oid: 1009,
+            },
+            {
+              name: "survival_goal",
+              type: "STRING",
+              oid: 25,
+            },
+          ],
+          rows: rows,
+        },
+      ],
+    },
+  };
+}
+
+export function stubDatabases(databases: string[]) {
+  const response = buildSQLApiDatabasesResponse(databases);
+  console.log("SQL API PATH", clusterUiApi.SQL_API_PATH);
+  fetchMock.mock({
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "X-Cockroach-API-Session": "cookie",
+    },
+    matcher: clusterUiApi.SQL_API_PATH,
+    method: "POST",
+    response: (_url: string, requestObj: RequestInit) => {
+      expect(JSON.parse(requestObj.body.toString())).toEqual(
+        clusterUiApi.databasesRequest,
+      );
+      console.log("STRINGIFY", JSON.stringify(response));
+      return {
+        body: JSON.stringify(response),
+      };
+    },
+  });
 }
 
 export function stubDatabaseDetails(
