@@ -504,10 +504,6 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	}
 }
 
-// errMalformedSnapshot indicates that the snapshot in question is malformed,
-// for e.g. missing raft log entries.
-var errMalformedSnapshot = errors.New("malformed snapshot generated")
-
 // Send implements the snapshotStrategy interface.
 func (kvSS *kvBatchSnapshotStrategy) Send(
 	ctx context.Context,
@@ -885,7 +881,10 @@ func (s *Store) checkSnapshotOverlapLocked(
 	// NB: this check seems redundant since placeholders are also represented in
 	// replicasByKey (and thus returned in getOverlappingKeyRangeLocked).
 	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
-		return errors.Errorf("%s: canAcceptSnapshotLocked: cannot add placeholder, have an existing placeholder %s %v", s, exRng, snapHeader.RaftMessageRequest.FromReplica)
+		return errors.Mark(errors.Errorf(
+			"%s: canAcceptSnapshotLocked: cannot add placeholder, have an existing placeholder %s %v",
+			s, exRng, snapHeader.RaftMessageRequest.FromReplica),
+			errMarkSnapshotError)
 	}
 
 	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
@@ -930,7 +929,10 @@ func (s *Store) checkSnapshotOverlapLocked(
 			msg += "; initiated GC:"
 			s.replicaGCQueue.AddAsync(ctx, exReplica, gcPriority)
 		}
-		return errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()) // exReplica can be nil
+		return errors.Mark(
+			errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()), // exReplica can be nil
+			errMarkSnapshotError,
+		)
 	}
 	return nil
 }
@@ -964,6 +966,8 @@ func (s *Store) receiveSnapshot(
 
 	if fn := s.cfg.TestingKnobs.ReceiveSnapshot; fn != nil {
 		if err := fn(header); err != nil {
+			// NB: we intentionally don't mark this error as errMarkSnapshotError so
+			// that we don't end up retrying injected errors in tests.
 			return sendSnapshotError(stream, err)
 		}
 	}
@@ -1004,7 +1008,7 @@ func (s *Store) receiveSnapshot(
 			return nil
 		}); pErr != nil {
 		log.Infof(ctx, "cannot accept snapshot: %s", pErr)
-		return pErr.GoError()
+		return sendSnapshotError(stream, pErr.GoError())
 	}
 
 	defer func() {
@@ -1078,10 +1082,13 @@ func (s *Store) receiveSnapshot(
 	// already received the entire snapshot here, so there's no point in
 	// abandoning application half-way through if the caller goes away.
 	applyCtx := s.AnnotateCtx(context.Background())
-	if err := s.processRaftSnapshotRequest(applyCtx, header, inSnap); err != nil {
-		return sendSnapshotErrorWithTrace(stream,
-			errors.Wrap(err.GoError(), "failed to apply snapshot"), rec,
-		)
+	if pErr := s.processRaftSnapshotRequest(applyCtx, header, inSnap); pErr != nil {
+		err := pErr.GoError()
+		// We mark this error as a snapshot error which will be interpreted by the
+		// sender as this being a retriable error, see isSnapshotError().
+		err = errors.Mark(err, errMarkSnapshotError)
+		err = errors.Wrap(err, "failed to apply snapshot")
+		return sendSnapshotErrorWithTrace(stream, err, rec)
 	}
 	return stream.Send(&kvserverpb.SnapshotResponse{
 		Status:         kvserverpb.SnapshotResponse_APPLIED,
@@ -1096,11 +1103,24 @@ func sendSnapshotError(stream incomingSnapshotStream, err error) error {
 func sendSnapshotErrorWithTrace(
 	stream incomingSnapshotStream, err error, trace tracingpb.Recording,
 ) error {
-	return stream.Send(&kvserverpb.SnapshotResponse{
-		Status:         kvserverpb.SnapshotResponse_ERROR,
-		Message:        err.Error(),
-		CollectedSpans: trace,
-	})
+	resp := snapRespErr(err)
+	resp.CollectedSpans = trace
+	return stream.Send(resp)
+}
+
+func snapRespErr(err error) *kvserverpb.SnapshotResponse {
+	return &kvserverpb.SnapshotResponse{
+		Status:            kvserverpb.SnapshotResponse_ERROR,
+		EncodedError:      errors.EncodeError(context.Background(), err),
+		DeprecatedMessage: err.Error(),
+	}
+}
+
+func maybeHandleDeprecatedSnapErr(deprecated bool, err error) error {
+	if !deprecated {
+		return err
+	}
+	return errors.Mark(err, errMarkSnapshotError)
 }
 
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
@@ -1505,9 +1525,8 @@ func sendSnapshot(
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
 		sp.ImportRemoteRecording(resp.CollectedSpans)
-		storePool.Throttle(storepool.ThrottleFailed, resp.Message, to.StoreID)
-		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
-			to, snap, resp.Message)
+		storePool.Throttle(storepool.ThrottleFailed, resp.DeprecatedMessage, to.StoreID)
+		return errors.Wrapf(maybeHandleDeprecatedSnapErr(resp.Error()), "%s: remote couldn't accept %s", to, snap)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
 		// This is the response we're expecting. Continue with snapshot sending.
 		log.Event(ctx, "received SnapshotResponse_ACCEPTED message from server")
@@ -1594,7 +1613,9 @@ func sendSnapshot(
 	}
 	switch resp.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
-		return errors.Errorf("%s: remote failed to apply snapshot for reason %s", to, resp.Message)
+		return errors.Wrapf(
+			maybeHandleDeprecatedSnapErr(resp.Error()), "%s: remote failed to apply snapshot", to,
+		)
 	case kvserverpb.SnapshotResponse_APPLIED:
 		return nil
 	default:
@@ -1622,10 +1643,9 @@ func delegateSnapshot(
 	}
 	switch resp.SnapResponse.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
-		return errors.Errorf(
-			"%s: sender couldn't accept %s with error: %s", delegatedSender,
-			req, resp.SnapResponse.Message,
-		)
+		return errors.Wrapf(
+			maybeHandleDeprecatedSnapErr(resp.Error()),
+			"%s: sender couldn't accept %s", delegatedSender, req)
 	case kvserverpb.SnapshotResponse_ACCEPTED:
 		// The sender accepted the request, it will continue with sending.
 		log.VEventf(
@@ -1643,20 +1663,20 @@ func delegateSnapshot(
 	// Wait for response to see if the receiver successfully applied the snapshot.
 	resp, err = stream.Recv()
 	if err != nil {
-		return errors.Wrapf(err, "%s: remote failed to send snapshot", delegatedSender)
+		return errors.Mark(
+			errors.Wrapf(err, "%s: remote failed to send snapshot", delegatedSender), errMarkSnapshotError,
+		)
 	}
 	// Wait for EOF to ensure server side processing is complete.
 	if unexpectedResp, err := stream.Recv(); err != io.EOF {
 		if err != nil {
-			return errors.Wrapf(
+			return errors.Mark(errors.Wrapf(
 				err, "%s: expected EOF, got resp=%v with error",
-				delegatedSender.StoreID, unexpectedResp,
-			)
+				delegatedSender.StoreID, unexpectedResp), errMarkSnapshotError)
 		}
-		return errors.Newf(
+		return errors.Mark(errors.Newf(
 			"%s: expected EOF, got resp=%v", delegatedSender.StoreID,
-			unexpectedResp,
-		)
+			unexpectedResp), errMarkSnapshotError)
 	}
 	sp := tracing.SpanFromContext(ctx)
 	if sp != nil {
@@ -1664,7 +1684,7 @@ func delegateSnapshot(
 	}
 	switch resp.SnapResponse.Status {
 	case kvserverpb.SnapshotResponse_ERROR:
-		return errors.Newf("%s", resp.SnapResponse.Message)
+		return maybeHandleDeprecatedSnapErr(resp.Error())
 	case kvserverpb.SnapshotResponse_APPLIED:
 		// This is the response we're expecting. Snapshot successfully applied.
 		log.VEventf(ctx, 2, "%s: delegated snapshot was successfully applied", delegatedSender)
