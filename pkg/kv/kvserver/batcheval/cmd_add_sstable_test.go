@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -1724,8 +1725,11 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.NoError(t, err)
 	r, store, err := s.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rd.RangeID)
 	require.NoError(t, err)
-	closedTS := r.GetCurrentClosedTimestamp(ctx)
-	require.NotZero(t, closedTS)
+	var closedTS hlc.Timestamp
+	require.Eventually(t, func() bool {
+		closedTS = r.GetCurrentClosedTimestamp(ctx)
+		return closedTS.IsSet()
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.
 	reqTS := closedTS.Prev()
