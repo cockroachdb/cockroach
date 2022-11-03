@@ -26,13 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
+type expBucket struct {
+	upper        int
+	numEq        int64
+	numLess      int64
+	distinctLess float64
+}
+
 func TestEquiDepthHistogram(t *testing.T) {
-	type expBucket struct {
-		upper        int
-		numEq        int64
-		numLess      int64
-		distinctLess float64
-	}
 	testCases := []struct {
 		samples       []int64
 		numRows       int64
@@ -245,36 +246,7 @@ func TestEquiDepthHistogram(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if h.Version != histVersion {
-				t.Errorf("Invalid histogram version %d expected %d", h.Version, histVersion)
-			}
-			if (h.Buckets == nil) != (tc.buckets == nil) {
-				t.Fatalf("Invalid bucket == nil: %v, expected %v", h.Buckets == nil, tc.buckets == nil)
-			}
-			if len(h.Buckets) != len(tc.buckets) {
-				t.Fatalf("Invalid number of buckets %d, expected %d", len(h.Buckets), len(tc.buckets))
-			}
-			for i, b := range h.Buckets {
-				_, val, err := encoding.DecodeVarintAscending(b.UpperBound)
-				if err != nil {
-					t.Fatal(err)
-				}
-				exp := tc.buckets[i]
-				if val != int64(exp.upper) {
-					t.Errorf("bucket %d: incorrect boundary %d, expected %d", i, val, exp.upper)
-				}
-				if b.NumEq != exp.numEq {
-					t.Errorf("bucket %d: incorrect EqRows %d, expected %d", i, b.NumEq, exp.numEq)
-				}
-				if b.NumRange != exp.numLess {
-					t.Errorf("bucket %d: incorrect RangeRows %d, expected %d", i, b.NumRange, exp.numLess)
-				}
-				// Round to two decimal places.
-				distinctRange := math.Round(b.DistinctRange*100.0) / 100.0
-				if distinctRange != exp.distinctLess {
-					t.Errorf("bucket %d: incorrect DistinctRows %f, expected %f", i, distinctRange, exp.distinctLess)
-				}
-			}
+			validateHistogramBuckets(t, tc.buckets, h)
 		})
 	}
 
@@ -297,6 +269,104 @@ func TestEquiDepthHistogram(t *testing.T) {
 			t.Fatal("expected error")
 		}
 	})
+}
+
+func TestConstructExtremesHistogram(t *testing.T) {
+	testCases := []struct {
+		values                 []int64
+		numRows, distinctCount int64
+		maxBuckets             int
+		lowerBound             int64
+		expected               []expBucket
+	}{
+		// This case is intended to simulate when the distribution of the
+		// values is such that a generated equi-depth histogram from the total set
+		// of samples could overlap over the range that the partial collection
+		// skips. Here, we verify that the resulting histogram for this type of
+		// sample does not overlap these bounds. Consider a case with spans:
+		// [\0-\2), (\2-\10] and sample lower: [0,1], upper: [3, 4, 5, 6, 7, 8, 9,
+		// 10], where maxBuckets = 4. The equi-depth histogram for the total sum
+		// would be [upperbound]: [0], [4], [7], [10], but this incorrect as 2
+		// should be undefined. This test helps validate that the constructed
+		// histogram does not include the undefined range.
+		{
+			values:        []int64{0, 1, 3, 4, 5, 6, 7, 8, 9, 10},
+			numRows:       10,
+			distinctCount: 10,
+			maxBuckets:    4,
+			lowerBound:    2,
+			expected: []expBucket{
+				{0, 1, 0, 0},
+				{1, 1, 0, 0},
+				{3, 1, 1, 0.67},
+				{10, 1, 6, 5.33},
+			},
+		},
+		{
+			// Test with a small distribution of values but a large
+			// number of rows.
+			values:        []int64{1, 2, 4, 5},
+			numRows:       3000,
+			distinctCount: 600,
+			maxBuckets:    5,
+			lowerBound:    3,
+			expected: []expBucket{
+				{math.MinInt64, 0, 0, 0},
+				{1, 601, 298, 297.5},
+				{2, 601, 0, 0},
+				{4, 601, 1, 1},
+				{5, 601, 0, 0},
+				{math.MaxInt64, 0, 298, 297.5},
+			},
+		},
+		{
+			// Test with a lowerbound towards the end of the range.
+			values:        []int64{3, 6, 9, 12, 18},
+			numRows:       500,
+			distinctCount: 5,
+			maxBuckets:    10,
+			lowerBound:    15,
+			expected: []expBucket{
+				{3, 100, 0, 0},
+				{6, 100, 0, 0},
+				{9, 100, 0, 0},
+				{12, 100, 0, 0},
+				{18, 100, 0, 0}},
+		},
+		{
+			// Test with values that are very sparsely distributed.
+			values:        []int64{0, 100, 500, 800},
+			numRows:       50,
+			distinctCount: 20,
+			maxBuckets:    8,
+			lowerBound:    250,
+			expected: []expBucket{
+				{0, 9, 0, 0},
+				{100, 9, 2, 1.99},
+				{500, 9, 8, 8.01},
+				{800, 9, 6, 6},
+			},
+		},
+	}
+
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			samples := make(tree.Datums, len(tc.values))
+			perm := rand.Perm(len(tc.values))
+			for i := range samples {
+				// Randomly permute the samples.
+				val := tc.values[perm[i]]
+
+				samples[i] = tree.NewDInt(tree.DInt(val))
+			}
+			h, _, err := ConstructExtremesHistogram(evalCtx, types.Int, samples, tc.numRows, tc.distinctCount, tc.maxBuckets, tree.NewDInt(tree.DInt(tc.lowerBound)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			validateHistogramBuckets(t, tc.expected, h)
+		})
+	}
 }
 
 func TestAdjustCounts(t *testing.T) {
@@ -862,4 +932,37 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func validateHistogramBuckets(t *testing.T, expected []expBucket, h HistogramData) {
+	if h.Version != histVersion {
+		t.Errorf("Invalid histogram version %d expected %d", h.Version, histVersion)
+	}
+	if (h.Buckets == nil) != (expected == nil) {
+		t.Fatalf("Invalid bucket == nil: %v, expected %v", h.Buckets == nil, expected == nil)
+	}
+	if len(h.Buckets) != len(expected) {
+		t.Fatalf("Invalid number of buckets %d, expected %d", len(h.Buckets), len(expected))
+	}
+	for i, b := range h.Buckets {
+		_, val, err := encoding.DecodeVarintAscending(b.UpperBound)
+		if err != nil {
+			t.Fatal(err)
+		}
+		exp := expected[i]
+		if val != int64(exp.upper) {
+			t.Errorf("bucket %d: incorrect boundary %d, expected %d", i, val, exp.upper)
+		}
+		if b.NumEq != exp.numEq {
+			t.Errorf("bucket %d: incorrect EqRows %d, expected %d", i, b.NumEq, exp.numEq)
+		}
+		if b.NumRange != exp.numLess {
+			t.Errorf("bucket %d: incorrect RangeRows %d, expected %d", i, b.NumRange, exp.numLess)
+		}
+		// Round to two decimal places.
+		distinctRange := math.Round(b.DistinctRange*100.0) / 100.0
+		if distinctRange != exp.distinctLess {
+			t.Errorf("bucket %d: incorrect DistinctRows %f, expected %f", i, distinctRange, exp.distinctLess)
+		}
+	}
 }
