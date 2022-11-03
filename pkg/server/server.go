@@ -784,6 +784,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	remoteFlowRunnerAcc := sqlMonitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
 	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(cfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)
 
+	serverIterator := &kvFanoutClient{
+		gossip:       g,
+		rpcCtx:       rpcContext,
+		db:           db,
+		nodeLiveness: nodeLiveness,
+		admin:        sAdmin,
+		st:           st,
+		ambientCtx:   cfg.AmbientCtx,
+	}
+
 	// Instantiate the status API server.
 	sStatus := newStatusServer(
 		cfg.AmbientCtx,
@@ -803,6 +813,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache,
 		remoteFlowRunner,
 		internalExecutor,
+		serverIterator,
 	)
 
 	// Instantiate the KV prober.

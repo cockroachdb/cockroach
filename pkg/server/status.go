@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -157,6 +156,7 @@ type baseStatusServer struct {
 	sqlServer          *SQLServer
 	rpcCtx             *rpc.Context
 	stopper            *stop.Stopper
+	serverIterator     ServerIterator
 }
 
 func isInternalAppName(app string) bool {
@@ -558,6 +558,7 @@ func newStatusServer(
 	closedSessionCache *sql.ClosedSessionCache,
 	remoteFlowRunner *flowinfra.RemoteFlowRunner,
 	internalExecutor *sql.InternalExecutor,
+	serverIterator ServerIterator,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
@@ -570,6 +571,7 @@ func newStatusServer(
 			st:                 st,
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
+			serverIterator:     serverIterator,
 		},
 		cfg:              cfg,
 		admin:            adminServer,
@@ -608,33 +610,14 @@ func (s *statusServer) RegisterGateway(
 }
 
 func (s *statusServer) parseNodeID(nodeIDParam string) (roachpb.NodeID, bool, error) {
-	return parseNodeID(s.gossip, nodeIDParam)
-}
-
-func parseNodeID(
-	gossip *gossip.Gossip, nodeIDParam string,
-) (nodeID roachpb.NodeID, isLocal bool, err error) {
-	// No parameter provided or set to local.
-	if len(nodeIDParam) == 0 || localRE.MatchString(nodeIDParam) {
-		return gossip.NodeID.Get(), true, nil
-	}
-
-	id, err := strconv.ParseInt(nodeIDParam, 0, 32)
-	if err != nil {
-		return 0, false, errors.Wrap(err, "node ID could not be parsed")
-	}
-	nodeID = roachpb.NodeID(id)
-	return nodeID, nodeID == gossip.NodeID.Get(), nil
+	id, local, err := s.serverIterator.parseServerID(nodeIDParam)
+	return roachpb.NodeID(id), local, err
 }
 
 func (s *statusServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.StatusClient, error) {
-	addr, err := s.gossip.GetNodeIDAddress(nodeID)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := s.rpcCtx.GRPCDialNode(addr.String(), nodeID, rpc.DefaultClass).Connect(ctx)
+	conn, err := s.serverIterator.dialNode(ctx, ServerID(nodeID))
 	if err != nil {
 		return nil, err
 	}
@@ -1434,7 +1417,7 @@ func (s *statusServer) NodesList(
 		// already returns a proper gRPC error status.
 		return nil, err
 	}
-	statuses, _, err := s.getNodeStatuses(ctx, 0 /* limit */, 0 /* offset */)
+	statuses, _, err := getNodeStatuses(ctx, s.db, 0 /* limit */, 0 /* offset */)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -1619,15 +1602,15 @@ func (s *statusServer) ListNodesInternal(
 
 // Note that the function returns plain errors, and it is the caller's
 // responsibility to convert them to serverErrors.
-func (s *statusServer) getNodeStatuses(
-	ctx context.Context, limit, offset int,
+func getNodeStatuses(
+	ctx context.Context, db *kv.DB, limit, offset int,
 ) (statuses []statuspb.NodeStatus, next int, _ error) {
 	startKey := keys.StatusNodePrefix
 	endKey := startKey.PrefixEnd()
 
 	b := &kv.Batch{}
 	b.Scan(startKey, endKey)
-	if err := s.db.Run(ctx, b); err != nil {
+	if err := db.Run(ctx, b); err != nil {
 		return nil, 0, err
 	}
 
@@ -1655,7 +1638,7 @@ func (s *statusServer) nodesHelper(
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 
-	statuses, next, err := s.getNodeStatuses(ctx, limit, offset)
+	statuses, next, err := getNodeStatuses(ctx, s.db, limit, offset)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1669,45 +1652,6 @@ func (s *statusServer) nodesHelper(
 		return nil, 0, err
 	}
 	return &resp, next, nil
-}
-
-// nodesStatusWithLiveness is like Nodes but for internal
-// use within this package.
-//
-// Note that the function returns plain errors, and it is the caller's
-// responsibility to convert them to serverErrors.
-func (s *statusServer) nodesStatusWithLiveness(
-	ctx context.Context,
-) (map[roachpb.NodeID]nodeStatusWithLiveness, error) {
-	nodes, err := s.ListNodesInternal(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	clock := s.admin.server.clock
-	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
-	if err != nil {
-		return nil, err
-	}
-	ret := make(map[roachpb.NodeID]nodeStatusWithLiveness)
-	for _, node := range nodes.Nodes {
-		nodeID := node.Desc.NodeID
-		livenessStatus := statusMap[nodeID]
-		if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
-			// Skip over removed nodes.
-			continue
-		}
-		ret[nodeID] = nodeStatusWithLiveness{
-			NodeStatus:     node,
-			livenessStatus: livenessStatus,
-		}
-	}
-	return ret, nil
-}
-
-// nodeStatusWithLiveness combines a NodeStatus with a NodeLivenessStatus.
-type nodeStatusWithLiveness struct {
-	statuspb.NodeStatus
-	livenessStatus livenesspb.NodeLivenessStatus
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
@@ -2643,7 +2587,7 @@ func (s *statusServer) iterateNodes(
 	responseFn func(nodeID roachpb.NodeID, resp interface{}),
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 ) error {
-	nodeStatuses, err := s.nodesStatusWithLiveness(ctx)
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
 	if err != nil {
 		return err
 	}
@@ -2667,7 +2611,7 @@ func (s *statusServer) iterateNodes(
 		})
 		if err != nil {
 			err = errors.Wrapf(err, "failed to dial into node %d (%s)",
-				nodeID, nodeStatuses[nodeID].livenessStatus)
+				nodeID, nodeStatuses[ServerID(nodeID)])
 			responseChan <- nodeResponse{nodeID: nodeID, err: err}
 			return
 		}
@@ -2675,7 +2619,7 @@ func (s *statusServer) iterateNodes(
 		res, err := nodeFn(ctx, client, nodeID)
 		if err != nil {
 			err = errors.Wrapf(err, "error requesting %s from node %d (%s)",
-				errorCtx, nodeID, nodeStatuses[nodeID].livenessStatus)
+				errorCtx, nodeID, nodeStatuses[ServerID(nodeID)])
 		}
 		responseChan <- nodeResponse{nodeID: nodeID, response: res, err: err}
 	}
@@ -2693,7 +2637,7 @@ func (s *statusServer) iterateNodes(
 				Sem:        sem,
 				WaitForSem: true,
 			},
-			func(ctx context.Context) { nodeQuery(ctx, nodeID) },
+			func(ctx context.Context) { nodeQuery(ctx, roachpb.NodeID(nodeID)) },
 		); err != nil {
 			return err
 		}
@@ -2735,7 +2679,7 @@ func (s *statusServer) paginatedIterateNodes(
 	if limit == 0 {
 		return paginationState{}, s.iterateNodes(ctx, errorCtx, dialFn, nodeFn, responseFn, errorFn)
 	}
-	nodeStatuses, err := s.nodesStatusWithLiveness(ctx)
+	nodeStatuses, err := s.serverIterator.getAllNodes(ctx)
 	if err != nil {
 		return paginationState{}, err
 	}
@@ -2746,7 +2690,7 @@ func (s *statusServer) paginatedIterateNodes(
 		nodeIDs = append(nodeIDs, requestedNodes...)
 	} else {
 		for nodeID := range nodeStatuses {
-			nodeIDs = append(nodeIDs, nodeID)
+			nodeIDs = append(nodeIDs, roachpb.NodeID(nodeID))
 		}
 	}
 	// Sort all nodes by IDs, as this is what mergeNodeIDs expects.

@@ -90,7 +90,7 @@ type SQLServerWrapper struct {
 	http            *httpServer
 	adminAuthzCheck *adminPrivilegeChecker
 	tenantAdmin     *tenantAdminServer
-	tenantStatus    *tenantStatusServer
+	tenantStatus    *statusServer
 	drainServer     *drainServer
 	authentication  *authenticationServer
 	// The Observability Server, used by the Observability Service to subscribe to
@@ -199,22 +199,39 @@ func NewTenantServer(
 	// and then assign it once an SQL server gets created. We are
 	// going to assume that the tenant status server won't require
 	// the SQL server object until later.
-	sStatus := newTenantStatusServer(
+
+	// TODO(davidh): docstring re: above
+	serverIterator := &tenantFanoutClient{
+		sqlServer: nil,
+		rpcCtx:    args.rpcContext,
+		stopper:   args.stopper,
+	}
+
+	// TODO(davidh): add error failures on all unsupported endpoints
+	// when running on a tenant.
+	sStatus := newStatusServer(
 		baseCfg.AmbientCtx,
-		adminAuthzCheck,
-		args.sessionRegistry,
-		args.closedSessionCache,
-		args.remoteFlowRunner,
 		baseCfg.Settings,
+		baseCfg.Config,
+		adminAuthzCheck,
+		nil, // should be sAdmin but doesn't "fit" yet
+		args.db,
+		nil, // TODO(davidh): what else uses gossip? maybe nothing...
+		args.recorder,
+		nil, // TODO(davidh): what else uses nodeLiveness? maybe nothing...
+		nil, // TODO(davidh): store pool? do we need it?
 		args.rpcContext,
-		args.stopper,
+		nil, // TODO(davidh): kv stores? do we need em?
+		stopper,
+		args.sessionRegistry,
+		closedSessionCache,
+		args.remoteFlowRunner,
+		args.circularInternalExecutor, // TODO(davidh): does this work??
+		serverIterator,
 	)
 	args.sqlStatusServer = sStatus
-	// Connect the admin server to the status service.
-	//
-	// TODO(knz): This would not be necessary if we could use the
-	// adminServer directly.
-	sAdmin.status = sStatus
+
+	sAdmin.serverIterator = serverIterator
 
 	// This is the location in NewServer() where we would be configuring
 	// the path to the special file that blocks background jobs.
@@ -259,6 +276,7 @@ func NewTenantServer(
 	// TODO(knz): If/when we want to support statement diagnostic requests
 	// in secondary tenants, this is where we would call setStmtDiagnosticsRequester(),
 	// like in NewServer().
+	serverIterator.sqlServer = sqlServer
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
 

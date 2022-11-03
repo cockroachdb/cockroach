@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -89,6 +91,45 @@ func (s *Server) startAttemptUpgrade(ctx context.Context) {
 	}
 }
 
+// nodesStatusWithLiveness is like Nodes but for internal
+// use within this package.
+//
+// Note that the function returns plain errors, and it is the caller's
+// responsibility to convert them to serverErrors.
+func (s *Server) nodesStatusWithLiveness(
+	ctx context.Context,
+) (map[roachpb.NodeID]nodeStatusWithLiveness, error) {
+	nodes, err := s.status.ListNodesInternal(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	clock := s.admin.server.clock
+	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
+	if err != nil {
+		return nil, err
+	}
+	ret := make(map[roachpb.NodeID]nodeStatusWithLiveness)
+	for _, node := range nodes.Nodes {
+		nodeID := node.Desc.NodeID
+		livenessStatus := statusMap[nodeID]
+		if livenessStatus == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+			// Skip over removed nodes.
+			continue
+		}
+		ret[nodeID] = nodeStatusWithLiveness{
+			NodeStatus:     node,
+			livenessStatus: livenessStatus,
+		}
+	}
+	return ret, nil
+}
+
+// nodeStatusWithLiveness combines a NodeStatus with a NodeLivenessStatus.
+type nodeStatusWithLiveness struct {
+	statuspb.NodeStatus
+	livenessStatus livenesspb.NodeLivenessStatus
+}
+
 // upgradeStatus lets the main checking loop know if we should do upgrade,
 // keep checking upgrade status, or stop attempting upgrade.
 // Return (true, nil) to indicate we want to stop attempting upgrade.
@@ -101,7 +142,7 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	nodesWithLiveness, err := s.status.nodesStatusWithLiveness(ctx)
+	nodesWithLiveness, err := s.nodesStatusWithLiveness(ctx)
 	if err != nil {
 		return false, err
 	}

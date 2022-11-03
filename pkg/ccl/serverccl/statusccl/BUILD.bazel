@@ -5,6 +5,7 @@ go_test(
     name = "statusccl_test",
     srcs = [
         "main_test.go",
+        "tenant_api_v2_test.go",
         "tenant_grpc_test.go",
         "tenant_status_test.go",
     ],

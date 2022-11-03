@@ -32,13 +32,9 @@ import (
 type tenantAdminServer struct {
 	log.AmbientContext
 	serverpb.UnimplementedAdminServer
-	sqlServer *SQLServer
-	drain     *drainServer
-
-	// TODO(knz): find a way to avoid using status here,
-	// for example by lifting the services used from admin into
-	// a separate object.
-	status *tenantStatusServer
+	sqlServer      *SQLServer
+	drain          *drainServer
+	serverIterator ServerIterator
 }
 
 // We require that `tenantAdminServer` implement
@@ -115,12 +111,12 @@ func (t *tenantAdminServer) Drain(
 	ctx = t.AnnotateCtx(ctx)
 
 	// Which node is this request for?
-	parsedInstanceID, local, err := t.status.parseInstanceID(req.NodeId)
+	parsedInstanceID, local, err := t.serverIterator.parseServerID(req.NodeId)
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, err.Error())
 	}
 	if !local {
-		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, parsedInstanceID)
+		instance, err := t.sqlServer.sqlInstanceReader.GetInstance(ctx, base.SQLInstanceID(parsedInstanceID))
 		if err != nil {
 			return err
 		}
@@ -131,7 +127,7 @@ func (t *tenantAdminServer) Drain(
 		// response. We must forward all of them.
 
 		// Connect to the target node.
-		client, err := t.dialPod(ctx, parsedInstanceID, instance.InstanceAddr)
+		client, err := t.dialPod(ctx, base.SQLInstanceID(parsedInstanceID), instance.InstanceAddr)
 		if err != nil {
 			return serverError(ctx, err)
 		}
