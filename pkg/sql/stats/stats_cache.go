@@ -504,6 +504,7 @@ const (
 	distinctCountIndex
 	nullCountIndex
 	avgSizeIndex
+	partialPredicateIndex
 	histogramIndex
 	statsLen
 )
@@ -537,6 +538,7 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 		{"distinctCount", distinctCountIndex, types.Int, false},
 		{"nullCount", nullCountIndex, types.Int, false},
 		{"avgSize", avgSizeIndex, types.Int, false},
+		{"partialPredicate", partialPredicateIndex, types.String, true},
 		{"histogram", histogramIndex, types.Bytes, true},
 	}
 	for _, v := range expectedTypes {
@@ -564,6 +566,9 @@ func NewTableStatisticProto(datums tree.Datums) (*TableStatisticProto, error) {
 	}
 	if datums[nameIndex] != tree.DNull {
 		res.Name = string(*datums[nameIndex].(*tree.DString))
+	}
+	if datums[partialPredicateIndex] != tree.DNull {
+		res.PartialPredicate = string(*datums[partialPredicateIndex].(*tree.DString))
 	}
 	if datums[histogramIndex] != tree.DNull {
 		res.HistogramData = &HistogramData{}
@@ -712,6 +717,7 @@ SELECT
 	"distinctCount",
 	"nullCount",
 	"avgSize",
+  "partialPredicate",
 	histogram
 FROM system.table_statistics
 WHERE "tableID" = $1

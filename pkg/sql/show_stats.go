@@ -36,6 +36,7 @@ var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "distinct_count", Typ: types.Int},
 	{Name: "null_count", Typ: types.Int},
 	{Name: "avg_size", Typ: types.Int},
+	{Name: "partial_predicate", Typ: types.String},
 	{Name: "histogram_id", Typ: types.Int},
 }
 
@@ -93,6 +94,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 							"distinctCount",
 							"nullCount",
 							"avgSize",
+						  "partialPredicate",
 							histogram
 						FROM system.table_statistics
 						WHERE "tableID" = $1
@@ -118,6 +120,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				distinctCountIdx
 				nullCountIdx
 				avgSizeIdx
+				partialPredicateIdx
 				histogramIdx
 				numCols
 			)
@@ -216,6 +219,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					if r[nameIdx] != tree.DNull {
 						statsRow.Name = string(*r[nameIdx].(*tree.DString))
 					}
+					if r[partialPredicateIdx] != tree.DNull {
+						statsRow.PartialPredicate = string(*r[partialPredicateIdx].(*tree.DString))
+					}
 					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histogramIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
@@ -275,6 +281,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					r[distinctCountIdx],
 					r[nullCountIdx],
 					r[avgSizeIdx],
+					r[partialPredicateIdx],
 					histogramID,
 				}
 
@@ -303,6 +310,10 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 	if stat.Name != "" {
 		name = tree.NewDString(stat.Name)
 	}
+	partialPredicate := tree.DNull
+	if stat.PartialPredicate != "" {
+		partialPredicate = tree.NewDString(stat.PartialPredicate)
+	}
 	columnIDs := tree.NewDArray(types.Int)
 	for _, c := range stat.ColumnIDs {
 		if err := columnIDs.Append(tree.NewDInt(tree.DInt(c))); err != nil {
@@ -319,6 +330,7 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 		tree.NewDInt(tree.DInt(stat.DistinctCount)),
 		tree.NewDInt(tree.DInt(stat.NullCount)),
 		tree.NewDInt(tree.DInt(stat.AvgSize)),
+		partialPredicate,
 	}
 	if stat.HistogramData == nil {
 		row = append(row, tree.DNull)

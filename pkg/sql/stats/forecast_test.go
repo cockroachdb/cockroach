@@ -628,6 +628,7 @@ func (ts *testStat) toTableStatistic(name string, tableID int) *TableStatistic {
 			DistinctCount: ts.dist,
 			NullCount:     ts.null,
 			AvgSize:       ts.size,
+			IsForecast:    true,
 		},
 	}
 	if ts.hist != nil {

@@ -245,6 +245,7 @@ func forecastColumnStatistics(
 			DistinctCount: uint64(distinctCount),
 			NullCount:     uint64(nullCount),
 			AvgSize:       uint64(avgSize),
+			IsForecast:    true,
 		},
 	}
 
