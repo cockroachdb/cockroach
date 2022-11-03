@@ -62,6 +62,7 @@ func TestCacheBasic(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
+		ief,
 	)
 
 	// Set the poll interval to be very short.
@@ -142,6 +143,7 @@ func TestRefresh(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			ptsKnobs),
 		s.DB(),
+		ief,
 	)
 
 	// Set the poll interval to be very long.
@@ -299,6 +301,7 @@ func TestQueryRecord(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
+		ief,
 	)
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
@@ -362,6 +365,7 @@ func TestIterate(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
+		ief,
 	)
 
 	// Set the poll interval to be very long.
@@ -513,6 +517,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 					s.InternalExecutor().(sqlutil.InternalExecutor),
 					&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 				s.DB(),
+				ief,
 			)
 
 			c := ptcache.New(ptcache.Config{
@@ -543,6 +548,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 			s.InternalExecutor().(sqlutil.InternalExecutor),
 			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
+		ief,
 	)
 
 	// Set the poll interval to be very long.
