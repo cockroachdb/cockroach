@@ -143,14 +143,14 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 // QueueJob creates a new job from record and queues it for execution after
 // the transaction commits.
 func (evalCtx *extendedEvalContext) QueueJob(
-	ctx context.Context, record jobs.Record,
+	ctx context.Context, txn *kv.Txn, record jobs.Record,
 ) (*jobs.Job, error) {
 	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
 	job, err := evalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
 		ctx,
 		record,
 		jobID,
-		evalCtx.Txn,
+		txn,
 	)
 	if err != nil {
 		return nil, err
