@@ -228,3 +228,36 @@ func (n *scanNode) initDescDefaults(colCfg scanColumnsConfig) error {
 	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
 	return nil
 }
+
+// initializes the column structures with the index that the provided column
+// is the prefix for.
+func (n *scanNode) initDescSpecificCol(colCfg scanColumnsConfig, prefixCol catalog.Column) error {
+	n.colCfg = colCfg
+	indexes := n.desc.AllIndexes()
+	prefixColID := prefixCol.GetID()
+
+	// Currently, we pick the first index that we find, even if there exist multiple in the
+	// table where prefixCol is the key column.
+	foundIndex := false
+	for _, idx := range indexes {
+		columns := n.desc.IndexKeyColumns(idx)
+		if len(columns) > 0 {
+			if columns[0].GetID() == prefixColID {
+				n.index = idx
+				foundIndex = true
+				break
+			}
+		}
+	}
+	if !foundIndex {
+		return errors.Newf("table %s does not contain an index with %s as a prefix column", n.desc.GetName(), prefixCol.GetName())
+	}
+	var err error
+	n.cols, err = initColsForScan(n.desc, n.colCfg)
+	if err != nil {
+		return err
+	}
+	// Set up the rest of the scanNode
+	n.resultColumns = colinfo.ResultColumnsFromColumns(n.desc.GetID(), n.cols)
+	return nil
+}
