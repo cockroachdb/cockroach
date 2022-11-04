@@ -658,6 +658,17 @@ CREATE TABLE system.sql_instances (
     FAMILY "primary" (id, addr, session_id, locality)
 )`
 
+	MrSQLInstancesTableSchema = `
+CREATE TABLE system.sql_instances (
+    id           INT NOT NULL,
+    addr         STRING,
+    session_id   BYTES,
+    locality     JSONB,
+	crdb_region  BYTES NOT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
+    FAMILY "primary" (crdb_region, id, addr, session_id, locality)
+)`
+
 	SpanConfigurationsTableSchema = `
 CREATE TABLE system.span_configurations (
     start_key    BYTES NOT NULL,
@@ -909,7 +920,7 @@ func MakeSystemTables() []SystemTable {
 		TransactionStatisticsTable,
 		DatabaseRoleSettingsTable,
 		TenantUsageTable,
-		SQLInstancesTable,
+		SQLInstancesTable(),
 		SpanConfigurationsTable,
 		TenantSettingsTable,
 		SpanCountTable,
@@ -2482,31 +2493,68 @@ var (
 			},
 		))
 
-	// SQLInstancesTable is the descriptor for the sqlinstances table
-	// It stores information about all the SQL instances for a tenant
-	// and their associated session, locality, and address information.
-	SQLInstancesTable = makeSystemTable(
-		SQLInstancesTableSchema,
-		systemTable(
-			catconstants.SQLInstancesTableName,
-			keys.SQLInstancesTableID,
-			[]descpb.ColumnDescriptor{
-				{Name: "id", ID: 1, Type: types.Int, Nullable: false},
-				{Name: "addr", ID: 2, Type: types.String, Nullable: true},
-				{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
-				{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
-			},
-			[]descpb.ColumnFamilyDescriptor{
-				{
-					Name:            "primary",
-					ID:              0,
-					ColumnNames:     []string{"id", "addr", "session_id", "locality"},
-					ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
-					DefaultColumnID: 0,
+	// SQLInstancesTable is the descriptor for the sqlinstances table. It
+	// stores information about all the SQL instances for a tenant and their
+	// associated session, locality, and address information.
+	//
+	// TODO(jeffswenson): remove the function wrapper around the
+	// SQLInstanceTable descriptor. See TestSupportMultiRegion for context.
+	SQLInstancesTable = func() SystemTable {
+		if TestSupportMultiRegion() {
+			return makeSystemTable(
+				MrSQLInstancesTableSchema,
+				systemTable(
+					catconstants.SQLInstancesTableName,
+					keys.SQLInstancesTableID,
+					[]descpb.ColumnDescriptor{
+						{Name: "id", ID: 1, Type: types.Int, Nullable: false},
+						{Name: "addr", ID: 2, Type: types.String, Nullable: true},
+						{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+						{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
+						{Name: "crdb_region", ID: 5, Type: types.Bytes, Nullable: false},
+					},
+					[]descpb.ColumnFamilyDescriptor{
+						{
+							Name:            "primary",
+							ID:              0,
+							ColumnNames:     []string{"id", "addr", "session_id", "locality", "crdb_region"},
+							ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5},
+							DefaultColumnID: 0,
+						},
+					},
+					descpb.IndexDescriptor{
+						Name:                "primary",
+						ID:                  2,
+						Unique:              true,
+						KeyColumnNames:      []string{"crdb_region", "id"},
+						KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC, catpb.IndexColumn_ASC},
+						KeyColumnIDs:        []descpb.ColumnID{5, 1},
+					},
+				))
+		}
+		return makeSystemTable(
+			SQLInstancesTableSchema,
+			systemTable(
+				catconstants.SQLInstancesTableName,
+				keys.SQLInstancesTableID,
+				[]descpb.ColumnDescriptor{
+					{Name: "id", ID: 1, Type: types.Int, Nullable: false},
+					{Name: "addr", ID: 2, Type: types.String, Nullable: true},
+					{Name: "session_id", ID: 3, Type: types.Bytes, Nullable: true},
+					{Name: "locality", ID: 4, Type: types.Jsonb, Nullable: true},
 				},
-			},
-			pk("id"),
-		))
+				[]descpb.ColumnFamilyDescriptor{
+					{
+						Name:            "primary",
+						ID:              0,
+						ColumnNames:     []string{"id", "addr", "session_id", "locality"},
+						ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4},
+						DefaultColumnID: 0,
+					},
+				},
+				pk("id"),
+			))
+	}
 
 	// SpanConfigurationsTable is the descriptor for the system tenant's span
 	// configurations table.
