@@ -14,6 +14,7 @@ package upgradecluster
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -145,5 +146,5 @@ func (c *Cluster) ForEveryNode(
 func (c *Cluster) IterateRangeDescriptors(
 	ctx context.Context, blockSize int, init func(), fn func(...roachpb.RangeDescriptor) error,
 ) error {
-	return c.c.RangeDescIterator.Iterate(ctx, blockSize, init, fn)
+	return c.c.RangeDescIterator.Iterate(ctx, blockSize, init, keys.EverythingSpan, fn)
 }
