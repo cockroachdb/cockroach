@@ -345,7 +345,7 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 	ri := MakeRangeIterator(ds)
 	for ri.Seek(ctx, nextRS.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		desc := ri.Desc()
-		partialRS, err := nextRS.Intersect(desc)
+		partialRS, err := nextRS.Intersect(desc.RSpan())
 		if err != nil {
 			return err
 		}
