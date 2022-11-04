@@ -30,6 +30,7 @@ import { TimeScale } from "../../timeScaleDropdown";
 
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+import LoadingError from "../../sqlActivity/errorComponent";
 
 const cx = classNames.bind(insightsDetailsStyles);
 
@@ -64,6 +65,8 @@ export const StatementInsightDetails: React.FC<
   refreshStatementInsights,
 }) => {
   const [explain, setExplain] = useState<string>(null);
+  const [loadedExplain, setLoadedExplain] = useState<boolean>(false);
+  const [explainError, setExplainError] = useState<Error>(null);
 
   const prevPage = (): void => history.goBack();
 
@@ -72,12 +75,14 @@ export const StatementInsightDetails: React.FC<
       !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
       insightEventDetails?.planGist &&
-      !explain
+      !loadedExplain
     ) {
       // Get the explain plan.
       getExplainPlanFromGist({ planGist: insightEventDetails.planGist }).then(
         res => {
-          setExplain(res.explainPlan || res.error);
+          setExplain(res.explainPlan);
+          setLoadedExplain(true);
+          setExplainError(res.error);
         },
       );
     }
@@ -140,9 +145,27 @@ export const StatementInsightDetails: React.FC<
                 <section className={cx("section")}>
                   <Row gutter={24}>
                     <Col span={24}>
-                      <SqlBox
-                        value={explain || "Not available."}
-                        size={SqlBoxSize.custom}
+                      <Loading
+                        loading={
+                          !loadedExplain &&
+                          insightEventDetails?.planGist?.length > 0
+                        }
+                        page={"stmt_insight_details"}
+                        error={explainError}
+                        render={() => (
+                          <SqlBox
+                            value={explain || "Not available."}
+                            size={SqlBoxSize.custom}
+                          />
+                        )}
+                        renderError={() =>
+                          LoadingError({
+                            statsType: "explain plan",
+                            timeout: explainError?.name
+                              ?.toLowerCase()
+                              .includes("timeout"),
+                          })
+                        }
                       />
                     </Col>
                   </Row>

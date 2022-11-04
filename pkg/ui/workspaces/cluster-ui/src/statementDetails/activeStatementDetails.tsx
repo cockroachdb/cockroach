@@ -30,6 +30,8 @@ import "antd/lib/tabs/style";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
 import styles from "./statementDetails.module.scss";
+import LoadingError from "../sqlActivity/errorComponent";
+import { Loading } from "../loading";
 const cx = classNames.bind(styles);
 
 export type ActiveStatementDetailsStateProps = {
@@ -61,6 +63,8 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
   const [explain, setExplain] = useState<string>(null);
+  const [loadedExplain, setLoadedExplain] = useState<boolean>(false);
+  const [explainError, setExplainError] = useState<Error>(null);
 
   useEffect(() => {
     if (statement == null) {
@@ -74,11 +78,13 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
       !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
       statement?.planGist &&
-      !explain
+      !loadedExplain
     ) {
       // Get the explain plan.
       getExplainPlanFromGist({ planGist: statement.planGist }).then(res => {
-        setExplain(res.explainPlan || res.error);
+        setExplain(res.explainPlan);
+        setLoadedExplain(true);
+        setExplainError(res.error);
       });
     }
   };
@@ -129,9 +135,24 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
         </Tabs.TabPane>
         {!isTenant && (
           <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
-            <SqlBox
-              value={explain || "Not available."}
-              size={SqlBoxSize.custom}
+            <Loading
+              loading={!loadedExplain && statement?.planGist?.length > 0}
+              page={"stmt_insight_details"}
+              error={explainError}
+              render={() => (
+                <SqlBox
+                  value={explain || "Not available."}
+                  size={SqlBoxSize.custom}
+                />
+              )}
+              renderError={() =>
+                LoadingError({
+                  statsType: "explain plan",
+                  timeout: explainError?.name
+                    ?.toLowerCase()
+                    .includes("timeout"),
+                })
+              }
             />
           </Tabs.TabPane>
         )}
