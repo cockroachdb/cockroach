@@ -1012,6 +1012,8 @@ func (b *changefeedResumer) resumeWithRetries(
 		// a dummy channel.
 		startedCh := make(chan tree.Datums, 1)
 
+		prevLastSuccessfulEmit := progress.GetChangefeed().LastNonemptyCheckpoint
+
 		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
@@ -1067,6 +1069,15 @@ func (b *changefeedResumer) resumeWithRetries(
 				jobID, progress.GetHighWater(), reloadErr)
 		} else {
 			progress = reloadedJob.Progress()
+			lastEmit := progress.GetChangefeed().LastNonemptyCheckpoint
+			if lastEmit == nil || lastEmit.IsEmpty() {
+				return errors.Wrap(err, `no successful emits since job started so treating error as fatal`)
+			}
+			// Check for equality rather than <= so that we don't need to be precise tracking the last successful emit;
+			// any change to LastNonemptyCheckpoint means something got written to a sink.
+			if prevLastSuccessfulEmit != nil && prevLastSuccessfulEmit.Equal(lastEmit) {
+				b.setJobRunningStatus(ctx, lastRunStatusUpdate, "not making progress, most recent error: %s", err)
+			}
 		}
 	}
 	return errors.Wrap(err, `ran out of retries`)

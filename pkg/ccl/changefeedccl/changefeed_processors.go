@@ -664,6 +664,10 @@ type changeFrontier struct {
 	// record was updated to the frontier's highwater mark
 	lastProtectedTimestampUpdate time.Time
 
+	// lastSuccessfulEmit tracks the most recent successful write to a sink reported
+	// by an aggregator process.
+	lastSuccessfulEmit time.Time
+
 	// js, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
 	js *jobState
@@ -703,6 +707,9 @@ type jobState struct {
 	settings *cluster.Settings
 	metrics  *Metrics
 	ts       timeutil.TimeSource
+
+	// Have we ever recorded a successful emit?
+	nonEmptyCheckpointed bool
 
 	// The last time we updated job run status.
 	lastRunStatusUpdate time.Time
@@ -747,7 +754,7 @@ func newJobState(
 		settings:           st,
 		metrics:            metrics,
 		ts:                 ts,
-		lastProgressUpdate: ts.Now(),
+		lastProgressUpdate: time.Now(),
 	}
 }
 
@@ -1099,6 +1106,9 @@ func (cf *changeFrontier) noteAggregatorProgress(d rowenc.EncDatum) error {
 	}
 
 	cf.maybeMarkJobIdle(resolvedSpans.Stats.RecentKvCount)
+	if resolvedSpans.Stats.RecentKvCount > 0 {
+		cf.lastSuccessfulEmit = time.Now()
+	}
 
 	for _, resolved := range resolvedSpans.ResolvedSpans {
 		// Inserting a timestamp less than the one the changefeed flow started at
@@ -1198,6 +1208,10 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		(inBackfill || cf.frontier.hasLaggingSpans(cf.spec.Feed.StatementTime, &cf.js.settings.SV)) &&
 			cf.js.canCheckpointSpans()
 
+	// If we have any success to report, do so immediately so that it's clear
+	// that subsequent intermittent errors are intermittent.
+	noteNonEmptyCheckpoint := (!cf.js.nonEmptyCheckpointed) && (!cf.lastSuccessfulEmit.IsZero())
+
 	// If the highwater has moved an empty checkpoint will be saved
 	var checkpoint jobspb.ChangefeedProgress_Checkpoint
 	if updateCheckpoint {
@@ -1205,7 +1219,7 @@ func (cf *changeFrontier) maybeCheckpointJob(
 		checkpoint.Spans, checkpoint.Timestamp = cf.frontier.getCheckpointSpans(maxBytes)
 	}
 
-	if updateCheckpoint || updateHighWater {
+	if updateCheckpoint || updateHighWater || noteNonEmptyCheckpoint {
 		checkpointStart := timeutil.Now()
 		updated, err := cf.checkpointJobProgress(cf.frontier.Frontier(), checkpoint)
 		if err != nil {
@@ -1247,6 +1261,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.Checkpoint = &checkpoint
+			changefeedProgress.LastNonemptyCheckpoint = &hlc.Timestamp{WallTime: cf.lastSuccessfulEmit.Unix()}
 
 			timestampManager := cf.manageProtectedTimestamps
 			// TODO(samiskin): Remove this conditional and the associated deprecated
