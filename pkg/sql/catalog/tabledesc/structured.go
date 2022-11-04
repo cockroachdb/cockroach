@@ -993,6 +993,11 @@ func (desc *Mutable) MaybeIncrementVersion() {
 	// Starting in 19.2 we use a zero-valued ModificationTime when incrementing
 	// the version, and then, upon reading, use the MVCC timestamp to populate
 	// the ModificationTime.
+	desc.ResetModificationTime()
+}
+
+// ResetModificationTime implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) ResetModificationTime() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 

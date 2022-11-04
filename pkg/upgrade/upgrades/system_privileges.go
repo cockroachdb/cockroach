@@ -24,6 +24,6 @@ func systemPrivilegesTableMigration(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
 	return createSystemTable(
-		ctx, d.DB, d.Codec, systemschema.SystemPrivilegeTable,
+		ctx, d.DB, d.Settings, d.Codec, systemschema.SystemPrivilegeTable,
 	)
 }

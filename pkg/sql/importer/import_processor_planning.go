@@ -68,6 +68,8 @@ func distImport(
 	testingKnobs importTestingKnobs,
 	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
+	defer sp.Finish()
 
 	dsp := execCtx.DistSQLPlanner()
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {

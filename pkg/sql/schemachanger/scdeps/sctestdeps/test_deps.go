@@ -756,7 +756,9 @@ func (b *testCatalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
 		b.s.uncommitted.DeleteNamespaceEntry(nameInfo)
 	}
 	for _, desc := range b.descs {
-		desc = resetModificationTime(desc)
+		mut := desc.NewBuilder().BuildCreatedMutable()
+		mut.ResetModificationTime()
+		desc = mut.ImmutableCopy()
 		b.s.LogSideEffectf("upsert descriptor #%d\n%s", desc.GetID(), b.s.descriptorDiff(desc))
 		b.s.uncommitted.UpsertDescriptorEntry(desc)
 	}

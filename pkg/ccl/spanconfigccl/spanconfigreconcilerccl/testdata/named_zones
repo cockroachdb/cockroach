@@ -123,6 +123,7 @@ state limit=5
 state offset=46
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
@@ -142,6 +143,7 @@ upsert /Table/10{7-8}                      ttl_seconds=50
 state offset=46
 ----
 ...
+/Table/4{6-7}                              database system (host)
 /Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)

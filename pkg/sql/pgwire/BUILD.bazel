@@ -113,6 +113,7 @@ go_test(
         "//pkg/server/telemetry",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/bootstrap",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/colconv",
         "//pkg/sql/lex",

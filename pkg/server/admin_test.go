@@ -592,10 +592,11 @@ func TestRangeCount(t *testing.T) {
 			}
 			m[tableName] = tblResp.RangeCount
 		}
-		// Hardcode the single range used by the role_id_seq, the above
+		// Hardcode the single range used by each system sequence, the above
 		// request does not return sequences.
 		// TODO(richardjcai): Maybe update the request to return
 		// sequences as well?
+		m[fmt.Sprintf("public.%s", catconstants.DescIDSequenceTableName)] = 1
 		m[fmt.Sprintf("public.%s", catconstants.RoleIDSequenceName)] = 1
 		return m
 	}

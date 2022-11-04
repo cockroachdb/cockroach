@@ -179,6 +179,7 @@ func TestCloudStorageSink(t *testing.T) {
 			nil, /* ief */
 			nil, /* kvDB */
 			nil, /* limiters */
+			cloud.NilMetrics,
 			opts...)
 	}
 

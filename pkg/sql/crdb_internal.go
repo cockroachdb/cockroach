@@ -487,6 +487,7 @@ CREATE TABLE crdb_internal.tables (
 );`,
 	indexes: []virtualIndex{
 		{
+			// INDEX(parent_id) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
 				flags := p.CommonLookupFlagsRequired()
@@ -500,6 +501,7 @@ CREATE TABLE crdb_internal.tables (
 			},
 		},
 		{
+			// INDEX(database_name) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbName := string(tree.MustBeDString(unwrappedConstraint))
 				flags := p.CommonLookupFlagsRequired()
@@ -5433,16 +5435,14 @@ CREATE TABLE crdb_internal.lost_descriptors_with_data (
 		INTEGER NOT NULL
 );`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		maxDescIDKeyVal, err := p.execCfg.DB.Get(context.Background(), p.extendedEvalCtx.Codec.DescIDSequenceKey())
-		if err != nil {
-			return err
-		}
-		descIDCounter, err := maxDescIDKeyVal.Value.GetInt()
-		if err != nil {
-			return err
-		}
 		minID := descpb.ID(keys.MaxReservedDescID + 1)
-		maxID := descpb.ID(descIDCounter)
+		maxID, err := p.ExecCfg().DescIDGenerator.PeekNextUniqueDescID(ctx)
+		if err != nil {
+			return err
+		}
+		if err != nil {
+			return err
+		}
 		if minID >= maxID {
 			return nil
 		}

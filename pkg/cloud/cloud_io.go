@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -97,19 +96,14 @@ const MaxDelayedRetryAttempts = 3
 func DelayedRetry(
 	ctx context.Context, opName string, customDelay func(error) time.Duration, fn func() error,
 ) error {
-	span := tracing.SpanFromContext(ctx)
-	attemptNumber := int32(1)
+	ctx, sp := tracing.ChildSpan(ctx, fmt.Sprintf("cloud.DelayedRetry.%s", opName))
+	defer sp.Finish()
+
 	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), MaxDelayedRetryAttempts, func() error {
 		err := fn()
 		if err == nil {
 			return nil
 		}
-		retryEvent := &roachpb.RetryTracingEvent{
-			Operation:     opName,
-			AttemptNumber: attemptNumber,
-			RetryError:    tracing.RedactAndTruncateError(err),
-		}
-		span.RecordStructured(retryEvent)
 		if customDelay != nil {
 			if d := customDelay(err); d > 0 {
 				select {
@@ -127,7 +121,6 @@ func DelayedRetry(
 			case <-ctx.Done():
 			}
 		}
-		attemptNumber++
 		return err
 	})
 }
@@ -199,7 +192,7 @@ func NewResumingReader(
 
 // Open opens the reader at its current offset.
 func (r *ResumingReader) Open(ctx context.Context) error {
-	return DelayedRetry(ctx, "ResumingReader.Opener", r.ErrFn, func() error {
+	return DelayedRetry(ctx, "Open", r.ErrFn, func() error {
 		var readErr error
 		r.Reader, readErr = r.Opener(ctx, r.Pos)
 		return readErr
@@ -208,6 +201,9 @@ func (r *ResumingReader) Open(ctx context.Context) error {
 
 // Read implements ioctx.ReaderCtx.
 func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "cloud.ResumingReader.Read")
+	defer sp.Finish()
+
 	var lastErr error
 	for retries := 0; lastErr == nil; retries++ {
 		if r.Reader == nil {
@@ -229,13 +225,6 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 
 		// Use the configured retry-on-error decider to check for a resumable error.
 		if r.RetryOnErrFn(lastErr) {
-			span := tracing.SpanFromContext(ctx)
-			retryEvent := &roachpb.RetryTracingEvent{
-				Operation:     "ResumingReader.Reader.Read",
-				AttemptNumber: int32(retries + 1),
-				RetryError:    tracing.RedactAndTruncateError(lastErr),
-			}
-			span.RecordStructured(retryEvent)
 			if retries >= maxNoProgressReads {
 				return 0, errors.Wrap(lastErr, "multiple Read calls return no data")
 			}

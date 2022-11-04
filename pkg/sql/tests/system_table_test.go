@@ -51,7 +51,7 @@ func TestInitialKeys(t *testing.T) {
 		var nonDescKeys int
 		if systemTenant {
 			codec = keys.SystemSQLCodec
-			nonDescKeys = 13
+			nonDescKeys = 14
 		} else {
 			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
 			nonDescKeys = 4
@@ -86,7 +86,7 @@ func TestInitialKeys(t *testing.T) {
 
 		// Verify that IDGenerator value is correct.
 		found := false
-		idgen := codec.DescIDSequenceKey()
+		idgen := codec.SequenceKey(keys.DescIDSequenceID)
 		var idgenkv roachpb.KeyValue
 		for _, v := range kv {
 			if v.Key.Equal(idgen) {

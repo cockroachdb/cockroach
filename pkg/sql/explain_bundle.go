@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -402,6 +403,10 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 		}
 		first = false
 	}
+	blankLine()
+	if err := c.printCreateAllSchemas(&buf); err != nil {
+		fmt.Fprintf(&buf, "-- error getting all schemas: %v\n", err)
+	}
 	for i := range sequences {
 		blankLine()
 		if err := c.PrintCreateSequence(&buf, &sequences[i]); err != nil {
@@ -450,8 +455,7 @@ func makeStmtEnvCollector(ctx context.Context, ie *InternalExecutor) stmtEnvColl
 	return stmtEnvCollector{ctx: ctx, ie: ie}
 }
 
-// environmentQuery is a helper to run a query that returns a single string
-// value.
+// query is a helper to run a query that returns a single string value.
 func (c *stmtEnvCollector) query(query string) (string, error) {
 	row, err := c.ie.QueryRowEx(
 		c.ctx,
@@ -480,6 +484,41 @@ func (c *stmtEnvCollector) query(query string) (string, error) {
 	}
 
 	return string(*s), nil
+}
+
+// queryRows is similar to query() for the case when multiple rows with single
+// string values can be returned.
+func (c *stmtEnvCollector) queryRows(query string) ([]string, error) {
+	rows, err := c.ie.QueryBufferedEx(
+		c.ctx,
+		"stmtEnvCollector",
+		nil, /* txn */
+		sessiondata.NoSessionDataOverride,
+		query,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	var values []string
+	for _, row := range rows {
+		if len(row) != 1 {
+			return nil, errors.AssertionFailedf(
+				"expected env query %q to return a single column, returned %d",
+				query, len(row),
+			)
+		}
+		s, ok := row[0].(*tree.DString)
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"expected env query %q to return a DString, returned %T",
+				query, row[0],
+			)
+		}
+		values = append(values, string(*s))
+	}
+
+	return values, nil
 }
 
 var testingOverrideExplainEnvVersion string
@@ -687,6 +726,22 @@ func (c *stmtEnvCollector) PrintCreateView(w io.Writer, tn *tree.TableName) erro
 		return err
 	}
 	fmt.Fprintf(w, "%s;\n", createStatement)
+	return nil
+}
+
+func (c *stmtEnvCollector) printCreateAllSchemas(w io.Writer) error {
+	createAllSchemas, err := c.queryRows("SHOW CREATE ALL SCHEMAS;")
+	if err != nil {
+		return err
+	}
+	for _, r := range createAllSchemas {
+		if r == "CREATE SCHEMA "+catconstants.PublicSchemaName+";" {
+			// The public schema is always present, so exclude it to ease the
+			// recreation of the bundle.
+			continue
+		}
+		fmt.Fprintf(w, "%s\n", r)
+	}
 	return nil
 }
 

@@ -46,6 +46,7 @@ func GetStorage(ctx context.Context, cfg FixtureConfig) (cloud.ExternalStorage, 
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		nil, /* metrics */
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, storageError)
