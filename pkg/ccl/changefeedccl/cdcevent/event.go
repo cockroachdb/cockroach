@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -345,7 +346,7 @@ func getEventDescriptorCached(
 	schemaTS hlc.Timestamp,
 	cache *cache.UnorderedCache,
 ) (*EventDescriptor, error) {
-	idVer := idVersion{id: desc.GetID(), version: desc.GetVersion(), family: family.ID}
+	idVer := CacheKey{ID: desc.GetID(), Version: desc.GetVersion(), FamilyID: family.ID}
 
 	if v, ok := cache.Get(idVer); ok {
 		ed := v.(*EventDescriptor)
@@ -381,7 +382,7 @@ func NewEventDecoder(
 		return nil, err
 	}
 
-	eventDescriptorCache := cache.NewUnorderedCache(defaultCacheConfig)
+	eventDescriptorCache := cache.NewUnorderedCache(DefaultCacheConfig)
 	getEventDescriptor := func(
 		desc catalog.TableDescriptor,
 		family *descpb.ColumnFamilyDescriptor,
@@ -548,4 +549,58 @@ func TestingGetFamilyIDFromKey(
 ) (descpb.FamilyID, error) {
 	_, familyID, err := decoder.(*eventDecoder).rfCache.tableDescForKey(context.Background(), key, ts)
 	return familyID, err
+}
+
+// TestingMakeEventRowFromEncDatums creates event row from specified  enc datum row.
+// encRow assumed to contain *already decoded* datums.
+// The first numKeyCols are assumed to be primary key columns.
+// Columns names are generated based on the datum types.
+func TestingMakeEventRowFromEncDatums(
+	encRow rowenc.EncDatumRow, colTypes []*types.T, numKeyCols int, deleted bool,
+) Row {
+	if len(encRow) != len(colTypes) {
+		panic("unexpected length mismatch")
+	}
+	intRange := func(start, end int) (res []int) {
+		for i := 0; i < end; i++ {
+			res = append(res, i)
+		}
+		return res
+	}
+	ed := &EventDescriptor{
+		Metadata: Metadata{
+			TableID:    42,
+			TableName:  "randtbl",
+			FamilyName: "primary",
+		},
+		cols: func() (cols []ResultColumn) {
+			names := make(map[string]int, len(encRow))
+			for i, typ := range colTypes {
+				colName := fmt.Sprintf("col_%s", typ.String())
+				names[colName]++
+				if names[colName] > 1 {
+					colName += fmt.Sprintf("_%d", names[colName]-1)
+				}
+				cols = append(cols, ResultColumn{
+					ResultColumn: colinfo.ResultColumn{
+						Name:    colName,
+						Typ:     typ,
+						TableID: 42,
+					},
+					ord: i,
+				})
+			}
+			return cols
+		}(),
+		keyCols:   intRange(0, numKeyCols),
+		valueCols: intRange(0, len(encRow)),
+	}
+
+	var alloc tree.DatumAlloc
+	return Row{
+		EventDescriptor: ed,
+		datums:          encRow,
+		deleted:         deleted,
+		alloc:           &alloc,
+	}
 }

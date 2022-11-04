@@ -8,6 +8,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/duration",
+        "//pkg/util/strutil",
         "//pkg/util/timeutil",
     ],
 )

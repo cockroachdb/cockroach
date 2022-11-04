@@ -297,7 +297,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptUpdatedTimestamps:        flagOption,
 	OptMVCCTimestamps:           flagOption,
 	OptDiff:                     flagOption,
-	OptCompression:              enum("gzip"),
+	OptCompression:              enum("gzip", "zstd"),
 	OptSchemaChangeEvents:       enum("column_changes", "default"),
 	OptSchemaChangePolicy:       enum("backfill", "nobackfill", "stop", "ignore"),
 	OptSplitColumnFamilies:      flagOption,

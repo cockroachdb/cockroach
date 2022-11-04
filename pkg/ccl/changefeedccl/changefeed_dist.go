@@ -10,12 +10,15 @@ package changefeedccl
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -307,6 +311,14 @@ func startDistChangefeed(
 	return err
 }
 
+var enableBalancedRangeDistribution = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"changefeed.balance_range_distribution.enable",
+	"if enabled, the ranges are balanced equally among all nodes",
+	util.ConstantWithMetamorphicTestBool(
+		"changefeed.balance_range_distribution.enable", false),
+).WithPublic()
+
 func makePlan(
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -316,23 +328,40 @@ func makePlan(
 	trackedSpans []roachpb.Span,
 	selectClause string,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 		var blankTxn *kv.Txn
 
-		planCtx := dsp.NewPlanningCtx(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
-			sql.DistributionTypeAlways)
-
-		var spanPartitions []sql.SpanPartition
+		distMode := sql.DistributionTypeAlways
 		if details.SinkURI == `` {
-			// Sinkless feeds get one ChangeAggregator on the gateway.
-			spanPartitions = []sql.SpanPartition{{SQLInstanceID: dsp.GatewayID(), Spans: trackedSpans}}
-		} else {
-			// All other feeds get a ChangeAggregator local on the leaseholder.
-			var err error
-			spanPartitions, err = dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+			// Sinkless feeds get one ChangeAggregator on this node.
+			distMode = sql.DistributionTypeNone
+		}
+
+		planCtx := dsp.NewPlanningCtx(ctx, execCtx.ExtendedEvalContext(), nil /* planner */, blankTxn,
+			sql.DistributionType(distMode))
+		spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, trackedSpans)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		sv := &execCtx.ExecCfg().Settings.SV
+		if enableBalancedRangeDistribution.Get(sv) {
+			scanType, err := changefeedbase.MakeStatementOptions(details.Opts).GetInitialScanType()
 			if err != nil {
 				return nil, nil, err
+			}
+
+			// Currently, balanced range distribution supported only in export mode.
+			// TODO(yevgeniy): Consider lifting this restriction.
+			if scanType == changefeedbase.OnlyInitialScan {
+				sender := execCtx.ExecCfg().DB.NonTransactionalSender()
+				distSender := sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
+
+				spanPartitions, err = rebalanceSpanPartitions(
+					ctx, &distResolver{distSender}, rebalanceThreshold.Get(sv), spanPartitions)
+				if err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 
@@ -441,4 +470,89 @@ func (w *changefeedResultWriter) SetError(err error) {
 }
 func (w *changefeedResultWriter) Err() error {
 	return w.err
+}
+
+var rebalanceThreshold = settings.RegisterFloatSetting(
+	settings.TenantWritable,
+	"changefeed.balance_range_distribution.sensitivity",
+	"rebalance if the number of ranges on a node exceeds the average by this fraction",
+	0.05,
+	settings.PositiveFloat,
+)
+
+type rangeResolver interface {
+	getRangesForSpans(ctx context.Context, spans []roachpb.Span) ([]roachpb.Span, error)
+}
+
+type distResolver struct {
+	*kvcoord.DistSender
+}
+
+func (r *distResolver) getRangesForSpans(
+	ctx context.Context, spans []roachpb.Span,
+) ([]roachpb.Span, error) {
+	return kvfeed.AllRangeSpans(ctx, r.DistSender, spans)
+}
+
+func rebalanceSpanPartitions(
+	ctx context.Context, r rangeResolver, sensitivity float64, p []sql.SpanPartition,
+) ([]sql.SpanPartition, error) {
+	if len(p) <= 1 {
+		return p, nil
+	}
+
+	// Explode set of spans into set of ranges.
+	// TODO(yevgeniy): This might not be great if the tables are huge.
+	numRanges := 0
+	for i := range p {
+		spans, err := r.getRangesForSpans(ctx, p[i].Spans)
+		if err != nil {
+			return nil, err
+		}
+		p[i].Spans = spans
+		numRanges += len(spans)
+	}
+
+	// Sort descending based on the number of ranges.
+	sort.Slice(p, func(i, j int) bool {
+		return len(p[i].Spans) > len(p[j].Spans)
+	})
+
+	targetRanges := int((1 + sensitivity) * float64(numRanges) / float64(len(p)))
+
+	for i, j := 0, len(p)-1; i < j && len(p[i].Spans) > targetRanges && len(p[j].Spans) < targetRanges; {
+		from, to := i, j
+
+		// Figure out how many ranges we can move.
+		numToMove := len(p[from].Spans) - targetRanges
+		canMove := targetRanges - len(p[to].Spans)
+		if numToMove <= canMove {
+			i++
+		}
+		if canMove <= numToMove {
+			numToMove = canMove
+			j--
+		}
+		if numToMove == 0 {
+			break
+		}
+
+		// Move numToMove spans from 'from' to 'to'.
+		idx := len(p[from].Spans) - numToMove
+		p[to].Spans = append(p[to].Spans, p[from].Spans[idx:]...)
+		p[from].Spans = p[from].Spans[:idx]
+	}
+
+	// Collapse ranges into nice set of contiguous spans.
+	for i := range p {
+		var g roachpb.SpanGroup
+		g.Add(p[i].Spans...)
+		p[i].Spans = g.Slice()
+	}
+
+	// Finally, re-sort based on the node id.
+	sort.Slice(p, func(i, j int) bool {
+		return p[i].SQLInstanceID < p[j].SQLInstanceID
+	})
+	return p, nil
 }

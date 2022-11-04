@@ -9,12 +9,21 @@
 package changefeedccl
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,4 +174,74 @@ func TestTopicForEvent(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestShardingByKey tests that the sharding function is deterministic and
+// maps keys within a range of [0, numWorkers).
+func TestShardingByKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	rng, _ := randutil.NewTestRand()
+	p := parallelEventConsumer{numWorkers: 16, hasher: makeHasher()}
+
+	poolSize := 10000
+	eventPool := make([]kvevent.Event, poolSize)
+	for i := 0; i < poolSize; i++ {
+		eventPool[i] = makeKVEventKeyOnly(rng, 128)
+	}
+
+	seen := map[string]int64{}
+	for i := 0; i < poolSize; i++ {
+		ev := eventPool[i]
+
+		b := p.getBucketForEvent(ev)
+		key := getKeyFromKVEvent(ev)
+
+		assert.True(t, 0 <= b && b < 16)
+
+		if bucket, ok := seen[key]; ok {
+			assert.Equal(t, bucket, b)
+		}
+		seen[key] = b
+	}
+}
+
+func BenchmarkShardingByKey(b *testing.B) {
+	rng, _ := randutil.NewTestRand()
+	p := parallelEventConsumer{numWorkers: 32, hasher: makeHasher()}
+
+	poolSize := 1000
+	eventPool := make([]kvevent.Event, poolSize)
+	for i := 0; i < poolSize; i++ {
+		eventPool[i] = makeKVEventKeyOnly(rng, 2<<31-1)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		p.getBucketForEvent(eventPool[rng.Intn(len(eventPool))])
+	}
+}
+
+func makeKVEventKeyOnly(rng *rand.Rand, upper int) kvevent.Event {
+	testTableID := 42
+
+	key, err := keyside.Encode(
+		keys.SystemSQLCodec.TablePrefix(uint32(testTableID)),
+		tree.NewDInt(tree.DInt(rng.Intn(upper))),
+		encoding.Ascending,
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	return kvevent.MakeKVEvent(&roachpb.RangeFeedEvent{
+		Val: &roachpb.RangeFeedValue{
+			Key: key,
+		},
+	})
+}
+
+func getKeyFromKVEvent(ev kvevent.Event) string {
+	return ev.KV().Key.String()
 }

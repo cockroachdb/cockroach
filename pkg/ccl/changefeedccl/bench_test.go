@@ -210,7 +210,7 @@ func createBenchmarkChangefeed(
 	}
 	initialHighWater := hlc.Timestamp{}
 	encodingOpts := changefeedbase.EncodingOptions{Format: changefeedbase.OptFormatJSON, Envelope: changefeedbase.OptEnvelopeRow}
-	encoder, err := makeJSONEncoder(encodingOpts, AllTargets(details))
+	encoder, err := makeJSONEncoder(encodingOpts)
 	if err != nil {
 		return nil, nil, err
 	}

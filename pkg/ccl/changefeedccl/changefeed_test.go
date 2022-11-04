@@ -1048,7 +1048,7 @@ func TestChangefeedProjectionDelete(t *testing.T) {
 			`foo: [0]->{}`,
 		})
 	}
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
 }
 
 // If we drop columns which are not targeted by the changefeed, it should not backfill.
@@ -2476,9 +2476,7 @@ func TestChangefeedBareJSON(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog')`)
 		foo := feed(t, f, `CREATE CHANGEFEED WITH schema_change_policy=stop AS SELECT * FROM foo`)
 		defer closeFeed(t, foo)
-		assertPayloads(t, foo, []string{
-			`foo: [0]->{"a": 0, "b": "dog"}`,
-		})
+		assertPayloads(t, foo, []string{`foo: [0]->{"a": 0, "b": "dog"}`})
 	}
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 	cdcTest(t, testFn, feedTestForceSink("enterprise"))
@@ -7426,4 +7424,85 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+}
+
+type echoResolver struct {
+	result []roachpb.Spans
+	pos    int
+}
+
+func (r *echoResolver) getRangesForSpans(
+	_ context.Context, _ []roachpb.Span,
+) (spans []roachpb.Span, _ error) {
+	spans = r.result[r.pos]
+	r.pos++
+	return spans, nil
+}
+
+func TestPartitionSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	partitions := func(p ...sql.SpanPartition) []sql.SpanPartition {
+		return p
+	}
+	mkPart := func(n base.SQLInstanceID, spans ...roachpb.Span) sql.SpanPartition {
+		return sql.SpanPartition{SQLInstanceID: n, Spans: spans}
+	}
+	mkSpan := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: []byte(start), EndKey: []byte(end)}
+	}
+	spans := func(s ...roachpb.Span) roachpb.Spans {
+		return s
+	}
+	const sensitivity = 0.01
+
+	for i, tc := range []struct {
+		input   []sql.SpanPartition
+		resolve []roachpb.Spans
+		expect  []sql.SpanPartition
+	}{
+		{
+			input: partitions(
+				mkPart(1, mkSpan("a", "j")),
+				mkPart(2, mkSpan("j", "q")),
+				mkPart(3, mkSpan("q", "z")),
+			),
+			// 6 total ranges, 2 per node.
+			resolve: []roachpb.Spans{
+				spans(mkSpan("a", "c"), mkSpan("c", "e"), mkSpan("e", "j")),
+				spans(mkSpan("j", "q")),
+				spans(mkSpan("q", "y"), mkSpan("y", "z")),
+			},
+			expect: partitions(
+				mkPart(1, mkSpan("a", "e")),
+				mkPart(2, mkSpan("e", "q")),
+				mkPart(3, mkSpan("q", "z")),
+			),
+		},
+		{
+			input: partitions(
+				mkPart(1, mkSpan("a", "c"), mkSpan("e", "p"), mkSpan("r", "z")),
+				mkPart(2),
+				mkPart(3, mkSpan("c", "e"), mkSpan("p", "r")),
+			),
+			// 5 total ranges -- on 2 nodes; target should be 1 per node.
+			resolve: []roachpb.Spans{
+				spans(mkSpan("a", "c"), mkSpan("e", "p"), mkSpan("r", "z")),
+				spans(),
+				spans(mkSpan("c", "e"), mkSpan("p", "r")),
+			},
+			expect: partitions(
+				mkPart(1, mkSpan("a", "c"), mkSpan("e", "p")),
+				mkPart(2, mkSpan("r", "z")),
+				mkPart(3, mkSpan("c", "e"), mkSpan("p", "r")),
+			),
+		},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			sp, err := rebalanceSpanPartitions(context.Background(),
+				&echoResolver{result: tc.resolve}, sensitivity, tc.input)
+			require.NoError(t, err)
+			require.Equal(t, tc.expect, sp)
+		})
+	}
 }
