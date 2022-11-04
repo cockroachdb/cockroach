@@ -34,7 +34,7 @@ func alterSystemSQLInstancesAddLocality(
 		query:          addLocalityCol,
 		schemaExistsFn: hasColumn,
 	}
-	if err := migrateTable(ctx, cs, d, op, keys.SQLInstancesTableID, systemschema.SQLInstancesTable); err != nil {
+	if err := migrateTable(ctx, cs, d, op, keys.SQLInstancesTableID, systemschema.SQLInstancesTable()); err != nil {
 		return err
 	}
 	return nil
