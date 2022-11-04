@@ -8955,10 +8955,10 @@ def go_deps():
         name = "org_golang_google_api",
         build_file_proto_mode = "disable_global",
         importpath = "google.golang.org/api",
-        sha256 = "29ab5b924df6b1e5c36aad1465f89f8a314d2d300aa329afbca89b599415c47b",
-        strip_prefix = "google.golang.org/api@v0.69.0",
+        sha256 = "1ce243cc39b1b3bed3f947ee222239ba40ffa583e28e6d4b9045c42f00a01766",
+        strip_prefix = "github.com/cockroachdb/google-api-go-client@v0.69.1-0.20221107234743-4cacbcc3add2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/google.golang.org/api/org_golang_google_api-v0.69.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/google-api-go-client/com_github_cockroachdb_google_api_go_client-v0.69.1-0.20221107234743-4cacbcc3add2.zip",
         ],
     )
     go_repository(
