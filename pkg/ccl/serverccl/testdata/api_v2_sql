@@ -1,4 +1,6 @@
-sql admin name=get_users_no_execute
+subtest sql_select_no_execute
+
+sql admin
 {
   "database": "system",
   "statements": [{"sql": "SELECT username FROM users where username = $1", "arguments": ["admin"]}]
@@ -23,7 +25,11 @@ sql admin name=get_users_no_execute
  }
 }
 
-sql admin name=get_users_execute
+subtest end
+
+subtest sql_select_users
+
+sql admin
 {
   "database": "system",
   "execute": true,
@@ -57,8 +63,12 @@ sql admin name=get_users_execute
  "num_statements": 1
 }
 
+subtest end
+
+subtest regression_test_for_84385
+
 # Regression test for #84385.
-sql admin name=regression_test_for_84385.
+sql admin
 {
   "database": "system",
   "execute": true,
@@ -97,9 +107,11 @@ sql admin name=regression_test_for_84385.
  "num_statements": 1
 }
 
+subtest end
 
+subtest select_user_no_admin
 
-sql non-admin expect-error name=select_users_no_admin
+sql non-admin expect-error
 {
   "database": "system",
   "execute": true,
@@ -108,8 +120,11 @@ sql non-admin expect-error name=select_users_no_admin
 ----
 42501|executing stmt 1: run-query-via-api: user authentic_user_noadmin does not have SELECT privilege on relation users
 
+subtest end
 
-sql admin name=multple_statements
+subtest sql_multiple_statements
+
+sql admin
 {
   "database": "system",
   "execute": true,
@@ -160,7 +175,11 @@ sql admin name=multple_statements
  "num_statements": 2
 }
 
-sql admin name=create_schema
+subtest end
+
+subtest sql_schema_changes
+
+sql admin
 {
   "database": "mydb",
   "execute": true,
@@ -221,8 +240,11 @@ sql admin name=create_schema
  "num_statements": 3
 }
 
+subtest end
 
-sql admin expect-error name=invalid_sql
+subtest sql_syntax_error
+
+sql admin expect-error
 {
   "statements": [
     {"sql": "INSERT INTO WHERE"}
@@ -231,8 +253,11 @@ sql admin expect-error name=invalid_sql
 ----
 42601|parsing statement 1: at or near "where": syntax error
 
+subtest end
 
-sql admin expect-error name=invalid_duration
+subtest invalid_duration
+
+sql admin expect-error
 {
   "timeout": "abcdef",
   "statements": [
@@ -242,8 +267,11 @@ sql admin expect-error name=invalid_duration
 ----
 XXUUU|time: invalid duration "abcdef"
 
+subtest end
 
-sql admin expect-error name=multiple_statements_single_string
+subtest sql_multiple_statements_in_one_line
+
+sql admin expect-error
 {
   "statements": [
     {"sql": "SELECT username FROM users where username = 'admin'; SELECT username FROM users where username = 'admin'"}
@@ -252,8 +280,11 @@ sql admin expect-error name=multiple_statements_single_string
 ----
 XXUUU|parsing statement 1: expecting 1 statement, found 2
 
+subtest end
 
-sql admin expect-error name=missing_placeholder
+subtest sql_placeholder_errors
+
+sql admin expect-error
 {
   "statements": [
     {"sql": "SELECT username FROM users where username = $1"}
@@ -263,7 +294,7 @@ sql admin expect-error name=missing_placeholder
 XXUUU|parsing statement 1: expected 1 placeholder(s), got 0
 
 
-sql admin expect-error name=placeholder_error
+sql admin expect-error
 {
   "statements": [
     {"sql": "SELECT username FROM users where username = $1", "arguments": ["blah", "blah"]}
@@ -272,7 +303,11 @@ sql admin expect-error name=placeholder_error
 ----
 XXUUU|parsing statement 1: expected 1 placeholder(s), got 2
 
-sql admin name=create_table
+subtest end
+
+subtest sql_create_table
+
+sql admin
 {
   "database": "mydb",
   "execute": true,
@@ -301,7 +336,11 @@ sql admin name=create_table
  "num_statements": 1
 }
 
-sql admin name=alter_table
+subtest end
+
+subtest sql_alter_table
+
+sql admin
 {
   "database": "mydb",
   "execute": true,
@@ -377,7 +416,7 @@ sql admin name=alter_table
  "num_statements": 4
 }
 
-sql admin name=sql_select
+sql admin
 {
   "database": "mydb",
   "execute": true,
@@ -423,8 +462,11 @@ sql admin name=sql_select
  "num_statements": 1
 }
 
+subtest end
 
-sql admin name=sql_drop_table
+subtest sql_drop_table
+
+sql admin
 {
   "database": "mydb",
   "execute": true,
@@ -454,3 +496,5 @@ sql admin name=sql_drop_table
  },
  "num_statements": 1
 }
+
+subtest end
