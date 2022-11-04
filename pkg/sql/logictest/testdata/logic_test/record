@@ -2,6 +2,12 @@ statement ok
 CREATE TABLE a(a INT PRIMARY KEY, b TEXT);
 INSERT INTO a VALUES(1,'2')
 
+# Virtual tables get an implicit record type.
+query TT
+SELECT (1, 'cat', 2, '{}')::pg_catalog.pg_namespace, ((3, 'dog', 4, ARRAY[]::STRING[])::pg_namespace).nspname
+----
+(1,cat,2,{})  dog
+
 query TITIT colnames
 SELECT t, t.a, t.b, t.* FROM a AS t
 ----

@@ -306,15 +306,19 @@ func (sr *schemaResolver) GetTypeDescriptor(
 	}
 	// Note that the value of required doesn't matter for lookups by ID.
 	flags := sr.CommonLookupFlagsRequired()
-	_, db, err := tc.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), flags)
-	if err != nil {
-		return tree.TypeName{}, nil, err
+	dbName := sr.CurrentDatabase()
+	if !descpb.IsVirtualTable(desc.GetID()) {
+		_, db, err := tc.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), flags)
+		if err != nil {
+			return tree.TypeName{}, nil, err
+		}
+		dbName = db.GetName()
 	}
 	sc, err := tc.GetImmutableSchemaByID(ctx, sr.txn, desc.GetParentSchemaID(), flags)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
-	name := tree.MakeQualifiedTypeName(db.GetName(), sc.GetName(), desc.GetName())
+	name := tree.MakeQualifiedTypeName(dbName, sc.GetName(), desc.GetName())
 	return name, desc, nil
 }
 

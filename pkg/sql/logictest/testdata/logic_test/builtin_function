@@ -2179,6 +2179,12 @@ text[]
 statement ok
 SELECT format_type(oid, NULL) FROM pg_type
 
+# Ensure that implicit record types for virtual tables can be formatted.
+query T
+select format_type('pg_namespace'::regtype, null);
+----
+pg_namespace
+
 query T
 SELECT pg_catalog.pg_get_userbyid((SELECT oid FROM pg_roles WHERE rolname='root'))
 ----
