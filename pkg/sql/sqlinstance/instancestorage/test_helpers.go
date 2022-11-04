@@ -90,12 +90,13 @@ func (s *Storage) CreateInstanceDataForTest(
 		if err != nil {
 			return err
 		}
-		row, err := s.rowcodec.encodeRow(instanceID, addr, sessionID, locality, s.codec, s.tableID)
+		key := s.rowcodec.encodeKey(instanceID)
+		value, err := s.rowcodec.encodeValue(addr, sessionID, locality)
 		if err != nil {
 			return err
 		}
 		b := txn.NewBatch()
-		b.Put(row.Key, row.Value)
+		b.Put(key, value)
 		return txn.CommitInBatch(ctx, b)
 	})
 }
@@ -105,7 +106,7 @@ func (s *Storage) CreateInstanceDataForTest(
 func (s *Storage) GetInstanceDataForTest(
 	ctx context.Context, instanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
-	k := makeInstanceKey(s.codec, s.tableID, instanceID)
+	k := s.rowcodec.encodeKey(instanceID)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	row, err := s.db.Get(ctx, k)
 	if err != nil {
@@ -114,7 +115,7 @@ func (s *Storage) GetInstanceDataForTest(
 	if row.Value == nil {
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
-	_, addr, sessionID, locality, _, _, err := s.rowcodec.decodeRow(row)
+	addr, sessionID, locality, _, err := s.rowcodec.decodeValue(*row.Value)
 	if err != nil {
 		return sqlinstance.InstanceInfo{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
