@@ -326,6 +326,11 @@ func (desc *Mutable) MaybeIncrementVersion() {
 		return
 	}
 	desc.Version++
+	desc.ResetModificationTime()
+}
+
+// ResetModificationTime implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) ResetModificationTime() {
 	desc.ModificationTime = hlc.Timestamp{}
 }
 

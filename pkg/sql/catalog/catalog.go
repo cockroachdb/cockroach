@@ -29,6 +29,9 @@ type MutableDescriptor interface {
 	// descriptor should increment the version on the mutable copy from the
 	// outset.
 	MaybeIncrementVersion()
+	// ResetModificationTime zeroes the descriptor's modification time field.
+	// Only call this if you really know what you're doing.
+	ResetModificationTime()
 
 	// Accessors for the original state of the descriptor prior to the mutations.
 	OriginalName() string

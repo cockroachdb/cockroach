@@ -136,6 +136,13 @@ type CatalogBuiltins interface {
 	// RedactDescriptor expects an encoded protobuf descriptor, decodes it,
 	// redacts its expressions, and re-encodes it.
 	RedactDescriptor(ctx context.Context, encodedDescriptor []byte) ([]byte, error)
+
+	// DescriptorWithPostDeserializationChanges expects an encoded protobuf
+	// descriptor, decodes it, puts it into a catalog.DescriptorBuilder,
+	// calls RunPostDeserializationChanges, and re-encodes it.
+	DescriptorWithPostDeserializationChanges(
+		ctx context.Context, encodedDescriptor []byte,
+	) ([]byte, error)
 }
 
 // HasPrivilegeSpecifier specifies an object to lookup privilege for.
