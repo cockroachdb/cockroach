@@ -732,9 +732,6 @@ func TestLint(t *testing.T) {
 			":!**/embedded.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
-			":!util/tracing/span.go",
-			":!util/tracing/crdbspan.go",
-			":!util/tracing/tracer.go",
 			":!cmd/roachtest/tests/gorm_helpers.go",
 		)
 		if err != nil {
