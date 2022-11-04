@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -38,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1527,10 +1525,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	distribute DistributionType,
 	progressAtomic *uint64,
 ) (topLevelQueryStats, error) {
-	var testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
-	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
-		testingPushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
-	}
 	recv := MakeDistSQLReceiver(
 		ctx, res, stmtType,
 		ex.server.cfg.RangeDescriptorCache,
@@ -1538,9 +1532,11 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		ex.server.cfg.Clock,
 		&ex.sessionTracing,
 		ex.server.cfg.ContentionRegistry,
-		testingPushCallback,
 	)
 	recv.progressAtomic = progressAtomic
+	if ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory != nil {
+		recv.testingKnobs.pushCallback = ex.server.cfg.TestingKnobs.DistSQLReceiverPushCallbackFactory(planner.stmt.SQL)
+	}
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()

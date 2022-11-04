@@ -961,7 +961,6 @@ func MakeDistSQLReceiver(
 	clockUpdater clockUpdater,
 	tracing *SessionTracing,
 	contentionRegistry *contention.Registry,
-	testingPushCallback func(rowenc.EncDatumRow, *execinfrapb.ProducerMetadata),
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
 	r := receiverSyncPool.Get().(*DistSQLReceiver)
@@ -986,7 +985,6 @@ func MakeDistSQLReceiver(
 		tracing:            tracing,
 		contentionRegistry: contentionRegistry,
 	}
-	r.testingKnobs.pushCallback = testingPushCallback
 	return r
 }
 
