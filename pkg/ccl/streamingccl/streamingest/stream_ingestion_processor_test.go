@@ -251,7 +251,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
 			topology, startTime, []jobspb.ResolvedSpan{}, tenantRekey,
-			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			mockClient, nil /* streamingTestingKnobs */)
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
@@ -298,7 +298,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
 			topology, startTime, checkpoint, tenantRekey, mockClient,
-			nil /* cutoverProvider */, streamingTestingKnobs)
+			streamingTestingKnobs)
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
@@ -325,7 +325,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
 			topology, startTime, []jobspb.ResolvedSpan{}, tenantRekey, &errorStreamClient{},
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */)
+			nil /* streamingTestingKnobs */)
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -435,10 +435,6 @@ func makeTestStreamURI(
 		"&TENANT_NAME=" + string(tenantName)
 }
 
-type noCutover struct{}
-
-func (n noCutover) cutoverReached(context.Context) (bool, error) { return false, nil }
-
 // TestRandomClientGeneration tests the ingestion processor against a random
 // stream workload.
 func TestRandomClientGeneration(t *testing.T) {
@@ -495,7 +491,7 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	out, err := runStreamIngestionProcessor(ctx, t, registry, kvDB,
 		topo, startTime, []jobspb.ResolvedSpan{}, tenantRekey,
-		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/)
+		randomStreamClient, nil /* streamingTestingKnobs*/)
 	require.NoError(t, err)
 
 	partitionSpanToTableID := getPartitionSpanToTableID(t, topo.Partitions)
@@ -563,11 +559,10 @@ func runStreamIngestionProcessor(
 	checkpoint []jobspb.ResolvedSpan,
 	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
-	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*distsqlutils.RowBuffer, error) {
 	sip, out, err := getStreamIngestionProcessor(ctx, t, registry, kvDB,
-		partitions, startTime, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs)
+		partitions, startTime, checkpoint, tenantRekey, mockClient, streamingTestingKnobs)
 	require.NoError(t, err)
 
 	sip.Run(ctx)
@@ -592,7 +587,6 @@ func getStreamIngestionProcessor(
 	checkpoint []jobspb.ResolvedSpan,
 	tenantRekey execinfrapb.TenantRekey,
 	mockClient streamclient.Client,
-	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 ) (*streamIngestionProcessor, *distsqlutils.RowBuffer, error) {
 	st := cluster.MakeTestingClusterSettings()
@@ -617,6 +611,7 @@ func getStreamIngestionProcessor(
 		DiskMonitor: testDiskMonitor,
 	}
 
+	in := &distsqlutils.RowBuffer{}
 	out := &distsqlutils.RowBuffer{}
 	post := execinfrapb.PostProcessSpec{}
 
@@ -635,7 +630,7 @@ func getStreamIngestionProcessor(
 	spec.StartTime = startTime
 	spec.Checkpoint.ResolvedSpans = checkpoint
 	processorID := int32(0)
-	proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, processorID, spec, &post, out)
+	proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, processorID, spec, &post, in, out)
 	require.NoError(t, err)
 	sip, ok := proc.(*streamIngestionProcessor)
 	if !ok {
@@ -643,9 +638,6 @@ func getStreamIngestionProcessor(
 	}
 
 	sip.forceClientForTests = mockClient
-	if cutoverProvider != nil {
-		sip.cutoverProvider = cutoverProvider
-	}
 
 	return sip, out, err
 }
