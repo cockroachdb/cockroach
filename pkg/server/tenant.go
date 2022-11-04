@@ -367,6 +367,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.InternalExecutorFactory,
 		s.db,
 		s.costController,
+		s.registry,
 	)
 
 	// Register the Observability Server, used by the Observability Service to

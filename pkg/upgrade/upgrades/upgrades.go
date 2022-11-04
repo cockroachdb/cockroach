@@ -169,6 +169,11 @@ var upgrades = []upgrade.Upgrade{
 		NoPrecondition,
 		addTenantNameColumnAndSystemTenantEntry,
 	),
+	upgrade.NewTenantUpgrade("set the value or system.descriptor_id_seq for the system tenant",
+		toCV(clusterversion.V23_1DescIDSequenceForSystemTenant),
+		NoPrecondition,
+		descIDSequenceForSystemTenant,
+	),
 }
 
 func init() {

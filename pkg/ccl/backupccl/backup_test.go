@@ -70,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -579,6 +580,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
 				tc.Servers[0].DB(),
 				nil, /* limiters */
+				cloud.NilMetrics,
 			)
 			require.NoError(t, err)
 			defer store.Close()
@@ -1651,11 +1653,13 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// than make a huge table, dial down the zone config for the bank table.
 	init := func(tc *testcluster.TestCluster) {
 		config.TestingSetupZoneConfigHook(tc.Stopper())
-		v, err := tc.Servers[0].DB().Get(context.Background(), keys.SystemSQLCodec.DescIDSequenceKey())
+		s := tc.Servers[0]
+		idgen := descidgen.NewGenerator(s.ClusterSettings(), keys.SystemSQLCodec, s.DB())
+		v, err := idgen.PeekNextUniqueDescID(context.Background())
 		if err != nil {
 			t.Fatal(err)
 		}
-		last := config.ObjectID(v.ValueInt())
+		last := config.ObjectID(v)
 		zoneConfig := zonepb.DefaultZoneConfig()
 		zoneConfig.RangeMaxBytes = proto.Int64(5000)
 		config.TestingSetZoneConfig(last+1, zoneConfig)
@@ -8049,6 +8053,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		nil, /* ief */
 		nil, /* kvDB */
 		nil, /* limiters */
+		cloud.NilMetrics,
 	)
 	require.NoError(t, err)
 

@@ -38,6 +38,7 @@ initialize tenant=11
 state offset=47
 ----
 ...
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -57,6 +58,7 @@ mutations discard tenant=10
 state offset=47
 ----
 ...
+/Table/4{7-8}                              database system (host)
 /Table/4{8-9}                              database system (host)
 /Table/5{0-1}                              database system (host)
 /Table/5{1-2}                              database system (host)
@@ -135,6 +137,7 @@ mutations discard tenant=11
 state offset=81
 ----
 ...
+/Tenant/10/Table/4{1-2}                    database system (tenant)
 /Tenant/10/Table/4{2-3}                    database system (tenant)
 /Tenant/10/Table/4{3-4}                    database system (tenant)
 /Tenant/10/Table/4{4-5}                    database system (tenant)

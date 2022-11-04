@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -96,6 +97,60 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		lastState:    scs.state,
 		plannedState: state,
 	}, nil
+}
+
+// waitForDescriptorIDGeneratorMigration polls the system.descriptor table (in
+// separate transactions) until the descriptor_id_seq record is present, which
+// indicates that the system tenant's descriptor ID generator has successfully
+// been migrated.
+func (p *planner) waitForDescriptorIDGeneratorMigration(ctx context.Context) error {
+	// Drop all leases and locks due to the current transaction, and, in the
+	// process, abort the transaction.
+	p.Descriptors().ReleaseAll(ctx)
+	if err := p.txn.Rollback(ctx); err != nil {
+		return err
+	}
+
+	// Wait for the system.descriptor_id_gen descriptor to appear.
+	start := timeutil.Now()
+	logEvery := log.Every(30 * time.Second)
+	blocked := true
+	for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); blocked && r.Next(); {
+		if knobs := p.ExecCfg().TenantTestingKnobs; knobs != nil {
+			if fn := knobs.BeforeCheckingForDescriptorIDSequence; fn != nil {
+				fn(ctx)
+			}
+		}
+		now := p.ExecCfg().Clock.Now()
+		if logEvery.ShouldLog() {
+			log.Infof(
+				ctx,
+				"waiting for system tenant descriptor ID generator migration, waited %v so far",
+				timeutil.Since(start),
+			)
+		}
+		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		) error {
+			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+				return err
+			}
+			desc, err := descriptors.Direct().MaybeGetDescriptorByIDUnvalidated(ctx, txn, keys.DescIDSequenceID)
+			if err != nil {
+				return err
+			}
+			blocked = desc == nil
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	log.Infof(
+		ctx,
+		"done waiting for system tenant descriptor ID generator migration after %v",
+		timeutil.Since(start),
+	)
+	return nil
 }
 
 // waitForDescriptorSchemaChanges polls the specified descriptor (in separate

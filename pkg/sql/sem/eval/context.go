@@ -244,7 +244,17 @@ type Context struct {
 
 // DescIDGenerator generates unique descriptor IDs.
 type DescIDGenerator interface {
+
+	// PeekNextUniqueDescID returns a lower bound to the next as-of-yet unassigned
+	// unique descriptor ID in the sequence.
+	PeekNextUniqueDescID(ctx context.Context) (catid.DescID, error)
+
+	// GenerateUniqueDescID returns the next available Descriptor ID and
+	// increments the counter.
 	GenerateUniqueDescID(ctx context.Context) (catid.DescID, error)
+
+	// IncrementDescID increments the descriptor ID counter by at least inc.
+	IncrementDescID(ctx context.Context, inc int64) error
 }
 
 // RangeStatsFetcher is used to fetch RangeStats.

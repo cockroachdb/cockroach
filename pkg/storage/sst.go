@@ -21,7 +21,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/vfs"
 )
+
+// NewSSTIterator returns an MVCCIterator for the provided "levels" of
+// SST files. The SSTs are merged during iteration. Each subslice's sstables
+// must have non-overlapping point keys, and be ordered by point key in
+// ascending order. Range keys may overlap arbitrarily, including within a
+// subarray. The outer slice of levels must be sorted in reverse chronological
+// order: a key in a file in a level at a lower index will shadow the same key
+// contained within a file in a level at a higher index.
+//
+// If the iterator is only going to be used for forward iteration, the caller
+// may pass forwardOnly=true for better performance.
+func NewSSTIterator(
+	files [][]sstable.ReadableFile, opts IterOptions, forwardOnly bool,
+) (MVCCIterator, error) {
+	return newPebbleSSTIterator(files, opts, forwardOnly)
+}
+
+// NewMemSSTIterator returns an MVCCIterator for the provided SST data,
+// similarly to NewSSTIterator().
+func NewMemSSTIterator(sst []byte, verify bool, opts IterOptions) (MVCCIterator, error) {
+	return NewMultiMemSSTIterator([][]byte{sst}, verify, opts)
+}
+
+// NewMultiMemSSTIterator returns an MVCCIterator for the provided SST data,
+// similarly to NewSSTIterator().
+func NewMultiMemSSTIterator(ssts [][]byte, verify bool, opts IterOptions) (MVCCIterator, error) {
+	files := make([]sstable.ReadableFile, 0, len(ssts))
+	for _, sst := range ssts {
+		files = append(files, vfs.NewMemFile(sst))
+	}
+	iter, err := NewSSTIterator([][]sstable.ReadableFile{files}, opts, false /* forwardOnly */)
+	if err != nil {
+		return nil, err
+	}
+	if verify {
+		iter = newVerifyingMVCCIterator(iter.(*pebbleIterator))
+	}
+	return iter, nil
+}
 
 // CheckSSTConflicts iterates over an SST and a Reader in lockstep and errors
 // out if it finds any conflicts. This includes intents and existing keys with a

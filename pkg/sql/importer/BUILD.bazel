@@ -189,6 +189,7 @@ go_test(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/catalog/dbdesc",
+        "//pkg/sql/catalog/descidgen",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",

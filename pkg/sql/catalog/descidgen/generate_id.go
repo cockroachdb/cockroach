@@ -13,75 +13,114 @@ package descidgen
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/errors"
 )
 
-// Generator implements DescIDGenerator.
-type Generator struct {
-	db    *kv.DB
-	codec keys.SQLCodec
+// generator implements eval.DescIDGenerator.
+type generator struct {
+	settings *cluster.Settings
+	codec    keys.SQLCodec
+	getOrInc func(ctx context.Context, key roachpb.Key, inc int64) (int64, error)
 }
 
-// NewGenerator constructs a new Generator.
-func NewGenerator(codec keys.SQLCodec, db *kv.DB) *Generator {
-	return &Generator{
-		codec: codec,
-		db:    db,
-	}
-}
-
-// GenerateUniqueDescID returns the next available Descriptor ID and increments
-// the counter.
-func (g *Generator) GenerateUniqueDescID(ctx context.Context) (catid.DescID, error) {
-	// Increment unique descriptor counter.
-	newVal, err := kv.IncrementValRetryable(ctx, g.db, g.codec.DescIDSequenceKey(), 1)
+// GenerateUniqueDescID is part of the eval.DescIDGenerator interface.
+func (g *generator) GenerateUniqueDescID(ctx context.Context) (id catid.DescID, _ error) {
+	nextID, err := g.run(ctx, 1)
 	if err != nil {
-		return descpb.InvalidID, err
+		return catid.InvalidDescID, err
 	}
-	return descpb.ID(newVal - 1), nil
+	return nextID - 1, nil
 }
 
-// TransactionalGenerator implements eval.DescIDGenerator using a transaction.
-type TransactionalGenerator struct {
-	codec keys.SQLCodec
-	txn   *kv.Txn
+// IncrementDescID is part of the eval.DescIDGenerator interface.
+func (g *generator) IncrementDescID(ctx context.Context, inc int64) error {
+	_, err := g.run(ctx, inc)
+	return err
 }
 
-// GenerateUniqueDescID returns the next available Descriptor ID and increments
-// the counter.
-func (t *TransactionalGenerator) GenerateUniqueDescID(ctx context.Context) (catid.DescID, error) {
-	got, err := t.txn.Inc(ctx, t.codec.DescIDSequenceKey(), 1)
-	if err != nil {
-		return 0, err
+// PeekNextUniqueDescID is part of the eval.DescIDGenerator interface.
+func (g *generator) PeekNextUniqueDescID(ctx context.Context) (descpb.ID, error) {
+	return g.run(ctx, 0 /* inc */)
+}
+
+// run is a convenience method for accessing the descriptor ID counter.
+func (g *generator) run(ctx context.Context, inc int64) (catid.DescID, error) {
+	key := g.codec.SequenceKey(keys.DescIDSequenceID)
+	if cv := g.settings.Version; g.codec.ForSystemTenant() &&
+		!cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant) {
+		// At this point, the system tenant may still be using a legacy non-SQL key,
+		// or may be in the process of undergoing the migration away from it, in
+		// which case descriptor ID generation is made unavailable.
+		if cv.IsActive(ctx, clusterversion.V23_1DescIDSequenceForSystemTenant-1) {
+			return catid.InvalidDescID, ErrDescIDSequenceMigrationInProgress
+		}
+		key = keys.LegacyDescIDGenerator
 	}
-	return catid.DescID(got.ValueInt() - 1), nil
+	nextID, err := g.getOrInc(ctx, key, inc)
+	return catid.DescID(nextID), err
 }
 
-// NewTransactionalGenerator constructs a transactional DescIDGenerator.
-func NewTransactionalGenerator(codec keys.SQLCodec, txn *kv.Txn) *TransactionalGenerator {
-	return &TransactionalGenerator{
-		codec: codec,
-		txn:   txn,
-	}
-}
-
-// PeekNextUniqueDescID returns the next as-of-yet unassigned unique descriptor
-// ID in the sequence. Note that this value is _not_ guaranteed to be the same
-// as that returned by a subsequent call to GenerateUniqueDescID. It will,
-// however, be a lower bound on it.
+// ErrDescIDSequenceMigrationInProgress is the error returned when the
+// descriptor ID generator is unavailable due to migrating the system tenant
+// counter from keys.LegacyDescIDGenerator to system.descriptor_id_seq.
 //
-// Note that this function must not be used during the execution of a
-// transaction which uses a TransactionalGenerator. Otherwise, deadlocks
-// may occur.
-func PeekNextUniqueDescID(ctx context.Context, db *kv.DB, codec keys.SQLCodec) (descpb.ID, error) {
-	v, err := db.Get(ctx, codec.DescIDSequenceKey())
-	if err != nil {
-		return descpb.InvalidID, err
+// TODO(postamar): remove along with clusterversion.V23_1DescIDSequenceForSystemTenant
+var ErrDescIDSequenceMigrationInProgress = errors.New(
+	"descriptor ID generator unavailable, migration in progress, retry later",
+)
+
+// NewGenerator constructs a non-transactional eval.DescIDGenerator.
+//
+// In this implementation the value returned by PeekNextUniqueDescID is _not_
+// guaranteed to be the same as that returned by a subsequent call to
+// GenerateUniqueDescID. It will, however, be a lower bound on it.
+//
+// In this implementation the increment applied by IncrementDescID is _not_
+// guaranteed to be the exact. It will, however, be a lower bound on the actual
+// increment.
+//
+// Note that this implementation must not be used during the execution of a
+// transaction which uses a transactional generator as constructed by
+// NewTransactionalGenerator. Otherwise, deadlocks may occur.
+func NewGenerator(settings *cluster.Settings, codec keys.SQLCodec, db *kv.DB) eval.DescIDGenerator {
+	return &generator{
+		settings: settings,
+		codec:    codec,
+		getOrInc: func(ctx context.Context, key roachpb.Key, inc int64) (int64, error) {
+			if inc == 0 {
+				ret, err := db.Get(ctx, key)
+				return ret.ValueInt(), err
+			}
+			return kv.IncrementValRetryable(ctx, db, key, inc)
+		},
 	}
-	return descpb.ID(v.ValueInt()), nil
+}
+
+// NewTransactionalGenerator constructs a transactional eval.DescIDGenerator.
+func NewTransactionalGenerator(
+	settings *cluster.Settings, codec keys.SQLCodec, txn *kv.Txn,
+) eval.DescIDGenerator {
+	return &generator{
+		settings: settings,
+		codec:    codec,
+		getOrInc: func(ctx context.Context, key roachpb.Key, inc int64) (_ int64, err error) {
+			var ret kv.KeyValue
+			if inc == 0 {
+				ret, err = txn.Get(ctx, key)
+			} else {
+				ret, err = txn.Inc(ctx, key, inc)
+			}
+			return ret.ValueInt(), err
+		},
+	}
 }
 
 // GenerateUniqueRoleID returns the next available Role ID and increments

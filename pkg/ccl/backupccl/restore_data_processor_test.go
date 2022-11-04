@@ -259,6 +259,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 					nil, /* ief */
 					nil, /* kvDB */
 					nil, /* limiters */
+					cloud.NilMetrics,
 					opts...)
 			},
 			Settings:          s.ClusterSettings(),

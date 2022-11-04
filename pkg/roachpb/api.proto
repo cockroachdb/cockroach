@@ -1474,6 +1474,9 @@ message ComputeChecksumResponse {
 }
 
 // RetryTracingEvent is the trace recording used to track retries.
+//
+// TODO(adityamaru): Delete in 23.2 since we have stopped emitting this
+// StructuredEvent in 23.1.
 message RetryTracingEvent {
   string operation = 1;
   int32 attempt_number = 2;

@@ -359,3 +359,110 @@ WHERE
 
 statement ok
 DROP TABLE kv
+
+# Check that crdb_internal.descriptor_with_post_deserialization_changes
+# performs as expected.
+subtest post_deserialization_changes
+
+statement ok
+CREATE FUNCTION desc_bytes(desc_name STRING) RETURNS BYTES VOLATILE LANGUAGE SQL AS $$
+SELECT
+	d.descriptor
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	ns.name = desc_name
+$$;
+CREATE FUNCTION tbl_json(desc_bytes BYTES) RETURNS JSONB STABLE LANGUAGE SQL AS $$
+SELECT crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', desc_bytes)->'table'
+$$;
+CREATE FUNCTION stripped(j JSON) RETURNS JSONB STABLE LANGUAGE SQL AS $$
+SELECT jsonb_build_object(
+  'nextConstraintId', (j->>'nextConstraintId')::INT,
+  'version', (j->>'version')::INT,
+  'modificationTime', j->'modificationTime'
+) $$;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+query T
+SELECT stripped(tbl_json(desc_bytes('t')))
+----
+{"modificationTime": {}, "nextConstraintId": 2, "version": 1}
+
+# Post-deserialization changes are idempotent.
+query T
+SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
+----
+{"modificationTime": {}, "nextConstraintId": 2, "version": 1}
+
+# Erase all constraint IDs from the descriptor.
+# These will be reinstated by descriptor post-deserialization changes.
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				json_set(
+					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+					ARRAY['table', 'nextConstraintId'],
+					'0'::JSONB
+				),
+				ARRAY['table', 'primaryIndex', 'constraintId'],
+				'0'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 't'
+
+query T
+SELECT stripped(tbl_json(desc_bytes('t')))
+----
+{"modificationTime": {}, "nextConstraintId": null, "version": 2}
+
+query T
+SELECT stripped(tbl_json(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t'))))
+----
+{"modificationTime": {}, "nextConstraintId": 2, "version": 2}
+
+# Check that existing modification times (possible for pre-19.2 descriptors) are not affected.
+query T
+SELECT
+	stripped(
+		tbl_json(
+			crdb_internal.descriptor_with_post_deserialization_changes(
+				crdb_internal.json_to_pb(
+					'cockroach.sql.sqlbase.Descriptor',
+					json_set(
+						crdb_internal.pb_to_json(
+							'cockroach.sql.sqlbase.Descriptor',
+							desc_bytes('t')
+						),
+						ARRAY['table', 'modificationTime'],
+						'{"logical": 1, "wallTime": "123456789"}'::JSONB
+					)
+				)
+			)
+		)
+	)
+----
+{"modificationTime": {"logical": 1, "wallTime": "123456789"}, "nextConstraintId": 2, "version": 2}
+
+# Perform a schema change to persist post-deserialization changes.
+statement ok
+ALTER TABLE t RENAME TO t_renamed
+
+query T
+SELECT stripped(tbl_json(desc_bytes('t_renamed')))
+----
+{"modificationTime": {}, "nextConstraintId": 2, "version": 3}
+
+statement ok
+DROP TABLE t_renamed

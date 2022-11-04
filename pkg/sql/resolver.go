@@ -986,7 +986,7 @@ func (l *internalLookupCtx) GetSchemaName(
 	return schemaName, found, nil
 }
 
-var metamorphicDeadultUseIndexLookupForDescriptorsInDatabase = util.ConstantWithMetamorphicTestBool(
+var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = util.ConstantWithMetamorphicTestBool(
 	`use-index-lookup-for-descriptors-in-database`, true,
 )
 
@@ -998,7 +998,7 @@ var useIndexLookupForDescriptorsInDatabase = settings.RegisterBoolSetting(
 	"sql.catalog.virtual_tables.use_index_lookup_for_descriptors_in_database.enabled",
 	"if enabled, virtual tables will do a lookup against the namespace table to"+
 		" find the descriptors in a database instead of scanning all descriptors",
-	metamorphicDeadultUseIndexLookupForDescriptorsInDatabase,
+	metamorphicDefaultUseIndexLookupForDescriptorsInDatabase,
 )
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding

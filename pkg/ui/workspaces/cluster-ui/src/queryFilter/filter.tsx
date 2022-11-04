@@ -58,11 +58,6 @@ interface FilterState {
   filters: Filters;
 }
 
-export interface SelectOptions {
-  label: string;
-  value: string;
-}
-
 export interface Filters extends Record<string, string | boolean> {
   app?: string;
   timeNumber?: string;
@@ -681,7 +676,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
               <>
                 <div className={filterLabel.margin}>
                   {timeLabel
-                    ? timeLabel
+                    ? `${timeLabel} runs longer than`
                     : "Statement fingerprint runs longer than"}
                 </div>
                 <section className={timePair.wrapper}>

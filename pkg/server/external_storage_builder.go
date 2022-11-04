@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
 
@@ -43,6 +44,7 @@ type externalStorageBuilder struct {
 	db                *kv.DB
 	limiters          cloud.Limiters
 	recorder          multitenant.TenantSideExternalIORecorder
+	metrics           metric.Struct
 }
 
 func (e *externalStorageBuilder) init(
@@ -56,6 +58,7 @@ func (e *externalStorageBuilder) init(
 	ief sqlutil.InternalExecutorFactory,
 	db *kv.DB,
 	recorder multitenant.TenantSideExternalIORecorder,
+	registry *metric.Registry,
 ) {
 	var blobClientFactory blobs.BlobClientFactory
 	if p, ok := testingKnobs.Server.(*TestingKnobs); ok && p.BlobClientFactory != nil {
@@ -73,6 +76,11 @@ func (e *externalStorageBuilder) init(
 	e.db = db
 	e.limiters = cloud.MakeLimiters(ctx, &settings.SV)
 	e.recorder = recorder
+
+	// Register the metrics that track interactions with external storage
+	// providers.
+	e.metrics = cloud.MakeMetrics()
+	registry.AddMetricStruct(e.metrics)
 }
 
 func (e *externalStorageBuilder) makeExternalStorage(
@@ -82,7 +90,7 @@ func (e *externalStorageBuilder) makeExternalStorage(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.MakeExternalStorage(ctx, dest, e.conf, e.settings, e.blobClientFactory, e.ie, e.ief,
-		e.db, e.limiters, append(e.defaultOptions(), opts...)...)
+		e.db, e.limiters, e.metrics, append(e.defaultOptions(), opts...)...)
 }
 
 func (e *externalStorageBuilder) makeExternalStorageFromURI(
@@ -92,7 +100,7 @@ func (e *externalStorageBuilder) makeExternalStorageFromURI(
 		return nil, errors.New("cannot create external storage before init")
 	}
 	return cloud.ExternalStorageFromURI(ctx, uri, e.conf, e.settings, e.blobClientFactory,
-		user, e.ie, e.ief, e.db, e.limiters, append(e.defaultOptions(), opts...)...)
+		user, e.ie, e.ief, e.db, e.limiters, e.metrics, append(e.defaultOptions(), opts...)...)
 }
 
 func (e *externalStorageBuilder) defaultOptions() []cloud.ExternalStorageOption {

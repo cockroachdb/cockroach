@@ -394,6 +394,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.decode_cluster_setting(setting: string, value: string) -> string`:                                                    1294,
 	`crdb_internal.decode_external_plan_gist(gist: string) -> string`:                                                                   355,
 	`crdb_internal.decode_plan_gist(gist: string) -> string`:                                                                            354,
+	`crdb_internal.descriptor_with_post_deserialization_changes(descriptor: bytes) -> bytes`:                                            2039,
 	`crdb_internal.deserialize_session(session: bytes) -> bool`:                                                                         1371,
 	`crdb_internal.destroy_tenant(id: int) -> int`:                                                                                      1304,
 	`crdb_internal.destroy_tenant(id: int, synchronous: bool) -> int`:                                                                   1305,

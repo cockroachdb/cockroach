@@ -13,10 +13,12 @@ package evalcatalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -51,6 +53,34 @@ func (b *Builtins) RedactDescriptor(_ context.Context, encodedDescriptor []byte)
 		return nil, ret
 	}
 	return protoutil.Marshal(&descProto)
+}
+
+// DescriptorWithPostDeserializationChanges expects an encoded protobuf
+// descriptor, decodes it, puts it into a catalog.DescriptorBuilder,
+// calls RunPostDeserializationChanges, and re-encodes it.
+func (b *Builtins) DescriptorWithPostDeserializationChanges(
+	_ context.Context, encodedDescriptor []byte,
+) ([]byte, error) {
+	// Use the largest-possible timestamp as a sentinel value when decoding the
+	// descriptor bytes. This will be used to set the modification time field in
+	// the built descriptor without triggering any errors. We need to remove it
+	// before re-encoding the descriptor, because it's nonsensical and it's what
+	// the descriptor collection does anyway when persisting a descriptor to
+	// storage.
+	var mvccTimestampSentinel = hlc.MaxTimestamp
+	db, err := descbuilder.FromBytesAndMVCCTimestamp(encodedDescriptor, mvccTimestampSentinel)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.RunPostDeserializationChanges(); err != nil {
+		return nil, err
+	}
+	mut := db.BuildCreatedMutable()
+	// Strip the sentinel value from the descriptor.
+	if mvccTimestampSentinel.Equal(mut.GetModificationTime()) {
+		mut.ResetModificationTime()
+	}
+	return protoutil.Marshal(mut.DescriptorProto())
 }
 
 // PGRelationIsUpdatable is part of the eval.CatalogBuiltins interface.

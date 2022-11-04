@@ -1134,6 +1134,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		s.sqlServer.execCfg.InternalExecutorFactory,
 		s.db,
 		nil, /* TenantExternalIORecorder */
+		s.registry,
 	)
 
 	// Filter out self from the gossip bootstrap addresses.

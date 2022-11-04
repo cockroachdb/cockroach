@@ -3499,6 +3499,18 @@ var charts = []sectionDescription{
 		},
 	},
 	{
+		Organization: [][]string{{Jobs, "External Storage"}},
+		Charts: []chartDescription{
+			{
+				Title: "External Storage",
+				Metrics: []string{
+					"cloud.read_bytes",
+					"cloud.write_bytes",
+				},
+			},
+		},
+	},
+	{
 		Organization: [][]string{{Process, "Node", "Admission"}},
 		Charts: []chartDescription{
 			{
