@@ -244,6 +244,8 @@ enum TransactionRetryReason {
 message TransactionRetryError {
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
   optional string extra_msg = 2 [(gogoproto.nullable) = false];
+  optional bytes conflicting_key = 3 [(gogoproto.casttype) = "Key"];
+  optional util.hlc.Timestamp timestamp = 4 [(gogoproto.nullable) = false];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -464,6 +466,8 @@ message TransactionRetryWithProtoRefreshError {
   // before, but with an incremented epoch and timestamp, or a completely new
   // Transaction.
   optional roachpb.Transaction transaction = 3 [(gogoproto.nullable) = false];
+  optional bytes conflicting_key = 4 [(gogoproto.casttype) = "Key"];
+  optional util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
 }
 
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a

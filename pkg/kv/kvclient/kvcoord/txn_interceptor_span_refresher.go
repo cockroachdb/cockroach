@@ -475,14 +475,18 @@ func newRetryErrorOnFailedPreemptiveRefresh(
 		reason = roachpb.RETRY_WRITE_TOO_OLD
 	}
 	msg := "failed preemptive refresh"
+	var retryErr *roachpb.TransactionRetryError
 	if refreshErr != nil {
 		if refreshErr, ok := refreshErr.GetDetail().(*roachpb.RefreshFailedError); ok {
 			msg = fmt.Sprintf("%s due to a conflict: %s on key %s", msg, refreshErr.FailureReason(), refreshErr.Key)
+			retryErr = roachpb.NewTransactionRetryErrorWithKey(reason, msg, refreshErr.Key, refreshErr.Timestamp)
 		} else {
 			msg = fmt.Sprintf("%s - unknown error: %s", msg, refreshErr)
 		}
 	}
-	retryErr := roachpb.NewTransactionRetryError(reason, msg)
+	if retryErr == nil {
+		retryErr = roachpb.NewTransactionRetryError(reason, msg)
+	}
 	return roachpb.NewErrorWithTxn(retryErr, txn)
 }
 

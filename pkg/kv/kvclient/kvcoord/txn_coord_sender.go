@@ -774,12 +774,23 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 func (tc *TxnCoordSender) handleRetryableErrLocked(
 	ctx context.Context, pErr *roachpb.Error,
 ) *roachpb.TransactionRetryWithProtoRefreshError {
+	errTxnID := pErr.GetTxn().ID
+	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
+
+	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
+	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
+		pErr.String(),
+		errTxnID, // the id of the transaction that encountered the error
+		newTxn)
+
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart. More details about the
 	// different error types are documented above on the metaRestart
 	// variables.
 	switch tErr := pErr.GetDetail().(type) {
 	case *roachpb.TransactionRetryError:
+		retErr.ConflictingKey = tErr.ConflictingKey
+		retErr.Timestamp = tErr.Timestamp
 		switch tErr.Reason {
 		case roachpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc()
@@ -794,6 +805,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		}
 
 	case *roachpb.WriteTooOldError:
+		retErr.Timestamp = tErr.ActualTimestamp
+		retErr.ConflictingKey = tErr.Key
 		tc.metrics.RestartsWriteTooOldMulti.Inc()
 
 	case *roachpb.ReadWithinUncertaintyIntervalError:
@@ -803,19 +816,13 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		tc.metrics.RestartsTxnAborted.Inc()
 
 	case *roachpb.TransactionPushError:
+		retErr.Timestamp = tErr.PusheeTxn.ReadTimestamp
+		retErr.ConflictingKey = tErr.PusheeTxn.Key
 		tc.metrics.RestartsTxnPush.Inc()
 
 	default:
 		tc.metrics.RestartsUnknown.Inc()
 	}
-	errTxnID := pErr.GetTxn().ID
-	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
-
-	// We'll pass a TransactionRetryWithProtoRefreshError up to the next layer.
-	retErr := roachpb.NewTransactionRetryWithProtoRefreshError(
-		pErr.String(),
-		errTxnID, // the id of the transaction that encountered the error
-		newTxn)
 
 	// Move to a retryable error state, where all Send() calls fail until the
 	// state is cleared.
