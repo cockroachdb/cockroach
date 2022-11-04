@@ -263,7 +263,7 @@ DETAIL: source SQL:
 CREATE OR REPLACE FUNCTION f(VARIADIC a int = 7) RETURNS INT AS 'SELECT 1' LANGUAGE SQL
                              ^
 HINT: You have attempted to use a feature that is not yet implemented.
-See: https://go.crdb.dev/issue-v/88947/v22.2
+See: https://go.crdb.dev/issue-v/88947/v23.1
 
 error
 CREATE OR REPLACE FUNCTION f(a int = 7) RETURNS INT TRANSFORM AS 'SELECT 1' LANGUAGE SQL
