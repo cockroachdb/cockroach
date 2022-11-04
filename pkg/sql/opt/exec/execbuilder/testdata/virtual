@@ -261,3 +261,16 @@ vectorized: true
 • virtual table
   table: tables@tables_parent_id_idx (partial index)
   spans: [/1 - /1]
+
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: jobs@jobs_status_idx
+          spans: [/'paused' - /'paused']
