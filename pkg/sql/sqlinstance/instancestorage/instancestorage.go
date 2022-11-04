@@ -73,7 +73,6 @@ var errNoPreallocatedRows = errors.New("no preallocated rows")
 type Storage struct {
 	codec        keys.SQLCodec
 	db           *kv.DB
-	tableID      descpb.ID
 	slReader     sqlliveness.Reader
 	rowcodec     rowCodec
 	settings     *cluster.Settings
@@ -117,8 +116,7 @@ func NewTestingStorage(
 	s := &Storage{
 		db:       db,
 		codec:    codec,
-		tableID:  sqlInstancesTableID,
-		rowcodec: makeRowCodec(codec),
+		rowcodec: makeRowCodec(codec, sqlInstancesTableID),
 		slReader: slReader,
 		settings: settings,
 	}
@@ -170,14 +168,15 @@ func (s *Storage) CreateInstance(
 				return err
 			}
 
-			row, err := s.rowcodec.encodeRow(availableID, addr, sessionID, locality, s.codec, s.tableID)
+			key := s.rowcodec.encodeKey(availableID)
+			value, err := s.rowcodec.encodeValue(addr, sessionID, locality)
 			if err != nil {
 				log.Warningf(ctx, "failed to encode row for instance id %d: %v", availableID, err)
 				return err
 			}
 
 			b := txn.NewBatch()
-			b.Put(row.Key, row.Value)
+			b.Put(key, value)
 			return txn.CommitInBatch(ctx, b)
 		}); err != nil {
 			return base.SQLInstanceID(0), err
@@ -354,7 +353,7 @@ func (s *Storage) getGlobalInstanceRows(
 func (s *Storage) getRegionalInstanceRows(
 	ctx context.Context, db dbScan,
 ) (instances []instancerow, _ error) {
-	start := makeTablePrefix(s.codec, s.tableID)
+	start := s.rowcodec.makeIndexPrefix()
 	end := start.PrefixEnd()
 	// Fetch all rows. The expected data size is small, so it should
 	// be okay to fetch all rows together.
@@ -364,19 +363,11 @@ func (s *Storage) getRegionalInstanceRows(
 		return nil, err
 	}
 	for i := range rows {
-		instanceID, addr, sessionID, locality, timestamp, _, err := s.rowcodec.decodeRow(rows[i])
+		instance, err := s.rowcodec.decodeRow(rows[i].Key, rows[i].Value)
 		if err != nil {
-			log.Warningf(ctx, "failed to decode row %v: %v", rows[i].Key, err)
 			return nil, err
 		}
-		curInstance := instancerow{
-			instanceID: instanceID,
-			addr:       addr,
-			sessionID:  sessionID,
-			timestamp:  timestamp,
-			locality:   locality,
-		}
-		instances = append(instances, curInstance)
+		instances = append(instances, instance)
 	}
 	return instances, nil
 }
@@ -386,7 +377,7 @@ func (s *Storage) getRegionalInstanceRows(
 func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) error {
 	// TODO(andrei): Ensure that we do not delete an instance ID that we no longer
 	// own, instead of deleting blindly.
-	key := makeInstanceKey(s.codec, s.tableID, id)
+	key := s.rowcodec.encodeKey(id)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if _, err := s.db.Del(ctx, key); err != nil {
 		return errors.Wrapf(err, "could not delete instance %d", id)
@@ -460,17 +451,16 @@ func (s *Storage) generateAvailableInstanceRows(
 
 			b := txn.NewBatch()
 			for _, instanceID := range toClaim {
-				row, err := s.rowcodec.encodeRow(
-					instanceID, "", sqlliveness.SessionID([]byte{}), roachpb.Locality{}, s.codec, s.tableID,
-				)
+				key := s.rowcodec.encodeKey(instanceID)
+				value, err := s.rowcodec.encodeValue("", sqlliveness.SessionID([]byte{}), roachpb.Locality{})
 				if err != nil {
 					log.Warningf(ctx, "failed to encode row for instance id %d: %v", instanceID, err)
 					return err
 				}
-				b.Put(row.Key, row.Value)
+				b.Put(key, value)
 			}
 			for _, instanceID := range toDelete {
-				key := makeInstanceKey(s.codec, s.tableID, instanceID)
+				key := s.rowcodec.encodeKey(instanceID)
 				b.Del(key)
 			}
 			return txn.CommitInBatch(ctx, b)
