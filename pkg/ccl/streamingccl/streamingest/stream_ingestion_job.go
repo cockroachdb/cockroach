@@ -289,7 +289,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 			ingestionJob.ID())
 		updateRunningStatus(ctx, ingestionJob, "running the SQL flow for the stream ingestion job")
-		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, planCtx, dsp,
+		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJob.ID(), planCtx, dsp,
 			streamIngestionSpecs, streamIngestionFrontierSpec); err != nil {
 			return err
 		}

@@ -87,6 +87,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 		DiskMonitor: testDiskMonitor,
 	}
 
+	in := &distsqlutils.RowBuffer{}
 	out := &distsqlutils.RowBuffer{}
 	post := execinfrapb.PostProcessSpec{}
 
@@ -251,7 +252,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				spec.InitialScanTimestamp = hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			}
 			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint
-			proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, 0 /* processorID */, spec, &post, out)
+			proc, err := newStreamIngestionDataProcessor(ctx, &flowCtx, 0 /* processorID */, spec, &post, in, out)
 			require.NoError(t, err)
 			sip, ok := proc.(*streamIngestionProcessor)
 			if !ok {

@@ -5,6 +5,7 @@ go_library(
     name = "streamingest",
     srcs = [
         "alter_replication_job.go",
+        "cutover_time_processor.go",
         "metrics.go",
         "stream_ingest_manager.go",
         "stream_ingestion_frontier_processor.go",

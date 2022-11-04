@@ -11,13 +11,11 @@ package streamingest
 import (
 	"context"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -119,6 +117,8 @@ type streamIngestionProcessor struct {
 	flowCtx *execinfra.FlowCtx
 	spec    execinfrapb.StreamIngestionDataSpec
 	output  execinfra.RowReceiver
+	input   execinfra.RowSource
+
 	rekeyer *backupccl.KeyRewriter
 	// rewriteToDiffKey Indicates whether we are rekeying a key into a different key.
 	rewriteToDiffKey bool
@@ -142,9 +142,6 @@ type streamIngestionProcessor struct {
 	// consuming multiple partitions from a stream.
 	streamPartitionClients []streamclient.Client
 
-	// cutoverProvider indicates when the cutover time has been reached.
-	cutoverProvider cutoverProvider
-
 	// frontier keeps track of the progress for the spans tracked by this processor
 	// and is used forward resolved spans
 	frontier *span.Frontier
@@ -156,30 +153,33 @@ type streamIngestionProcessor struct {
 	// and have attempted to flush them with `internalDrained`.
 	internalDrained bool
 
-	// pollingWaitGroup registers the polling goroutine and waits for it to return
-	// when the processor is being drained.
-	pollingWaitGroup sync.WaitGroup
+	// cutoverRecieverWaitGroup contains the go routine that is
+	// pulling the cutover from the input processor.
+	cutoverReceiverWaitGroup ctxgroup.Group
+	// cutoverReceiverCancel is used to stop the cutover reciever
+	// process.
+	cutoverReceiverCancel context.CancelFunc
 
 	// eventCh is the merged event channel of all of the partition event streams.
 	eventCh chan partitionEvent
 
-	// cutoverCh is used to convey that the ingestion job has been signaled to
+	// cutoverTimeCh is used to convey that the ingestion job has been signaled to
 	// cutover.
-	cutoverCh chan struct{}
+	cutoverTimeCh chan hlc.Timestamp
+
+	// cutoverTime is our current target cutoverTime
+	cutoverTime hlc.Timestamp
 
 	// cg is used to receive the subscription of events from the source cluster.
 	cg ctxgroup.Group
 
-	// closePoller is used to shutdown the poller that checks the job for a
-	// cutover signal.
-	closePoller chan struct{}
 	// cancelMergeAndWait cancels the merging goroutines and waits for them to
 	// finish. It cannot be called concurrently with Next(), as it consumes from
 	// the merged channel.
 	cancelMergeAndWait func()
 
 	// mu is used to provide thread-safe read-write operations to ingestionErr
-	// and pollingErr.
+	// and cutoverErr.
 	mu struct {
 		syncutil.Mutex
 
@@ -187,9 +187,10 @@ type streamIngestionProcessor struct {
 		// that it can be forwarded through the DistSQL flow.
 		ingestionErr error
 
-		// pollingErr stores any error that is returned from the poller checking for a
-		// cutover signal so that it can be forwarded through the DistSQL flow.
-		pollingErr error
+		// cutoverErr stores any error that is encountered
+		// when receiving or parsing cutoverTime delivered by
+		// our input processor.
+		cutoverErr error
 	}
 
 	// metrics are monitoring all running ingestion jobs.
@@ -215,6 +216,7 @@ func newStreamIngestionDataProcessor(
 	processorID int32,
 	spec execinfrapb.StreamIngestionDataSpec,
 	post *execinfrapb.PostProcessSpec,
+	input execinfra.RowSource,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
 	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(flowCtx.Codec(),
@@ -242,21 +244,17 @@ func newStreamIngestionDataProcessor(
 		flowCtx:           flowCtx,
 		spec:              spec,
 		output:            output,
+		input:             input,
 		curKVBatch:        make([]storage.MVCCKeyValue, 0),
 		frontier:          frontier,
 		maxFlushRateTimer: timeutil.NewTimer(),
-		cutoverProvider: &cutoverFromJobProgress{
-			jobID:    jobspb.JobID(spec.JobID),
-			registry: flowCtx.Cfg.JobRegistry,
-		},
-		cutoverCh:        make(chan struct{}),
-		closePoller:      make(chan struct{}),
-		rekeyer:          rekeyer,
-		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
+		cutoverTimeCh:     make(chan hlc.Timestamp),
+		rekeyer:           rekeyer,
+		rewriteToDiffKey:  spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 	}
 	if err := sip.Init(ctx, sip, post, streamIngestionResultTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
-			InputsToDrain: []execinfra.RowSource{},
+			InputsToDrain: []execinfra.RowSource{input},
 			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
 				sip.close()
 				return nil
@@ -289,18 +287,19 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	sip.rangeBatcher = newRangeKeyBatcher(ctx, evalCtx.Settings, db)
 
-	// Start a poller that checks if the stream ingestion job has been signaled to
-	// cutover.
-	sip.pollingWaitGroup.Add(1)
-	go func() {
-		defer sip.pollingWaitGroup.Done()
-		err := sip.checkForCutoverSignal(ctx, sip.closePoller)
-		if err != nil {
+	// Start a goroutine that reads our input processor to receive
+	// cutover time notifications.
+	grpCtx, cancel := context.WithCancel(ctx)
+	sip.cutoverReceiverWaitGroup = ctxgroup.WithContext(grpCtx)
+	sip.cutoverReceiverCancel = cancel
+	sip.cutoverReceiverWaitGroup.GoCtx(func(ctx context.Context) error {
+		if err := sip.consumeCutoverTime(ctx); err != nil {
 			sip.mu.Lock()
-			sip.mu.pollingErr = errors.Wrap(err, "error while polling job for cutover signal")
+			sip.mu.cutoverErr = err
 			sip.mu.Unlock()
 		}
-	}()
+		return nil
+	})
 
 	log.Infof(ctx, "starting %d stream partitions", len(sip.spec.PartitionSpecs))
 
@@ -349,11 +348,12 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 // Next is part of the RowSource interface.
 func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if sip.State != execinfra.StateRunning {
+		sip.MoveToDraining(nil /* error */)
 		return nil, sip.DrainHelper()
 	}
 
 	sip.mu.Lock()
-	err := sip.mu.pollingErr
+	err := sip.mu.cutoverErr
 	sip.mu.Unlock()
 	if err != nil {
 		sip.MoveToDraining(err)
@@ -390,6 +390,18 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 	return nil, sip.DrainHelper()
 }
 
+// MoveToDraining ensures that our cutover receiver is shut down
+// before moving us into the draining state as we want to be sure that
+// the cutover receiver won't call Next() on our input after we've
+// moved to draining.
+func (sip *streamIngestionProcessor) MoveToDraining(err error) {
+	if sip.cutoverReceiverCancel != nil {
+		sip.cutoverReceiverCancel()
+		_ = sip.cutoverReceiverWaitGroup.Wait()
+	}
+	sip.ProcessorBase.MoveToDraining(err)
+}
+
 // MustBeStreaming implements the Processor interface.
 func (sip *streamIngestionProcessor) MustBeStreaming() bool {
 	return true
@@ -398,6 +410,14 @@ func (sip *streamIngestionProcessor) MustBeStreaming() bool {
 // ConsumerClosed is part of the RowSource interface.
 func (sip *streamIngestionProcessor) ConsumerClosed() {
 	sip.close()
+}
+
+// ConsumerDone is part of the RowSource interface.
+//
+// We implement this ourselves to ensure that we can call our version
+// of MoveToDraining().
+func (sip *streamIngestionProcessor) ConsumerDone() {
+	sip.MoveToDraining(nil /* error */)
 }
 
 func (sip *streamIngestionProcessor) close() {
@@ -414,42 +434,15 @@ func (sip *streamIngestionProcessor) close() {
 	if sip.maxFlushRateTimer != nil {
 		sip.maxFlushRateTimer.Stop()
 	}
-	close(sip.closePoller)
-	// Wait for the processor goroutine to return so that we do not access
-	// processor state once it has shutdown.
-	sip.pollingWaitGroup.Wait()
+
+	sip.cutoverReceiverCancel()
+	_ = sip.cutoverReceiverWaitGroup.Wait()
+
 	// Wait for the merge goroutine.
 	if sip.cancelMergeAndWait != nil {
 		sip.cancelMergeAndWait()
 	}
 	sip.InternalClose()
-}
-
-// checkForCutoverSignal periodically loads the job progress to check for the
-// sentinel value that signals the ingestion job to complete.
-func (sip *streamIngestionProcessor) checkForCutoverSignal(
-	ctx context.Context, stopPoller chan struct{},
-) error {
-	sv := &sip.flowCtx.Cfg.Settings.SV
-	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
-	defer tick.Stop()
-	for {
-		select {
-		case <-stopPoller:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-tick.C:
-			cutoverReached, err := sip.cutoverProvider.cutoverReached(ctx)
-			if err != nil {
-				return err
-			}
-			if cutoverReached {
-				sip.cutoverCh <- struct{}{}
-				return nil
-			}
-		}
-	}
 }
 
 // merge takes events from all the streams and merges them into a single
@@ -573,21 +566,22 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 					sip.maxFlushRateTimer.Reset(time.Until(sip.lastFlushTime.Add(minFlushInterval)))
 					continue
 				}
-
+				if sip.frontierAtCutoverTime() {
+					log.Infof(sip.Ctx(), "ingestion processor reached cutover time %s", sip.cutoverTime)
+					sip.internalDrained = true
+				}
 				return sip.flush()
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
 			}
-		case <-sip.cutoverCh:
-			// TODO(adityamaru): Currently, the cutover time can only be <= resolved
-			// ts written to the job progress and so there is no point flushing
-			// buffered KVs only to be reverted. When we allow users to specify a
-			// cutover ts in the future, this will need to change.
-			//
-			// On receiving a cutover signal, the processor must shutdown gracefully.
-			sip.internalDrained = true
-			return nil, nil
-
+		case cutoverTime := <-sip.cutoverTimeCh:
+			sip.cutoverTime = cutoverTime
+			if sip.frontierAtCutoverTime() {
+				log.Infof(sip.Ctx(), "ingestion processor reached cutover time %s", sip.cutoverTime)
+				sip.internalDrained = true
+				return sip.flush()
+			}
+			continue
 		case <-sip.maxFlushRateTimer.C:
 			sip.maxFlushRateTimer.Read = true
 			return sip.flush()
@@ -596,6 +590,59 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 	// No longer running, we've closed our batcher.
 	return nil, nil
+}
+
+func (sip *streamIngestionProcessor) consumeCutoverTime(ctx context.Context) error {
+	sip.input.Start(ctx)
+
+	var alloc tree.DatumAlloc
+	var lastCutoverTime hlc.Timestamp
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
+		row, meta := sip.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return meta.Err
+			}
+		}
+		if row == nil {
+			return nil
+		}
+		if len(row) == 0 {
+			return nil
+		}
+
+		cutoverTime, err := decodeCutoverTimeRow(row, &alloc)
+		if err != nil {
+			return errors.Wrap(err, "decode cutover time")
+		}
+
+		if cutoverTime.IsEmpty() || cutoverTime.Equal(lastCutoverTime) {
+			continue
+		}
+
+		select {
+		case sip.cutoverTimeCh <- cutoverTime:
+			lastCutoverTime = cutoverTime
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+func (sip *streamIngestionProcessor) frontierAtCutoverTime() bool {
+	if sip.cutoverTime.IsEmpty() {
+		return false
+	}
+	if sip.frontier != nil && sip.frontier.Frontier().IsEmpty() {
+		return false
+	}
+	return sip.cutoverTime.Compare(sip.frontier.Frontier()) <= 0
 }
 
 func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) error {
@@ -853,40 +900,6 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	sip.rangeBatcher.reset()
 
 	return &flushedCheckpoints, sip.batcher.Reset(ctx)
-}
-
-// cutoverProvider allows us to override how we decide when the job has reached
-// the cutover places in tests.
-type cutoverProvider interface {
-	cutoverReached(context.Context) (bool, error)
-}
-
-// custoverFromJobProgress is a cutoverProvider that decides whether the cutover
-// time has been reached based on the progress stored on the job record.
-type cutoverFromJobProgress struct {
-	registry *jobs.Registry
-	jobID    jobspb.JobID
-}
-
-func (c *cutoverFromJobProgress) cutoverReached(ctx context.Context) (bool, error) {
-	j, err := c.registry.LoadJob(ctx, c.jobID)
-	if err != nil {
-		return false, err
-	}
-	progress := j.Progress()
-	var sp *jobspb.Progress_StreamIngest
-	var ok bool
-	if sp, ok = progress.GetDetails().(*jobspb.Progress_StreamIngest); !ok {
-		return false, errors.Newf("unknown progress type %T in stream ingestion job %d",
-			j.Progress().Progress, c.jobID)
-	}
-	// Job has been signaled to complete.
-	if resolvedTimestamp := progress.GetHighWater(); !sp.StreamIngest.CutoverTime.IsEmpty() &&
-		resolvedTimestamp != nil && sp.StreamIngest.CutoverTime.Less(*resolvedTimestamp) {
-		return true, nil
-	}
-
-	return false, nil
 }
 
 // frontierForSpan returns the lowest timestamp in the frontier within the given

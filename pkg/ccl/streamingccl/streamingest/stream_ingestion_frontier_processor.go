@@ -321,6 +321,14 @@ func (sf *streamIngestionFrontier) Next() (
 			return nil, sf.DrainHelper()
 		}
 	}
+
+	// If we are exiting without an error, attempt to persist our
+	// progress.
+	if err := sf.updateProgress(); err != nil {
+		// We've already moved to draining above, so calling
+		// MoveToDraining here with an error is disallowed.
+		log.Warningf(sf.Ctx(), "could not persist progress before exiting: %v", err)
+	}
 	return nil, sf.DrainHelper()
 }
 
@@ -378,25 +386,31 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 				`got a resolved timestamp %s that is less than the frontier processor start time %s`,
 				redact.Safe(resolved.Timestamp), redact.Safe(sf.highWaterAtStart))
 		}
-
 		changed, err := sf.frontier.Forward(resolved.Span, resolved.Timestamp)
 		if err != nil {
 			return false, err
 		}
 		frontierChanged = frontierChanged || changed
 	}
-
 	return frontierChanged, nil
 }
 
-// maybeUpdatePartitionProgress polls the frontier and updates the job progress with
-// partition-specific information to track the status of each partition.
+// maybeUpdatePartitionProgress polls the frontier and updates the job
+// progress with the high watermark and partition-specific information
+// to track the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
-	ctx := sf.Ctx()
 	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		return nil
 	}
+	return sf.updateProgress()
+}
+
+// updateProgress polls the frontier and updates the job progress with
+// the high watermark and partition-specific information to track the
+// status of each partition.
+func (sf *streamIngestionFrontier) updateProgress() error {
+	ctx := sf.Ctx()
 	f := sf.frontier
 	registry := sf.flowCtx.Cfg.JobRegistry
 	jobID := jobspb.JobID(sf.spec.JobID)
@@ -413,6 +427,8 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 
 	sf.lastPartitionUpdate = timeutil.Now()
 
+	// TODO(ssd): This update method doesn't require that we
+	// actually have the job lease still.
 	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
 		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
@@ -421,7 +437,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		}
 
 		progress := md.Progress
-		// Keep the recorded highwater empty until some advancement has been made
+		// Keep the recorded highwater empty until some advancement has been made.
 		if sf.highWaterAtStart.Less(highWatermark) {
 			progress.Progress = &jobspb.Progress_HighWater{
 				HighWater: &highWatermark,
@@ -465,7 +481,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		return err
 	}
 	sf.metrics.JobProgressUpdates.Inc(1)
-	sf.persistedHighWater = f.Frontier()
+	sf.persistedHighWater = highWatermark
 	sf.metrics.FrontierCheckpointSpanCount.Update(int64(len(frontierResolvedSpans)))
 
 	return nil
