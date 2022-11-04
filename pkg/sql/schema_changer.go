@@ -337,7 +337,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			// other fields are used.
 			&SessionTracing{},
 			sc.execCfg.ContentionRegistry,
-			nil, /* testingPushCallback */
 		)
 		defer recv.Release()
 

@@ -272,7 +272,6 @@ func distRestore(
 			nil,   /* clockUpdater */
 			evalCtx.Tracing,
 			evalCtx.ExecCfg.ContentionRegistry,
-			nil, /* testingPushCallback */
 		)
 		defer recv.Release()
 
