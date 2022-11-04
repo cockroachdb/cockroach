@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -74,8 +75,9 @@ func (dbc *dbAdapter) RangeFeed(
 	startFrom hlc.Timestamp,
 	withDiff bool,
 	eventC chan<- kvcoord.RangeFeedMessage,
+	opts ...kvcoord.RangeFeedOption,
 ) error {
-	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC)
+	return dbc.distSender.RangeFeed(ctx, spans, startFrom, withDiff, eventC, opts...)
 }
 
 // concurrentBoundAccount is a thread safe bound account.
@@ -118,7 +120,7 @@ func (dbc *dbAdapter) Scan(
 	// If we don't have parallelism configured, just scan each span in turn.
 	if cfg.scanParallelism == nil {
 		for _, sp := range spans {
-			if err := dbc.scanSpan(ctx, sp, asOf, rowFn, cfg.targetScanBytes, cfg.onSpanDone, acc); err != nil {
+			if err := dbc.scanSpan(ctx, sp, asOf, rowFn, cfg.targetScanBytes, cfg.onSpanDone, cfg.overSystemTable, acc); err != nil {
 				return err
 			}
 		}
@@ -154,7 +156,7 @@ func (dbc *dbAdapter) Scan(
 	g := ctxgroup.WithContext(ctx)
 	err := dbc.divideAndSendScanRequests(
 		ctx, &g, spans, asOf, rowFn,
-		parallelismFn, cfg.targetScanBytes, cfg.onSpanDone, acc)
+		parallelismFn, cfg.targetScanBytes, cfg.onSpanDone, cfg.overSystemTable, acc)
 	if err != nil {
 		cancel()
 	}
@@ -168,6 +170,7 @@ func (dbc *dbAdapter) scanSpan(
 	rowFn func(value roachpb.KeyValue),
 	targetScanBytes int64,
 	onScanDone OnScanCompleted,
+	overSystemTable bool,
 	acc *concurrentBoundAccount,
 ) error {
 	if acc != nil {
@@ -177,39 +180,46 @@ func (dbc *dbAdapter) scanSpan(
 		defer acc.Shrink(ctx, targetScanBytes)
 	}
 
-	return dbc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if err := txn.SetFixedTimestamp(ctx, asOf); err != nil {
-			return err
-		}
-		sp := span
-		var b kv.Batch
-		for {
-			b.Header.TargetBytes = targetScanBytes
-			b.Scan(sp.Key, sp.EndKey)
-			if err := txn.Run(ctx, &b); err != nil {
+	admissionPri := admissionpb.BulkNormalPri
+	if overSystemTable {
+		admissionPri = admissionpb.NormalPri
+	}
+	return dbc.db.TxnWithAdmissionControl(ctx,
+		roachpb.AdmissionHeader_ROOT_KV,
+		admissionPri,
+		func(ctx context.Context, txn *kv.Txn) error {
+			if err := txn.SetFixedTimestamp(ctx, asOf); err != nil {
 				return err
 			}
-			res := b.Results[0]
-			for _, row := range res.Rows {
-				rowFn(roachpb.KeyValue{Key: row.Key, Value: *row.Value})
-			}
-			if res.ResumeSpan == nil {
-				if onScanDone != nil {
-					return onScanDone(ctx, sp)
-				}
-				return nil
-			}
-
-			if onScanDone != nil {
-				if err := onScanDone(ctx, roachpb.Span{Key: sp.Key, EndKey: res.ResumeSpan.Key}); err != nil {
+			sp := span
+			var b kv.Batch
+			for {
+				b.Header.TargetBytes = targetScanBytes
+				b.Scan(sp.Key, sp.EndKey)
+				if err := txn.Run(ctx, &b); err != nil {
 					return err
 				}
-			}
+				res := b.Results[0]
+				for _, row := range res.Rows {
+					rowFn(roachpb.KeyValue{Key: row.Key, Value: *row.Value})
+				}
+				if res.ResumeSpan == nil {
+					if onScanDone != nil {
+						return onScanDone(ctx, sp)
+					}
+					return nil
+				}
 
-			sp = res.ResumeSpanAsValue()
-			b = kv.Batch{}
-		}
-	})
+				if onScanDone != nil {
+					if err := onScanDone(ctx, roachpb.Span{Key: sp.Key, EndKey: res.ResumeSpan.Key}); err != nil {
+						return err
+					}
+				}
+
+				sp = res.ResumeSpanAsValue()
+				b = kv.Batch{}
+			}
+		})
 }
 
 // divideAndSendScanRequests divides spans into small ranges based on range boundaries,
@@ -224,6 +234,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 	parallelismFn func() int,
 	targetScanBytes int64,
 	onSpanDone OnScanCompleted,
+	overSystemTable bool,
 	acc *concurrentBoundAccount,
 ) error {
 	// Build a span group so that we can iterate spans in order.
@@ -261,7 +272,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 			sp := partialRS.AsRawSpanWithNoLocals()
 			workGroup.GoCtx(func(ctx context.Context) error {
 				defer limAlloc.Release()
-				return dbc.scanSpan(ctx, sp, asOf, rowFn, targetScanBytes, onSpanDone, acc)
+				return dbc.scanSpan(ctx, sp, asOf, rowFn, targetScanBytes, onSpanDone, overSystemTable, acc)
 			})
 
 			if !ri.NeedAnother(nextRS) {
