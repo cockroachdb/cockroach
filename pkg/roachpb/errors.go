@@ -700,6 +700,18 @@ func NewTransactionRetryError(
 	}
 }
 
+// NewTransactionRetryError initializes a new TransactionRetryError.
+func NewTransactionRetryErrorWithKey(
+	reason TransactionRetryReason, extraMsg string, key Key, timestamp hlc.Timestamp,
+) *TransactionRetryError {
+	return &TransactionRetryError{
+		Reason:         reason,
+		ExtraMsg:       extraMsg,
+		ConflictingKey: key,
+		Timestamp:      timestamp,
+	}
+}
+
 func (e *TransactionRetryError) Error() string {
 	msg := ""
 	if e.ExtraMsg != "" {

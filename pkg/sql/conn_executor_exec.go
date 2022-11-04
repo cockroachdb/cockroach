@@ -25,7 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1061,6 +1064,19 @@ func (ex *connExecutor) rollbackSQLTransaction(
 	return eventTxnFinishAborted{}, nil
 }
 
+// SQLRestartTransactionError is returned as a wrapper around a TransactionRetryWithProtoRefreshError
+// when possible, to include some useful user-facing information.
+type SQLRestartTransactionError struct {
+	cause              error
+	userVisibleMessage string
+}
+
+func (e SQLRestartTransactionError) Error() string {
+	return fmt.Sprintf("%s: %s: %s", pgerror.TxnRetryMsgPrefix, e.userVisibleMessage, e.cause.Error())
+}
+
+func (e SQLRestartTransactionError) ClientVisibleRetryError() {}
+
 // dispatchToExecutionEngine executes the statement, writes the result to res
 // and returns an event for the connection's state machine.
 //
@@ -1232,6 +1248,41 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			}
 		}
 	}
+
+	if err := res.Err(); err != nil {
+		var tre *roachpb.TransactionRetryWithProtoRefreshError
+		if errors.As(err, &tre) {
+			_, tableID, err := planner.execCfg.Codec.DecodeTablePrefix(tre.ConflictingKey)
+			if err == nil {
+				// Retrieve the target TableDescriptor from the lease manager. No caching
+				// is attempted because the lease manager does its own caching.
+				desc, err := planner.execCfg.LeaseManager.Acquire(ctx, tre.Timestamp, descpb.ID(tableID))
+				if err == nil {
+					tableDesc := desc.Underlying().(catalog.TableDescriptor)
+					// Immediately release the lease, since we only need it for the exact
+					// timestamp requested.
+					desc.Release(ctx)
+					idx, names, vals, err := row.DecodeRowInfo(ctx, tableDesc, tre.ConflictingKey, nil, false)
+					if err == nil {
+						var sb strings.Builder
+						fmt.Fprintf(&sb, "conflict in table %s@%s writing to row ", tableDesc.GetName(), idx.GetName())
+						for i := range names {
+							if i != 0 {
+								sb.WriteString(", ")
+							}
+							fmt.Fprintf(&sb, "%s = %s", names[i], vals[i])
+						}
+						newErr := &SQLRestartTransactionError{
+							cause:              res.Err(),
+							userVisibleMessage: sb.String(),
+						}
+						res.SetError(newErr)
+					}
+				}
+			}
+		}
+	}
+
 	ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 	ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.PlannerEndExecStmt, timeutil.Now())
 
