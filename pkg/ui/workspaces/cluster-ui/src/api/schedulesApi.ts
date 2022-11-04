@@ -10,7 +10,11 @@
 
 import Long from "long";
 import moment from "moment";
-import { executeInternalSql, SqlExecutionRequest } from "./sqlApi";
+import {
+  executeInternalSql,
+  SqlExecutionRequest,
+  sqlResultsAreEmpty,
+} from "./sqlApi";
 import { RequestError } from "../util";
 
 type ScheduleColumns = {
@@ -76,7 +80,7 @@ export function getSchedules(req: {
   };
   return executeInternalSql<ScheduleColumns>(request).then(result => {
     const txn_results = result.execution.txn_results;
-    if (txn_results.length === 0 || !txn_results[0].rows) {
+    if (sqlResultsAreEmpty(result)) {
       // No data.
       return [];
     }

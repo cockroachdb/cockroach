@@ -15,6 +15,7 @@ import {
   LONG_TIMEOUT,
   SqlExecutionRequest,
   SqlExecutionResponse,
+  sqlResultsAreEmpty,
 } from "./sqlApi";
 import {
   BlockedContentionDetails,
@@ -198,10 +199,10 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
   return executeInternalSql<TransactionContentionResponseColumns>(
     txnContentionRequest,
   ).then(contentionResults => {
-    const res = contentionResults.execution.txn_results[0].rows;
-    if (!res || res.length < 1) {
+    if (sqlResultsAreEmpty(contentionResults)) {
       return;
     }
+    const res = contentionResults.execution.txn_results[0].rows;
     const txnFingerprintIDs = res.map(row => row.waiting_txn_fingerprint_id);
     const txnFingerprintRequest: SqlExecutionRequest = {
       statements: [
@@ -216,11 +217,11 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
     return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
       txnFingerprintRequest,
     ).then(txnStmtFingerprintResults => {
-      const txnStmtRes =
-        txnStmtFingerprintResults.execution.txn_results[0].rows;
-      if (!txnStmtRes || txnStmtRes.length < 1) {
+      if (sqlResultsAreEmpty(txnStmtFingerprintResults)) {
         return;
       }
+      const txnStmtRes =
+        txnStmtFingerprintResults.execution.txn_results[0].rows;
       const stmtFingerprintIDs = txnStmtRes.map(row => row.query_ids);
       const fingerprintStmtsRequest: SqlExecutionRequest = {
         statements: [
@@ -418,10 +419,10 @@ export function getTransactionInsightEventDetailsState(
   return executeInternalSql<TxnContentionDetailsResponseColumns>(
     txnContentionDetailsRequest,
   ).then(contentionResults => {
-    const res = contentionResults.execution.txn_results[0].rows;
-    if (!res || res.length < 1) {
+    if (sqlResultsAreEmpty(contentionResults)) {
       return;
     }
+    const res = contentionResults.execution.txn_results[0].rows;
     const waitingTxnFingerprintId = res[0].waiting_txn_fingerprint_id;
     const waitingTxnFingerprintRequest: SqlExecutionRequest = {
       statements: [
