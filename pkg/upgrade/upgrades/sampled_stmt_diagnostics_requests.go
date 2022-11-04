@@ -28,6 +28,8 @@ const (
 ALTER TABLE system.statement_diagnostics_requests
   ADD COLUMN sampling_probability FLOAT NULL FAMILY "primary"`
 
+	dropCompletedIdxV1 = `DROP INDEX IF EXISTS system.statement_diagnostics_requests@completed_idx`
+
 	createCompletedIdxV3 = `
 CREATE INDEX completed_idx ON system.statement_diagnostics_requests (completed, ID)
   STORING (statement_fingerprint, sampling_probability, min_execution_latency, expires_at)`
@@ -47,6 +49,25 @@ func sampledStmtDiagReqsMigration(
 			schemaList:     []string{"sampling_probability"},
 			query:          addSamplingProbColToStmtDiagReqs,
 			schemaExistsFn: hasColumn,
+		},
+		{
+			name:       "drop-stmt-diag-reqs-v1-index",
+			schemaList: []string{"completed_idx"},
+			query:      dropCompletedIdxV1,
+			schemaExistsFn: func(existing, _ catalog.TableDescriptor, _ string) (bool, error) {
+				// We want to determine whether the old index from 21.2 exists.
+				// That index has one stored column. The index we introduce below has
+				// four.
+				idx, _ := existing.FindIndexWithName("completed_idx")
+				// If the index does not exist, we're good to proceed.
+				if idx == nil {
+					return true, nil
+				}
+				// Say that the schema does exist if the column count does not
+				// correspond to the old 21.2 count. If we return true, then
+				// the drop index command will not happen.
+				return idx.NumSecondaryStoredColumns() != 1, nil
+			},
 		},
 		{
 			name:           "create-stmt-diag-reqs-v3-index",

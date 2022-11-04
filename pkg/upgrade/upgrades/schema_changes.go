@@ -252,17 +252,17 @@ func indexDescForComparison(idx catalog.Index) *descpb.IndexDescriptor {
 	// See https://github.com/cockroachdb/cockroach/issues/65929.
 	desc.CreatedExplicitly = false
 
-	// The below clearing of names is just buggy. If an index name is reused with
-	// a different set of stored column IDs, we may avoid a migration we intended
-	// to do. This bug has happened, but for the sake of CI, we'll preserve the
-	// bug for the moment.
-	//
-	// TODO(ajwerner): Fix this bug and respect the length of column IDs and the
-	// names.
-	desc.StoreColumnNames = nil
+	// Clear out the column IDs, but retain their length. Column IDs may
+	// change. Note that we retain the name slices. Those should match.
 	desc.StoreColumnIDs = nil
 	for i := range desc.StoreColumnIDs {
 		desc.StoreColumnIDs[i] = 0
+	}
+	for i := range desc.KeyColumnIDs {
+		desc.KeyColumnIDs[i] = 0
+	}
+	for i := range desc.KeySuffixColumnIDs {
+		desc.KeySuffixColumnIDs[i] = 0
 	}
 
 	desc.CreatedAtNanos = 0
