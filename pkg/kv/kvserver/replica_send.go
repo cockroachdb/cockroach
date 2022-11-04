@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -120,7 +121,7 @@ func (r *Replica) Send(
 // *StoreWriteBytes return value.
 func (r *Replica) SendWithWriteBytes(
 	ctx context.Context, ba *roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *StoreWriteBytes, *roachpb.Error) {
+) (*roachpb.BatchResponse, *kvadmission.StoreWriteBytes, *roachpb.Error) {
 	if r.store.cfg.Settings.CPUProfileType() == cluster.CPUProfileWithLabels {
 		defer pprof.SetGoroutineLabels(ctx)
 		// Note: the defer statement captured the previous context.
@@ -167,7 +168,7 @@ func (r *Replica) SendWithWriteBytes(
 	// Differentiate between read-write, read-only, and admin.
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error
-	var writeBytes *StoreWriteBytes
+	var writeBytes *kvadmission.StoreWriteBytes
 	if isReadOnly {
 		log.Event(ctx, "read-only path")
 		fn := (*Replica).executeReadOnlyBatch
@@ -372,7 +373,7 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 // concurrency guard back to the caller.
 type batchExecutionFn func(
 	*Replica, context.Context, *roachpb.BatchRequest, *concurrency.Guard,
-) (*roachpb.BatchResponse, *concurrency.Guard, *StoreWriteBytes, *roachpb.Error)
+) (*roachpb.BatchResponse, *concurrency.Guard, *kvadmission.StoreWriteBytes, *roachpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
 var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
@@ -393,7 +394,7 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 // handles the process of retrying batch execution after addressing the error.
 func (r *Replica) executeBatchWithConcurrencyRetries(
 	ctx context.Context, ba *roachpb.BatchRequest, fn batchExecutionFn,
-) (br *roachpb.BatchResponse, writeBytes *StoreWriteBytes, pErr *roachpb.Error) {
+) (br *roachpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *roachpb.Error) {
 	// Try to execute command; exit retry loop on success.
 	var latchSpans, lockSpans *spanset.SpanSet
 	var requestEvalKind concurrency.RequestEvalKind
@@ -1046,7 +1047,7 @@ func (r *Replica) getBatchRequestQPS(ctx context.Context, ba *roachpb.BatchReque
 
 // recordRequestWriteBytes records the write bytes from a replica batch
 // request.
-func (r *Replica) recordRequestWriteBytes(writeBytes *StoreWriteBytes) {
+func (r *Replica) recordRequestWriteBytes(writeBytes *kvadmission.StoreWriteBytes) {
 	if writeBytes == nil {
 		return
 	}

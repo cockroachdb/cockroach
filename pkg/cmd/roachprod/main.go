@@ -934,15 +934,12 @@ var grafanaURLCmd = &cobra.Command{
 	Short: `returns a url to the grafana dashboard`,
 	Args:  cobra.ExactArgs(1),
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		urls, err := roachprod.GrafanaURL(context.Background(), roachprodLibraryLogger, args[0],
+		url, err := roachprod.GrafanaURL(context.Background(), roachprodLibraryLogger, args[0],
 			grafanaurlOpen)
 		if err != nil {
 			return err
 		}
-		for _, url := range urls {
-			fmt.Println(url)
-		}
-		fmt.Println("username: admin; pwd: admin")
+		fmt.Println(url)
 		return nil
 	}),
 }

@@ -108,7 +108,7 @@ var FrontierCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"changefeed.frontier_checkpoint_max_bytes",
 	"controls the maximum size of the checkpoint as a total size of key bytes",
-	1<<20,
+	1<<20, // 1 MiB
 )
 
 // ScanRequestLimit is the number of Scan requests that can run at once.
@@ -122,11 +122,14 @@ var ScanRequestLimit = settings.RegisterIntSetting(
 )
 
 // ScanRequestSize is the target size of the scan request response.
+//
+// TODO(cdc,yevgeniy,irfansharif): 16 MiB is too large for "elastic" work such
+// as this; reduce the default. Evaluate this as part of #90089.
 var ScanRequestSize = settings.RegisterIntSetting(
 	settings.TenantWritable,
 	"changefeed.backfill.scan_request_size",
 	"the maximum number of bytes returned by each scan request",
-	16<<20,
+	16<<20, // 16 MiB
 )
 
 // SinkThrottleConfig describes throttling configuration for the sink.

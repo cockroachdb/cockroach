@@ -302,7 +302,6 @@ const (
 	// V22_2SupportAssumeRoleAuth is the version where assume role authorization is
 	// supported in cloud storage and KMS.
 	V22_2SupportAssumeRoleAuth
-
 	// V22_2FixUserfileRelatedDescriptorCorruption adds a migration which uses
 	// heuristics to identify invalid table descriptors for userfile-related
 	// descriptors.

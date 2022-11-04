@@ -373,7 +373,8 @@ func makeElasticGrantCoordinator(
 	elasticCPUGranterMetrics := makeElasticCPUGranterMetrics()
 	registry.AddMetricStruct(elasticCPUGranterMetrics)
 
-	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu", registry, admissionpb.BulkNormalPri)
+	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu", registry,
+		admissionpb.BulkNormalPri, admissionpb.NormalPri)
 
 	elasticCPUGranter := newElasticCPUGranter(ambientCtx, st, elasticCPUGranterMetrics)
 	schedulerLatencyListener := newSchedulerLatencyListener(ambientCtx, st, schedulerLatencyListenerMetrics, elasticCPUGranter)

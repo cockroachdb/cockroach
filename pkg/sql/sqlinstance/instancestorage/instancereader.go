@@ -161,6 +161,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 		[]roachpb.Span{instancesTableSpan},
 		r.clock.Now(),
 		updateCacheFn,
+		rangefeed.WithSystemTablePriority(),
 		rangefeed.WithInitialScan(initialScanDoneFn),
 		rangefeed.WithOnInitialScanError(initialScanErrFn),
 		rangefeed.WithRowTimestampInInitialScan(true),
