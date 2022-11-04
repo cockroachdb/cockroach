@@ -290,11 +290,13 @@ func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error 
 	return nil
 }
 
-func (p *storage) GetMetadata(ctx context.Context, txn *kv.Txn) (ptpb.Metadata, error) {
+func (p *storage) GetMetadata(
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
+) (ptpb.Metadata, error) {
 	if txn == nil {
 		return ptpb.Metadata{}, errNoTxn
 	}
-	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
+	row, err := executor.QueryRowEx(ctx, "protectedts-GetMetadata", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getMetadataQuery)
 	if err != nil {
@@ -317,7 +319,7 @@ func (p *storage) GetState(
 	if txn == nil {
 		return ptpb.State{}, errNoTxn
 	}
-	md, err := p.GetMetadata(ctx, txn)
+	md, err := p.GetMetadata(ctx, txn, executor)
 	if err != nil {
 		return ptpb.State{}, err
 	}

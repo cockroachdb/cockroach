@@ -76,16 +76,16 @@ func (s *storageWithDatabase) Release(ctx context.Context, txn *kv.Txn, id uuid.
 }
 
 func (s *storageWithDatabase) GetMetadata(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor,
 ) (md ptpb.Metadata, err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			md, err = s.s.GetMetadata(ctx, txn)
+		err = s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			md, err = s.s.GetMetadata(ctx, newTxn, ie)
 			return err
 		})
 		return md, err
 	}
-	return s.s.GetMetadata(ctx, txn)
+	return s.s.GetMetadata(ctx, txn, executor)
 }
 
 func (s *storageWithDatabase) GetState(

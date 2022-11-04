@@ -241,7 +241,7 @@ func (c *Cache) doUpdate(ctx context.Context) error {
 				ts = txn.ReadTimestamp()
 			}
 		}()
-		md, err := c.storage.GetMetadata(ctx, txn)
+		md, err := c.storage.GetMetadata(ctx, txn, ie)
 		if err != nil {
 			return errors.Wrap(err, "failed to fetch protectedts metadata")
 		}
