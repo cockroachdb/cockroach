@@ -79,7 +79,6 @@ export function filterActiveStatements(
  * getActiveExecutionsFromSessions returns active statements and
  * transactions from the array of sessions provided.
  * @param sessionsResponse sessions array from which to extract data
- * @param lastUpdated the time the sessions data was last updated
  * @returns
  */
 export function getActiveExecutionsFromSessions(
