@@ -129,6 +129,15 @@ func newTestIterator(kvs []storage.MVCCKeyValue, upperBound roachpb.Key) *testIt
 	}
 }
 
+func (s *testIterator) Clone() *testIterator {
+	if s == nil {
+		return nil
+	}
+	c := *s
+	c.done = make(chan struct{})
+	return &c
+}
+
 func (s *testIterator) Close() {
 	s.closed = true
 	close(s.done)
@@ -356,7 +365,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			}
 			isc, cleanup := tc.intentScanner()
 			defer cleanup()
-			initScan := newInitResolvedTSScan(&p, isc)
+			initScan := newInitResolvedTSScan(isc, p.Span.AsRawSpanWithNoLocals(), (*processorRTSScanConsumer)(&p))
 			initScan.Run(context.Background())
 			// Compare the event channel to the expected events.
 			assert.Equal(t, len(expEvents), len(p.eventC))

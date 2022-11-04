@@ -37,13 +37,21 @@ type runnable interface {
 // the Processor was started and hooked up to a stream of logical operations.
 // The Processor can initialize its resolvedTimestamp once the scan completes
 // because it knows it is now tracking all intents in its key range.
+//
+// The task is abstracted so that it can also be used outside the context of a
+// Processor, even though Processor is the primary consumer. This flexibility
+// allows registrations to perform ad-hoc computations of the resolved timestamp
+// at specific Raft log indexes in certain error cases.
 type initResolvedTSScan struct {
-	p  *Processor
 	is IntentScanner
+	sp roachpb.Span
+	c  initResolvedTSScanConsumer
 }
 
-func newInitResolvedTSScan(p *Processor, c IntentScanner) runnable {
-	return &initResolvedTSScan{p: p, is: c}
+func newInitResolvedTSScan(
+	is IntentScanner, sp roachpb.Span, c initResolvedTSScanConsumer,
+) runnable {
+	return &initResolvedTSScan{is: is, sp: sp, c: c}
 }
 
 func (s *initResolvedTSScan) Run(ctx context.Context) {
@@ -51,34 +59,92 @@ func (s *initResolvedTSScan) Run(ctx context.Context) {
 	if err := s.iterateAndConsume(ctx); err != nil {
 		err = errors.Wrap(err, "initial resolved timestamp scan failed")
 		log.Errorf(ctx, "%v", err)
-		s.p.StopWithErr(roachpb.NewError(err))
+		s.c.onErr(err)
 	} else {
-		// Inform the processor that its resolved timestamp can be initialized.
-		s.p.setResolvedTSInitialized(ctx)
+		s.c.onSuccess(ctx)
 	}
 }
 
 func (s *initResolvedTSScan) iterateAndConsume(ctx context.Context) error {
-	startKey := s.p.Span.Key.AsRawKey()
-	endKey := s.p.Span.EndKey.AsRawKey()
-	return s.is.ConsumeIntents(ctx, startKey, endKey, func(op enginepb.MVCCWriteIntentOp) bool {
-		var ops [1]enginepb.MVCCLogicalOp
-		ops[0].SetValue(&op)
-		return s.p.sendEvent(ctx, event{ops: ops[:]}, 0)
-	})
+	return s.is.ConsumeIntents(ctx, s.sp.Key, s.sp.EndKey, s.c)
 }
 
 func (s *initResolvedTSScan) Cancel() {
 	s.is.Close()
 }
 
-type eventConsumer func(enginepb.MVCCWriteIntentOp) bool
+// initResolvedTSScanConsumer consumes intents during an initResolvedTSScan.
+type initResolvedTSScanConsumer interface {
+	onIntent(context.Context, enginepb.MVCCWriteIntentOp) bool
+	onSuccess(context.Context)
+	onErr(error)
+}
+
+// processorRTSScanConsumer implements initResolvedTSScanConsumer for a
+// Processor. All intent information is passed through to the Processor
+// asynchronously.
+type processorRTSScanConsumer Processor
+
+func (p *processorRTSScanConsumer) onIntent(
+	ctx context.Context, op enginepb.MVCCWriteIntentOp,
+) bool {
+	alloc := new(struct {
+		ops [1]enginepb.MVCCLogicalOp
+		op  enginepb.MVCCWriteIntentOp
+	})
+	alloc.op = op
+	alloc.ops[0].WriteIntent = &alloc.op
+	return (*Processor)(p).sendEvent(ctx, event{ops: alloc.ops[:]}, 0)
+}
+
+func (p *processorRTSScanConsumer) onSuccess(ctx context.Context) {
+	// Inform the processor that its resolved timestamp can be initialized.
+	(*Processor)(p).setResolvedTSInitialized(ctx)
+}
+
+func (p *processorRTSScanConsumer) onErr(err error) {
+	(*Processor)(p).StopWithErr(roachpb.NewError(err))
+}
+
+// syncRTSScanConsumer implements initResolvedTSScanConsumer for a
+// resolvedTimestamp tracker. When the scan completes, the tracker
+// will be initialized and contain the resolved timestamp.
+type syncRTSScanConsumer struct {
+	rts resolvedTimestamp
+	err error
+}
+
+func newSyncRTSScanConsumer(closedTS hlc.Timestamp) *syncRTSScanConsumer {
+	return &syncRTSScanConsumer{
+		rts: makeResolvedTimestamp(closedTS),
+	}
+}
+
+func (p *syncRTSScanConsumer) onIntent(_ context.Context, op enginepb.MVCCWriteIntentOp) bool {
+	p.rts.ConsumeLogicalOp(enginepb.MVCCLogicalOp{WriteIntent: &op})
+	return true
+}
+
+func (p *syncRTSScanConsumer) onSuccess(_ context.Context) {
+	p.rts.Init()
+}
+
+func (p *syncRTSScanConsumer) onErr(err error) {
+	p.err = err
+}
+
+func (p *syncRTSScanConsumer) resolvedTimestamp() *resolvedTimestamp {
+	return &p.rts
+}
 
 // IntentScanner is used by the ResolvedTSScan to find all intents on
 // a range.
 type IntentScanner interface {
-	// ConsumeIntents calls consumer on any intents found on keys between startKey and endKey.
-	ConsumeIntents(ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, consumer eventConsumer) error
+	// ConsumeIntents calls consumer on any intents found on keys between startKey
+	// and endKey.
+	ConsumeIntents(
+		ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, consumer initResolvedTSScanConsumer,
+	) error
 	// Close closes the IntentScanner.
 	Close()
 }
@@ -102,7 +168,7 @@ func NewSeparatedIntentScanner(iter storage.EngineIterator) IntentScanner {
 
 // ConsumeIntents implements the IntentScanner interface.
 func (s *SeparatedIntentScanner) ConsumeIntents(
-	ctx context.Context, startKey roachpb.Key, _ roachpb.Key, consumer eventConsumer,
+	ctx context.Context, startKey roachpb.Key, _ roachpb.Key, consumer initResolvedTSScanConsumer,
 ) error {
 	ltStart, _ := keys.LockTableSingleKey(startKey, nil)
 	var meta enginepb.MVCCMetadata
@@ -132,7 +198,8 @@ func (s *SeparatedIntentScanner) ConsumeIntents(
 			return errors.Newf("expected transaction metadata but found none for %s", lockedKey)
 		}
 
-		consumer(enginepb.MVCCWriteIntentOp{
+		// TODO(nvanbenschoten): react to the return value of onIntent.
+		consumer.onIntent(ctx, enginepb.MVCCWriteIntentOp{
 			TxnID:           meta.Txn.ID,
 			TxnKey:          meta.Txn.Key,
 			TxnMinTimestamp: meta.Txn.MinTimestamp,
@@ -167,7 +234,7 @@ func NewLegacyIntentScanner(iter storage.SimpleMVCCIterator) IntentScanner {
 
 // ConsumeIntents implements the IntentScanner interface.
 func (l *LegacyIntentScanner) ConsumeIntents(
-	ctx context.Context, start roachpb.Key, end roachpb.Key, consumer eventConsumer,
+	ctx context.Context, start roachpb.Key, end roachpb.Key, consumer initResolvedTSScanConsumer,
 ) error {
 	startKey := storage.MakeMVCCMetadataKey(start)
 	endKey := storage.MakeMVCCMetadataKey(end)
@@ -196,7 +263,8 @@ func (l *LegacyIntentScanner) ConsumeIntents(
 
 		// If this is an intent, inform the Processor.
 		if meta.Txn != nil {
-			consumer(enginepb.MVCCWriteIntentOp{
+			// TODO(nvanbenschoten): react to the return value of onIntent.
+			consumer.onIntent(ctx, enginepb.MVCCWriteIntentOp{
 				TxnID:           meta.Txn.ID,
 				TxnKey:          meta.Txn.Key,
 				TxnMinTimestamp: meta.Txn.MinTimestamp,

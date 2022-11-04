@@ -32,6 +32,15 @@ const (
 	// defaultPushTxnsAge is the default age at which a Processor will begin to
 	// consider a transaction old enough to push.
 	defaultPushTxnsAge = 10 * time.Second
+	// The size of an event is 72 bytes, so this will result in an allocation on
+	// the order of ~300KB per RangeFeed. That's probably ok given the number of
+	// ranges on a node that we'd like to support with active rangefeeds, but it's
+	// certainly on the upper end of the range.
+	//
+	// TODO(dan): Everyone seems to agree that this memory limit would be better
+	// set at a store-wide level, but there doesn't seem to be an easy way to
+	// accomplish that.
+	defaultEventChanCap = 4096
 	// defaultCheckStreamsInterval is the default interval at which a Processor
 	// will check all streams to make sure they have not been canceled.
 	defaultCheckStreamsInterval = 1 * time.Second
@@ -53,6 +62,10 @@ type Config struct {
 	RangeID roachpb.RangeID
 	Span    roachpb.RSpan
 
+	// InitClosedTS is the initial closed timestamp on the range, at the time
+	// when the rangefeed Processor was started.
+	InitClosedTS hlc.Timestamp
+
 	TxnPusher TxnPusher
 	// PushTxnsInterval specifies the interval at which a Processor will push
 	// all transactions in the unresolvedIntentQueue that are above the age
@@ -73,6 +86,10 @@ type Config struct {
 	// CheckStreamsInterval specifies interval at which a Processor will check
 	// all streams to make sure they have not been canceled.
 	CheckStreamsInterval time.Duration
+
+	// SkipInitResolvedTS is used in testing to disable the processor-wide initial
+	// resolved timestamp scan.
+	SkipInitResolvedTS bool
 
 	// Metrics is for production monitoring of RangeFeeds.
 	Metrics *Metrics
@@ -98,6 +115,9 @@ func (sc *Config) SetDefaults() {
 		if sc.PushTxnsAge == 0 {
 			sc.PushTxnsAge = defaultPushTxnsAge
 		}
+	}
+	if sc.EventChanCap == 0 {
+		sc.EventChanCap = defaultEventChanCap
 	}
 	if sc.CheckStreamsInterval == 0 {
 		sc.CheckStreamsInterval = defaultCheckStreamsInterval
@@ -196,7 +216,7 @@ func NewProcessor(cfg Config) *Processor {
 	p := &Processor{
 		Config: cfg,
 		reg:    makeRegistry(),
-		rts:    makeResolvedTimestamp(),
+		rts:    makeResolvedTimestamp(cfg.InitClosedTS),
 
 		regC:       make(chan registration),
 		unregC:     make(chan *registration),
@@ -215,7 +235,7 @@ func NewProcessor(cfg Config) *Processor {
 // IntentScannerConstructor is used to construct an IntentScanner. It
 // should be called from underneath a stopper task to ensure that the
 // engine has not been closed.
-type IntentScannerConstructor func() IntentScanner
+type IntentScannerConstructor func(roachpb.Span) IntentScanner
 
 // CatchUpIteratorConstructor is used to construct an iterator that can be used
 // for catchup-scans. Takes the key span and exclusive start time to run the
@@ -263,15 +283,18 @@ func (p *Processor) run(
 
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue. Ignore error if quiescing.
-	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
-		initScan := newInitResolvedTSScan(p, rtsIter)
-		err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
-		if err != nil {
-			initScan.Cancel()
+	if !p.SkipInitResolvedTS {
+		if rtsIterFunc != nil {
+			sp := p.Span.AsRawSpanWithNoLocals()
+			rtsIter := rtsIterFunc(sp)
+			initScan := newInitResolvedTSScan(rtsIter, sp, (*processorRTSScanConsumer)(p))
+			err := stopper.RunAsyncTask(ctx, "rangefeed: init resolved ts", initScan.Run)
+			if err != nil {
+				initScan.Cancel()
+			}
+		} else {
+			p.initResolvedTS(ctx)
 		}
-	} else {
-		p.initResolvedTS(ctx)
 	}
 
 	// txnPushTicker periodically pushes the transaction record of all
@@ -470,7 +493,9 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 func (p *Processor) Register(
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
+	initClosedTS hlc.Timestamp,
 	catchUpIterConstructor CatchUpIteratorConstructor,
+	rtsIterConstructor IntentScannerConstructor,
 	withDiff bool,
 	stream Stream,
 	errC chan<- *roachpb.Error,
@@ -481,8 +506,8 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchUpIterConstructor, withDiff,
-		p.Config.EventChanCap, p.Metrics, stream, errC,
+		span.AsRawSpanWithNoLocals(), startTS, initClosedTS, catchUpIterConstructor,
+		rtsIterConstructor, withDiff, p.Config.EventChanCap, p.Metrics, stream, errC,
 	)
 	select {
 	case p.regC <- r:

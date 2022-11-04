@@ -138,7 +138,7 @@ func rangeFeedCheckpoint(span roachpb.Span, ts hlc.Timestamp) *roachpb.RangeFeed
 const testProcessorEventCCap = 16
 
 func newTestProcessorWithTxnPusher(
-	t *testing.T, rtsIter storage.SimpleMVCCIterator, txnPusher TxnPusher,
+	t *testing.T, rtsIter *testIterator, txnPusher TxnPusher,
 ) (*Processor, *stop.Stopper) {
 	t.Helper()
 	stopper := stop.NewStopper()
@@ -162,16 +162,14 @@ func newTestProcessorWithTxnPusher(
 	return p, stopper
 }
 
-func makeIntentScannerConstructor(rtsIter storage.SimpleMVCCIterator) IntentScannerConstructor {
+func makeIntentScannerConstructor(rtsIter *testIterator) IntentScannerConstructor {
 	if rtsIter == nil {
 		return nil
 	}
-	return func() IntentScanner { return NewLegacyIntentScanner(rtsIter) }
+	return func(roachpb.Span) IntentScanner { return NewLegacyIntentScanner(rtsIter) }
 }
 
-func newTestProcessor(
-	t *testing.T, rtsIter storage.SimpleMVCCIterator,
-) (*Processor, *stop.Stopper) {
+func newTestProcessor(t *testing.T, rtsIter *testIterator) (*Processor, *stop.Stopper) {
 	t.Helper()
 	return newTestProcessorWithTxnPusher(t, rtsIter, nil /* pusher */)
 }
@@ -207,8 +205,10 @@ func TestProcessorBasic(t *testing.T) {
 	r1OK, r1Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -328,8 +328,10 @@ func TestProcessorBasic(t *testing.T) {
 	r2OK, r1And2Filter := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil,  /* catchUpIter */
-		true, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		true,            /* withDiff */
 		r2Stream,
 		r2ErrC,
 	)
@@ -411,8 +413,10 @@ func TestProcessorBasic(t *testing.T) {
 	r3OK, _ := p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r3Stream,
 		r3ErrC,
 	)
@@ -438,7 +442,7 @@ func TestNilProcessor(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	require.Panics(t, func() { _ = p.Start(stopper, nil) })
-	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, nil, false, nil, nil) })
+	require.Panics(t, func() { p.Register(roachpb.RSpan{}, hlc.Timestamp{}, hlc.Timestamp{}, nil, nil, false, nil, nil) })
 }
 
 func TestProcessorSlowConsumer(t *testing.T) {
@@ -453,8 +457,10 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -463,8 +469,10 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r2Stream,
 		r2ErrC,
 	)
@@ -565,8 +573,10 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -634,8 +644,10 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -707,8 +719,10 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		make(chan *roachpb.Error, 1),
 	)
@@ -952,7 +966,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 			runtime.Gosched()
 			s := newTestStream()
 			errC := make(chan<- *roachpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, hlc.Timestamp{}, nil, nil, false, s, errC)
 		}()
 		go func() {
 			defer wg.Done()
@@ -1021,7 +1035,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 			s := newTestStream()
 			regs[s] = firstIdx
 			errC := make(chan *roachpb.Error, 1)
-			p.Register(p.Span, hlc.Timestamp{}, nil, false, s, errC)
+			p.Register(p.Span, hlc.Timestamp{}, hlc.Timestamp{}, nil, nil, false, s, errC)
 			regDone <- struct{}{}
 		}
 	}()
@@ -1109,8 +1123,10 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		rStream,
 		rErrC,
 	)
@@ -1197,8 +1213,10 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		rStream,
 		rErrC,
 	)
@@ -1274,8 +1292,10 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
@@ -1285,8 +1305,10 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r2Stream,
 		r2ErrC,
 	)
@@ -1442,8 +1464,10 @@ func BenchmarkProcessorWithBudget(b *testing.B) {
 	p.Register(
 		roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 		hlc.Timestamp{WallTime: 1},
-		nil,   /* catchUpIter */
-		false, /* withDiff */
+		hlc.Timestamp{}, /* initClosedTS */
+		nil,             /* catchUpIterConstructor */
+		nil,             /* rtsIterConstructor */
+		false,           /* withDiff */
 		r1Stream,
 		r1ErrC,
 	)
