@@ -389,69 +389,20 @@ func (sr *schemaResolver) ResolveFunction(
 		return nil, pgerror.New(pgcode.FeatureNotSupported, "cross-database function references not allowed")
 	}
 
-	// Get builtin functions if there is any match.
+	// Get builtin and udf functions if there is any match.
 	builtinDef, err := tree.GetBuiltinFuncDefinition(fn, path)
 	if err != nil {
 		return nil, err
 	}
-
-	var udfDef *tree.ResolvedFunctionDefinition
-	if fn.ExplicitSchema && fn.Schema() != catconstants.CRDBInternalSchemaName {
-		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), fn.Schema())
-		if err != nil {
-			return nil, err
-		}
-
-		if !found {
-			return nil, pgerror.Newf(pgcode.UndefinedSchema, "schema %q does not exist", fn.Schema())
-		}
-
-		sc := prefix.Schema
-		udfDef, _ = sc.GetResolvedFuncDefinition(fn.Object())
-	} else {
-		for i, n := 0, path.NumElements(); i < n; i++ {
-			schema := path.GetSchema(i)
-			found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), schema)
-			if err != nil {
-				return nil, err
-			}
-			if !found {
-				continue
-			}
-			curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
-			if !found {
-				continue
-			}
-			udfDef, err = udfDef.MergeWith(curUdfDef)
-			if err != nil {
-				return nil, err
-			}
-		}
+	udfDef, err := maybeLookUpUDF(ctx, sr, path, fn)
+	if err != nil {
+		return nil, err
 	}
 
-	if builtinDef == nil && udfDef == nil {
-		// If nothing found, there is a chance that user typed in a quoted function
-		// name which is not lowercase. So here we try to lowercase the given
-		// function name and find a suggested function name if possible.
-		extraMsg := ""
-		var lowerName tree.UnresolvedName
-		if fn.ExplicitSchema {
-			lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]), strings.ToLower(name.Parts[1]))
-		} else {
-			lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
-		}
-		if lowerName != *name {
-			alternative, err := sr.ResolveFunction(ctx, &lowerName, path)
-			if err == nil && alternative != nil {
-				extraMsg = fmt.Sprintf(", but %s() exists", alternative.Name)
-			}
-		}
-		return nil, errors.Wrapf(tree.ErrFunctionUndefined, "unknown function: %s()%s", tree.ErrString(name), extraMsg)
-	}
-	if builtinDef == nil {
-		return udfDef, nil
-	}
-	if udfDef == nil {
+	switch {
+	case builtinDef != nil && udfDef != nil:
+		return builtinDef.MergeWith(udfDef)
+	case builtinDef != nil:
 		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
 		if props.UnsupportedWithIssue != 0 {
 			// Note: no need to embed the function name in the message; the
@@ -466,9 +417,95 @@ func (sr *schemaResolver) ResolveFunction(
 			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
 		}
 		return builtinDef, nil
+	case udfDef != nil:
+		return udfDef, nil
+	default:
+		return nil, makeFunctionUndefinedError(ctx, name, path, fn, sr)
+	}
+}
+
+// If nothing found, there is a chance that user typed in a quoted function
+// name which is not lowercase. So here we try to lowercase the given
+// function name and find a suggested function name if possible.
+func makeFunctionUndefinedError(
+	ctx context.Context,
+	name *tree.UnresolvedName,
+	path tree.SearchPath,
+	fn tree.FunctionName,
+	sr *schemaResolver,
+) error {
+	var lowerName tree.UnresolvedName
+	if fn.ExplicitSchema {
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]), strings.ToLower(name.Parts[1]))
+	} else {
+		lowerName = tree.MakeUnresolvedName(strings.ToLower(name.Parts[0]))
+	}
+	wrap := func(err error) error { return err }
+	if lowerName != *name {
+		alternative, err := sr.ResolveFunction(ctx, &lowerName, path)
+		if err != nil {
+			switch pgerror.GetPGCode(err) {
+			case pgcode.UndefinedFunction, pgcode.UndefinedSchema:
+				// Lower-case function does not exist.
+			default:
+				return errors.Wrapf(err,
+					"failed to look up alternative name for %v which does not exist", &fn,
+				)
+			}
+		} else if alternative != nil {
+			wrap = func(err error) error {
+				return errors.WithHintf(
+					err, "lower-case alternative %s exists", &lowerName,
+				)
+			}
+		}
+	}
+	return wrap(errors.Wrapf(
+		tree.ErrFunctionUndefined, "unknown function: %s()", tree.ErrString(name),
+	))
+}
+
+func maybeLookUpUDF(
+	ctx context.Context, sr *schemaResolver, path tree.SearchPath, fn tree.FunctionName,
+) (*tree.ResolvedFunctionDefinition, error) {
+	if sr.txn == nil {
+		return nil, nil
 	}
 
-	return builtinDef.MergeWith(udfDef)
+	if fn.ExplicitSchema && fn.Schema() != catconstants.CRDBInternalSchemaName {
+		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), fn.Schema())
+		if err != nil {
+			return nil, err
+		}
+
+		if !found {
+			return nil, pgerror.Newf(pgcode.UndefinedSchema, "schema %q does not exist", fn.Schema())
+		}
+
+		udfDef, _ := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
+		return udfDef, nil
+	}
+
+	var udfDef *tree.ResolvedFunctionDefinition
+	for i, n := 0, path.NumElements(); i < n; i++ {
+		schema := path.GetSchema(i)
+		found, prefix, err := sr.LookupSchema(ctx, sr.CurrentDatabase(), schema)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			continue
+		}
+		curUdfDef, found := prefix.Schema.GetResolvedFuncDefinition(fn.Object())
+		if !found {
+			continue
+		}
+		udfDef, err = udfDef.MergeWith(curUdfDef)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return udfDef, nil
 }
 
 func (sr *schemaResolver) ResolveFunctionByOID(

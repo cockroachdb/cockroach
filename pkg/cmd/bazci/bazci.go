@@ -31,7 +31,6 @@ import (
 	bes "github.com/cockroachdb/cockroach/pkg/build/bazel/bes"
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost"
-	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/testfilter"
 	"github.com/cockroachdb/errors"
 	ptypes "github.com/gogo/protobuf/types"
 	"github.com/spf13/cobra"
@@ -61,10 +60,9 @@ type fullTestResult struct {
 }
 
 var (
-	port                      int
-	artifactsDir              string
-	shouldProcessTestFailures bool
-	githubPostFormatterName   string
+	port                    int
+	artifactsDir            string
+	githubPostFormatterName string
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -82,6 +80,7 @@ type monitorBuildServer struct {
 	namedSetsOfFiles map[string][]builtArtifact
 	testResults      map[string][]fullTestResult
 	builtTargets     map[string]*bes.TargetComplete
+	testXmls         []string
 	// Send a bool value to this channel when it's time to tear down the
 	// server.
 	finished chan bool
@@ -222,6 +221,9 @@ func (s *monitorBuildServer) handleBuildEvent(
 						if err := doCopy(src, dst); err != nil {
 							return nil, err
 						}
+						if output.Name == "test.xml" {
+							s.testXmls = append(s.testXmls, src)
+						}
 					} else {
 						panic(output)
 					}
@@ -269,12 +271,6 @@ func init() {
 		"default",
 		"formatter name for githubpost",
 	)
-	rootCmd.Flags().BoolVar(
-		&shouldProcessTestFailures,
-		"process_test_failures",
-		false,
-		"process failures artifacts (and post github issues for release failures)",
-	)
 	rootCmd.Flags().IntVar(
 		&port,
 		"port",
@@ -283,59 +279,35 @@ func init() {
 	)
 }
 
-func bazciImpl(cmd *cobra.Command, args []string) (retErr error) {
-	var goTestJSONOutputFilePath string
-	defer func() {
-		if err := processTestJSONIfNeeded(retErr != nil /* shouldCreateTarball */, goTestJSONOutputFilePath); err != nil {
-			fmt.Printf("failed to process go test json output - %v\n", err)
-		}
-	}()
-
+func bazciImpl(cmd *cobra.Command, args []string) error {
 	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
-		retErr = errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
-		return
+		return errors.Newf("First argument must be `build`, `run`, `test`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
 	}
 
 	// Special case: munge-test-xml/merge-test-xmls don't require running Bazel at all.
 	// Perform the munge then exit immediately.
 	if args[0] == mungeTestXMLSubcmd {
-		retErr = mungeTestXMLs(args)
-		return
+		return mungeTestXMLs(args)
 	}
 	if args[0] == mergeTestXMLsSubcmd {
-		retErr = mergeTestXMLs(args)
-		return
+		return mergeTestXMLs(args)
 	}
 
 	server := newMonitorBuildServer(args[0])
 	if err := server.Start(); err != nil {
-		retErr = err
-		return
+		return err
 	}
 	args = append(args, fmt.Sprintf("--bes_backend=grpc://127.0.0.1:%d", port))
-	if shouldProcessTestFailures {
-		f, createTempErr := os.CreateTemp(artifactsDir, "test.json.txt")
-		if createTempErr != nil {
-			retErr = createTempErr
-			return
-		}
-		goTestJSONOutputFilePath = f.Name()
-		// Closing the file because we will not use the file pointer.
-		if retErr = f.Close(); retErr != nil {
-			return
-		}
-		args = append(args, "--test_env", goTestJSONOutputFilePath)
-	}
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
 	bazelCmd.Stdout = os.Stdout
 	bazelCmd.Stderr = os.Stderr
-	retErr = bazelCmd.Run()
-	if retErr != nil {
-		fmt.Printf("got error %+v from bazel run\n", retErr)
+	bazelErr := bazelCmd.Run()
+	if bazelErr != nil {
+		fmt.Printf("got error %+v from bazel run\n", bazelErr)
 	}
 	server.Wait()
-	return
+	return errors.CombineErrors(processTestXmls(server.testXmls), bazelErr)
 }
 
 func mungeTestXMLs(args []string) error {
@@ -409,90 +381,6 @@ func doCopy(src, dst string) error {
 	return err
 }
 
-func processFailures(goTestJSONOutputFileBuf []byte, failuresFilePath string) error {
-	pr, pw := io.Pipe()
-	err := testfilter.FilterAndWrite(bytes.NewReader(goTestJSONOutputFileBuf), pw, []string{"strip", "omit", "convert"})
-	if err != nil {
-		return err
-	}
-	f, err := os.Create(failuresFilePath)
-	if err != nil {
-		return err
-	}
-	written, err := io.Copy(f, pr)
-	if err != nil {
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	if written == 0 {
-		if err := os.Remove(failuresFilePath); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func postReleaseOnlyFailures(goTestJSONOutputFileBuf []byte) error {
-	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
-	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
-	if isReleaseBranch {
-		// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
-		// ever asked to post, so enforce that on all runs.
-		// The way this env var is made available here is quite tricky. The build
-		// calling this method is usually a build that is invoked from PRs, so it
-		// can't have secrets available to it (for the PR could modify
-		// build/teamcity-* to leak the secret). Instead, we provide the secrets
-		// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
-		// pass that env var through when it's there. This means we won't have the
-		// env var on PR builds, but we'll have it for builds that are triggered
-		// from the release branches.
-		if os.Getenv("GITHUB_API_TOKEN") == "" {
-			return errors.New("GITHUB_API_TOKEN must be set")
-		}
-		githubpost.Post(githubPostFormatterName, bytes.NewReader(goTestJSONOutputFileBuf))
-	}
-	return nil
-}
-
-// createTarball converts the test json output file into output intended for human eyes
-// and creates a tarball that contains the original json file and the converted
-// human-readable file.
-func createTarball(goTestJSONOutputFilePath string) error {
-	buf, err := os.ReadFile(goTestJSONOutputFilePath)
-	if err != nil {
-		return err
-	}
-	f, err := os.Create(filepath.Join(artifactsDir, "full_output.txt"))
-	if err != nil {
-		return err
-	}
-	if err := testfilter.FilterAndWrite(bytes.NewReader(buf), f, []string{"convert"}); err != nil {
-		return err
-	}
-
-	tarArgs := []string{
-		"--strip-components=1",
-		"-czf",
-		"full_output.tgz",
-		"full_output.txt",
-		filepath.Base(goTestJSONOutputFilePath),
-	}
-	createTarballCmd := exec.Command("tar", tarArgs...)
-	createTarballCmd.Dir = artifactsDir
-	var errBuf bytes.Buffer
-	createTarballCmd.Stderr = &errBuf
-	fmt.Println("running tar w/ args: ", shellescape.QuoteCommand(tarArgs))
-	if err := createTarballCmd.Run(); err != nil {
-		return errors.Wrapf(err, "StdErr: %s", errBuf.String())
-	}
-	if err := os.Remove(filepath.Join(artifactsDir, "full_output.txt")); err != nil {
-		fmt.Printf("Failed to remove full_output.txt - %v\n", err)
-	}
-	return nil
-}
-
 // Some unit tests test automatic ballast creation. These ballasts can be
 // larger than the maximum artifact size. Remove any artifacts with the
 // EMERGENCY_BALLAST filename.
@@ -512,24 +400,42 @@ func removeEmergencyBallasts() {
 	}
 }
 
-func processTestJSONIfNeeded(shouldCreateTarball bool, goTestJSONOutputFilePath string) error {
-	if !shouldProcessTestFailures {
-		return nil
-	}
+func processTestXmls(testXmls []string) error {
 	removeEmergencyBallasts()
-	buf, err := os.ReadFile(goTestJSONOutputFilePath)
-	if err != nil {
-		return err
-	}
-	if err := processFailures(buf, filepath.Join(artifactsDir, "failures.txt")); err != nil {
-		return err
-	}
-	if err := postReleaseOnlyFailures(buf); err != nil {
-		return err
-	}
-	if shouldCreateTarball {
-		if err := createTarball(goTestJSONOutputFilePath); err != nil {
-			return err
+	branch := strings.TrimPrefix(os.Getenv("TC_BUILD_BRANCH"), "refs/heads/")
+	isReleaseBranch := strings.HasPrefix(branch, "master") || strings.HasPrefix(branch, "release") || strings.HasPrefix(branch, "provisional")
+	if isReleaseBranch {
+		// GITHUB_API_TOKEN must be in the env or github-post will barf if it's
+		// ever asked to post, so enforce that on all runs.
+		// The way this env var is made available here is quite tricky. The build
+		// calling this method is usually a build that is invoked from PRs, so it
+		// can't have secrets available to it (for the PR could modify
+		// build/teamcity-* to leak the secret). Instead, we provide the secrets
+		// to a higher-level job (Publish Bleeding Edge) and use TeamCity magic to
+		// pass that env var through when it's there. This means we won't have the
+		// env var on PR builds, but we'll have it for builds that are triggered
+		// from the release branches.
+		if os.Getenv("GITHUB_API_TOKEN") == "" {
+			return errors.New("GITHUB_API_TOKEN must be set")
+		}
+		var postErrors []string
+		for _, testXml := range testXmls {
+			xmlFile, err := os.Open(testXml)
+			if err != nil {
+				postErrors = append(postErrors, fmt.Sprintf("Failed to open %s with the following error: %v", testXml, err))
+				continue
+			}
+			if err := githubpost.PostFromTestXML(githubPostFormatterName, xmlFile); err != nil {
+				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))
+				continue
+			}
+			if err := xmlFile.Close(); err != nil {
+				postErrors = append(postErrors, fmt.Sprintf("Failed to close %s with error: %v\n", testXml, err))
+				continue
+			}
+		}
+		if len(postErrors) != 0 {
+			return errors.Newf("%s", strings.Join(postErrors, "\n"))
 		}
 	}
 	return nil

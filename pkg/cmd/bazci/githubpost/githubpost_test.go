@@ -22,15 +22,70 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestListFailures(t *testing.T) {
-	type issue struct {
-		testName   string
-		title      string
-		message    string
-		expRepro   string
-		mention    []string
-		hasProject bool
+type issue struct {
+	testName   string
+	title      string
+	message    string
+	expRepro   string
+	mention    []string
+	hasProject bool
+}
+
+func init() {
+	fileLineForTesting = map[packageAndTest]fileAndLine{
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/util/stop",
+			testName:    "TestStopperWithCancelConcurrent",
+		}: {
+			filename: "pkg/util/stop/stopper_test.go",
+			linenum:  "375",
+		},
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			testName:    "TestReplicateQueueRebalance",
+		}: {
+			filename: "pkg/kv/kvserver/replicate_queue_test.go",
+			linenum:  "56",
+		},
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			testName:    "TestGossipHandlesReplacedNode",
+		}: {
+			filename: "pkg/kv/kvserver/gossip_test.go",
+			linenum:  "142",
+		},
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			testName:    "TestPretty",
+		}: {
+			filename: "pkg/util/json/json_test.go",
+			linenum:  "2234",
+		},
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			testName:    "TestJSONErrors",
+		}: {
+			filename: "pkg/util/json/json_test.go",
+			linenum:  "249",
+		},
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+			testName:    "TestTxnCoordSenderPipelining",
+		}: {
+			filename: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
+			linenum:  "2429",
+		},
+		{
+			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+			testName:    "TestAbortReadOnlyTransaction",
+		}: {
+			filename: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
+			linenum:  "1990",
+		},
 	}
+}
+
+func TestListFailuresFromJSON(t *testing.T) {
 	// Each test case expects a number of issues.
 	testCases := []struct {
 		pkgEnv    string
@@ -309,7 +364,72 @@ TestXXA - 1.00s
 				curIssue++
 				return nil
 			}
-			if err := listFailures(context.Background(), file, f); err != nil {
+			if err := listFailuresFromJSON(context.Background(), file, f); err != nil {
+				t.Fatal(err)
+			}
+			if curIssue != len(c.expIssues) {
+				t.Fatalf("expected %d issues, got: %d", len(c.expIssues), curIssue)
+			}
+		})
+	}
+}
+
+func TestListFailuresFromTestXML(t *testing.T) {
+	testCases := []struct {
+		fileName  string
+		expPkg    string
+		expIssues []issue
+		formatter formatter
+	}{
+		{
+			fileName: "basic.xml",
+			expPkg:   "github.com/cockroachdb/cockroach/pkg/util/json",
+			expIssues: []issue{{
+				testName: "TestJSONErrors",
+				title:    "util/json: TestJSONErrors failed",
+				message: `=== RUN   TestJSONErrors
+--- FAIL: TestJSONErrors (0.00s)
+=== RUN   TestJSONErrors/frues
+    json_test.go:278: expected error message to be 'trailing characters after JSON document', but was 'unable to decode JSON: invalid character 'r' in literal false (expecting 'a')'
+    --- FAIL: TestJSONErrors/frues (0.00s)`,
+				mention: []string{"@cockroachdb/unowned"},
+			}},
+			formatter: defaultFormatter,
+		},
+	}
+
+	for _, c := range testCases {
+		t.Run(c.fileName, func(t *testing.T) {
+			file, err := os.Open(testutils.TestDataPath(t, c.fileName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			curIssue := 0
+
+			f := func(ctx context.Context, f failure) error {
+				if t.Failed() {
+					return nil
+				}
+				if curIssue >= len(c.expIssues) {
+					t.Errorf("unexpected issue filed. title: %s", f.title)
+				}
+				if exp := c.expPkg; exp != f.packageName {
+					t.Errorf("expected package %s, but got %s", exp, f.packageName)
+				}
+				if exp := c.expIssues[curIssue].testName; exp != f.testName {
+					t.Errorf("expected test name %s, but got %s", exp, f.testName)
+				}
+				if exp := c.expIssues[curIssue].title; exp != f.title {
+					t.Errorf("expected title %s, but got %s", exp, f.title)
+				}
+				if exp := c.expIssues[curIssue].message; !strings.Contains(f.testMessage, exp) {
+					t.Errorf("expected message containing %s, but got:\n%s", exp, f.testMessage)
+				}
+				curIssue++
+				return nil
+			}
+			if err := listFailuresFromTestXML(context.Background(), file, f); err != nil {
 				t.Fatal(err)
 			}
 			if curIssue != len(c.expIssues) {

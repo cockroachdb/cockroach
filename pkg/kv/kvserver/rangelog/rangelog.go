@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -29,10 +29,7 @@ import (
 // Writer implements kvserver.RangeLogWriter using the InternalExecutor.
 type Writer struct {
 	generateUniqueID IDGen
-	codec            keys.SQLCodec
-	tableDesc        catalog.TableDescriptor
-	primaryIndex     catalog.Index
-	tableColMap      catalog.TableColMap
+	w                bootstrap.KVWriter
 }
 
 // IDGen is used to generate a unique ID for new rows.
@@ -48,10 +45,7 @@ func NewWriter(codec keys.SQLCodec, generateUniqueID IDGen) *Writer {
 func newWriter(codec keys.SQLCodec, id IDGen, table catalog.TableDescriptor) *Writer {
 	return &Writer{
 		generateUniqueID: id,
-		codec:            codec,
-		tableDesc:        table,
-		primaryIndex:     table.GetPrimaryIndex(),
-		tableColMap:      catalog.ColumnIDToOrdinalMap(table.PublicColumns()),
+		w:                bootstrap.MakeKVWriter(codec, table),
 	}
 }
 
@@ -86,22 +80,11 @@ func (s *Writer) WriteRangeLogEvent(
 		}
 		args[5] = tree.NewDString(string(infoBytes))
 	}
-	entries, err := rowenc.EncodePrimaryIndex(
-		s.codec,
-		s.tableDesc,
-		s.primaryIndex,
-		s.tableColMap,
-		args[:],
-		false, // includeEmpty
-	)
-	if err != nil {
+	ba := txn.NewBatch()
+	if err := s.w.Insert(ba, args[:]...); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(
 			err, "failed to encode rangelog index entries",
 		)
-	}
-	ba := txn.NewBatch()
-	for i := range entries {
-		ba.Put(entries[i].Key, &entries[i].Value)
 	}
 	return txn.Run(ctx, ba)
 }

@@ -464,9 +464,11 @@ func TestLint(t *testing.T) {
 					":!testutils/data_path.go",
 					":!util/log/tracebacks.go",
 					":!util/sdnotify/sdnotify_unix.go",
-					":!util/grpcutil", // GRPC_GO_* variables
-					":!roachprod",     // roachprod requires AWS environment variables
-					":!cli/env.go",    // The CLI needs the PGHOST variable.
+					":!util/grpcutil",                     // GRPC_GO_* variables
+					":!roachprod",                         // roachprod requires AWS environment variables
+					":!cli/env.go",                        // The CLI needs the PGHOST variable.
+					":!internal/codeowners/codeowners.go", // For BAZEL_TEST.
+					":!internal/team/team.go",             // For BAZEL_TEST.
 				},
 			},
 		} {
