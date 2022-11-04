@@ -22,13 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
@@ -128,7 +123,9 @@ func (s *TestState) WithTxn(fn func(s *TestState)) {
 			return nil
 		})
 		_ = u.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
-			d = resetModificationTime(d)
+			mut := d.NewBuilder().BuildCreatedMutable()
+			mut.ResetModificationTime()
+			d = mut.ImmutableCopy()
 			s.committed.UpsertDescriptorEntry(d)
 			s.uncommitted.UpsertDescriptorEntry(d)
 			return nil
@@ -272,7 +269,9 @@ func (s *TestState) ClientNoticeSender() eval.ClientNoticeSender {
 func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {
 	var old protoutil.Message
 	if d, _ := s.mustReadImmutableDescriptor(desc.GetID()); d != nil {
-		old = resetModificationTime(d).DescriptorProto()
+		mut := d.NewBuilder().BuildCreatedMutable()
+		mut.ResetModificationTime()
+		old = mut.DescriptorProto()
 	}
 	return sctestutils.ProtoDiff(old, desc.DescriptorProto(), sctestutils.DiffArgs{
 		Indent:       "  ",
@@ -293,21 +292,4 @@ func (s *TestState) descriptorDiff(desc catalog.Descriptor) string {
 			}
 		}
 	})
-}
-
-func resetModificationTime(d catalog.Descriptor) catalog.Descriptor {
-	mut := d.NewBuilder().BuildCreatedMutable()
-	switch m := mut.(type) {
-	case *tabledesc.Mutable:
-		m.ModificationTime.Reset()
-	case *dbdesc.Mutable:
-		m.ModificationTime.Reset()
-	case *typedesc.Mutable:
-		m.ModificationTime.Reset()
-	case *schemadesc.Mutable:
-		m.ModificationTime.Reset()
-	case *funcdesc.Mutable:
-		m.ModificationTime.Reset()
-	}
-	return mut.ImmutableCopy()
 }

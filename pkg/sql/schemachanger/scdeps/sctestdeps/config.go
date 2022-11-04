@@ -62,7 +62,8 @@ func WithDescriptors(c nstree.Catalog) Option {
 				}
 				m.CreateAsOfTime = modifTime
 			}
-			desc = resetModificationTime(mut)
+			mut.ResetModificationTime()
+			desc = mut.ImmutableCopy()
 			state.committed.UpsertDescriptorEntry(desc)
 			state.uncommitted.UpsertDescriptorEntry(desc)
 			return nil
