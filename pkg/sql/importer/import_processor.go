@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -123,6 +124,7 @@ type readImportDataProcessor struct {
 	spec    execinfrapb.ReadImportDataSpec
 	output  execinfra.RowReceiver
 
+	wg     ctxgroup.Group
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 
 	seqChunkProvider *row.SeqChunkProvider
@@ -152,6 +154,11 @@ func newReadImportDataProcessor(
 	}
 	if err := cp.Init(ctx, cp, post, csvOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				log.Info(ctx, "TrailingMetaCallback")
+				cp.close()
+				return nil
+			},
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
 		}); err != nil {
@@ -178,11 +185,26 @@ func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
 	// We don't have to worry about this go routine leaking because next we loop over progCh
 	// which is closed only after the go routine returns.
-	go func() {
+	idp.wg = ctxgroup.WithContext(ctx)
+	idp.wg.GoCtx(func(ctx context.Context) error {
 		defer close(idp.progCh)
 		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
-	}()
+		return nil
+	})
+}
+
+func (idp *readImportDataProcessor) ConsumerClosed() {
+	idp.close()
+}
+
+func (idp *readImportDataProcessor) close() {
+	if idp.Closed {
+		return
+	}
+
+	_ = idp.wg.Wait()
+	idp.InternalClose()
 }
 
 // Next is part of the RowSource interface.
@@ -444,7 +466,7 @@ func ingestKvs(
 		offset++
 	}
 
-	pushProgress := func() {
+	pushProgress := func(ctx context.Context) {
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
@@ -465,7 +487,10 @@ func ingestKvs(
 			bulkSummaryMu.summary.Reset()
 			bulkSummaryMu.Unlock()
 		}
-		progCh <- prog
+		select {
+		case progCh <- prog:
+		case <-ctx.Done():
+		}
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -482,7 +507,7 @@ func ingestKvs(
 			case <-stopProgress:
 				return nil
 			case <-tick.C:
-				pushProgress()
+				pushProgress(ctx)
 			}
 		}
 	})
@@ -542,9 +567,13 @@ func ingestKvs(
 			writtenRow[offset] = kvBatch.LastRow
 			atomic.StoreUint32(&writtenFraction[offset], math.Float32bits(kvBatch.Progress))
 			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
-				_ = pkIndexAdder.Flush(ctx)
-				_ = indexAdder.Flush(ctx)
-				pushProgress()
+				if err := pkIndexAdder.Flush(ctx); err != nil {
+					log.Warningf(ctx, "pkIndexAddr flush err: %v", err)
+				}
+				if err := indexAdder.Flush(ctx); err != nil {
+					log.Warningf(ctx, "indexAddr flush err: %v", err)
+				}
+				pushProgress(ctx)
 			}
 		}
 		return nil

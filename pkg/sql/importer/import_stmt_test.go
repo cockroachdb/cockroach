@@ -2908,6 +2908,82 @@ func TestImportRetriesBreakerOpenFailure(t *testing.T) {
 	require.NoError(t, g.Wait())
 }
 
+func TestImportIntoCSVCancel(t *testing.T) {
+	// defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
+
+	const nodes = 3
+
+	numFiles := nodes + 2
+	rowsPerFile := 5000
+	rowsPerRaceFile := 16
+
+	resetBatchSize := TestingSetParallelImporterReaderBatchSize(1)
+	defer resetBatchSize()
+
+	ctx := context.Background()
+	baseDir := testutils.TestDataPath(t, "csv")
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+		// Test fails when run within a test tenant. More investigation
+		// is required. Tracked with #76378.
+		DisableDefaultTestTenant: true,
+		ExternalIODir:            baseDir,
+	}})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.ServerConn(0)
+
+	setupDoneCh := make(chan struct{})
+
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.onSetupFinish = func() {
+					close(setupDoneCh)
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.concurrent_addsstable_requests = 10`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING storage.mvcc.range_tombstones.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_io_write.small_write_size='1'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size='1'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING server.debug.default_vmodule='sst_batcher=4,buffering_adder=4'`)
+
+	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
+
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
+	defer sqlDB.Exec(t, `DROP TABLE t`)
+
+	preImportData := sqlDB.QueryStr(t, `SELECT * FROM t`)
+
+	var jobID int
+	row := sqlDB.QueryRow(t, fmt.Sprintf("IMPORT INTO t (a, b) CSV DATA (%s) WITH DETACHED", strings.Join(testFiles.files, ",")))
+	row.Scan(&jobID)
+	<-setupDoneCh
+	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", jobID))
+	sqlDB.Exec(t, fmt.Sprintf("SHOW JOB WHEN COMPLETE %d", jobID))
+
+	time.Sleep(5 * time.Second)
+	t.Logf("checking query results")
+	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, preImportData)
+
+	// // Expect it to succeed on re-attempt.
+	// sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, strings.Join(testFiles.files, ",")))
+}
+
 // TODO(adityamaru): Tests still need to be added incrementally as
 // relevant IMPORT INTO logic is added. Some of them include:
 // -> FK and constraint violation

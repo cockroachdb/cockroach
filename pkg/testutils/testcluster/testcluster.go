@@ -45,8 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
@@ -159,46 +157,46 @@ func (tc *TestCluster) stopServers(ctx context.Context) {
 	// was passed in at cluster creation time). We should not allow the Tracer to
 	// be passed in like this, and we should then also added this registry
 	// draining check to individual TestServers.
-	for i := 0; i < tc.NumServers(); i++ {
-		// Wait until a server's span registry is emptied out. This helps us check
-		// to see that there are no un-Finish()ed spans. We need to wrap this in a
-		// SucceedsSoon block because it's possible for us to issue requests during
-		// server shut down, where the requests in turn would create (registered)
-		// spans. Cleaning up temporary objects created by the session[1] is one
-		// example of this.
-		//
-		// [1]: cleanupSessionTempObjects
-		tracer := tc.Servers[i].Tracer()
-		testutils.SucceedsSoon(tc.t, func() error {
-			var sps []tracing.RegistrySpan
-			_ = tracer.VisitSpans(func(span tracing.RegistrySpan) error {
-				sps = append(sps, span)
-				return nil
-			})
-			if len(sps) == 0 {
-				return nil
-			}
-			var buf strings.Builder
-			fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
-			var ids []uint64
-			for _, sp := range sps {
-				trace := sp.GetFullRecording(tracingpb.RecordingVerbose)
-				rec := trace.Flatten()
-				for _, rs := range rec {
-					// NB: it would be a sight easier to just include these in the output of
-					// the string formatted recording, but making a change there presumably requires
-					// lots of changes across various testdata in the codebase and the author is
-					// trying to be nimble.
-					ids = append(ids, rs.GoroutineID)
-				}
-				fmt.Fprintln(&buf, rec)
-				fmt.Fprintln(&buf)
-			}
-			sl := make([]byte, 5<<20 /* 5mb */)
-			sl = sl[:runtime.Stack(sl, true /* all */)]
-			return errors.Newf("%s\n\ngoroutines of interest: %v\nstacks:\n\n%s", buf.String(), ids, sl)
-		})
-	}
+	// for i := 0; i < tc.NumServers(); i++ {
+	// 	// Wait until a server's span registry is emptied out. This helps us check
+	// 	// to see that there are no un-Finish()ed spans. We need to wrap this in a
+	// 	// SucceedsSoon block because it's possible for us to issue requests during
+	// 	// server shut down, where the requests in turn would create (registered)
+	// 	// spans. Cleaning up temporary objects created by the session[1] is one
+	// 	// example of this.
+	// 	//
+	// 	// [1]: cleanupSessionTempObjects
+	// 	tracer := tc.Servers[i].Tracer()
+	// 	testutils.SucceedsSoon(tc.t, func() error {
+	// 		var sps []tracing.RegistrySpan
+	// 		_ = tracer.VisitSpans(func(span tracing.RegistrySpan) error {
+	// 			sps = append(sps, span)
+	// 			return nil
+	// 		})
+	// 		if len(sps) == 0 {
+	// 			return nil
+	// 		}
+	// 		var buf strings.Builder
+	// 		fmt.Fprintf(&buf, "unexpectedly found %d active spans:\n", len(sps))
+	// 		var ids []uint64
+	// 		for _, sp := range sps {
+	// 			trace := sp.GetFullRecording(tracingpb.RecordingVerbose)
+	// 			rec := trace.Flatten()
+	// 			for _, rs := range rec {
+	// 				// NB: it would be a sight easier to just include these in the output of
+	// 				// the string formatted recording, but making a change there presumably requires
+	// 				// lots of changes across various testdata in the codebase and the author is
+	// 				// trying to be nimble.
+	// 				ids = append(ids, rs.GoroutineID)
+	// 			}
+	// 			fmt.Fprintln(&buf, rec)
+	// 			fmt.Fprintln(&buf)
+	// 		}
+	// 		sl := make([]byte, 5<<20 /* 5mb */)
+	// 		sl = sl[:runtime.Stack(sl, true /* all */)]
+	// 		return errors.Newf("%s\n\ngoroutines of interest: %v\nstacks:\n\n%s", buf.String(), ids, sl)
+	// 	})
+	// }
 	// Force a GC in an attempt to run finalizers. Some finalizers run sanity
 	// checks that panic on failure, and ideally we'd run them all before starting
 	// the next test.
