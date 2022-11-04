@@ -19,6 +19,10 @@ import {
 import { Button } from "../../button";
 import { SqlBox, SqlBoxSize } from "../../sql";
 import { SortSetting } from "../../sortedtable";
+import classNames from "classnames/bind";
+import styles from "../statementDetails.module.scss";
+
+const cx = classNames.bind(styles);
 
 interface PlanDetailsProps {
   plans: PlanHashStats[];
@@ -59,13 +63,15 @@ function renderPlanTable(
 ): React.ReactElement {
   const columns = makeExplainPlanColumns(handleDetails);
   return (
-    <PlansSortedTable
-      columns={columns}
-      data={plans}
-      className="statements-table"
-      sortSetting={sortSetting}
-      onChangeSortSetting={onChangeSortSetting}
-    />
+    <div className={cx("table-area")}>
+      <PlansSortedTable
+        columns={columns}
+        data={plans}
+        className="statements-table"
+        sortSetting={sortSetting}
+        onChangeSortSetting={onChangeSortSetting}
+      />
+    </div>
   );
 }
 
