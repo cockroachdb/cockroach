@@ -308,9 +308,9 @@ var testCases = []testCase{
 				require.Regexp(t, msg, tCtx.pts.MarkVerified(ctx, nil /* txn */, uuid.MakeV4()).Error())
 				_, err := tCtx.pts.GetRecord(ctx, nil /* txn */, uuid.MakeV4())
 				require.Regexp(t, msg, err.Error())
-				_, err = tCtx.pts.GetMetadata(ctx, nil /* txn */)
+				_, err = tCtx.pts.GetMetadata(ctx, nil /* txn */, ie)
 				require.Regexp(t, msg, err.Error())
-				_, err = tCtx.pts.GetState(ctx, nil, ie)
+				_, err = tCtx.pts.GetState(ctx, nil /* txn */, ie)
 				require.Regexp(t, msg, err.Error())
 			}),
 		},
@@ -499,7 +499,7 @@ func (test testCase) run(t *testing.T) {
 		}))
 		var md ptpb.Metadata
 		require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
-			md, err = pts.GetMetadata(ctx, txn)
+			md, err = pts.GetMetadata(ctx, txn, ie)
 			return err
 		}))
 		require.EqualValues(t, tCtx.state, state)
@@ -762,6 +762,7 @@ func TestErrorsFromSQL(t *testing.T) {
 
 	s := tc.Server(0)
 	ie := s.InternalExecutor().(sqlutil.InternalExecutor)
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	wrappedIE := &wrappedInternalExecutor{wrapped: ie}
 	pts := ptstorage.New(s.ClusterSettings(), wrappedIE, &protectedts.TestingKnobs{})
 
@@ -782,11 +783,10 @@ func TestErrorsFromSQL(t *testing.T) {
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return pts.Release(ctx, txn, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to release record %v: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := pts.GetMetadata(ctx, txn)
+	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		_, err := pts.GetMetadata(ctx, txn, ie)
 		return err
 	}), "failed to read metadata: boom")
-	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		_, err := pts.GetState(ctx, txn, ie)
 		return err
