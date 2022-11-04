@@ -802,7 +802,8 @@ CREATE TABLE crdb_internal.jobs (
    next_run TIMESTAMP NULL,
    num_runs INT8 NULL,
    execution_errors STRING[] NULL,
-   execution_events JSONB NULL
+   execution_events JSONB NULL,
+   INDEX jobs_status_idx (status ASC) STORING (job_id, job_type, description, statement, user_name, descriptor_ids, running_status, created, started, finished, modified, fraction_completed, high_water_timestamp, error, coordinator_id, trace_id, last_run, next_run, num_runs, execution_errors, execution_events)
 )  CREATE TABLE crdb_internal.jobs (
    job_id INT8 NULL,
    job_type STRING NULL,
@@ -825,7 +826,8 @@ CREATE TABLE crdb_internal.jobs (
    next_run TIMESTAMP NULL,
    num_runs INT8 NULL,
    execution_errors STRING[] NULL,
-   execution_events JSONB NULL
+   execution_events JSONB NULL,
+   INDEX jobs_status_idx (status ASC) STORING (job_id, job_type, description, statement, user_name, descriptor_ids, running_status, created, started, finished, modified, fraction_completed, high_water_timestamp, error, coordinator_id, trace_id, last_run, next_run, num_runs, execution_errors, execution_events)
 )  {}  {}
 CREATE TABLE crdb_internal.kv_node_liveness (
    node_id INT8 NOT NULL,
