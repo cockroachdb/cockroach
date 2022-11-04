@@ -94,7 +94,7 @@ type Storage interface {
 	Release(context.Context, *kv.Txn, uuid.UUID) error
 
 	// GetMetadata retrieves the metadata with the provided Txn.
-	GetMetadata(context.Context, *kv.Txn) (ptpb.Metadata, error)
+	GetMetadata(context.Context, *kv.Txn, sqlutil.InternalExecutor) (ptpb.Metadata, error)
 
 	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
