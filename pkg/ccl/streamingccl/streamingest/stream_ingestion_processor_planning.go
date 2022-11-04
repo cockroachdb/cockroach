@@ -107,25 +107,71 @@ func distStreamIngest(
 		return nil
 	}
 
-	// Setup a one-stage plan with one proc per input spec.
-	corePlacement := make([]physicalplan.ProcessorCorePlacement, len(streamIngestionSpecs))
-	for i := range streamIngestionSpecs {
-		corePlacement[i].SQLInstanceID = sqlInstanceIDs[i]
-		corePlacement[i].Core.StreamIngestionData = streamIngestionSpecs[i]
-	}
-
-	p := planCtx.NewPhysicalPlan()
-	p.AddNoInputStage(
-		corePlacement,
-		execinfrapb.PostProcessSpec{},
-		streamIngestionResultTypes,
-		execinfrapb.Ordering{},
-	)
-
 	execCfg := execCtx.ExecCfg()
 	gatewayNodeID, err := execCfg.NodeInfo.NodeID.OptionalNodeIDErr(48274)
 	if err != nil {
 		return err
+	}
+
+	p := planCtx.NewPhysicalPlan()
+
+	// The first stage contains a single processor running on the gateway.
+	// This is responsible for sending the cutover signal to the stream ingestion processors.
+	cutoverProcessor := &cutoverProcessor{
+		settings: planCtx.ExtendedEvalCtx.Settings,
+		registry: planCtx.ExtendedEvalCtx.ExecCfg.JobRegistry,
+		jobID:    jobID,
+	}
+	cutoverProcessorIdx := p.AddLocalProcessor(cutoverProcessor)
+	stageID := p.NewStage(false /* containsRemoteProcessor */, false /* allowPartialDistribution */)
+
+	outputRouterType := execinfrapb.OutputRouterSpec_MIRROR
+	if len(streamIngestionSpecs) == 1 {
+		outputRouterType = execinfrapb.OutputRouterSpec_PASS_THROUGH
+	}
+	p.AddProcessor(physicalplan.Processor{
+		SQLInstanceID: base.SQLInstanceID(gatewayNodeID),
+		Spec: execinfrapb.ProcessorSpec{
+			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
+				RowSourceIdx: uint32(cutoverProcessorIdx),
+				NumInputs:    0,
+				Name:         "stream-ingestion-cutover-monitor",
+			}},
+			Post: execinfrapb.PostProcessSpec{},
+			Output: []execinfrapb.OutputRouterSpec{{
+				Type: outputRouterType,
+			}},
+			StageID:     stageID,
+			ResultTypes: streamIngestionCutoverProcessorTypes,
+		},
+	})
+
+	ingestionStageID := p.NewStageOnNodes(sqlInstanceIDs)
+	slot := 0
+	for i := range streamIngestionSpecs {
+		proc := physicalplan.Processor{
+			SQLInstanceID: sqlInstanceIDs[i],
+			Spec: execinfrapb.ProcessorSpec{
+				Input: []execinfrapb.InputSyncSpec{
+					{ColumnTypes: streamIngestionCutoverProcessorTypes},
+				},
+				Core:        execinfrapb.ProcessorCoreUnion{StreamIngestionData: streamIngestionSpecs[i]},
+				Post:        execinfrapb.PostProcessSpec{},
+				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     ingestionStageID,
+				ResultTypes: streamIngestionResultTypes,
+			},
+		}
+		pIdx := p.AddProcessor(proc)
+		p.ResultRouters = append(p.ResultRouters, pIdx)
+		p.Streams = append(p.Streams, physicalplan.Stream{
+			SourceProcessor:  physicalplan.ProcessorIdx(cutoverProcessorIdx),
+			SourceRouterSlot: slot,
+			DestProcessor:    pIdx,
+			DestInput:        0,
+		})
+		slot++
+
 	}
 
 	// The ResultRouters from the previous stage will feed in to the
@@ -138,7 +184,6 @@ func distStreamIngest(
 	dsp.FinalizePlan(planCtx, p)
 
 	rw := sql.NewRowResultWriter(nil /* rowContainer */)
-
 	recv := sql.MakeDistSQLReceiver(
 		ctx,
 		rw,

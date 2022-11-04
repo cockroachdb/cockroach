@@ -44,7 +44,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func verifyIngestionStats(t *testing.T, streamID int64, cutoverTime time.Time, stats string) {
+func verifyIngestionStats(t *testing.T, cutoverTime time.Time, stats string) {
 	fetchRequiredValueKey := func(j json2.JSON, key string) json2.JSON {
 		val, err := j.FetchValKey(key)
 		require.NoError(t, err)
@@ -182,7 +182,7 @@ INSERT INTO d.t2 VALUES (2);
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 
-	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
+	verifyIngestionStats(t, cutoverTime,
 		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
 
 	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), DisableCreateTenant: true})

@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "streamingest",
     srcs = [
+        "cutover_time_processor.go",
         "metrics.go",
         "stream_ingest_manager.go",
         "stream_ingestion_frontier_processor.go",
