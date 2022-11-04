@@ -34,7 +34,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-var sqlAPIClock timeutil.TimeSource = timeutil.DefaultTimeSource{}
+// SQLAPIClock is exposed for override by tests. Tenant tests are in
+// the serverccl package.
+var SQLAPIClock timeutil.TimeSource = timeutil.DefaultTimeSource{}
 
 // swagger:operation POST /sql/ execSQL
 //
@@ -262,7 +264,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	ctx = a.admin.server.AnnotateCtx(ctx)
+	ctx = a.sqlServer.ambientCtx.AnnotateCtx(ctx)
 
 	// Read the request arguments.
 	// Is there a request payload?
@@ -372,9 +374,9 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		// We need a transaction to group the statements together.
 		// We use TxnWithSteppingEnabled here even though we don't
 		// use stepping below, because that buys us admission control.
-		ief := a.admin.server.sqlServer.execCfg.InternalExecutorFactory
+		ief := a.sqlServer.internalExecutorFactory
 		runner = func(ctx context.Context, fn txnFunc) error {
-			return ief.TxnWithExecutor(ctx, a.admin.server.db, nil /* sessionData */, func(
+			return ief.TxnWithExecutor(ctx, a.db, nil /* sessionData */, func(
 				ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 			) error {
 				return fn(ctx, txn, ie)
@@ -382,7 +384,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		runner = func(ctx context.Context, fn func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error) error {
-			return fn(ctx, nil, a.admin.ie)
+			return fn(ctx, nil, a.sqlServer.internalExecutor)
 		}
 	}
 
@@ -418,11 +420,11 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 
 				returnType := stmt.stmt.AST.StatementReturnType()
 				stmtErr := func() (retErr error) {
-					txnRes.Start = jsonTime(sqlAPIClock.Now())
+					txnRes.Start = jsonTime(SQLAPIClock.Now())
 					txnRes.Statement = stmtIdx + 1
 					txnRes.Tag = stmt.stmt.AST.StatementTag()
 					defer func() {
-						txnRes.End = jsonTime(sqlAPIClock.Now())
+						txnRes.End = jsonTime(SQLAPIClock.Now())
 						if retErr != nil {
 							retErr = errors.Wrapf(retErr, "executing stmt %d", stmtIdx+1)
 							txnRes.Error = &jsonError{retErr}
@@ -535,7 +537,7 @@ func (r *resultRow) MarshalJSON() ([]byte, error) {
 
 func (a *apiV2Server) shouldStop(ctx context.Context) error {
 	select {
-	case <-a.admin.server.stopper.ShouldQuiesce():
+	case <-a.sqlServer.stopper.ShouldQuiesce():
 		return errors.New("server is shutting down")
 	case <-ctx.Done():
 		return ctx.Err()

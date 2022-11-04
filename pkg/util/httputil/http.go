@@ -75,6 +75,17 @@ func PostJSON(httpClient http.Client, path string, request, response protoutil.M
 	return err
 }
 
+// PostJSONRaw uses the supplied client to POST request to the URL specified by
+// the parameters and returns the response.
+func PostJSONRaw(httpClient http.Client, path string, request []byte) (*http.Response, error) {
+	buf := bytes.NewBuffer(request)
+	req, err := http.NewRequest("POST", path, buf)
+	if err != nil {
+		return nil, err
+	}
+	return doJSONRawRequest(httpClient, req)
+}
+
 // PostJSONWithRequest uses the supplied client to POST request to the URL
 // specified by the parameters and unmarshals the result into response.
 //
@@ -120,4 +131,12 @@ func doJSONRequest(
 		)
 	}
 	return resp, jsonpb.Unmarshal(resp.Body, response)
+}
+
+func doJSONRawRequest(httpClient http.Client, req *http.Request) (*http.Response, error) {
+	if timeout := httpClient.Timeout; timeout > 0 {
+		req.Header.Set("Grpc-Timeout", strconv.FormatInt(timeout.Nanoseconds(), 10)+"n")
+	}
+	req.Header.Set(AcceptHeader, JSONContentType)
+	return httpClient.Do(req)
 }
