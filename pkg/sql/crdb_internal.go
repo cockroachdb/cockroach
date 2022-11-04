@@ -487,6 +487,7 @@ CREATE TABLE crdb_internal.tables (
 );`,
 	indexes: []virtualIndex{
 		{
+			// INDEX(parent_id) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
 				flags := p.CommonLookupFlagsRequired()
@@ -500,6 +501,7 @@ CREATE TABLE crdb_internal.tables (
 			},
 		},
 		{
+			// INDEX(database_name) WHERE drop_time IS NULL
 			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
 				dbName := string(tree.MustBeDString(unwrappedConstraint))
 				flags := p.CommonLookupFlagsRequired()
