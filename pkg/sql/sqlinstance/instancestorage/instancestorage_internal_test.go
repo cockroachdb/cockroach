@@ -13,7 +13,6 @@ package instancestorage
 import (
 	"context"
 	gosql "database/sql"
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -36,8 +36,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func makeSession() sqlliveness.SessionID {
+	session, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+	if err != nil {
+		panic(err)
+	}
+	return session
+}
 
 func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -47,11 +56,19 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	getAvailableInstanceID := func(storage *Storage, region []byte) (id base.SQLInstanceID, err error) {
+		err = storage.db.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
+			id, err = storage.getAvailableInstanceIDForRegion(ctx, region, txn)
+			return err
+		})
+		return
+	}
+
 	t.Run("no rows", func(t *testing.T) {
 		stopper, storage, _, _ := setup(t, sqlDB, kvDB, s.ClusterSettings())
 		defer stopper.Stop(ctx)
 
-		id, err := storage.getAvailableInstanceIDForRegion(ctx, storage.db)
+		id, err := getAvailableInstanceID(storage, nil)
 		require.Error(t, err, errNoPreallocatedRows.Error())
 		require.Equal(t, base.SQLInstanceID(0), id)
 	})
@@ -62,13 +79,15 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 		defer stopper.Stop(ctx)
 
 		// Pre-allocate four instances.
+		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{4, 3, 2, 1}
 		addresses := [...]string{"addr4", "addr3", "addr2", "addr1"}
-		sessionIDs := [...]sqlliveness.SessionID{"session4", "session3", "session2", "session1"}
+		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession()}
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 		for _, id := range instanceIDs {
 			require.NoError(t, storage.CreateInstanceDataForTest(
 				ctx,
+				region,
 				id,
 				"",
 				sqlliveness.SessionID([]byte{}),
@@ -79,168 +98,189 @@ func TestGetAvailableInstanceIDForRegion(t *testing.T) {
 
 		// Take instance 4. 1 should be prioritized.
 		claim(ctx, t, instanceIDs[0], addresses[0], sessionIDs[0], sessionExpiry, storage, slStorage)
-		id, err := storage.getAvailableInstanceIDForRegion(ctx, storage.db)
+		id, err := getAvailableInstanceID(storage, region)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(1), id)
 
 		// Take instance 1 and 2. 3 should be prioritized.
 		claim(ctx, t, instanceIDs[2], addresses[2], sessionIDs[2], sessionExpiry, storage, slStorage)
 		claim(ctx, t, instanceIDs[3], addresses[3], sessionIDs[3], sessionExpiry, storage, slStorage)
-		id, err = storage.getAvailableInstanceIDForRegion(ctx, storage.db)
+		id, err = getAvailableInstanceID(storage, region)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(3), id)
 
 		// Take instance 3. No rows left.
 		claim(ctx, t, instanceIDs[1], addresses[1], sessionIDs[1], sessionExpiry, storage, slStorage)
-		id, err = storage.getAvailableInstanceIDForRegion(ctx, storage.db)
+		id, err = getAvailableInstanceID(storage, region)
 		require.Error(t, err, errNoPreallocatedRows.Error())
 		require.Equal(t, base.SQLInstanceID(0), id)
 
 		// Make instance 3 and 4 expire. 3 should be prioritized.
 		require.NoError(t, slStorage.Delete(ctx, sessionIDs[0]))
 		require.NoError(t, slStorage.Delete(ctx, sessionIDs[1]))
-		id, err = storage.getAvailableInstanceIDForRegion(ctx, storage.db)
+		id, err = getAvailableInstanceID(storage, region)
 		require.NoError(t, err)
 		require.Equal(t, base.SQLInstanceID(3), id)
 	})
 }
 
-func TestIDsToReclaim(t *testing.T) {
+func TestIdsToAllocate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-
-	const preallocatedCount = 5
-	PreallocatedCount.Override(ctx, &s.ClusterSettings().SV, preallocatedCount)
-
-	sortAsc := func(ids []base.SQLInstanceID) {
-		sort.SliceStable(ids, func(i, j int) bool {
-			return ids[i] < ids[j]
-		})
+	type testCase struct {
+		name       string
+		target     int
+		regions    [][]byte
+		instances  []instancerow
+		toAllocate []instancerow
 	}
 
-	t.Run("no rows", func(t *testing.T) {
-		stopper, storage, _, _ := setup(t, sqlDB, kvDB, s.ClusterSettings())
-		defer stopper.Stop(ctx)
+	nonEmptySession := makeSession()
+	regions := [][]byte{{0}, {1}, {2}, {3}, {4}}
 
-		toClaim, toDelete, err := storage.idsToReclaim(ctx, storage.db)
-		require.NoError(t, err)
-		require.Len(t, toClaim, preallocatedCount)
-		require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 5}, toClaim)
-		require.Len(t, toDelete, 0)
-	})
+	for _, tc := range []testCase{
+		{
+			name:    "initial-allocation",
+			target:  2,
+			regions: [][]byte{regions[1], regions[2], regions[3]},
+			toAllocate: []instancerow{
+				{region: regions[1], instanceID: 1},
+				{region: regions[1], instanceID: 2},
+				{region: regions[2], instanceID: 3},
+				{region: regions[2], instanceID: 4},
+				{region: regions[3], instanceID: 5},
+				{region: regions[3], instanceID: 6},
+			},
+		},
+		{
+			name:    "partial-allocation",
+			target:  2,
+			regions: [][]byte{regions[1], regions[2], regions[3]},
+			instances: []instancerow{
+				{region: regions[1], instanceID: 1, sessionID: nonEmptySession},
+				{region: regions[1], instanceID: 2},
+				/* 3 is a hole */
+				{region: regions[2], instanceID: 4, sessionID: nonEmptySession},
+				/* 5 and 6 are holes */
+				{region: regions[2], instanceID: 7, sessionID: nonEmptySession},
+			},
+			toAllocate: []instancerow{
+				{region: regions[1], instanceID: 3},
+				{region: regions[2], instanceID: 5},
+				{region: regions[2], instanceID: 6},
+				{region: regions[3], instanceID: 8},
+				{region: regions[3], instanceID: 9},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.toAllocate, idsToAllocate(tc.target, tc.regions, tc.instances))
+		})
+	}
+}
 
-	t.Run("nothing to reclaim", func(t *testing.T) {
-		const expiration = time.Minute
-		stopper, storage, _, clock := setup(t, sqlDB, kvDB, s.ClusterSettings())
-		defer stopper.Stop(ctx)
+func TestIdsToReclaim(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
-		// Pre-allocate two instances.
-		instanceIDs := [...]base.SQLInstanceID{1, 2, 3, 4, 5}
-		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		for _, id := range instanceIDs {
-			require.NoError(t, storage.CreateInstanceDataForTest(
-				ctx,
-				id,
-				"",
-				sqlliveness.SessionID([]byte{}),
-				sessionExpiry,
-				roachpb.Locality{},
-			))
-		}
+	type instance struct {
+		id      int
+		session sqlliveness.SessionID
+		dead    bool
+	}
 
-		toClaim, toDelete, err := storage.idsToReclaim(ctx, storage.db)
-		require.NoError(t, err)
-		require.Len(t, toClaim, 0)
-		require.Len(t, toDelete, 0)
-	})
+	type testCase struct {
+		name      string
+		target    int
+		instances []instance
+		toReclaim []base.SQLInstanceID
+		toDelete  []base.SQLInstanceID
+	}
 
-	t.Run("preallocated rows", func(t *testing.T) {
-		const expiration = time.Minute
-		stopper, storage, slStorage, clock := setup(t, sqlDB, kvDB, s.ClusterSettings())
-		defer stopper.Stop(ctx)
+	sessions := make([]sqlliveness.SessionID, 10)
+	for i := range sessions {
+		sessions[i] = makeSession()
+	}
 
-		// Pre-allocate two instances.
-		instanceIDs := [...]base.SQLInstanceID{5, 2}
-		addresses := [...]string{"addr5", "addr2"}
-		sessionIDs := [...]sqlliveness.SessionID{"session5", "session2"}
-		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		for _, id := range instanceIDs {
-			require.NoError(t, storage.CreateInstanceDataForTest(
-				ctx,
-				id,
-				"",
-				sqlliveness.SessionID([]byte{}),
-				sessionExpiry,
-				roachpb.Locality{},
-			))
-		}
+	for _, tc := range []testCase{
+		{
+			name:   "reclaim-and-delete",
+			target: 2,
+			instances: []instance{
+				{id: 1, session: sessions[1], dead: true},
+				{id: 2, session: sessions[2], dead: true},
+				{id: 3, session: sessions[3], dead: true},
+				{id: 4, session: sessions[4]},
+				{id: 5, session: ""},
+			},
+			toReclaim: []base.SQLInstanceID{1, 2},
+			toDelete:  []base.SQLInstanceID{3, 5},
+		},
+		{
+			name:   "reclaim",
+			target: 5,
+			instances: []instance{
+				{id: 1, session: sessions[1], dead: true},
+				{id: 2, session: sessions[2], dead: true},
+				{id: 3, session: sessions[3], dead: true},
+				{id: 4, session: sessions[4]},
+				{id: 5, session: ""},
+			},
+			toReclaim: []base.SQLInstanceID{1, 2, 3},
+		},
+		{
+			name:   "delete",
+			target: 2,
+			instances: []instance{
+				{id: 1},
+				{id: 2},
+				{id: 3},
+				{id: 4},
+			},
+			toDelete: []base.SQLInstanceID{3, 4},
+		},
+		{
+			name:   "all-in-use",
+			target: 5,
+			instances: []instance{
+				{id: 1, session: sessions[1]},
+				{id: 2, session: sessions[2]},
+				{id: 3, session: sessions[3]},
+				{id: 4, session: sessions[4]},
+			},
+		},
+		{
+			name:   "all-pre-allocated",
+			target: 5,
+			instances: []instance{
+				{id: 1},
+				{id: 2},
+				{id: 3},
+				{id: 4},
+				{id: 5},
+			},
+		},
+		{
+			name:   "empty",
+			target: 5,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			instances := make([]instancerow, len(tc.instances))
+			isExpired := map[sqlliveness.SessionID]bool{}
+			for i, instance := range tc.instances {
+				instances[i] = instancerow{instanceID: base.SQLInstanceID(instance.id), sessionID: instance.session}
+				if instance.session != "" && instance.dead {
+					isExpired[instance.session] = true
+				}
+			}
 
-		toClaim, toDelete, err := storage.idsToReclaim(ctx, storage.db)
-		sortAsc(toClaim)
-		require.NoError(t, err)
-		require.Len(t, toClaim, 3)
-		require.Equal(t, []base.SQLInstanceID{1, 3, 4}, toClaim)
-		require.Len(t, toDelete, 0)
-
-		// Take instance 5.
-		claim(ctx, t, instanceIDs[0], addresses[0], sessionIDs[0], sessionExpiry, storage, slStorage)
-		toClaim, toDelete, err = storage.idsToReclaim(ctx, storage.db)
-		sortAsc(toClaim)
-		require.NoError(t, err)
-		require.Len(t, toClaim, 4)
-		require.Equal(t, []base.SQLInstanceID{1, 3, 4, 6}, toClaim)
-		require.Len(t, toDelete, 0)
-
-		// Take instance 2.
-		claim(ctx, t, instanceIDs[1], addresses[1], sessionIDs[1], sessionExpiry, storage, slStorage)
-		toClaim, toDelete, err = storage.idsToReclaim(ctx, storage.db)
-		sortAsc(toClaim)
-		require.NoError(t, err)
-		require.Len(t, toClaim, 5)
-		require.Equal(t, []base.SQLInstanceID{1, 3, 4, 6, 7}, toClaim)
-		require.Len(t, toDelete, 0)
-
-		// Make instance 5 expire.
-		require.NoError(t, slStorage.Delete(ctx, sessionIDs[0]))
-		toClaim, toDelete, err = storage.idsToReclaim(ctx, storage.db)
-		sortAsc(toClaim)
-		require.NoError(t, err)
-		require.Len(t, toClaim, 5)
-		require.Equal(t, []base.SQLInstanceID{1, 3, 4, 5, 6}, toClaim)
-		require.Len(t, toDelete, 0)
-	})
-
-	t.Run("too many expired rows", func(t *testing.T) {
-		const expiration = time.Minute
-		stopper, storage, _, clock := setup(t, sqlDB, kvDB, s.ClusterSettings())
-		defer stopper.Stop(ctx)
-
-		// Pre-allocate 10 instances.
-		instanceIDs := [...]base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
-		for _, id := range instanceIDs {
-			require.NoError(t, storage.CreateInstanceDataForTest(
-				ctx,
-				id,
-				fmt.Sprintf("addr%d", id),
-				sqlliveness.SessionID([]byte(fmt.Sprintf("session%d", id))),
-				sessionExpiry,
-				roachpb.Locality{},
-			))
-		}
-
-		toClaim, toDelete, err := storage.idsToReclaim(ctx, storage.db)
-		sortAsc(toClaim)
-		require.NoError(t, err)
-		require.Len(t, toClaim, 5)
-		require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 5}, toClaim)
-		require.Len(t, toDelete, 5)
-		require.Equal(t, []base.SQLInstanceID{6, 7, 8, 9, 10}, toDelete)
-	})
+			toReclaim, toDelete := idsToReclaim(tc.target, instances, isExpired)
+			require.Equal(t, tc.toReclaim, toReclaim)
+			require.Equal(t, tc.toDelete, toDelete)
+		})
+	}
 }
 
 func TestGenerateAvailableInstanceRows(t *testing.T) {
@@ -255,13 +295,15 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 	const preallocatedCount = 5
 	PreallocatedCount.Override(ctx, &s.ClusterSettings().SV, preallocatedCount)
 
+	regions := [][]byte{enum.One}
+
 	t.Run("nothing preallocated", func(t *testing.T) {
 		stopper, storage, _, clock := setup(t, sqlDB, kvDB, s.ClusterSettings())
 		defer stopper.Stop(ctx)
 
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, sessionExpiry))
+		require.NoError(t, storage.generateAvailableInstanceRows(ctx, regions, sessionExpiry))
 
 		instances, err := storage.GetAllInstancesDataForTest(ctx)
 		sortInstancesForTest(instances)
@@ -280,14 +322,16 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 
 		sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 
+		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 3, 5, 8}
 		addresses := [...]string{"addr1", "addr3", "addr5", "addr8"}
-		sessionIDs := [...]sqlliveness.SessionID{"session1", "session3", "session5", "session8"}
+		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession(), makeSession()}
 
 		// Preallocate first two, and claim the other two (have not expired)
-		for i := 0; i < 2; i++ {
+		for _, i := range []int{0, 1} {
 			require.NoError(t, storage.CreateInstanceDataForTest(
 				ctx,
+				region,
 				instanceIDs[i],
 				"",
 				sqlliveness.SessionID([]byte{}),
@@ -295,17 +339,17 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 				roachpb.Locality{},
 			))
 		}
-		for i := 2; i < 4; i++ {
+		for _, i := range []int{2, 3} {
 			claim(ctx, t, instanceIDs[i], addresses[i], sessionIDs[i], sessionExpiry, storage, slStorage)
 		}
 
 		// Generate available rows.
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, sessionExpiry))
+		require.NoError(t, storage.generateAvailableInstanceRows(ctx, regions, sessionExpiry))
 
 		instances, err := storage.GetAllInstancesDataForTest(ctx)
 		sortInstancesForTest(instances)
 		require.NoError(t, err)
-		require.Equal(t, preallocatedCount+2, len(instances))
+		require.Equal(t, preallocatedCount+2, len(instances), "instances: %+v", instances)
 		{
 			var foundIDs []base.SQLInstanceID
 			for i := 0; i < preallocatedCount; i++ {
@@ -327,12 +371,12 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 		}
 
 		// Delete the expired rows.
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, sessionExpiry))
+		require.NoError(t, storage.reclaimRegion(ctx, region))
 
 		instances, err = storage.GetAllInstancesDataForTest(ctx)
 		sortInstancesForTest(instances)
 		require.NoError(t, err)
-		require.Equal(t, preallocatedCount, len(instances))
+		require.Equal(t, preallocatedCount, len(instances), "instances: %+v", instances)
 		{
 			var foundIDs []base.SQLInstanceID
 			for i := 0; i < preallocatedCount; i++ {
@@ -340,7 +384,7 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 				require.Empty(t, instances[i].SessionID)
 				require.Empty(t, instances[i].InstanceAddr)
 			}
-			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 6}, foundIDs)
+			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 5}, foundIDs)
 		}
 
 		// Claim 1 and 3, and make them expire.
@@ -350,7 +394,7 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 		}
 
 		// Should reclaim expired rows.
-		require.NoError(t, storage.generateAvailableInstanceRows(ctx, sessionExpiry))
+		require.NoError(t, storage.reclaimRegion(ctx, region))
 
 		instances, err = storage.GetAllInstancesDataForTest(ctx)
 		sortInstancesForTest(instances)
@@ -363,7 +407,7 @@ func TestGenerateAvailableInstanceRows(t *testing.T) {
 				require.Empty(t, instances[i].SessionID)
 				require.Empty(t, instances[i].InstanceAddr)
 			}
-			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 6}, foundIDs)
+			require.Equal(t, []base.SQLInstanceID{1, 2, 3, 4, 5}, foundIDs)
 		}
 	})
 }
@@ -430,8 +474,11 @@ func claim(
 	storage *Storage,
 	slStorage *slstorage.FakeStorage,
 ) {
+	t.Helper()
+	region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
+	require.NoError(t, err)
 	require.NoError(t, slStorage.Insert(ctx, sessionID, sessionExpiration))
 	require.NoError(t, storage.CreateInstanceDataForTest(
-		ctx, instanceID, addr, sessionID, sessionExpiration, roachpb.Locality{},
+		ctx, region, instanceID, addr, sessionID, sessionExpiration, roachpb.Locality{},
 	))
 }

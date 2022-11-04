@@ -500,7 +500,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.db, codec, cfg.sqlLivenessProvider.CachedReader(), cfg.Settings)
 		cfg.sqlInstanceReader = instancestorage.NewReader(
 			cfg.sqlInstanceStorage,
-			cfg.sqlLivenessProvider.CachedReader(),
+			cfg.sqlLivenessProvider,
 			cfg.rangeFeedFactory,
 			codec, cfg.clock, cfg.stopper)
 

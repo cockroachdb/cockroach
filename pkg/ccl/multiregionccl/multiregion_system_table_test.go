@@ -10,56 +10,110 @@ package multiregionccl
 
 import (
 	"context"
-	"fmt"
+	gosql "database/sql"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/enum"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
-func createSqllivenessTable(
-	t *testing.T, db *sqlutils.SQLRunner, dbName string,
-) (tableID descpb.ID) {
-	t.Helper()
-	db.Exec(t, fmt.Sprintf(`
-		CREATE DATABASE IF NOT EXISTS "%s" 
-		WITH PRIMARY REGION "us-east1"
-		REGIONS "us-east1", "us-east2", "us-east3"
-	`, dbName))
+// alterCrdbRegionType converts the crdb_region []byte column in a system
+// database table into the system database's enum type.
+func alterCrdbRegionType(
+	ctx context.Context, tableID descpb.ID, db *kv.DB, executor descs.TxnManager,
+) error {
+	flags := tree.CommonLookupFlags{
+		Required:    true,
+		AvoidLeased: true,
+	}
+	objFlags := tree.ObjectLookupFlags{
+		CommonLookupFlags: flags,
+	}
 
-	// expiration needs to be column 2. slstorage.Table assumes the column id.
-	// session_uuid and crdb_region are identified by their location in the
-	// primary key.
-	db.Exec(t, fmt.Sprintf(`
-		CREATE TABLE "%s".sqlliveness (
-			session_uuid BYTES NOT NULL,
-			expiration DECIMAL NOT NULL,
-			crdb_region "%s".public.crdb_internal_region,
-			PRIMARY KEY(crdb_region, session_uuid)
-		) LOCALITY REGIONAL BY ROW;
-	`, dbName, dbName))
-	db.QueryRow(t, `
-		select u.id
-		from system.namespace t
-		join system.namespace u 
-		  on t.id = u."parentID" 
-		where t.name = $1 and u.name = $2`,
-		dbName, "sqlliveness").Scan(&tableID)
-	return tableID
+	getRegionEnum := func(systemDB catalog.DatabaseDescriptor, txn *kv.Txn, collection *descs.Collection) (*typedesc.Mutable, *types.T, error) {
+		enumID, err := systemDB.MultiRegionEnumID()
+		if err != nil {
+			return nil, nil, err
+		}
+		enumTypeDesc, err := collection.GetMutableTypeByID(ctx, txn, enumID, objFlags)
+		if err != nil {
+			return nil, nil, err
+		}
+		schema, err := collection.GetImmutableSchemaByID(ctx, txn, enumTypeDesc.GetParentSchemaID(), flags)
+		if err != nil {
+			return nil, nil, err
+		}
+		enumName := tree.MakeQualifiedTypeName(systemDB.GetName(), schema.GetName(), enumTypeDesc.GetName())
+		enumType, err := enumTypeDesc.MakeTypesT(ctx, &enumName, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		return enumTypeDesc, enumType, nil
+	}
+
+	getMutableColumn := func(table *tabledesc.Mutable, name string) (*descpb.ColumnDescriptor, error) {
+		for i := range table.Columns {
+			if table.Columns[i].Name == name {
+				return &table.Columns[i], nil
+			}
+		}
+		return nil, errors.New("crdb_region column not found")
+	}
+
+	err := executor.DescsTxn(ctx, db, func(ctx context.Context, txn *kv.Txn, collection *descs.Collection) error {
+		_, systemDB, err := collection.GetImmutableDatabaseByID(ctx, txn, keys.SystemDatabaseID, flags)
+		if err != nil {
+			return err
+		}
+
+		enumTypeDesc, enumType, err := getRegionEnum(systemDB, txn, collection)
+		if err != nil {
+			return err
+		}
+
+		// Change the crdb_region column's type to the enum
+		tableDesc, err := collection.GetMutableTableByID(ctx, txn, tableID, objFlags)
+		if err != nil {
+			return err
+		}
+		column, err := getMutableColumn(tableDesc, "crdb_region")
+		if err != nil {
+			return err
+		}
+		column.Type = enumType
+		if err := collection.WriteDesc(ctx, false, tableDesc, txn); err != nil {
+			return err
+		}
+
+		// Add a back reference to the enum
+		enumTypeDesc.AddReferencingDescriptorID(tableID)
+		return collection.WriteDesc(ctx, false, enumTypeDesc, txn)
+	})
+	if err != nil {
+		return errors.Wrapf(err, "unable to change crdb_region from []byte to the multi-region enum for table %d", tableID)
+	}
+	return err
 }
 
 func TestMrSystemDatabase(t *testing.T) {
@@ -67,74 +121,116 @@ func TestMrSystemDatabase(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
 
-	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
+	// Enable settings required for configuring a tenant's system database as multi-region.
+	cs := cluster.MakeTestingClusterSettings()
+	sql.SecondaryTenantsMultiRegionAbstractionsEnabled.Override(context.Background(), &cs.SV, true)
+	sql.SecondaryTenantZoneConfigsEnabled.Override(context.Background(), &cs.SV, true)
+
+	cluster, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{}, multiregionccltestutils.WithSettings(cs))
 	defer cleanup()
 
-	tDB := sqlutils.MakeSQLRunner(sqlDB)
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	tenantArgs := base.TestTenantArgs{
+		Settings: cs,
+		TenantID: id,
+		Locality: *cluster.Servers[0].Locality(),
+	}
+	tenantServer, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+
+	tDB := sqlutils.MakeSQLRunner(tenantSQL)
+
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+
+	ctx := context.Background()
+	executor := tenantServer.ExecutorConfig().(sql.ExecutorConfig)
+
+	// Changing the type of the crdb_region field is required to modify the
+	// types with SET LOCALITY REGIONAL BY ROW.
+	require.NoError(t, alterCrdbRegionType(ctx, keys.SqllivenessID, executor.DB, executor.InternalExecutorFactory))
+	require.NoError(t, alterCrdbRegionType(ctx, keys.SQLInstancesTableID, executor.DB, executor.InternalExecutorFactory))
+
+	// Run schema validations to ensure the manual descriptor modifications are
+	// okay.
+	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
 
 	t.Run("Sqlliveness", func(t *testing.T) {
+		// TODO(jeffswenson): Setting the locality does not work because it causes the schema
+		// changer to rewrite the primary key index.
+		// tDB.Exec(t, `ALTER TABLE system.sqlliveness SET LOCALITY REGIONAL BY ROW`)
 		row := tDB.QueryRow(t, `SELECT crdb_region, session_uuid, expiration FROM system.sqlliveness LIMIT 1`)
 		var sessionUUID string
 		var crdbRegion string
 		var rawExpiration apd.Decimal
 		row.Scan(&crdbRegion, &sessionUUID, &rawExpiration)
+		require.Equal(t, "us-east1", crdbRegion)
 	})
-}
 
-func TestRbrSqllivenessTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
+	t.Run("Sqlinstances", func(t *testing.T) {
+		// TODO(jeffswenson): Setting the locality does not work because it causes the schema
+		// changer to rewrite the primary key index.
+		// tDB.Exec(t, `ALTER TABLE system.sql_instances SET LOCALITY REGIONAL BY ROW`)
 
-	ctx := context.Background()
+		t.Run("InUse", func(t *testing.T) {
+			query := `
+				SELECT id, addr, session_id, locality, crdb_region
+				FROM system.sql_instances
+				WHERE session_id IS NOT NULL
+			`
+			rows := tDB.Query(t, query)
+			require.True(t, rows.Next())
+			for {
+				var id base.SQLInstanceID
+				var addr, locality string
+				var crdb_region string
+				var session sqlliveness.SessionID
 
-	cluster, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
-	defer cleanup()
-	kvDB := cluster.Servers[0].DB()
-	settings := cluster.Servers[0].Cfg.Settings
-	stopper := cluster.Servers[0].Stopper()
+				require.NoError(t, rows.Scan(&id, &addr, &session, &locality, &crdb_region))
 
-	tDB := sqlutils.MakeSQLRunner(sqlDB)
+				require.True(t, 0 < id)
+				require.NotEmpty(t, addr)
+				require.NotEmpty(t, locality)
+				require.NotEmpty(t, session)
+				require.NotEmpty(t, crdb_region)
 
-	t0 := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	timeSource := timeutil.NewManualTime(t0)
-	clock := hlc.NewClock(timeSource, base.DefaultMaxClockOffset)
+				require.Equal(t, "us-east1", crdb_region)
 
-	setup := func(t *testing.T) *slstorage.Storage {
-		dbName := t.Name()
-		tableID := createSqllivenessTable(t, tDB, dbName)
-		var ambientCtx log.AmbientContext
-		// rbrIndexID is the index id used to access the regional by row index in
-		// tests. In production it will be index 2, but the freshly created test table
-		// will have index 1.
-		const rbrIndexID = 1
-		return slstorage.NewTestingStorage(ambientCtx, stopper, clock, kvDB, keys.SystemSQLCodec, settings,
-			tableID, rbrIndexID, timeSource.NewTimer)
-	}
+				if !rows.Next() {
+					break
+				}
+			}
+			require.NoError(t, rows.Close())
+		})
 
-	t.Run("SqlRead", func(t *testing.T) {
-		storage := setup(t)
+		t.Run("Preallocated", func(t *testing.T) {
+			query := `
+				SELECT id, addr, session_id, locality, crdb_region
+				FROM system.sql_instances
+				WHERE session_id IS NULL
+			`
+			rows := tDB.Query(t, query)
+			require.True(t, rows.Next())
+			for {
+				var id base.SQLInstanceID
+				var addr, locality, session gosql.NullString
+				var crdb_region string
 
-		initialUUID := uuid.MakeV4()
-		session, err := slstorage.MakeSessionID(enum.One, initialUUID)
-		require.NoError(t, err)
+				require.NoError(t, rows.Scan(&id, &addr, &session, &locality, &crdb_region))
 
-		writeExpiration := clock.Now().Add(10, 00)
-		require.NoError(t, storage.Insert(ctx, session, writeExpiration))
+				require.True(t, 0 < id)
+				require.False(t, addr.Valid)
+				require.False(t, locality.Valid)
+				require.False(t, session.Valid)
+				require.NotEmpty(t, crdb_region)
 
-		var sessionUUID string
-		var crdbRegion string
-		var rawExpiration apd.Decimal
-
-		row := tDB.QueryRow(t, fmt.Sprintf(`SELECT crdb_region, session_uuid, expiration FROM "%s".sqlliveness`, t.Name()))
-		row.Scan(&crdbRegion, &sessionUUID, &rawExpiration)
-
-		require.Contains(t, []string{"us-east1", "us-east2", "us-east3"}, crdbRegion)
-		require.Equal(t, sessionUUID, string(initialUUID.GetBytes()))
-
-		readExpiration, err := hlc.DecimalToHLC(&rawExpiration)
-		require.NoError(t, err)
-
-		require.Equal(t, writeExpiration, readExpiration)
+				if !rows.Next() {
+					break
+				}
+			}
+			require.NoError(t, rows.Close())
+		})
 	})
 }

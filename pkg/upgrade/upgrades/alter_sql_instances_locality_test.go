@@ -64,7 +64,8 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 	)
 
 	// Inject the old copy of the descriptor.
-	upgrades.InjectLegacyTable(ctx, t, s, systemschema.SQLInstancesTable, getDeprecatedSqlInstancesDescriptor)
+	sqlInstancesTable := systemschema.SQLInstancesTable()
+	upgrades.InjectLegacyTable(ctx, t, s, sqlInstancesTable, getDeprecatedSqlInstancesDescriptor)
 	// Validate that the table sql_instances has the old schema.
 	upgrades.ValidateSchemaExists(
 		ctx,
@@ -72,7 +73,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 		s,
 		sqlDB,
 		keys.SQLInstancesTableID,
-		systemschema.SQLInstancesTable,
+		systemschema.SQLInstancesTable(),
 		[]string{},
 		validationSchemas,
 		false, /* expectExists */
@@ -92,7 +93,7 @@ func TestAlterSystemSqlInstancesTable(t *testing.T) {
 		s,
 		sqlDB,
 		keys.SQLInstancesTableID,
-		systemschema.SQLInstancesTable,
+		sqlInstancesTable,
 		[]string{},
 		validationSchemas,
 		true, /* expectExists */

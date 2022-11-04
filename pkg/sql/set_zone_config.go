@@ -240,7 +240,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 	}
 
 	if !p.ExecCfg().Codec.ForSystemTenant() &&
-		!secondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
+		!SecondaryTenantZoneConfigsEnabled.Get(&p.ExecCfg().Settings.SV) {
 		// Return an unimplemented error here instead of referencing the cluster
 		// setting here as zone configurations for secondary tenants are intended to
 		// be hidden.
