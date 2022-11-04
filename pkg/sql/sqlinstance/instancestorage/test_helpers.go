@@ -76,6 +76,7 @@ func (f *FakeStorage) ReleaseInstanceID(_ context.Context, id base.SQLInstanceID
 // table for testing purposes.
 func (s *Storage) CreateInstanceDataForTest(
 	ctx context.Context,
+	region []byte,
 	instanceID base.SQLInstanceID,
 	addr string,
 	sessionID sqlliveness.SessionID,
@@ -90,7 +91,7 @@ func (s *Storage) CreateInstanceDataForTest(
 		if err != nil {
 			return err
 		}
-		key := s.rowcodec.encodeKey(instanceID)
+		key := s.rowcodec.encodeKey(region, instanceID)
 		value, err := s.rowcodec.encodeValue(addr, sessionID, locality)
 		if err != nil {
 			return err
@@ -104,9 +105,9 @@ func (s *Storage) CreateInstanceDataForTest(
 // GetInstanceDataForTest returns instance data directly from raw storage for
 // testing purposes.
 func (s *Storage) GetInstanceDataForTest(
-	ctx context.Context, instanceID base.SQLInstanceID,
+	ctx context.Context, region []byte, instanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
-	k := s.rowcodec.encodeKey(instanceID)
+	k := s.rowcodec.encodeKey(region, instanceID)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	row, err := s.db.Get(ctx, k)
 	if err != nil {
@@ -136,7 +137,7 @@ func (s *Storage) GetAllInstancesDataForTest(
 	var rows []instancerow
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		rows, err = s.getGlobalInstanceRows(ctx, txn)
+		rows, err = s.getInstanceRows(ctx /*global*/, nil, txn)
 		return err
 	})
 	if err != nil {
