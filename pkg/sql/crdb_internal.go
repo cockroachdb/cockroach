@@ -414,142 +414,217 @@ CREATE TABLE crdb_internal.super_regions (
 	},
 }
 
+func makeCrdbInternalTablesAddRowFn(
+	p *planner, pusher func(...tree.Datum) error,
+) func(table catalog.TableDescriptor, dbName tree.Datum, scName string) error {
+	row := make(tree.Datums, 14)
+	return func(table catalog.TableDescriptor, dbName tree.Datum, scName string) (err error) {
+		dropTimeDatum := tree.DNull
+		if dropTime := table.GetDropTime(); dropTime != 0 {
+			dropTimeDatum, err = tree.MakeDTimestamp(
+				timeutil.Unix(0, dropTime), time.Nanosecond,
+			)
+			if err != nil {
+				return err
+			}
+		}
+		locality := tree.DNull
+		if c := table.GetLocalityConfig(); c != nil {
+			f := p.EvalContext().FmtCtx(tree.FmtSimple)
+			if err := multiregion.FormatTableLocalityConfig(c, f); err != nil {
+				return err
+			}
+			locality = tree.NewDString(f.String())
+		}
+		row = row[:0]
+		row = append(row,
+			tree.NewDInt(tree.DInt(int64(table.GetID()))),
+			tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
+			tree.NewDString(table.GetName()),
+			dbName,
+			tree.NewDInt(tree.DInt(int64(table.GetVersion()))),
+			eval.TimestampToInexactDTimestamp(table.GetModificationTime()),
+			eval.TimestampToDecimalDatum(table.GetModificationTime()),
+			tree.NewDString(table.GetFormatVersion().String()),
+			tree.NewDString(table.GetState().String()),
+			tree.DNull, // sc_lease_node_id is deprecated
+			tree.DNull, // sc_lease_expiration_time is deprecated
+			dropTimeDatum,
+			tree.NewDString(table.GetAuditMode().String()),
+			tree.NewDString(scName),
+			tree.NewDInt(tree.DInt(int64(table.GetParentSchemaID()))),
+			locality,
+		)
+		return pusher(row...)
+	}
+}
+
 // TODO(tbg): prefix with kv_.
 var crdbInternalTablesTable = virtualSchemaTable{
 	comment: `table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)`,
 	schema: `
 CREATE TABLE crdb_internal.tables (
-  table_id                 INT NOT NULL,
-  parent_id                INT NOT NULL,
-  name                     STRING NOT NULL,
-  database_name            STRING,
-  version                  INT NOT NULL,
-  mod_time                 TIMESTAMP NOT NULL,
-  mod_time_logical         DECIMAL NOT NULL,
-  format_version           STRING NOT NULL,
-  state                    STRING NOT NULL,
-  sc_lease_node_id         INT,
-  sc_lease_expiration_time TIMESTAMP,
-  drop_time                TIMESTAMP,
-  audit_mode               STRING NOT NULL,
-  schema_name              STRING NOT NULL,
-  parent_schema_id         INT NOT NULL,
-  locality                 TEXT
-)`,
-	generator: func(ctx context.Context, p *planner, dbDesc catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
-		row := make(tree.Datums, 14)
-		worker := func(ctx context.Context, pusher rowPusher) error {
-			all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
-			if err != nil {
+    table_id                 INT8 NOT NULL,
+    parent_id                INT8 NOT NULL,
+    name                     STRING NOT NULL,
+    database_name            STRING,
+    version                  INT8 NOT NULL,
+    mod_time                 TIMESTAMP NOT NULL,
+    mod_time_logical         DECIMAL NOT NULL,
+    format_version           STRING NOT NULL,
+    state                    STRING NOT NULL,
+    sc_lease_node_id         INT8,
+    sc_lease_expiration_time TIMESTAMP,
+    drop_time                TIMESTAMP,
+    audit_mode               STRING NOT NULL,
+    schema_name              STRING NOT NULL,
+    parent_schema_id         INT8 NOT NULL,
+    locality                 STRING,
+    INDEX (parent_id) WHERE drop_time IS NULL,
+    INDEX (database_name) WHERE drop_time IS NULL
+);`,
+	indexes: []virtualIndex{
+		{
+			// INDEX(parent_id) WHERE drop_time IS NULL
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				dbID := descpb.ID(tree.MustBeDInt(unwrappedConstraint))
+				flags := p.CommonLookupFlagsRequired()
+				flags.Required = false
+				flags.IncludeOffline = true
+				ok, db, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID, flags)
+				if !ok || err != nil {
+					return false, err
+				}
+				return crdbInternalTablesDatabaseLookupFunc(ctx, p, db, addRow)
+			},
+		},
+		{
+			// INDEX(database_name) WHERE drop_time IS NULL
+			populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
+				dbName := string(tree.MustBeDString(unwrappedConstraint))
+				flags := p.CommonLookupFlagsRequired()
+				flags.Required = false
+				flags.IncludeOffline = true
+				db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), dbName, flags)
+				if db == nil || err != nil {
+					return false, err
+				}
+				return crdbInternalTablesDatabaseLookupFunc(ctx, p, db, addRow)
+			},
+		},
+	},
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		all, err := p.Descriptors().GetAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+		descs := all.OrderedDescriptors()
+		dbNames := make(map[descpb.ID]string)
+		scNames := make(map[descpb.ID]string)
+		// TODO(richardjcai): Remove this case for keys.PublicSchemaID in 22.2.
+		scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
+		// Record database descriptors for name lookups.
+		for _, desc := range descs {
+			if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
+				dbNames[dbDesc.GetID()] = dbDesc.GetName()
+			}
+			if scDesc, ok := desc.(catalog.SchemaDescriptor); ok {
+				scNames[scDesc.GetID()] = scDesc.GetName()
+			}
+		}
+		addDesc := makeCrdbInternalTablesAddRowFn(p, addRow)
+
+		// Note: we do not use forEachTableDesc() here because we want to
+		// include added and dropped descriptors.
+		for _, desc := range descs {
+			table, ok := desc.(catalog.TableDescriptor)
+			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+				continue
+			}
+			dbName := dbNames[table.GetParentID()]
+			if dbName == "" {
+				// The parent database was deleted. This is possible e.g. when
+				// a database is dropped with CASCADE, and someone queries
+				// this virtual table before the dropped table descriptors are
+				// effectively deleted.
+				dbName = fmt.Sprintf("[%d]", table.GetParentID())
+			}
+			schemaName := scNames[table.GetParentSchemaID()]
+			if schemaName == "" {
+				// The parent schema was deleted, possibly due to reasons mentioned above.
+				schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+			}
+			if err := addDesc(table, tree.NewDString(dbName), schemaName); err != nil {
 				return err
 			}
-			descs := all.OrderedDescriptors()
-			dbNames := make(map[descpb.ID]string)
-			scNames := make(map[descpb.ID]string)
-			// TODO(richardjcai): Remove this case for keys.PublicSchemaID in 22.2.
-			scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
-			// Record database descriptors for name lookups.
-			for _, desc := range descs {
-				if dbDesc, ok := desc.(catalog.DatabaseDescriptor); ok {
-					dbNames[dbDesc.GetID()] = dbDesc.GetName()
-				}
-				if scDesc, ok := desc.(catalog.SchemaDescriptor); ok {
-					scNames[scDesc.GetID()] = scDesc.GetName()
-				}
-			}
+		}
 
-			addDesc := func(table catalog.TableDescriptor, dbName tree.Datum, scName string) error {
-				leaseNodeDatum := tree.DNull
-				leaseExpDatum := tree.DNull
-				if lease := table.GetLease(); lease != nil {
-					leaseNodeDatum = tree.NewDInt(tree.DInt(int64(lease.NodeID)))
-					leaseExpDatum, err = tree.MakeDTimestamp(
-						timeutil.Unix(0, lease.ExpirationTime), time.Nanosecond,
-					)
-					if err != nil {
-						return err
-					}
-				}
-				dropTimeDatum := tree.DNull
-				if dropTime := table.GetDropTime(); dropTime != 0 {
-					dropTimeDatum, err = tree.MakeDTimestamp(
-						timeutil.Unix(0, dropTime), time.Nanosecond,
-					)
-					if err != nil {
-						return err
-					}
-				}
-				locality := tree.DNull
-				if c := table.GetLocalityConfig(); c != nil {
-					f := p.EvalContext().FmtCtx(tree.FmtSimple)
-					if err := multiregion.FormatTableLocalityConfig(c, f); err != nil {
-						return err
-					}
-					locality = tree.NewDString(f.String())
-				}
-				row = row[:0]
-				row = append(row,
-					tree.NewDInt(tree.DInt(int64(table.GetID()))),
-					tree.NewDInt(tree.DInt(int64(table.GetParentID()))),
-					tree.NewDString(table.GetName()),
-					dbName,
-					tree.NewDInt(tree.DInt(int64(table.GetVersion()))),
-					eval.TimestampToInexactDTimestamp(table.GetModificationTime()),
-					eval.TimestampToDecimalDatum(table.GetModificationTime()),
-					tree.NewDString(table.GetFormatVersion().String()),
-					tree.NewDString(table.GetState().String()),
-					leaseNodeDatum,
-					leaseExpDatum,
-					dropTimeDatum,
-					tree.NewDString(table.GetAuditMode().String()),
-					tree.NewDString(scName),
-					tree.NewDInt(tree.DInt(int64(table.GetParentSchemaID()))),
-					locality,
-				)
-				return pusher.pushRow(row...)
-			}
-
-			// Note: we do not use forEachTableDesc() here because we want to
-			// include added and dropped descriptors.
-			for _, desc := range descs {
-				table, ok := desc.(catalog.TableDescriptor)
-				if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
-					continue
-				}
-				dbName := dbNames[table.GetParentID()]
-				if dbName == "" {
-					// The parent database was deleted. This is possible e.g. when
-					// a database is dropped with CASCADE, and someone queries
-					// this virtual table before the dropped table descriptors are
-					// effectively deleted.
-					dbName = fmt.Sprintf("[%d]", table.GetParentID())
-				}
-				schemaName := scNames[table.GetParentSchemaID()]
-				if schemaName == "" {
-					// The parent schema was deleted, possibly due to reasons mentioned above.
-					schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
-				}
-				if err := addDesc(table, tree.NewDString(dbName), schemaName); err != nil {
+		// Also add all the virtual descriptors.
+		vt := p.getVirtualTabler()
+		vSchemas := vt.getSchemas()
+		for _, virtSchemaName := range vt.getSchemaNames() {
+			e := vSchemas[virtSchemaName]
+			for _, tName := range e.orderedDefNames {
+				vTableEntry := e.defs[tName]
+				if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
 					return err
 				}
 			}
+		}
+		return nil
+	},
+}
 
-			// Also add all the virtual descriptors.
-			vt := p.getVirtualTabler()
-			vSchemas := vt.getSchemas()
-			for _, virtSchemaName := range vt.getSchemaNames() {
-				e := vSchemas[virtSchemaName]
-				for _, tName := range e.orderedDefNames {
-					vTableEntry := e.defs[tName]
-					if err := addDesc(vTableEntry.desc, tree.DNull, virtSchemaName); err != nil {
-						return err
-					}
-				}
-			}
+func crdbInternalTablesDatabaseLookupFunc(
+	ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error,
+) (bool, error) {
+	var descs nstree.Catalog
+	var err error
+	if useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
+		descs, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.Txn(), db)
+	} else {
+		descs, err = p.Descriptors().GetAllDescriptors(ctx, p.Txn())
+	}
+	if err != nil {
+		return false, err
+	}
+
+	scNames := make(map[descpb.ID]string)
+	// TODO(richardjcai): Remove this case for keys.PublicSchemaID in 22.2.
+	scNames[keys.PublicSchemaID] = catconstants.PublicSchemaName
+	// Record database descriptors for name lookups.
+	dbID := db.GetID()
+	_ = descs.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		if desc.GetParentID() != dbID {
 			return nil
 		}
-		return setupGenerator(ctx, worker, stopper)
-	},
+		if scDesc, ok := desc.(catalog.SchemaDescriptor); ok {
+			scNames[scDesc.GetID()] = scDesc.GetName()
+		}
+		return nil
+	})
+	rf := makeCrdbInternalTablesAddRowFn(p, addRow)
+	var seenAny bool
+	if err := descs.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		if desc.GetParentID() != dbID {
+			return nil
+		}
+		table, ok := desc.(catalog.TableDescriptor)
+		if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
+			return nil
+		}
+		seenAny = true
+		schemaName := scNames[table.GetParentSchemaID()]
+		if schemaName == "" {
+			// The parent schema was deleted, possibly due to reasons mentioned above.
+			schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+		}
+		return rf(table, tree.NewDString(db.GetName()), schemaName)
+	}); err != nil {
+		return false, err
+	}
+
+	return seenAny, nil
 }
 
 var crdbInternalPgCatalogTableIsImplementedTable = virtualSchemaTable{

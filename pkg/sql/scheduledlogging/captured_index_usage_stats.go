@@ -12,7 +12,6 @@ package scheduledlogging
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -191,32 +190,34 @@ func captureIndexUsageStats(
 		if databaseName == "system" || databaseName == "defaultdb" || databaseName == "postgres" {
 			continue
 		}
-		stmt := fmt.Sprintf(`
-  SELECT ti.descriptor_name as table_name,
-         ti.descriptor_id as table_id,
-         ti.index_name,
-         ti.index_id,
-         ti.index_type,
-         ti.is_unique,
-         ti.is_inverted,
-         total_reads,
-         last_read,
-         ti.created_at,
-         t.schema_name
-    FROM %[1]s.crdb_internal.index_usage_statistics us
-    JOIN %[1]s.crdb_internal.table_indexes ti
-      ON us.index_id = ti.index_id
-     AND us.table_id = ti.descriptor_id
-    JOIN %[1]s.crdb_internal.tables t
-      ON ti.descriptor_id = t.table_id
-ORDER BY total_reads ASC;`,
-			databaseName.String())
+		const stmt = `
+		SELECT
+		 ti.descriptor_name as table_name,
+		 ti.descriptor_id as table_id,
+		 ti.index_name,
+		 ti.index_id,
+		 ti.index_type,
+		 ti.is_unique,
+		 ti.is_inverted,
+		 total_reads,
+		 last_read,
+		 ti.created_at,
+		 ns.nspname::string
+		FROM crdb_internal.index_usage_statistics AS us
+    JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
+                                          AND us.table_id = ti.descriptor_id
+    JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
+    JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
+ORDER BY total_reads ASC`
 
 		it, err := ie.QueryIteratorEx(
 			ctx,
 			"capture-index-usage-stats",
 			nil,
-			sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+			sessiondata.InternalExecutorOverride{
+				User:     username.RootUserName(),
+				Database: string(databaseName),
+			},
 			stmt,
 		)
 		if err != nil {

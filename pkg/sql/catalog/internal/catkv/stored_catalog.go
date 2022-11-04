@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -57,6 +58,9 @@ type StoredCatalog struct {
 	// modifications have been made. The freshest schemas should be in the map
 	// above.
 	allSchemasForDatabase map[descpb.ID]map[descpb.ID]string
+
+	// allDescriptorsForDatabase maps databaseID->nstree.Catalog
+	allDescriptorsForDatabase map[descpb.ID]nstree.Catalog
 
 	// memAcc is the actual account of an injected, upstream monitor
 	// to track memory usage of StoredCatalog.
@@ -189,6 +193,27 @@ func (sc *StoredCatalog) EnsureAllDatabaseDescriptors(ctx context.Context, txn *
 	return nil
 }
 
+// GetAllDescriptorNamesForDatabase generates a new map catalog with namespace
+// entries for all children of the requested database. It stores the result in
+// the cache.
+func (sc *StoredCatalog) GetAllDescriptorNamesForDatabase(
+	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
+) (nstree.Catalog, error) {
+	if sc.allDescriptorsForDatabase == nil {
+		sc.allDescriptorsForDatabase = make(map[descpb.ID]nstree.Catalog)
+	}
+	c, ok := sc.allDescriptorsForDatabase[db.GetID()]
+	if !ok {
+		var err error
+		c, err = sc.ScanNamespaceForDatabaseEntries(ctx, txn, db)
+		if err != nil {
+			return nstree.Catalog{}, err
+		}
+		sc.allDescriptorsForDatabase[db.GetID()] = c
+	}
+	return c, nil
+}
+
 func (sc *StoredCatalog) ensureAllSchemaIDsAndNamesForDatabase(
 	ctx context.Context, txn *kv.Txn, db catalog.DatabaseDescriptor,
 ) error {
@@ -233,8 +258,8 @@ func (sc *StoredCatalog) GetSchemaIDsAndNamesForDatabase(
 
 // IsIDKnownToNotExist returns false iff there definitely is no descriptor
 // in storage with that ID.
-func (sc *StoredCatalog) IsIDKnownToNotExist(id descpb.ID) bool {
-	if !sc.hasAllDescriptors {
+func (sc *StoredCatalog) IsIDKnownToNotExist(id descpb.ID, parentID catid.DescID) bool {
+	if !sc.hasAllDescriptors && !sc.hasAllDescriptorForDatabase(parentID) {
 		return false
 	}
 	return sc.GetCachedByID(id) == nil
@@ -354,6 +379,14 @@ func (sc *StoredCatalog) NewValidationDereferencer(txn *kv.Txn) validate.Validat
 		sc:  sc,
 		txn: txn,
 	}
+}
+
+func (sc *StoredCatalog) hasAllDescriptorForDatabase(id catid.DescID) bool {
+	if id == 0 {
+		return false
+	}
+	_, ok := sc.allDescriptorsForDatabase[id]
+	return ok
 }
 
 type storedCatalogBackedDereferencer struct {

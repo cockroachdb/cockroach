@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -139,7 +141,24 @@ func (p *planner) SchemaExists(ctx context.Context, dbName, scName string) (foun
 func (p *planner) IsTableVisible(
 	ctx context.Context, curDB string, searchPath sessiondata.SearchPath, tableID oid.Oid,
 ) (isVisible, exists bool, err error) {
-	tableDesc, err := p.LookupTableByID(ctx, descpb.ID(tableID))
+	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), curDB,
+		tree.DatabaseLookupFlags{
+			Required:    true,
+			AvoidLeased: p.skipDescriptorCache,
+		})
+	if err != nil {
+		return false, false, err
+	}
+	// It is critical that we set ParentID on the flags in order to ensure that
+	// we do not do a very expensive, and ultimately fruitless lookup for an
+	// OID which definitely does not exist. Only OIDs corresponding to relations
+	// in the current database are relevant for this function. If we have already
+	// fetched all the tables in the current database, then we can use that
+	// fact to avoid a KV lookup. The descs layer relies on our setting this
+	// field in the flags to avoid that lookup.
+	flags := p.ObjectLookupFlags(true /* required */, false /* requireMutable */)
+	flags.ParentID = dbDesc.GetID()
+	tableDesc, err := p.Descriptors().GetImmutableTableByID(ctx, p.Txn(), descpb.ID(tableID), flags)
 	if err != nil {
 		// If a "not found" error happened here, we return "not exists" rather than
 		// the error.
@@ -158,21 +177,6 @@ func (p *planner) IsTableVisible(
 			AvoidLeased: p.skipDescriptorCache})
 	if err != nil {
 		return false, false, err
-	}
-	if schemaDesc.SchemaKind() != catalog.SchemaVirtual {
-		dbID := tableDesc.GetParentID()
-		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: p.skipDescriptorCache})
-		if err != nil {
-			return false, false, err
-		}
-		if dbDesc.GetName() != curDB {
-			// If the table is in a different database, then it's considered to be
-			// "not existing" instead of just "not visible"; this matches PostgreSQL.
-			return false, false, nil
-		}
 	}
 	iter := searchPath.Iter()
 	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
@@ -980,6 +984,21 @@ func (l *internalLookupCtx) GetSchemaName(
 	schemaName, found := l.schemaNames[id]
 	return schemaName, found, nil
 }
+
+var metamorphicDefaultUseIndexLookupForDescriptorsInDatabase = util.ConstantWithMetamorphicTestBool(
+	`use-index-lookup-for-descriptors-in-database`, true,
+)
+
+// useIndexLookupForDescriptorsInDatabase controls whether an index against the
+// namespace table should be used to fetch the set of descriptors needed to
+// materialize most system tables.
+var useIndexLookupForDescriptorsInDatabase = settings.RegisterBoolSetting(
+	settings.TenantWritable,
+	"sql.catalog.virtual_tables.use_index_lookup_for_descriptors_in_database.enabled",
+	"if enabled, virtual tables will do a lookup against the namespace table to"+
+		" find the descriptors in a database instead of scanning all descriptors",
+	metamorphicDefaultUseIndexLookupForDescriptorsInDatabase,
+)
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
 // database descriptor using the table's ID.

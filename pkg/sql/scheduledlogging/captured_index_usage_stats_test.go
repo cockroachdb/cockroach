@@ -79,7 +79,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	stubLoggingDelay := 0 * time.Second
 
 	// timeBuffer is a short time buffer to account for non-determinism in the logging timings.
-	timeBuffer := time.Second
+	const timeBuffer = 2 * time.Second
 
 	settings := cluster.MakeTestingClusterSettings()
 	// Configure capture index usage statistics to be disabled. This is to test
@@ -262,10 +262,10 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 			previousTimestamp = currentTimestamp
 		}
 
-		actualDuration := time.Duration(currentTimestamp-previousTimestamp) * time.Nanosecond
+		actualDuration := time.Duration(currentTimestamp - previousTimestamp)
 		// Use a time window to afford some non-determinism in the test.
-		require.Greater(t, expectedDuration, actualDuration-timeBuffer)
-		require.Greater(t, actualDuration+timeBuffer, expectedDuration)
+		require.Greaterf(t, expectedDuration, actualDuration-timeBuffer, "%v <= %v-%v", expectedDuration, actualDuration, timeBuffer)
+		require.Greater(t, actualDuration+timeBuffer, expectedDuration, "%v+%v <= %v", expectedDuration, actualDuration, timeBuffer)
 		previousTimestamp = currentTimestamp
 	}
 }

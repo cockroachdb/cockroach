@@ -535,6 +535,10 @@ func (b *Builder) buildScan(
 		private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
 		outScope.expr = b.factory.ConstructScan(&private)
 
+		// Add the partial indexes after constructing the scan so we can use the
+		// logical properties of the scan to fully normalize the index predicates.
+		b.addPartialIndexPredicatesForTable(tabMeta, outScope.expr)
+
 		// Note: virtual tables should not be collected as view dependencies.
 		return outScope
 	}
