@@ -22,7 +22,8 @@
     "test": "jest --watch",
     "start": "npm-run-all -p build:watch tsc:watch",
     "storybook": "start-storybook -p 6006",
-    "build-storybook": "build-storybook"
+    "build-storybook": "build-storybook",
+    "bump": "yarn version --prerelease --preid prerelease --no-git-tag-version"
   },
   "keywords": [],
   "license": "MIT",
