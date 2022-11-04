@@ -26,5 +26,5 @@ func main() {
 	formatterName := flag.String("formatter", "", "formatter to use to construct GitHub issues")
 	flag.Parse()
 
-	githubpost.Post(*formatterName, os.Stdin)
+	githubpost.PostFromJSON(*formatterName, os.Stdin)
 }
