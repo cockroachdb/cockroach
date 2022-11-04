@@ -38,12 +38,9 @@ import (
 // make it shorter.
 func registerSnapshotOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:  "admission-control/snapshot-overload",
-		Owner: registry.OwnerAdmissionControl,
-		// TODO(irfansharif): After two weeks of nightly baking time, reduce
-		// this to a weekly cadence. This is a long-running test and serves only
-		// as a coarse-grained benchmark.
-		// 	Tags:    []string{`weekly`},
+		Name:    "admission-control/snapshot-overload",
+		Owner:   registry.OwnerAdmissionControl,
+		Tags:    []string{`weekly`},
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {

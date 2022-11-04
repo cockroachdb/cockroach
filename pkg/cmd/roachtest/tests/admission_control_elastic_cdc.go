@@ -29,12 +29,9 @@ import (
 // an increase in foreground latency.
 func registerElasticControlForCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:  "admission-control/elastic-cdc",
-		Owner: registry.OwnerAdmissionControl,
-		// TODO(irfansharif): After two weeks of nightly baking time, reduce
-		// this to a weekly cadence. This is a long-running test and serves only
-		// as a coarse-grained benchmark.
-		// 	Tags:    []string{`weekly`},
+		Name:            "admission-control/elastic-cdc",
+		Owner:           registry.OwnerAdmissionControl,
+		Tags:            []string{`weekly`},
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(8)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
