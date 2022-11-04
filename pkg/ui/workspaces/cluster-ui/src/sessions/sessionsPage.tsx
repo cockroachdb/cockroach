@@ -389,7 +389,6 @@ export class SessionsPage extends React.Component<
         }),
       );
 
-    const timeLabel = "Session duration runs longer than";
     const displayColumns = columns.filter(c => isColumnSelected(c));
 
     return (
@@ -404,7 +403,7 @@ export class SessionsPage extends React.Component<
             sessionStatuses={sessionStatuses}
             activeFilters={activeFilters}
             filters={filters}
-            timeLabel={timeLabel}
+            timeLabel={"Session duration"}
           />
         </div>
         <section>
