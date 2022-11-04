@@ -14,17 +14,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // MakeZoneKeyPrefix returns the key prefix for id's row in the system.zones
 // table.
 func MakeZoneKeyPrefix(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
-	return codec.ZoneKeyPrefix(uint32(id))
+	k := codec.IndexPrefix(keys.ZonesTableID, keys.ZonesTablePrimaryIndexID)
+	return encoding.EncodeUvarintAscending(k, uint64(id))
 }
 
 // MakeZoneKey returns the key for a given id's entry in the system.zones table.
 func MakeZoneKey(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
-	return codec.ZoneKey(uint32(id))
+	k := MakeZoneKeyPrefix(codec, id)
+	return keys.MakeFamilyKey(k, keys.ZonesTableConfigColFamID)
 }
 
 // DecodeObjectID decodes the object ID for the system-tenant from

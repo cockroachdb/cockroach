@@ -12,7 +12,9 @@ package jobs
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -1241,6 +1243,7 @@ func (r *Registry) stepThroughStateMachine(
 				"job %d: resuming with non-nil error", job.ID())
 		}
 		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
+		labels := pprof.Labels("job", fmt.Sprintf("%s id=%d", jobType, job.ID()))
 
 		if err := job.started(ctx, nil /* txn */); err != nil {
 			return err
@@ -1254,7 +1257,9 @@ func (r *Registry) stepThroughStateMachine(
 				jm.CurrentlyRunning.Dec(1)
 				r.metrics.RunningNonIdleJobs.Dec(1)
 			}()
-			err = resumer.Resume(resumeCtx, execCtx)
+			pprof.Do(resumeCtx, labels, func(ctx context.Context) {
+				err = resumer.Resume(ctx, execCtx)
+			})
 		}()
 
 		r.MarkIdle(job, false)

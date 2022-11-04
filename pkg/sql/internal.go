@@ -1374,32 +1374,34 @@ func (ief *InternalExecutorFactory) DescsTxnWithExecutor(
 ) error {
 	run := ApplyTxnOptions(db, opts...)
 
-	// Waits for descriptors that were modified, skipping
-	// over ones that had their descriptor wiped.
-	waitForDescriptors := func(modifiedDescriptors []lease.IDVersion, deletedDescs catalog.DescriptorIDSet) error {
-		// Wait for a single version on leased descriptors.
+	// Wait for descriptors that were modified or dropped. If the descriptor
+	// was not dropped, wait for one version. Otherwise, wait for no versions.
+	waitForDescriptors := func(
+		modifiedDescriptors []lease.IDVersion,
+		deletedDescs catalog.DescriptorIDSet,
+	) error {
+		retryOpts := retry.Options{
+			InitialBackoff: time.Millisecond,
+			Multiplier:     1.5,
+			MaxBackoff:     time.Second,
+		}
+		lm := ief.server.cfg.LeaseManager
 		for _, ld := range modifiedDescriptors {
-			waitForNoVersion := deletedDescs.Contains(ld.ID)
-			retryOpts := retry.Options{
-				InitialBackoff: time.Millisecond,
-				Multiplier:     1.5,
-				MaxBackoff:     time.Second,
+			if deletedDescs.Contains(ld.ID) { // we'll wait below
+				continue
 			}
-			// Detect unpublished ones.
-			if waitForNoVersion {
-				err := ief.server.cfg.LeaseManager.WaitForNoVersion(ctx, ld.ID, retryOpts)
-				if err != nil {
-					return err
-				}
-			} else {
-				_, err := ief.server.cfg.LeaseManager.WaitForOneVersion(ctx, ld.ID, retryOpts)
-				// If the descriptor has been deleted, just wait for leases to drain.
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					err = ief.server.cfg.LeaseManager.WaitForNoVersion(ctx, ld.ID, retryOpts)
-				}
-				if err != nil {
-					return err
-				}
+			_, err := lm.WaitForOneVersion(ctx, ld.ID, retryOpts)
+			// If the descriptor has been deleted, just wait for leases to drain.
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				err = lm.WaitForNoVersion(ctx, ld.ID, retryOpts)
+			}
+			if err != nil {
+				return err
+			}
+		}
+		for _, id := range deletedDescs.Ordered() {
+			if err := lm.WaitForNoVersion(ctx, id, retryOpts); err != nil {
+				return err
 			}
 		}
 		return nil

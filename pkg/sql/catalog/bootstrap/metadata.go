@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -372,21 +371,6 @@ func addSplitIDs(target *MetadataSchema) {
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 }
 
-// createZoneConfigKV creates a kv pair for the zone config for the given key
-// and config value.
-func createZoneConfigKV(
-	keyID int, codec keys.SQLCodec, zoneConfig *zonepb.ZoneConfig,
-) roachpb.KeyValue {
-	value := roachpb.Value{}
-	if err := value.SetProto(zoneConfig); err != nil {
-		panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not marshal ZoneConfig for ID: %d", keyID))
-	}
-	return roachpb.KeyValue{
-		Key:   codec.ZoneKey(uint32(keyID)),
-		Value: value,
-	}
-}
-
 // InitialZoneConfigKVs returns a list of KV pairs to seed `system.zones`. The
 // list contains extra entries for the system tenant.
 func InitialZoneConfigKVs(
@@ -394,10 +378,23 @@ func InitialZoneConfigKVs(
 	defaultZoneConfig *zonepb.ZoneConfig,
 	defaultSystemZoneConfig *zonepb.ZoneConfig,
 ) (ret []roachpb.KeyValue) {
+	const skippedColumnFamilyID = 0
+	w := MakeKVWriter(codec, systemschema.ZonesTable, skippedColumnFamilyID)
+	add := func(id uint32, zc *zonepb.ZoneConfig) {
+		bytes, err := protoutil.Marshal(zc)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "could not marshal ZoneConfig for ID: %d", id))
+		}
+		kvs, err := w.RecordToKeyValues(tree.NewDInt(tree.DInt(id)), tree.NewDBytes(tree.DBytes(bytes)))
+		if err != nil {
+			panic(err)
+		}
+		ret = append(ret, kvs...)
+	}
+
 	// Both the system tenant and secondary tenants get their own RANGE DEFAULT
 	// zone configuration.
-	ret = append(ret,
-		createZoneConfigKV(keys.RootNamespaceID, codec, defaultZoneConfig))
+	add(keys.RootNamespaceID, defaultZoneConfig)
 
 	if !codec.ForSystemTenant() {
 		return ret
@@ -412,8 +409,6 @@ func InitialZoneConfigKVs(
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	ret = append(ret,
-		createZoneConfigKV(keys.MetaRangesID, codec, metaRangeZoneConf))
 
 	// Some reporting tables have shorter GC times.
 	replicationConstraintStatsZoneConf := &zonepb.ZoneConfig{
@@ -428,18 +423,14 @@ func InitialZoneConfigKVs(
 
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	ret = append(ret,
-		createZoneConfigKV(keys.LivenessRangesID, codec, livenessZoneConf))
-	ret = append(ret,
-		createZoneConfigKV(keys.SystemRangesID, codec, systemZoneConf))
-	ret = append(ret,
-		createZoneConfigKV(keys.SystemDatabaseID, codec, systemZoneConf))
-	ret = append(ret,
-		createZoneConfigKV(keys.ReplicationConstraintStatsTableID, codec, replicationConstraintStatsZoneConf))
-	ret = append(ret,
-		createZoneConfigKV(keys.ReplicationStatsTableID, codec, replicationStatsZoneConf))
-	ret = append(ret,
-		createZoneConfigKV(keys.TenantUsageTableID, codec, tenantUsageZoneConf))
+
+	add(keys.MetaRangesID, metaRangeZoneConf)
+	add(keys.LivenessRangesID, livenessZoneConf)
+	add(keys.SystemRangesID, systemZoneConf)
+	add(keys.SystemDatabaseID, systemZoneConf)
+	add(keys.ReplicationConstraintStatsTableID, replicationConstraintStatsZoneConf)
+	add(keys.ReplicationStatsTableID, replicationStatsZoneConf)
+	add(keys.TenantUsageTableID, tenantUsageZoneConf)
 
 	return ret
 }
@@ -488,51 +479,17 @@ func addSystemTenantEntry(target *MetadataSchema) {
 		// tenant). Nothing to do.
 		return
 	}
-	tenantsTableDesc := desc.(catalog.TableDescriptor)
-
-	// TODO(knz): What if more indexes or columns are added to the table
-	// after this code has been written? I sure wish I could express
-	// this using SQL statements (perhaps as a separate code generator
-	// that would provide raw bytes that I can paste here?)
-	values := []tree.Datum{
+	tenantsTableWriter := MakeKVWriter(target.codec, desc.(catalog.TableDescriptor))
+	kvs, err := tenantsTableWriter.RecordToKeyValues(
 		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
 		tree.MakeDBool(true),
 		tree.NewDBytes(tree.DBytes(infoBytes)),
 		tree.NewDString(info.Name),
-	}
-	if len(tenantsTableDesc.PublicColumns()) != len(values) {
-		panic(errors.New("programming error: update values when adding columns to the tenants table"))
-	}
-	var colIDtoRowIndex catalog.TableColMap
-	for i, c := range tenantsTableDesc.PublicColumns() {
-		colIDtoRowIndex.Set(c.GetID(), i)
-	}
-
-	// Encode the PK row.
-	primaryIndex := tenantsTableDesc.GetPrimaryIndex()
-	primaryIndexPairs, err := rowenc.EncodePrimaryIndex(
-		target.codec, tenantsTableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	)
 	if err != nil {
 		panic(err)
 	}
-	for _, k := range primaryIndexPairs {
-		target.otherKV = append(target.otherKV,
-			roachpb.KeyValue{Key: k.Key, Value: k.Value})
-	}
-
-	// Encode the secondary index rows.
-	secondaryIndexes := tenantsTableDesc.PublicNonPrimaryIndexes()
-	for _, secondaryIndex := range secondaryIndexes {
-		secondaryIndexPairs, err := rowenc.EncodeSecondaryIndex(
-			target.codec, tenantsTableDesc, secondaryIndex, colIDtoRowIndex, values, true)
-		if err != nil {
-			panic(err)
-		}
-		for _, k := range secondaryIndexPairs {
-			target.otherKV = append(target.otherKV,
-				roachpb.KeyValue{Key: k.Key, Value: k.Value})
-		}
-	}
+	target.otherKV = append(target.otherKV, kvs...)
 }
 
 // TestingMinUserDescID returns the smallest user-created descriptor ID in a
