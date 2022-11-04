@@ -13,10 +13,12 @@ package evalcatalog
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -51,6 +53,22 @@ func (b *Builtins) RedactDescriptor(_ context.Context, encodedDescriptor []byte)
 		return nil, ret
 	}
 	return protoutil.Marshal(&descProto)
+}
+
+// DescriptorWithPostDeserializationChanges expects an encoded protobuf
+// descriptor, decodes it, puts it into a catalog.DescriptorBuilder,
+// calls RunPostDeserializationChanges, and re-encodes it.
+func (b *Builtins) DescriptorWithPostDeserializationChanges(
+	_ context.Context, encodedDescriptor []byte, mvccTimestamp hlc.Timestamp,
+) ([]byte, error) {
+	db, err := descbuilder.FromBytesAndMVCCTimestamp(encodedDescriptor, mvccTimestamp)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.RunPostDeserializationChanges(); err != nil {
+		return nil, err
+	}
+	return protoutil.Marshal(db.BuildCreatedMutable().DescriptorProto())
 }
 
 // PGRelationIsUpdatable is part of the eval.CatalogBuiltins interface.

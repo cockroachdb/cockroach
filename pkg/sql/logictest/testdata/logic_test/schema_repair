@@ -359,3 +359,83 @@ WHERE
 
 statement ok
 DROP TABLE kv
+
+# Check that crdb_internal.descriptor_with_post_deserialization_changes
+# performs as expected.
+subtest post_deserialization_changes
+
+statement ok
+CREATE FUNCTION desc_bytes(desc_name STRING) RETURNS BYTES VOLATILE LANGUAGE SQL AS $$
+SELECT
+	d.descriptor
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	ns.name = desc_name
+$$;
+
+statement ok
+CREATE FUNCTION next_constraint_id(desc_bytes BYTES) RETURNS INT STABLE LANGUAGE SQL AS $$
+SELECT (crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', desc_bytes)->'table'->>'nextConstraintId')::INT
+$$;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY)
+
+query I
+SELECT next_constraint_id(desc_bytes('t'))
+----
+2
+
+# Post-deserialization changes are idempotent, for the most part.
+query I
+SELECT next_constraint_id(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t')))
+----
+2
+
+# Erase all constraint IDs from the descriptor.
+# These will be reinstated by descriptor post-deserialization changes.
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				json_set(
+					crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+					ARRAY['table', 'nextConstraintId'],
+					'0'::JSONB
+				),
+				ARRAY['table', 'primaryIndex', 'constraintId'],
+				'0'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 't'
+
+query I
+SELECT next_constraint_id(desc_bytes('t'))
+----
+NULL
+
+query I
+SELECT next_constraint_id(crdb_internal.descriptor_with_post_deserialization_changes(desc_bytes('t')))
+----
+2
+
+# Perform a schema change to persist post-deserialization changes.
+statement ok
+ALTER TABLE t RENAME TO t_renamed
+
+query I
+SELECT next_constraint_id(desc_bytes('t_renamed'))
+----
+2
+
+statement ok
+DROP TABLE t_renamed
