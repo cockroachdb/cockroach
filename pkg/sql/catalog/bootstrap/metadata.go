@@ -345,7 +345,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptor(systemschema.TransactionStatisticsTable)
 	target.AddDescriptor(systemschema.DatabaseRoleSettingsTable)
 	target.AddDescriptorForSystemTenant(systemschema.TenantUsageTable)
-	target.AddDescriptor(systemschema.SQLInstancesTable)
+	target.AddDescriptor(systemschema.SQLInstancesTable())
 	target.AddDescriptorForSystemTenant(systemschema.SpanConfigurationsTable)
 
 	// Tables introduced in 22.1.
