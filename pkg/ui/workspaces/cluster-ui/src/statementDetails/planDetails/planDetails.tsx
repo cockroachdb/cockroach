@@ -69,12 +69,14 @@ export function PlanDetails({
     );
   } else {
     return (
-      <PlanTable
-        plans={plans}
-        handleDetails={handleDetails}
-        sortSetting={plansSortSetting}
-        onChangeSortSetting={setPlansSortSetting}
-      />
+      <div className={cx("table-area")}>
+        <PlanTable
+          plans={plans}
+          handleDetails={handleDetails}
+          sortSetting={plansSortSetting}
+          onChangeSortSetting={setPlansSortSetting}
+        />
+      </div>
     );
   }
 }
