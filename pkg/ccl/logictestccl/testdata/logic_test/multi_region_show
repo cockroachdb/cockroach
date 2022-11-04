@@ -60,3 +60,38 @@ multi_region_test_placement_restricted_db         CREATE DATABASE multi_region_t
 
 statement error target database or schema does not exist
 SHOW CREATE DATABASE foo
+
+# Test that showing localities works for databases and schemas with weird
+# names.
+subtest show_tables_locality
+
+statement ok
+CREATE DATABASE "This is a fun name, no?" PRIMARY REGION "ap-southeast-2";
+USE "This is a fun name, no?";
+CREATE SCHEMA sc;
+CREATE SCHEMA "A delightful name for a schema!";
+CREATE TABLE g (i INT PRIMARY KEY) LOCALITY GLOBAL;
+CREATE TABLE "A delightful name for a schema!".rbr (i INT PRIMARY KEY) LOCALITY REGIONAL BY ROW;
+CREATE TABLE sc.rbt (i INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE;
+
+query TTTTIT
+SHOW TABLES
+----
+A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW
+public                           g    table  root  0  GLOBAL
+sc                               rbt  table  root  0  REGIONAL BY TABLE IN PRIMARY REGION
+
+statement ok
+use defaultdb
+
+query TTTTIT
+SHOW TABLES FROM "This is a fun name, no?"
+----
+A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW
+public                           g    table  root  0  GLOBAL
+sc                               rbt  table  root  0  REGIONAL BY TABLE IN PRIMARY REGION
+
+query TTTTIT
+SHOW TABLES FROM "This is a fun name, no?"."A delightful name for a schema!"
+----
+A delightful name for a schema!  rbr  table  root  0  REGIONAL BY ROW

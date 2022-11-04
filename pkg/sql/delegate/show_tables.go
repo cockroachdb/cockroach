@@ -110,7 +110,7 @@ ORDER BY schema_name, table_name
 		descJoin,
 		estimatedRowCount,
 		estimatedRowCountJoin,
-		tree.NewDString(name.CatalogName.String()),
+		lexbase.EscapeSQLString(string(name.CatalogName)),
 	)
 	return parse(query)
 }

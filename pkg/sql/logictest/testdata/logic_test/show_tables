@@ -32,3 +32,28 @@ query TTTTTT
 SHOW TABLES WITH COMMENT
 ----
 public  show_this_table  table  root  NULL  ·
+
+statement ok
+SET CLUSTER SETTING sql.show_tables.estimated_row_count.enabled = default
+
+statement ok
+CREATE DATABASE "Do you like this for a database name?";
+SET database = "Do you like this for a database name?";
+CREATE SCHEMA sc;
+CREATE TABLE sc.foo (i INT8);
+CREATE TABLE foo (i INT8);
+
+query TTTTIT
+SHOW TABLES
+----
+public  foo  table  root  0  NULL
+sc      foo  table  root  0  NULL
+
+
+statement ok
+USE other
+
+query TTTTIT
+SHOW TABLES FROM "Do you like this for a database name?".sc
+----
+sc  foo  table  root  0  NULL
