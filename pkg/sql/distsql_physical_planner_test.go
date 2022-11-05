@@ -207,7 +207,6 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 		nil, /* clockUpdater */
 		&SessionTracing{},
 		nil, /* contentionRegistry */
-		nil, /* testingPushCallback */
 	)
 
 	replicas := []roachpb.ReplicaDescriptor{{ReplicaID: 1}, {ReplicaID: 2}, {ReplicaID: 3}}

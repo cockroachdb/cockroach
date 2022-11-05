@@ -163,7 +163,6 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			execCfg.Clock,
 			p.ExtendedEvalContext().Tracing,
 			execCfg.ContentionRegistry,
-			nil, /* testingPushCallback */
 		)
 
 		// We need to re-plan every time, since the plan is closed automatically
@@ -225,7 +224,6 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 		nil, /* clockUpdater */
 		&SessionTracing{},
 		nil, /* contentionRegistry */
-		nil, /* testingPushCallback */
 	)
 
 	retryErr := roachpb.NewErrorWithTxn(
@@ -370,7 +368,6 @@ func TestDistSQLReceiverDrainsOnError(t *testing.T) {
 		nil, /* clockUpdater */
 		&SessionTracing{},
 		nil, /* contentionRegistry */
-		nil, /* testingPushCallback */
 	)
 	status := recv.Push(nil /* row */, &execinfrapb.ProducerMetadata{Err: errors.New("some error")})
 	require.Equal(t, execinfra.DrainRequested, status)
