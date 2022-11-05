@@ -12,7 +12,7 @@ tc_start_block "Run opt tests with fast_int_set_large"
 ARTIFACTS_DIR=/artifacts/fast_int_set_large
 mkdir $ARTIFACTS_DIR
 exit_status_large=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --artifacts_dir $ARTIFACTS_DIR --process_test_failures -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --artifacts_dir $ARTIFACTS_DIR -- \
     test //pkg/sql/opt:opt_test --config=ci \
     --define gotags=bazel,crdb_test,fast_int_set_large \
     || exit_status_large=$?
@@ -25,7 +25,7 @@ tc_start_block "Run opt tests with fast_int_set_small"
 ARTIFACTS_DIR=/artifacts/fast_int_set_small
 mkdir $ARTIFACTS_DIR
 exit_status_small=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --artifacts_dir $ARTIFACTS_DIR --process_test_failures -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --artifacts_dir $ARTIFACTS_DIR -- \
     test --config=ci \
     //pkg/sql/opt:opt_test \
     --define gotags=bazel,crdb_test,fast_int_set_small \
