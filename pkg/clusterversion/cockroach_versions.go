@@ -549,29 +549,18 @@ const (
 	finalVersion = invalidVersionKey
 )
 
-// devVersionsAbove is the version key above which all versions are offset to be
-// development version when developmentBranch is true. By default this is all
-// versions, by setting this to -1, but an env var can override this, to leave
-// the first version un-offset. Doing so means that that version, which is
-// generally minBinaryVersion as well, is unchanged, and thus allows upgrading a
-// stable release data-dir to a dev version if desired.
-var devVersionsAbove Key = func() Key {
-	if envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false) {
-		return invalidVersionKey + 1
-	}
-	return invalidVersionKey
-}()
-
 var versionsSingleton = func() keyedVersions {
 	if developmentBranch {
+		skipFirst := envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
 		const devOffset = 1000000
 		// Throw every version above the last release (which will be none on a release
 		// branch) 1 million major versions into the future, so any "upgrade" to a
 		// release branch build will be a downgrade and thus blocked.
 		for i := range rawVersionsSingleton {
-			if rawVersionsSingleton[i].Key > devVersionsAbove {
-				rawVersionsSingleton[i].Major += devOffset
+			if i == 0 && skipFirst {
+				continue
 			}
+			rawVersionsSingleton[i].Major += devOffset
 		}
 	}
 	return rawVersionsSingleton
