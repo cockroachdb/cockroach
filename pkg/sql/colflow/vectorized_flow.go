@@ -349,11 +349,6 @@ func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	return f.tempStorage.path
 }
 
-// IsVectorized is part of the flowinfra.Flow interface.
-func (f *vectorizedFlow) IsVectorized() bool {
-	return true
-}
-
 // ConcurrentTxnUse is part of the flowinfra.Flow interface. It is conservative
 // in that it returns that there is concurrent txn use as soon as any operator
 // concurrency is detected. This should be inconsequential for local flows that
