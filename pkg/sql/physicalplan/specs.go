@@ -23,9 +23,9 @@ var flowSpecPool = sync.Pool{
 	},
 }
 
-// NewFlowSpec returns a new FlowSpec, which may have non-zero capacity in its
+// newFlowSpec returns a new FlowSpec, which may have non-zero capacity in its
 // slice fields.
-func NewFlowSpec(flowID execinfrapb.FlowID, gateway base.SQLInstanceID) *execinfrapb.FlowSpec {
+func newFlowSpec(flowID execinfrapb.FlowID, gateway base.SQLInstanceID) *execinfrapb.FlowSpec {
 	spec := flowSpecPool.Get().(*execinfrapb.FlowSpec)
 	spec.FlowID = flowID
 	spec.Gateway = gateway
