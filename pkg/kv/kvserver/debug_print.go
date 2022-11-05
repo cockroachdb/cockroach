@@ -186,8 +186,13 @@ func tryRangeDescriptor(kv storage.MVCCKeyValue) (string, error) {
 	if err := IsRangeDescriptorKey(kv.Key); err != nil {
 		return "", err
 	}
+	// RangeDescriptor is a MVCCValue.
+	v, err := storage.DecodeMVCCValue(kv.Value)
+	if err != nil {
+		return "", err
+	}
 	var desc roachpb.RangeDescriptor
-	if err := getProtoValue(kv.Value, &desc); err != nil {
+	if err := v.Value.GetProto(&desc); err != nil {
 		return "", err
 	}
 	return descStr(desc), nil
@@ -436,13 +441,6 @@ func IsRangeDescriptorKey(key storage.MVCCKey) error {
 		return fmt.Errorf("wrong suffix: %s", suffix)
 	}
 	return nil
-}
-
-func getProtoValue(data []byte, msg protoutil.Message) error {
-	value := roachpb.Value{
-		RawBytes: data,
-	}
-	return value.GetProto(msg)
 }
 
 func descStr(desc roachpb.RangeDescriptor) string {

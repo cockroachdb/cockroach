@@ -526,11 +526,15 @@ func loadRangeDescriptor(
 			// doesn't parse as a range descriptor just skip it.
 			return nil //nolint:returnerrcheck
 		}
-		if len(kv.Value) == 0 {
+		v, err := storage.DecodeMVCCValue(kv.Value)
+		if err != nil {
+			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
+		}
+		if v.IsTombstone() {
 			// RangeDescriptor was deleted (range merged away).
 			return nil
 		}
-		if err := (roachpb.Value{RawBytes: kv.Value}).GetProto(&desc); err != nil {
+		if err := v.Value.GetProto(&desc); err != nil {
 			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
 			return nil
 		}
