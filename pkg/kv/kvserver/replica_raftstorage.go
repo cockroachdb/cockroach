@@ -852,6 +852,13 @@ func (r *Replica) applySnapshot(
 		log.Fatalf(ctx, "found empty HardState for non-empty Snapshot %+v", nonemptySnap)
 	}
 
+	// TODO(sep-raft-log): much of the code here will be replaced by a call to:
+	if useReplicasStorage {
+		_ = storage.RangeStorage(nil).IngestRangeSnapshot
+	}
+	// ... which doesn't need a mutex since we're holding raftMu here and the keyspace
+	// has been protected either by the existing initialized replica or a placeholder.
+
 	var stats struct {
 		// Time to process subsumed replicas.
 		subsumedReplicas time.Time

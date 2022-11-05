@@ -45,6 +45,8 @@ import (
 	"go.etcd.io/etcd/raft/v3/tracker"
 )
 
+const useReplicasStorage = false
+
 var (
 	// raftLogTruncationClearRangeThreshold is the number of entries at which Raft
 	// log truncation uses a Pebble range tombstone rather than point deletes. It
@@ -927,18 +929,25 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// reads from the batch. Any reads are performed on the underlying DB.
 	batch := r.store.Engine().NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
+	// TODO(sep-raft-log): use this instead:
+	var rmb storage.RaftMutationBatch // unused so far
+	_ = rmb
 
 	prevLastIndex := lastIndex
 	if len(rd.Entries) > 0 {
 		stats.tAppendBegin = timeutil.Now()
-		// All of the entries are appended to distinct keys, returning a new
+		// All the entries are appended to distinct keys, returning a new
 		// last index.
+		// TODO(sep-raft-log): this doesn't seem to integrate with RaftMutationBatch, which is probably
+		// unintentional. ReplicasStorage does wrap the sideloaded storage as well.
 		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := r.maybeSideloadEntriesRaftMuLocked(ctx, rd.Entries)
 		if err != nil {
 			const expl = "during sideloading"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 		raftLogSize += sideLoadedEntriesSize
+		// TODO(sep-raft-log): update `rmb` from `r.append` or rather, operate on it.
+		_ = rmb
 		if lastIndex, lastTerm, raftLogSize, err = r.append(
 			ctx, batch, lastIndex, lastTerm, raftLogSize, thinEntries,
 		); err != nil {
@@ -964,6 +973,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		//
 		// We have both in the same batch, so there's no problem. If that ever
 		// changes, we must write and sync the Entries before the HardState.
+		_ = rmb.HardState // TODO(sep-raft-log): update this too
 		if err := r.raftMu.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return stats, expl, errors.Wrap(err, expl)
@@ -984,6 +994,27 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// infer the that entries are persisted on the node that sends a snapshot.
 	stats.tPebbleCommitBegin = timeutil.Now()
 	stats.pebbleBatchBytes = int64(batch.Len())
+	// TODO(sep-raft-log): for splits/merges, pass the batch to
+	// either r.store.rs.{Split,Merge}Range instead of committing it
+	// here. If this is a merge, prior to that also call rhs.SyncStateMachine.
+	// For regular commands, use ApplyCommittedBatch (if it's an AddSST, first
+	// call ApplyCommittedUsingIngest first).
+	if useReplicasStorage {
+		_ = r.store.mu.rs.SplitReplica
+	}
+	// TODO(sep-raft-log): does it make sense to have SyncStateMachine sit on
+	// RangeStorage as opposed to ReplicasStorage? You sync one you sync all,
+	// and this doesn't seem to be something we'd ever want to lift.
+	// TODO(sep-raft-log): ^--- hmm, or is it? As is multi-store is implemented
+	// in distribution, but since access across replicas is never necessary, we
+	// could also spread replicas out over a set of stores. But this is probably
+	// not a good idea because then you need two layers of load balancing, one
+	// among the local stores and today's distributed one. You'd also lose the
+	// ability to use admission control on a per-store basis. Ok, bad idea.
+	if useReplicasStorage {
+		_, _ = r.store.mu.rs.MergeReplicas, storage.RangeStorage(nil).SyncStateMachine
+		_ = storage.RangeStorage(nil).ApplyCommittedBatch
+	}
 	sync := rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)
 	if err := batch.Commit(sync); err != nil {
 		const expl = "while committing batch"

@@ -242,6 +242,17 @@ func (r *Replica) loadRaftMuLockedReplicaMuLocked(desc *roachpb.RangeDescriptor)
 // node. It is false when a replica has been created in response to an incoming
 // message but we are waiting for our initial snapshot.
 func (r *Replica) IsInitialized() bool {
+	// TODO(sep-raft-log): this in-memory state will necessarily
+	// sometimes be out of sync with the disk stage, since we're
+	// not holding raftMu here. We should audit the callers and
+	// see what we expect. I think we should have the semantics
+	// that this method *trails* the update to the disk state.
+	// In other words, a replica might look uninitialized to
+	// callers of this method (who don't hold raftMu) but actually
+	// is initialized) for just a moment. Callers of this method
+	// generally want to avoid picking up uninitialized replicas
+	// and can live with this behavior; it's better than picking up
+	// half-initialized replicas.
 	return r.isInitialized.Get()
 }
 

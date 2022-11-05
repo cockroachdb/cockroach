@@ -56,6 +56,11 @@ func (s *Store) RemoveReplica(
 func (s *Store) removeReplicaRaftMuLocked(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, opts RemoveOptions,
 ) error {
+	// TODO(sep-raft-log): both code paths below need to be augmented by a call to
+	// the below instead of mucking with the engine(s) directly.
+	if useReplicasStorage {
+		_ = s.mu.rs.DiscardReplica
+	}
 	rep.raftMu.AssertHeld()
 	if rep.IsInitialized() {
 		if opts.InsertPlaceholder {

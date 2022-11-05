@@ -274,6 +274,13 @@ type Replica struct {
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
+	//
+	// TODO(sep-raft-log): with separate raft log and/or async append/apply,
+	// does a single mutex continue to make sense? We want to be handling
+	// Ready structs while also having inflight appends going on, which
+	// strongly suggests that the answer is "no". We need to allow synchronizing
+	// with log application, Ready handling, and appends separately to avoid
+	// unwanted serialization between them.
 	raftMu struct {
 		syncutil.Mutex
 

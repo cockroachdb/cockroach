@@ -56,6 +56,22 @@ func splitPreApply(
 	// acquired) in Replica.acquireSplitLock. It must be present here if it hasn't
 	// been removed in the meantime (handled below).
 	rightRepl := r.store.GetReplicaIfExists(split.RightDesc.RangeID)
+
+	// SplitReplica will replace most of the logic below. If it returns a non-nil
+	// RangeStorage, we need to put that into rightRepl at some point before that
+	// replica becomes usable[^1]. Should also revisit what needs to be in
+	// splitPostApply, if anything. Probably we need to continue delaying making
+	// rightRepl accessible for readers until after the batch has committed. Note
+	// that SplitReplica really needs to be called *instead* of
+	// batch.Commit(true), since it will commit the batch. So all of the code here
+	// will go away, with the exception of the closed timestamp stuff at the end.
+	//
+	// [^1]: or not - `rs` allows grabbing a handle on demand, so maybe replicas
+	// can init it lazily so we don't need to thread it around as much.
+	if useReplicasStorage {
+		_ = r.store.mu.rs.SplitReplica
+	}
+
 	// Check to see if we know that the RHS has already been removed from this
 	// store at the replica ID implied by the split.
 	if rightRepl == nil || rightRepl.isNewerThanSplit(&split) {

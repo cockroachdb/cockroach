@@ -659,6 +659,15 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	// applied in its own batch so it's not possible that any other commands
 	// which precede this command can shadow writes from this SSTable.
 	if res.AddSSTable != nil {
+		// TODO(sep-raft-log): all batch/eng modification will be replaced by the
+		// below. While we're at it we should likely move that call closer to
+		// ApplyCommitted which must follow it. That is, build up a list of paths to
+		// ingest in replicaAppBatch and let handleRaftReadyRaftMuLocked retrieve
+		// it.
+		if useReplicasStorage {
+			_ = storage.RangeStorage(nil).ApplyCommittedUsingIngest
+		}
+
 		copied := addSSTablePreApply(
 			ctx,
 			b.r.store.cfg.Settings,

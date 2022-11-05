@@ -138,6 +138,13 @@ func (s *Store) tryGetOrCreateReplica(
 	// conditions. This double-checked locking is an optimization to avoid this
 	// work when we know the Replica should not be created ahead of time.
 	tombstoneKey := keys.RangeTombstoneKey(rangeID)
+	// TODO(sep-raft-log): use the below instead.
+	// TODO(sep-raft-log): CreateUninitializedRange already checks the tombstone,
+	// so do we even need this step, and GetRangeTombstone in general?
+	if useReplicasStorage {
+		_ = s.mu.rs.GetRangeTombstone
+	}
+
 	var tombstone roachpb.RangeTombstone
 	if ok, err := storage.MVCCGetProto(
 		ctx, s.Engine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
@@ -194,6 +201,17 @@ func (s *Store) tryGetOrCreateReplica(
 	}
 	s.mu.uninitReplicas[repl.RangeID] = repl
 	s.mu.Unlock() // NB: unlocking out of order
+
+	// Some of what follows should be replaced by CreateUninitializedRange.
+	// Note that the locking is subtle. We can call CreateUninitializedRange
+	// now without a lock because we're the only one creating this range, as
+	// we've got the entry in the RangeMap and we're still holding the mutexes
+	// on `repl` (which must be held when destroying the repl again).
+	// `rs` internally also has internal in-mem data that are updated here, so
+	// these need a mutex though.
+	if useReplicasStorage {
+		_ = s.mu.rs.CreateUninitializedRange
+	}
 
 	// Initialize the Replica with the replicaID.
 	if err := func() error {

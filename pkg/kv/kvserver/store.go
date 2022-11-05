@@ -927,6 +927,16 @@ type Store struct {
 		//
 		// INVARIANT: any entry in this map is also in replicasByKey.
 		replicaPlaceholders map[roachpb.RangeID]*ReplicaPlaceholder
+
+		// TODO(sep-raft-log): we don't actually hold `s.mu` most of the time
+		// when using this, so this should probably be moved out one level, but we
+		// need to explain why each use of this interface is safe. Generally the
+		// uses that we need are safe because the writes that are carried out to
+		// engine by the various methods on this interface happen under a locked
+		// raftMu, or because we know that have unique access to a replica's
+		// keyspace for other reasons. In other words, the pre-ReplicasStorage
+		// reasons carry over to each individual use of ReplicasStorage.
+		rs storage.ReplicasStorage
 	}
 
 	// The unquiesced subset of replicas.
