@@ -845,7 +845,15 @@ message AdminSplitResponse {
 // Ranges that do not have the sticky bit set are eligible for
 // automatic merging.
 message AdminUnsplitRequest {
+
+  enum Class {
+    ARBITRARY = 0;
+    ORGANIZATION = 1;
+  }
+
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  Class class = 2;
 }
 
 // An AdminUnsplitResponse is the return value from the
