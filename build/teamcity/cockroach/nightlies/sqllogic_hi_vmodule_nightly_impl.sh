@@ -10,7 +10,7 @@ BAZEL_BIN=$(bazel info bazel-bin --config=ci)
 ARTIFACTS_DIR=/artifacts
 
 exit_status=0
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --process_test_failures -- test --config=ci \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     //pkg/sql/logictest/tests/... \
     --test_arg=--vmodule=*=10 \
     --test_arg=-show-sql \

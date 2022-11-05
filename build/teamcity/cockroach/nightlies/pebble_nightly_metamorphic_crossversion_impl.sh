@@ -29,7 +29,7 @@ test_args=$(echo $@ | python3 -c "import sys; print(' '.join(['--test_arg=' +wor
 # Add the verbosity flag.
 test_args="--test_arg=-test.v $test_args"
 
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --process_test_failures -- \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- \
                                       test @com_github_cockroachdb_pebble//internal/metamorphic/crossversion:crossversion_test \
                                       --test_timeout=25200 '--test_filter=TestMetaCrossVersion$' \
                                       --define gotags=bazel,invariants \
