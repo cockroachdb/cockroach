@@ -320,7 +320,7 @@ func TestRangeSplitsStickyBit(t *testing.T) {
 	}
 
 	// Removing sticky bit.
-	if err := s.DB.AdminUnsplit(ctx, splitKey.AsRawKey()); err != nil {
+	if err := s.DB.AdminUnsplit(ctx, splitKey.AsRawKey(), roachpb.AdminUnsplitRequest_ORGANIZATION); err != nil {
 		t.Fatal(err)
 	}
 

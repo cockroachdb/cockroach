@@ -175,8 +175,11 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 		*roachpb.IsSpanEmptyRequest:
 		return true
 	case *roachpb.AdminSplitRequest:
-		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID == roachpb.SystemTenantID
+		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID.IsSystem()
+	case *roachpb.AdminUnsplitRequest:
+		return t.Class != roachpb.AdminUnsplitRequest_ARBITRARY || tenID.IsSystem()
 	}
+
 	return false
 }
 

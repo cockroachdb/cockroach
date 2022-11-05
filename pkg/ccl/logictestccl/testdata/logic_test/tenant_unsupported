@@ -48,7 +48,7 @@ SELECT * FROM crdb_internal.kv_node_status
 statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmSplit\] not permitted
 ALTER TABLE kv SPLIT AT VALUES ('foo')
 
-statement error operation is unsupported in multi-tenancy mode
+statement error pq: could not UNSPLIT AT \('foo'\): rpc error: code = Unauthenticated desc = request \[1 AdmUnsplit\] not permitted
 ALTER TABLE kv UNSPLIT AT VALUES ('foo')
 
 statement error operation is unsupported in multi-tenancy mode
