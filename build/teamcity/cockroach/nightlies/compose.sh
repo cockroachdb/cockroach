@@ -20,7 +20,7 @@ ARTIFACTS_DIR=$PWD/artifacts
 mkdir -p $ARTIFACTS_DIR
 
 exit_status=0
-$BAZCI --process_test_failures --artifacts_dir=$ARTIFACTS_DIR -- \
+$BAZCI --artifacts_dir=$ARTIFACTS_DIR -- \
        test --config=ci //pkg/compose:compose_test \
        "--sandbox_writable_path=$ARTIFACTS_DIR" \
        "--test_tmpdir=$ARTIFACTS_DIR" \
