@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -137,6 +138,33 @@ func (s *Tenant) Reconciler() spanconfig.Reconciler {
 // mutations made by the tenant.
 func (s *Tenant) KVAccessorRecorder() *spanconfigtestutils.KVAccessorRecorder {
 	return s.recorder
+}
+
+// WithMutableDatabaseDescriptor invokes the provided callback with a mutable
+// database descriptor, changes to which are then committed back to the system.
+// The callback needs to be idempotent.
+func (s *Tenant) WithMutableDatabaseDescriptor(
+	ctx context.Context, dbName string, f func(*dbdesc.Mutable),
+) {
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	) error {
+		desc, err := descsCol.GetMutableDatabaseByName(
+			ctx,
+			txn,
+			dbName,
+			tree.DatabaseLookupFlags{
+				Required:       true,
+				IncludeOffline: true,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		f(desc)
+		return descsCol.WriteDesc(ctx, false, desc, txn)
+	}))
 }
 
 // WithMutableTableDescriptor invokes the provided callback with a mutable table
