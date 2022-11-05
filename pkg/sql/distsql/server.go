@@ -414,7 +414,7 @@ func (ds *ServerImpl) setupFlow(
 		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
-	if f.IsVectorized() {
+	if isVectorized {
 		telemetry.Inc(sqltelemetry.VecExecCounter)
 	}
 
@@ -566,14 +566,10 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	batchOutput execinfra.BatchReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, execopnode.OpChains, error) {
-	ctx, f, opChains, err := ds.setupFlow(
+	return ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, &mon.BoundAccount{}, /* reserved */
 		req, output, batchOutput, localState,
 	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return ctx, f, opChains, err
 }
 
 // setupSpanForIncomingRPC creates a span for a SetupFlow RPC. The caller must
@@ -618,6 +614,11 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
+	if cb := ds.TestingKnobs.SetupFlowCb; cb != nil {
+		if err := cb(ds.ServerConfig.NodeID.SQLInstanceID(), req); err != nil {
+			return &execinfrapb.SimpleResponse{Error: execinfrapb.NewError(ctx, err)}, nil
+		}
+	}
 	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
 	defer rpcSpan.Finish()
 

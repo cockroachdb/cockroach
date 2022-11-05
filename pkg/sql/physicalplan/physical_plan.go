@@ -875,8 +875,6 @@ func (p *PhysicalPlan) PopulateEndpoints() {
 
 // GenerateFlowSpecs takes a plan (with populated endpoints) and generates the
 // set of FlowSpecs (one per node involved in the plan).
-//
-// gateway is the current node's SQLInstanceID.
 func (p *PhysicalPlan) GenerateFlowSpecs() map[base.SQLInstanceID]*execinfrapb.FlowSpec {
 	flowID := execinfrapb.FlowID{
 		UUID: p.FlowID,
@@ -886,7 +884,7 @@ func (p *PhysicalPlan) GenerateFlowSpecs() map[base.SQLInstanceID]*execinfrapb.F
 	for _, proc := range p.Processors {
 		flowSpec, ok := flows[proc.SQLInstanceID]
 		if !ok {
-			flowSpec = NewFlowSpec(flowID, p.GatewaySQLInstanceID)
+			flowSpec = newFlowSpec(flowID, p.GatewaySQLInstanceID)
 			flows[proc.SQLInstanceID] = flowSpec
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
