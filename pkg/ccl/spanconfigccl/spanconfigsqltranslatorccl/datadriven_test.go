@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -245,6 +246,20 @@ func TestDataDriven(t *testing.T) {
 				d.ScanArgs(t, "database", &dbName)
 				d.ScanArgs(t, "table", &tbName)
 				tenant.WithMutableTableDescriptor(ctx, dbName, tbName, func(mutable *tabledesc.Mutable) {
+					mutable.SetPublic()
+				})
+
+			case "mark-database-offline":
+				var dbName string
+				d.ScanArgs(t, "database", &dbName)
+				tenant.WithMutableDatabaseDescriptor(ctx, dbName, func(mutable *dbdesc.Mutable) {
+					mutable.SetOffline("for testing")
+				})
+
+			case "mark-database-public":
+				var dbName string
+				d.ScanArgs(t, "database", &dbName)
+				tenant.WithMutableDatabaseDescriptor(ctx, dbName, func(mutable *dbdesc.Mutable) {
 					mutable.SetPublic()
 				})
 
