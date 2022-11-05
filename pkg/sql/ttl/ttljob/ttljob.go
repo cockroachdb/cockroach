@@ -331,7 +331,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			nil, /* clockUpdater */
 			evalCtx.Tracing,
 			execCfg.ContentionRegistry,
-			nil, /* testingPushCallback */
 		)
 		defer distSQLReceiver.Release()
 

@@ -152,7 +152,6 @@ func (im *IndexBackfillerMergePlanner) plan(
 			im.execCfg.Clock,
 			evalCtx.Tracing,
 			im.execCfg.ContentionRegistry,
-			nil, /* testingPushCallback */
 		)
 		defer recv.Release()
 		evalCtxCopy := evalCtx
