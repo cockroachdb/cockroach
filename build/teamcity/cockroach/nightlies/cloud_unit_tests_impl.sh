@@ -44,13 +44,13 @@ bazel_test_env=(--test_env=GO_TEST_WRAP_TESTV=1 \
   --test_env=AWS_CONFIG_FILE="$AWS_CONFIG_FILE")
 exit_status=0
 
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --process_test_failures -- test --config=ci \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test //pkg/ccl/cloudccl/amazon:amazon_test \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
     || exit_status=$?
 
-$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci --process_test_failures -- test --config=ci \
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     //pkg/ccl/backupccl:backupccl_test --test_filter='^TestCloudBackupRestore' \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
