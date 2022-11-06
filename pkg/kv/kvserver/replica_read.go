@@ -139,6 +139,8 @@ func (r *Replica) executeReadOnlyBatch(
 			if err != nil {
 				return nil, g, nil, roachpb.NewError(err)
 			}
+			defer latchSpansRead.Release()
+			defer lockSpansRead.Release()
 			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
 				return nil, g, nil, roachpb.NewError(roachpb.NewOptimisticEvalConflictsError())
 			}
