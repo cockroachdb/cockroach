@@ -1,0 +1,3 @@
+echo
+----
+db0.ReverseScanSkipLocked(ctx, tk(1), tk(2), 0) // @<ts> (/Table/100/"0000000000000001":v21, <nil>)
