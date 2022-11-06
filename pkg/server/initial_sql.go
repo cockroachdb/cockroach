@@ -23,6 +23,16 @@ import (
 // RunInitialSQL concerns itself with running "initial SQL" code when
 // a cluster is started for the first time.
 //
+// Note: this function is not suitable for production readiness in
+// multi-node clusters. It is only guaranteed to do “the right thing”
+// in `cockroach start-single-node`. This is because other nodes than
+// n1 can start accepting clients before it completes execution (so
+// its behavior is not "pre-clients"), and it may not run at all if n1
+// crashes soon after initialization. This behavior is sufficiently
+// advanced to provide good UX in `start-single-node` and multi-node
+// `demo`, but should not be relied on to perform more important
+// initialization tasks.
+//
 // The "startSingleNode" argument is true for `start-single-node`,
 // and `cockroach demo` with 2 nodes or fewer.
 // If adminUser is non-empty, an admin user with that name is
