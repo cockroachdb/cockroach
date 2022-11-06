@@ -43,15 +43,17 @@ message ClosureTxnOperation {
 message GetOperation {
   bytes key = 1;
   bool for_update = 2;
-  Result result = 3 [(gogoproto.nullable) = false];
+  bool skip_locked = 3;
+  Result result = 4 [(gogoproto.nullable) = false];
 }
 
 message ScanOperation {
   bytes key = 1;
   bytes end_key = 2;
   bool for_update = 3;
-  bool reverse = 4;
-  Result result = 5 [(gogoproto.nullable) = false];
+  bool skip_locked = 4;
+  bool reverse = 5;
+  Result result = 6 [(gogoproto.nullable) = false];
 }
 
 message PutOperation {
