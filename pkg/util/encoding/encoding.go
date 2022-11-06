@@ -631,6 +631,21 @@ func EncodeBytesDescending(b []byte, data []byte) []byte {
 	return b
 }
 
+// EncodeBytesSize returns the size of the []byte value when encoded using
+// EncodeBytes{Ascending,Descending}. The function accounts for the encoding
+// marker, escaping, and the terminator.
+func EncodeBytesSize(data []byte) int {
+	// Encoding overhead:
+	// +1 for [bytesMarker] prefix
+	// +2 for [escape, escapedTerm] suffix
+	// +1 for each byte that needs to be escaped
+	//
+	// NOTE: bytes.Count is implemented by the go runtime in assembly and is
+	// much faster than looping over the bytes in the slice, especially when
+	// given a single-byte separator.
+	return len(data) + 3 + bytes.Count(data, []byte{escape})
+}
+
 // DecodeBytesAscending decodes a []byte value from the input buffer
 // which was encoded using EncodeBytesAscending. The decoded bytes
 // are appended to r. The remainder of the input buffer and the

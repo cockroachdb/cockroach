@@ -487,7 +487,7 @@ func testPeekLength(t *testing.T, encoded []byte) {
 	}
 }
 
-func TestEncodeDecodeBytes(t *testing.T) {
+func TestEncodeDecodeBytesAscending(t *testing.T) {
 	testCases := []struct {
 		value   []byte
 		encoded []byte
@@ -515,6 +515,11 @@ func TestEncodeDecodeBytes(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
+		expSize := EncodeBytesSize(c.value)
+		if len(enc) != expSize {
+			t.Errorf("expected encoded size %d, got %d", expSize, len(enc))
+		}
+
 		remainder, dec, err := DecodeBytesAscending(enc, nil)
 		if err != nil {
 			t.Error(err)
@@ -569,6 +574,11 @@ func TestEncodeDecodeBytesDescending(t *testing.T) {
 					c.value, testCases[i-1].encoded, enc)
 			}
 		}
+		expSize := EncodeBytesSize(c.value)
+		if len(enc) != expSize {
+			t.Errorf("expected encoded size %d, got %d", expSize, len(enc))
+		}
+
 		remainder, dec, err := DecodeBytesDescending(enc, nil)
 		if err != nil {
 			t.Error(err)

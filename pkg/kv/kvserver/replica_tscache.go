@@ -574,6 +574,14 @@ func (r *Replica) CanCreateTxnRecord(
 	return true, minCommitTS, 0
 }
 
+// Pseudo range local key suffixes used to construct "marker" keys for use
+// with the timestamp cache. These must not collide with a real range local
+// key suffix defined in pkg/keys/constants.go.
+var (
+	localTxnTombstoneMarkerSuffix = roachpb.RKey("tmbs")
+	localTxnPushMarkerSuffix      = roachpb.RKey("push")
+)
+
 // transactionTombstoneMarker returns the key used as a marker indicating that a
 // particular txn has written a transaction record (which may or may not still
 // exist). It serves as a guard against recreating a transaction record after it
@@ -582,7 +590,7 @@ func (r *Replica) CanCreateTxnRecord(
 // for existing txn records when considering 1PC evaluation without hitting
 // disk.
 func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
-	return append(keys.TransactionKey(key, txnID), []byte("-tmbs")...)
+	return keys.MakeRangeKey(keys.MustAddr(key), localTxnTombstoneMarkerSuffix, txnID.GetBytes())
 }
 
 // transactionPushMarker returns the key used as a marker indicating that a
@@ -590,7 +598,7 @@ func transactionTombstoneMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
 // as a marker in the timestamp cache indicating that the transaction was pushed
 // in case the push happens before there's a transaction record.
 func transactionPushMarker(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
-	return append(keys.TransactionKey(key, txnID), []byte("-push")...)
+	return keys.MakeRangeKey(keys.MustAddr(key), localTxnPushMarkerSuffix, txnID.GetBytes())
 }
 
 // GetCurrentReadSummary returns a new ReadSummary reflecting all reads served

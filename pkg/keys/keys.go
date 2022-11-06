@@ -374,7 +374,7 @@ func MakeRangeKey(key, suffix, detail roachpb.RKey) roachpb.Key {
 	if len(suffix) != localSuffixLength {
 		panic(fmt.Sprintf("suffix len(%q) != %d", suffix, localSuffixLength))
 	}
-	buf := MakeRangeKeyPrefix(key)
+	buf := makeRangeKeyPrefixWithExtraCapacity(key, len(suffix)+len(detail))
 	buf = append(buf, suffix...)
 	buf = append(buf, detail...)
 	return buf
@@ -382,8 +382,14 @@ func MakeRangeKey(key, suffix, detail roachpb.RKey) roachpb.Key {
 
 // MakeRangeKeyPrefix creates a key prefix under which all range-local keys
 // can be found.
+// gcassert:inline
 func MakeRangeKeyPrefix(key roachpb.RKey) roachpb.Key {
-	buf := make(roachpb.Key, 0, len(LocalRangePrefix)+len(key)+1)
+	return makeRangeKeyPrefixWithExtraCapacity(key, 0)
+}
+
+func makeRangeKeyPrefixWithExtraCapacity(key roachpb.RKey, extra int) roachpb.Key {
+	keyLen := len(LocalRangePrefix) + encoding.EncodeBytesSize(key)
+	buf := make(roachpb.Key, 0, keyLen+extra)
 	buf = append(buf, LocalRangePrefix...)
 	buf = encoding.EncodeBytesAscending(buf, key)
 	return buf
@@ -422,11 +428,7 @@ func RangeDescriptorKey(key roachpb.RKey) roachpb.Key {
 // transaction key and ID. The base key is encoded in order to
 // guarantee that all transaction records for a range sort together.
 func TransactionKey(key roachpb.Key, txnID uuid.UUID) roachpb.Key {
-	rk, err := Addr(key)
-	if err != nil {
-		panic(err)
-	}
-	return MakeRangeKey(rk, LocalTransactionSuffix, roachpb.RKey(txnID.GetBytes()))
+	return MakeRangeKey(MustAddr(key), LocalTransactionSuffix, txnID.GetBytes())
 }
 
 // QueueLastProcessedKey returns a range-local key for last processed
@@ -453,10 +455,7 @@ func RangeProbeKey(key roachpb.RKey) roachpb.Key {
 // For a scan [start, end) the corresponding lock table scan is
 // [LTSK(start), LTSK(end)).
 func LockTableSingleKey(key roachpb.Key, buf []byte) (roachpb.Key, []byte) {
-	// The +3 accounts for the bytesMarker and terminator. Note that this is a
-	// lower-bound, since the escaping done by EncodeBytesAscending depends on
-	// what bytes are in the key. But we expect this to be usually accurate.
-	keyLen := len(LocalRangeLockTablePrefix) + len(LockTableSingleKeyInfix) + len(key) + 3
+	keyLen := len(LocalRangeLockTablePrefix) + len(LockTableSingleKeyInfix) + encoding.EncodeBytesSize(key)
 	if cap(buf) < keyLen {
 		buf = make([]byte, 0, keyLen)
 	} else {
