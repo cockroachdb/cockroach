@@ -389,13 +389,15 @@ func startTestFullServer(
 		options.argsFn(&args)
 	}
 
-	ctx := context.Background()
+	resetRetry := testingUseFastRetry()
 	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	s, db, _ := serverutils.StartServer(t, args)
 
+	ctx := context.Background()
 	cleanup := func() {
 		s.Stopper().Stop(ctx)
 		resetFlushFrequency()
+		resetRetry()
 	}
 	var err error
 	defer func() {
@@ -429,6 +431,7 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
+	resetRetry := testingUseFastRetry()
 	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	cluster, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, knobs,
@@ -437,6 +440,7 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 	cleanupAndReset := func() {
 		cleanup()
 		resetFlushFrequency()
+		resetRetry()
 	}
 
 	var err error
@@ -497,9 +501,10 @@ func startTestTenant(
 	tenantRunner.ExecMultiple(t, strings.Split(serverSetupStatements, ";")...)
 
 	waitForTenantPodsActive(t, tenantServer, 1)
-
+	resetRetry := testingUseFastRetry()
 	return tenantID, tenantServer, tenantDB, func() {
 		tenantServer.Stopper().Stop(context.Background())
+		resetRetry()
 	}
 }
 

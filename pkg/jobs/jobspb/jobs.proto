@@ -926,6 +926,7 @@ message ChangefeedProgress {
 
   reserved 2;
   Checkpoint checkpoint = 4;
+  util.hlc.Timestamp last_nonempty_checkpoint = 5;
 
   // ProtectedTimestampRecord is the ID of the protected timestamp record
   // corresponding to this job. While the job ought to clean up the record
