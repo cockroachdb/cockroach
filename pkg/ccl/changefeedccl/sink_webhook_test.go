@@ -171,8 +171,7 @@ func TestWebhookSink(t *testing.T) {
 		// now sink's client accepts no custom certs, should reject the server's cert and fail
 		require.NoError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, []byte("[1001]"), []byte("{\"after\":{\"col1\":\"val1\",\"rowid\":1000},\"key\":[1001],\"topic:\":\"foo\"}"), zeroTS, zeroTS, zeroAlloc))
 
-		require.EqualError(t, sinkSrcNoCert.Flush(context.Background()),
-			fmt.Sprintf(`Post "%s": x509: certificate signed by unknown authority`, sinkDest.URL()))
+		require.Regexp(t, "x509", sinkSrcNoCert.Flush(context.Background()))
 		require.EqualError(t, sinkSrcNoCert.EmitRow(context.Background(), nil, nil, nil, zeroTS, zeroTS, zeroAlloc),
 			`context canceled`)
 
