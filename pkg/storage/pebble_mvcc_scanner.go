@@ -1413,9 +1413,10 @@ func (p *pebbleMVCCScanner) isKeyLockedByConflictingTxn(
 		strength = lock.Exclusive
 	}
 	if ok, txn := p.lockTable.IsKeyLockedByConflictingTxn(key, strength); ok {
-		// The key is locked, so ignore it. However, we return the lock holder
-		// separately if we have room; the caller may want to resolve it.
-		if p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents {
+		// The key is locked or reserved, so ignore it.
+		if txn != nil && (p.maxIntents == 0 || int64(p.intents.Count()) < p.maxIntents) {
+			// However, if the key is locked, we return the lock holder separately
+			// (if we have room); the caller may want to resolve it.
 			if !p.addKeyAndMetaAsIntent(ctx, key, txn) {
 				return false, false
 			}
@@ -1436,6 +1437,10 @@ func (p *pebbleMVCCScanner) addCurIntent(ctx context.Context) bool {
 func (p *pebbleMVCCScanner) addKeyAndMetaAsIntent(
 	ctx context.Context, key roachpb.Key, txn *enginepb.TxnMeta,
 ) bool {
+	if txn == nil {
+		p.err = errors.AssertionFailedf("nil txn passed to addKeyAndMetaAsIntent")
+		return false
+	}
 	mvccKey := MakeMVCCMetadataKey(key)
 	mvccVal := enginepb.MVCCMetadata{Txn: txn}
 	encodedKey := EncodeMVCCKey(mvccKey)

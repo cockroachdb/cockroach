@@ -4,9 +4,16 @@ new-txn name=txn1 ts=10,1 epoch=0
 new-txn name=txn2 ts=11,1 epoch=0
 ----
 
+new-txn name=txn3 ts=12,1 epoch=0
+----
+
+new-txn name=txn4 ts=13,1 epoch=0
+----
+
 # -------------------------------------------------------------
 # Prep: Txn 1 acquire locks at key k and key k2
 #       Txn 2 acquire locks at key k3
+#       Txn 4 acquires reservation at key k4
 # -------------------------------------------------------------
 
 new-request name=req1 txn=txn1 ts=10,0
@@ -52,15 +59,61 @@ finish req=req2
 ----
 [-] finish req2: finishing request
 
+new-request name=req3 txn=txn3 ts=12,0
+  put key=k4 value=v
+----
+
+sequence req=req3
+----
+[3] sequence req3: sequencing request
+[3] sequence req3: acquiring latches
+[3] sequence req3: scanning lock table for conflicting locks
+[3] sequence req3: sequencing complete, returned guard
+
+on-lock-acquired req=req3 key=k4
+----
+[-] acquire lock: txn 00000003 @ k4
+
+finish req=req3
+----
+[-] finish req3: finishing request
+
+new-request name=req4 txn=txn4 ts=13,0
+  put key=k4 value=v
+----
+
+sequence req=req4
+----
+[4] sequence req4: sequencing request
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: waiting in lock wait-queues
+[4] sequence req4: lock wait-queue event: wait for (distinguished) txn 00000003 holding lock @ key "k4" (queuedWriters: 1, queuedReaders: 0)
+[4] sequence req4: pushing after 0s for: liveness detection = true, deadlock detection = true, timeout enforcement = false, priority enforcement = false
+[4] sequence req4: pushing txn 00000003 to abort
+[4] sequence req4: blocked on select in concurrency_test.(*cluster).PushTransaction
+
+on-txn-updated txn=txn3 status=aborted
+----
+[-] update txn: aborting txn3
+[4] sequence req4: resolving intent "k4" for txn 00000003 with ABORTED status
+[4] sequence req4: lock wait-queue event: done waiting
+[4] sequence req4: conflicted with 00000003-0000-0000-0000-000000000000 on "k4" for 0.000s
+[4] sequence req4: acquiring latches
+[4] sequence req4: scanning lock table for conflicting locks
+[4] sequence req4: sequencing complete, returned guard
+
 debug-lock-table
 ----
-global: num=3
+global: num=4
  lock: "k"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k2"
   holder: txn: 00000001-0000-0000-0000-000000000000, ts: 10.000000000,0, info: unrepl epoch: 0, seqs: [0]
  lock: "k3"
   holder: txn: 00000002-0000-0000-0000-000000000000, ts: 11.000000000,0, info: unrepl epoch: 0, seqs: [0]
+ lock: "k4"
+  res: req: 4, txn: 00000004-0000-0000-0000-000000000000, ts: 13.000000000,0, seq: 0
 local: num=0
 
 # -------------------------------------------------------------
@@ -70,15 +123,15 @@ local: num=0
 # -------------------------------------------------------------
 
 new-request name=reqSkipLocked txn=txn2 ts=9,0 wait-policy=skip-locked
-  scan key=k endkey=k5
+  scan key=k endkey=k6
 ----
 
 sequence req=reqSkipLocked
 ----
-[3] sequence reqSkipLocked: sequencing request
-[3] sequence reqSkipLocked: acquiring latches
-[3] sequence reqSkipLocked: scanning lock table for conflicting locks
-[3] sequence reqSkipLocked: sequencing complete, returned guard
+[5] sequence reqSkipLocked: sequencing request
+[5] sequence reqSkipLocked: acquiring latches
+[5] sequence reqSkipLocked: scanning lock table for conflicting locks
+[5] sequence reqSkipLocked: sequencing complete, returned guard
 
 is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=none
 ----
@@ -96,6 +149,10 @@ is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=none
 ----
 locked: false
 
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 strength=none
+----
+locked: false
+
 is-key-locked-by-conflicting-txn req=reqSkipLocked key=k strength=exclusive
 ----
 locked: true, holder: 00000001-0000-0000-0000-000000000000
@@ -110,11 +167,19 @@ locked: false
 
 is-key-locked-by-conflicting-txn req=reqSkipLocked key=k4 strength=exclusive
 ----
+locked: true, holder: <nil>
+
+is-key-locked-by-conflicting-txn req=reqSkipLocked key=k5 strength=exclusive
+----
 locked: false
 
 finish req=reqSkipLocked
 ----
 [-] finish reqSkipLocked: finishing request
+
+finish req=req4
+----
+[-] finish req4: finishing request
 
 reset
 ----
