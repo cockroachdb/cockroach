@@ -584,9 +584,18 @@ func (r *Replica) evaluate1PC(
 		}
 	}
 
-	// Add placeholder responses for end transaction requests.
-	br.Add(&roachpb.EndTxnResponse{OnePhaseCommit: true})
+	// Assign the response txn.
 	br.Txn = clonedTxn
+	// Add placeholder response for the end transaction request.
+	etAlloc := new(struct {
+		et    roachpb.EndTxnResponse
+		union roachpb.ResponseUnion_EndTxn
+	})
+	etAlloc.et.OnePhaseCommit = true
+	etAlloc.union.EndTxn = &etAlloc.et
+	br.Responses = append(br.Responses, roachpb.ResponseUnion{})
+	br.Responses[len(br.Responses)-1].Value = &etAlloc.union
+
 	return onePCResult{
 		success: onePCSucceeded,
 		stats:   *ms,
