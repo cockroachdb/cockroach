@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -529,10 +530,11 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 
 	if scope != defaultSLIScope {
 		if !enableSLIMetrics {
-			return nil, errors.WithHint(
-				pgerror.Newf(pgcode.ConfigurationLimitExceeded, "cannot create metrics scope %q", scope),
-				"try restarting with COCKROACH_EXPERIMENTAL_ENABLE_PER_CHANGEFEED_METRICS=true",
-			)
+			return nil, changefeedbase.WithTerminalError(
+				errors.WithHint(
+					pgerror.Newf(pgcode.ConfigurationLimitExceeded, "cannot create metrics scope %q", scope),
+					"try restarting with COCKROACH_EXPERIMENTAL_ENABLE_PER_CHANGEFEED_METRICS=true",
+				))
 		}
 		const failSafeMax = 1024
 		if len(a.mu.sliMetrics) == failSafeMax {

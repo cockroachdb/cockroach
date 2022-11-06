@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -51,18 +50,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
-
-var changefeedRetryOptions = retry.Options{
-	InitialBackoff: 5 * time.Millisecond,
-	Multiplier:     2,
-	MaxBackoff:     10 * time.Second,
-}
 
 // featureChangefeedEnabled is used to enable and disable the CHANGEFEED feature.
 var featureChangefeedEnabled = settings.RegisterBoolSetting(
@@ -213,7 +205,6 @@ func changefeedPlanHook(
 		}
 
 		if details.SinkURI == `` {
-
 			p.ExtendedEvalContext().ChangefeedState = &coreChangefeedProgress{
 				progress: progress,
 			}
@@ -231,7 +222,7 @@ func changefeedPlanHook(
 			logChangefeedCreateTelemetry(ctx, jr)
 
 			var err error
-			for r := retry.StartWithCtx(ctx, changefeedRetryOptions); r.Next(); {
+			for r := getRetry(ctx); r.Next(); {
 				if err = distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh); err == nil {
 					return nil
 				}
@@ -242,15 +233,18 @@ func changefeedPlanHook(
 					}
 				}
 
-				if !changefeedbase.IsRetryableError(err) {
-					log.Warningf(ctx, `CHANGEFEED returning with error: %+v`, err)
-					return err
+				if err = changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
+					break
 				}
 
+				// All other errors retry.
 				progress = p.ExtendedEvalContext().ChangefeedState.(*coreChangefeedProgress).progress
 			}
+			// TODO(yevgeniy): This seems wrong -- core changefeeds always terminate
+			// with an error.  Perhaps rename this telemetry to indicate number of
+			// completed feeds.
 			telemetry.Count(`changefeed.core.error`)
-			return changefeedbase.MaybeStripRetryableErrorMarker(err)
+			return err
 		}
 
 		// The below block creates the job and protects the data required for the
@@ -794,7 +788,7 @@ func validateSink(
 	canarySink, err := getSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
 		nilOracle, p.User(), jobID, sli)
 	if err != nil {
-		return changefeedbase.MaybeStripRetryableErrorMarker(err)
+		return err
 	}
 	if err := canarySink.Close(); err != nil {
 		return err
@@ -1002,18 +996,18 @@ func (b *changefeedResumer) resumeWithRetries(
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
 	// or for many other reasons.
-	var err error
 	var lastRunStatusUpdate time.Time
 
-	for r := retry.StartWithCtx(ctx, changefeedRetryOptions); r.Next(); {
+	for r := getRetry(ctx); r.Next(); {
 		// startedCh is normally used to signal back to the creator of the job that
 		// the job has started; however, in this case nothing will ever receive
 		// on the channel, causing the changefeed flow to block. Replace it with
 		// a dummy channel.
 		startedCh := make(chan tree.Datums, 1)
 
-		if err = distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh); err == nil {
-			return nil
+		err := distChangefeedFlow(ctx, jobExec, jobID, details, progress, startedCh)
+		if err == nil {
+			return nil // Changefeed completed -- e.g. due to initial_scan=only mode.
 		}
 
 		if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs); ok {
@@ -1022,30 +1016,16 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 		}
 
-		// Retry changefeed if error is retryable.  In addition, we want to handle
-		// context cancellation as retryable, but only if the resumer context has not been cancelled.
-		// (resumer context is canceled by the jobs framework -- so we should respect it).
-		isRetryableErr := changefeedbase.IsRetryableError(err) ||
-			(ctx.Err() == nil && errors.Is(err, context.Canceled))
-		if !isRetryableErr {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			if flowinfra.IsFlowRetryableError(err) {
-				// We don't want to retry flowinfra retryable error in the retry loop above.
-				// This error currently indicates that this node is being drained.  As such,
-				// retries will not help.
-				// Instead, we want to make sure that the changefeed job is not marked failed
-				// due to a transient, retryable error.
-				err = jobs.MarkAsRetryJobError(err)
-				_ = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable flow error: %s", err)
-			}
-
-			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
+		// Terminate changefeed if needed.
+		if err := changefeedbase.AsTerminalError(ctx, jobExec.ExecCfg().LeaseManager, err); err != nil {
+			log.Infof(ctx, "CHANGEFEED %d shutting down (cause: %v)", jobID, err)
+			// Best effort -- update job status to make it clear why changefeed shut down.
+			// This won't always work if this node is being shutdown/drained.
+			b.setJobRunningStatus(ctx, time.Time{}, "shutdown due to %s", err)
 			return err
 		}
 
+		// All other errors retry.
 		log.Warningf(ctx, `WARNING: CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
 		lastRunStatusUpdate = b.setJobRunningStatus(ctx, lastRunStatusUpdate, "retryable error: %s", err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
@@ -1069,7 +1049,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			progress = reloadedJob.Progress()
 		}
 	}
-	return errors.Wrap(err, `ran out of retries`)
+	return errors.Wrap(ctx.Err(), `ran out of retries`)
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

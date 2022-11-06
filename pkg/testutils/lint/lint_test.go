@@ -1196,6 +1196,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!*.pb.go",
 			":!*.pb.gw.go",
+			":!ccl/changefeedccl/changefeedbase/errors.go",
 			":!kv/kvclient/kvcoord/lock_spans_over_budget_error.go",
 			":!spanconfig/errors.go",
 			":!roachpb/replica_unavailable_error.go",
