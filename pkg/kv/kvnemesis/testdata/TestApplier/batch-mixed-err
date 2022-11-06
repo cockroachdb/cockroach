@@ -6,5 +6,5 @@ echo
   b.GetForUpdate(tk(1)) // context canceled
   b.ScanForUpdate(tk(1), tk(3)) // context canceled
   b.ReverseScan(tk(1), tk(3)) // context canceled
-  db0.Run(ctx, b) // context canceled
+  db1.Run(ctx, b) // context canceled
 }

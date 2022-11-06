@@ -17,7 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
-	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -253,6 +254,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			fn = (*kv.Batch).GetForUpdate
 		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			if o.SkipLocked {
+				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
+			}
 			fn(b, o.Key)
 		})
 		o.Result = resultInit(ctx, err)
@@ -287,6 +291,9 @@ func applyClientOp(ctx context.Context, db clientI, op *Operation, inTxn bool) {
 			fn = (*kv.Batch).ScanForUpdate
 		}
 		res, ts, err := dbRunWithResultAndTimestamp(ctx, db, func(b *kv.Batch) {
+			if o.SkipLocked {
+				b.Header.WaitPolicy = lock.WaitPolicy_SkipLocked
+			}
 			fn(b, o.Key, o.EndKey)
 		})
 		o.Result = resultInit(ctx, err)

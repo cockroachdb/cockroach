@@ -226,6 +226,7 @@ func (o *observedWrite) isDelete() bool {
 
 type observedRead struct {
 	Key        roachpb.Key
+	SkipLocked bool
 	Value      roachpb.Value
 	ValidTimes disjointTimeSpans
 }
@@ -236,6 +237,7 @@ type observedScan struct {
 	Span          roachpb.Span
 	IsDeleteRange bool
 	Reverse       bool
+	SkipLocked    bool
 	KVs           []roachpb.KeyValue
 	Valid         multiKeyTimeSpan
 }
@@ -402,8 +404,9 @@ func (v *validator) processOp(op Operation) {
 			break
 		}
 		read := &observedRead{
-			Key:   t.Key,
-			Value: roachpb.Value{RawBytes: t.Result.Value},
+			Key:        t.Key,
+			SkipLocked: t.SkipLocked,
+			Value:      roachpb.Value{RawBytes: t.Result.Value},
 		}
 		v.curObservations = append(v.curObservations, read)
 
@@ -624,8 +627,9 @@ func (v *validator) processOp(op Operation) {
 				Key:    t.Key,
 				EndKey: t.EndKey,
 			},
-			KVs:     make([]roachpb.KeyValue, len(t.Result.Values)),
-			Reverse: t.Reverse,
+			Reverse:    t.Reverse,
+			SkipLocked: t.SkipLocked,
+			KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
 		}
 		for i, kv := range t.Result.Values {
 			scan.KVs[i] = roachpb.KeyValue{
@@ -1000,7 +1004,7 @@ func (v *validator) checkAtomicCommitted(
 				}
 			}
 		case *observedRead:
-			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes)
+			o.ValidTimes = validReadTimes(batch, o.Key, o.Value.RawBytes, o.SkipLocked /* missingKeyValid */)
 		case *observedScan:
 			// All kvs should be within scan boundary.
 			for _, kv := range o.KVs {
@@ -1021,7 +1025,7 @@ func (v *validator) checkAtomicCommitted(
 			if !sort.IsSorted(orderedKVs) {
 				failure = `scan result not ordered correctly`
 			}
-			o.Valid = validScanTime(batch, o.Span, o.KVs)
+			o.Valid = validScanTime(batch, o.Span, o.KVs, o.SkipLocked /* missingKeysValid */)
 		default:
 			panic(errors.AssertionFailedf(`unknown observedOp: %T %s`, observation, observation))
 		}
@@ -1260,7 +1264,15 @@ func mustGetStringValue(value []byte) string {
 	return string(b)
 }
 
-func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTimeSpans {
+func validReadTimes(
+	b *pebble.Batch, key roachpb.Key, value []byte, missingKeyValid bool,
+) disjointTimeSpans {
+	if len(value) == 0 && missingKeyValid {
+		// If no value was returned for the key and this is allowed, all times are
+		// valid for this read.
+		return disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}}
+	}
+
 	var hist []storage.MVCCValue
 	lowerBound := storage.EncodeMVCCKey(storage.MVCCKey{Key: key})
 	upperBound := storage.EncodeMVCCKey(storage.MVCCKey{Key: key.Next()})
@@ -1350,7 +1362,9 @@ func validReadTimes(b *pebble.Batch, key roachpb.Key, value []byte) disjointTime
 	return validTimes
 }
 
-func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) multiKeyTimeSpan {
+func validScanTime(
+	b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue, missingKeysValid bool,
+) multiKeyTimeSpan {
 	valid := multiKeyTimeSpan{
 		Gaps: disjointTimeSpans{{Start: hlc.MinTimestamp, End: hlc.MaxTimestamp}},
 	}
@@ -1365,7 +1379,7 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 		// NB: we use value uniqueness here, but we could also use seqnos, so this
 		// is only a left-over of past times rather than an actual reliance on
 		// unique values.
-		validTimes := validReadTimes(b, kv.Key, kv.Value.RawBytes)
+		validTimes := validReadTimes(b, kv.Key, kv.Value.RawBytes, missingKeysValid)
 		if len(validTimes) > 1 {
 			panic(errors.AssertionFailedf(
 				`invalid number of read time spans for a (key,non-nil-value) pair in scan results: %s->%s: %v`,
@@ -1413,7 +1427,7 @@ func validScanTime(b *pebble.Batch, span roachpb.Span, kvs []roachpb.KeyValue) m
 		if _, ok := missingKeys[string(mvccKey.Key)]; !ok {
 			// Key not in scan response. Only valid if scan was before key's time, or
 			// at a time when the key was deleted.
-			missingKeys[string(mvccKey.Key)] = validReadTimes(b, mvccKey.Key, nil)
+			missingKeys[string(mvccKey.Key)] = validReadTimes(b, mvccKey.Key, nil, missingKeysValid)
 		}
 	}
 
@@ -1456,7 +1470,11 @@ func printObserved(observedOps ...observedOp) string {
 					opCode, o.Key, o.EndKey, ts, mustGetStringValue(o.Value.RawBytes), o.Seq)
 			}
 		case *observedRead:
-			fmt.Fprintf(&buf, "[r]%s:", o.Key)
+			opCode := "r"
+			if o.SkipLocked {
+				opCode += "(skip-locked)"
+			}
+			fmt.Fprintf(&buf, "[%s]%s:", opCode, o.Key)
 			validTimes := o.ValidTimes
 			if len(validTimes) == 0 {
 				validTimes = append(validTimes, timeSpan{})
@@ -1475,6 +1493,9 @@ func printObserved(observedOps ...observedOp) string {
 			}
 			if o.Reverse {
 				opCode = "rs"
+			}
+			if o.SkipLocked {
+				opCode += "(skip-locked)"
 			}
 			var kvs strings.Builder
 			for i, kv := range o.KVs {

@@ -1879,6 +1879,102 @@ func TestValidate(t *testing.T) {
 				tombstone(k2, t2, s2),
 			),
 		},
+		{
+			name: "one read skip locked after write",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(getSkipLocked(k1), v1, t1)),
+			},
+			kvs: kvs(kv(k1, t1, s1)),
+		},
+		{
+			name: "one read skip locked after write returning wrong value",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(getSkipLocked(k1), v2, t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1)),
+		},
+		{
+			name: "one read skip locked after write returning no value",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withReadResultTS(getSkipLocked(k1), ``, t2)),
+			},
+			kvs: kvs(kv(k1, t1, s1)),
+		},
+		{
+			name: "one scan skip locked after writes",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scanSkipLocked(k1, k3), t4, scanKV(k1, v1), scanKV(k2, v2))),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one scan skip locked after writes returning wrong value",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scanSkipLocked(k1, k3), t3, scanKV(k1, v3), scanKV(k2, v2))),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one scan skip locked after writes returning no values",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scanSkipLocked(k1, k3), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one scan skip locked after writes returning some values",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(scanSkipLocked(k1, k3), t3, scanKV(k2, v2))),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one reverse scan skip locked after writes",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScanSkipLocked(k1, k3), t3, scanKV(k2, v2), scanKV(k1, v1))),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one reverse scan skip locked after writes returning wrong value",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScanSkipLocked(k1, k3), t3, scanKV(k2, v2), scanKV(k1, v3))),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one reverse scan skip locked after writes returning no values",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScanSkipLocked(k1, k3), t3)),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
+		{
+			name: "one reverse scan skip locked after writes returning some values",
+			steps: []Step{
+				step(withResultTS(put(k1, s1), t1)),
+				step(withResultTS(put(k2, s2), t2)),
+				step(withScanResultTS(reverseScanSkipLocked(k1, k3), t3, scanKV(k2, v2))),
+			},
+			kvs: kvs(kv(k1, t1, s1), kv(k2, t2, s2)),
+		},
 	}
 
 	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, t.Name()))
