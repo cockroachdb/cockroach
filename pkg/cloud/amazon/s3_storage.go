@@ -578,7 +578,7 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 		return nil, err
 	}
 
-	buf := bytes.NewBuffer(make([]byte, 4<<20))
+	buf := bytes.NewBuffer(make([]byte, 0, 4<<20))
 
 	return &putUploader{
 		b: buf,
