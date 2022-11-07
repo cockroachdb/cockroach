@@ -11,14 +11,63 @@
 package scerrors
 
 import (
+	"context"
 	"fmt"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+// HandleErrorOrPanic generates a closure, intended to be deferred, to handle
+// panics which reach all the way up to the declarative schema changer's entry
+// points.
+// Due to it being called at the entry points, this function also handles
+// logging and wrapping errors, for convenience.
+func HandleErrorOrPanic(
+	ctx context.Context, err *error, msgFmt string, args ...interface{},
+) func() {
+	isExpensive := log.ExpensiveLogEnabled(ctx, 2)
+	var start time.Time
+	if isExpensive {
+		start = timeutil.Now()
+	}
+	const logDepth = 1
+	log.InfofDepth(ctx, logDepth, msgFmt, args...)
+	return func() {
+		switch recErr := recover().(type) {
+		case nil:
+			// No panicked error.
+		case runtime.Error:
+			*err = errors.WithAssertionFailure(recErr)
+		case error:
+			*err = recErr
+		default:
+			*err = errors.AssertionFailedf("recovered from uncategorizable panic: %v", recErr)
+		}
+		if unwrappedErr := *err; unwrappedErr != nil {
+			if errors.HasAssertionFailure(unwrappedErr) {
+				*err = errors.Wrapf(unwrappedErr, msgFmt, args...)
+			}
+			msgFmt = "failed " + msgFmt + " with error: %v"
+			args = append(args[:len(args):len(args)], unwrappedErr)
+			log.InfofDepth(ctx, logDepth, msgFmt, args...)
+			return
+		}
+		if !isExpensive {
+			return
+		}
+		msgFmt = "done " + msgFmt + " in %s"
+		args = append(args[:len(args):len(args)], timeutil.Since(start))
+		log.InfofDepth(ctx, logDepth, msgFmt, args...)
+	}
+}
 
 type notImplementedError struct {
 	n      tree.NodeFormatter
