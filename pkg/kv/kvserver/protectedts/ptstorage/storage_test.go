@@ -304,8 +304,8 @@ var testCases = []testCase{
 				ieNotBoundToTxn := tCtx.tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
 				const msg = "must provide a non-nil transaction"
 				require.Regexp(t, msg, tCtx.pts.Protect(ctx, nil /* txn */, &rec).Error())
-				require.Regexp(t, msg, tCtx.pts.Release(ctx, nil /* txn */, uuid.MakeV4()).Error())
-				require.Regexp(t, msg, tCtx.pts.MarkVerified(ctx, nil /* txn */, uuid.MakeV4()).Error())
+				require.Regexp(t, msg, tCtx.pts.Release(ctx, nil /* txn */, ieNotBoundToTxn, uuid.MakeV4()).Error())
+				require.Regexp(t, msg, tCtx.pts.MarkVerified(ctx, nil /* txn */, ieNotBoundToTxn, uuid.MakeV4()).Error())
 				_, err := tCtx.pts.GetRecord(ctx, nil /* txn */, uuid.MakeV4(), ieNotBoundToTxn)
 				require.Regexp(t, msg, err.Error())
 				_, err = tCtx.pts.GetMetadata(ctx, nil /* txn */, ieNotBoundToTxn)
@@ -348,8 +348,8 @@ type releaseOp struct {
 
 func (r releaseOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	id := r.idFunc(tCtx)
-	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return tCtx.pts.Release(ctx, txn, id)
+	err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return tCtx.pts.Release(ctx, txn, ie, id)
 	})
 	if !testutils.IsError(err, r.expErr) {
 		t.Fatalf("expected error to match %q, got %q", r.expErr, err)
@@ -385,8 +385,8 @@ type markVerifiedOp struct {
 
 func (mv markVerifiedOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	id := mv.idFunc(tCtx)
-	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return tCtx.pts.MarkVerified(ctx, txn, id)
+	err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return tCtx.pts.MarkVerified(ctx, txn, ie, id)
 	})
 	if !testutils.IsError(err, mv.expErr) {
 		t.Fatalf("expected error to match %q, got %q", mv.expErr, err)
@@ -779,11 +779,11 @@ func TestErrorsFromSQL(t *testing.T) {
 		_, err := pts.GetRecord(ctx, txn, rec.ID.GetUUID(), ie)
 		return err
 	}), fmt.Sprintf("failed to read record %v: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return pts.MarkVerified(ctx, txn, rec.ID.GetUUID())
+	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return pts.MarkVerified(ctx, txn, ie, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to mark record %v as verified: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return pts.Release(ctx, txn, rec.ID.GetUUID())
+	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return pts.Release(ctx, txn, ie, rec.ID.GetUUID())
 	}), fmt.Sprintf("failed to release record %v: boom", rec.ID))
 	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		_, err := pts.GetMetadata(ctx, txn, ie)

@@ -1042,6 +1042,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
 	execCfg.ProtectedTimestampManager = jobsprotectedts.NewManager(
 		execCfg.DB,
+		ieFactory,
 		execCfg.Codec,
 		execCfg.ProtectedTimestampProvider,
 		execCfg.SystemConfig,
@@ -1475,10 +1476,11 @@ func (s *SQLServer) preStart(
 		stopper,
 		s.metricsRegistry,
 		&scheduledjobs.JobExecutionConfig{
-			Settings:         s.execCfg.Settings,
-			InternalExecutor: s.internalExecutor,
-			DB:               s.execCfg.DB,
-			TestingKnobs:     knobs.JobsTestingKnobs,
+			Settings:                s.execCfg.Settings,
+			InternalExecutor:        s.internalExecutor,
+			DB:                      s.execCfg.DB,
+			InternalExecutorFactory: s.internalExecutorFactory,
+			TestingKnobs:            knobs.JobsTestingKnobs,
 			PlanHookMaker: func(opName string, txn *kv.Txn, user username.SQLUsername) (interface{}, func()) {
 				// This is a hack to get around a Go package dependency cycle. See comment
 				// in sql/jobs/registry.go on planHookMaker.

@@ -786,11 +786,14 @@ func backupPlanHook(
 		if detached {
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
-			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, jobID, plannerTxn)
-			if err != nil {
+			if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+					ctx, jr, jobID, plannerTxn, ie)
+				return err
+			}); err != nil {
 				return err
 			}
+
 			resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 			return nil
 		}

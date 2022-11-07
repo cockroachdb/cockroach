@@ -256,8 +256,8 @@ func (j *Job) taskName() string {
 
 // Started marks the tracked job as started by updating status to running in
 // jobs table.
-func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) started(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusPending && md.Status != StatusRunning {
 			return errors.Errorf("job with status %s cannot be marked started", md.Status)
 		}
@@ -282,15 +282,17 @@ func (j *Job) started(ctx context.Context, txn *kv.Txn) error {
 
 // CheckStatus verifies the status of the job and returns an error if the job's
 // status isn't Running or Reverting.
-func (j *Job) CheckStatus(ctx context.Context, txn *kv.Txn) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, _ *JobUpdater) error {
+func (j *Job) CheckStatus(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, _ *JobUpdater) error {
 		return md.CheckRunningOrReverting()
 	})
 }
 
 // CheckTerminalStatus returns true if the job is in a terminal status.
-func (j *Job) CheckTerminalStatus(ctx context.Context, txn *kv.Txn) bool {
-	err := j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, _ *JobUpdater) error {
+func (j *Job) CheckTerminalStatus(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+) bool {
+	err := j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, _ *JobUpdater) error {
 		if !md.Status.Terminal() {
 			return &InvalidStatusError{md.ID, md.Status, "checking that job status is success", md.Payload.Error}
 		}
@@ -304,9 +306,9 @@ func (j *Job) CheckTerminalStatus(ctx context.Context, txn *kv.Txn) bool {
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
 func (j *Job) RunningStatus(
-	ctx context.Context, txn *kv.Txn, runningStatusFn RunningStatusFn,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, runningStatusFn RunningStatusFn,
 ) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -348,9 +350,9 @@ func FractionUpdater(f float32) FractionProgressedFn {
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) FractionProgressed(
-	ctx context.Context, txn *kv.Txn, progressedFn FractionProgressedFn,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, progressedFn FractionProgressedFn,
 ) error {
-	return j.Update(ctx, txn, func(_ *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -377,9 +379,12 @@ func (j *Job) FractionProgressed(
 // registry adoption loop by the node currently running a job to move it from
 // PauseRequested to paused.
 func (j *Job) paused(
-	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusPaused {
 			// Already paused - do nothing.
 			return nil
@@ -401,8 +406,8 @@ func (j *Job) paused(
 // job is currently paused. It does not directly resume the job; rather, it
 // expires the job's lease so that a Registry adoption loop detects it and
 // resumes it.
-func (j *Job) unpaused(ctx context.Context, txn *kv.Txn) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) unpaused(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	return j.Update(ctx, txn, ie, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusRunning || md.Status == StatusReverting {
 			// Already resumed - do nothing.
 			return nil
@@ -429,9 +434,12 @@ func (j *Job) unpaused(ctx context.Context, txn *kv.Txn) error {
 // that it is in state StatusCancelRequested and will move it to state
 // StatusReverting.
 func (j *Job) cancelRequested(
-	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", j.ID())
 		}
@@ -459,7 +467,7 @@ func (j *Job) cancelRequested(
 // onPauseRequestFunc is a function used to perform action on behalf of a job
 // implementation when a pause is requested.
 type onPauseRequestFunc func(
-	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
+	ctx context.Context, planHookState interface{}, txn *kv.Txn, ie sqlutil.InternalExecutor, progress *jobspb.Progress,
 ) error
 
 // PauseRequested sets the status of the tracked job to pause-requested. It does
@@ -467,9 +475,13 @@ type onPauseRequestFunc func(
 // actively cancel it when it notices that it is in state StatusPauseRequested
 // and will move it to state StatusPaused.
 func (j *Job) PauseRequested(
-	ctx context.Context, txn *kv.Txn, fn onPauseRequestFunc, reason string,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	fn onPauseRequestFunc,
+	reason string,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(txn1 *kv.Txn, executor sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusPauseRequested || md.Status == StatusPaused {
 			return nil
 		}
@@ -479,7 +491,7 @@ func (j *Job) PauseRequested(
 		if fn != nil {
 			execCtx, cleanup := j.registry.execCtx("pause request", j.Payload().UsernameProto.Decode())
 			defer cleanup()
-			if err := fn(ctx, execCtx, txn, md.Progress); err != nil {
+			if err := fn(ctx, execCtx, txn1, executor, md.Progress); err != nil {
 				return err
 			}
 			ju.UpdateProgress(md.Progress)
@@ -494,9 +506,13 @@ func (j *Job) PauseRequested(
 
 // reverted sets the status of the tracked job to reverted.
 func (j *Job) reverted(
-	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	err error,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusReverting &&
 			md.Status != StatusCancelRequested &&
 			md.Status != StatusRunning &&
@@ -545,9 +561,12 @@ func (j *Job) reverted(
 
 // Canceled sets the status of the tracked job to cancel.
 func (j *Job) canceled(
-	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusCanceled {
 			return nil
 		}
@@ -568,9 +587,13 @@ func (j *Job) canceled(
 
 // Failed marks the tracked job as having failed with the given error.
 func (j *Job) failed(
-	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	err error,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(txn *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		// TODO(spaskob): should we fail if the terminal state is not StatusFailed?
 		if md.Status.Terminal() {
 			// Already done - do nothing.
@@ -607,14 +630,18 @@ func (j *Job) failed(
 // RevertFailed marks the tracked job as having failed during revert with the
 // given error. Manual cleanup is required when the job is in this state.
 func (j *Job) revertFailed(
-	ctx context.Context, txn *kv.Txn, err error, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	err error,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(txn1 *kv.Txn, ie1 sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status != StatusReverting {
 			return fmt.Errorf("job with status %s cannot fail during a revert", md.Status)
 		}
 		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
+			if err := fn(ctx, txn1); err != nil {
 				return err
 			}
 		}
@@ -629,9 +656,12 @@ func (j *Job) revertFailed(
 // succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) succeeded(
-	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	fn func(context.Context, *kv.Txn) error,
 ) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+	return j.Update(ctx, txn, ie, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if md.Status == StatusSucceeded {
 			return nil
 		}
@@ -655,8 +685,10 @@ func (j *Job) succeeded(
 }
 
 // SetDetails sets the details field of the currently running tracked job.
-func (j *Job) SetDetails(ctx context.Context, txn *kv.Txn, details interface{}) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) SetDetails(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, details interface{},
+) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -667,8 +699,10 @@ func (j *Job) SetDetails(ctx context.Context, txn *kv.Txn, details interface{}) 
 }
 
 // SetProgress sets the details field of the currently running tracked job.
-func (j *Job) SetProgress(ctx context.Context, txn *kv.Txn, details interface{}) error {
-	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+func (j *Job) SetProgress(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, details interface{},
+) error {
+	return j.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
@@ -735,14 +769,21 @@ func (j *Job) MarkIdle(isIdle bool) {
 }
 
 func (j *Job) runInTxn(
-	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	fn func(context.Context, *kv.Txn, sqlutil.InternalExecutor) error,
 ) error {
 	if txn != nil {
+		if ie == nil {
+			return errors.New("txn is not nil but ie is nil")
+		}
+		// TODO(janexing): ie can't be nil
 		// Don't run fn in a retry loop because we need retryable errors to
 		// propagate up to the transaction's properly-scoped retry loop.
-		return fn(ctx, txn)
+		return fn(ctx, txn, ie)
 	}
-	return j.registry.db.Txn(ctx, fn)
+	return j.registry.internalExecutorFactory.TxnWithExecutor(ctx, j.registry.db, nil /* sessionData */, fn)
 }
 
 // JobNotFoundError is returned from load when the job does not exist.
@@ -764,7 +805,7 @@ func HasJobNotFoundError(err error) bool {
 	return errors.HasType(err, (*JobNotFoundError)(nil))
 }
 
-func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
+func (j *Job) load(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 	ctx, sp := tracing.ChildSpan(ctx, "load-job")
 	defer sp.Finish()
 
@@ -773,7 +814,7 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 	var createdBy *CreatedByInfo
 	var status Status
 
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+	if err := j.runInTxn(ctx, txn, ie, func(ctx context.Context, newTxn *kv.Txn, executor sqlutil.InternalExecutor) error {
 		const (
 			queryNoSessionID   = "SELECT payload, progress, created_by_type, created_by_id, status FROM system.jobs WHERE id = $1"
 			queryWithSessionID = queryNoSessionID + " AND claim_session_id = $2"
@@ -783,10 +824,10 @@ func (j *Job) load(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		var row tree.Datums
 		if j.session == nil {
-			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
+			row, err = executor.QueryRowEx(ctx, "load-job-query", newTxn, sess,
 				queryNoSessionID, j.ID())
 		} else {
-			row, err = j.registry.ex.QueryRowEx(ctx, "load-job-query", txn, sess,
+			row, err = executor.QueryRowEx(ctx, "load-job-query", newTxn, sess,
 				queryWithSessionID, j.ID(), j.session.ID().UnsafeBytes())
 		}
 		if err != nil {
@@ -992,7 +1033,7 @@ func (sj *StartableJob) Cancel(ctx context.Context) error {
 			sj.registry.unregister(sj.ID())
 		}
 	}()
-	return sj.registry.CancelRequested(ctx, nil, sj.ID())
+	return sj.registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, sj.ID())
 }
 
 func (sj *StartableJob) recordStart() (alreadyStarted bool) {

@@ -110,6 +110,7 @@ go_test(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
         "//pkg/storage",
         "//pkg/streaming",
         "//pkg/testutils",

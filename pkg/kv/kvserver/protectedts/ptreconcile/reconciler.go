@@ -42,7 +42,7 @@ var ReconcileInterval = settings.RegisterDurationSetting(
 // StatusFunc is used to check on the status of a Record based on its Meta
 // field.
 type StatusFunc func(
-	ctx context.Context, txn *kv.Txn, meta []byte,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, meta []byte,
 ) (shouldRemove bool, _ error)
 
 // StatusFuncs maps from MetaType to a StatusFunc.
@@ -142,16 +142,16 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 			continue
 		}
 		var didRemove bool
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		if err := r.ief.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 			didRemove = false // reset for retries
-			shouldRemove, err := task(ctx, txn, rec.Meta)
+			shouldRemove, err := task(ctx, txn, ie, rec.Meta)
 			if err != nil {
 				return err
 			}
 			if !shouldRemove {
 				return nil
 			}
-			err = r.pts.Release(ctx, txn, rec.ID.GetUUID())
+			err = r.pts.Release(ctx, txn, ie, rec.ID.GetUUID())
 			if err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 				return err
 			}

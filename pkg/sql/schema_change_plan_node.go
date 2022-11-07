@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -266,27 +267,34 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		s.plannedState = state
 	}
 
-	runDeps := newSchemaChangerTxnRunDependencies(
-		params.ctx,
-		p.SessionData(),
-		p.User(),
-		p.ExecCfg(),
-		p.Txn(),
-		p.Descriptors(),
-		p.EvalContext(),
-		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		scs.jobID,
-		scs.stmts,
-	)
-	after, jobID, err := scrun.RunStatementPhase(
-		params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
-	)
-	if err != nil {
+	if err := p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		runDeps := newSchemaChangerTxnRunDependencies(
+			params.ctx,
+			p.SessionData(),
+			p.User(),
+			p.ExecCfg(),
+			p.Txn(),
+			ie,
+			p.Descriptors(),
+			p.EvalContext(),
+			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			scs.jobID,
+			scs.stmts,
+		)
+		after, jobID, err := scrun.RunStatementPhase(
+			params.ctx, p.ExecCfg().DeclarativeSchemaChangerTestingKnobs, runDeps, s.plannedState,
+		)
+		if err != nil {
+			return err
+		}
+		scs.state = after
+		scs.jobID = jobID
+		return nil
+	}); err != nil {
 		return err
 	}
-	scs.state = after
-	scs.jobID = jobID
 	return nil
+
 }
 
 func newSchemaChangerTxnRunDependencies(
@@ -295,6 +303,7 @@ func newSchemaChangerTxnRunDependencies(
 	user username.SQLUsername,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	descriptors *descs.Collection,
 	evalContext *eval.Context,
 	kvTrace bool,
@@ -314,6 +323,7 @@ func newSchemaChangerTxnRunDependencies(
 		execCfg.Codec,
 		sessionData,
 		txn,
+		ie,
 		user,
 		descriptors,
 		execCfg.JobRegistry,

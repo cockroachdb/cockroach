@@ -633,7 +633,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
 			if jobErr := r.job.FractionProgressed(
-				ctx, nil, /* txn */
+				ctx, nil /* txn */, nil, /* ie */
 				func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
 					// The job failed so the progress value here doesn't really matter.
 					return 0

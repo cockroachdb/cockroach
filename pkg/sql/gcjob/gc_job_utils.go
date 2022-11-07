@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -68,9 +69,9 @@ func initDetailsAndProgress(
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
 	var job *jobs.Job
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var err error
-		job, err = execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+		job, err = execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn, ie)
 		if err != nil {
 			return err
 		}
@@ -122,12 +123,12 @@ func initializeProgress(
 	}
 
 	if update {
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+		if err := execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn, ie)
 			if err != nil {
 				return err
 			}
-			return job.SetProgress(ctx, txn, *progress)
+			return job.SetProgress(ctx, txn, ie, *progress)
 		}); err != nil {
 			return err
 		}
@@ -278,16 +279,16 @@ func persistProgress(
 	progress *jobspb.SchemaChangeGCProgress,
 	runningStatus jobs.RunningStatus,
 ) {
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+	if err := execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn, ie)
 		if err != nil {
 			return err
 		}
-		if err := job.SetProgress(ctx, txn, *progress); err != nil {
+		if err := job.SetProgress(ctx, txn, ie, *progress); err != nil {
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
-		err = job.RunningStatus(ctx, txn, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		err = job.RunningStatus(ctx, txn, ie, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatus, nil
 		})
 		if err != nil {

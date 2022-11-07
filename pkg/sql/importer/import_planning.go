@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -962,9 +963,11 @@ func importPlanHook(
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()
-			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, jobID, p.Txn())
-			if err != nil {
+			if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+					ctx, jr, jobID, p.Txn(), ie)
+				return err
+			}); err != nil {
 				return err
 			}
 

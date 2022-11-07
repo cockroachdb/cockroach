@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -3338,30 +3339,37 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 	if len(scs.state.Targets) == 0 {
 		return nil
 	}
-	deps := newSchemaChangerTxnRunDependencies(
-		ctx,
-		ex.planner.SessionData(),
-		ex.planner.User(),
-		ex.server.cfg,
-		ex.planner.txn,
-		ex.extraTxnState.descCollection,
-		ex.planner.EvalContext(),
-		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
-		scs.jobID,
-		scs.stmts,
-	)
-	ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
-	after, jobID, err := scrun.RunPreCommitPhase(
-		ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
-	)
-	if err != nil {
+
+	if err := ex.planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		deps := newSchemaChangerTxnRunDependencies(
+			ctx,
+			ex.planner.SessionData(),
+			ex.planner.User(),
+			ex.server.cfg,
+			ex.planner.txn,
+			ie,
+			ex.extraTxnState.descCollection,
+			ex.planner.EvalContext(),
+			ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			scs.jobID,
+			scs.stmts,
+		)
+		ex.extraTxnState.descCollection.ResetSyntheticDescriptors()
+		after, jobID, err := scrun.RunPreCommitPhase(
+			ctx, ex.server.cfg.DeclarativeSchemaChangerTestingKnobs, deps, scs.state,
+		)
+		if err != nil {
+			return err
+		}
+		scs.state = after
+		scs.jobID = jobID
+		if jobID != jobspb.InvalidJobID {
+			ex.extraTxnState.jobs.add(jobID)
+			log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
+		}
+		return nil
+	}); err != nil {
 		return err
-	}
-	scs.state = after
-	scs.jobID = jobID
-	if jobID != jobspb.InvalidJobID {
-		ex.extraTxnState.jobs.add(jobID)
-		log.Infof(ctx, "queued new schema change job %d using the new schema changer", jobID)
 	}
 	return nil
 }

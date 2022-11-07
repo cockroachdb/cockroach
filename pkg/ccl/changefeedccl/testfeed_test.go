@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -259,9 +260,13 @@ func (r *reportErrorResumer) OnFailOrCancel(
 
 // OnPauseRequest implements PauseRequester interface.
 func (r *reportErrorResumer) OnPauseRequest(
-	ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress,
+	ctx context.Context,
+	execCtx interface{},
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	details *jobspb.Progress,
 ) error {
-	return r.wrapped.(*changefeedResumer).OnPauseRequest(ctx, execCtx, txn, details)
+	return r.wrapped.(*changefeedResumer).OnPauseRequest(ctx, execCtx, txn, ie, details)
 }
 
 type wrapSinkFn func(sink Sink) Sink

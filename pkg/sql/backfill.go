@@ -938,9 +938,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var todoSpans []roachpb.Span
 	var mutationIdx int
 
-	if err := DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+	if err := sc.txnWithExecutor(ctx, func(ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, col *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
 		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
-			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, col, sc.descID, sc.mutationID, filter)
+			ctx, sc.jobRegistry, txn, ie, sc.execCfg.Codec, col, sc.descID, sc.mutationID, filter)
 		return err
 	}); err != nil {
 		return err
@@ -954,7 +954,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 
 	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
 	if writeAsOf.IsEmpty() {
-		if err := sc.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		if err := sc.job.RunningStatus(ctx, nil /* txn */, nil /* ie */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return jobs.RunningStatus("scanning target index for in-progress transactions"), nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
@@ -986,14 +986,14 @@ func (sc *SchemaChanger) distIndexBackfill(
 			return err
 		}
 		log.Infof(ctx, "persisting target safe write time %v...", writeAsOf)
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := sc.ieFactory.TxnWithExecutor(ctx, sc.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			details := sc.job.Details().(jobspb.SchemaChangeDetails)
 			details.WriteTimestamp = writeAsOf
-			return sc.job.SetDetails(ctx, txn, details)
+			return sc.job.SetDetails(ctx, txn, ie, details)
 		}); err != nil {
 			return err
 		}
-		if err := sc.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		if err := sc.job.RunningStatus(ctx, nil /* txn */, nil /* ie */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return RunningStatusBackfill, nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(sc.job.ID()))
@@ -1122,7 +1122,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		if origNRanges == -1 {
 			origNRanges = nRanges
 		}
-		return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sc.ieFactory.TxnWithExecutor(ctx, sc.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			// No processor has returned completed spans yet.
 			if nRanges < origNRanges {
 				fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
@@ -1130,7 +1130,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				if err != nil {
 					return err
 				}
-				if err := sc.job.FractionProgressed(ctx, txn,
+				if err := sc.job.FractionProgressed(ctx, txn, ie,
 					jobs.FractionUpdater(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStatusError(err)
 				}
@@ -1146,7 +1146,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
-		return sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return sc.ieFactory.TxnWithExecutor(ctx, sc.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			updateJobMu.Lock()
 			defer updateJobMu.Unlock()
 			// No processor has returned completed spans yet.
@@ -1154,7 +1154,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				return nil
 			}
 			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
-			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
+			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, ie, sc.job)
 		})
 	}
 
@@ -1285,15 +1285,15 @@ func (sc *SchemaChanger) distColumnBackfill(
 		// update operation to be short and to not be coupled to any other
 		// backfill work, which may take much longer.
 		return sc.job.FractionProgressed(
-			ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted),
+			ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(fractionCompleted),
 		)
 	}
 
 	readAsOf := sc.clock.Now()
 	var mutationIdx int
-	if err := DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+	if err := sc.txnWithExecutor(ctx, func(ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, col *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
 		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
-			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, col, sc.descID, sc.mutationID, filter)
+			ctx, sc.jobRegistry, txn, ie, sc.execCfg.Codec, col, sc.descID, sc.mutationID, filter)
 		return err
 	}); err != nil {
 		return err
@@ -1363,8 +1363,8 @@ func (sc *SchemaChanger) distColumnBackfill(
 
 		// Record what is left to do for the job.
 		// TODO(spaskob): Execute this at a regular cadence.
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return rowexec.SetResumeSpansInJob(ctx, todoSpans, mutationIdx, txn, sc.job)
+		if err := sc.ieFactory.TxnWithExecutor(ctx, sc.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return rowexec.SetResumeSpansInJob(ctx, todoSpans, mutationIdx, txn, ie, sc.job)
 		}); err != nil {
 			return err
 		}
@@ -1381,7 +1381,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 func (sc *SchemaChanger) updateJobRunningStatus(
 	ctx context.Context, status jobs.RunningStatus,
 ) (tableDesc catalog.TableDescriptor, err error) {
-	err = DescsTxn(ctx, sc.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+	err = sc.txnWithExecutor(ctx, func(ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, col *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
 		// Read table descriptor without holding a lease.
 		tableDesc, err = col.Direct().MustGetTableDescByID(ctx, txn, sc.descID)
 		if err != nil {
@@ -1404,7 +1404,7 @@ func (sc *SchemaChanger) updateJobRunningStatus(
 			}
 		}
 		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.RunningStatus(ctx, txn, func(
+			if err := sc.job.RunningStatus(ctx, txn, ie, func(
 				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return status, nil
 			}); err != nil {
@@ -1479,6 +1479,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 			return ValidateForwardIndexes(
 				ctx,
 				sc.job,
+				sc.ieFactory,
 				tableDesc,
 				forwardIndexes,
 				runHistoricalTxn,
@@ -1495,6 +1496,7 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 				ctx,
 				sc.execCfg.Codec,
 				sc.job,
+				sc.ieFactory,
 				tableDesc,
 				invertedIndexes,
 				runHistoricalTxn,
@@ -1568,6 +1570,7 @@ func ValidateInvertedIndexes(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	job *jobs.Job,
+	ief sqlutil.InternalExecutorFactory,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -1771,6 +1774,7 @@ func countExpectedRowsForInvertedIndex(
 func ValidateForwardIndexes(
 	ctx context.Context,
 	job *jobs.Job,
+	ief sqlutil.InternalExecutorFactory,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -2243,8 +2247,8 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 // DROP and steps any MERGING indexes to WRITE_ONLY
 func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context) error {
 	var runStatus jobs.RunningStatus
-	return sc.txn(ctx, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	return sc.txnWithExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
@@ -2282,7 +2286,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.RunningStatus(ctx, txn, func(
+			if err := sc.job.RunningStatus(ctx, txn, ie, func(
 				ctx context.Context, details jobspb.Details,
 			) (jobs.RunningStatus, error) {
 				return runStatus, nil

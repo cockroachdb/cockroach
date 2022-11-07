@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -107,13 +108,14 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
 	var tableStatsToRefresh []descpb.ID
-	err := d.internalExecutorFactory.DescsTxn(ctx, d.db, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	err := d.internalExecutorFactory.DescsTxnWithExecutor(ctx, d.db, nil, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		pl := d.job.Payload()
 		ed := &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
+				ie:                 ie,
 				codec:              d.codec,
 				descsCollection:    descriptors,
 				jobRegistry:        d.jobRegistry,

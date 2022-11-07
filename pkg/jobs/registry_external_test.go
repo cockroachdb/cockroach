@@ -65,7 +65,7 @@ func TestRoundtripJob(t *testing.T) {
 		Details:       jobspb.RestoreDetails{},
 		Progress:      jobspb.RestoreProgress{},
 	}
-	storedJob, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
+	storedJob, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */, nil /* ie */)
 	require.NoError(t, err)
 	retrievedJob, err := registry.LoadJob(ctx, jobID)
 	if err != nil {

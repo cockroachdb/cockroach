@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -44,9 +45,7 @@ import (
 type JobRegistry interface {
 	MakeJobID() jobspb.JobID
 	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn) (*jobs.Job, error)
-	UpdateJobWithTxn(
-		ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
-	) error
+	UpdateJobWithTxn(ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ie sqlutil.InternalExecutor, useReadLock bool, updateFunc jobs.UpdateFn) error
 	CheckPausepoint(name string) error
 }
 
@@ -57,6 +56,7 @@ func NewExecutorDependencies(
 	codec keys.SQLCodec,
 	sessionData *sessiondata.SessionData,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	user username.SQLUsername,
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
@@ -77,6 +77,7 @@ func NewExecutorDependencies(
 	return &execDeps{
 		txnDeps: txnDeps{
 			txn:                txn,
+			ie:                 ie,
 			codec:              codec,
 			descsCollection:    descsCollection,
 			jobRegistry:        jobRegistry,
@@ -103,6 +104,7 @@ func NewExecutorDependencies(
 
 type txnDeps struct {
 	txn                 *kv.Txn
+	ie                  sqlutil.InternalExecutor
 	codec               keys.SQLCodec
 	descsCollection     *descs.Collection
 	jobRegistry         JobRegistry
@@ -122,8 +124,8 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 	ctx context.Context, id jobspb.JobID, callback scexec.JobUpdateCallback,
 ) error {
 	const useReadLock = false
-	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
-		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, d.ie, useReadLock, func(
+		_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		return callback(md, ju.UpdateProgress, ju.UpdatePayload)
 	})

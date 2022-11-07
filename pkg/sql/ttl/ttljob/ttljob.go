@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -258,8 +259,9 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			ctx,
 			jobID,
 			nil,  /* txn */
+			nil,  /* ie */
 			true, /* useReadLock */
-			func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				progress := md.Progress
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
 				rowLevelTTL.JobSpanCount = int64(jobSpanCount)

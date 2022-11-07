@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -40,6 +41,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	s0 := tc.Server(0)
+	ief := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	ptp := s0.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
 	jr := s0.JobRegistry().(*jobs.Registry)
 	k := keys.SystemSQLCodec.TablePrefix(keys.ProtectedTimestampsRecordsTableID)
@@ -88,8 +90,8 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 			require.Truef(t, rec.Target.Equal(got),
 				"expected target=%s, got target=%s", rec.Target.String(), got.String())
 
-			require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				return ptp.Release(ctx, txn, rec.ID.GetUUID())
+			require.NoError(t, ief.TxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				return ptp.Release(ctx, txn, ie, rec.ID.GetUUID())
 			}))
 		})
 	}

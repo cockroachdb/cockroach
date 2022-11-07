@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -277,7 +278,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
 	var highWater time.Time
-	err = job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err = job.Update(ctx, nil /* txn */, nil /* ie */, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		highWater = timeutil.Now().Round(time.Microsecond)
 		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
 		return jobs.UpdateHighwaterProgressed(hlcHighWater, md, ju)

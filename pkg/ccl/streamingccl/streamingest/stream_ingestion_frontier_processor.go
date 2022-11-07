@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -413,8 +414,8 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 
 	sf.lastPartitionUpdate = timeutil.Now()
 
-	if err := registry.UpdateJobWithTxn(ctx, jobID, nil, false, func(
-		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+	if err := registry.UpdateJobWithTxn(ctx, jobID, nil /* txn */, nil /* ie */, false, func(
+		_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err

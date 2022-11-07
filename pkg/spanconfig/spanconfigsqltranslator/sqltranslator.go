@@ -42,9 +42,7 @@ var _ spanconfig.SQLTranslator = &SQLTranslator{}
 type txnBundle struct {
 	txn      *kv.Txn
 	descsCol *descs.Collection
-	// TODO(janexing): we inject ie here is to replace the executor used in
-	// s.ptsProvider.GetState() in SQLTranslator.Translate().
-	ie sqlutil.InternalExecutor
+	ie       sqlutil.InternalExecutor
 }
 
 // SQLTranslator is the concrete implementation of spanconfig.SQLTranslator.

@@ -29,6 +29,7 @@ import (
 type ValidateForwardIndexesFn func(
 	ctx context.Context,
 	job *jobs.Job,
+	ief sqlutil.InternalExecutorFactory,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -43,6 +44,7 @@ type ValidateInvertedIndexesFn func(
 	ctx context.Context,
 	codec keys.SQLCodec,
 	job *jobs.Job,
+	ief sqlutil.InternalExecutorFactory,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -89,7 +91,7 @@ func (vd validator) ValidateForwardIndexes(
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
 	return vd.validateForwardIndexes(
-		ctx, job, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
+		ctx, job, vd.ieFactory, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
 		withFirstMutationPublic, gatherAllInvalid, override, vd.protectedTimestampProvider,
 	)
 }
@@ -106,7 +108,7 @@ func (vd validator) ValidateInvertedIndexes(
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
 	return vd.validateInvertedIndexes(
-		ctx, vd.codec, job, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
+		ctx, vd.codec, job, vd.ieFactory, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
 		withFirstMutationPublic, gatherAllInvalid, override, vd.protectedTimestampProvider,
 	)
 }

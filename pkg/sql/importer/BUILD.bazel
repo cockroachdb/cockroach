@@ -89,6 +89,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sqltelemetry",
+        "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
         "//pkg/sql/types",
         "//pkg/storage",

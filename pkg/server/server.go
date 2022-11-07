@@ -505,10 +505,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Settings:                st,
 		Knobs:                   protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
-				jobRegistry, internalExecutor, jobsprotectedts.Jobs),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(jobRegistry,
-				internalExecutor, jobsprotectedts.Schedules),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):      jobsprotectedts.MakeStatusFunc(jobRegistry, jobsprotectedts.Jobs),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(jobRegistry, jobsprotectedts.Schedules),
 		},
 	})
 	if err != nil {

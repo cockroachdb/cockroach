@@ -101,8 +101,9 @@ func TestCacheBasic(t *testing.T) {
 		return nil
 	})
 
+	ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
 	// Then release the record and make sure that that gets seen.
-	require.Nil(t, p.Release(ctx, nil /* txn */, r.ID.GetUUID()))
+	require.Nil(t, p.Release(ctx, nil /* txn */, ieNotBoundToTxn, r.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
 		var coveredBy []*ptpb.Record
 		_ = c.Iterate(ctx, sp.Key, sp.EndKey,
@@ -238,7 +239,8 @@ func TestRefresh(t *testing.T) {
 		// operation, amd then refresh after it. This will demonstrate that the
 		// iteration call does not block concurrent refreshes.
 		ch := <-inIterate
-		require.NoError(t, p.Release(ctx, nil /* txn */, rec.ID.GetUUID()))
+		ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
+		require.NoError(t, p.Release(ctx, nil /* txn */, ieNotBoundToTxn, rec.ID.GetUUID()))
 		require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 		// Signal the Iterate loop to exit and wait for it to close the channel.
 		close(ch)
@@ -336,7 +338,8 @@ func TestQueryRecord(t *testing.T) {
 	require.True(t, exists2)
 	require.True(t, !asOf.Less(createdAt2))
 	// Release 2 and then create 3.
-	require.NoError(t, p.Release(ctx, nil /* txn */, r2.ID.GetUUID()))
+	ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
+	require.NoError(t, p.Release(ctx, nil /* txn */, ieNotBoundToTxn, r2.ID.GetUUID()))
 	r3, createdAt3 := protect(t, s, p, s.Clock().Now(), sp42)
 	exists2, asOf = c.QueryRecord(ctx, r2.ID.GetUUID())
 	require.True(t, exists2)
@@ -528,9 +531,10 @@ func TestGetProtectionTimestamps(t *testing.T) {
 			})
 			require.NoError(t, c.Start(ctx, tc.Stopper()))
 
+			ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
 			testCase.test(t, p, c, func(records ...*ptpb.Record) {
 				for _, r := range records {
-					require.NoError(t, p.Release(ctx, nil, r.ID.GetUUID()))
+					require.NoError(t, p.Release(ctx, nil /* txn */, ieNotBoundToTxn, r.ID.GetUUID()))
 				}
 			})
 		})

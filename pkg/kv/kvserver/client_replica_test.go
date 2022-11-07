@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
@@ -4165,6 +4166,7 @@ func TestStrictGCEnforcement(t *testing.T) {
 
 	var (
 		db         = tc.Server(0).DB()
+		ief        = tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		getTableID = func() (tableID uint32) {
 			sqlDB.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
 				` WHERE name = 'foo' AND database_name = current_database()`).Scan(&tableID)
@@ -4454,8 +4456,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 			return ptp.Protect(ctx, txn, &rec)
 		}))
 		defer func() {
-			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return ptp.Release(ctx, txn, rec.ID.GetUUID())
+			require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				return ptp.Release(ctx, txn, ie, rec.ID.GetUUID())
 			}))
 		}()
 		assertScanRejected(t)

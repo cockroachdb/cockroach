@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -264,8 +265,11 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 			ctx, clusterversion.V22_2UseDelRangeInGCJob,
 		),
 	)
-	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
+	if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+			ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn, ie)
+		return err
+	}); err != nil {
 		return err
 	}
 

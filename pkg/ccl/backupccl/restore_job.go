@@ -963,8 +963,8 @@ func createImportingDescriptors(
 	}
 
 	if !details.PrepareCompleted {
-		err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		err := p.ExecCfg().InternalExecutorFactory.DescsTxnWithExecutor(ctx, p.ExecCfg().DB, nil /* session data */, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
 			// A couple of pieces of cleanup are required for multi-region databases.
 			// First, we need to find all of the MULTIREGION_ENUMs types and remap the
@@ -1228,7 +1228,7 @@ func createImportingDescriptors(
 			}
 
 			// Update the job once all descs have been prepared for ingestion.
-			err := r.job.SetDetails(ctx, txn, details)
+			err := r.job.SetDetails(ctx, txn, ie, details)
 
 			// Emit to the event log now that the job has finished preparing descs.
 			emitRestoreJobEvent(ctx, p, jobs.StatusRunning, r.job)
@@ -1512,10 +1512,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// public.
 		// TODO (lucy): Ideally we'd just create the database in the public state in
 		// the first place, as a special case.
-		publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
+		if err := p.ExecCfg().InternalExecutorFactory.DescsTxnWithExecutor(ctx, p.ExecCfg().DB, nil /* session data */, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+		) error {
 			return r.publishDescriptors(ctx, txn, ie, p.ExecCfg(), p.User(), descsCol, details, nil)
-		}
-		if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* sd */, publishDescriptors); err != nil {
+		}); err != nil {
 			return err
 		}
 		p.ExecCfg().JobRegistry.NotifyToAdoptJobs()
@@ -1571,7 +1572,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		resTotal.Add(res)
 
 		if details.DescriptorCoverage == tree.AllDescriptors {
-			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, preData.systemTables); err != nil {
+			if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, p.ExecCfg().InternalExecutorFactory, preData.systemTables); err != nil {
 				return err
 			}
 			// Reload the details as we may have updated the job.
@@ -1632,7 +1633,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 
 	var devalidateIndexes map[descpb.ID][]descpb.IndexID
 	if toValidate := len(details.RevalidateIndexes); toValidate > 0 {
-		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		if err := r.job.RunningStatus(ctx, nil /* txn */, nil /* ie */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return jobs.RunningStatus(fmt.Sprintf("re-validating %d indexes", toValidate)), nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
@@ -1644,10 +1645,11 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		devalidateIndexes = bad
 	}
 
-	publishDescriptors := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
+	if err := p.ExecCfg().InternalExecutorFactory.DescsTxnWithExecutor(ctx, p.ExecCfg().DB, nil /* session data */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		return r.publishDescriptors(ctx, txn, ie, p.ExecCfg(), p.User(), descsCol, details, devalidateIndexes)
-	}
-	if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* sd */, publishDescriptors); err != nil {
+	}); err != nil {
 		return err
 	}
 
@@ -1670,7 +1672,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		// includes the jobs that are being restored. As soon as we restore these
 		// jobs, they become accessible to the user, and may start executing. We
 		// need this to happen after the descriptors have been marked public.
-		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, mainData.systemTables); err != nil {
+		if err := r.restoreSystemTables(ctx, p.ExecCfg().DB, p.ExecCfg().InternalExecutorFactory, mainData.systemTables); err != nil {
 			return err
 		}
 		// Reload the details as we may have updated the job.
@@ -1803,6 +1805,7 @@ func revalidateIndexes(
 			if err := sql.ValidateForwardIndexes(
 				ctx,
 				job,
+				execCfg.InternalExecutorFactory,
 				tableDesc.MakePublic(),
 				forward,
 				runner,
@@ -1823,6 +1826,7 @@ func revalidateIndexes(
 				ctx,
 				execCfg.Codec,
 				job,
+				execCfg.InternalExecutorFactory,
 				tableDesc.MakePublic(),
 				inverted,
 				runner,
@@ -1922,7 +1926,9 @@ func insertStats(
 			restoreStatsInsertBatchSize = len(latestStats)
 		}
 
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
+			ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+		) error {
 			if err := stats.InsertNewStats(ctx, execCfg.Settings, execCfg.InternalExecutor, txn,
 				latestStats[:restoreStatsInsertBatchSize]); err != nil {
 				return errors.Wrapf(err, "inserting stats from backup")
@@ -1931,7 +1937,7 @@ func insertStats(
 			// If this is the last batch, mark the stats insertion complete.
 			if restoreStatsInsertBatchSize == len(latestStats) {
 				details.StatsInserted = true
-				if err := job.SetDetails(ctx, txn, details); err != nil {
+				if err := job.SetDetails(ctx, txn, ie, details); err != nil {
 					return errors.Wrapf(err, "updating job marking stats insertion complete")
 				}
 			}
@@ -1995,9 +2001,7 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
-	if err := scbackup.CreateDeclarativeSchemaChangeJobs(
-		ctx, r.execCfg.JobRegistry, txn, ie, all,
-	); err != nil {
+	if err := scbackup.CreateDeclarativeSchemaChangeJobs(ctx, r.execCfg.JobRegistry, txn, ie, all); err != nil {
 		return err
 	}
 
@@ -2120,7 +2124,7 @@ func (r *restoreResumer) publishDescriptors(
 	details.SchemaDescs = newSchemas
 	details.DatabaseDescs = newDBs
 	details.FunctionDescs = newFunctions
-	if err := r.job.SetDetails(ctx, txn, details); err != nil {
+	if err := r.job.SetDetails(ctx, txn, ie, details); err != nil {
 		return errors.Wrap(err,
 			"updating job details after publishing tables")
 	}
@@ -2795,7 +2799,10 @@ func (r *restoreResumer) restoreSystemUsers(
 // restoreSystemTables atomically replaces the contents of the system tables
 // with the data from the restored system tables.
 func (r *restoreResumer) restoreSystemTables(
-	ctx context.Context, db *kv.DB, tables []catalog.TableDescriptor,
+	ctx context.Context,
+	db *kv.DB,
+	ief sqlutil.InternalExecutorFactory,
+	tables []catalog.TableDescriptor,
 ) error {
 	details := r.job.Details().(jobspb.RestoreDetails)
 	if details.SystemTablesMigrated == nil {
@@ -2834,7 +2841,7 @@ func (r *restoreResumer) restoreSystemTables(
 				continue
 			}
 
-			if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				if err := systemTable.config.migrationFunc(ctx, r.execCfg, txn,
 					systemTable.stagingTableName, details.DescriptorRewrites); err != nil {
 					return err
@@ -2844,7 +2851,7 @@ func (r *restoreResumer) restoreSystemTables(
 				// restarts don't try to import data over our migrated data. This would
 				// fail since the restored data would shadow the migrated keys.
 				details.SystemTablesMigrated[systemTable.systemTableName] = true
-				return r.job.SetDetails(ctx, txn, details)
+				return r.job.SetDetails(ctx, txn, ie, details)
 			}); err != nil {
 				return err
 			}

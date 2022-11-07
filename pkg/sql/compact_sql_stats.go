@@ -167,6 +167,7 @@ func (e *scheduledSQLStatsCompactionExecutor) OnDrop(
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
+	ie sqlutil.InternalExecutor,
 ) (int, error) {
 	return 0, persistedsqlstats.ErrScheduleUndroppable
 }
@@ -178,8 +179,9 @@ func (e *scheduledSQLStatsCompactionExecutor) ExecuteJob(
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
-	if err := e.createSQLStatsCompactionJob(ctx, cfg, sj, txn); err != nil {
+	if err := e.createSQLStatsCompactionJob(ctx, cfg, sj, txn, ie); err != nil {
 		e.metrics.NumFailed.Inc(1)
 	}
 
@@ -188,7 +190,11 @@ func (e *scheduledSQLStatsCompactionExecutor) ExecuteJob(
 }
 
 func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
-	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn *kv.Txn,
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	sj *jobs.ScheduledJob,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	p, cleanup := cfg.PlanHookMaker("invoke-sql-stats-compact", txn, username.NodeUserName())
 	defer cleanup()
@@ -197,7 +203,7 @@ func (e *scheduledSQLStatsCompactionExecutor) createSQLStatsCompactionJob(
 		persistedsqlstats.CreateCompactionJob(ctx, &jobs.CreatedByInfo{
 			ID:   sj.ScheduleID(),
 			Name: jobs.CreatedByScheduledJobs,
-		}, txn, p.(*planner).ExecCfg().JobRegistry)
+		}, txn, ie, p.(*planner).ExecCfg().JobRegistry)
 
 	if err != nil {
 		return err

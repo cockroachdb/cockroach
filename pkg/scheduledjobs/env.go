@@ -43,9 +43,10 @@ type JobSchedulerEnv interface {
 
 // JobExecutionConfig encapsulates external components needed for scheduled job execution.
 type JobExecutionConfig struct {
-	Settings         *cluster.Settings
-	InternalExecutor sqlutil.InternalExecutor
-	DB               *kv.DB
+	Settings                *cluster.Settings
+	InternalExecutor        sqlutil.InternalExecutor
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
+	DB                      *kv.DB
 	// TestingKnobs is *jobs.TestingKnobs; however we cannot depend
 	// on jobs package due to circular dependencies.
 	TestingKnobs base.ModuleTestingKnobs

@@ -264,7 +264,9 @@ func (p *storage) GetRecord(
 	return &r, nil
 }
 
-func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
+func (p *storage) MarkVerified(
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor, id uuid.UUID,
+) error {
 	if txn == nil {
 		return errNoTxn
 	}
@@ -280,11 +282,13 @@ func (p *storage) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) e
 	return nil
 }
 
-func (p *storage) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
+func (p *storage) Release(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id uuid.UUID,
+) error {
 	if txn == nil {
 		return errNoTxn
 	}
-	numRows, err := p.ex.ExecEx(ctx, "protectedts-Release", txn,
+	numRows, err := ie.ExecEx(ctx, "protectedts-Release", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		releaseQuery, id.GetBytesMut())
 	if err != nil {

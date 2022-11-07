@@ -43,8 +43,8 @@ func completeStreamIngestion(
 	cutoverTimestamp hlc.Timestamp,
 ) error {
 	jobRegistry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, false, /* useReadLock */
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return jobRegistry.UpdateJobWithTxn(ctx, ingestionJobID, txn, ie, false, /* useReadLock */
+		func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// TODO(adityamaru): This should change in the future, a user should be
 			// allowed to correct their cutover time if the process of reverting the job
 			// has not started.
@@ -69,7 +69,7 @@ func getStreamIngestionStats(
 	ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
-	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, txn)
+	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, txn, ie)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func waitUntilProducerActive(
 }
 
 func updateRunningStatus(ctx context.Context, ingestionJob *jobs.Job, status string) {
-	if err := ingestionJob.RunningStatus(ctx, nil,
+	if err := ingestionJob.RunningStatus(ctx, nil /* txn */, nil, /* ie */
 		func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 			return jobs.RunningStatus(status), nil
 		}); err != nil {
@@ -242,7 +242,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		}
 
 		// TODO(casper): update running status
-		err = ingestionJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		err = ingestionJob.Update(ctx, nil /* txn */, nil /* ie */, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			if md.Progress.GetStreamIngest().StartTime.Less(startTime) {
 				md.Progress.GetStreamIngest().StartTime = startTime
 			}
@@ -362,11 +362,16 @@ func (s *streamIngestionResumer) handleResumeError(
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
 	jobExecCtx := execCtx.(sql.JobExecContext)
-	return s.job.PauseRequested(resumeCtx, jobExecCtx.Txn(), func(ctx context.Context,
-		planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
-		progress.RunningStatus = errorMessage
-		return nil
-	}, errorMessage)
+
+	return jobExecCtx.WithInternalExecutor(resumeCtx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return s.job.PauseRequested(resumeCtx, jobExecCtx.Txn(), ie, func(_ context.Context,
+			_ interface{}, _ *kv.Txn, _ sqlutil.InternalExecutor, progress *jobspb.Progress) error {
+			progress.RunningStatus = errorMessage
+			return nil
+		}, errorMessage)
+
+	})
+
 }
 
 // Resume is part of the jobs.Resumer interface.  Ensure that any errors
@@ -465,7 +470,7 @@ func maybeRevertToCutoverTimestamp(
 			}
 		}
 	}
-	return true, j.SetProgress(ctx, nil /* txn */, *sp.StreamIngest)
+	return true, j.SetProgress(ctx, nil /* txn */, nil /* ie */, *sp.StreamIngest)
 }
 
 func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachpb.TenantID) error {

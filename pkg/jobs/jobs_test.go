@@ -198,7 +198,11 @@ type registryTestSuite struct {
 }
 
 func noopPauseRequestFunc(
-	ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress,
+	ctx context.Context,
+	planHookState interface{},
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	progress *jobspb.Progress,
 ) error {
 	return nil
 }
@@ -284,7 +288,7 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 					case err := <-rts.resumeCh:
 						return err
 					case <-rts.progressCh:
-						err := job.FractionProgressed(rts.ctx, nil /* txn */, jobs.FractionUpdater(0))
+						err := job.FractionProgressed(rts.ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(0))
 						if err != nil {
 							return err
 						}
@@ -327,8 +331,8 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 				rts.mu.a.Success = true
 				return rts.successErr
 			},
-			PauseRequest: func(ctx context.Context, execCfg interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
-				return rts.onPauseRequest(ctx, execCfg, txn, progress)
+			PauseRequest: func(ctx context.Context, execCfg interface{}, txn *kv.Txn, ie sqlutil.InternalExecutor, progress *jobspb.Progress) error {
+				return rts.onPauseRequest(ctx, execCfg, txn, ie, progress)
 			},
 		}
 	}, jobs.UsesTenantCostControl)
@@ -357,7 +361,7 @@ func (rts *registryTestSuite) check(t *testing.T, expectedStatus jobs.Status) {
 		if expectedStatus == "" {
 			return nil
 		}
-		st, err := rts.job.TestingCurrentStatus(rts.ctx, nil /* txn */)
+		st, err := rts.job.TestingCurrentStatus(rts.ctx, nil /* txn */, nil /* ie */)
 		if err != nil {
 			return err
 		}
@@ -912,7 +916,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		madeUpSpans := []roachpb.Span{
 			{Key: roachpb.Key("foo")},
 		}
-		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn *kv.Txn, ie sqlutil.InternalExecutor, progress *jobspb.Progress) error {
 			progress.GetImport().SpanProgress = madeUpSpans
 			return nil
 		}
@@ -948,7 +952,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		rts.setUp(t)
 		defer rts.tearDown()
 
-		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+		rts.onPauseRequest = func(ctx context.Context, planHookState interface{}, txn *kv.Txn, ie sqlutil.InternalExecutor, progress *jobspb.Progress) error {
 			return errors.New("boom")
 		}
 
@@ -1188,7 +1192,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	createJob := func(record jobs.Record) (*jobs.Job, expectation) {
 		beforeTime := timeutil.Now()
-		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
+		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 		payload := job.Payload()
 		return job, expectation{
@@ -1274,7 +1278,7 @@ func TestJobLifecycle(t *testing.T) {
 			{0.0, 0.0}, {0.5, 0.5}, {0.5, 0.5}, {0.4, 0.4}, {0.8, 0.8}, {1.0, 1.0},
 		}
 		for _, f := range progresses {
-			if err := woodyJob.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(f.actual)); err != nil {
+			if err := woodyJob.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(f.actual)); err != nil {
 				t.Fatal(err)
 			}
 			woodyExp.FractionCompleted = f.expected
@@ -1284,7 +1288,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyJob.FractionProgressed(ctx, nil /* txn */, func(_ context.Context, details jobspb.ProgressDetails) float32 {
+		if err := woodyJob.FractionProgressed(ctx, nil /* txn */, nil /* ie */, func(_ context.Context, details jobspb.ProgressDetails) float32 {
 			details.(*jobspb.Progress_Restore).Restore.HighWater = roachpb.Key("mariana")
 			return 1.0
 		}); err != nil {
@@ -1318,7 +1322,7 @@ func TestJobLifecycle(t *testing.T) {
 			Before: timeutil.Now(),
 			Error:  "Buzz Lightyear can't fly",
 		}
-		buzzJob, err := registry.CreateAdoptableJobWithTxn(ctx, buzzRecord, registry.MakeJobID(), nil /* txn */)
+		buzzJob, err := registry.CreateAdoptableJobWithTxn(ctx, buzzRecord, registry.MakeJobID(), nil /* txn */, nil /* txn */)
 		require.NoError(t, err)
 		if err := buzzExp.verify(buzzJob.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
@@ -1331,7 +1335,7 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if err := buzzJob.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(.42)); err != nil {
+		if err := buzzJob.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(.42)); err != nil {
 			t.Fatal(err)
 		}
 		buzzExp.FractionCompleted = .42
@@ -1451,7 +1455,7 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("cancelable jobs can be paused until finished", func(t *testing.T) {
 		job, exp := startLeasedJob(t, defaultRecord)
 
-		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
+		if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Paused(ctx); err != nil {
@@ -1460,11 +1464,11 @@ func TestJobLifecycle(t *testing.T) {
 		if err := exp.verify(job.ID(), jobs.StatusPaused); err != nil {
 			t.Fatal(err)
 		}
-		if err := registry.Unpause(ctx, nil, job.ID()); err != nil {
+		if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 			t.Fatal(err)
 		}
 		// Resume the job again to ensure that the resumption is idempotent.
-		if err := registry.Unpause(ctx, nil, job.ID()); err != nil {
+		if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 			t.Fatal(err)
 		}
 		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
@@ -1479,7 +1483,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); !testutils.IsError(err, "cannot be requested to be paused") {
+		if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, job.ID(), ""); !testutils.IsError(err, "cannot be requested to be paused") {
 			t.Fatalf("expected 'cannot pause succeeded job', but got '%s'", err)
 		}
 	})
@@ -1487,7 +1491,7 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("cancelable jobs can be canceled until finished", func(t *testing.T) {
 		{
 			job, exp := startLeasedJob(t, defaultRecord)
-			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
+			if err := registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusCancelRequested); err != nil {
@@ -1500,7 +1504,7 @@ func TestJobLifecycle(t *testing.T) {
 			if err := job.Started(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
+			if err := registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusCancelRequested); err != nil {
@@ -1510,13 +1514,13 @@ func TestJobLifecycle(t *testing.T) {
 
 		{
 			job, exp := startLeasedJob(t, defaultRecord)
-			if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
+			if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, job.ID(), ""); err != nil {
 				t.Fatal(err)
 			}
 			if err := job.Paused(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
+			if err := registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 				t.Fatal(err)
 			}
 			if err := exp.verify(job.ID(), jobs.StatusCancelRequested); err != nil {
@@ -1530,7 +1534,7 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			expectedErr := "job with status succeeded cannot be requested to be canceled"
-			if err := registry.CancelRequested(ctx, nil, job.ID()); !testutils.IsError(err, expectedErr) {
+			if err := registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, job.ID()); !testutils.IsError(err, expectedErr) {
 				t.Fatalf("expected '%s', but got '%s'", expectedErr, err)
 			}
 		}
@@ -1539,10 +1543,10 @@ func TestJobLifecycle(t *testing.T) {
 	t.Run("unpaused jobs cannot be resumed", func(t *testing.T) {
 		{
 			job, _ := startLeasedJob(t, defaultRecord)
-			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
+			if err := registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 				t.Fatal(err)
 			}
-			if err := registry.Unpause(ctx, nil, job.ID()); !testutils.IsError(err, "cannot be resumed") {
+			if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, job.ID()); !testutils.IsError(err, "cannot be resumed") {
 				t.Errorf("got unexpected status '%v'", err)
 			}
 		}
@@ -1553,7 +1557,7 @@ func TestJobLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			expectedErr := fmt.Sprintf("job with status %s cannot be resumed", jobs.StatusSucceeded)
-			if err := registry.Unpause(ctx, nil, job.ID()); !testutils.IsError(err, expectedErr) {
+			if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, job.ID()); !testutils.IsError(err, expectedErr) {
 				t.Errorf("expected '%s', but got '%v'", expectedErr, err)
 			}
 		}
@@ -1569,17 +1573,18 @@ func TestJobLifecycle(t *testing.T) {
 		// panic.
 		_, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 			Details: 42,
-		}, registry.MakeJobID(), nil /* txn */)
+		}, registry.MakeJobID(), nil /* txn */, nil /* txn */)
 	})
 
 	t.Run("update before create fails", func(t *testing.T) {
 		// Attempt to create the job but abort the transaction.
 		var job *jobs.Job
-		require.Regexp(t, "boom", s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+		require.Regexp(t, "boom", ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			job, _ = registry.CreateAdoptableJobWithTxn(ctx, jobs.Record{
 				Details:  jobspb.RestoreDetails{},
 				Progress: jobspb.RestoreProgress{},
-			}, registry.MakeJobID(), txn)
+			}, registry.MakeJobID(), txn, ie)
 			return errors.New("boom")
 		}))
 		if err := job.Started(ctx); !testutils.IsError(err, "not found in system.jobs table") {
@@ -1613,7 +1618,7 @@ func TestJobLifecycle(t *testing.T) {
 			{WallTime: 2, Logical: 0},
 		}
 		for _, ts := range highWaters {
-			require.NoError(t, job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			require.NoError(t, job.Update(ctx, nil /* txn */, nil /* txn */, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				return jobs.UpdateHighwaterProgressed(ts, md, ju)
 			}))
 			p := job.Progress()
@@ -1628,13 +1633,13 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(-0.1)); !testutils.IsError(err, "outside allowable range") {
+		if err := job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(-0.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(1.1)); !testutils.IsError(err, "outside allowable range") {
+		if err := job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(1.1)); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
 		}
-		if err := job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := job.Update(ctx, nil /* txn */, nil /* ie */, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			return jobs.UpdateHighwaterProgressed(hlc.Timestamp{WallTime: -1}, md, ju)
 		}); !testutils.IsError(err, "outside allowable range") {
 			t.Fatalf("expected 'outside allowable range' error, but got %v", err)
@@ -1646,7 +1651,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.Update(ctx, nil, func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := job.Update(ctx, nil /* txn */, nil /* ie */, func(_ *kv.Txn, _ sqlutil.InternalExecutor, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			return errors.Errorf("boom")
 		}); !testutils.IsError(err, "boom") {
 			t.Fatalf("expected 'boom' error, but got %v", err)
@@ -1661,7 +1666,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
+		if err := job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on succeeded job \(id \d+\)`,
 		) {
 			t.Fatalf("expected 'cannot update progress' error, but got %v", err)
@@ -1670,10 +1675,10 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("progress on paused job fails", func(t *testing.T) {
 		job, _ := startLeasedJob(t, defaultRecord)
-		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
+		if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
+		if err := job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on pause-requested job`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
@@ -1682,10 +1687,10 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("progress on canceled job fails", func(t *testing.T) {
 		job, _ := startLeasedJob(t, defaultRecord)
-		if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
+		if err := registry.CancelRequested(ctx, nil /* txn */, nil /* ie */, job.ID()); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.5)); !testutils.IsError(
+		if err := job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(0.5)); !testutils.IsError(
 			err, `cannot update progress on cancel-requested job \(id \d+\)`,
 		) {
 			t.Fatalf("expected progress error, but got %v", err)
@@ -1697,7 +1702,7 @@ func TestJobLifecycle(t *testing.T) {
 		if err := job.Started(ctx); err != nil {
 			t.Fatal(err)
 		}
-		if err := job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(0.2)); err != nil {
+		if err := job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(0.2)); err != nil {
 			t.Fatal(err)
 		}
 		if err := job.Succeeded(ctx); err != nil {
@@ -1717,14 +1722,14 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		newDetails := jobspb.ImportDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
-		require.NoError(t, job.SetDetails(ctx, nil /* txn */, newDetails))
+		require.NoError(t, job.SetDetails(ctx, nil /* txn */, nil /* ie */, newDetails))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
-		require.NoError(t, job.SetDetails(ctx, nil /* txn */, newDetails))
+		require.NoError(t, job.SetDetails(ctx, nil /* txn */, nil /* ie */, newDetails))
 
 		// Now change job's session id and check that updates are rejected.
 		_, err := exp.DB.Exec(updateClaimStmt, "!@#!@$!$@#", job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetDetails(ctx, nil /* txn */, newDetails))
+		require.Error(t, job.SetDetails(ctx, nil /* txn */, nil /* ie */, newDetails))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 	})
 
@@ -1733,7 +1738,7 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusCancelRequested, job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetDetails(ctx, nil /* txn */, jobspb.ImportDetails{URIs: []string{"new"}}))
+		require.Error(t, job.SetDetails(ctx, nil /* txn */, nil /* ie */, jobspb.ImportDetails{URIs: []string{"new"}}))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusCancelRequested))
 	})
 
@@ -1742,13 +1747,13 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		newProgress := jobspb.ImportProgress{ResumePos: []int64{42}}
 		exp.Record.Progress = newProgress
-		require.NoError(t, job.SetProgress(ctx, nil /* txn */, newProgress))
+		require.NoError(t, job.SetProgress(ctx, nil /* txn */, nil /* ie */, newProgress))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 
 		// Now change job's session id and check that updates are rejected.
 		_, err := exp.DB.Exec(updateClaimStmt, "!@#!@$!$@#", job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetDetails(ctx, nil /* txn */, newProgress))
+		require.Error(t, job.SetDetails(ctx, nil /* txn */, nil /* ie */, newProgress))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 	})
 
@@ -1757,7 +1762,7 @@ func TestJobLifecycle(t *testing.T) {
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusPauseRequested, job.ID())
 		require.NoError(t, err)
-		require.Error(t, job.SetProgress(ctx, nil /* txn */, jobspb.ImportProgress{ResumePos: []int64{42}}))
+		require.Error(t, job.SetProgress(ctx, nil /* txn */, nil /* ie */, jobspb.ImportProgress{ResumePos: []int64{42}}))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusPauseRequested))
 	})
 
@@ -1781,7 +1786,7 @@ func TestJobLifecycle(t *testing.T) {
 			Progress:  jobspb.BackupProgress{},
 			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
 		}
-		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
+		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 
 		loadedJob, err := registry.LoadJob(ctx, jobID)
@@ -2637,7 +2642,7 @@ func TestStartableJob(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, txn.Commit(ctx))
 		require.NoError(t, sj.Cancel(ctx))
-		status, err := sj.TestingCurrentStatus(ctx, nil /* txn */)
+		status, err := sj.TestingCurrentStatus(ctx, nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusCancelRequested, status)
 		// Start should fail since we have already called cancel on the job.
@@ -2711,7 +2716,7 @@ func TestStartableJob(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			loaded, err := jr.LoadJob(ctx, sj.ID())
 			require.NoError(t, err)
-			st, err := loaded.TestingCurrentStatus(ctx, nil /* txn */)
+			st, err := loaded.TestingCurrentStatus(ctx, nil /* txn */, nil /* ie */)
 			require.NoError(t, err)
 			if st != jobs.StatusSucceeded {
 				return errors.Errorf("expected %s, got %s", jobs.StatusSucceeded, st)
@@ -2801,7 +2806,7 @@ func TestRegistryTestingNudgeAdoptionQueue(t *testing.T) {
 	}, jobs.UsesTenantCostControl)
 	before := timeutil.Now()
 	jobID := registry.MakeJobID()
-	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */, nil /* ie */)
 	require.NoError(t, err)
 	registry.TestingNudgeAdoptionQueue()
 	// We want the job to be resumed very rapidly. We set this long timeout of 2s
@@ -2894,7 +2899,7 @@ func TestMetrics(t *testing.T) {
 			Details:       jobspb.BackupDetails{},
 			Progress:      jobspb.BackupProgress{},
 		}
-		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, registry.MakeJobID(), nil /* txn */)
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, registry.MakeJobID(), nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 		errCh := <-resuming
 		backupMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeBackup]
@@ -2913,7 +2918,7 @@ func TestMetrics(t *testing.T) {
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
 		jobID := registry.MakeJobID()
-		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 		{
 			// Fail the Resume with a retriable error.
@@ -2928,7 +2933,7 @@ func TestMetrics(t *testing.T) {
 			// We'll pause the job this time around and make sure it stops running.
 			<-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "for testing"))
+			require.NoError(t, registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, "for testing"))
 			int64EqSoon(t, importMetrics.ResumeRetryError.Count, 2)
 			require.Equal(t, int64(0), importMetrics.ResumeFailed.Count())
 			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
@@ -2951,7 +2956,7 @@ func TestMetrics(t *testing.T) {
 		}
 		{
 			// Now resume the job and let it succeed.
-			require.NoError(t, registry.Unpause(ctx, nil, jobID))
+			require.NoError(t, registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID))
 			errCh := <-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
 			errCh <- nil
@@ -2968,7 +2973,7 @@ func TestMetrics(t *testing.T) {
 		}
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
-		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, registry.MakeJobID(), nil /* txn */)
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, registry.MakeJobID(), nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 		{
 			// Fail the Resume with a permanent error.
@@ -3004,7 +3009,7 @@ func TestMetrics(t *testing.T) {
 		importMetrics := registry.MetricsStruct().JobMetrics[jobspb.TypeImport]
 
 		jobID := registry.MakeJobID()
-		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
+		_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */, nil /* ie */)
 		require.NoError(t, err)
 		{
 			// Fail the Resume with a retriable error.
@@ -3019,7 +3024,7 @@ func TestMetrics(t *testing.T) {
 			// We'll pause the job this time around and make sure it stops running.
 			<-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
-			require.NoError(t, registry.PauseRequested(ctx, nil, jobID, ""))
+			require.NoError(t, registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, ""))
 			int64EqSoon(t, importMetrics.FailOrCancelRetryError.Count, 1)
 			require.Equal(t, int64(1), importMetrics.ResumeFailed.Count())
 			require.Equal(t, int64(0), importMetrics.ResumeCompleted.Count())
@@ -3033,7 +3038,7 @@ func TestMetrics(t *testing.T) {
 		}
 		{
 			// Now resume the job and let it succeed.
-			require.NoError(t, registry.Unpause(ctx, nil, jobID))
+			require.NoError(t, registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID))
 			errCh := <-resuming
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
 			errCh <- nil
@@ -3076,12 +3081,13 @@ func TestLoseLeaseDuringExecution(t *testing.T) {
 		return jobs.FakeResumer{
 			OnResume: func(ctx context.Context) error {
 				defer close(resumed)
-				_, err := s.InternalExecutor().(sqlutil.InternalExecutor).Exec(
+				ie := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
+				_, err := ie.Exec(
 					ctx, "set-claim-null", nil, /* txn */
 					`UPDATE system.jobs SET claim_session_id = NULL WHERE id = $1`,
 					j.ID())
 				assert.NoError(t, err)
-				err = j.Update(ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+				err = j.Update(ctx, nil /* txn */, nil /* ie */, func(_ *kv.Txn, _ sqlutil.InternalExecutor, _ jobs.JobMetadata, _ *jobs.JobUpdater) error {
 					return nil
 				})
 				resumed <- err
@@ -3183,7 +3189,7 @@ func TestPauseReason(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	jobID := registry.MakeJobID()
-	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */)
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, jobID, nil /* txn */, nil /* ie */)
 	require.NoError(t, err)
 
 	countRowsWithClaimInfo := func() int {
@@ -3239,7 +3245,7 @@ func TestPauseReason(t *testing.T) {
 
 	{
 		// Next, pause the job with a reason. Wait for pause and make sure the pause reason is set.
-		require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "for testing"))
+		require.NoError(t, registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, "for testing"))
 		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
 		checkStatusAndPauseReason(t, jobID, "paused", "for testing")
 		mustNotHaveClaim()
@@ -3247,7 +3253,7 @@ func TestPauseReason(t *testing.T) {
 
 	{
 		// Now resume the job. Verify that the job is running now, but the pause reason is still there.
-		require.NoError(t, registry.Unpause(ctx, nil, jobID))
+		require.NoError(t, registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID))
 		tdb.CheckQueryResultsRetry(t, q, [][]string{{"running"}})
 
 		checkStatusAndPauseReason(t, jobID, "running", "for testing")
@@ -3256,7 +3262,7 @@ func TestPauseReason(t *testing.T) {
 	}
 	{
 		// Pause the job again with a different reason. Verify that the job is paused with the reason.
-		require.NoError(t, registry.PauseRequested(ctx, nil, jobID, "second time"))
+		require.NoError(t, registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, "second time"))
 		tdb.CheckQueryResultsRetry(t, q, [][]string{{"paused"}})
 		checkStatusAndPauseReason(t, jobID, "paused", "second time")
 		mustNotHaveClaim()
@@ -3457,7 +3463,7 @@ func TestPausepoints(t *testing.T) {
 			} else {
 				require.Error(t, sj.AwaitCompletion(ctx))
 			}
-			status, err := sj.TestingCurrentStatus(ctx, nil)
+			status, err := sj.TestingCurrentStatus(ctx, nil /* txn */, nil /* ie */)
 			// Map pause-requested to paused to avoid races.
 			if status == jobs.StatusPauseRequested {
 				status = jobs.StatusPaused

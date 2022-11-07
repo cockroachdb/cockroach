@@ -51,6 +51,7 @@ func (s schemaTelemetryExecutor) OnDrop(
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
+	ie sqlutil.InternalExecutor,
 ) (int, error) {
 	return 0, errScheduleUndroppable
 }
@@ -64,6 +65,7 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) (err error) {
 	defer func() {
 		if err == nil {
@@ -76,7 +78,7 @@ func (s schemaTelemetryExecutor) ExecuteJob(
 	defer cleanup()
 	jr := p.(sql.PlanHookState).ExecCfg().JobRegistry
 	r := schematelemetrycontroller.CreateSchemaTelemetryJobRecord(jobs.CreatedByScheduledJobs, sj.ScheduleID())
-	_, err = jr.CreateAdoptableJobWithTxn(ctx, r, jr.MakeJobID(), txn)
+	_, err = jr.CreateAdoptableJobWithTxn(ctx, r, jr.MakeJobID(), txn, ie)
 	return err
 }
 

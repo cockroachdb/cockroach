@@ -829,10 +829,8 @@ func makeTenantSQLServerArgs(
 		Settings:                st,
 		Knobs:                   protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
-			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
-				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Jobs),
-			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
-				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Schedules),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs):      jobsprotectedts.MakeStatusFunc(circularJobRegistry, jobsprotectedts.Jobs),
+			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(circularJobRegistry, jobsprotectedts.Schedules),
 		},
 	})
 	if err != nil {

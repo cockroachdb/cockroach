@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -453,11 +454,12 @@ CREATE TABLE test.test_table (
 func cancelJob(
 	t *testing.T, ctx context.Context, s serverutils.TestServerInterface, jobID jobspb.JobID,
 ) {
-	err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+	err := ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		// Using this way of canceling because the migration job us non-cancelable.
 		// Canceling in this way skips the check.
 		return s.JobRegistry().(*jobs.Registry).UpdateJobWithTxn(
-			ctx, jobID, txn, false /* useReadLock */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+			ctx, jobID, txn, ie, false /* useReadLock */, func(txn *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
 				ju.UpdateStatus(jobs.StatusCancelRequested)
 				return nil

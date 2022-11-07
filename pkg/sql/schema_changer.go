@@ -885,7 +885,9 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
-	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
+	return sc.txnWithExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		flags := tree.ObjectLookupFlagsWithRequired()
 		flags.AvoidLeased = true
 		desc, err := descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
@@ -909,7 +911,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 		}
 		if runStatus != "" && !desc.Dropped() {
 			if err := sc.job.RunningStatus(
-				ctx, txn, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+				ctx, txn, ie, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 					return runStatus, nil
 				}); err != nil {
 				return errors.Wrapf(err, "failed to update job status")
@@ -1093,8 +1095,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	log.Info(ctx, "stepping through state machine")
 
 	var runStatus jobs.RunningStatus
-	if err := sc.txn(ctx, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := sc.txnWithExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
@@ -1165,7 +1167,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.RunningStatus(ctx, txn, func(
+			if err := sc.job.RunningStatus(ctx, txn, ie, func(
 				ctx context.Context, details jobspb.Details,
 			) (jobs.RunningStatus, error) {
 				return runStatus, nil
@@ -1207,9 +1209,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 	log.Info(ctx, "stepping through state machine")
 
 	var runStatus jobs.RunningStatus
-	if err := sc.txn(ctx, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-	) error {
+	if err := sc.txnWithExecutor(ctx, func(ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, descsCol *descs.Collection, ie sqlutil.InternalExecutor) error {
 		tbl, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
@@ -1246,7 +1246,7 @@ func (sc *SchemaChanger) stepStateMachineAfterIndexBackfill(ctx context.Context)
 			return err
 		}
 		if sc.job != nil {
-			if err := sc.job.RunningStatus(ctx, txn, func(
+			if err := sc.job.RunningStatus(ctx, txn, ie, func(
 				ctx context.Context, details jobspb.Details,
 			) (jobs.RunningStatus, error) {
 				return runStatus, nil
@@ -1935,7 +1935,9 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 	// Get the other tables whose foreign key backreferences need to be removed.
 	alreadyReversed := false
 	const kvTrace = true // TODO(ajwerner): figure this out
-	err := sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
+	err := sc.txnWithExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+	) error {
 		scTable, err := descsCol.GetMutableTableVersionByID(ctx, sc.descID, txn)
 		if err != nil {
 			return err
@@ -2050,7 +2052,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 		tableDesc := scTable.ImmutableCopy().(catalog.TableDescriptor)
 		// Mark the schema change job as failed and create a rollback job.
-		err = sc.updateJobForRollback(ctx, txn, tableDesc)
+		err = sc.updateJobForRollback(ctx, txn, ie, tableDesc)
 		if err != nil {
 			return err
 		}
@@ -2061,7 +2063,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 			if err != nil {
 				return err
 			}
-			if err := sc.jobRegistry.Failed(ctx, txn, jobID, causingError); err != nil {
+			if err := sc.jobRegistry.Failed(ctx, txn, jobID, ie, causingError); err != nil {
 				return err
 			}
 		}
@@ -2087,7 +2089,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 
 // updateJobForRollback updates the schema change job in the case of a rollback.
 func (sc *SchemaChanger) updateJobForRollback(
-	ctx context.Context, txn *kv.Txn, tableDesc catalog.TableDescriptor,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, tableDesc catalog.TableDescriptor,
 ) error {
 	// Initialize refresh spans to scan the entire table.
 	span := tableDesc.PrimaryIndexSpan(sc.execCfg.Codec)
@@ -2103,7 +2105,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 	}
 	oldDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
 	if err := sc.job.SetDetails(
-		ctx, txn, jobspb.SchemaChangeDetails{
+		ctx, txn, ie, jobspb.SchemaChangeDetails{
 			DescID:          sc.descID,
 			TableMutationID: sc.mutationID,
 			ResumeSpanList:  spanList,
@@ -2112,7 +2114,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 	); err != nil {
 		return err
 	}
-	if err := sc.job.SetProgress(ctx, txn, jobspb.SchemaChangeProgress{}); err != nil {
+	if err := sc.job.SetProgress(ctx, txn, ie, jobspb.SchemaChangeProgress{}); err != nil {
 		return err
 	}
 

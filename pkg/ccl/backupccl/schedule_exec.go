@@ -53,6 +53,7 @@ func (e *scheduledBackupExecutor) ExecuteJob(
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	if err := e.executeBackup(ctx, cfg, sj, txn); err != nil {
 		e.metrics.NumFailed.Inc(1)
@@ -108,12 +109,16 @@ func (e *scheduledBackupExecutor) executeBackup(
 	if err != nil {
 		return err
 	}
-	_, err = invokeBackup(ctx, backupFn, nil, nil)
+	_, err = invokeBackup(ctx, backupFn, nil /* registry */, nil /* txn */, nil /* ie */)
 	return err
 }
 
 func invokeBackup(
-	ctx context.Context, backupFn sql.PlanHookRowFn, registry *jobs.Registry, txn *kv.Txn,
+	ctx context.Context,
+	backupFn sql.PlanHookRowFn,
+	registry *jobs.Registry,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) (eventpb.RecoveryEvent, error) {
 	resultCh := make(chan tree.Datums) // No need to close
 	g := ctxgroup.WithContext(ctx)
@@ -122,7 +127,7 @@ func invokeBackup(
 	g.GoCtx(func(ctx context.Context) error {
 		select {
 		case res := <-resultCh:
-			backupEvent = getBackupFnTelemetry(ctx, registry, txn, res)
+			backupEvent = getBackupFnTelemetry(ctx, registry, txn, ie, res)
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -427,6 +432,7 @@ func unlinkOrDropDependentSchedule(
 	scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	args *backuppb.ScheduledBackupExecutionArgs,
 ) (int, error) {
 	if args.DependentScheduleID == 0 {
@@ -455,7 +461,7 @@ func unlinkOrDropDependentSchedule(
 			return 0, err
 		}
 
-		return 1, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+		return 1, releaseProtectedTimestamp(ctx, txn, ie, scheduleControllerEnv.PTSProvider(),
 			dependentArgs.ProtectedTimestampRecord)
 	}
 
@@ -483,6 +489,7 @@ func (e *scheduledBackupExecutor) OnDrop(
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
+	ie sqlutil.InternalExecutor,
 ) (int, error) {
 	args := &backuppb.ScheduledBackupExecutionArgs{}
 
@@ -490,19 +497,23 @@ func (e *scheduledBackupExecutor) OnDrop(
 		return 0, errors.Wrap(err, "un-marshaling args")
 	}
 
-	dependentRowsDropped, err := unlinkOrDropDependentSchedule(ctx, scheduleControllerEnv, env, txn, args)
+	dependentRowsDropped, err := unlinkOrDropDependentSchedule(ctx, scheduleControllerEnv, env, txn, ie, args)
 	if err != nil {
 		return dependentRowsDropped, errors.Wrap(err, "failed to unlink dependent schedule")
 	}
 
-	return dependentRowsDropped, releaseProtectedTimestamp(ctx, txn, scheduleControllerEnv.PTSProvider(),
+	return dependentRowsDropped, releaseProtectedTimestamp(ctx, txn, ie, scheduleControllerEnv.PTSProvider(),
 		args.ProtectedTimestampRecord)
 }
 
 // getBackupFnTelemetry collects the telemetry from the dry-run backup
 // corresponding to backupFnResult.
 func getBackupFnTelemetry(
-	ctx context.Context, registry *jobs.Registry, txn *kv.Txn, backupFnResult tree.Datums,
+	ctx context.Context,
+	registry *jobs.Registry,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	backupFnResult tree.Datums,
 ) eventpb.RecoveryEvent {
 	if registry == nil {
 		return eventpb.RecoveryEvent{}
@@ -523,7 +534,7 @@ func getBackupFnTelemetry(
 			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
 		}
 
-		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn, ie)
 		if err != nil {
 			return jobspb.BackupDetails{}, errors.Wrap(err, "failed to load dry-run backup job")
 		}

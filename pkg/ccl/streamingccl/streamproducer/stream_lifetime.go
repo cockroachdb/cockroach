@@ -35,7 +35,11 @@ import (
 // 1. Tracks the liveness of the replication stream consumption
 // 2. TODO(casper): Updates the protected timestamp for spans being replicated
 func startReplicationStreamJob(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantID uint64,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	tenantID uint64,
 ) (streampb.StreamID, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
@@ -52,7 +56,7 @@ func startReplicationStreamJob(
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	ptsID := uuid.MakeV4()
 	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
-	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
+	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn, ie); err != nil {
 		return streampb.InvalidStreamID, err
 	}
 
@@ -105,8 +109,8 @@ func updateReplicationStreamProgress(
 	ie sqlutil.InternalExecutor,
 ) (status streampb.StreamReplicationStatus, err error) {
 	const useReadLock = false
-	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, ie, useReadLock,
+		func(txn *kv.Txn, ie sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			status.StreamStatus = convertProducerJobStatusToStreamStatus(md.Status)
 			// Skip checking PTS record in cases that it might already be released
 			if status.StreamStatus != streampb.StreamReplicationStatus_STREAM_ACTIVE &&
@@ -133,8 +137,7 @@ func updateReplicationStreamProgress(
 			// ingestion using the previous ingestion high watermark, it can fall behind the
 			// source cluster protected timestamp.
 			if shouldUpdatePTS := ptsRecord.Timestamp.Less(consumedTime); shouldUpdatePTS {
-				// TODO(janexing): update the ie after refactoring Job.Update().
-				if err = ptsProvider.UpdateTimestamp(ctx, txn, nil /* ie */, ptsID, consumedTime); err != nil {
+				if err = ptsProvider.UpdateTimestamp(ctx, txn, ie, ptsID, consumedTime); err != nil {
 					return err
 				}
 				status.ProtectedTimestamp = &consumedTime
@@ -259,13 +262,14 @@ func completeReplicationStream(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	streamID streampb.StreamID,
 	successfulIngestion bool,
 ) error {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
 	const useReadLock = false
-	return registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	return registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, ie, useReadLock,
+		func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// Updates the stream ingestion status, make the job resumer exit running
 			// when picking up the new status.
 			if (md.Status == jobs.StatusRunning || md.Status == jobs.StatusPending) &&

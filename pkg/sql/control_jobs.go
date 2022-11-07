@@ -15,12 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -88,8 +90,11 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		job, err := reg.LoadJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.Txn())
-		if err != nil {
+		var job *jobs.Job
+		if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			job, err = reg.LoadJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.Txn(), ie)
+			return err
+		}); err != nil {
 			return err
 		}
 
@@ -112,11 +117,17 @@ func (n *controlJobsNode) startExec(params runParams) error {
 
 		switch n.desiredStatus {
 		case jobs.StatusPaused:
-			err = reg.PauseRequested(params.ctx, params.p.txn, jobspb.JobID(jobID), n.reason)
+			err = params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				return reg.PauseRequested(params.ctx, params.p.txn, ie, jobspb.JobID(jobID), n.reason)
+			})
 		case jobs.StatusRunning:
-			err = reg.Unpause(params.ctx, params.p.txn, jobspb.JobID(jobID))
+			err = params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				return reg.Unpause(params.ctx, params.p.txn, ie, jobspb.JobID(jobID))
+			})
 		case jobs.StatusCanceled:
-			err = reg.CancelRequested(params.ctx, params.p.txn, jobspb.JobID(jobID))
+			err = params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				return reg.CancelRequested(params.ctx, params.p.txn, ie, jobspb.JobID(jobID))
+			})
 		default:
 			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}

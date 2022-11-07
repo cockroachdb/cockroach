@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
@@ -487,8 +488,8 @@ INSERT INTO foo VALUES (1), (10), (100);
 		jr := s0.JobRegistry().(*jobs.Registry)
 		var j *jobs.Job
 		var table catalog.TableDescriptor
-		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		require.NoError(t, execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* sd */, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) (err error) {
 			mut, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{})
 			if err != nil {
@@ -515,7 +516,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 					ResumeSpanList:  resumeSpanList,
 				},
 				Progress: jobspb.SchemaChangeGCProgress{},
-			}, jobID, txn)
+			}, jobID, txn, ie)
 			if err != nil {
 				return err
 			}

@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -59,7 +60,7 @@ type testInfra struct {
 }
 
 func (ti testInfra) newExecDeps(
-	txn *kv.Txn, descsCollection *descs.Collection,
+	txn *kv.Txn, ie sqlutil.InternalExecutor, descsCollection *descs.Collection,
 ) scexec.Dependencies {
 	const kvTrace = true
 	const schemaChangerJobID = 1
@@ -68,6 +69,7 @@ func (ti testInfra) newExecDeps(
 		ti.lm.Codec(),
 		&sessiondata.SessionData{},
 		txn,
+		ie,
 		username.RootUserName(),
 		descsCollection,
 		noopJobRegistry{},
@@ -105,6 +107,13 @@ func (ti *testInfra) txn(
 	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
 	return ti.ief.DescsTxn(ctx, ti.db, f)
+}
+
+func (ti *testInfra) txnWithExecutor(
+	ctx context.Context,
+	f func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor) error,
+) error {
+	return ti.ief.DescsTxnWithExecutor(ctx, ti.db, nil, f)
 }
 
 func TestExecutorDescriptorMutationOps(t *testing.T) {
@@ -162,10 +171,10 @@ CREATE TABLE db.t (
 			return nil
 		}))
 
-		require.NoError(t, ti.txn(ctx, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		require.NoError(t, ti.txnWithExecutor(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
-			exDeps := ti.newExecDeps(txn, descriptors)
+			exDeps := ti.newExecDeps(txn, ie, descriptors)
 			_, orig, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, immFlags)
 			require.NoError(t, err)
 			require.Equal(t, c.orig().TableDesc(), orig.TableDesc())
@@ -265,8 +274,8 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var cs scpb.CurrentState
-		require.NoError(t, ti.txn(ctx, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		require.NoError(t, ti.txnWithExecutor(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) (err error) {
 			tn := tree.MakeTableNameWithSchema("db", tree.PublicSchemaName, "foo")
 			_, fooTable, err := descriptors.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
@@ -337,19 +346,19 @@ func TestSchemaChanger(t *testing.T) {
 			sc := sctestutils.MakePlan(t, initial, scop.PreCommitPhase)
 			stages := sc.StagesForCurrentPhase()
 			for _, s := range stages {
-				exDeps := ti.newExecDeps(txn, descriptors)
+				exDeps := ti.newExecDeps(txn, ie, descriptors)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
 				cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
 			}
 			return nil
 		}))
 		var after scpb.CurrentState
-		require.NoError(t, ti.txn(ctx, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		require.NoError(t, ti.txnWithExecutor(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
 			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
-				exDeps := ti.newExecDeps(txn, descriptors)
+				exDeps := ti.newExecDeps(txn, ie, descriptors)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
 				after = scpb.CurrentState{TargetState: cs.TargetState, Current: s.After}
 			}
@@ -370,8 +379,8 @@ func TestSchemaChanger(t *testing.T) {
 		ti.tsql.Exec(t, `CREATE TABLE db.foo (i INT PRIMARY KEY)`)
 
 		var cs scpb.CurrentState
-		require.NoError(t, ti.txn(ctx, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		require.NoError(t, ti.txnWithExecutor(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) (err error) {
 			sctestutils.WithBuilderDependenciesFromTestServer(ti.tc.Server(0), func(buildDeps scbuild.Dependencies) {
 				parsed, err := parser.Parse("ALTER TABLE db.foo ADD COLUMN j INT")
@@ -383,7 +392,7 @@ func TestSchemaChanger(t *testing.T) {
 				{
 					sc := sctestutils.MakePlan(t, initial, scop.PreCommitPhase)
 					for _, s := range sc.StagesForCurrentPhase() {
-						exDeps := ti.newExecDeps(txn, descriptors)
+						exDeps := ti.newExecDeps(txn, ie, descriptors)
 						require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
 						cs = scpb.CurrentState{TargetState: initial.TargetState, Current: s.After}
 					}
@@ -391,12 +400,12 @@ func TestSchemaChanger(t *testing.T) {
 			})
 			return nil
 		}))
-		require.NoError(t, ti.txn(ctx, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		require.NoError(t, ti.txnWithExecutor(ctx, func(
+			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
 			sc := sctestutils.MakePlan(t, cs, scop.PostCommitPhase)
 			for _, s := range sc.Stages {
-				exDeps := ti.newExecDeps(txn, descriptors)
+				exDeps := ti.newExecDeps(txn, ie, descriptors)
 				require.NoError(t, sc.DecorateErrorWithPlanDetails(scexec.ExecuteStage(ctx, exDeps, s.Ops())))
 			}
 			return nil
@@ -412,7 +421,12 @@ func (n noopJobRegistry) CheckPausepoint(name string) error {
 }
 
 func (n noopJobRegistry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	useReadLock bool,
+	updateFunc jobs.UpdateFn,
 ) error {
 	return nil
 }

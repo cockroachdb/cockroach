@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -38,6 +39,7 @@ const timedProtectTimeStampGCPct = 0.8
 // is hit.
 type Manager struct {
 	db                  *kv.DB
+	ief                 sqlutil.InternalExecutorFactory
 	codec               keys.SQLCodec
 	protectedTSProvider protectedts.Provider
 	systemConfig        config.SystemConfigProvider
@@ -76,6 +78,7 @@ func getProtectedTSOnJob(details jobspb.Details) *uuid.UUID {
 // for jobs.
 func NewManager(
 	db *kv.DB,
+	ief sqlutil.InternalExecutorFactory,
 	codec keys.SQLCodec,
 	protectedTSProvider protectedts.Provider,
 	systemConfig config.SystemConfigProvider,
@@ -83,6 +86,7 @@ func NewManager(
 ) *Manager {
 	return &Manager{
 		db:                  db,
+		ief:                 ief,
 		codec:               codec,
 		protectedTSProvider: protectedTSProvider,
 		systemConfig:        systemConfig,
@@ -168,8 +172,8 @@ func (p *Manager) Protect(
 		return nil, nil
 	}
 	var protectedtsID *uuid.UUID
-	err := p.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		job, err := p.jr.LoadJobWithTxn(ctx, jobID, txn)
+	err := p.ief.TxnWithExecutor(ctx, p.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		job, err := p.jr.LoadJobWithTxn(ctx, jobID, txn, ie)
 		if err != nil {
 			return err
 		}
@@ -181,7 +185,7 @@ func (p *Manager) Protect(
 			newID := uuid.MakeV4()
 			protectedtsID = &newID
 			// Set up a new protected timestamp ID and install it on the job.
-			return job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			return job.Update(ctx, txn, ie, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				details = job.Details()
 				details = setProtectedTSOnJob(details, protectedtsID)
 				md.Payload.Details = jobspb.WrapPayloadDetails(details)
@@ -194,7 +198,7 @@ func (p *Manager) Protect(
 			})
 		}
 		// Refresh the existing timestamp.
-		return p.protectedTSProvider.UpdateTimestamp(ctx, txn, *protectedtsID, readAsOf)
+		return p.protectedTSProvider.UpdateTimestamp(ctx, txn, ie, *protectedtsID, readAsOf)
 	})
 	if err != nil {
 		return nil, err
@@ -208,8 +212,10 @@ func (p *Manager) Protect(
 // Note: This should only be used for job cleanup if is not currently,
 // executing.
 func (p *Manager) Unprotect(ctx context.Context, jobID jobspb.JobID) error {
-	return p.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		job, err := p.jr.LoadJobWithTxn(ctx, jobID, txn)
+	return p.ief.TxnWithExecutor(ctx, p.db, nil /* session data */, func(
+		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+	) error {
+		job, err := p.jr.LoadJobWithTxn(ctx, jobID, txn, ie)
 		if err != nil {
 			return err
 		}
@@ -221,12 +227,12 @@ func (p *Manager) Unprotect(ctx context.Context, jobID jobspb.JobID) error {
 		}
 		// If we do find one then we need to clean up the protected timestamp,
 		// and remove it from the job.
-		return job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		return job.Update(ctx, txn, ie, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			details = md.Payload.UnwrapDetails()
 			details = setProtectedTSOnJob(details, nil)
 			md.Payload.Details = jobspb.WrapPayloadDetails(details)
 			ju.UpdatePayload(md.Payload)
-			return p.protectedTSProvider.Release(ctx, txn, *protectedtsID)
+			return p.protectedTSProvider.Release(ctx, txn, ie, *protectedtsID)
 		})
 	})
 }

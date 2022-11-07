@@ -85,12 +85,12 @@ func testJobsProtectedTimestamp(
 		return j, rec
 	}
 	jMovedToFailed, recMovedToFailed := mkJobAndRecord()
-	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return jr.Failed(ctx, txn, jMovedToFailed.ID(), io.ErrUnexpectedEOF)
+	require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return jr.Failed(ctx, txn, jMovedToFailed.ID(), ie, io.ErrUnexpectedEOF)
 	}))
 	jFinished, recFinished := mkJobAndRecord()
-	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return jr.Succeeded(ctx, txn, jFinished.ID())
+	require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return jr.Succeeded(ctx, txn, ie, jFinished.ID())
 	}))
 	_, recRemains := mkJobAndRecord()
 	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, ptsID uuid.UUID) (err error) {

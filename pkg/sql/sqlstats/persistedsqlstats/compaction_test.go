@@ -380,7 +380,7 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 
 func launchSQLStatsCompactionJob(server serverutils.TestServerInterface) (jobspb.JobID, error) {
 	return persistedsqlstats.CreateCompactionJob(
-		context.Background(), nil /* createdByInfo */, nil, /* txn */
+		context.Background(), nil /* createdByInfo */, nil /* txn */, nil, /* ie */
 		server.JobRegistry().(*jobs.Registry),
 	)
 }
