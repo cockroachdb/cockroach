@@ -71,6 +71,10 @@
   }
 }
 
+.table-area {
+  overflow-x: scroll;
+}
+
 .last-cleared-tooltip, .numeric-stats-table, .plan-view-table {
   &__tooltip {
     width: 36px;
