@@ -15,7 +15,7 @@ import { createMemoryHistory } from "history";
 import Long from "long";
 import { noop } from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { RequestError } from "src/util";
+import {HexStringToInt64String, RequestError} from "src/util";
 import { StatementDiagnosticsReport } from "../api";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import ILatencyInfo = cockroach.sql.ILatencyInfo;
@@ -268,6 +268,7 @@ const diagnosticsReportsInProgress: StatementDiagnosticsReport[] = [
 const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
 const lastUpdated = moment("Sep 15 2021 01:30:00 GMT");
 const aggregationInterval = 3600; // 1 hour
+const stmt_fingerprint_id = HexStringToInt64String("\\x76245b7acd82d39d");
 
 const statementsPagePropsFixture: StatementsPageProps = {
   history,
@@ -946,6 +947,10 @@ const statementsPagePropsFixture: StatementsPageProps = {
   lastReset: "2020-04-13 07:22:23",
   columns: null,
   isTenant: false,
+  insightCounts:   [{
+    insightCount: 1,
+    fingerprintID: stmt_fingerprint_id,
+  }],
   hasViewActivityRedactedRole: false,
   hasAdminRole: true,
   dismissAlertMessage: noop,
@@ -955,6 +960,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   refreshUserSQLRoles: noop,
   refreshNodes: noop,
   resetSQLStats: noop,
+  refreshInsightCount: noop,
   onTimeScaleChange: noop,
   onActivateStatementDiagnostics: noop,
   onDiagnosticsModalOpen: noop,

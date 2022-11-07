@@ -20,9 +20,11 @@ import {
 } from "./sqlApi";
 import {
   BlockedContentionDetails,
+  ExecutionInsightCountEvent,
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
   InsightNameEnum,
+  InsightType,
   TxnContentionInsightDetails,
   TxnInsightDetails,
   TxnInsightEvent,
@@ -649,4 +651,89 @@ export async function getTxnInsightDetailsApi(
     result: txnInsightDetails,
     errors,
   };
+}
+
+// Transaction Insight Counts
+
+// Note that insight counts show the number of distinct insight types for a given execution, not the number of
+// individual insight events.
+export type TransactionInsightCounts = ExecutionInsightCountEvent[];
+
+const txnInsightCountsQuery = (filters?: TxnQueryFilters) => {
+  const txnColumns = `
+  encode(txn_fingerprint_id, 'hex') AS txn_fingerprint_id,
+  problems,
+  causes`;
+
+  let whereClause = `
+WHERE app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%'
+AND txn_id != '00000000-0000-0000-0000-000000000000'`;
+
+  if (filters?.start) {
+    whereClause += ` AND start_time >= '${filters.start.toISOString()}'`;
+  }
+
+  if (filters?.end) {
+    whereClause += ` AND end_time <= '${filters.end.toISOString()}'`;
+  }
+
+  return `
+    SELECT DISTINCT ON (txn_fingerprint_id, problems, causes)
+      ${txnColumns}
+    FROM
+      ${TXN_INSIGHTS_TABLE_NAME}
+    ${whereClause}
+    ORDER BY txn_fingerprint_id, problems, causes, end_time DESC
+`;
+};
+
+type TransactionInsightCountResponseRow = {
+  txn_fingerprint_id: string; // hex string
+  problems: string[];
+  causes: string[];
+};
+
+function getTransactionInsightCountResponse(
+  response: SqlExecutionResponse<TransactionInsightCountResponseRow>,
+): TransactionInsightCounts {
+  if (!response.execution.txn_results[0].rows) {
+    return [];
+  }
+
+  const txnInsightMap = new Map<string, Set<InsightNameEnum>>();
+  response.execution.txn_results[0].rows.forEach(row => {
+    const txnInsights = getInsightsFromProblemsAndCauses(
+      row.problems,
+      row.causes,
+      InsightExecEnum.TRANSACTION,
+    );
+    if (!txnInsightMap.has(row.txn_fingerprint_id)) {
+      const txnInsightTypes = new Set<InsightNameEnum>();
+      txnInsights.forEach(insight => txnInsightTypes.add(insight.name));
+      txnInsightMap.set(row.txn_fingerprint_id, txnInsightTypes);
+    } else {
+      txnInsights.forEach(insight => {
+        const mapValues = txnInsightMap.get(row.txn_fingerprint_id);
+        !mapValues.has(insight.name) && mapValues.add(insight.name);
+      });
+    }
+  });
+
+  const res: TransactionInsightCounts = Array.from(
+    txnInsightMap,
+    ([name, value]) => ({ fingerprintID: name, insightCount: value.size }),
+  );
+
+  return res;
+}
+
+export function getTransactionInsightCount(
+  req: TxnInsightsRequest,
+): Promise<TransactionInsightCounts> {
+  const request = makeInsightsSqlRequest([txnInsightCountsQuery(req)]);
+  return executeInternalSql<TransactionInsightCountResponseRow>(request).then(
+    result => {
+      return getTransactionInsightCountResponse(result);
+    },
+  );
 }

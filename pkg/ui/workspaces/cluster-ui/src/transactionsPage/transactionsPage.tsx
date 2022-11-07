@@ -34,6 +34,7 @@ import {
   getTrxAppFilterOptions,
   searchTransactionsData,
   filterTransactions,
+  addInsightCounts,
 } from "./utils";
 import Long from "long";
 import { merge } from "lodash";
@@ -68,11 +69,14 @@ import {
   timeScale1hMinOptions,
   getValidOption,
   toRoundedDateRange,
+  timeScaleRangeToObj,
 } from "../timeScaleDropdown";
+import { ExecutionInsightCountEvent } from "src/insights/types";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import moment from "moment";
+import { TxnInsightsRequest } from "../api";
 
 type IStatementsResponse = protos.cockroach.server.serverpb.IStatementsResponse;
 
@@ -98,12 +102,14 @@ export interface TransactionsPageStateProps {
   search: string;
   sortSetting: SortSetting;
   hasAdminRole?: UIConfigState["hasAdminRole"];
+  insightCounts: ExecutionInsightCountEvent[];
 }
 
 export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
+  refreshInsightCount: (req: TxnInsightsRequest) => void;
   resetSQLStats: (req: StatementsRequest) => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
@@ -130,6 +136,7 @@ function stmtsRequestFromTimeScale(
     end: Long.fromNumber(end.unix()),
   });
 }
+
 export class TransactionsPage extends React.Component<
   TransactionsPageProps,
   TState
@@ -195,7 +202,7 @@ export class TransactionsPage extends React.Component<
   };
 
   clearRefreshDataTimeout(): void {
-    if (this.refreshDataTimeout != null) {
+    if (this.refreshDataTimeout !== null) {
       clearTimeout(this.refreshDataTimeout);
     }
   }
@@ -216,6 +223,8 @@ export class TransactionsPage extends React.Component<
   refreshData = (ts?: TimeScale): void => {
     const time = ts ?? this.props.timeScale;
     const req = stmtsRequestFromTimeScale(time);
+    const insightCountReq = timeScaleRangeToObj(time);
+    this.props.refreshInsightCount(insightCountReq);
     this.props.refreshData(req);
 
     this.resetPolling(time);
@@ -249,6 +258,11 @@ export class TransactionsPage extends React.Component<
         this.refreshData,
         Math.max(0, nextRefresh.diff(now, "milliseconds")),
       );
+    }
+
+    if (!this.props.insightCounts) {
+      const insightCountReq = timeScaleRangeToObj(this.props.timeScale);
+      this.props.refreshInsightCount(insightCountReq);
     }
 
     this.props.refreshNodes();
@@ -415,6 +429,7 @@ export class TransactionsPage extends React.Component<
       sortSetting,
       search,
       hasAdminRole,
+      insightCounts,
     } = this.props;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
@@ -503,7 +518,7 @@ export class TransactionsPage extends React.Component<
             error={this.props?.error}
             render={() => {
               const { pagination } = this.state;
-              const transactionsToDisplay: TransactionInfo[] =
+              const transactionsToDisplay: TransactionInfo[] = addInsightCounts(
                 aggregateAcrossNodeIDs(filteredTransactions, statements).map(
                   t => ({
                     stats_data: t.stats_data,
@@ -511,7 +526,9 @@ export class TransactionsPage extends React.Component<
                     regions: generateRegion(t, statements, nodeRegions),
                     regionNodes: generateRegionNode(t, statements, nodeRegions),
                   }),
-                );
+                ),
+                insightCounts,
+              );
               const { current, pageSize } = pagination;
               const hasData = data.transactions?.length > 0;
               const isUsedFilter = search?.length > 0;

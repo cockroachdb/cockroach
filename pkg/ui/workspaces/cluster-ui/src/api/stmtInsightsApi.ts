@@ -14,12 +14,15 @@ import {
   LONG_TIMEOUT,
   sqlApiErrorMessage,
   SqlExecutionRequest,
+  SqlExecutionResponse,
   sqlResultsAreEmpty,
   SqlTxnResult,
 } from "./sqlApi";
 import {
+  ExecutionInsightCountEvent,
   getInsightsFromProblemsAndCauses,
   InsightExecEnum,
+  InsightNameEnum,
   StmtInsightEvent,
 } from "src/insights";
 import moment from "moment";
@@ -217,4 +220,99 @@ export function formatStmtInsights(
       cpuSQLNanos: row.cpu_sql_nanos,
     } as StmtInsightEvent;
   });
+}
+
+// Statement Insight Counts
+
+// Note that insight counts show the number of distinct insight types for a given execution, not the number of
+// individual insight events.
+
+export type StatementInsightCounts = ExecutionInsightCountEvent[];
+
+type StatementInsightCountResponseRow = {
+  stmt_fingerprint_id: string; // hex string
+  problem: string;
+  causes: string[];
+};
+
+function getStatementInsightCountResponse(
+  response: SqlExecutionResponse<StatementInsightCountResponseRow>,
+): StatementInsightCounts {
+  if (!response.execution.txn_results[0].rows) {
+    return [];
+  }
+
+  const stmtInsightMap = new Map<string, Set<InsightNameEnum>>();
+  response.execution.txn_results[0].rows.forEach(row => {
+    const stmtInsights = getInsightsFromProblemsAndCauses(
+      [row.problem],
+      row.causes,
+      InsightExecEnum.TRANSACTION,
+    );
+    if (!stmtInsightMap.has(row.stmt_fingerprint_id)) {
+      const stmtInsightTypes = new Set<InsightNameEnum>();
+      stmtInsights.forEach(insight => stmtInsightTypes.add(insight.name));
+      stmtInsightMap.set(row.stmt_fingerprint_id, stmtInsightTypes);
+    } else {
+      stmtInsights.forEach(insight => {
+        const mapValues = stmtInsightMap.get(row.stmt_fingerprint_id);
+        !mapValues.has(insight.name) && mapValues.add(insight.name);
+      });
+    }
+  });
+
+  const res: StatementInsightCounts = Array.from(
+    stmtInsightMap,
+    ([name, value]) => ({ fingerprintID: name, insightCount: value.size }),
+  );
+
+  return res;
+}
+
+const stmtInsightCountsQuery = (filters?: StmtInsightsReq) => {
+  const stmtColumns = `
+  encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
+  problem,
+  causes`;
+
+  let whereClause = `
+WHERE app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%'
+AND txn_id != '00000000-0000-0000-0000-000000000000'`;
+
+  if (filters?.start) {
+    whereClause += ` AND start_time >= '${filters.start.toISOString()}'`;
+  }
+
+  if (filters?.end) {
+    whereClause += ` AND end_time <= '${filters.end.toISOString()}'`;
+  }
+
+  return `
+    SELECT DISTINCT ON (stmt_fingerprint_id, problem, causes)
+      ${stmtColumns}
+    FROM
+      crdb_internal.cluster_execution_insights
+    ${whereClause}
+    ORDER BY stmt_fingerprint_id, problem, causes, end_time DESC
+`;
+};
+
+export function getStatementInsightCount(
+  req: StmtInsightsReq,
+): Promise<StatementInsightCounts> {
+  const request: SqlExecutionRequest = {
+    statements: [
+      {
+        sql: stmtInsightCountsQuery(req),
+      },
+    ],
+    execute: true,
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
+  };
+  return executeInternalSql<StatementInsightCountResponseRow>(request).then(
+    result => {
+      return getStatementInsightCountResponse(result);
+    },
+  );
 }

@@ -16,6 +16,8 @@ import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { SortSetting } from "../sortedtable";
 import { Filters } from "../queryFilter";
 import { TimeScale } from "../timeScaleDropdown";
+import { ExecutionInsightCountEvent } from "../insights";
+import { HexStringToInt64String } from "../util";
 
 const history = createMemoryHistory({ initialEntries: ["/transactions"] });
 
@@ -68,6 +70,8 @@ export const filters: Filters = {
 };
 
 export const lastUpdated = moment();
+
+const txn_fingerprint_id = HexStringToInt64String("\\x76245b7acd82d39d");
 
 export const data: cockroach.server.serverpb.IStatementsResponse = {
   statements: [
@@ -785,6 +789,7 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
   transactions: [
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(Number(txn_fingerprint_id)),
         statement_fingerprint_ids: [Long.fromInt(100)],
         app: "$ internal-select-running/get-claimed-jobs",
         aggregated_ts: timestamp,
@@ -807,6 +812,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 1,
+        ),
         statement_fingerprint_ids: [Long.fromInt(101)],
         app: "$ internal-stmt-diag-poll",
         aggregated_ts: timestamp,
@@ -829,6 +837,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 2,
+        ),
         statement_fingerprint_ids: [Long.fromInt(102)],
         app: "$ internal-get-tables",
         aggregated_ts: timestamp,
@@ -845,6 +856,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 3,
+        ),
         statement_fingerprint_ids: [Long.fromInt(103)],
         app: "$ internal-read orphaned leases",
         aggregated_ts: timestamp,
@@ -861,6 +875,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 4,
+        ),
         statement_fingerprint_ids: [Long.fromInt(104)],
         app: "$ internal-expire-sessions",
         aggregated_ts: timestamp,
@@ -880,6 +897,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 5,
+        ),
         statement_fingerprint_ids: [Long.fromInt(105)],
         app: "$ internal-show-version",
         aggregated_ts: timestamp,
@@ -896,6 +916,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 6,
+        ),
         statement_fingerprint_ids: [Long.fromInt(106), Long.fromInt(107)],
         app: "$ internal-delete-sessions",
         aggregated_ts: timestamp,
@@ -918,6 +941,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 7,
+        ),
         statement_fingerprint_ids: [Long.fromInt(108)],
         app: "$ TEST",
         aggregated_ts: timestamp,
@@ -937,6 +963,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 8,
+        ),
         statement_fingerprint_ids: [Long.fromInt(109)],
         app: "$ TEST",
         aggregated_ts: timestamp,
@@ -959,6 +988,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 9,
+        ),
         statement_fingerprint_ids: [Long.fromInt(107)],
         app: "$ TEST",
         aggregated_ts: timestamp,
@@ -981,6 +1013,9 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
     {
       stats_data: {
+        transaction_fingerprint_id: Long.fromInt(
+          Number(txn_fingerprint_id) + 10,
+        ),
         statement_fingerprint_ids: [Long.fromInt(107)],
         app: "$ TEST EXACT",
         aggregated_ts: timestamp,
@@ -1003,3 +1038,10 @@ export const data: cockroach.server.serverpb.IStatementsResponse = {
     },
   ],
 };
+
+export const insightCounts: ExecutionInsightCountEvent[] = [
+  {
+    insightCount: 1,
+    fingerprintID: txn_fingerprint_id,
+  },
+];

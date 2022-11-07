@@ -46,6 +46,7 @@ import {
 } from "../transactionsPage/utils";
 import classNames from "classnames/bind";
 import statsTablePageStyles from "src/statementsTable/statementsTableContent.module.scss";
+import { insightTableCell } from "../statementsTable";
 
 export type Transaction =
   protos.cockroach.server.serverpb.StatementsResponse.IExtendedCollectedTransactionStatistics;
@@ -64,6 +65,7 @@ interface TransactionsTable {
 export interface TransactionInfo extends Transaction {
   regions: string[];
   regionNodes: string[];
+  insightCount?: number;
 }
 
 const { latencyClasses } = tableClasses;
@@ -202,6 +204,12 @@ export function makeTransactionsColumns(
       cell: latencyBar,
       className: latencyClasses.column,
       sort: (item: TransactionInfo) => item.stats_data.stats.service_lat.mean,
+    },
+    {
+      name: "insightCount",
+      title: statisticsTableTitles.insightCount(statType),
+      cell: (item: TransactionInfo) => insightTableCell(item.insightCount),
+      sort: (item: TransactionInfo) => item.insightCount,
     },
     {
       name: "contention",

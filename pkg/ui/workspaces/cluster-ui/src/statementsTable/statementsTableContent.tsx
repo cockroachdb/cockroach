@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { ReactElement } from "react";
 import { Link } from "react-router-dom";
 import classNames from "classnames/bind";
 import { noop } from "lodash";
@@ -28,12 +28,19 @@ import {
   appNamesAttr,
 } from "src/util";
 import styles from "./statementsTableContent.module.scss";
+import insightStyles from "src/insights/workloadInsights/util/workloadInsights.module.scss";
+
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { EllipsisVertical } from "@cockroachlabs/icons";
 import { getBasePath, StatementDiagnosticsReport } from "../api";
 import moment from "moment";
 
 export type NodeNames = { [nodeId: string]: string };
 const cx = classNames.bind(styles);
+const insightCx = classNames.bind(insightStyles);
+
+type IStatementDiagnosticsReport =
+  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export const StatementTableCell = {
   statements:
@@ -258,3 +265,15 @@ export const NodeLink = (props: {
     </div>
   </Link>
 );
+
+export const insightTableCell = (count: number): ReactElement | string => {
+  let text: string;
+  if (!count || count === 0) {
+    return "0";
+  } else if (count === 1) {
+    text = "1 insight";
+  } else {
+    text = `${count} insights`;
+  }
+  return <span className={insightCx(`insight-type--warning`)}>{text}</span>;
+};

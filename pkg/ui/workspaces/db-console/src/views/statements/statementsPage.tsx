@@ -17,6 +17,7 @@ import {
   refreshNodes,
   refreshDatabases,
   refreshStatementDiagnosticsRequests,
+  refreshStatementInsightCounts,
   refreshStatements,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
@@ -72,6 +73,7 @@ import {
   selectStatementsDataValid,
 } from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import { selectStatementInsightCounts } from "src/views/insights/insightsSelectors";
 
 type ICollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -295,6 +297,7 @@ const fingerprintsPageActions = {
   refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
+  refreshInsightCount: refreshStatementInsightCounts,
   dismissAlertMessage: () => {
     return (dispatch: AppDispatch) => {
       dispatch(
@@ -388,6 +391,7 @@ export default withRouter(
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
         hasAdminRole: selectHasAdminRole(state),
+        insightCounts: selectStatementInsightCounts(state),
       },
       activePageProps: mapStateToRecentStatementViewProps(state),
     }),

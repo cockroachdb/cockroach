@@ -183,3 +183,19 @@ export const selectSchemaInsightsTypes = createSelector(
     ).sort();
   },
 );
+
+export const selectStatementInsightCounts = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  state => {
+    if (!state.statementInsightCounts.data) return null;
+    return state.statementInsightCounts.data;
+  },
+);
+
+export const selectTransactionInsightCounts = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  state => {
+    if (!state.transactionInsightCounts.data) return null;
+    return state.transactionInsightCounts.data;
+  },
+);

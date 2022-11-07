@@ -31,7 +31,10 @@ import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnost
 import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
-import { localStorageSelector } from "../store/utils/selectors";
+import {
+  adminUISelector,
+  localStorageSelector,
+} from "../store/utils/selectors";
 import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
 
 type ICollectedStatementStatistics =
@@ -242,4 +245,11 @@ export const selectFilters = createSelector(
 export const selectSearch = createSelector(
   localStorageSelector,
   localStorage => localStorage["search/StatementsPage"],
+);
+
+export const selectStatementInsightCounts = createSelector(
+  adminUISelector,
+  state => {
+    return state?.statementInsightCounts?.data;
+  },
 );

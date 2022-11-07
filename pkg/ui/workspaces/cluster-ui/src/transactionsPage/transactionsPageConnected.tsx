@@ -15,6 +15,7 @@ import { Dispatch } from "redux";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as insightCountActions } from "src/store/insights/transactionInsightCounts";
 import {
   TransactionsPageStateProps,
   TransactionsPageDispatchProps,
@@ -26,6 +27,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectTransactionInsightCounts,
 } from "./transactionsPage.selectors";
 import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -51,6 +53,7 @@ import {
   RecentTransactionsViewStateProps,
   RecentTransactionsViewDispatchProps,
 } from "./recentTransactionsView";
+import { TxnInsightsRequest } from "../api";
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
@@ -84,6 +87,7 @@ export const TransactionsPageConnected = withRouter(
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         hasAdminRole: selectHasAdminRole(state),
+        insightCounts: selectTransactionInsightCounts(state),
       },
       activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
@@ -94,6 +98,8 @@ export const TransactionsPageConnected = withRouter(
         refreshNodes: () => dispatch(nodesActions.refresh()),
         refreshUserSQLRoles: () =>
           dispatch(uiConfigActions.refreshUserSQLRoles()),
+        refreshInsightCount: (req: TxnInsightsRequest) =>
+          dispatch(insightCountActions.refresh(req)),
         resetSQLStats: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.reset(req)),
         onTimeScaleChange: (ts: TimeScale) => {

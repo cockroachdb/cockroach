@@ -15,6 +15,7 @@ import moment from "moment";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import {
   contentionTime,
+  insights,
   planningExecutionTime,
   readFromDisk,
   readsAndWrites,
@@ -64,6 +65,7 @@ export const statisticsColumnLabels = {
   lastExecTimestamp: "Last Execution Time (UTC)",
   statementFingerprintId: "Statement Fingerprint ID",
   transactionFingerprintId: "Transaction Fingerprint ID",
+  insightCount: "Insights",
 };
 
 export const contentModifiers = {
@@ -588,6 +590,37 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("time", statType)}
+      </Tooltip>
+    );
+  },
+  insightCount: (statType: StatisticType) => {
+    let contentModifier = "";
+    switch (statType) {
+      case "transaction":
+        contentModifier = contentModifiers.transaction;
+        break;
+      case "statement":
+        contentModifier = contentModifiers.statement;
+        break;
+    }
+
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              {`The number of distinct `}
+              <Anchor href={insights} target="_blank">
+                insights
+              </Anchor>
+              {` detected for each ${contentModifier}.`}
+            </p>
+          </>
+        }
+      >
+        {getLabel("insightCount")}
       </Tooltip>
     );
   },

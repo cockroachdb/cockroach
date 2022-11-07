@@ -429,6 +429,26 @@ const txnInsightsReducerObj = new CachedDataReducer(
 export const refreshTxnInsights = txnInsightsReducerObj.refresh;
 export const invalidateTxnInsights = txnInsightsReducerObj.invalidateData;
 
+const statementInsightCountsReducerObj = new CachedDataReducer(
+  clusterUiApi.getStatementInsightCount,
+  "statementInsightCounts",
+  null,
+  moment.duration(5, "m"),
+);
+
+export const refreshStatementInsightCounts =
+  statementInsightCountsReducerObj.refresh;
+
+const transactionInsightCountsReducerObj = new CachedDataReducer(
+  clusterUiApi.getTransactionInsightCount,
+  "transactionInsightCounts",
+  null,
+  moment.duration(5, "m"),
+);
+
+export const refreshTransactionInsightCounts =
+  transactionInsightCountsReducerObj.refresh;
+
 export const txnInsightsRequestKey = (
   req: clusterUiApi.TxnInsightDetailsRequest,
 ): string => req.txnExecutionID;
@@ -560,6 +580,8 @@ export interface APIReducersState {
   stmtInsights: CachedDataReducerState<StmtInsightEvent[]>;
   txnInsightDetails: KeyedCachedDataReducerState<clusterUiApi.TxnInsightDetailsResponse>;
   txnInsights: CachedDataReducerState<TxnInsightEvent[]>;
+  statementInsightCounts: CachedDataReducerState<clusterUiApi.StatementInsightCounts>;
+  transactionInsightCounts: CachedDataReducerState<clusterUiApi.TransactionInsightCounts>;
   schemaInsights: CachedDataReducerState<clusterUiApi.InsightRecommendation[]>;
   statementFingerprintInsights: KeyedCachedDataReducerState<StmtInsightEvent[]>;
   schedules: KeyedCachedDataReducerState<clusterUiApi.Schedules>;
@@ -620,6 +642,10 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [rawTraceReducerObj.actionNamespace]: rawTraceReducerObj.reducer,
   [statementFingerprintInsightsReducerObj.actionNamespace]:
     statementFingerprintInsightsReducerObj.reducer,
+  [statementInsightCountsReducerObj.actionNamespace]:
+    statementInsightCountsReducerObj.reducer,
+  [transactionInsightCountsReducerObj.actionNamespace]:
+    transactionInsightCountsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

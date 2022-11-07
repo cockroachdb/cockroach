@@ -63,6 +63,14 @@ import {
   reducer as statementFingerprintInsights,
   StatementFingerprintInsightsCachedState,
 } from "./insights/statementFingerprintInsights";
+import {
+  StatementInsightCountsState,
+  reducer as statementInsightCounts,
+} from "./insights/statementInsightCounts";
+import {
+  TransactionInsightCountsState,
+  reducer as transactionInsightCounts,
+} from "./insights/transactionInsightCounts";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -84,6 +92,8 @@ export type AdminUiState = {
   txnInsights: TxnInsightsState;
   schemaInsights: SchemaInsightsState;
   statementFingerprintInsights: StatementFingerprintInsightsCachedState;
+  statementInsightCounts: StatementInsightCountsState;
+  transactionInsightCounts: TransactionInsightCountsState;
 };
 
 export type AppState = {
@@ -110,6 +120,8 @@ export const reducers = combineReducers<AdminUiState>({
   databasesList,
   schemaInsights,
   statementFingerprintInsights,
+  statementInsightCounts,
+  transactionInsightCounts,
 });
 
 export const rootActions = {

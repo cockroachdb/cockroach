@@ -34,6 +34,7 @@ import {
 
 import { calculateTotalWorkload, syncHistory, unique } from "src/util";
 import {
+  addInsightCounts,
   AggregateStatistics,
   makeStatementsColumns,
   populateRegionNodeForStatements,
@@ -65,6 +66,7 @@ import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
+  timeScaleRangeToObj,
   timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
@@ -76,8 +78,10 @@ import moment from "moment";
 import {
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
+  StmtInsightsReq,
 } from "../api";
 import { filteredStatementsData } from "../sqlActivity/util";
+import { ExecutionInsightCountEvent } from "../insights";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -96,6 +100,7 @@ export interface StatementsPageDispatchProps {
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   resetSQLStats: (req: StatementsRequest) => void;
+  refreshInsightCount: (req: StmtInsightsReq) => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
     insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
@@ -132,6 +137,7 @@ export interface StatementsPageStateProps {
   sortSetting: SortSetting;
   filters: Filters;
   search: string;
+  insightCounts: ExecutionInsightCountEvent[];
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
@@ -303,9 +309,10 @@ export class StatementsPage extends React.Component<
 
   refreshStatements = (ts?: TimeScale): void => {
     const time = ts ?? this.props.timeScale;
+    const insightCountReq = timeScaleRangeToObj(time);
+    this.props.refreshInsightCount(insightCountReq);
     const req = stmtsRequestFromTimeScale(time);
     this.props.refreshStatements(req);
-
     this.resetPolling(time);
   };
 
@@ -347,6 +354,11 @@ export class StatementsPage extends React.Component<
         this.refreshStatements,
         Math.max(0, nextRefresh.diff(now, "milliseconds")),
       );
+    }
+
+    if (!this.props.insightCounts) {
+      const insightCountReq = timeScaleRangeToObj(this.props.timeScale);
+      this.props.refreshInsightCount(insightCountReq);
     }
 
     this.refreshDatabases();
@@ -499,14 +511,16 @@ export class StatementsPage extends React.Component<
       hasViewActivityRedactedRole,
       sortSetting,
       search,
+      insightCounts,
     } = this.props;
-    const data = filteredStatementsData(
+    const stmts = filteredStatementsData(
       filters,
       search,
       statements,
       nodeRegions,
       isTenant,
     );
+    const data = addInsightCounts(stmts, insightCounts);
     const totalWorkload = calculateTotalWorkload(statements);
     const totalCount = data.length;
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;

@@ -19,6 +19,7 @@ import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as databasesListActions } from "src/store/databasesList";
 import { actions as nodesActions } from "../store/nodes";
+import { actions as insightCountActions } from "../store/insights/statementInsightCounts";
 import {
   StatementsPageDispatchProps,
   StatementsPageStateProps,
@@ -36,6 +37,7 @@ import {
   selectFilters,
   selectSearch,
   selectStatementsLastUpdated,
+  selectStatementInsightCounts,
 } from "./statementsPage.selectors";
 import { selectTimeScale } from "../store/utils/selectors";
 import {
@@ -59,6 +61,7 @@ import {
   mapStateToRecentStatementsPageProps,
 } from "./recentStatementsPage.selectors";
 import {
+  StmtInsightsReq,
   InsertStmtDiagnosticRequest,
   StatementDiagnosticsReport,
 } from "../api";
@@ -100,6 +103,7 @@ export const ConnectedStatementsPage = withRouter(
         lastUpdated: selectStatementsLastUpdated(state),
         statementsError: selectStatementsLastError(state),
         totalFingerprints: selectTotalFingerprints(state),
+        insightCounts: selectStatementInsightCounts(state),
       },
       activePageProps: mapStateToRecentStatementsPageProps(state),
     }),
@@ -122,6 +126,8 @@ export const ConnectedStatementsPage = withRouter(
           dispatch(uiConfigActions.refreshUserSQLRoles()),
         resetSQLStats: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.reset(req)),
+        refreshInsightCount: (req: StmtInsightsReq) =>
+          dispatch(insightCountActions.refresh(req)),
         dismissAlertMessage: () =>
           dispatch(
             localStorageActions.update({

@@ -20,6 +20,7 @@ import {
   TimestampToNumber,
   TimestampToMoment,
   unset,
+  HexStringToInt64String,
 } from "src/util";
 import { DATE_FORMAT } from "src/util/format";
 import {
@@ -41,7 +42,7 @@ import {
 } from "src/sortedtable";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { StatementTableCell } from "./statementsTableContent";
+import { insightTableCell, StatementTableCell } from "./statementsTableContent";
 import {
   statisticsTableTitles,
   StatisticType,
@@ -51,6 +52,7 @@ type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
 import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
+import { ExecutionInsightCountEvent } from "../insights";
 const cx = classNames.bind(styles);
 
 export interface AggregateStatistics {
@@ -75,6 +77,7 @@ export interface AggregateStatistics {
   totalWorkload?: Long;
   regions?: string[];
   regionNodes?: string[];
+  insightCount?: number;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
@@ -211,6 +214,12 @@ export function makeStatementsColumns(
       className: cx("statements-table__col-latency"),
       cell: latencyBar,
       sort: (stmt: AggregateStatistics) => stmt.stats.service_lat.mean,
+    },
+    {
+      name: "insightCount",
+      title: statisticsTableTitles.insightCount(statType),
+      cell: (stmt: AggregateStatistics) => insightTableCell(stmt.insightCount),
+      sort: (stmt: AggregateStatistics) => stmt.insightCount,
     },
     {
       name: "contention",
@@ -378,3 +387,27 @@ export function populateRegionNodeForStatements(
     stmt.regionNodes = regionNodes;
   });
 }
+
+export const addInsightCounts = function (
+  stmts: AggregateStatistics[],
+  insightCounts: ExecutionInsightCountEvent[],
+): AggregateStatistics[] {
+  if (!insightCounts) {
+    return stmts;
+  }
+  const res: AggregateStatistics[] = [];
+  stmts.forEach(stmt => {
+    const count = insightCounts?.find(
+      insightCount =>
+        HexStringToInt64String(insightCount.fingerprintID) ===
+        stmt.aggregatedFingerprintID,
+    )?.insightCount;
+    if (count) {
+      stmt.insightCount = count;
+    } else {
+      stmt.insightCount = 0;
+    }
+    res.push(stmt);
+  });
+  return res;
+};
