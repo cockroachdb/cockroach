@@ -249,7 +249,7 @@ func (s *initServer) ServeAndWait(
 			//
 			// TODO(irfansharif): We're calling Initialize a second time here.
 			// There's no real reason to anymore, we can use
-			// SetActiveClusterVersion instead. This will let us make
+			// SetActiveVersion instead. This will let us make
 			// `Initialize` a bit stricter, which is a nice simplification to
 			// have.
 			//
