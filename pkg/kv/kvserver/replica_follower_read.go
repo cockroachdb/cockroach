@@ -37,24 +37,45 @@ var FollowerReadsEnabled = settings.RegisterBoolSetting(
 // requests that can be evaluated on a follower replica, given a sufficiently
 // advanced closed timestamp.
 func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
-	// Explanation of conditions:
-	// 1. the batch cannot have or intend to receive a timestamp set from a
-	//    server-side clock. If a follower with a lagging clock sets its timestamp
-	//    and this then allows the follower to evaluate the batch as a follower
-	//    read, then the batch might miss past writes served at higher timestamps
-	//    on the leaseholder.
-	// 2. each request in the batch needs to be "transactional", because those are
-	//    the only ones that have clearly defined semantics when served under the
-	//    closed timestamp.
-	// 3. the batch needs to be read-only, because a follower replica cannot
-	//    propose writes to Raft.
-	// 4. the batch needs to be non-locking, because unreplicated locks are only
-	//    held on the leaseholder.
+	// Various restrictions apply to a batch for it to be successfully considered
+	// for evaluation on a follower replica, which are described inline.
+	//
+	// The batch cannot have or intend to receive a timestamp set from a
+	// server-side clock. If follower with a lagging clock sets its timestamp
+	// and this then allows the follower to evaluate the batch as a follower read,
+	// then the batch might miss past writes served at higher timestamps on the
+	// leaseholder.
 	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock != nil)
 	if tsFromServerClock {
 		return false
 	}
-	return ba.IsAllTransactional() && ba.IsReadOnly() && !ba.IsLocking()
+	if len(ba.Requests) == 0 {
+		// No requests to evaluate.
+		return false
+	}
+	// Each request in the batch needs to have clearly defined semantics when
+	// served under the closed timestamp.
+	for _, ru := range ba.Requests {
+		r := ru.GetInner()
+		switch {
+		case roachpb.IsTransactional(r):
+			// Transactional requests have clear semantics when served under the
+			// closed timestamp. The request must be read-only, as follower replicas
+			// cannot propose writes to Raft. The request also needs to be
+			// non-locking, because unreplicated locks are only held on the
+			// leaseholder.
+			if !roachpb.IsReadOnly(r) || roachpb.IsLocking(r) {
+				return false
+			}
+		case r.Method() == roachpb.Export:
+		// Export requests also have clear semantics when served under the closed
+		// timestamp as well, even though they are non-transactional, as they
+		// define the start and end timestamp to export data over.
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // canServeFollowerReadRLocked tests, when a range lease could not be acquired,
