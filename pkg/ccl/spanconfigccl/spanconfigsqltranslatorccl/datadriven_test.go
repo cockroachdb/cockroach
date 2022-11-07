@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -180,10 +181,10 @@ func TestDataDriven(t *testing.T) {
 
 				var records []spanconfig.Record
 				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
-				err := sql.DescsTxn(ctx, &execCfg, func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+				err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
+					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
 					var err error
 					records, _, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
 					require.NoError(t, err)
@@ -212,10 +213,10 @@ func TestDataDriven(t *testing.T) {
 			case "full-translate":
 				sqlTranslatorFactory := tenant.SpanConfigSQLTranslatorFactory().(*spanconfigsqltranslator.Factory)
 				var records []spanconfig.Record
-				err := sql.DescsTxn(ctx, &execCfg, func(
-					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+				err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
+					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
 					var err error
 					records, _, err = spanconfig.FullTranslate(ctx, sqlTranslator)
 					require.NoError(t, err)

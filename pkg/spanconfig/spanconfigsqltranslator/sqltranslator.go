@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -34,14 +35,25 @@ import (
 // SQLTranslator implements the spanconfig.SQLTranslator interface.
 var _ spanconfig.SQLTranslator = &SQLTranslator{}
 
+// txnBundle is created to emphasize that the SQL translator is correspond to
+// a certain txn, and all fields here are a whole. It essentially keeps the
+// semantics of “translate at a snapshot in time”. This means that this
+// txnBundle should be written only in `NewTranslator`.
+type txnBundle struct {
+	txn      *kv.Txn
+	descsCol *descs.Collection
+	// TODO(janexing): we inject ie here is to replace the executor used in
+	// s.ptsProvider.GetState() in SQLTranslator.Translate().
+	ie sqlutil.InternalExecutor
+}
+
 // SQLTranslator is the concrete implementation of spanconfig.SQLTranslator.
 type SQLTranslator struct {
 	ptsProvider protectedts.Provider
 	codec       keys.SQLCodec
 	knobs       *spanconfig.TestingKnobs
 
-	txn      *kv.Txn
-	descsCol *descs.Collection
+	txnBundle txnBundle
 }
 
 // Factory is used to construct transaction-scoped SQLTranslators.
@@ -66,16 +78,36 @@ func NewFactory(
 }
 
 // NewSQLTranslator constructs and returns a transaction-scoped
-// spanconfig.SQLTranslator. The caller must ensure that the collection passed
-// in is associated with the supplied transaction.
-func (f *Factory) NewSQLTranslator(txn *kv.Txn, descsCol *descs.Collection) *SQLTranslator {
+// spanconfig.SQLTranslator. The caller must ensure that the collection and
+// internal executor and the transaction are associated with each other.
+func (f *Factory) NewSQLTranslator(
+	txn *kv.Txn, ie sqlutil.InternalExecutor, descsCol *descs.Collection,
+) *SQLTranslator {
 	return &SQLTranslator{
 		ptsProvider: f.ptsProvider,
 		codec:       f.codec,
 		knobs:       f.knobs,
-		txn:         txn,
-		descsCol:    descsCol,
+		txnBundle: txnBundle{
+			txn:      txn,
+			descsCol: descsCol,
+			ie:       ie,
+		},
 	}
+}
+
+// GetTxn returns the txn bound to this sql translator.
+func (s *SQLTranslator) GetTxn() *kv.Txn {
+	return s.txnBundle.txn
+}
+
+// GetDescsCollection returns the descriptor collection bound to this sql translator.
+func (s *SQLTranslator) GetDescsCollection() *descs.Collection {
+	return s.txnBundle.descsCol
+}
+
+// GetInternalExecutor returns the internal executor bound to this sql translator.
+func (s *SQLTranslator) GetInternalExecutor() sqlutil.InternalExecutor {
+	return s.txnBundle.ie
 }
 
 // Translate is part of the spanconfig.SQLTranslator interface.
@@ -91,7 +123,7 @@ func (s *SQLTranslator) Translate(
 	// timestamp subsystem, and the internal limits to limit the size of this
 	// table, there is scope for improvement in the future. One option could be
 	// a rangefeed-backed materialized view of the system table.
-	ptsState, err := s.ptsProvider.GetState(ctx, s.txn)
+	ptsState, err := s.ptsProvider.GetState(ctx, s.GetTxn())
 	if err != nil {
 		return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to get protected timestamp state")
 	}
@@ -110,7 +142,7 @@ func (s *SQLTranslator) Translate(
 	seen := make(map[descpb.ID]struct{})
 	var leafIDs descpb.IDs
 	for _, id := range ids {
-		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, s.txn, s.descsCol)
+		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, s.GetTxn(), s.GetDescsCollection())
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
@@ -122,13 +154,13 @@ func (s *SQLTranslator) Translate(
 		}
 	}
 
-	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, s.txn, ids)
+	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, s.GetTxn(), ids)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 	records = append(records, pseudoTableRecords...)
 
-	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, s.txn, ids)
+	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, s.GetTxn(), ids)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -138,14 +170,14 @@ func (s *SQLTranslator) Translate(
 
 	// For every unique leaf ID, generate span configurations.
 	for _, leafID := range leafIDs {
-		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, s.txn, s.descsCol, ptsStateReader)
+		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, s.GetTxn(), s.GetDescsCollection(), ptsStateReader)
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
 		records = append(records, translatedRecords...)
 	}
 
-	return records, s.txn.CommitTimestamp(), nil
+	return records, s.GetTxn().CommitTimestamp(), nil
 }
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.
