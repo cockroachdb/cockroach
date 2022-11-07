@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,7 +83,7 @@ func (s *PersistedSQLStats) IterateStatementStats(
 func (s *PersistedSQLStats) persistedStmtStatsIter(
 	ctx context.Context, options *sqlstats.IteratorOptions,
 ) (iter sqlutil.InternalRows, expectedColCnt int, err error) {
-	query, expectedColCnt := s.getFetchQueryForStmtStatsTable(options)
+	query, expectedColCnt := s.getFetchQueryForStmtStatsTable(ctx, options)
 
 	persistedIter, err := s.cfg.InternalExecutor.QueryIteratorEx(
 		ctx,
@@ -100,7 +101,7 @@ func (s *PersistedSQLStats) persistedStmtStatsIter(
 }
 
 func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
-	options *sqlstats.IteratorOptions,
+	ctx context.Context, options *sqlstats.IteratorOptions,
 ) (query string, colCnt int) {
 	selectedColumns := []string{
 		"aggregated_ts",
@@ -112,7 +113,10 @@ func (s *PersistedSQLStats) getFetchQueryForStmtStatsTable(
 		"statistics",
 		"plan",
 		"agg_interval",
-		"index_recommendations",
+	}
+
+	if s.cfg.Settings.Version.IsActive(ctx, clusterversion.AlterSystemStatementStatisticsAddIndexRecommendations) {
+		selectedColumns = append(selectedColumns, "index_recommendations")
 	}
 
 	// [1]: selection columns
