@@ -98,6 +98,7 @@ export interface StatementsPageDispatchProps {
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
   resetSQLStats: (req: StatementsRequest) => void;
+  refreshinsightCount: () => void;
   dismissAlertMessage: () => void;
   onActivateStatementDiagnostics: (
     statement: string,
@@ -310,6 +311,7 @@ export class StatementsPage extends React.Component<
   refreshStatements = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshStatements(req);
+    this.props.refreshinsightCount();
 
     this.resetPolling(this.props.timeScale.key);
   };
@@ -392,6 +394,7 @@ export class StatementsPage extends React.Component<
         this.props.refreshStatementDiagnosticsRequests();
       }
     }
+    this.props.refreshinsightCount();
   };
 
   componentWillUnmount(): void {
@@ -580,7 +583,6 @@ export class StatementsPage extends React.Component<
     // If the cluster is a tenant cluster we don't show info
     // about nodes/regions.
     populateRegionNodeForStatements(statements, nodeRegions, isTenant);
-
     // Creates a list of all possible columns,
     // hiding nodeRegions if is not multi-region and
     // hiding columns that won't be displayed for tenants.

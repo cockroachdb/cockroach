@@ -55,6 +55,14 @@ import {
   TransactionInsightDetailsState,
   reducer as transactionInsightDetails,
 } from "./insightDetails/transactionInsightDetails";
+import {
+  StatementInsightCountsState,
+  reducer as statementInsightCounts,
+} from "./insights/statementInsightCounts";
+import {
+  TransactionInsightCountsState,
+  reducer as transactionInsightCounts,
+} from "./insights/transactionInsightCounts";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -74,6 +82,8 @@ export type AdminUiState = {
   transactionInsightDetails: TransactionInsightDetailsState;
   statementInsights: StatementInsightsState;
   schemaInsights: SchemaInsightsState;
+  statementInsightCounts: StatementInsightCountsState;
+  transactionInsightCounts: TransactionInsightCountsState;
 };
 
 export type AppState = {
@@ -98,6 +108,8 @@ export const reducers = combineReducers<AdminUiState>({
   job,
   clusterLocks,
   schemaInsights,
+  statementInsightCounts,
+  transactionInsightCounts,
 });
 
 export const rootActions = {

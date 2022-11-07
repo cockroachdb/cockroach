@@ -11,7 +11,11 @@
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { refreshNodes, refreshStatements } from "src/redux/apiReducers";
+import {
+  refreshNodes,
+  refreshStatements,
+  refreshTransactionInsightCounts,
+} from "src/redux/apiReducers";
 import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
@@ -40,6 +44,7 @@ import {
 } from "./activeTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import { selectTransactionInsightCounts } from "src/views/insights/insightsSelectors";
 
 // selectStatements returns the array of AggregateStatistics to show on the
 // TransactionsPage, based on if the appAttr route parameter is set.
@@ -97,6 +102,7 @@ const fingerprintsPageActions = {
   refreshData: refreshStatements,
   refreshNodes,
   resetSQLStats: resetSQLStatsAction,
+  refreshInsightCount: refreshTransactionInsightCounts,
   onTimeScaleChange: setGlobalTimeScaleAction,
   // We use `null` when the value was never set and it will show all columns.
   // If the user modifies the selection and no columns are selected,
@@ -150,6 +156,7 @@ const TransactionsPageConnected = withRouter(
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
         statementsError: state.cachedData.statements.lastError,
+        insightCount: selectTransactionInsightCounts(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),

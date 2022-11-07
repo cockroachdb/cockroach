@@ -33,6 +33,7 @@ import {
   getTrxAppFilterOptions,
   searchTransactionsData,
   filterTransactions,
+  addInsightCounts,
 } from "./utils";
 import Long from "long";
 import { merge } from "lodash";
@@ -68,6 +69,7 @@ import {
   getValidOption,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
+import { ExecutionInsightCountEvent } from "src/insights/types";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { TransactionViewType } from "./transactionsPageTypes";
 import { isSelectedColumn } from "../columnsSelector/utils";
@@ -94,11 +96,13 @@ export interface TransactionsPageStateProps {
   pageSize?: number;
   search: string;
   sortSetting: SortSetting;
+  insightCount: ExecutionInsightCountEvent[];
 }
 
 export interface TransactionsPageDispatchProps {
   refreshData: (req: StatementsRequest) => void;
   refreshNodes: () => void;
+  refreshInsightCount: () => void;
   resetSQLStats: (req: StatementsRequest) => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onColumnsChange?: (selectedColumns: string[]) => void;
@@ -210,6 +214,7 @@ export class TransactionsPage extends React.Component<
   refreshData = (): void => {
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
+    this.props.refreshInsightCount();
     this.resetPolling(this.props.timeScale.key);
   };
 
@@ -282,6 +287,7 @@ export class TransactionsPage extends React.Component<
     if (!this.props.isTenant) {
       this.props.refreshNodes();
     }
+    this.props.refreshInsightCount();
   }
 
   onChangeSortSetting = (ss: SortSetting): void => {
@@ -402,6 +408,7 @@ export class TransactionsPage extends React.Component<
       columns: userSelectedColumnsToShow,
       sortSetting,
       search,
+      insightCount,
     } = this.props;
     const internal_app_name_prefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
@@ -490,7 +497,7 @@ export class TransactionsPage extends React.Component<
             error={this.props?.error}
             render={() => {
               const { pagination } = this.state;
-              const transactionsToDisplay: TransactionInfo[] =
+              const transactionsToDisplay: TransactionInfo[] = addInsightCounts(
                 aggregateAcrossNodeIDs(filteredTransactions, statements).map(
                   t => ({
                     stats_data: t.stats_data,
@@ -499,7 +506,9 @@ export class TransactionsPage extends React.Component<
                       ? []
                       : generateRegionNode(t, statements, nodeRegions),
                   }),
-                );
+                ),
+                insightCount,
+              );
               const { current, pageSize } = pagination;
               const hasData = data.transactions?.length > 0;
               const isUsedFilter = search?.length > 0;

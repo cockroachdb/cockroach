@@ -18,6 +18,7 @@ import { actions as analyticsActions } from "src/store/analytics";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as nodesActions } from "../store/nodes";
+import { actions as insightCountActions } from "../store/insights/statementInsightCounts";
 import {
   StatementsPageDispatchProps,
   StatementsPageStateProps,
@@ -125,6 +126,7 @@ export const ConnectedStatementsPage = withRouter(
           dispatch(uiConfigActions.refreshUserSQLRoles()),
         resetSQLStats: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.reset(req)),
+        refreshinsightCount: () => dispatch(insightCountActions.refresh()),
         dismissAlertMessage: () =>
           dispatch(
             localStorageActions.update({

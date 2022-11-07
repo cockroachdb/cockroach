@@ -21,6 +21,7 @@ import {
   sortSetting,
   filters,
   lastUpdated,
+  insightCounts,
 } from "./transactions.fixture";
 
 import { TransactionsPage } from ".";
@@ -46,10 +47,12 @@ storiesOf("Transactions Page", module)
       onSortingChange={noop}
       refreshData={noop}
       refreshNodes={noop}
+      refreshInsightCount={noop}
       resetSQLStats={noop}
       search={""}
       sortSetting={sortSetting}
       lastUpdated={lastUpdated}
+      insightCount={insightCounts}
     />
   ))
   .add("without data", () => {
@@ -65,10 +68,12 @@ storiesOf("Transactions Page", module)
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshInsightCount={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        insightCount={insightCounts}
       />
     );
   })
@@ -92,10 +97,12 @@ storiesOf("Transactions Page", module)
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshInsightCount={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        insightCount={insightCounts}
       />
     );
   })
@@ -112,10 +119,12 @@ storiesOf("Transactions Page", module)
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshInsightCount={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        insightCount={insightCounts}
       />
     );
   })
@@ -139,10 +148,12 @@ storiesOf("Transactions Page", module)
         onSortingChange={noop}
         refreshData={noop}
         refreshNodes={noop}
+        refreshInsightCount={noop}
         resetSQLStats={noop}
         search={""}
         sortSetting={sortSetting}
         lastUpdated={lastUpdated}
+        insightCount={insightCounts}
       />
     );
   });

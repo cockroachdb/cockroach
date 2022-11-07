@@ -15,6 +15,7 @@ import { Dispatch } from "redux";
 import { AppState } from "src/store";
 import { actions as nodesActions } from "src/store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { actions as insightCountActions } from "src/store/insights/transactionInsightCounts";
 import {
   TransactionsPageStateProps,
   TransactionsPageDispatchProps,
@@ -26,6 +27,7 @@ import {
   selectSortSetting,
   selectFilters,
   selectSearch,
+  selectTransactionInsightCount,
 } from "./transactionsPage.selectors";
 import { selectIsTenant } from "../store/uiConfig";
 import { nodeRegionsByIDSelector } from "../store/nodes";
@@ -81,6 +83,7 @@ export const TransactionsPageConnected = withRouter(
         nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
+        insightCount: selectTransactionInsightCount(state),
       },
       activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
@@ -89,6 +92,7 @@ export const TransactionsPageConnected = withRouter(
         refreshData: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.refresh(req)),
         refreshNodes: () => dispatch(nodesActions.refresh()),
+        refreshInsightCount: () => dispatch(insightCountActions.refresh()),
         resetSQLStats: (req: StatementsRequest) =>
           dispatch(sqlStatsActions.reset(req)),
         onTimeScaleChange: (ts: TimeScale) => {

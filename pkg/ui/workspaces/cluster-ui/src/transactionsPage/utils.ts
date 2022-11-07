@@ -29,7 +29,10 @@ import {
   computeOrUseStmtSummary,
   transactionScopedStatementKey,
   unset,
+  HexStringToInt64String,
 } from "../util";
+import { ExecutionInsightCountEvent } from "../insights";
+import { TransactionInfo } from "../transactionsTable";
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -403,4 +406,26 @@ export const aggregateAcrossNodeIDs = function (
     .mapValues(mergeTransactionStats)
     .values()
     .value();
+};
+
+export const addInsightCounts = function (
+  txns: TransactionInfo[],
+  insightCounts: ExecutionInsightCountEvent[],
+): TransactionInfo[] {
+  if (!insightCounts) {
+    return txns;
+  }
+  const res: TransactionInfo[] = [];
+  txns.forEach(txn => {
+    const count = insightCounts?.find(
+      insightCount =>
+        HexStringToInt64String(insightCount.fingerprintID) ===
+        txn.stats_data.transaction_fingerprint_id.toString(),
+    )?.insightCount;
+    if (count !== null) {
+      txn.insightCount = count;
+      res.push(txn);
+    }
+  });
+  return res;
 };

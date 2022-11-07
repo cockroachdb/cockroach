@@ -23,6 +23,8 @@ import {
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
+import { actions as statementInsightCountsActions } from "src/store/insights/statementInsightCounts";
+import { actions as transactionInsightCountsActions } from "src/store/insights/transactionInsightCounts";
 import { toRoundedDateRange } from "../../timeScaleDropdown";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
@@ -60,6 +62,14 @@ export function* updateSQLStatsTimeScaleSaga(
   yield put(sqlStatsActions.refresh(req));
 }
 
+export function* refreshStatementInsightCountsSaga() {
+  yield put(statementInsightCountsActions.refresh());
+}
+
+export function* refreshTransactionInsightCountsSaga() {
+  yield put(transactionInsightCountsActions.refresh());
+}
+
 export function* resetSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   try {
     yield call(resetSQLStats);
@@ -76,6 +86,14 @@ export function* sqlStatsSaga() {
     takeLatest(sqlStatsActions.refresh, refreshSQLStatsSaga),
     takeLatest(sqlStatsActions.request, requestSQLStatsSaga),
     takeLatest(sqlStatsActions.updateTimeScale, updateSQLStatsTimeScaleSaga),
+    takeEvery(
+      statementInsightCountsActions.refresh,
+      refreshStatementInsightCountsSaga,
+    ),
+    takeEvery(
+      transactionInsightCountsActions.refresh,
+      refreshTransactionInsightCountsSaga,
+    ),
     takeEvery(sqlStatsActions.reset, resetSQLStatsSaga),
   ]);
 }

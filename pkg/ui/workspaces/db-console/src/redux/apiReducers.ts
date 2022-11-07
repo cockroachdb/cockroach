@@ -420,6 +420,26 @@ const statementInsightsReducerObj = new CachedDataReducer(
 );
 export const refreshStatementInsights = statementInsightsReducerObj.refresh;
 
+const statementInsightCountsReducerObj = new CachedDataReducer(
+  clusterUiApi.getStatementInsightCountApi,
+  "statementInsightCounts",
+  null,
+  moment.duration(5, "m"),
+);
+
+export const refreshStatementInsightCounts =
+  statementInsightCountsReducerObj.refresh;
+
+const transactionInsightCountsReducerObj = new CachedDataReducer(
+  clusterUiApi.getTransactionInsightCountApi,
+  "transactionInsightCounts",
+  null,
+  moment.duration(5, "m"),
+);
+
+export const refreshTransactionInsightCounts =
+  transactionInsightCountsReducerObj.refresh;
+
 export const transactionInsightRequestKey = (
   req: clusterUiApi.TransactionInsightEventDetailsRequest,
 ): string => `${req.id}`;
@@ -527,6 +547,8 @@ export interface APIReducersState {
   schedule: KeyedCachedDataReducerState<clusterUiApi.Schedule>;
   snapshots: CachedDataReducerState<clusterUiApi.ListTracingSnapshotsResponseMessage>;
   snapshot: KeyedCachedDataReducerState<clusterUiApi.GetTracingSnapshotResponseMessage>;
+  statementInsightCounts: CachedDataReducerState<clusterUiApi.StatementInsightCounts>;
+  transactionInsightCounts: CachedDataReducerState<clusterUiApi.TransactionInsightCounts>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -579,6 +601,10 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [scheduleReducerObj.actionNamespace]: scheduleReducerObj.reducer,
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,
+  [statementInsightCountsReducerObj.actionNamespace]:
+    statementInsightCountsReducerObj.reducer,
+  [transactionInsightCountsReducerObj.actionNamespace]:
+    transactionInsightCountsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

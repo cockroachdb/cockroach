@@ -40,7 +40,7 @@ import {
 } from "src/sortedtable";
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { StatementTableCell } from "./statementsTableContent";
+import { insightTableCell, StatementTableCell } from "./statementsTableContent";
 import {
   statisticsTableTitles,
   NodeNames,
@@ -144,6 +144,12 @@ function makeCommonColumns(
       sort: (stmt: AggregateStatistics) => stmt.stats.service_lat.mean,
     },
     {
+      name: "insightCount",
+      title: statisticsTableTitles.insightCount(statType),
+      cell: (stmt: AggregateStatistics) => insightTableCell(stmt.insightCount),
+      sort: (stmt: AggregateStatistics) => stmt.insightCount,
+    },
+    {
       name: "contention",
       title: statisticsTableTitles.contention(statType),
       cell: contentionBar,
@@ -234,6 +240,7 @@ export interface AggregateStatistics {
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload?: Long;
   regionNodes?: string[];
+  insightCount?: number;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}

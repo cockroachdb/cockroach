@@ -19,6 +19,7 @@ import {
 } from "./sqlApi";
 import {
   BlockedContentionDetails,
+  ExecutionInsightCountEvent,
   InsightExecEnum,
   InsightNameEnum,
   StatementInsightEvent,
@@ -564,6 +565,56 @@ export function combineTransactionInsightEventDetailsState(
   return res;
 }
 
+// Transaction Insight Counts
+
+// Here we're just reusing the same query that we use to get transaction contention events.
+// Note that insight counts show the number of distinct insight types for a given execution, not the number of
+// individual insight events.
+export type TransactionInsightCounts = ExecutionInsightCountEvent[];
+
+type TransactionInsightCountResponseRow = {
+  waiting_txn_fingerprint_id: string; // hex string
+  insight_count: number;
+};
+
+function getTransactionInsightCountResponse(
+  response: SqlExecutionResponse<TransactionInsightCountResponseRow>,
+): TransactionInsightCounts {
+  if (!response.execution.txn_results[0].rows) {
+    return [];
+  }
+
+  return response.execution.txn_results[0].rows.map(row => {
+    return {
+      fingerprintID: row.waiting_txn_fingerprint_id,
+      insightCount: 1, // Because we only report transaction contention events, the insight count is hardcoded at 1.
+    };
+  });
+}
+
+const transactionInsightCountQuery = {
+  query: txnContentionQuery,
+  toState: getTransactionInsightCountResponse,
+};
+
+export function getTransactionInsightCountApi(): Promise<TransactionInsightCounts> {
+  const request: SqlExecutionRequest = {
+    statements: [
+      {
+        sql: `${transactionInsightCountQuery.query}`,
+      },
+    ],
+    execute: true,
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
+  };
+  return executeInternalSql<TransactionInsightCountResponseRow>(request).then(
+    result => {
+      return transactionInsightCountQuery.toState(result);
+    },
+  );
+}
+
 // Statements
 
 type ExecutionInsightsResponseRow = {
@@ -698,6 +749,69 @@ export function getStatementInsightsApi(): Promise<StatementInsights> {
   return executeInternalSql<ExecutionInsightsResponseRow>(request).then(
     result => {
       return statementInsightsQuery.toState(result);
+    },
+  );
+}
+
+// Statement Insight Counts
+
+// Note that insight counts show the number of distinct insight types for a given execution, not the number of
+// individual insight events.
+
+export type StatementInsightCounts = ExecutionInsightCountEvent[];
+
+type StatementInsightCountResponseRow = {
+  stmt_fingerprint_id: string; // hex string
+  cause_count: number;
+};
+
+function getStatementInsightCountResponse(
+  response: SqlExecutionResponse<StatementInsightCountResponseRow>,
+): StatementInsightCounts {
+  if (!response.execution.txn_results[0].rows) {
+    return [];
+  }
+
+  // Because we consider a problem without a cause an insight in the UI (e.g., a "Slow Execution"), we return at least
+  // 1 insight count for all events with a problem.
+  return response.execution.txn_results[0].rows.map(row => {
+    return {
+      fingerprintID: row.stmt_fingerprint_id,
+      insightCount: Math.max(1, row.cause_count),
+    };
+  });
+}
+
+const statementInsightCountQuery = {
+  query: `SELECT stmt_fingerprint_id, cause_count FROM (SELECT
+            problem,
+            cardinality(causes) AS cause_count,
+            encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
+            end_time,
+            row_number()                          OVER (
+              PARTITION BY txn_fingerprint_id
+              ORDER BY end_time DESC
+              ) AS rank
+          FROM crdb_internal.cluster_execution_insights
+          WHERE problem != 'None' AND app_name != '${INTERNAL_SQL_API_APP}'
+            ) WHERE rank = 1`,
+  toState: getStatementInsightCountResponse,
+};
+
+export function getStatementInsightCountApi(): Promise<StatementInsightCounts> {
+  const request: SqlExecutionRequest = {
+    statements: [
+      {
+        sql: `${statementInsightCountQuery.query}`,
+      },
+    ],
+    execute: true,
+    max_result_size: LARGE_RESULT_SIZE,
+    timeout: LONG_TIMEOUT,
+  };
+  return executeInternalSql<StatementInsightCountResponseRow>(request).then(
+    result => {
+      return statementInsightCountQuery.toState(result);
     },
   );
 }

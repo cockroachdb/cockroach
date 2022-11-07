@@ -308,6 +308,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "1985666523427702831",
@@ -322,6 +323,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "13649565517143827225",
@@ -337,6 +339,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "1533636712988872414",
@@ -352,6 +355,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "2461578209191418170",
@@ -366,6 +370,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "4705782015019656142",
@@ -380,6 +385,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: true,
       stats: statementStats,
+      insightCount: 1,
     },
     {
       aggregatedFingerprintID: "2298970482983227199",
@@ -395,6 +401,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "4716433305747424413",
@@ -409,6 +416,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "367828504526856403",
@@ -424,6 +432,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "14972494059652918390",
@@ -438,6 +447,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "15897033026745880862",
@@ -453,6 +463,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: true,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "49958554803360403681",
@@ -467,6 +478,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "9233296116064220812",
@@ -481,6 +493,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "6117473345491440803",
@@ -497,6 +510,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "1301242584620444873",
@@ -512,6 +526,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       fullScan: false,
       stats: statementStats,
       diagnosticsReports,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "11195381626529102926",
@@ -528,6 +543,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "18127289707013477303",
@@ -556,6 +572,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "818321793552651414",
@@ -572,6 +589,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "13217779306501326587",
@@ -588,6 +606,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "6325213731862855938",
@@ -602,6 +621,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "17372586739449521577",
@@ -616,6 +636,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "17098541896015126122",
@@ -630,6 +651,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "13350023170184726428",
@@ -646,6 +668,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "2695725667586429780",
@@ -662,6 +685,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "6754865160812330169",
@@ -678,6 +702,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "6810471486115018510",
@@ -692,6 +717,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "13265908854908549668",
@@ -706,6 +732,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "18377382163116490400",
@@ -720,6 +747,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "8695470234690735168",
@@ -736,6 +764,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "9261848985398568228",
@@ -752,6 +781,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "4176684928840388768",
@@ -766,6 +796,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "15868120298061590648",
@@ -781,6 +812,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       fullScan: false,
       stats: statementStats,
       diagnosticsReports: diagnosticsReportsInProgress,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "13070583869906258880",
@@ -796,6 +828,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "641287435601027145",
@@ -810,6 +843,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "16743225271705059729",
@@ -826,6 +860,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "6075815909800602827",
@@ -842,6 +877,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "5158086166870396309",
@@ -857,6 +893,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "13494397675172244644",
@@ -871,6 +908,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "101921598584277094",
@@ -885,6 +923,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "7880339715822034020",
@@ -900,6 +939,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
     {
       aggregatedFingerprintID: "16819876564846676829",
@@ -914,6 +954,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
       applicationName: "app",
       fullScan: false,
       stats: statementStats,
+      insightCount: 0,
     },
   ],
   statementsError: null,
@@ -935,6 +976,7 @@ const statementsPagePropsFixture: StatementsPageProps = {
   refreshUserSQLRoles: noop,
   refreshNodes: noop,
   resetSQLStats: noop,
+  refreshinsightCount: noop,
   onTimeScaleChange: noop,
   onActivateStatementDiagnostics: noop,
   onDiagnosticsModalOpen: noop,

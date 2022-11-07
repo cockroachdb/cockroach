@@ -30,7 +30,10 @@ import { selectDiagnosticsReportsPerStatement } from "../store/statementDiagnost
 import { AggregateStatistics } from "../statementsTable";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
 import { SQLStatsState } from "../store/sqlStats";
-import { localStorageSelector } from "../store/utils/selectors";
+import {
+  adminUISelector,
+  localStorageSelector,
+} from "../store/utils/selectors";
 
 type ICollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -46,6 +49,7 @@ export interface StatementsSummaryData {
   database: string;
   applicationName: string;
   stats: StatementStatistics[];
+  insightCount: number;
 }
 
 export const selectStatementsLastUpdated = createSelector(
@@ -129,14 +133,24 @@ export const selectLastReset = createSelector(sqlStatsSelector, state => {
   return formatDate(TimestampToMoment(state.data.last_reset));
 });
 
+export const selectStatementInsightCount = createSelector(
+  adminUISelector,
+  state => {
+    if (!state.statementInsightCounts.data) return null;
+    return state.statementInsightCounts.data;
+  },
+);
+
 export const selectStatements = createSelector(
   sqlStatsSelector,
   (_: AppState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
+  selectStatementInsightCount,
   (
     state: SQLStatsState,
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
+    insightCounts,
   ): AggregateStatistics[] => {
     // State is valid if we successfully fetched data, and the data has not yet been invalidated.
     if (!state.data || !state.valid) {
@@ -188,6 +202,12 @@ export const selectStatements = createSelector(
           database: stmt.database,
           applicationName: stmt.app,
           stats: [],
+          insightCount:
+            insightCounts?.find(
+              insight =>
+                insight.fingerprintID ===
+                stmt.statement_fingerprint_id?.toString(16),
+            )?.insightCount || 0,
         };
       }
       statsByStatementKey[key].stats.push(stmt.stats);
@@ -208,6 +228,7 @@ export const selectStatements = createSelector(
         applicationName: stmt.applicationName,
         stats: combineStatementStats(stmt.stats),
         diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
+        insightCount: stmt.insightCount,
       };
     });
   },

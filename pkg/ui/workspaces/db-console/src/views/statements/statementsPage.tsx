@@ -16,6 +16,7 @@ import * as protos from "src/js/protos";
 import {
   refreshNodes,
   refreshStatementDiagnosticsRequests,
+  refreshStatementInsightCounts,
   refreshStatements,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
@@ -43,6 +44,7 @@ import {
   ActiveStatementsViewDispatchProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
+  ExecutionInsightCountEvent,
 } from "@cockroachlabs/cluster-ui";
 import {
   cancelStatementDiagnosticsReportAction,
@@ -64,6 +66,7 @@ import {
 } from "./activeStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
+import { selectStatementInsightCounts } from "src/views/insights/insightsSelectors";
 
 type ICollectedStatementStatistics =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -92,6 +95,7 @@ interface StatementsSummaryData {
   database: string;
   applicationName: string;
   stats: StatementStatistics[];
+  insightCount: ExecutionInsightCountEvent[];
 }
 
 // selectStatements returns the array of AggregateStatistics to show on the
@@ -100,10 +104,12 @@ export const selectStatements = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
   (_state: AdminUIState, props: RouteComponentProps) => props,
   selectDiagnosticsReportsPerStatement,
+  selectStatementInsightCounts,
   (
     state: CachedDataReducerState<StatementsResponseMessage>,
     props: RouteComponentProps<any>,
     diagnosticsReportsPerStatement,
+    insightCounts,
   ): AggregateStatistics[] => {
     if (!state.data || !state.valid) {
       return null;
@@ -154,6 +160,11 @@ export const selectStatements = createSelector(
           database: stmt.database,
           applicationName: stmt.app,
           stats: [],
+          insightCount: insightCounts?.find(
+            insight =>
+              insight.fingerprintID.toString() ===
+              stmt.statement_fingerprint_id?.toString(16),
+          )?.insightCount,
         };
       }
       statsByStatementKey[key].stats.push(stmt.stats);
@@ -174,6 +185,7 @@ export const selectStatements = createSelector(
         applicationName: stmt.applicationName,
         stats: combineStatementStats(stmt.stats),
         diagnosticsReports: diagnosticsReportsPerStatement[stmt.statement],
+        insightCount: Number(stmt.insightCount),
       };
     });
   },
@@ -291,6 +303,7 @@ const fingerprintsPageActions = {
   refreshNodes,
   refreshUserSQLRoles,
   resetSQLStats: resetSQLStatsAction,
+  refreshinsightCount: refreshStatementInsightCounts,
   dismissAlertMessage: () => {
     return (dispatch: AppDispatch) => {
       dispatch(
