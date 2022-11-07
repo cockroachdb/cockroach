@@ -1,0 +1,5 @@
+timestamp
+YYYY-MM-DD HH24:MI:SS.US "\"ignore YY\"" \i\"gnore_me+
+2020-01-02 01:03:05
+----
+2020-01-02 01:03:05: 2020-01-02 01:03:05.000000 "ignore YY" \0"gnore_me+
