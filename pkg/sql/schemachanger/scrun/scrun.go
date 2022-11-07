@@ -24,9 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RunStatementPhase executes in-transaction schema changes for the targeted
@@ -158,22 +157,15 @@ func executeStage(
 	stageIdx int,
 	stage scplan.Stage,
 ) (err error) {
-
-	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
-
+	defer scerrors.HandleErrorOrPanic(ctx, &err,
+		"executing declarative schema change %s (rollback=%v) for %s",
+		redact.Safe(stage), redact.Safe(p.InRollback), redact.Safe(p.StatementTags()),
+	)()
 	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {
 			return err
 		}
 	}
-
-	start := timeutil.Now()
-	defer func() {
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "executing %s (rollback=%v) took %v: err = %v",
-				stage, p.InRollback, timeutil.Since(start), err)
-		}
-	}()
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
 		// Don't go through the effort to wrap the error if it's a retry or it's a
 		// cancelation.
@@ -209,7 +201,10 @@ func makeState(
 	descriptorIDs []descpb.ID,
 	rollback bool,
 	withCatalog withCatalogFunc,
-) (scpb.CurrentState, error) {
+) (state scpb.CurrentState, err error) {
+	defer scerrors.HandleErrorOrPanic(ctx, &err,
+		"rebuilding declarative schema change state from descriptors %v", redact.Safe(descriptorIDs),
+	)()
 	descError := func(desc catalog.Descriptor, err error) error {
 		return errors.Wrapf(err, "descriptor %q (%d)", desc.GetName(), desc.GetID())
 	}
@@ -273,7 +268,7 @@ func makeState(
 	}); err != nil {
 		return scpb.CurrentState{}, err
 	}
-	state, err := scpb.MakeCurrentStateFromDescriptors(descriptorStates)
+	state, err = scpb.MakeCurrentStateFromDescriptors(descriptorStates)
 	if err != nil {
 		return scpb.CurrentState{}, err
 	}

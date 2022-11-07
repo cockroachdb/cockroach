@@ -138,6 +138,8 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/sql/logictest.logicTest).Errorf": true,
 	"(*github.com/cockroachdb/cockroach/pkg/sql/logictest.logicTest).Fatalf": true,
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors.HandleErrorOrPanic": true,
+
 	"github.com/cockroachdb/cockroach/pkg/server.serverErrorf":        true,
 	"github.com/cockroachdb/cockroach/pkg/server.guaranteedExitFatal": true,
 
