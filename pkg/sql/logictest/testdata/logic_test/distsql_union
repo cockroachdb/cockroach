@@ -282,13 +282,10 @@ NULL
 2
 
 query I rowsort
-(SELECT y FROM xyz ORDER BY z) INTERSECT ALL (SELECT y FROM xyz ORDER BY z)
+(SELECT y FROM xyz ORDER BY z) INTERSECT (SELECT y FROM xyz ORDER BY z)
 ----
 NULL
 1
-1
-1
-2
 2
 
 # INTERSECT ALL and INTERSECT with a projection on the result.
