@@ -137,18 +137,18 @@ func (i rangeMerge) Span() roachpb.Span {
 	return i.span
 }
 
-type rangeReplicaRemoval struct {
+type rangeReplicaChange struct {
 	rangeID roachpb.RangeID
 	span    roachpb.Span
 }
 
-func (i rangeReplicaRemoval) String() string {
-	return fmt.Sprintf("range has unapplied descriptor change that removes current replica\n  r%d: %v",
+func (i rangeReplicaChange) String() string {
+	return fmt.Sprintf("range has unapplied descriptor change\n  r%d: %v",
 		i.rangeID,
 		i.span)
 }
 
-func (i rangeReplicaRemoval) Span() roachpb.Span {
+func (i rangeReplicaChange) Span() roachpb.Span {
 	return i.span
 }
 
