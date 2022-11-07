@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/clusterversion",
         "//pkg/jobs/jobspb",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/opgen",
