@@ -100,10 +100,13 @@ func NewSyncedCluster(
 	return c, nil
 }
 
+// ErrAfterRetry marks an error that has occurred/persisted after retries
+var ErrAfterRetry = errors.New("error occurred after retries")
+
 // The first retry is after 5s, the second and final is after 25s
 var defaultRunRetryOpt = retry.Options{
-	InitialBackoff: 5 * time.Second,
-	Multiplier:     5,
+	InitialBackoff: 100 * time.Millisecond,
+	Multiplier:     2,
 	MaxBackoff:     1 * time.Minute,
 	// This will run a total of 3 times `runWithMaybeRetry`
 	MaxRetries: 2,
@@ -141,7 +144,9 @@ func runWithMaybeRetry(
 	}
 
 	if res.Err != nil && res.Attempt > 1 {
-		res.Err = errors.Wrapf(res.Err, "Error persisted after %v attempts", res.Attempt)
+		// An error cannot be marked with more than one reference error. Since res.Err may already be marked, we create
+		// a new error here and mark it.
+		res.Err = errors.Mark(errors.Wrapf(res.Err, "error persisted after %v attempts", res.Attempt), ErrAfterRetry)
 	}
 	return res, err
 }
