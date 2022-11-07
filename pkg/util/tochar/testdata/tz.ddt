@@ -1,0 +1,47 @@
+timestamp_fmt
+2020-02-22 00:16:17
+tz
+TZ
+TZH
+TZM
+OF
+FMOF
+----
+tz: utc
+TZ: UTC
+TZH: +00
+TZM: 00
+OF: +00
+FMOF: +0
+
+timestamp_fmt tz=Australia/Adelaide
+2020-02-22 00:16:17
+tz
+TZ
+TZH
+TZM
+OF
+FMOF
+----
+tz: acdt
+TZ: ACDT
+TZH: +10
+TZM: 30
+OF: +10:30
+FMOF: +10:30
+
+timestamp_fmt tz=America/St_Johns
+2020-02-22 00:16:17
+tz
+TZ
+TZH
+TZM
+OF
+FMOF
+----
+tz: nst
+TZ: NST
+TZH: -03
+TZM: 30
+OF: -03:30
+FMOF: -3:30

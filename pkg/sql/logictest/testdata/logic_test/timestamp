@@ -550,3 +550,218 @@ query T
 SELECT (t2 - t1) FROM t
 ----
 1 day
+
+# Rough translation of the to_char tests from PostgreSQL.
+statement ok
+CREATE TABLE TIMESTAMPTZ_TBL (id SERIAL, d1 timestamp(2) with time zone);
+INSERT INTO TIMESTAMPTZ_TBL (d1) VALUES
+  ('1997-06-10 17:32:01 -07:00'),
+  ('2001-09-22T18:19:20');
+
+query T
+SELECT to_char(d1, 'DAY Day day DY Dy dy MONTH Month month MON Mon mon')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+wednesday Wednesday wednesday wed Wed wed JUNE      June      june      JUN Jun jun
+saturday  Saturday  saturday  sat Sat sat SEPTEMBER September september SEP Sep sep
+
+query T
+SELECT to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+wednesday Wednesday wednesday JUNE June june
+saturday Saturday saturday SEPTEMBER September september
+
+query T
+SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1,997 1997 997 97 7 20 2 06 24 162 11 4 2450611
+2,001 2001 001 01 1 21 3 09 38 265 22 7 2452175
+
+query T
+SELECT to_char(d1, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMD FMJ')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1,997 1997 997 97 7 20 2 6 24 162 11 4 2450611
+2,001 2001 1 1 1 21 3 9 38 265 22 7 2452175
+
+query T
+SELECT to_char(d1::timestamp, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMD FMJ')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1,997 1997 997 97 7 20 2 6 24 162 11 4 2450611
+2,001 2001 1 1 1 21 3 9 38 265 22 7 2452175
+
+query T
+SELECT to_char(d1, 'HH HH12 HH24 MI SS SSSS')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+12 12 00 32 01 1921
+06 06 18 19 20 65960
+
+query T
+SELECT to_char(d1, E'"HH:MI:SS is" HH:MI:SS "\\"text between quote marks\\""')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+HH:MI:SS is 12:32:01 "text between quote marks"
+HH:MI:SS is 06:19:20 "text between quote marks"
+
+query T
+SELECT to_char(d1, 'HH24--text--MI--text--SS')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+00--text--32--text--01
+18--text--19--text--20
+
+query T
+SELECT to_char(d1, 'YYYYTH YYYYth Jth')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1997TH 1997th 2450611th
+2001ST 2001st 2452175th
+
+query T
+SELECT to_char(d1, 'YYYY A.D. YYYY a.d. YYYY bc HH:MI:SS P.M. HH:MI:SS p.m. HH:MI:SS pm')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1997 A.D. 1997 a.d. 1997 ad 12:32:01 A.M. 12:32:01 a.m. 12:32:01 am
+2001 A.D. 2001 a.d. 2001 ad 06:19:20 P.M. 06:19:20 p.m. 06:19:20 pm
+
+query T
+SELECT to_char(d1, 'IYYY IYY IY I IW IDDD ID')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1997 997 97 7 24 164 3
+2001 001 01 1 38 265 6
+
+query T
+SELECT to_char(d1, 'FMIYYY FMIYY FMIY FMI FMIW FMIDDD FMID')
+   FROM TIMESTAMPTZ_TBL ORDER BY id
+----
+1997 997 97 7 24 164 3
+2001 1 1 1 38 265 6
+
+query T
+SELECT to_char(d, 'FF1 FF2 FF3 FF4 FF5 FF6  ff1 ff2 ff3 ff4 ff5 ff6  MS US')
+   FROM (VALUES
+       ('2018-11-02 12:34:56'::timestamptz),
+       ('2018-11-02 12:34:56.78'::timestamptz),
+       ('2018-11-02 12:34:56.78901'::timestamptz),
+       ('2018-11-02 12:34:56.78901234'::timestamptz)
+   ) d(d)
+----
+0 00 000 0000 00000 000000  0 00 000 0000 00000 000000  000 000000
+7 78 780 7800 78000 780000  7 78 780 7800 78000 780000  780 780000
+7 78 789 7890 78901 789010  7 78 789 7890 78901 789010  789 789010
+7 78 789 7890 78901 789012  7 78 789 7890 78901 789012  789 789012
+
+query TT
+SET timezone = '00:00';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
++00  +00:00
+
+query TT
+SET timezone = '+02:00';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
+-02  -02:00
+
+query TT
+SET timezone = '-13:00';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
++13  +13:00
+
+query TT
+SET timezone = '-00:30';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
++00:30  +00:30
+
+query TT
+SET timezone = '00:30';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
+-00:30  -00:30
+
+query TT
+SET timezone = '-04:30';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
++04:30  +04:30
+
+query TT
+SET timezone = '04:30';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
+-04:30  -04:30
+
+query TT
+SET timezone = '-04:15';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
++04:15  +04:15
+
+query TT
+SET timezone = '04:15';
+SELECT to_char(now(), 'OF') as of_t, to_char(now(), 'TZH:TZM') as "TZH:TZM";
+----
+-04:15  -04:15
+
+query TT
+RESET timezone;
+-- Check of, tzh, tzm with various zone offsets.
+SET timezone = '00:00';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
++00  +00:00
+
+query TT
+SET timezone = '+02:00';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
+-02  -02:00
+
+query TT
+SET timezone = '-13:00';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
++13  +13:00
+
+query TT
+SET timezone = '-00:30';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
++00:30  +00:30
+
+query TT
+SET timezone = '00:30';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
+-00:30  -00:30
+
+query TT
+SET timezone = '-04:30';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
++04:30  +04:30
+
+query TT
+SET timezone = '04:30';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
+-04:30  -04:30
+
+query TT
+SET timezone = '-04:15';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
++04:15  +04:15
+
+query TT
+SET timezone = '04:15';
+SELECT to_char(now(), 'of') as of_t, to_char(now(), 'tzh:tzm') as "tzh:tzm";
+----
+-04:15  -04:15
