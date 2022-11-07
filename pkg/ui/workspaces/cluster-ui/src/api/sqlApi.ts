@@ -60,7 +60,7 @@ export type SqlExecutionErrorMessage = {
   source: { file: string; line: number; function: "string" };
 };
 
-export const SQL_API_PATH = "/api/v2/sql/";
+export const SQL_API_PATH = "api/v2/sql/";
 
 /**
  * executeSql executes the provided SQL statements in a single transaction
