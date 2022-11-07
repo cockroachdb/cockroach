@@ -15,6 +15,7 @@ go_library(
         "//pkg/workload/examples",
         "//pkg/workload/geospatial",
         "//pkg/workload/indexes",
+        "//pkg/workload/insights",
         "//pkg/workload/jsonload",
         "//pkg/workload/kv",
         "//pkg/workload/ledger",
