@@ -157,11 +157,6 @@ type Closer interface {
 	// (wherever necessary) by the implementation. This is so since the span in
 	// the context from Init() might be already finished when Close() is called
 	// whereas the argument context will contain an unfinished span.
-	//
-	// If this Closer is an execinfra.Releasable, the implementation must be
-	// safe to execute even after Release() was called.
-	// TODO(yuzefovich): refactor this because the Release()'d objects should
-	// not be used anymore.
 	Close(context.Context) error
 }
 
