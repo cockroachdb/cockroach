@@ -500,9 +500,27 @@ func CalcReplicaDigest(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
+	// Request quota from the limiter in chunks of quotaBatchSize, to amortize the
+	// overhead of the limiter when reading many small KVs.
+	var budget int64
+	const quotaBatchSize = int64(4 << 10) // 4 KiB
+	wait := func(size int64) error {
+		if size <= budget {
+			budget -= size
+			return nil
+		}
+		batches := (size - budget + quotaBatchSize - 1) / quotaBatchSize
+		tokens := batches * quotaBatchSize
+		if err := limiter.WaitN(ctx, tokens); err != nil {
+			return err
+		}
+		budget += tokens - size
+		return nil
+	}
+
 	pointKeyVisitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
 		// Rate limit the scan through the range.
-		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
+		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
 			return err
 		}
 		// Encode the length of the key and value.
@@ -535,8 +553,8 @@ func CalcReplicaDigest(
 
 	rangeKeyVisitor := func(rangeKV storage.MVCCRangeKeyValue) error {
 		// Rate limit the scan through the range.
-		err := limiter.WaitN(ctx,
-			int64(len(rangeKV.RangeKey.StartKey)+len(rangeKV.RangeKey.EndKey)+len(rangeKV.Value)))
+		err := wait(
+			int64(len(rangeKV.RangeKey.StartKey) + len(rangeKV.RangeKey.EndKey) + len(rangeKV.Value)))
 		if err != nil {
 			return err
 		}
