@@ -1018,7 +1018,7 @@ func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
 	// TODO(ajwerner): In the future, lock this down even further.
 	multiRegionSystemDatabasePermitted := func() bool {
 		return allowMultiRegionSystemDatabase.Get(&params.EvalContext().Settings.SV) &&
-			params.SessionData().User() != username.RootUserName()
+			params.SessionData().User() == username.RootUserName()
 	}
 	if n.desc.GetID() == keys.SystemDatabaseID &&
 		!multiRegionSystemDatabasePermitted() {
