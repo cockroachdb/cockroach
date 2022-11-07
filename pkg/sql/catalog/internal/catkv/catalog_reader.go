@@ -37,6 +37,9 @@ type CatalogReader interface {
 	// ScanAll scans the entirety of the descriptor and namespace tables.
 	ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error)
 
+	// ScanAllNamespaceEntries scans all namespace entries.
+	ScanAllNamespaceEntries(context.Context, *kv.Txn) (nstree.Catalog, error)
+
 	// ScanNamespaceForDatabases scans the portion of the namespace table which
 	// contains all database name entries.
 	ScanNamespaceForDatabases(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error)
@@ -131,6 +134,24 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 		b.Header.MaxSpanRequestKeys = 0
 		descsPrefix := catalogkeys.MakeAllDescsMetadataKey(codec)
 		b.Scan(descsPrefix, descsPrefix.PrefixEnd())
+		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
+		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
+	})
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+	return mc.Catalog, nil
+}
+
+// ScanAllNamespaceEntries is part of the CatalogReader interface.
+func (cr catalogReader) ScanAllNamespaceEntries(
+	ctx context.Context, txn *kv.Txn,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	log.Eventf(ctx, "fetching all descriptors and namespace entries")
+	cq := catalogQuery{catalogReader: cr}
+	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
+		b.Header.MaxSpanRequestKeys = 0
 		nsPrefix := codec.IndexPrefix(keys.NamespaceTableID, catconstants.NamespaceTablePrimaryIndexID)
 		b.Scan(nsPrefix, nsPrefix.PrefixEnd())
 	})

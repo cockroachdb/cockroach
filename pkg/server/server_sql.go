@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/cachewarm"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -1369,6 +1370,10 @@ func (s *SQLServer) preStart(
 
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
+	cachewarm.Leases(
+		ctx, stopper, s.execCfg.Settings, s.execCfg.DB, s.execCfg.LeaseManager,
+		s.execCfg.InternalExecutorFactory,
+	)
 
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.execCfg.Settings)
 	ieMon.StartNoReserved(ctx, s.pgServer.SQLServer.GetBytesMonitor())

@@ -164,6 +164,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/cacheutil",
         "//pkg/sql/catalog/bootstrap",
+        "//pkg/sql/catalog/cachewarm",
         "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catsessiondata",
         "//pkg/sql/catalog/colinfo",

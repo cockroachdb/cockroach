@@ -1,0 +1,21 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cachewarm",
+    srcs = ["leases.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/catalog/cachewarm",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/lease",
+        "//pkg/sql/catalog/nstree",
+        "//pkg/util/log",
+        "//pkg/util/stop",
+    ],
+)
+
+get_x_data(name = "get_x_data")

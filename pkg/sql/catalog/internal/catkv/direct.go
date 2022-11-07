@@ -42,6 +42,10 @@ type Direct interface {
 		ctx context.Context, txn *kv.Txn,
 	) (nstree.Catalog, error)
 
+	// ScanAllNamespaceEntries will read all entries in the namespace table
+	// into a catalog.
+	ScanAllNamespaceEntries(ctx context.Context, txn *kv.Txn) (nstree.Catalog, error)
+
 	// MaybeGetDescriptorByIDUnvalidated looks up the descriptor given its ID if
 	// it exists. No attempt is made at validation.
 	MaybeGetDescriptorByIDUnvalidated(
