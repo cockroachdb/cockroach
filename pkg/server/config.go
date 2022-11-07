@@ -646,14 +646,20 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				details = append(details, redact.Sprintf("store %d: %+v", i, e.Properties()))
 				engines = append(engines, e)
 			} else {
-				e, err := storage.Open(ctx,
-					storage.InMemory(),
+				storageConfigs := []storage.ConfigOption{
 					storage.Attributes(spec.Attributes),
 					storage.CacheSize(cfg.CacheSize),
 					storage.MaxSize(sizeInBytes),
 					storage.EncryptionAtRest(spec.EncryptionOptions),
 					storage.Settings(cfg.Settings),
 					storage.If(storeKnobs.SmallEngineBlocks, storage.BlockSize(1)),
+				}
+				if len(storeKnobs.EngineKnobs) > 0 {
+					storageConfigs = append(storageConfigs, storeKnobs.EngineKnobs...)
+				}
+				e, err := storage.Open(ctx,
+					storage.InMemory(),
+					storageConfigs...,
 				)
 				if err != nil {
 					return Engines{}, err

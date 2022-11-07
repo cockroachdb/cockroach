@@ -40,7 +40,6 @@ go_library(
         "sst_writer.go",
         "store_properties.go",
         "temp_engine.go",
-        "testing_knobs.go",
         "verifying_iterator.go",
         ":gen-resourcelimitreached-stringer",  # keep
     ],
