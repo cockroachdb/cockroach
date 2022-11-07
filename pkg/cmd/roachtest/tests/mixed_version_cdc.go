@@ -323,12 +323,12 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(node int) versionStep {
 		t.Status("creating changefeed")
 		db := u.conn(ctx, t, node)
 
-		options := []cdcOption{
-			{"updated", ""},
-			{"resolved", fmt.Sprintf("'%s'", resolvedInterval)},
+		options := map[string]string{
+			"updated":  "",
+			"resolved": fmt.Sprintf("'%s'", resolvedInterval),
 		}
 		_, err := newChangefeedCreator(db, fmt.Sprintf("%s.%s", targetDB, targetTable), cmvt.kafka.sinkURL(ctx)).
-			With(options...).
+			With(options).
 			Create()
 		if err != nil {
 			t.Fatal(err)
