@@ -45,13 +45,10 @@ func TestMultiRegionDatabaseStats(t *testing.T) {
 	ctx := context.Background()
 	knobs := base.TestingKnobs{}
 
-	regionToNumServers := make(map[string]int, 6)
-	regionToNumServers["us-east"] = 3
-	regionToNumServers["us-west"] = 3
-
 	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
 		t,
-		regionToNumServers, /* numServers */
+		[]string{"us-east", "us-west"},
+		3, /* serversPerRegion */
 		knobs,
 		multiregionccltestutils.WithUseDatabase("d"),
 	)
