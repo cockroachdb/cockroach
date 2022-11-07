@@ -598,9 +598,22 @@ func (*Replica) sha512(
 	var timestampBuf []byte
 	hasher := sha512.New()
 
+	// Request quota from the limiter in chunks of at least targetBatchSize, to
+	// amortize the overhead of the limiter when reading many small KVs.
+	var batchSize int64
+	const targetBatchSize = int64(256 << 10) // 256 KiB
+	wait := func(size int64) error {
+		if batchSize += size; batchSize < targetBatchSize {
+			return nil
+		}
+		tokens := batchSize
+		batchSize = 0
+		return limiter.WaitN(ctx, tokens)
+	}
+
 	visitor := func(unsafeKey storage.MVCCKey, unsafeValue []byte) error {
-		// Rate Limit the scan through the range
-		if err := limiter.WaitN(ctx, int64(len(unsafeKey.Key)+len(unsafeValue))); err != nil {
+		// Rate limit the scan through the range.
+		if err := wait(int64(len(unsafeKey.Key) + len(unsafeValue))); err != nil {
 			return err
 		}
 
@@ -659,6 +672,11 @@ func (*Replica) sha512(
 				iter, span.Start, span.End, 0 /* nowNanos */, visitor,
 			)
 			iter.Close()
+			// Consume the remaining quota borrowed in the visitor. Do it even on
+			// iteration error, but prioritize returning the latter if it occurs.
+			if wErr := limiter.WaitN(ctx, batchSize); wErr != nil && err == nil {
+				err = wErr
+			}
 			if err != nil {
 				return nil, err
 			}
