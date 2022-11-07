@@ -418,6 +418,7 @@ export class TransactionsPage extends React.Component<
               onSubmitFilters={this.onSubmitFilters}
               appNames={appNames}
               regions={regions}
+              timeLabel={"Transaction fingerprint"}
               nodes={nodes.map(n => "n" + n)}
               activeFilters={activeFilters}
               filters={filters}

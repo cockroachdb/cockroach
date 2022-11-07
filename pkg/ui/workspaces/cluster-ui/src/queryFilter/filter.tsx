@@ -558,7 +558,9 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}
             <div className={filterLabel.margin}>
-              {timeLabel ? timeLabel : "Statement fingerprint runs longer than"}
+              {timeLabel
+                ? `${timeLabel} runs longer than`
+                : "Statement fingerprint runs longer than"}
             </div>
             <section className={timePair.wrapper}>
               <Input
