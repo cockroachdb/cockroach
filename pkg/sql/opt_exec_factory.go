@@ -1988,7 +1988,7 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 		return nil, err
 	}
 
-	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+	if !ef.planner.ExecCfg().IsSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
 	}
 
@@ -2002,7 +2002,7 @@ func (ef *execFactory) ConstructAlterTableUnsplitAll(index cat.Index) (exec.Node
 func (ef *execFactory) ConstructAlterTableRelocate(
 	index cat.Index, input exec.Node, relocateSubject tree.RelocateSubject,
 ) (exec.Node, error) {
-	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+	if !ef.planner.ExecCfg().IsSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
@@ -2021,7 +2021,7 @@ func (ef *execFactory) ConstructAlterRangeRelocate(
 	toStoreID tree.TypedExpr,
 	fromStoreID tree.TypedExpr,
 ) (exec.Node, error) {
-	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
+	if !ef.planner.ExecCfg().IsSystemTenant() {
 		return nil, errorutil.UnsupportedWithMultiTenancy(54250)
 	}
 
