@@ -409,7 +409,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		// i.e. allow all shadowing without AddSSTable having to check for overlapping
 		// keys. This is because RESTORE is expected to ingest into an empty keyspace.
 		// If a restore job is resumed, the un-checkpointed spans that are re-ingested
-		// will perfectly shadow (equal key, value and ts) the already ingested keys.
+		// will shadow (equal key, value; different ts) the already ingested keys.
 		//
 		// NB: disallowShadowingBelow used to be unconditionally set to logical=1.
 		// This permissive value would allow shadowing in case the RESTORE has to
