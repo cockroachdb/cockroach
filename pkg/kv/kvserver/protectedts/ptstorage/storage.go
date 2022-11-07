@@ -228,7 +228,9 @@ func (p *storage) deprecatedGetRecord(
 	return &r, nil
 }
 
-func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*ptpb.Record, error) {
+func (p *storage) GetRecord(
+	ctx context.Context, txn *kv.Txn, id uuid.UUID, executor sqlutil.InternalExecutor,
+) (*ptpb.Record, error) {
 	if txn == nil {
 		return nil, errNoTxn
 	}
@@ -242,7 +244,7 @@ func (p *storage) GetRecord(ctx context.Context, txn *kv.Txn, id uuid.UUID) (*pt
 		return p.deprecatedGetRecord(ctx, txn, id)
 	}
 
-	row, err := p.ex.QueryRowEx(ctx, "protectedts-GetRecord", txn,
+	row, err := executor.QueryRowEx(ctx, "protectedts-GetRecord", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getRecordQuery, id.GetBytesMut())
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -26,24 +27,25 @@ import (
 type streamIngestManagerImpl struct {
 	evalCtx *eval.Context
 	txn     *kv.Txn
+	ie      sqlutil.InternalExecutor
 }
 
 // CompleteStreamIngestion implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) CompleteStreamIngestion(
 	ctx context.Context, ingestionJobID jobspb.JobID, cutoverTimestamp hlc.Timestamp,
 ) error {
-	return completeStreamIngestion(ctx, r.evalCtx, r.txn, ingestionJobID, cutoverTimestamp)
+	return completeStreamIngestion(ctx, r.evalCtx, r.txn, r.ie, ingestionJobID, cutoverTimestamp)
 }
 
 // GetStreamIngestionStats implements streaming.StreamIngestManager interface.
 func (r *streamIngestManagerImpl) GetStreamIngestionStats(
 	ctx context.Context, ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
-	return getStreamIngestionStats(ctx, r.evalCtx, r.txn, ingestionJobID)
+	return getStreamIngestionStats(ctx, r.evalCtx, r.txn, r.ie, ingestionJobID)
 }
 
 func newStreamIngestManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) (eval.StreamIngestManager, error) {
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
@@ -63,7 +65,7 @@ func newStreamIngestManagerWithPrivilegesCheck(
 			pgcode.InsufficientPrivilege, "replication requires enterprise license")
 	}
 
-	return &streamIngestManagerImpl{evalCtx: evalCtx, txn: txn}, nil
+	return &streamIngestManagerImpl{evalCtx: evalCtx, txn: txn, ie: ie}, nil
 }
 
 func init() {

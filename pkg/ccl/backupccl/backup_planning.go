@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -920,7 +921,7 @@ func getScheduledBackupExecutionArgsFromSchedule(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
-	ie *sql.InternalExecutor,
+	ie sqlutil.InternalExecutor,
 	scheduleID int64,
 ) (*jobs.ScheduledJob, *backuppb.ScheduledBackupExecutionArgs, error) {
 	// Load the schedule that has spawned this job.

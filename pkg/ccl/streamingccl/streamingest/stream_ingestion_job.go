@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +38,7 @@ func completeStreamIngestion(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	ingestionJobID jobspb.JobID,
 	cutoverTimestamp hlc.Timestamp,
 ) error {
@@ -60,7 +62,11 @@ func completeStreamIngestion(
 }
 
 func getStreamIngestionStats(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ingestionJobID jobspb.JobID,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	ingestionJobID jobspb.JobID,
 ) (*streampb.StreamIngestionStats, error) {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry
 	j, err := registry.LoadJobWithTxn(ctx, ingestionJobID, txn)

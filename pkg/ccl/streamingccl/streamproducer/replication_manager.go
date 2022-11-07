@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -25,6 +26,7 @@ import (
 type replicationStreamManagerImpl struct {
 	evalCtx *eval.Context
 	txn     *kv.Txn
+	ie      sqlutil.InternalExecutor
 }
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -38,7 +40,7 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 func (r *replicationStreamManagerImpl) HeartbeatReplicationStream(
 	ctx context.Context, streamID streampb.StreamID, frontier hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
-	return heartbeatReplicationStream(ctx, r.evalCtx, r.txn, streamID, frontier)
+	return heartbeatReplicationStream(ctx, r.evalCtx, r.txn, streamID, frontier, r.ie)
 }
 
 // StreamPartition implements streaming.ReplicationStreamManager interface.
@@ -63,7 +65,7 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) (eval.ReplicationStreamManager, error) {
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {
@@ -84,7 +86,7 @@ func newReplicationStreamManagerWithPrivilegesCheck(
 			pgcode.InsufficientPrivilege, "replication requires enterprise license")
 	}
 
-	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn}, nil
+	return &replicationStreamManagerImpl{evalCtx: evalCtx, txn: txn, ie: ie}, nil
 }
 
 func init() {

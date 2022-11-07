@@ -230,7 +230,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	failedRec.Timestamp = beforeWrites
 	failedRec.Timestamp.Logical = 0
 	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &failedRec))
-	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID())
+	ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
+	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID(), ieNotBoundToTxn)
 	require.NoError(t, err)
 
 	// Verify that the record did indeed make its way down into KV where the
@@ -276,8 +277,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	// Release the failed record.
 	require.NoError(t, ptsWithDB.Release(ctx, nil, failedRec.ID.GetUUID()))
 	require.NoError(t, ptsWithDB.Release(ctx, nil, laterRec.ID.GetUUID()))
-	ie := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
-	state, err := ptsWithDB.GetState(ctx, nil /* txn */, ie)
+	state, err := ptsWithDB.GetState(ctx, nil /* txn */, ieNotBoundToTxn)
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)
 	require.Equal(t, int(state.NumRecords), len(state.Records))

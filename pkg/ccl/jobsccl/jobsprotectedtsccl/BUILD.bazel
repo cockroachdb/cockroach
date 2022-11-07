@@ -28,6 +28,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/sqlutil",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

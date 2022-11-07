@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -74,9 +75,10 @@ func checkPTSRecord(
 ) {
 	var ptsRecord *ptpb.Record
 	var err error
-	require.NoError(t, th.server.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	ief := th.server.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+	require.NoError(t, ief.TxnWithExecutor(ctx, th.server.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		ptsRecord, err = th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.
-			GetRecord(context.Background(), txn, id)
+			GetRecord(context.Background(), txn, id, ie)
 		require.NoError(t, err)
 		return nil
 	}))
@@ -199,9 +201,9 @@ INSERT INTO t values (1), (10), (100);
 			require.NotEqual(t, *ptsOnIncID, *incArgs.ProtectedTimestampRecord)
 
 			// Check that the old pts record has been released.
-			require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(
-					ctx, txn, *ptsOnIncID)
+			ief := th.server.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+			require.NoError(t, ief.TxnWithExecutor(ctx, th.server.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(ctx, txn, *ptsOnIncID, ie)
 				require.True(t, errors.Is(err, protectedts.ErrNotExists))
 				return nil
 			}))
@@ -292,9 +294,9 @@ INSERT INTO t values (1), (10), (100);
 		require.Error(t, err)
 
 		// Check that the incremental schedule's PTS is dropped
-		require.NoError(t, th.cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(
-				ctx, txn, *ptsOnIncID)
+		ief := th.server.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+		require.NoError(t, ief.TxnWithExecutor(ctx, th.server.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			_, err := th.server.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider.GetRecord(ctx, txn, *ptsOnIncID, ie)
 			require.True(t, errors.Is(err, protectedts.ErrNotExists))
 			return nil
 		}))

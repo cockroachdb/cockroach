@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -91,8 +92,8 @@ func testJobsProtectedTimestamp(
 		return jr.Succeeded(ctx, txn, jFinished.ID())
 	}))
 	_, recRemains := mkJobAndRecord()
-	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
-		_, err = ptp.GetRecord(ctx, txn, ptsID)
+	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, ptsID uuid.UUID) (err error) {
+		_, err = ptp.GetRecord(ctx, txn, ptsID, ie)
 		if err == nil {
 			return errors.New("found pts record, waiting for ErrNotExists")
 		}
@@ -102,14 +103,15 @@ func testJobsProtectedTimestamp(
 		return errors.Wrap(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
-		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := ensureNotExists(ctx, txn, recMovedToFailed.ID.GetUUID()); err != nil {
+		ief := execCfg.InternalExecutorFactory
+		return ief.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			if err := ensureNotExists(ctx, txn, ie, recMovedToFailed.ID.GetUUID()); err != nil {
 				return err
 			}
-			if err := ensureNotExists(ctx, txn, recFinished.ID.GetUUID()); err != nil {
+			if err := ensureNotExists(ctx, txn, ie, recFinished.ID.GetUUID()); err != nil {
 				return err
 			}
-			_, err := ptp.GetRecord(ctx, txn, recRemains.ID.GetUUID())
+			_, err := ptp.GetRecord(ctx, txn, recRemains.ID.GetUUID(), ie)
 			require.NoError(t, err)
 			return err
 		})
@@ -216,8 +218,8 @@ func testSchedulesProtectedTimestamp(
 		`DROP SCHEDULE $1`, sjDropped.ScheduleID())
 	require.NoError(t, err)
 	_, recSchedule := mkScheduleAndRecord("do-not-drop")
-	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ptsID uuid.UUID) (err error) {
-		_, err = ptp.GetRecord(ctx, txn, ptsID)
+	ensureNotExists := func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, ptsID uuid.UUID) (err error) {
+		_, err = ptp.GetRecord(ctx, txn, ptsID, ie)
 		if err == nil {
 			return errors.New("found pts record, waiting for ErrNotExists")
 		}
@@ -227,11 +229,11 @@ func testSchedulesProtectedTimestamp(
 		return errors.Wrap(err, "waiting for ErrNotExists")
 	}
 	testutils.SucceedsSoon(t, func() (err error) {
-		return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			if err := ensureNotExists(ctx, txn, recScheduleDropped.ID.GetUUID()); err != nil {
+		return execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			if err := ensureNotExists(ctx, txn, ie, recScheduleDropped.ID.GetUUID()); err != nil {
 				return err
 			}
-			_, err := ptp.GetRecord(ctx, txn, recSchedule.ID.GetUUID())
+			_, err := ptp.GetRecord(ctx, txn, recSchedule.ID.GetUUID(), ie)
 			require.NoError(t, err)
 			return err
 		})

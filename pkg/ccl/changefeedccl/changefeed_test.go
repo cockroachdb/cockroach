@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/sqllivenesstestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -5058,8 +5059,9 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 				if shouldPause {
 					require.NotEqual(t, uuid.Nil, details.ProtectedTimestampRecord)
 					var r *ptpb.Record
-					require.NoError(t, serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-						r, err = pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
+					ief := serverCfg.InternalExecutorFactory
+					require.NoError(t, ief.TxnWithExecutor(ctx, serverCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+						r, err = pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord, ie)
 						return err
 					}))
 					require.True(t, r.Timestamp.LessEq(*progress.GetHighWater()))
@@ -5076,9 +5078,9 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 				j, err := jr.LoadJob(ctx, feedJob.JobID())
 				require.NoError(t, err)
 				details := j.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-
-				err = serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-					r, err := pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
+				ief := serverCfg.InternalExecutorFactory
+				err = ief.TxnWithExecutor(ctx, serverCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+					r, err := pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord, ie)
 					if err != nil || r.Timestamp.Less(resolvedTs) {
 						return fmt.Errorf("expected protected timestamp record %v to have timestamp greater than %v", r, resolvedTs)
 					}

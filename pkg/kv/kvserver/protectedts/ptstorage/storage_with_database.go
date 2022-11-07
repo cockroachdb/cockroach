@@ -45,16 +45,16 @@ func (s *storageWithDatabase) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.
 }
 
 func (s *storageWithDatabase) GetRecord(
-	ctx context.Context, txn *kv.Txn, id uuid.UUID,
+	ctx context.Context, txn *kv.Txn, id uuid.UUID, executor sqlutil.InternalExecutor,
 ) (r *ptpb.Record, err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			r, err = s.s.GetRecord(ctx, txn, id)
+		err = s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			r, err = s.s.GetRecord(ctx, newTxn, id, ie)
 			return err
 		})
 		return r, err
 	}
-	return s.s.GetRecord(ctx, txn, id)
+	return s.s.GetRecord(ctx, txn, id, executor)
 }
 
 func (s *storageWithDatabase) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {

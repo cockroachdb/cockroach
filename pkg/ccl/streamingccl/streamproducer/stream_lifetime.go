@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -101,6 +102,7 @@ func updateReplicationStreamProgress(
 	streamID streampb.StreamID,
 	consumedTime hlc.Timestamp,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) (status streampb.StreamReplicationStatus, err error) {
 	const useReadLock = false
 	err = registry.UpdateJobWithTxn(ctx, jobspb.JobID(streamID), txn, useReadLock,
@@ -113,7 +115,7 @@ func updateReplicationStreamProgress(
 			}
 
 			ptsID := md.Payload.GetStreamReplication().ProtectedTimestampRecordID
-			ptsRecord, err := ptsProvider.GetRecord(ctx, txn, ptsID)
+			ptsRecord, err := ptsProvider.GetRecord(ctx, txn, ptsID, ie)
 			if err != nil {
 				return err
 			}
@@ -131,6 +133,7 @@ func updateReplicationStreamProgress(
 			// ingestion using the previous ingestion high watermark, it can fall behind the
 			// source cluster protected timestamp.
 			if shouldUpdatePTS := ptsRecord.Timestamp.Less(consumedTime); shouldUpdatePTS {
+				// TODO (janexing): update ie.
 				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, consumedTime); err != nil {
 					return err
 				}
@@ -159,6 +162,7 @@ func heartbeatReplicationStream(
 	txn *kv.Txn,
 	streamID streampb.StreamID,
 	frontier hlc.Timestamp,
+	ie sqlutil.InternalExecutor,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
@@ -177,8 +181,7 @@ func heartbeatReplicationStream(
 		}
 		status.StreamStatus = convertProducerJobStatusToStreamStatus(pj.Status())
 		payload := pj.Payload()
-		ptsRecord, err := execConfig.ProtectedTimestampProvider.GetRecord(ctx, txn,
-			payload.GetStreamReplication().ProtectedTimestampRecordID)
+		ptsRecord, err := execConfig.ProtectedTimestampProvider.GetRecord(ctx, txn, payload.GetStreamReplication().ProtectedTimestampRecordID, ie)
 		// Nil protected timestamp indicates it was not created or has been released.
 		if errors.Is(err, protectedts.ErrNotExists) {
 			return status, nil
@@ -192,7 +195,7 @@ func heartbeatReplicationStream(
 
 	return updateReplicationStreamProgress(ctx,
 		expirationTime, execConfig.ProtectedTimestampProvider, execConfig.JobRegistry,
-		streamID, frontier, txn)
+		streamID, frontier, txn, ie)
 }
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.

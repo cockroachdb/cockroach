@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -127,6 +128,10 @@ type PlanHookState interface {
 	SpanConfigReconciler() spanconfig.Reconciler
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
 	Txn() *kv.Txn
+	WithInternalExecutor(
+		ctx context.Context,
+		run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	) error
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
