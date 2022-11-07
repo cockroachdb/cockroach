@@ -12,6 +12,7 @@ package scpb
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -67,6 +68,18 @@ func (s *CurrentState) Rollback() {
 		}
 	}
 	s.InRollback = true
+}
+
+// StatementTags returns the concatenated statement tags in the current state.
+func (s CurrentState) StatementTags() string {
+	var sb strings.Builder
+	for i, stmt := range s.Statements {
+		if i > 0 {
+			sb.WriteString("; ")
+		}
+		sb.WriteString(stmt.StatementTag)
+	}
+	return sb.String()
 }
 
 // NumStatus is the number of values which Status may take on.
