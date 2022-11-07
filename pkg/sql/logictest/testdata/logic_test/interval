@@ -624,6 +624,55 @@ SELECT i, i::INTERVAL FROM interval_parsing ORDER BY pk
 -10 years 22 months -1 day 01:02:03   -8-2 -1 +1:02:03
 -10 years 22 months -1 day -01:02:03  -8-2 -1 -1:02:03
 
+# Could not find any regress tests for to_char in PG, so we're making our own up!
+statement ok
+CREATE TABLE intvl_tbl (id SERIAL, d1 INTERVAL);
+INSERT INTO intvl_tbl (d1) VALUES
+  ('355 months 40 days 123:45:12'),
+  ('-400 months -30 days -100:12:13')
+
+query T
+SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD J')
+   FROM intvl_tbl ORDER BY id
+----
+0,029 0029 029 29 9 00 3 07 1528 10690 40 1731873
+0,-33 -0033 -033 -33 -3 00 0 -04 -1717 -12030 -30 1708823
+
+query T
+SELECT to_char(d1, 'FMY,YYY FMYYYY FMYYY FMYY FMY FMCC FMQ FMMM FMWW FMDDD FMDD FMJ')
+   FROM intvl_tbl ORDER BY id
+----
+0,029 29 29 29 9 0 3 7 1528 10690 40 1731873
+0,-33 -33 -33 -33 -3 0 0 -4 -1717 -12030 -30 1708823
+
+query T
+SELECT to_char(d1, 'HH HH12 HH24 MI SS SSSS')
+   FROM intvl_tbl ORDER BY id
+----
+03 03 123 45 12 445512
+-04 -04 -100 -12 -13 -360733
+
+query T
+SELECT to_char(d1, E'"HH:MI:SS is" HH:MI:SS "\\"text between quote marks\\""')
+   FROM intvl_tbl ORDER BY id
+----
+HH:MI:SS is 03:45:12 "text between quote marks"
+HH:MI:SS is -04:-12:-13 "text between quote marks"
+
+query T
+SELECT to_char(d1, 'HH24--text--MI--text--SS')
+   FROM intvl_tbl ORDER BY id
+----
+123--text--45--text--12
+-100--text---12--text---13
+
+query T
+SELECT to_char(d1, 'YYYYTH YYYYth Jth')
+   FROM intvl_tbl ORDER BY id
+----
+0029TH 0029th 1731873rd
+-0033RD -0033rd 1708823rd
+
 # Test intervalstyle being respected in pg_indexes.
 
 statement ok

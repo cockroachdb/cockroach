@@ -1027,7 +1027,7 @@ func Truncate(d time.Duration, r time.Duration) time.Duration {
 	return d - (d % r)
 }
 
-// ParseDuration parses the given interval in the given style.
+// ParseInterval parses the given interval in the given style.
 func ParseInterval(
 	style IntervalStyle, s string, itm types.IntervalTypeMetadata,
 ) (Duration, error) {

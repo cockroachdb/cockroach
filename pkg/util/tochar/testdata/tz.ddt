@@ -45,3 +45,27 @@ TZH: -03
 TZM: 30
 OF: -03:30
 FMOF: -3:30
+
+interval_fmt
+1 day
+tz
+TZ
+TZH
+TZM
+OF
+----
+tz: [ERROR] invalid format specification for an interval value
+  DETAIL: format tz
+  HINT: intervals are not tied to specific calendar dates
+TZ: [ERROR] invalid format specification for an interval value
+  DETAIL: format TZ
+  HINT: intervals are not tied to specific calendar dates
+TZH: [ERROR] invalid format specification for an interval value
+  DETAIL: format TZH
+  HINT: intervals are not tied to specific calendar dates
+TZM: [ERROR] invalid format specification for an interval value
+  DETAIL: format TZM
+  HINT: intervals are not tied to specific calendar dates
+OF: [ERROR] invalid format specification for an interval value
+  DETAIL: format OF
+  HINT: intervals are not tied to specific calendar dates
