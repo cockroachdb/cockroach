@@ -192,6 +192,20 @@ func (ba *BatchRequest) IsAllTransactional() bool {
 	return ba.hasFlagForAll(isTxn)
 }
 
+// IsAllTransactionalOrExportRequests returns true iff every request in the
+// BatchRequest can either be part of a transaction or is an ExportRequest.
+func (ba *BatchRequest) IsAllTransactionalOrExportRequests() bool {
+	if len(ba.Requests) == 0 {
+		return false
+	}
+	for _, union := range ba.Requests {
+		if (union.GetInner().flags()&isTxn) == 0 && union.GetInner().Method() != Export {
+			return false
+		}
+	}
+	return true
+}
+
 // IsLocking returns true iff the BatchRequest intends to acquire locks.
 func (ba *BatchRequest) IsLocking() bool {
 	return ba.hasFlag(isLocking)

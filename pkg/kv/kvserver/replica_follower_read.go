@@ -43,9 +43,9 @@ func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
 	//    and this then allows the follower to evaluate the batch as a follower
 	//    read, then the batch might miss past writes served at higher timestamps
 	//    on the leaseholder.
-	// 2. each request in the batch needs to be "transactional", because those are
-	//    the only ones that have clearly defined semantics when served under the
-	//    closed timestamp.
+	// 2. Each request in the batch needs to have clearly defined semantics when
+	//    served under the closed timestamp. This includes all "transactional"
+	//    requests and ExportRequests (which are non-transactional).
 	// 3. the batch needs to be read-only, because a follower replica cannot
 	//    propose writes to Raft.
 	// 4. the batch needs to be non-locking, because unreplicated locks are only
@@ -54,7 +54,7 @@ func BatchCanBeEvaluatedOnFollower(ba *roachpb.BatchRequest) bool {
 	if tsFromServerClock {
 		return false
 	}
-	return ba.IsAllTransactional() && ba.IsReadOnly() && !ba.IsLocking()
+	return ba.IsAllTransactionalOrExportRequests() && ba.IsReadOnly() && !ba.IsLocking()
 }
 
 // canServeFollowerReadRLocked tests, when a range lease could not be acquired,
