@@ -183,9 +183,9 @@ func TestDataDriven(t *testing.T) {
 				err := sql.DescsTxn(ctx, &execCfg, func(
 					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(descsCol)
 					var err error
-					records, _, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
+					records, _, err = sqlTranslator.Translate(ctx, txn, descIDs, generateSystemSpanConfigs)
 					require.NoError(t, err)
 					return nil
 				})
@@ -215,9 +215,9 @@ func TestDataDriven(t *testing.T) {
 				err := sql.DescsTxn(ctx, &execCfg, func(
 					ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 				) error {
-					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
+					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(descsCol)
 					var err error
-					records, _, err = spanconfig.FullTranslate(ctx, sqlTranslator)
+					records, _, err = spanconfig.FullTranslate(ctx, txn, sqlTranslator)
 					require.NoError(t, err)
 					return nil
 				})

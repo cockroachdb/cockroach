@@ -233,8 +233,8 @@ func (f *fullReconciler) reconcile(
 	if err := sql.DescsTxn(ctx, f.execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		translator := f.sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
-		records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, translator)
+		translator := f.sqlTranslatorFactory.NewSQLTranslator(descsCol)
+		records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, txn, translator)
 		return err
 	}); err != nil {
 		return nil, hlc.Timestamp{}, err
@@ -495,8 +495,8 @@ func (r *incrementalReconciler) reconcile(
 						return err
 					}
 
-					translator := r.sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
-					records, _, err = translator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
+					translator := r.sqlTranslatorFactory.NewSQLTranslator(descsCol)
+					records, _, err = translator.Translate(ctx, txn, allIDs, generateSystemSpanConfigurations)
 					return err
 				}); err != nil {
 				return err

@@ -39,9 +39,7 @@ type SQLTranslator struct {
 	ptsProvider protectedts.Provider
 	codec       keys.SQLCodec
 	knobs       *spanconfig.TestingKnobs
-
-	txn      *kv.Txn
-	descsCol *descs.Collection
+	descsCol    *descs.Collection
 }
 
 // Factory is used to construct transaction-scoped SQLTranslators.
@@ -68,19 +66,18 @@ func NewFactory(
 // NewSQLTranslator constructs and returns a transaction-scoped
 // spanconfig.SQLTranslator. The caller must ensure that the collection passed
 // in is associated with the supplied transaction.
-func (f *Factory) NewSQLTranslator(txn *kv.Txn, descsCol *descs.Collection) *SQLTranslator {
+func (f *Factory) NewSQLTranslator(descsCol *descs.Collection) *SQLTranslator {
 	return &SQLTranslator{
 		ptsProvider: f.ptsProvider,
 		codec:       f.codec,
 		knobs:       f.knobs,
-		txn:         txn,
 		descsCol:    descsCol,
 	}
 }
 
 // Translate is part of the spanconfig.SQLTranslator interface.
 func (s *SQLTranslator) Translate(
-	ctx context.Context, ids descpb.IDs, generateSystemSpanConfigurations bool,
+	ctx context.Context, txn *kv.Txn, ids descpb.IDs, generateSystemSpanConfigurations bool,
 ) (records []spanconfig.Record, _ hlc.Timestamp, _ error) {
 	// Construct an in-memory view of the system.protected_ts_records table to
 	// populate the protected timestamp field on the emitted span configs.
@@ -91,7 +88,7 @@ func (s *SQLTranslator) Translate(
 	// timestamp subsystem, and the internal limits to limit the size of this
 	// table, there is scope for improvement in the future. One option could be
 	// a rangefeed-backed materialized view of the system table.
-	ptsState, err := s.ptsProvider.GetState(ctx, s.txn)
+	ptsState, err := s.ptsProvider.GetState(ctx, txn)
 	if err != nil {
 		return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to get protected timestamp state")
 	}
@@ -110,7 +107,7 @@ func (s *SQLTranslator) Translate(
 	seen := make(map[descpb.ID]struct{})
 	var leafIDs descpb.IDs
 	for _, id := range ids {
-		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, s.txn, s.descsCol)
+		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, txn, s.descsCol)
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
@@ -122,13 +119,13 @@ func (s *SQLTranslator) Translate(
 		}
 	}
 
-	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, s.txn, ids)
+	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, txn, ids)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
 	records = append(records, pseudoTableRecords...)
 
-	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, s.txn, ids)
+	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, txn, ids)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
@@ -138,14 +135,14 @@ func (s *SQLTranslator) Translate(
 
 	// For every unique leaf ID, generate span configurations.
 	for _, leafID := range leafIDs {
-		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, s.txn, s.descsCol, ptsStateReader)
+		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, txn, s.descsCol, ptsStateReader)
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
 		records = append(records, translatedRecords...)
 	}
 
-	return records, s.txn.CommitTimestamp(), nil
+	return records, txn.CommitTimestamp(), nil
 }
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.
