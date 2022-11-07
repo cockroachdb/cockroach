@@ -3537,6 +3537,16 @@ func (og *operationGenerator) selectStmt(ctx context.Context, tx pgx.Tx) (stmt *
 			}
 		}
 		if err := rows.Err(); err != nil {
+			pgErr := new(pgconn.PgError)
+			// For select statements, we can have out of memory or temporary
+			// space errors at runtime when fetching the result set. So,
+			// deal with the min here.
+			if errors.As(err, &pgErr) &&
+				stmt.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
+				return errors.Mark(errors.Wrap(err, "ROLLBACK; Successfully got expected execution error."),
+					errRunInTxnRbkSentinel,
+				)
+			}
 			return err
 		}
 		return nil
