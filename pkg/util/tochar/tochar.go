@@ -492,12 +492,30 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%0*d", zeroPad, val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_RM, DCH_rm:
-			// Roman numerals, not supporting this for now...
-			return "", pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"to_char format %s not supported",
-				fn.key.name,
-			)
+			if t.Month() == 0 && t.Year() == 0 {
+				continue
+			}
+			// Roman numerals are in reverse order, which is why the indexes
+			// are reversed.
+			var idx int
+			if t.Month() == 0 {
+				if t.Year() >= 0 {
+					idx = 0
+				} else {
+					idx = 11
+				}
+			} else if t.Month() < 0 {
+				idx = -1 * int(t.Month())
+			} else {
+				idx = 12 - int(t.Month())
+			}
+			var str string
+			if fn.key.id == DCH_RM {
+				str = ucMonthRomanNumerals[idx]
+			} else {
+				str = lcMonthRomanNumerals[idx]
+			}
+			sb.WriteString(fmt.Sprintf("%*s", fn.suffix.zeroPad(-4), str))
 		case DCH_W:
 			val := (t.Day()-1)/7 + 1
 			sb.WriteString(fmt.Sprintf("%d", val))
