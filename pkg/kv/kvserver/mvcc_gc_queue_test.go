@@ -222,9 +222,9 @@ func TestMVCCGCQueueMakeGCScoreIntentCooldown(t *testing.T) {
 		"just GCed":                {lastGC: now.Add(-1, 0), expectGC: false},
 		"future GC":                {lastGC: now.Add(1, 0), expectGC: false},
 		"MVCC GC ignores cooldown": {lastGC: now.Add(-1, 0), mvccGC: true, expectGC: true},
-		"before GC cooldown":       {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
-		"at GC cooldown":           {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds(), 0), expectGC: true},
-		"after GC cooldown":        {lastGC: now.Add(-mvccGCQueueIntentCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
+		"before GC cooldown":       {lastGC: now.Add(-mvccGCQueueCooldownDuration.Nanoseconds()+1, 0), expectGC: false},
+		"at GC cooldown":           {lastGC: now.Add(-mvccGCQueueCooldownDuration.Nanoseconds(), 0), expectGC: true},
+		"after GC cooldown":        {lastGC: now.Add(-mvccGCQueueCooldownDuration.Nanoseconds()-1, 0), expectGC: true},
 	}
 	for name, tc := range testcases {
 		tc := tc

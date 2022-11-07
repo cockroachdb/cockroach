@@ -53,18 +53,18 @@ const (
 	// for ranged intent resolution if it exceeds the timeout.
 	mvccGCQueueIntentBatchTimeout = 2 * time.Minute
 
-	// mvccGCQueueIntentCooldownDuration is the duration to wait between MVCC GC
+	// mvccGCQueueCooldownDuration is the duration to wait between MVCC GC
 	// attempts of the same range when triggered solely by intents. This is to
 	// prevent continually spinning on intents that belong to active transactions,
 	// which can't be cleaned up.
-	mvccGCQueueIntentCooldownDuration = 2 * time.Hour
+	mvccGCQueueCooldownDuration = 2 * time.Hour
 	// intentAgeNormalization is the average age of outstanding intents
 	// which amount to a score of "1" added to total replica priority.
 	intentAgeNormalization = 8 * time.Hour
 
 	// Thresholds used to decide whether to queue for MVCC GC based on keys and
 	// intents.
-	mvccGCKeyScoreThreshold          = 2
+	mvccGCKeyScoreThreshold          = 1
 	mvccGCIntentScoreThreshold       = 1
 	mvccGCDropRangeKeyScoreThreshold = 1
 
@@ -447,14 +447,28 @@ func makeMVCCGCQueueScoreImpl(
 	valScore := r.DeadFraction * r.ValuesScalableScore
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
+	scoreMet := func(score float64, minThreshold, maxThreshold float64, cooldown time.Duration) bool {
+		// Cool down rate is how much we want to cool down after previous gc based
+		// on the score. If score is at min threshold we would wait for cooldown
+		// time, it is proportionally reduced as score reaches maxThreshold and is
+		// zero at maxThreshold which means no cooldown is necessary.
+		coolDownRate := 1 - (score - minThreshold) / (maxThreshold - minThreshold)
+		adjustedCoolDown := time.Duration(int64(float64(cooldown.Nanoseconds()) * coolDownRate))
+		if score > minThreshold && (r.LastGC == 0 || r.LastGC >= adjustedCoolDown) {
+			return true
+		}
+		return false
+	}
+
 	// First determine whether we should queue based on MVCC score alone.
-	r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCKeyScoreThreshold
+	r.ShouldQueue = canAdvanceGCThreshold && scoreMet(r.FuzzFactor*valScore, mvccGCKeyScoreThreshold,
+		mvccGCKeyScoreThreshold*1.1, mvccGCQueueCooldownDuration)
 
 	// Next, determine whether we should queue based on intent score. For
 	// intents, we also enforce a cooldown time since we may not actually
 	// be able to clean up any intents (for active transactions).
-	if !r.ShouldQueue && r.FuzzFactor*r.IntentScore > mvccGCIntentScoreThreshold &&
-		(r.LastGC == 0 || r.LastGC >= mvccGCQueueIntentCooldownDuration) {
+	if !r.ShouldQueue && scoreMet(r.FuzzFactor*r.IntentScore, mvccGCIntentScoreThreshold,
+		math.MaxFloat64, mvccGCQueueCooldownDuration) {
 		r.ShouldQueue = true
 	}
 
