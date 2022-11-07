@@ -8,13 +8,12 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package tree
+package duration
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -181,9 +180,9 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
 			}
 
-			for style := range duration.IntervalStyle_value {
+			for style := range IntervalStyle_value {
 				t.Run(style, func(t *testing.T) {
-					styleVal := duration.IntervalStyle(duration.IntervalStyle_value[style])
+					styleVal := IntervalStyle(IntervalStyle_value[style])
 					dur2, err := parseDuration(styleVal, s, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
@@ -195,7 +194,7 @@ func TestValidSQLIntervalSyntax(t *testing.T) {
 					}
 
 					// Test that a Datum recognizes the format.
-					di, err := parseInterval(styleVal, test.input, test.itm)
+					di, err := ParseInterval(styleVal, test.input, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 					}
@@ -421,11 +420,11 @@ func TestPGIntervalSyntax(t *testing.T) {
 	}
 	for _, test := range testData {
 		t.Run(test.input, func(t *testing.T) {
-			for style := range duration.IntervalStyle_value {
+			for style := range IntervalStyle_value {
 				t.Run(style, func(t *testing.T) {
-					styleVal := duration.IntervalStyle(duration.IntervalStyle_value[style])
+					styleVal := IntervalStyle(IntervalStyle_value[style])
 					expectedError := test.error
-					if test.errorSQLStandard != "" && styleVal == duration.IntervalStyle_SQL_STANDARD {
+					if test.errorSQLStandard != "" && styleVal == IntervalStyle_SQL_STANDARD {
 						expectedError = test.errorSQLStandard
 					}
 
@@ -445,7 +444,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 					}
 					s := dur.String()
 					expected := test.output
-					if test.outputSQLStandard != "" && styleVal == duration.IntervalStyle_SQL_STANDARD {
+					if test.outputSQLStandard != "" && styleVal == IntervalStyle_SQL_STANDARD {
 						expected = test.outputSQLStandard
 					}
 					if s != expected {
@@ -462,7 +461,7 @@ func TestPGIntervalSyntax(t *testing.T) {
 					}
 
 					// Test that a Datum recognizes the format.
-					di, err := parseInterval(styleVal, test.input, test.itm)
+					di, err := ParseInterval(styleVal, test.input, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 					}
@@ -573,9 +572,9 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 				t.Fatalf(`%q: got "%s", expected "%s"`, test.input, s, test.output)
 			}
 
-			for style := range duration.IntervalStyle_value {
+			for style := range IntervalStyle_value {
 				t.Run(style, func(t *testing.T) {
-					dur2, err := parseDuration(duration.IntervalStyle(duration.IntervalStyle_value[style]), s, test.itm)
+					dur2, err := parseDuration(IntervalStyle(IntervalStyle_value[style]), s, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: repr "%s" is not parsable: %v`, test.input, s, err)
 					}
@@ -585,7 +584,7 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 					}
 
 					// Test that a Datum recognizes the format.
-					di, err := parseInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), test.input, test.itm)
+					di, err := ParseInterval(IntervalStyle(IntervalStyle_value[style]), test.input, test.itm)
 					if err != nil {
 						t.Fatalf(`%q: unrecognized as datum: %v`, test.input, err)
 					}
@@ -597,7 +596,7 @@ func TestISO8601IntervalSyntax(t *testing.T) {
 
 				// Test that ISO 8601 output format also round-trips
 				s4 := dur.ISO8601String()
-				di2, err := parseInterval(duration.IntervalStyle(duration.IntervalStyle_value[style]), s4, test.itm)
+				di2, err := ParseInterval(IntervalStyle(IntervalStyle_value[style]), s4, test.itm)
 				if err != nil {
 					t.Fatalf(`%q: ISO8601String "%s" unrecognized as datum: %v`, test.input, s4, err)
 				}

@@ -5,13 +5,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "duration",
-    srcs = ["duration.go"],
+    srcs = [
+        "duration.go",
+        "parse.go",
+    ],
     embed = [":duration_go_proto"],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/duration",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
         "//pkg/util/arith",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
@@ -21,10 +25,15 @@ go_library(
 go_test(
     name = "duration_test",
     size = "small",
-    srcs = ["duration_test.go"],
+    srcs = [
+        "duration_test.go",
+        "parse_test.go",
+    ],
     args = ["-test.timeout=55s"],
     embed = [":duration"],
     deps = [
+        "//pkg/sql/types",
+        "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "@com_github_stretchr_testify//require",
