@@ -362,7 +362,7 @@ export class SessionsPage extends React.Component<
             timeLabel={timeLabel}
           />
         </div>
-        <section>
+        <section className={sessionsPageCx("sessions-table-area")}>
           <div className={statementsPageCx("cl-table-statistic")}>
             <div className={"session-column-selector"}>
               <ColumnsSelector
