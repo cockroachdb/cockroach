@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/datadriven"
@@ -30,6 +32,7 @@ func TestDataDriven(t *testing.T) {
 		Style: pgdate.Style_ISO,
 		Order: pgdate.Order_YMD,
 	}
+	is := duration.IntervalStyle_POSTGRES
 	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			var ret strings.Builder
@@ -47,7 +50,7 @@ func TestDataDriven(t *testing.T) {
 					require.NoError(t, err)
 					r, err := TimeToChar(ts.In(tz), lines[0])
 					if err != nil {
-						ret.WriteString(in + ": [ERROR] " + err.Error() + strings.Join(append(errors.GetAllDetails(err), errors.GetAllHints(err)...), " ... "))
+						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
 					} else {
 						ret.WriteString(in + ": " + r)
 					}
@@ -65,7 +68,42 @@ func TestDataDriven(t *testing.T) {
 					require.NoError(t, err)
 					r, err := TimeToChar(ts.In(tz), in)
 					if err != nil {
-						ret.WriteString(in + ": [ERROR] " + err.Error() + strings.Join(append(errors.GetAllDetails(err), errors.GetAllHints(err)...), " ... "))
+						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
+					} else {
+						ret.WriteString(in + ": " + r)
+					}
+				}
+			case "interval":
+				// Input is format, followed by intervals separated by newlines.
+				// Output is the same intervals in the given format.
+				lines := strings.Split(d.Input, "\n")
+				for i, in := range lines[1:] {
+					if i > 0 {
+						ret.WriteString("\n")
+					}
+					ivl, err := duration.ParseInterval(is, in, types.IntervalTypeMetadata{})
+					require.NoError(t, err)
+					r, err := DurationToChar(ivl, lines[0])
+					if err != nil {
+						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
+					} else {
+						ret.WriteString(in + ": " + r)
+					}
+				}
+			case "interval_fmt":
+				// Input is interval, followed by formats separated by newlines.
+				// Output is the interval in the given formats.
+				lines := strings.Split(d.Input, "\n")
+				ivl, err := duration.ParseInterval(is, lines[0], types.IntervalTypeMetadata{})
+				require.NoError(t, err)
+				for i, in := range lines[1:] {
+					if i > 0 {
+						ret.WriteString("\n")
+					}
+					require.NoError(t, err)
+					r, err := DurationToChar(ivl, in)
+					if err != nil {
+						ret.WriteString(in + ": [ERROR] " + err.Error() + errorDetails(err))
 					} else {
 						ret.WriteString(in + ": " + r)
 					}
@@ -78,6 +116,19 @@ func TestDataDriven(t *testing.T) {
 	})
 }
 
+func errorDetails(err error) string {
+	var sb strings.Builder
+	for _, detail := range errors.GetAllDetails(err) {
+		sb.WriteString("\n  DETAIL: ")
+		sb.WriteString(detail)
+	}
+	for _, hint := range errors.GetAllHints(err) {
+		sb.WriteString("\n  HINT: ")
+		sb.WriteString(hint)
+	}
+	return sb.String()
+}
+
 // TestAllTimestamps does a basic sanity check that all time types are supported
 // and do not panic.
 func TestAllTimestamps(t *testing.T) {
@@ -85,6 +136,20 @@ func TestAllTimestamps(t *testing.T) {
 	for _, kw := range dchKeywords {
 		t.Run(kw.name, func(t *testing.T) {
 			_, err := TimeToChar(n, kw.name)
+			if err != nil {
+				require.True(t, pgerror.HasCandidateCode(err))
+			}
+		})
+	}
+}
+
+// TestAllIntervals does a basic sanity check that all time types are supported
+// and do not panic.
+func TestAllIntervals(t *testing.T) {
+	d := duration.MakeDuration(0, 10, 15)
+	for _, kw := range dchKeywords {
+		t.Run(kw.name, func(t *testing.T) {
+			_, err := DurationToChar(d, kw.name)
 			if err != nil {
 				require.True(t, pgerror.HasCandidateCode(err))
 			}

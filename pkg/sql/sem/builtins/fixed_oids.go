@@ -1920,6 +1920,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`to_char(timestamp: timestamp) -> string`:                                                                                                                                       992,
 	`to_char(timestamp: timestamp, format: string) -> string`:                                                                                                                       2040,
 	`to_char(timestamptz: timestamptz, format: string) -> string`:                                                                                                                   2041,
+	`to_char(interval: interval, format: string) -> string`:                                                                                                                         2042,
 	`to_char(date: date) -> string`:                                                                                                                                                 993,
 	`to_char_with_style(interval: interval, style: string) -> string`:                                                                                                               994,
 	`to_char_with_style(timestamp: timestamp, datestyle: string) -> string`:                                                                                                         995,

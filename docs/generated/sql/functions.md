@@ -661,6 +661,8 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(interval: <a href="interval.html">interval</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string assuming the Postgres IntervalStyle.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(interval: <a href="interval.html">interval</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string using the given format.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string assuming the ISO, MDY DateStyle.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string using the given format.</p>

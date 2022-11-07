@@ -2416,6 +2416,18 @@ var regularBuiltins = map[string]builtinDefinition{
 			Volatility: volatility.Immutable,
 		},
 		tree.Overload{
+			Types:      tree.ArgTypes{{"interval", types.Interval}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDInterval(args[0])
+				f := tree.MustBeDString(args[1])
+				s, err := tochar.DurationToChar(d.Duration, string(f))
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert an interval to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
 			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
