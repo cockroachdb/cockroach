@@ -37,7 +37,7 @@ describe("rest api", function () {
           "Content-Type": "application/json",
           "X-Cockroach-API-Session": "cookie",
         },
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual(
@@ -52,7 +52,7 @@ describe("rest api", function () {
       });
 
       return clusterUiApi.getDatabasesList().then(result => {
-        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(fetchMock.calls(`/${clusterUiApi.SQL_API_PATH}`).length).toBe(1);
         expect(result.databases.length).toBe(2);
       });
     });
@@ -60,7 +60,7 @@ describe("rest api", function () {
     it("correctly handles an error", function (done) {
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual(
@@ -84,7 +84,7 @@ describe("rest api", function () {
     it("correctly times out", function (done) {
       // Mock out the fetch query to /databases, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual(
@@ -305,7 +305,7 @@ describe("rest api", function () {
     it("correctly requests events", function () {
       // Mock out the fetch query
       fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
@@ -329,7 +329,7 @@ describe("rest api", function () {
       });
 
       return clusterUiApi.getNonRedactedEvents().then(result => {
-        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(fetchMock.calls(`/${clusterUiApi.SQL_API_PATH}`).length).toBe(1);
         expect(result.length).toBe(1);
       });
     });
@@ -339,7 +339,7 @@ describe("rest api", function () {
 
       // Mock out the fetch query
       fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
@@ -363,7 +363,7 @@ describe("rest api", function () {
       });
 
       return clusterUiApi.getNonRedactedEvents(req).then(result => {
-        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(fetchMock.calls(`/${clusterUiApi.SQL_API_PATH}`).length).toBe(1);
         expect(result.length).toBe(1);
       });
     });
@@ -371,7 +371,7 @@ describe("rest api", function () {
     it("correctly handles an error", function (done) {
       // Mock out the fetch query, but return a 500 status code
       fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
@@ -396,7 +396,7 @@ describe("rest api", function () {
     it("correctly times out", function (done) {
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: clusterUiApi.SQL_API_PATH,
+        matcher: `/${clusterUiApi.SQL_API_PATH}`,
         method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
           expect(JSON.parse(requestObj.body.toString())).toEqual({
