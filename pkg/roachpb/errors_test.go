@@ -180,3 +180,44 @@ func TestRefreshSpanError(t *testing.T) {
 	e2 := NewRefreshFailedError(RefreshFailedError_REASON_INTENT, Key("bar"), hlc.Timestamp{WallTime: 4})
 	require.Equal(t, "encountered recently written intent \"bar\" @0.000000004,0", e2.Error())
 }
+
+func TestNotLeaseholderError(t *testing.T) {
+	rd := &ReplicaDescriptor{
+		ReplicaID: 1, StoreID: 1, NodeID: 1,
+	}
+	for _, tc := range []struct {
+		exp string
+		err *NotLeaseHolderError
+	}{
+		{
+			exp: `[NotLeaseHolderError] r1: replica not lease holder; replica (n1,s1):1 is`,
+			err: &NotLeaseHolderError{
+				RangeID:               1,
+				DeprecatedLeaseHolder: rd,
+			},
+		},
+		{
+			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000001,0 epo=1`,
+			err: &NotLeaseHolderError{
+				RangeID: 1,
+				Lease: &Lease{
+					Start:           hlc.ClockTimestamp{WallTime: 1},
+					Replica:         *rd,
+					Epoch:           1,
+					Sequence:        2,
+					AcquisitionType: LeaseAcquisitionType_Transfer,
+				},
+			},
+		},
+		{
+			exp: `[NotLeaseHolderError] r1: replica not lease holder; lease holder unknown`,
+			err: &NotLeaseHolderError{
+				RangeID: 1,
+			},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tc.exp, tc.err.Error())
+		})
+	}
+}
