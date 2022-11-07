@@ -114,14 +114,18 @@ var defaultRunRetryOpt = retry.Options{
 // if it returns true, will result in `f` being retried using the `retryOpts`
 // If the `shouldRetryFn` is not specified (nil), then no retries will be
 // performed.
+//
+// We operate on a pointer to RunResultDetails as it has already have been
+// captured in a *RunResultDetails[] in Run, but here we may enrich with attempt
+// number and a wrapper error.
 func runWithMaybeRetry(
 	l *logger.Logger,
 	retryOpts retry.Options,
-	shouldRetryFn func(details RunResultDetails) bool,
-	f func() (RunResultDetails, error),
-) (RunResultDetails, error) {
+	shouldRetryFn func(details *RunResultDetails) bool,
+	f func() (*RunResultDetails, error),
+) (*RunResultDetails, error) {
 	var err error
-	var res RunResultDetails
+	var res *RunResultDetails
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		res, err = f()
@@ -135,10 +139,14 @@ func runWithMaybeRetry(
 		}
 		break
 	}
+
+	if res.Err != nil && res.Attempt > 1 {
+		res.Err = errors.Wrapf(res.Err, "Error persisted after %v attempts", res.Attempt)
+	}
 	return res, err
 }
 
-func defaultShouldRetry(res RunResultDetails) bool {
+func defaultShouldRetry(res *RunResultDetails) bool {
 	return errors.Is(res.Err, rperrors.ErrSSH255)
 }
 
@@ -279,7 +287,7 @@ func (c *SyncedCluster) Stop(
 	if wait {
 		display += " and waiting"
 	}
-	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -329,7 +337,7 @@ fi`,
 			sig,                       // [3]
 			waitCmd,                   // [4]
 		)
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 		return res, res.Err
 	})
 }
@@ -340,7 +348,7 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 	if err := c.Stop(ctx, l, 9, true /* wait */, 0 /* maxWait */); err != nil {
 		return err
 	}
-	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -369,7 +377,7 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 		return res, res.Err
 	})
 }
@@ -387,7 +395,7 @@ type NodeStatus struct {
 func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) ([]NodeStatus, error) {
 	display := fmt.Sprintf("%s: status", c.Name)
 	results := make([]NodeStatus, len(c.Nodes))
-	if err := c.Parallel(l, display, len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -408,7 +416,7 @@ else
   echo ${out}
 fi
 `
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
@@ -638,7 +646,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	cmd string,
 	combined bool,
 	stdout, stderr io.Writer,
-) (RunResultDetails, error) {
+) (*RunResultDetails, error) {
 	sess, res, err := c.setupSession(node)
 	if err != nil {
 		return res, err
@@ -671,7 +679,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 
 	// if running on 2+ nodes
 	if combined {
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, nodeCmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, nodeCmd) }, res)
 	} else {
 		var stdoutBuffer, stderrBuffer bytes.Buffer
 		multStdout := io.MultiWriter(&stdoutBuffer, stdout)
@@ -679,7 +687,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		sess.SetStdout(multStdout)
 		sess.SetStderr(multStderr)
 
-		getRunResult(func() error { return sess.Run(ctx, nodeCmd) }, &res)
+		getRunResult(func() error { return sess.Run(ctx, nodeCmd) }, res)
 		res.Stderr = stderrBuffer.String()
 		res.Stdout = stdoutBuffer.String()
 	}
@@ -712,8 +720,8 @@ func (c *SyncedCluster) Run(
 		display = fmt.Sprintf("%s: %s", c.Name, title)
 	}
 
-	results := make([]RunResultDetails, len(nodes))
-	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) (RunResultDetails, error) {
+	results := make([]*RunResultDetails, len(nodes))
+	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		//err is a non command failure
 		result, err := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, !stream, stdout, stderr)
 		results[i] = result
@@ -725,15 +733,30 @@ func (c *SyncedCluster) Run(
 	return selectError(results, stream, stdout)
 }
 
-func selectError(results []RunResultDetails, stream bool, stdout io.Writer) error {
-	var errs = make([]error, len(results))
+// selectError returns the error from the RunResultDetails with the highest RemoteExitStatus
+func selectError(results []*RunResultDetails, stream bool, stdout io.Writer) error {
+	var resultWithError *RunResultDetails
 	for i, r := range results {
 		if !stream {
 			fmt.Fprintf(stdout, "  %2d: %s\n%v\n", i+1, strings.TrimSpace(string(r.CombinedOut)), r.Err)
 		}
-		errs[i] = r.Err
+
+		if r.Err != nil {
+			if resultWithError == nil {
+				resultWithError = r
+				continue
+			}
+
+			if r.RemoteExitStatus > resultWithError.RemoteExitStatus {
+				resultWithError = r
+			}
+		}
 	}
-	return rperrors.SelectPriorityError(errs)
+
+	if resultWithError != nil {
+		return resultWithError.Err
+	}
+	return nil
 }
 
 // RunWithDetails runs a command on the specified nodes and returns results details and an error.
@@ -742,16 +765,24 @@ func (c *SyncedCluster) RunWithDetails(
 ) ([]RunResultDetails, error) {
 	display := fmt.Sprintf("%s: %s", c.Name, title)
 
-	// Caveat. We are capturing the state of a result even though it may
-	// be processed further by the caller of the closure (e.g. retry)
-	results := make([]RunResultDetails, len(nodes))
+	// We use pointers here as we are capturing the state of a result even though it may
+	// be processed further by the caller.
+	resultPtrs := make([]*RunResultDetails, len(nodes))
 
-	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) (RunResultDetails, error) { //nolint:errcheck
+	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) { //nolint:errcheck
 		result, err := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, false, l.Stdout, l.Stderr)
-		results[i] = result
+		resultPtrs[i] = result
 		return result, err
 	}); err != nil {
 		l.Printf("%v", err)
+	}
+
+	// Return values to preserve API
+	results := make([]RunResultDetails, len(nodes))
+	for i, v := range resultPtrs {
+		if v != nil {
+			results[i] = *v
+		}
 	}
 	return results, nil
 }
@@ -789,9 +820,9 @@ func (c *SyncedCluster) RepeatRun(
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
 	errs := make([]error, len(c.Nodes))
-	if err := c.Parallel(l, display, len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := RunResultDetails{Node: node}
+		res := &RunResultDetails{Node: node}
 		for j := 0; j < 600; j++ {
 			sess, err := c.newSession(node)
 			if err != nil {
@@ -845,11 +876,11 @@ func getCombinedResult(f func() ([]byte, error), res *RunResultDetails) {
 // given the code in `newSession`)
 // RunResultDetails is used across all functions which
 // create a session and holds error and stdout information
-func (c *SyncedCluster) setupSession(node Node) (session, RunResultDetails, error) {
+func (c *SyncedCluster) setupSession(node Node) (session, *RunResultDetails, error) {
 	res := RunResultDetails{Node: node}
 	sess, err := c.newSession(node)
 	res.Err = err
-	return sess, res, err
+	return sess, &res, err
 }
 
 // SetupSSH configures the cluster for use with SSH. This is generally run after
@@ -880,7 +911,7 @@ func (c *SyncedCluster) SetupSSH(ctx context.Context, l *logger.Logger) error {
 	// Generate an ssh key that we'll distribute to all of the nodes in the
 	// cluster in order to allow inter-node ssh.
 	var sshTar []byte
-	if err := c.Parallel(l, "generating ssh key", 1, 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "generating ssh key", 1, 0, func(i int) (*RunResultDetails, error) {
 		sess, res, err := c.setupSession(1)
 		if err != nil {
 			return res, err
@@ -902,7 +933,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		sess.SetStdout(&stdout)
 		sess.SetStderr(&stderr)
 
-		getRunResult(func() error { return sess.Run(ctx, cmd) }, &res)
+		getRunResult(func() error { return sess.Run(ctx, cmd) }, res)
 
 		res.Stdout = stdout.String()
 		res.Stderr = stderr.String()
@@ -917,7 +948,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 
 	// Skip the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
-	if err := c.Parallel(l, "distributing ssh key", len(nodes), 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "distributing ssh key", len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -928,7 +959,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		sess.SetStdin(bytes.NewReader(sshTar))
 		cmd := `tar xf -`
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "%s: output:\n%s", cmd, res.CombinedOut)
@@ -943,9 +974,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	// known hosts file in unhashed format, working around a limitation of jsch
 	// (which is used in jepsen tests).
 	ips := make([]string, len(c.Nodes), len(c.Nodes)*2)
-	if err := c.Parallel(l, "retrieving hosts", len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "retrieving hosts", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := RunResultDetails{Node: node}
+		res := &RunResultDetails{Node: node}
 		for j := 0; j < 20 && ips[i] == ""; j++ {
 			var err error
 			ips[i], err = c.GetInternalIP(ctx, node)
@@ -968,7 +999,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		ips = append(ips, c.Host(i))
 	}
 	var knownHostsData []byte
-	if err := c.Parallel(l, "scanning hosts", 1, 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "scanning hosts", 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -1003,7 +1034,7 @@ exit 1
 		sess.SetStdout(&stdout)
 		sess.SetStderr(&stderr)
 
-		getRunResult(func() error { return sess.Run(ctx, cmd) }, &res)
+		getRunResult(func() error { return sess.Run(ctx, cmd) }, res)
 
 		res.Stdout = stdout.String()
 		res.Stderr = stderr.String()
@@ -1016,7 +1047,7 @@ exit 1
 		return err
 	}
 
-	if err := c.Parallel(l, "distributing known_hosts", len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "distributing known_hosts", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -1052,7 +1083,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
         '"'"'{}'"'"' ~` + config.SharedUser + `/.ssh' \;
 fi
 `
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "%s: output:\n%s", cmd, res.CombinedOut)
@@ -1068,7 +1099,7 @@ fi
 		// additional authorized_keys to both the current user (your username on
 		// gce and the shared user on aws) as well as to the shared user on both
 		// platforms.
-		if err := c.Parallel(l, "adding additional authorized keys", len(c.Nodes), 0, func(i int) (RunResultDetails, error) {
+		if err := c.Parallel(l, "adding additional authorized keys", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 			node := c.Nodes[i]
 			sess, res, err := c.setupSession(node)
 			if err != nil {
@@ -1099,7 +1130,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
         "${tmp2}" ~` + config.SharedUser + `/.ssh/authorized_keys
 fi
 `
-			getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+			getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 			if res.Err != nil {
 				return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
@@ -1133,7 +1164,7 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 	// Generate the ca, client and node certificates on the first node.
 	var msg string
 	display := fmt.Sprintf("%s: initializing certs", c.Name)
-	if err := c.Parallel(l, display, 1, 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		sess, res, err := c.setupSession(1)
 		if err != nil {
 			return res, err
@@ -1154,7 +1185,7 @@ mkdir -p certs
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			msg = fmt.Sprintf("%s: %v", res.CombinedOut, res.Err)
@@ -1220,7 +1251,7 @@ func (c *SyncedCluster) createTenantCertBundle(
 	ctx context.Context, l *logger.Logger, bundleName string, tenantID int, nodeNames []string,
 ) error {
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
-	return c.Parallel(l, display, 1, 0, func(i int) (RunResultDetails, error) {
+	return c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -1258,7 +1289,7 @@ tar cvf %[5]s $CERT_DIR
 			bundleName,
 		)
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "certificate creation error: %s", res.CombinedOut)
@@ -1338,7 +1369,7 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 ) bool {
 	var existsErr error
 	display := fmt.Sprintf("%s: checking %s", c.Name, path)
-	if err := c.Parallel(l, display, 1, 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -1346,7 +1377,7 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 		}
 		defer sess.Close()
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, `test -e `+path) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, `test -e `+path) }, res)
 
 		existsErr = res.Err
 		return res, nil
@@ -1368,9 +1399,9 @@ func (c *SyncedCluster) createNodeCertArguments(
 	nodes := allNodes(len(c.VMs))
 	if !c.IsLocal() {
 		ips = make([]string, len(nodes))
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (RunResultDetails, error) {
+		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*RunResultDetails, error) {
 			node := nodes[i]
-			res := RunResultDetails{Node: node}
+			res := &RunResultDetails{Node: node}
 
 			res.Stdout, res.Err = c.GetInternalIP(ctx, node)
 			ips[i] = res.Stdout
@@ -1415,7 +1446,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 	}
 
 	display := c.Name + ": distributing certs"
-	return c.Parallel(l, display, len(nodes), 0, func(i int) (RunResultDetails, error) {
+	return c.Parallel(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := nodes[i]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -1434,7 +1465,7 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 			cmd += "tar xf -"
 		}
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
@@ -2105,9 +2136,9 @@ func (c *SyncedCluster) pghosts(
 	ctx context.Context, l *logger.Logger, nodes Nodes,
 ) (map[Node]string, error) {
 	ips := make([]string, len(nodes))
-	if err := c.Parallel(l, "", len(nodes), 0, func(i int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := nodes[i]
-		res := RunResultDetails{Node: node}
+		res := &RunResultDetails{Node: node}
 		res.Stdout, res.Err = c.GetInternalIP(ctx, node)
 		ips[i] = res.Stdout
 		return res, errors.Wrapf(res.Err, "pghosts")
@@ -2216,12 +2247,8 @@ func (c *SyncedCluster) Parallel(
 	l *logger.Logger,
 	display string,
 	count, concurrency int,
-	fn func(i int) (RunResultDetails, error),
+	fn func(i int) (*RunResultDetails, error),
 ) error {
-	// FIXME: according to ParallelE, if err != nil, then failed contains the failures for each node
-	// however right now, we get failures when the error == nil, and report on them
-	// why tho? this should behave consistently
-	// if any failed - then pick an error, and return that
 	failed, err := c.ParallelE(l, display, count, concurrency, fn)
 	if err != nil {
 		sort.Slice(failed, func(i, j int) bool { return failed[i].Index < failed[j].Index })
@@ -2241,13 +2268,16 @@ func (c *SyncedCluster) Parallel(
 // `config.MaxConcurrency` if it is lower) in parallel. If `concurrency` is
 // 0, then it defaults to `count`.
 //
+// The function returns a pointer to RunResultDetails as we may enrich
+// the result with retry information (attempt number, wrapper error)
+//
 // If err is non-nil, the slice of ParallelResults will contain the
 // results from any of the failed invocations.
 func (c *SyncedCluster) ParallelE(
 	l *logger.Logger,
 	display string,
 	count, concurrency int,
-	fn func(i int) (RunResultDetails, error),
+	fn func(i int) (*RunResultDetails, error),
 ) ([]ParallelResult, error) {
 	if concurrency == 0 || concurrency > count {
 		concurrency = count
@@ -2264,7 +2294,7 @@ func (c *SyncedCluster) ParallelE(
 	startNext := func() {
 		go func(i int) {
 			defer wg.Done()
-			res, err := runWithMaybeRetry(l, defaultRunRetryOpt, defaultShouldRetry, func() (RunResultDetails, error) { return fn(i) })
+			res, err := runWithMaybeRetry(l, defaultRunRetryOpt, defaultShouldRetry, func() (*RunResultDetails, error) { return fn(i) })
 			results <- ParallelResult{i, res.CombinedOut, err}
 		}(index)
 		index++
