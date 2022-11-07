@@ -290,7 +290,7 @@ var testCases = []testCase{
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
-					return tCtx.pts.UpdateTimestamp(ctx, txn, randomID(tCtx), hlc.Timestamp{WallTime: 1})
+					return tCtx.pts.UpdateTimestamp(ctx, txn, ie, randomID(tCtx), hlc.Timestamp{WallTime: 1})
 				})
 				require.EqualError(t, err, protectedts.ErrNotExists.Error())
 			}),
@@ -450,7 +450,7 @@ type updateTimestampOp struct {
 func (p updateTimestampOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	id := pickOneRecord(tCtx)
 	err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-		return tCtx.pts.UpdateTimestamp(ctx, txn, id, p.updateTimestamp)
+		return tCtx.pts.UpdateTimestamp(ctx, txn, ie, id, p.updateTimestamp)
 	})
 	if !testutils.IsError(err, p.expErr) {
 		t.Fatalf("expected error to match %q, got %q", p.expErr, err)

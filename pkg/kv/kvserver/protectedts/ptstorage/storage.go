@@ -71,9 +71,13 @@ func New(
 var errNoTxn = errors.New("must provide a non-nil transaction")
 
 func (p *storage) UpdateTimestamp(
-	ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	id uuid.UUID,
+	timestamp hlc.Timestamp,
 ) error {
-	row, err := p.ex.QueryRowEx(ctx, "protectedts-update", txn,
+	row, err := ie.QueryRowEx(ctx, "protectedts-update", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		updateTimestampQuery, id.GetBytesMut(), timestamp.AsOfSystemTime())
 	if err != nil {

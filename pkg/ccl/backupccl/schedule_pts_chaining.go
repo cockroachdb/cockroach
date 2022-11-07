@@ -152,7 +152,9 @@ func maybeUpdateSchedulePTSRecord(
 				return errors.AssertionFailedf("incremental backup has unexpected chaining action %d on"+
 					" backup job details", backupDetails.SchedulePTSChainingRecord.Action)
 			}
-			if err := manageIncrementalBackupPTSChaining(ctx, backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord, backupDetails.EndTime, exec, txn, scheduleID); err != nil {
+			if err := manageIncrementalBackupPTSChaining(ctx,
+				backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord,
+				backupDetails.EndTime, exec, txn, ie, scheduleID); err != nil {
 				return errors.Wrap(err, "failed to manage chaining of pts record during a inc backup")
 			}
 		case backuppb.ScheduledBackupExecutionArgs_FULL:
@@ -260,12 +262,13 @@ func manageIncrementalBackupPTSChaining(
 	tsToProtect hlc.Timestamp,
 	exec *sql.ExecutorConfig,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	scheduleID int64,
 ) error {
 	if ptsRecordID == nil {
 		return errors.AssertionFailedf("unexpected nil pts record id on incremental schedule %d", scheduleID)
 	}
-	err := exec.ProtectedTimestampProvider.UpdateTimestamp(ctx, txn, *ptsRecordID, tsToProtect)
+	err := exec.ProtectedTimestampProvider.UpdateTimestamp(ctx, txn, ie, *ptsRecordID, tsToProtect)
 	// If we cannot find the pts record to update it is possible that a concurrent
 	// full backup has released the record, and written a new record on the
 	// incremental schedule. This should only happen if this is an "overhang"

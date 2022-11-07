@@ -1319,7 +1319,8 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 	} else {
 		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
-		if err := pts.UpdateTimestamp(ctx, txn, recordID, highWater); err != nil {
+		// TODO(janexing): update the ie after refactoring Job.Update().
+		if err := pts.UpdateTimestamp(ctx, txn, nil /* ie */, recordID, highWater); err != nil {
 			return err
 		}
 	}
