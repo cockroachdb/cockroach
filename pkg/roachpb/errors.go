@@ -290,6 +290,7 @@ type ErrorDetailType int
 // This lists all ErrorDetail types. The numeric values in this list are used to
 // identify corresponding timeseries. The values correspond to the proto oneof
 // values.
+//
 //go:generate stringer -type=ErrorDetailType
 const (
 	NotLeaseHolderErrType                   ErrorDetailType = 1
@@ -488,12 +489,12 @@ func (e *NotLeaseHolderError) message(_ *Error) string {
 	} else {
 		fmt.Fprint(&buf, "replica not lease holder; ")
 	}
-	if e.LeaseHolder == nil {
-		fmt.Fprint(&buf, "lease holder unknown")
-	} else if e.Lease != nil {
+	if e.Lease != nil {
 		fmt.Fprintf(&buf, "current lease is %s", e.Lease)
+	} else if e.DeprecatedLeaseHolder != nil {
+		fmt.Fprintf(&buf, "replica %s is", *e.DeprecatedLeaseHolder)
 	} else {
-		fmt.Fprintf(&buf, "replica %s is", *e.LeaseHolder)
+		fmt.Fprint(&buf, "lease holder unknown")
 	}
 	return buf.String()
 }
