@@ -546,3 +546,38 @@ J
 3 years 6 months 01:02:03
 ----
 3 years 6 months 01:02:03: 1722306
+
+# RM
+timestamp
+RM"x"
+2020-02-01 BC 01:02:03
+2020-12-01 01:02:03
+2020-01-01 01:02:03
+----
+2020-02-01 BC 01:02:03: II  x
+2020-12-01 01:02:03: XII x
+2020-01-01 01:02:03: I   x
+
+timestamp
+rm"< spaces here"
+2020-02-01 BC 01:02:03
+2020-12-01 01:02:03
+2020-01-01 01:02:03
+----
+2020-02-01 BC 01:02:03: ii  < spaces here
+2020-12-01 01:02:03: xii < spaces here
+2020-01-01 01:02:03: i   < spaces here
+
+interval
+FMRM" < no spaces here"
+1 day
+1 month 1 day
+-1 month 1 day
+-13 months
+13 months
+----
+1 day:  < no spaces here
+1 month 1 day: I < no spaces here
+-1 month 1 day: XI < no spaces here
+-13 months: XI < no spaces here
+13 months: I < no spaces here
