@@ -108,10 +108,12 @@ func TestCanSendToFollower(t *testing.T) {
 		txn.GlobalUncertaintyLimit = ts
 		return txn
 	}
-	batch := func(txn *roachpb.Transaction, req roachpb.Request) *roachpb.BatchRequest {
+	batch := func(txn *roachpb.Transaction, reqs ...roachpb.Request) *roachpb.BatchRequest {
 		ba := &roachpb.BatchRequest{}
 		ba.Txn = txn
-		ba.Add(req)
+		for _, req := range reqs {
+			ba.Add(req)
+		}
 		return ba
 	}
 	withBatchTimestamp := func(ba *roachpb.BatchRequest, ts hlc.Timestamp) *roachpb.BatchRequest {
@@ -146,7 +148,17 @@ func TestCanSendToFollower(t *testing.T) {
 		{
 			name: "stale non-txn export batch",
 			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), stale),
-			exp:  false,
+			exp:  true,
+		},
+		{
+			name: "stale non-txn multiple exports batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}, &roachpb.ExportRequest{}), stale),
+			exp:  true,
+		},
+		{
+			name: "stale non-txn mixed export-scan batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}, &roachpb.ScanRequest{}), stale),
+			exp:  true,
 		},
 		{
 			name: "current-time non-txn batch",
@@ -156,6 +168,11 @@ func TestCanSendToFollower(t *testing.T) {
 		{
 			name: "current-time non-txn export batch",
 			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), current),
+			exp:  false,
+		},
+		{
+			name: "current-time non-txn multiple exports batch",
+			ba:   withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}, &roachpb.ExportRequest{}), current),
 			exp:  false,
 		},
 		{
@@ -275,7 +292,7 @@ func TestCanSendToFollower(t *testing.T) {
 			name:     "stale non-txn export batch, global reads policy",
 			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), stale),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
-			exp:      false,
+			exp:      true,
 		},
 		{
 			name:     "current-time non-txn batch, global reads policy",
@@ -287,7 +304,7 @@ func TestCanSendToFollower(t *testing.T) {
 			name:     "current-time non-txn export batch, global reads policy",
 			ba:       withBatchTimestamp(batch(nil, &roachpb.ExportRequest{}), current),
 			ctPolicy: roachpb.LEAD_FOR_GLOBAL_READS,
-			exp:      false,
+			exp:      true,
 		},
 		{
 			name:     "future non-txn batch, global reads policy",
