@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -71,6 +73,9 @@ func (b *Builtins) DescriptorWithPostDeserializationChanges(
 	db, err := descbuilder.FromBytesAndMVCCTimestamp(encodedDescriptor, mvccTimestampSentinel)
 	if err != nil {
 		return nil, err
+	}
+	if db == nil {
+		return nil, pgerror.New(pgcode.InvalidBinaryRepresentation, "empty descriptor")
 	}
 	if err := db.RunPostDeserializationChanges(); err != nil {
 		return nil, err
