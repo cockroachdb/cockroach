@@ -11,6 +11,7 @@
 import { unset } from "src/util";
 import {
   ExecutionDetails,
+  ExecutionInsightCount,
   getInsightFromCause,
   Insight,
   InsightExecEnum,
@@ -23,6 +24,7 @@ import {
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
+import { indexOf } from "lodash";
 
 export const filterTransactionInsights = (
   transactions: TxnInsightEvent[] | null,
@@ -419,4 +421,58 @@ export function getTxnInsightRecommendations(
     recs.push(getRecommendationForExecInsight(insight, execDetails)),
   );
   return recs;
+}
+
+// The functions below de-duplicate insights of the same type for a given fingerprint.
+// The front-end requires de-duplicated insights for the fingerprints pages because the backend has a problem+cause
+// definition for insight types, and the SQL API query selects distinct on fingerprint, problem, and cause.
+
+export function getStmtFingerprintInsightCounts(
+  insightEvents: StmtInsightEvent[],
+): ExecutionInsightCount[] {
+  if (!insightEvents || insightEvents.length === 0) {
+    return null;
+  }
+  const result: ExecutionInsightCount[] = [];
+  const stmtInsightMap = new Map<string, Set<InsightNameEnum>>();
+  insightEvents.forEach(event => {
+    const insightsSet =
+      stmtInsightMap.get(event.statementFingerprintID) ||
+      new Set<InsightNameEnum>();
+    event.insights.forEach(insight => insightsSet.add(insight.name));
+    stmtInsightMap.set(event.statementFingerprintID, insightsSet);
+  });
+  stmtInsightMap.forEach((value, key) =>
+    result.push({
+      fingerprintID: key,
+      insightCount: value.size,
+    }),
+  );
+
+  return result;
+}
+
+export function getTxnFingerprintInsightCounts(
+  insightEvents: TxnInsightEvent[],
+): ExecutionInsightCount[] {
+  if (!insightEvents || insightEvents.length === 0) {
+    return null;
+  }
+  const result: ExecutionInsightCount[] = [];
+  const txnInsightMap = new Map<string, Set<InsightNameEnum>>();
+  insightEvents.forEach(event => {
+    const insightsSet =
+      txnInsightMap.get(event.transactionFingerprintID) ||
+      new Set<InsightNameEnum>();
+    event.insights.forEach(insight => insightsSet.add(insight.name));
+    txnInsightMap.set(event.transactionFingerprintID, insightsSet);
+  });
+  txnInsightMap.forEach((value, key) =>
+    result.push({
+      fingerprintID: key,
+      insightCount: value.size,
+    }),
+  );
+
+  return result;
 }
