@@ -1004,9 +1004,14 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 }
 
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
-	// Block adding a primary region to the system database. This ensures that the system
-	// database can never be made into a multi-region database.
-	if n.desc.GetID() == keys.SystemDatabaseID {
+	// Block adding a primary region to the system database unless the user is
+	// root. This ensures that the system database can only be made into a
+	// multi-region database by the root user.
+	//
+	// TODO(ajwerner): In the future, lock this down even further under clearer
+	// semantics.
+	if n.desc.GetID() == keys.SystemDatabaseID &&
+		!params.SessionData().User().IsRootUser() {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"adding a primary region to the system database is not supported",
