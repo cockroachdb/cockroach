@@ -12,12 +12,10 @@ import { createSelector } from "reselect";
 import { localStorageSelector } from "src/store/utils/selectors";
 import { AppState } from "src/store/reducers";
 
-import {
-  selectStatementInsightDetailsCombiner,
-  selectStatementInsightDetailsCombinerByFingerprint,
-} from "src/selectors/insightsCommon.selectors";
+import { selectStatementInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
 import { selectStatementFingerprintID, selectID } from "src/selectors/common";
 import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
+import { FixFingerprintHexValue } from "../../../util";
 
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
   state.adminUI.stmtInsights?.data;
@@ -56,5 +54,11 @@ export const selectStmtInsightsLoading = (state: AppState): boolean =>
 export const selectInsightsByFingerprint = createSelector(
   selectStmtInsights,
   selectStatementFingerprintID,
-  selectStatementInsightDetailsCombinerByFingerprint,
+  (execInsights, fingerprintID) => {
+    if (fingerprintID == null) {
+      return null;
+    }
+    const id = FixFingerprintHexValue(BigInt(fingerprintID).toString(16));
+    return execInsights?.filter(stmt => stmt.statementFingerprintID === id);
+  },
 );

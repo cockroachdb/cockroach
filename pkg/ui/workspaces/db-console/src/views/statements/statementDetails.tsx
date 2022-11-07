@@ -18,7 +18,7 @@ import {
   refreshStatementDiagnosticsRequests,
   refreshStatementDetails,
   refreshUserSQLRoles,
-  refreshStatementFingerprintInsights,
+  refreshStmtInsights,
 } from "src/redux/apiReducers";
 import { RouteComponentProps } from "react-router";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
@@ -53,6 +53,7 @@ import { appNamesAttr, statementAttr } from "src/util/constants";
 import { selectTimeScale } from "src/redux/timeScale";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import moment from "moment";
+import { selectStmtInsightsByFingerprint } from "src/views/insights/insightsSelectors";
 
 const { generateStmtDetailsToID } = util;
 
@@ -103,15 +104,6 @@ export const selectStatementDetails = createSelector(
   },
 );
 
-const selectStatementFingerprintInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.statementFingerprintInsights,
-  (_state: AdminUIState, props: RouteComponentProps): string =>
-    getMatchParamByName(props.match, statementAttr),
-  (cachedFingerprintInsights, fingerprintID) => {
-    return cachedFingerprintInsights[fingerprintID]?.data;
-  },
-);
-
 const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
@@ -133,10 +125,7 @@ const mapStateToProps = (
     ),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     hasAdminRole: selectHasAdminRole(state),
-    statementFingerprintInsights: selectStatementFingerprintInsights(
-      state,
-      props,
-    ),
+    statementInsights: selectStmtInsightsByFingerprint(state, props),
   };
 };
 
@@ -174,8 +163,8 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   refreshNodes: refreshNodes,
   refreshNodesLiveness: refreshLiveness,
   refreshUserSQLRoles: refreshUserSQLRoles,
-  refreshStatementFingerprintInsights: (req: clusterUiApi.StmtInsightsReq) =>
-    refreshStatementFingerprintInsights(req),
+  refreshStatementInsights: (req: clusterUiApi.StmtInsightsReq) =>
+    refreshStmtInsights(req),
 };
 
 export default withRouter(

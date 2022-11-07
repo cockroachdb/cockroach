@@ -10,8 +10,15 @@
 
 import { createSelector } from "reselect";
 
-import { localStorageSelector } from "../store/utils/selectors";
+import {
+  adminUISelector,
+  localStorageSelector,
+} from "../store/utils/selectors";
 import { sqlStatsSelector } from "../store/sqlStats/sqlStats.selector";
+import {
+  ExecutionInsightCountEvent,
+  getTxnFingerprintInsightCounts,
+} from "../insights";
 
 export const selectTransactionsData = createSelector(
   sqlStatsSelector,
@@ -47,4 +54,11 @@ export const selectFilters = createSelector(
 export const selectSearch = createSelector(
   localStorageSelector,
   localStorage => localStorage["search/TransactionsPage"],
+);
+
+export const selectTransactionInsightCounts = createSelector(
+  adminUISelector,
+  (state): ExecutionInsightCountEvent[] => {
+    return getTxnFingerprintInsightCounts(state?.txnInsights?.data);
+  },
 );

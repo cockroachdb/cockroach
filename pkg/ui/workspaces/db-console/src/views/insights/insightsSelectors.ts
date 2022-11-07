@@ -19,12 +19,16 @@ import {
   SortSetting,
   selectID,
   selectTransactionFingerprintID,
+  selectStatementFingerprintID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightDetailsCombiner,
   InsightEnumToLabel,
   TxnInsightDetails,
   api,
   util,
+  ExecutionInsightCountEvent,
+  getStmtFingerprintInsightCounts,
+  getTxnFingerprintInsightCounts,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
@@ -120,6 +124,18 @@ export const selectTxnInsightsByFingerprint = createSelector(
   },
 );
 
+export const selectStmtInsightsByFingerprint = createSelector(
+  selectStmtInsights,
+  selectStatementFingerprintID,
+  (execInsights, fingerprintID) => {
+    if (fingerprintID == null) {
+      return null;
+    }
+    const id = util.FixFingerprintHexValue(BigInt(fingerprintID).toString(16));
+    return execInsights?.filter(stmt => stmt.statementFingerprintID === id);
+  },
+);
+
 export const selectInsightTypes = () => {
   const insights: string[] = [];
   InsightEnumToLabel.forEach(insight => {
@@ -181,5 +197,19 @@ export const selectSchemaInsightsTypes = createSelector(
         schemaInsights.map(schemaInsight => insightType(schemaInsight.type)),
       ),
     ).sort();
+  },
+);
+
+export const selectStatementInsightCounts = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  (state): ExecutionInsightCountEvent[] => {
+    return getStmtFingerprintInsightCounts(state?.stmtInsights?.data);
+  },
+);
+
+export const selectTransactionInsightCounts = createSelector(
+  (state: AdminUIState) => state.cachedData,
+  (state): ExecutionInsightCountEvent[] => {
+    return getTxnFingerprintInsightCounts(state?.txnInsights?.data);
   },
 );

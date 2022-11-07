@@ -11,6 +11,7 @@
 import { unset } from "src/util";
 import {
   ExecutionDetails,
+  ExecutionInsightCountEvent,
   getInsightFromCause,
   Insight,
   InsightExecEnum,
@@ -23,6 +24,7 @@ import {
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
+import { indexOf } from "lodash";
 
 export const filterTransactionInsights = (
   transactions: TxnInsightEvent[] | null,
@@ -419,4 +421,76 @@ export function getTxnInsightRecommendations(
     recs.push(getRecommendationForExecInsight(insight, execDetails)),
   );
   return recs;
+}
+
+// The functions below de-duplicate insights of the same type for a given fingerprint.
+// The front-end requires de-duplicated insights for the fingerprints pages because the backend has a problem+cause
+// definition for insight types, and the SQL API query selects distinct on fingerprint, problem, and cause.
+
+export function getStmtFingerprintInsightCounts(
+  insightEvents: StmtInsightEvent[],
+): ExecutionInsightCountEvent[] {
+  if (!insightEvents) {
+    return null;
+  }
+  const result: ExecutionInsightCountEvent[] = [];
+  const stmtInsightMap = new Map<string, Set<InsightNameEnum>>();
+  insightEvents.forEach(event => {
+    if (!stmtInsightMap.has(event.statementFingerprintID)) {
+      const stmtInsightTypes = new Set<InsightNameEnum>();
+      event.insights.forEach(insight => stmtInsightTypes.add(insight.name));
+      stmtInsightMap.set(event.statementFingerprintID, stmtInsightTypes);
+      result.push({
+        fingerprintID: event.statementFingerprintID,
+        insightCount: event.insights.length,
+      });
+    } else {
+      const mapValues = stmtInsightMap.get(event.statementFingerprintID);
+      event.insights.forEach(insight => {
+        if (!mapValues.has(insight.name)) {
+          mapValues.add(insight.name);
+          const idx = result.findIndex(
+            item => item.fingerprintID === event.statementFingerprintID,
+          );
+          result[idx].insightCount += 1;
+        }
+      });
+    }
+  });
+
+  return result;
+}
+
+export function getTxnFingerprintInsightCounts(
+  insightEvents: TxnInsightEvent[],
+): ExecutionInsightCountEvent[] {
+  if (!insightEvents) {
+    return null;
+  }
+  const result: ExecutionInsightCountEvent[] = [];
+  const txnInsightMap = new Map<string, Set<InsightNameEnum>>();
+  insightEvents.forEach(event => {
+    if (!txnInsightMap.has(event.transactionFingerprintID)) {
+      const txnInsightTypes = new Set<InsightNameEnum>();
+      event.insights.forEach(insight => txnInsightTypes.add(insight.name));
+      txnInsightMap.set(event.transactionFingerprintID, txnInsightTypes);
+      result.push({
+        fingerprintID: event.transactionFingerprintID,
+        insightCount: event.insights.length,
+      });
+    } else {
+      const mapValues = txnInsightMap.get(event.transactionFingerprintID);
+      event.insights.forEach(insight => {
+        if (!mapValues.has(insight.name)) {
+          mapValues.add(insight.name);
+          const idx = result.findIndex(
+            item => item.fingerprintID === event.transactionFingerprintID,
+          );
+          result[idx].insightCount += 1;
+        }
+      });
+    }
+  });
+
+  return result;
 }

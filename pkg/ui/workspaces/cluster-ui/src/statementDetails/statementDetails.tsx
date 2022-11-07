@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React, { ReactNode, useContext, useMemo } from "react";
+import React, { ReactNode, useContext } from "react";
 import { Col, Row, Tabs } from "antd";
 import "antd/lib/col/style";
 import "antd/lib/row/style";
@@ -81,7 +81,6 @@ import {
 } from "../api";
 import {
   getStmtInsightRecommendations,
-  InsightNameEnum,
   InsightType,
   StmtInsightEvent,
 } from "../insights";
@@ -124,7 +123,7 @@ export interface StatementDetailsDispatchProps {
   refreshUserSQLRoles: () => void;
   refreshNodes: () => void;
   refreshNodesLiveness: () => void;
-  refreshStatementFingerprintInsights: (req: StmtInsightsReq) => void;
+  refreshStatementInsights: (req: StmtInsightsReq) => void;
   createStatementDiagnosticsReport: (
     insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
   ) => void;
@@ -155,7 +154,7 @@ export interface StatementDetailsStateProps {
   isTenant?: UIConfigState["isTenant"];
   hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
   hasAdminRole?: UIConfigState["hasAdminRole"];
-  statementFingerprintInsights?: StmtInsightEvent[];
+  statementInsights?: StmtInsightEvent[];
 }
 
 export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
@@ -275,13 +274,11 @@ export class StatementDetails extends React.Component<
 
   refreshStatementInsights = () => {
     const [startTime, endTime] = toRoundedDateRange(this.props.timeScale);
-    const id = BigInt(this.props.statementFingerprintID).toString(16);
     const req: StmtInsightsReq = {
       start: startTime,
       end: endTime,
-      stmtFingerprintId: id,
     };
-    this.props.refreshStatementFingerprintInsights(req);
+    this.props.refreshStatementInsights(req);
   };
 
   handleResize = (): void => {
@@ -552,7 +549,7 @@ export class StatementDetails extends React.Component<
       return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
     const { cardWidth } = this.state;
-    const { nodeRegions, isTenant, statementFingerprintInsights } = this.props;
+    const { nodeRegions, isTenant, statementInsights } = this.props;
     const { stats } = this.props.statementDetails.statement;
     const {
       app_names,
@@ -668,9 +665,9 @@ export class StatementDetails extends React.Component<
       false,
     );
     const tableData: InsightRecommendation[] = [];
-    if (statementFingerprintInsights) {
+    if (statementInsights) {
       const tableDataTypes = new Set<InsightType>();
-      statementFingerprintInsights.forEach(insight => {
+      statementInsights.forEach(insight => {
         const rec = getStmtInsightRecommendations(insight);
         rec.forEach(entry => {
           if (!tableDataTypes.has(entry.type)) {

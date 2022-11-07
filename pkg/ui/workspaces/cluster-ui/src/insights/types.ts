@@ -124,6 +124,11 @@ export type ContentionEvent = {
   stmtInsightEvent: StmtInsightEvent;
 };
 
+export type ExecutionInsightCountEvent = {
+  fingerprintID: string;
+  insightCount: number;
+};
+
 export const highContentionInsight = (
   execType: InsightExecEnum,
   latencyThresholdMs?: number,
