@@ -10,6 +10,13 @@
 
 let path = "";
 
+/**
+ * Sets the base URL to use that all API paths are appended to in
+ * the app. When running Cluster UI components embedded elsewhere, this is
+ * helpful to ensure that requests are routed to your particular cluster when
+ * it's not served from the Base URL of your application. This path should
+ * **not** include a trailing slash.
+ */
 export const setBasePath = (basePath: string): string => (path = basePath);
 
 export const getBasePath = (): string => path;

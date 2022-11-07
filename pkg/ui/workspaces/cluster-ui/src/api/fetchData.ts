@@ -115,7 +115,7 @@ export function fetchDataJSON<ResponseType, RequestType>(
 
   const basePath = getBasePath();
 
-  return fetch(`${basePath}${path}`, params).then(response => {
+  return fetch(`${basePath}/${path}`, params).then(response => {
     if (!response.ok) {
       throw new RequestError(
         response.statusText,
