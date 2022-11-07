@@ -102,7 +102,7 @@ type Storage interface {
 
 	// UpdateTimestamp updates the timestamp protected by the record with the
 	// specified UUID.
-	UpdateTimestamp(ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp) error
+	UpdateTimestamp(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id uuid.UUID, timestamp hlc.Timestamp) error
 }
 
 // Iterator iterates records in a cache until wantMore is false or all Records

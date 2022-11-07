@@ -102,13 +102,17 @@ func (s *storageWithDatabase) GetState(
 }
 
 func (s *storageWithDatabase) UpdateTimestamp(
-	ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	id uuid.UUID,
+	timestamp hlc.Timestamp,
 ) (err error) {
 	if txn == nil {
-		err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return s.s.UpdateTimestamp(ctx, txn, id, timestamp)
+		err = s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, executor sqlutil.InternalExecutor) error {
+			return s.s.UpdateTimestamp(ctx, newTxn, executor, id, timestamp)
 		})
 		return err
 	}
-	return s.s.UpdateTimestamp(ctx, txn, id, timestamp)
+	return s.s.UpdateTimestamp(ctx, txn, ie, id, timestamp)
 }

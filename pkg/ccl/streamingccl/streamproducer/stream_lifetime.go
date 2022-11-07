@@ -133,8 +133,8 @@ func updateReplicationStreamProgress(
 			// ingestion using the previous ingestion high watermark, it can fall behind the
 			// source cluster protected timestamp.
 			if shouldUpdatePTS := ptsRecord.Timestamp.Less(consumedTime); shouldUpdatePTS {
-				// TODO (janexing): update ie.
-				if err = ptsProvider.UpdateTimestamp(ctx, txn, ptsID, consumedTime); err != nil {
+				// TODO(janexing): update the ie after refactoring Job.Update().
+				if err = ptsProvider.UpdateTimestamp(ctx, txn, nil /* ie */, ptsID, consumedTime); err != nil {
 					return err
 				}
 				status.ProtectedTimestamp = &consumedTime
