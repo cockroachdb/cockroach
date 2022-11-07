@@ -109,7 +109,9 @@ func (r *Replica) executeReadOnlyBatch(
 		// the request is not being optimistically evaluated (optimistic evaluation
 		// does not wait for latches or check locks).
 		log.VEventf(ctx, 3, "lock table scan complete without conflicts; dropping latches early")
+		r.store.metrics.ReplicaReadBatchDroppedLatchesBeforeEval.Inc(1)
 		if !stillNeedsInterleavedIntents {
+			r.store.metrics.ReplicaReadBatchWithoutInterleavingIter.Inc(1)
 			evalPath = readOnlyWithoutInterleavedIntents
 		}
 		r.updateTimestampCacheAndDropLatches(ctx, g, ba, nil /* br */, nil /* pErr */, st)
