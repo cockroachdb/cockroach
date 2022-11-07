@@ -172,7 +172,9 @@ var upgrades = []upgrade.Upgrade{
 }
 
 func init() {
-	for _, m := range upgrades {
+	toAdd := append(upgrades, getStaticJobsUpgrades()...)
+
+	for _, m := range toAdd {
 		if _, exists := registry[m.ClusterVersion()]; exists {
 			panic(errors.AssertionFailedf("duplicate upgrade registration for %v", m.ClusterVersion()))
 		}

@@ -162,7 +162,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 			return err
 		}
 		if row == nil {
-			return errors.Errorf("not found in system.jobs table")
+			return &JobNotFoundError{jobID: j.ID()}
 		}
 
 		if status, err = unmarshalStatus(row[0]); err != nil {

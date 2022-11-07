@@ -422,6 +422,11 @@ func (j *Job) unpaused(ctx context.Context, txn *kv.Txn) error {
 	})
 }
 
+type cancelControl bool
+
+const forceCancel cancelControl = false
+const respectNonCancellable cancelControl = true
+
 // cancelRequested sets the status of the tracked job to cancel-requested. It
 // does not directly cancel the job; like job.Paused, it expects the job to call
 // job.Progressed soon, observe a "job is cancel-requested" error, and abort.
@@ -429,10 +434,10 @@ func (j *Job) unpaused(ctx context.Context, txn *kv.Txn) error {
 // that it is in state StatusCancelRequested and will move it to state
 // StatusReverting.
 func (j *Job) cancelRequested(
-	ctx context.Context, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
+	ctx context.Context, ctrl cancelControl, txn *kv.Txn, fn func(context.Context, *kv.Txn) error,
 ) error {
 	return j.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.Payload.Noncancelable {
+		if ctrl == respectNonCancellable && md.Payload.Noncancelable {
 			return errors.Newf("job %d: not cancelable", j.ID())
 		}
 		if md.Status == StatusCancelRequested || md.Status == StatusCanceled {

@@ -375,6 +375,7 @@ type runner struct {
 	codec       keys.SQLCodec
 	sqlExecutor *sql.InternalExecutor
 	settings    *cluster.Settings
+	jobRegistry *jobs.Registry
 }
 
 func (r runner) execAsRoot(ctx context.Context, opName, stmt string, qargs ...interface{}) error {
@@ -581,6 +582,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 		codec:       m.codec,
 		sqlExecutor: m.sqlExecutor,
 		settings:    m.settings,
+		jobRegistry: m.jobRegistry,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		if !m.shouldRunMigration(migration, bootstrapVersion) {

@@ -218,6 +218,7 @@ func MakeRegistry(
 	}
 	if knobs != nil {
 		r.knobs = *knobs
+		r.TestingResumerCreationKnobs = knobs.TestingResumerCreationKnobs
 		if knobs.TimeSource != nil {
 			r.clock = knobs.TimeSource
 		}
@@ -486,6 +487,15 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 // at a later time by some node in the cluster.
 func (r *Registry) CreateAdoptableJobWithTxn(
 	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
+) (*Job, error) {
+	return r.CreateAdoptableJobWithTxnIfNotExist(ctx, false, record, jobID, txn)
+}
+
+// CreateAdoptableJobWithTxnIfNotExist creates a job which will be adopted for execution
+// at a later time by some node in the cluster.
+// ifNotExists, if true, executes UPSERT statement.
+func (r *Registry) CreateAdoptableJobWithTxnIfNotExist(
+	ctx context.Context, ifNotExists bool, record Record, jobID jobspb.JobID, txn *kv.Txn,
 ) (*Job, error) {
 	// TODO(sajjad): Clean up the interface - remove jobID from the params as
 	// Record now has JobID field.
@@ -1011,6 +1021,18 @@ func (r *Registry) getJobFn(
 
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
 func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
+	return r.cancelRequested(ctx, respectNonCancellable, txn, id)
+}
+
+// MustCancel marks the job as cancel-requested even if the job is non-cancellable.
+// Intended to be used by migrations only.
+func (r *Registry) MustCancel(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
+	return r.cancelRequested(ctx, forceCancel, txn, id)
+}
+
+func (r *Registry) cancelRequested(
+	ctx context.Context, ctrl cancelControl, txn *kv.Txn, id jobspb.JobID,
+) error {
 	job, _, err := r.getJobFn(ctx, txn, id)
 	if err != nil {
 		// Special case schema change jobs to mark the job as canceled.
@@ -1026,12 +1048,12 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id jobspb.J
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
 			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(payload.Description, "ROLL BACK") {
-				return job.cancelRequested(ctx, txn, nil)
+				return job.cancelRequested(ctx, ctrl, txn, nil)
 			}
 		}
 		return err
 	}
-	return job.cancelRequested(ctx, txn, nil)
+	return job.cancelRequested(ctx, ctrl, txn, nil)
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
@@ -1192,6 +1214,17 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption
 			"or jobs.UsesTenantCostControl is required; see comments for these options to learn more")
 	}
 	options[typ] = resOpts
+}
+
+// TestingRegisterConstructor is a registration mechanism for tests which returns
+// a function to restore prior configuration.
+func TestingRegisterConstructor(typ jobspb.Type, fn Constructor, opts ...RegisterOption) func() {
+	oldConstructor, oldOpts := constructors[typ], options[typ]
+	RegisterConstructor(typ, fn, opts...)
+	return func() {
+		constructors[typ] = oldConstructor
+		options[typ] = oldOpts
+	}
 }
 
 func (r *Registry) createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
