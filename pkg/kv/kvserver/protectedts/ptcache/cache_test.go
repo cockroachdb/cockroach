@@ -610,9 +610,10 @@ func protect(
 	}
 	ctx := context.Background()
 	txn := s.DB().NewTxn(ctx, "test")
+	ieNotBoundToTxn := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
 	require.NoError(t, p.Protect(ctx, txn, r))
 	require.NoError(t, txn.Commit(ctx))
-	_, err := p.GetRecord(ctx, nil, r.ID.GetUUID())
+	_, err := p.GetRecord(ctx, nil /* txn */, r.ID.GetUUID(), ieNotBoundToTxn)
 	require.NoError(t, err)
 	createdAt = txn.CommitTimestamp()
 	return r, createdAt

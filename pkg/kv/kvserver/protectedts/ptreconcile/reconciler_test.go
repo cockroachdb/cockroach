@@ -51,6 +51,7 @@ func TestReconciler(t *testing.T) {
 		// Now I want to create some artifacts that should get reconciled away and
 		// then make sure that they do and others which should not do not.
 		s0 := tc.Server(0)
+		ief := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		ptp := s0.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 
 		settings := cluster.MakeTestingClusterSettings()
@@ -60,7 +61,6 @@ func TestReconciler(t *testing.T) {
 			toRemove map[string]struct{}
 		}{}
 		state.toRemove = map[string]struct{}{}
-		ief := s0.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		r := ptreconcile.New(settings, s0.DB(), ief, ptp,
 			ptreconcile.StatusFuncs{
 				testTaskType: func(
@@ -114,8 +114,8 @@ func TestReconciler(t *testing.T) {
 				}
 				return nil
 			})
-			require.Regexp(t, protectedts.ErrNotExists, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				_, err := ptp.GetRecord(ctx, txn, rec1.ID.GetUUID())
+			require.Regexp(t, protectedts.ErrNotExists, ief.TxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				_, err := ptp.GetRecord(ctx, txn, rec1.ID.GetUUID(), ie)
 				return err
 			}))
 		})

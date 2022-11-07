@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -95,10 +96,10 @@ func maybeUpdateSchedulePTSRecord(
 		}
 	}
 
-	return exec.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return exec.InternalExecutorFactory.TxnWithExecutor(ctx, exec.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		// We cannot rely on b.job containing created_by_id because on job
 		// resumption the registry does not populate the resumers' CreatedByInfo.
-		datums, err := exec.InternalExecutor.QueryRowEx(
+		datums, err := ie.QueryRowEx(
 			ctx,
 			"lookup-schedule-info",
 			txn,
@@ -151,9 +152,7 @@ func maybeUpdateSchedulePTSRecord(
 				return errors.AssertionFailedf("incremental backup has unexpected chaining action %d on"+
 					" backup job details", backupDetails.SchedulePTSChainingRecord.Action)
 			}
-			if err := manageIncrementalBackupPTSChaining(ctx,
-				backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord,
-				backupDetails.EndTime, exec, txn, scheduleID); err != nil {
+			if err := manageIncrementalBackupPTSChaining(ctx, backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord, backupDetails.EndTime, exec, txn, scheduleID); err != nil {
 				return errors.Wrap(err, "failed to manage chaining of pts record during a inc backup")
 			}
 		case backuppb.ScheduledBackupExecutionArgs_FULL:
@@ -161,7 +160,7 @@ func maybeUpdateSchedulePTSRecord(
 				return errors.AssertionFailedf("full backup has unexpected chaining action %d on"+
 					" backup job details", backupDetails.SchedulePTSChainingRecord.Action)
 			}
-			if err := manageFullBackupPTSChaining(ctx, env, txn, backupDetails, exec, args); err != nil {
+			if err := manageFullBackupPTSChaining(ctx, env, txn, ie, backupDetails, exec, args); err != nil {
 				return errors.Wrap(err, "failed to manage chaining of pts record during a full backup")
 			}
 		}
@@ -175,6 +174,7 @@ func manageFullBackupPTSChaining(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	backupDetails jobspb.BackupDetails,
 	exec *sql.ExecutorConfig,
 	fullScheduleArgs *backuppb.ScheduledBackupExecutionArgs,
@@ -182,7 +182,7 @@ func manageFullBackupPTSChaining(
 	// Let's resolve the dependent incremental schedule as the first step. If the
 	// schedule has been dropped then we can avoid doing unnecessary work.
 	incSj, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(ctx, env, txn,
-		exec.InternalExecutor, fullScheduleArgs.DependentScheduleID)
+		ie, fullScheduleArgs.DependentScheduleID)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			log.Warningf(ctx, "could not find dependent schedule with id %d",
@@ -194,7 +194,7 @@ func manageFullBackupPTSChaining(
 
 	// Resolve the target that needs to be protected on this execution of the
 	// scheduled backup.
-	targetToProtect, deprecatedSpansToProtect, err := getTargetProtectedByBackup(ctx, backupDetails, txn, exec)
+	targetToProtect, deprecatedSpansToProtect, err := getTargetProtectedByBackup(ctx, backupDetails, txn, ie, exec)
 	if err != nil {
 		return errors.Wrap(err, "getting target to protect")
 	}
@@ -265,8 +265,7 @@ func manageIncrementalBackupPTSChaining(
 	if ptsRecordID == nil {
 		return errors.AssertionFailedf("unexpected nil pts record id on incremental schedule %d", scheduleID)
 	}
-	err := exec.ProtectedTimestampProvider.UpdateTimestamp(ctx, txn, *ptsRecordID,
-		tsToProtect)
+	err := exec.ProtectedTimestampProvider.UpdateTimestamp(ctx, txn, *ptsRecordID, tsToProtect)
 	// If we cannot find the pts record to update it is possible that a concurrent
 	// full backup has released the record, and written a new record on the
 	// incremental schedule. This should only happen if this is an "overhang"
@@ -283,14 +282,17 @@ func manageIncrementalBackupPTSChaining(
 }
 
 func getTargetProtectedByBackup(
-	ctx context.Context, backupDetails jobspb.BackupDetails, txn *kv.Txn, exec *sql.ExecutorConfig,
+	ctx context.Context,
+	backupDetails jobspb.BackupDetails,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	exec *sql.ExecutorConfig,
 ) (target *ptpb.Target, deprecatedSpans []roachpb.Span, err error) {
 	if backupDetails.ProtectedTimestampRecord == nil {
 		return nil, nil, nil
 	}
 
-	ptsRecord, err := exec.ProtectedTimestampProvider.GetRecord(ctx, txn,
-		*backupDetails.ProtectedTimestampRecord)
+	ptsRecord, err := exec.ProtectedTimestampProvider.GetRecord(ctx, txn, *backupDetails.ProtectedTimestampRecord, ie)
 	if err != nil {
 		return nil, nil, err
 	}

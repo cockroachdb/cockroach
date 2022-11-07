@@ -240,8 +240,8 @@ var testCases = []testCase{
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				var rec *ptpb.Record
-				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-					rec, err = tCtx.pts.GetRecord(ctx, txn, randomID(tCtx))
+				err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+					rec, err = tCtx.pts.GetRecord(ctx, txn, randomID(tCtx), ie)
 					return err
 				})
 				require.EqualError(t, err, protectedts.ErrNotExists.Error())
@@ -289,7 +289,7 @@ var testCases = []testCase{
 		name: "UpdateTimestamp -- does not exist",
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
-				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+				err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 					return tCtx.pts.UpdateTimestamp(ctx, txn, randomID(tCtx), hlc.Timestamp{WallTime: 1})
 				})
 				require.EqualError(t, err, protectedts.ErrNotExists.Error())
@@ -301,16 +301,16 @@ var testCases = []testCase{
 		ops: []op{
 			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
 				rec := newRecord(tCtx, tCtx.tc.Server(0).Clock().Now(), "", nil, tableTarget(42), tableSpan(42))
-				ie := tCtx.tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
+				ieNotBoundToTxn := tCtx.tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
 				const msg = "must provide a non-nil transaction"
 				require.Regexp(t, msg, tCtx.pts.Protect(ctx, nil /* txn */, &rec).Error())
 				require.Regexp(t, msg, tCtx.pts.Release(ctx, nil /* txn */, uuid.MakeV4()).Error())
 				require.Regexp(t, msg, tCtx.pts.MarkVerified(ctx, nil /* txn */, uuid.MakeV4()).Error())
-				_, err := tCtx.pts.GetRecord(ctx, nil /* txn */, uuid.MakeV4())
+				_, err := tCtx.pts.GetRecord(ctx, nil /* txn */, uuid.MakeV4(), ieNotBoundToTxn)
 				require.Regexp(t, msg, err.Error())
-				_, err = tCtx.pts.GetMetadata(ctx, nil /* txn */, ie)
+				_, err = tCtx.pts.GetMetadata(ctx, nil /* txn */, ieNotBoundToTxn)
 				require.Regexp(t, msg, err.Error())
-				_, err = tCtx.pts.GetState(ctx, nil /* txn */, ie)
+				_, err = tCtx.pts.GetState(ctx, nil /* txn */, ieNotBoundToTxn)
 				require.Regexp(t, msg, err.Error())
 			}),
 		},
@@ -321,6 +321,7 @@ type testContext struct {
 	pts protectedts.Storage
 	tc  *testcluster.TestCluster
 	db  *kv.DB
+	ief sqlutil.InternalExecutorFactory
 
 	// If set to false, the test will be run with
 	// `DisableProtectedTimestampForMultiTenant` set to true, thereby testing the
@@ -448,7 +449,7 @@ type updateTimestampOp struct {
 
 func (p updateTimestampOp) run(ctx context.Context, t *testing.T, tCtx *testContext) {
 	id := pickOneRecord(tCtx)
-	err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := tCtx.ief.TxnWithExecutor(ctx, tCtx.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		return tCtx.pts.UpdateTimestamp(ctx, txn, id, p.updateTimestamp)
 	})
 	if !testutils.IsError(err, p.expErr) {
@@ -488,6 +489,7 @@ func (test testCase) run(t *testing.T) {
 	tCtx := testContext{
 		pts:                    pts,
 		db:                     db,
+		ief:                    ief,
 		tc:                     tc,
 		runWithDeprecatedSpans: test.runWithDeprecatedSpans,
 	}
@@ -506,8 +508,8 @@ func (test testCase) run(t *testing.T) {
 		require.EqualValues(t, tCtx.state.Metadata, md)
 		for _, r := range tCtx.state.Records {
 			var rec *ptpb.Record
-			require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				rec, err = pts.GetRecord(ctx, txn, r.ID.GetUUID())
+			require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+				rec, err = pts.GetRecord(ctx, txn, r.ID.GetUUID(), ie)
 				return err
 			}))
 			require.EqualValues(t, &r, rec)
@@ -618,6 +620,7 @@ func TestCorruptData(t *testing.T) {
 
 	runCorruptDataTest := func(tCtx *testContext, s serverutils.TestServerInterface,
 		tc *testcluster.TestCluster, pts protectedts.Storage) {
+		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		rec := newRecord(tCtx, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
 		require.NoError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			return pts.Protect(ctx, txn, &rec)
@@ -638,12 +641,11 @@ func TestCorruptData(t *testing.T) {
 		var got *ptpb.Record
 		msg := regexp.MustCompile("failed to unmarshal (span|target) for " + rec.ID.String() + ": ")
 		require.Regexp(t, msg,
-			s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				got, err = pts.GetRecord(ctx, txn, rec.ID.GetUUID())
+			ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+				got, err = pts.GetRecord(ctx, txn, rec.ID.GetUUID(), ie)
 				return err
 			}).Error())
 		require.Nil(t, got)
-		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		require.NoError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 			_, err = pts.GetState(ctx, txn, ie)
 			return err
@@ -706,6 +708,7 @@ func TestCorruptData(t *testing.T) {
 		defer tc.Stopper().Stop(ctx)
 
 		s := tc.Server(0)
+		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		pts := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 
 		rec := newRecord(&testContext{}, s.Clock().Now(), "foo", []byte("bar"), tableTarget(42), tableSpan(42))
@@ -729,12 +732,11 @@ func TestCorruptData(t *testing.T) {
 		msg := regexp.MustCompile("failed to parse timestamp for " + rec.ID.String() +
 			": logical part has too many digits")
 		require.Regexp(t, msg,
-			s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-				got, err = pts.GetRecord(ctx, txn, rec.ID.GetUUID())
+			ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+				got, err = pts.GetRecord(ctx, txn, rec.ID.GetUUID(), ie)
 				return err
 			}))
 		require.Nil(t, got)
-		ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 		require.NoError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 			_, err = pts.GetState(ctx, txn, ie)
 			return err
@@ -773,8 +775,8 @@ func TestErrorsFromSQL(t *testing.T) {
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return pts.Protect(ctx, txn, &rec)
 	}), fmt.Sprintf("failed to write record %v: boom", rec.ID))
-	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err := pts.GetRecord(ctx, txn, rec.ID.GetUUID())
+	require.EqualError(t, ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		_, err := pts.GetRecord(ctx, txn, rec.ID.GetUUID(), ie)
 		return err
 	}), fmt.Sprintf("failed to read record %v: boom", rec.ID))
 	require.EqualError(t, s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {

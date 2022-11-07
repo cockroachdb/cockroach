@@ -79,7 +79,7 @@ type Storage interface {
 	// should be protected as well as the timestamp at which the Record providing
 	// that protection is known to be alive. The ReadTimestamp of the Txn used in
 	// this method can be used to provide such a timestamp.
-	GetRecord(context.Context, *kv.Txn, uuid.UUID) (*ptpb.Record, error)
+	GetRecord(context.Context, *kv.Txn, uuid.UUID, sqlutil.InternalExecutor) (*ptpb.Record, error)
 
 	// MarkVerified will mark a protected timestamp as verified.
 	//

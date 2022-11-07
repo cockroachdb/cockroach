@@ -246,6 +246,7 @@ go_test(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/sqllivenesstestutils",
+        "//pkg/sql/sqlutil",
         "//pkg/sql/tests",
         "//pkg/sql/types",
         "//pkg/storage",

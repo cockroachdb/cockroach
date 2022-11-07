@@ -15,10 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -51,7 +53,14 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 		p, cleanup := sql.NewInternalPlanner("test", txn, sqlUser, &sql.MemoryMetrics{}, &execCfg, sessionData)
 		defer cleanup()
 		ec := p.(interface{ EvalContext() *eval.Context }).EvalContext()
-		return newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, txn)
+		var repManager eval.ReplicationStreamManager
+		if err := p.(sql.PlanHookState).WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			repManager, err = newReplicationStreamManagerWithPrivilegesCheck(ctx, ec, txn, ie)
+			return err
+		}); err != nil {
+			return nil, err
+		}
+		return repManager, nil
 	}
 
 	for _, tc := range []struct {

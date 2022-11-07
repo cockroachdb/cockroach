@@ -10,6 +10,7 @@ go_library(
         "//pkg/ccl/streamingccl/streampb",
         "//pkg/kv",
         "//pkg/sql/sem/eval",
+        "//pkg/sql/sqlutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

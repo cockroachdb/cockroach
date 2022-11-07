@@ -835,10 +835,25 @@ func (p *planner) resetPlanner(
 func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return streaming.GetReplicationStreamManager(ctx, p.EvalContext(), p.Txn())
+	var repStreamManager eval.ReplicationStreamManager
+	if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+		repStreamManager, err = streaming.GetReplicationStreamManager(ctx, p.EvalContext(), txn, ie)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return repStreamManager, nil
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
-	return streaming.GetStreamIngestManager(ctx, p.EvalContext(), p.Txn())
+	var streamIngestManager eval.StreamIngestManager
+	if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+		streamIngestManager, err = streaming.GetStreamIngestManager(ctx, p.EvalContext(), txn, ie)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return streamIngestManager, nil
+
 }

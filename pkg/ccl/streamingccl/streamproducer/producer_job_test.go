@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -116,6 +117,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	source := tc.Server(0)
+	ief := source.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	sql := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	// Shorten the tracking frequency to make timer easy to be triggerred.
 	sql.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
@@ -170,8 +172,9 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		})
 	}
 	getPTSRecord := func(ptsID uuid.UUID) (r *ptpb.Record, err error) {
-		err = source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			r, err = ptp.GetRecord(ctx, txn, ptsID)
+		ief := source.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+		err = ief.TxnWithExecutor(ctx, source.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			r, err = ptp.GetRecord(ctx, txn, ptsID, ie)
 			return err
 		})
 		return r, err
@@ -200,10 +203,10 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			require.True(t, testutils.IsError(err, "protected timestamp record does not exist"), err)
 
 			var status streampb.StreamReplicationStatus
-			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			require.NoError(t, ief.TxnWithExecutor(ctx, source.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				status, err = updateReplicationStreamProgress(
 					ctx, timeutil.Now(), ptp, registry, streaming.StreamID(jr.JobID),
-					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn)
+					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn, ie)
 				return err
 			}))
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, status.StreamStatus)
@@ -236,9 +239,9 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			var streamStatus streampb.StreamReplicationStatus
 			var err error
 			expire := expirationTime(jr).Add(10 * time.Millisecond)
-			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			require.NoError(t, ief.TxnWithExecutor(ctx, source.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				streamStatus, err = updateReplicationStreamProgress(
-					ctx, expire, ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn)
+					ctx, expire, ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn, ie)
 				return err
 			}))
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, streamStatus.StreamStatus)
