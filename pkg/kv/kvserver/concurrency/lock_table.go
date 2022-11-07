@@ -592,16 +592,38 @@ func (g *lockTableGuardImpl) IsKeyLockedByConflictingTxn(
 	l := iter.Cur()
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	lockHolderTxn, lockHolderTS := l.getLockHolder()
-	if lockHolderTxn != nil && g.isSameTxn(lockHolderTxn) {
-		// Already locked by this txn.
+	if l.isEmptyLock() {
+		// The lock is empty but has not yet been deleted.
 		return false, nil
 	}
-	if strength == lock.None && g.ts.Less(lockHolderTS) {
+	if !l.holder.locked {
+		// Key reserved.
+		if strength == lock.None {
+			// Non-locking reads only care about locks, not reservations.
+			return false, nil
+		}
+		if g.isSameTxn(l.reservation.txn) {
+			// Already reserved by this txn.
+			return false, nil
+		}
+		// "If the key is reserved, nil is returned."
+		return true, nil
+	}
+	// Key locked.
+	txn, ts := l.getLockHolder()
+	if txn == nil {
+		panic("non-empty lockState with nil lock holder and nil reservation")
+	}
+	if strength == lock.None && g.ts.Less(ts) {
 		// Non-locking read below lock's timestamp.
 		return false, nil
 	}
-	return true, lockHolderTxn
+	if g.isSameTxn(txn) {
+		// Already locked by this txn.
+		return false, nil
+	}
+	// "If the key is locked, the lock holder is also returned."
+	return true, txn
 }
 
 func (g *lockTableGuardImpl) notify() {
@@ -759,7 +781,7 @@ type lockHolderInfo struct {
 	// the lock is continuously held by a succession of different TxnMetas, the
 	// epoch must be monotonic and the ts (derived from txn.WriteTimestamp for
 	// some calls, and request.ts for other calls) must be monotonic. After ts
-	// is intialized, the timestamps inside txn are not used.
+	// is initialized, the timestamps inside txn are not used.
 	txn *enginepb.TxnMeta
 
 	// All the TxnSeqs in the current epoch at which this lock has been
