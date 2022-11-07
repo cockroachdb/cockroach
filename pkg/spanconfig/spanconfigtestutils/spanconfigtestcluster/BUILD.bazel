@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/distsql",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlutil",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

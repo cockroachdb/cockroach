@@ -52,28 +52,26 @@ func GetMetaType(metaType MetaType) string {
 
 // MakeStatusFunc returns a function which determines whether the job or
 // schedule implied with this value of meta should be removed by the reconciler.
-func MakeStatusFunc(
-	jr *jobs.Registry, ie sqlutil.InternalExecutor, metaType MetaType,
-) ptreconcile.StatusFunc {
+func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc {
 	switch metaType {
 	case Jobs:
-		return func(ctx context.Context, txn *kv.Txn, meta []byte) (shouldRemove bool, _ error) {
+		return func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, meta []byte) (shouldRemove bool, _ error) {
 			jobID, err := decodeID(meta)
 			if err != nil {
 				return false, err
 			}
-			j, err := jr.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn)
+			j, err := jr.LoadJobWithTxn(ctx, jobspb.JobID(jobID), txn, ie)
 			if jobs.HasJobNotFoundError(err) {
 				return true, nil
 			}
 			if err != nil {
 				return false, err
 			}
-			isTerminal := j.CheckTerminalStatus(ctx, txn)
+			isTerminal := j.CheckTerminalStatus(ctx, txn, ie)
 			return isTerminal, nil
 		}
 	case Schedules:
-		return func(ctx context.Context, txn *kv.Txn, meta []byte) (shouldRemove bool, _ error) {
+		return func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, meta []byte) (shouldRemove bool, _ error) {
 			scheduleID, err := decodeID(meta)
 			if err != nil {
 				return false, err

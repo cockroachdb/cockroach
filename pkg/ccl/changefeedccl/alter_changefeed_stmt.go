@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -94,8 +95,11 @@ func alterChangefeedPlanHook(
 		}
 		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
-		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.Txn())
-		if err != nil {
+		var job *jobs.Job
+		if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			job, err = p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.Txn(), ie)
+			return err
+		}); err != nil {
 			err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
 			return err
 		}
@@ -187,17 +191,17 @@ func alterChangefeedPlanHook(
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
 
-		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.Txn(), lockForUpdate, func(
-			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-		) error {
-			ju.UpdatePayload(&newPayload)
-			if newProgress != nil {
-				ju.UpdateProgress(newProgress)
-			}
-			return nil
-		})
-
-		if err != nil {
+		if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.Txn(), ie, lockForUpdate, func(
+				_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
+			) error {
+				ju.UpdatePayload(&newPayload)
+				if newProgress != nil {
+					ju.UpdateProgress(newProgress)
+				}
+				return nil
+			})
+		}); err != nil {
 			return err
 		}
 

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -80,6 +81,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	ctx := context.Background()
 
 	s, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{})
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	defer s.Stopper().Stop(ctx)
 
 	evalCtx := &eval.Context{
@@ -190,7 +192,7 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			job := createMockImportJob(ctx, t, registry, test.allocatedChunks, test.resumePos)
 			j := &row.SeqChunkProvider{
-				Registry: registry, JobID: job.ID(), DB: db,
+				Registry: registry, JobID: job.ID(), DB: db, InternalExecutorFactory: ief,
 			}
 			annot := &row.CellInfoAnnotation{
 				SourceID: 0,

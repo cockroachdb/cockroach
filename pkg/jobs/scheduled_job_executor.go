@@ -27,13 +27,7 @@ import (
 type ScheduledJobExecutor interface {
 	// Executes scheduled job;  Implementation may use provided transaction.
 	// Modifications to the ScheduledJob object will be persisted.
-	ExecuteJob(
-		ctx context.Context,
-		cfg *scheduledjobs.JobExecutionConfig,
-		env scheduledjobs.JobSchedulerEnv,
-		schedule *ScheduledJob,
-		txn *kv.Txn,
-	) error
+	ExecuteJob(ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, env scheduledjobs.JobSchedulerEnv, schedule *ScheduledJob, txn *kv.Txn, ie sqlutil.InternalExecutor) error
 
 	// Notifies that the system.job started by the ScheduledJob completed.
 	// Implementation may use provided transaction to perform any additional mutations.
@@ -71,14 +65,7 @@ type ScheduledJobController interface {
 	// OnDrop runs before the passed in `schedule` is dropped as part of a `DROP
 	// SCHEDULE` query. OnDrop may drop the schedule's dependent schedules and will
 	// return the number of additional schedules it drops.
-	OnDrop(
-		ctx context.Context,
-		scheduleControllerEnv scheduledjobs.ScheduleControllerEnv,
-		env scheduledjobs.JobSchedulerEnv,
-		schedule *ScheduledJob,
-		txn *kv.Txn,
-		descsCol *descs.Collection,
-	) (int, error)
+	OnDrop(ctx context.Context, scheduleControllerEnv scheduledjobs.ScheduleControllerEnv, env scheduledjobs.JobSchedulerEnv, schedule *ScheduledJob, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) (int, error)
 }
 
 // ScheduledJobExecutorFactory is a callback to create a ScheduledJobExecutor.

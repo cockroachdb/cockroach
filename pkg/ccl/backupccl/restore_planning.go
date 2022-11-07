@@ -1840,11 +1840,14 @@ func doRestorePlan(
 		// When running in detached mode, we simply create the job record.
 		// We do not wait for the job to finish.
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
-		_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-			ctx, jr, jobID, p.Txn())
-		if err != nil {
+		if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			_, err = p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
+				ctx, jr, jobID, p.Txn(), ie)
+			return err
+		}); err != nil {
 			return err
 		}
+
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
 		collectRestoreTelemetry(ctx, jobID, restoreDetails, intoDB, newDBName, subdir, restoreStmt,
 			descsByTablePattern, restoreDBs, asOfInterval, debugPauseOn, p.SessionData().ApplicationName)

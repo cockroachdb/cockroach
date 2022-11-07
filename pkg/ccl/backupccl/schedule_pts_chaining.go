@@ -238,7 +238,7 @@ func manageFullBackupPTSChaining(
 	// about to release. Already running incremental backup jobs would have
 	// written their own pts record during planning, and should complete
 	// successfully.
-	if err := releaseProtectedTimestamp(ctx, txn, exec.ProtectedTimestampProvider,
+	if err := releaseProtectedTimestamp(ctx, txn, ie, exec.ProtectedTimestampProvider,
 		backupDetails.SchedulePTSChainingRecord.ProtectedTimestampRecord); err != nil {
 		return errors.Wrap(err, "release pts record for schedule")
 	}

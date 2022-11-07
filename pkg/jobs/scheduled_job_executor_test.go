@@ -32,11 +32,12 @@ type statusTrackingExecutor struct {
 }
 
 func (s *statusTrackingExecutor) ExecuteJob(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
-	_ *ScheduledJob,
-	_ *kv.Txn,
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
+	schedule *ScheduledJob,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	s.numExec++
 	return nil

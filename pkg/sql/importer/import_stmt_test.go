@@ -4662,7 +4662,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 			})
 
 			// Pause the job;
-			if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
+			if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, ""); err != nil {
 				t.Fatal(err)
 			}
 			// Send cancellation and unblock breakpoint.
@@ -4692,7 +4692,7 @@ func TestImportDefaultWithResume(t *testing.T) {
 			sqlDB.QueryRow(t, fmt.Sprintf(`SELECT last_value FROM %s`, test.sequence)).Scan(&seqValOnPause)
 
 			// Unpause the job and wait for it to complete.
-			if err := registry.Unpause(ctx, nil, jobID); err != nil {
+			if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID); err != nil {
 				t.Fatal(err)
 			}
 			js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -285,13 +286,12 @@ func (s *Tenant) MakeProtectedTimestampRecordAndProtect(
 
 // ReleaseProtectedTimestampRecord will release a ptpb.Record.
 func (s *Tenant) ReleaseProtectedTimestampRecord(ctx context.Context, recordID string) {
-	require.NoError(s.t, s.ExecCfg().DB.Txn(ctx,
-		func(ctx context.Context, txn *kv.Txn) error {
-			require.Len(s.t, recordID, 1,
-				"datadriven test only supports single character record IDs")
-			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
-			require.NoError(s.t, err)
-			return s.ProtectedTimestampProvider().Release(ctx, txn, recID)
-		}))
+	require.NoError(s.t, s.ExecCfg().InternalExecutorFactory.TxnWithExecutor(ctx, s.ExecCfg().DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		require.Len(s.t, recordID, 1,
+			"datadriven test only supports single character record IDs")
+		recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
+		require.NoError(s.t, err)
+		return s.ProtectedTimestampProvider().Release(ctx, txn, ie, recID)
+	}))
 	s.updateTimestampAfterLastSQLChange()
 }

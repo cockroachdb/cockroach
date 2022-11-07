@@ -487,20 +487,20 @@ VALUES ($1, $2, $3, $4, $5, $6)`, jobID, StatusRunning, payloadBytes, progressBy
 // CreateAdoptableJobWithTxn creates a job which will be adopted for execution
 // at a later time by some node in the cluster.
 func (r *Registry) CreateAdoptableJobWithTxn(
-	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn,
+	ctx context.Context, record Record, jobID jobspb.JobID, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) (*Job, error) {
 	// TODO(sajjad): Clean up the interface - remove jobID from the params as
 	// Record now has JobID field.
 	record.JobID = jobID
 	j := r.newJob(ctx, record)
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+	if err := j.runInTxn(ctx, txn, ie, func(ctx context.Context, txn1 *kv.Txn, executor sqlutil.InternalExecutor) error {
 		// Note: although the following uses ReadTimestamp and
 		// ReadTimestamp can diverge from the value of now() throughout a
 		// transaction, this may be OK -- we merely required ModifiedMicro
 		// to be equal *or greater* than previously inserted timestamps
 		// computed by now(). For now ReadTimestamp can only move forward
 		// and the assertion ReadTimestamp >= now() holds at all times.
-		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
+		j.mu.progress.ModifiedMicros = timeutil.ToUnixMicros(txn1.ReadTimestamp().GoTime())
 		payloadBytes, err := protoutil.Marshal(&j.mu.payload)
 		if err != nil {
 			return err
@@ -529,7 +529,7 @@ func (r *Registry) CreateAdoptableJobWithTxn(
                     created_by_id
                    )
 VALUES ($1, $2, $3, $4, $5, $6);`
-		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt,
+		_, err = executor.Exec(ctx, "job-insert", txn1, stmt,
 			jobID, StatusRunning, payloadBytes, progressBytes, createdByType, createdByID)
 		return err
 	}); err != nil {
@@ -621,7 +621,7 @@ func (r *Registry) CreateStartableJobWithTxn(
 //
 // TODO(ssd): Remove this API and replace it with a safer API.
 func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
-	return r.LoadJobWithTxn(ctx, jobID, nil)
+	return r.LoadJobWithTxn(ctx, jobID, nil /* txn */, nil /* ie */)
 }
 
 // LoadClaimedJob loads an existing job with the given jobID from the
@@ -632,7 +632,7 @@ func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job
 	if err != nil {
 		return nil, err
 	}
-	if err := j.load(ctx, nil); err != nil {
+	if err := j.load(ctx, nil /* txn */, nil /* ie */); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -642,13 +642,13 @@ func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job
 // the txn argument. Passing a nil transaction is equivalent to calling LoadJob
 // in that a transaction will be automatically created.
 func (r *Registry) LoadJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn,
+	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) (*Job, error) {
 	j := &Job{
 		id:       jobID,
 		registry: r,
 	}
-	if err := j.load(ctx, txn); err != nil {
+	if err := j.load(ctx, txn, ie); err != nil {
 		return nil, err
 	}
 	return j, nil
@@ -663,13 +663,18 @@ func (r *Registry) LoadJobWithTxn(
 // and may do extra work and thus should not do locking. Cases where the job
 // is used to coordinate resources from multiple nodes may benefit from locking.
 func (r *Registry) UpdateJobWithTxn(
-	ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc UpdateFn,
+	ctx context.Context,
+	jobID jobspb.JobID,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	useReadLock bool,
+	updateFunc UpdateFn,
 ) error {
 	j := &Job{
 		id:       jobID,
 		registry: r,
 	}
-	return j.update(ctx, txn, useReadLock, updateFunc)
+	return j.update(ctx, txn, ie, useReadLock, updateFunc)
 }
 
 // TODO (sajjad): make maxAdoptionsPerLoop a cluster setting.
@@ -998,9 +1003,9 @@ func (r *Registry) cleanupOldJobsPage(
 // getJobFn attempts to get a resumer from the given job id. If the job id
 // does not have a resumer then it returns an error message suitable for users.
 func (r *Registry) getJobFn(
-	ctx context.Context, txn *kv.Txn, id jobspb.JobID,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id jobspb.JobID,
 ) (*Job, Resumer, error) {
-	job, err := r.LoadJobWithTxn(ctx, id, txn)
+	job, err := r.LoadJobWithTxn(ctx, id, txn, ie)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1012,8 +1017,10 @@ func (r *Registry) getJobFn(
 }
 
 // CancelRequested marks the job as cancel-requested using the specified txn (may be nil).
-func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+func (r *Registry) CancelRequested(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id jobspb.JobID,
+) error {
+	job, _, err := r.getJobFn(ctx, txn, ie, id)
 	if err != nil {
 		// Special case schema change jobs to mark the job as canceled.
 		if job != nil {
@@ -1028,19 +1035,19 @@ func (r *Registry) CancelRequested(ctx context.Context, txn *kv.Txn, id jobspb.J
 			// safest way for now (i.e., without a larger jobs/schema change refactor)
 			// is to hack this up with a string comparison.
 			if payload.Type() == jobspb.TypeSchemaChange && !strings.HasPrefix(payload.Description, "ROLL BACK") {
-				return job.cancelRequested(ctx, txn, nil)
+				return job.cancelRequested(ctx, txn, ie, nil /* fn */)
 			}
 		}
 		return err
 	}
-	return job.cancelRequested(ctx, txn, nil)
+	return job.cancelRequested(ctx, txn, ie, nil /* fn */)
 }
 
 // PauseRequested marks the job with id as paused-requested using the specified txn (may be nil).
 func (r *Registry) PauseRequested(
-	ctx context.Context, txn *kv.Txn, id jobspb.JobID, reason string,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id jobspb.JobID, reason string,
 ) error {
-	job, resumer, err := r.getJobFn(ctx, txn, id)
+	job, resumer, err := r.getJobFn(ctx, txn, ie, id)
 	if err != nil {
 		return err
 	}
@@ -1048,37 +1055,45 @@ func (r *Registry) PauseRequested(
 	if pr, ok := resumer.(PauseRequester); ok {
 		onPauseRequested = pr.OnPauseRequest
 	}
-	return job.PauseRequested(ctx, txn, onPauseRequested, reason)
+	return job.PauseRequested(ctx, txn, ie, onPauseRequested, reason)
 }
 
 // Succeeded marks the job with id as succeeded.
-func (r *Registry) Succeeded(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+func (r *Registry) Succeeded(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id jobspb.JobID,
+) error {
+	job, _, err := r.getJobFn(ctx, txn, ie, id)
 	if err != nil {
 		return err
 	}
-	return job.succeeded(ctx, txn, nil)
+	return job.succeeded(ctx, txn, ie, nil)
 }
 
 // Failed marks the job with id as failed.
 func (r *Registry) Failed(
-	ctx context.Context, txn *kv.Txn, id jobspb.JobID, causingError error,
+	ctx context.Context,
+	txn *kv.Txn,
+	id jobspb.JobID,
+	ie sqlutil.InternalExecutor,
+	causingError error,
 ) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+	job, _, err := r.getJobFn(ctx, txn, ie, id)
 	if err != nil {
 		return err
 	}
-	return job.failed(ctx, txn, causingError, nil)
+	return job.failed(ctx, txn, ie, causingError, nil /* fn */)
 }
 
 // Unpause changes the paused job with id to running or reverting using the
 // specified txn (may be nil).
-func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id jobspb.JobID) error {
-	job, _, err := r.getJobFn(ctx, txn, id)
+func (r *Registry) Unpause(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id jobspb.JobID,
+) error {
+	job, _, err := r.getJobFn(ctx, txn, ie, id)
 	if err != nil {
 		return err
 	}
-	return job.unpaused(ctx, txn)
+	return job.unpaused(ctx, txn, ie)
 }
 
 // Resumer is a resumable job, and is associated with a Job object. Jobs can be
@@ -1153,7 +1168,7 @@ type PauseRequester interface {
 	// OnPauseRequest is called in the transaction that moves a job to PauseRequested.
 	// If an error is returned, the pause request will fail. execCtx is a
 	// sql.JobExecCtx.
-	OnPauseRequest(ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress) error
+	OnPauseRequest(ctx context.Context, execCtx interface{}, txn *kv.Txn, ie sqlutil.InternalExecutor, details *jobspb.Progress) error
 }
 
 // JobResultsReporter is an interface for reporting the results of the job execution.
@@ -1245,7 +1260,7 @@ func (r *Registry) stepThroughStateMachine(
 		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
 		labels := pprof.Labels("job", fmt.Sprintf("%s id=%d", jobType, job.ID()))
 
-		if err := job.started(ctx, nil /* txn */); err != nil {
+		if err := job.started(ctx, nil /* txn */, nil /* ie */); err != nil {
 			return err
 		}
 
@@ -1279,7 +1294,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 
 		if errors.Is(err, errPauseSelfSentinel) {
-			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
+			if err := r.PauseRequested(ctx, nil /* txn */, nil /* ie */, job.ID(), err.Error()); err != nil {
 				return err
 			}
 			return errors.Wrap(err, PauseRequestExplained)
@@ -1312,7 +1327,7 @@ func (r *Registry) stepThroughStateMachine(
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: unexpected status %s provided to state machine", job.ID(), status)
 	case StatusCanceled:
-		if err := job.canceled(ctx, nil /* txn */, nil /* fn */); err != nil {
+		if err := job.canceled(ctx, nil /* txn */, nil /* ie */, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as canceled then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.WithSecondaryError(
@@ -1328,7 +1343,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: successful but unexpected error provided", job.ID())
 		}
-		err := job.succeeded(ctx, nil /* txn */, nil /* fn */)
+		err := job.succeeded(ctx, nil /* txn */, nil /* ie */, nil /* fn */)
 		switch {
 		case err == nil:
 			telemetry.Inc(TelemetryMetrics[jobType].Successful)
@@ -1340,7 +1355,7 @@ func (r *Registry) stepThroughStateMachine(
 		}
 		return err
 	case StatusReverting:
-		if err := job.reverted(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
+		if err := job.reverted(ctx, nil /* txn */, nil /* ie */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as reverting then it will be
 			// restarted during the next adopt loop and it will be retried.
 			return errors.WithSecondaryError(
@@ -1380,7 +1395,7 @@ func (r *Registry) stepThroughStateMachine(
 		if jobErr == nil {
 			return errors.AssertionFailedf("job %d: has StatusFailed but no error was provided", job.ID())
 		}
-		if err := job.failed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
+		if err := job.failed(ctx, nil /* txn */, nil /* ie */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.WithSecondaryError(
@@ -1399,7 +1414,7 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.AssertionFailedf("job %d: has StatusRevertFailed but no error was provided",
 				job.ID())
 		}
-		if err := job.revertFailed(ctx, nil /* txn */, jobErr, nil /* fn */); err != nil {
+		if err := job.revertFailed(ctx, nil /* txn */, nil /* ie */, jobErr, nil /* fn */); err != nil {
 			// If we can't transactionally mark the job as failed then it will be
 			// restarted during the next adopt loop and reverting will be retried.
 			return errors.WithSecondaryError(
@@ -1524,8 +1539,8 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		return
 	}
 
-	updateErr := j.Update(ctx, nil, func(
-		txn *kv.Txn, md JobMetadata, ju *JobUpdater,
+	updateErr := j.Update(ctx, nil /* txn */, nil /* ie */, func(
+		_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater,
 	) error {
 		pl := md.Payload
 		{ // Append the entry to the log

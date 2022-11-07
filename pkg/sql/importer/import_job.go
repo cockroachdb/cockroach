@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -115,9 +116,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// Skip prepare stage on job resumption, if it has already been completed.
 		if !details.PrepareComplete {
 			var schemaMetadata *preparedSchemaMetadata
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-			) error {
+			cfg := p.ExecCfg()
+			if err := cfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, cfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) error {
 				var preparedDetails jobspb.ImportDetails
 				schemaMetadata = &preparedSchemaMetadata{
 					newSchemaIDToName: make(map[descpb.ID]string),
@@ -161,8 +161,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 				// Update the job details now that the schemas and table descs have
 				// been "prepared".
-				return r.job.Update(ctx, txn, func(
-					txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+				return r.job.Update(ctx, txn, ie, func(
+					_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
 				) error {
 					pl := md.Payload
 					*pl.GetImport() = preparedDetails
@@ -276,7 +276,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 		}
 
-		if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
+		if err := r.job.SetDetails(ctx, nil /* txn */, nil /* ie */, details); err != nil {
 			return err
 		}
 	}
@@ -337,8 +337,8 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	// IMPORT INTO was planned on the older node.
 	//
 	// TODO(adityamaru): Remove in 22.1.
-	if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return r.releaseProtectedTimestamp(ctx, txn, p.ExecCfg().ProtectedTimestampProvider)
+	if err := p.ExecCfg().InternalExecutorFactory.TxnWithExecutor(ctx, p.ExecCfg().DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return r.releaseProtectedTimestamp(ctx, txn, ie, p.ExecCfg().ProtectedTimestampProvider)
 	}); err != nil {
 		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
 	}
@@ -781,7 +781,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		ctx, span = tracing.ChildSpan(ctx, "import-parsing-bundle-schema")
 		defer span.Finish()
 
-		if err := r.job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		if err := r.job.RunningStatus(ctx, nil /* txn */, nil /* ie */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatusImportBundleParseSchema, nil
 		}); err != nil {
 			return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(r.job.ID()))
@@ -845,7 +845,7 @@ func (r *importResumer) parseBundleSchemaIfNeeded(ctx context.Context, phs inter
 		// Prevent job from redoing schema parsing and table desc creation
 		// on subsequent resumptions.
 		details.ParseBundleSchema = false
-		if err := r.job.SetDetails(ctx, nil /* txn */, details); err != nil {
+		if err := r.job.SetDetails(ctx, nil /* txn */, nil /* ie */, details); err != nil {
 			return err
 		}
 	}
@@ -980,8 +980,8 @@ func (r *importResumer) publishTables(
 
 	log.Event(ctx, "making tables live")
 
-	err := sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	err := execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		b := txn.NewBatch()
 		for _, tbl := range details.Tables {
@@ -1030,7 +1030,7 @@ func (r *importResumer) publishTables(
 
 		// Update job record to mark tables published state as complete.
 		details.TablesPublished = true
-		err := r.job.SetDetails(ctx, txn, details)
+		err := r.job.SetDetails(ctx, txn, ie, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing tables")
 		}
@@ -1101,8 +1101,8 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 	}
 	log.Event(ctx, "making schemas live")
 
-	return sql.DescsTxn(ctx, execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	return execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, execCfg.DB, nil /* session data */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		b := txn.NewBatch()
 		for _, schema := range details.Schemas {
@@ -1128,7 +1128,7 @@ func (r *importResumer) publishSchemas(ctx context.Context, execCfg *sql.Executo
 
 		// Update job record to mark tables published state as complete.
 		details.SchemasPublished = true
-		err := r.job.SetDetails(ctx, txn, details)
+		err := r.job.SetDetails(ctx, txn, ie, details)
 		if err != nil {
 			return errors.Wrap(err, "updating job details after publishing schemas")
 		}
@@ -1146,7 +1146,7 @@ func (r *importResumer) checkVirtualConstraints(
 		desc.SetPublic()
 
 		if sql.HasVirtualUniqueConstraints(desc) {
-			if err := job.RunningStatus(ctx, nil /* txn */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+			if err := job.RunningStatus(ctx, nil /* txn */, nil /* ie */, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 				return jobs.RunningStatus(fmt.Sprintf("re-validating %s", desc.GetName())), nil
 			}); err != nil {
 				return errors.Wrapf(err, "failed to update running status of job %d", errors.Safe(job.ID()))
@@ -1433,9 +1433,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 	addToFileFormatTelemetry(details.Format.Format.String(), "failed")
 	cfg := execCtx.(sql.JobExecContext).ExecCfg()
 	var jobsToRunAfterTxnCommit []jobspb.JobID
-	if err := sql.DescsTxn(ctx, cfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
-	) error {
+	if err := cfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, cfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor) error {
 		if err := r.dropTables(ctx, txn, descsCol, cfg); err != nil {
 			return err
 		}
@@ -1452,7 +1450,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, execCtx interface{},
 		}
 		// TODO(adityamaru): Remove in 22.1 since we do not write PTS records during
 		// IMPORT INTO from 21.2+.
-		return r.releaseProtectedTimestamp(ctx, txn, cfg.ProtectedTimestampProvider)
+		return r.releaseProtectedTimestamp(ctx, txn, ie, cfg.ProtectedTimestampProvider)
 	}); err != nil {
 		return err
 	}
@@ -1736,7 +1734,7 @@ func (r *importResumer) dropSchemas(
 }
 
 func (r *importResumer) releaseProtectedTimestamp(
-	ctx context.Context, txn *kv.Txn, pts protectedts.Storage,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, pts protectedts.Storage,
 ) error {
 	details := r.job.Details().(jobspb.ImportDetails)
 	ptsID := details.ProtectedTimestampRecord
@@ -1744,7 +1742,7 @@ func (r *importResumer) releaseProtectedTimestamp(
 	if ptsID == nil {
 		return nil
 	}
-	err := pts.Release(ctx, txn, *ptsID)
+	err := pts.Release(ctx, txn, ie, *ptsID)
 	if errors.Is(err, protectedts.ErrNotExists) {
 		// No reason to return an error which might cause problems if it doesn't
 		// seem to exist.

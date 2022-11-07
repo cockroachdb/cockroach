@@ -83,7 +83,11 @@ func CreateSQLStatsCompactionScheduleIfNotYetExist(
 // We do not need to worry about checking if the job already exist;
 // at most 1 job semantics are enforced by scheduled jobs system.
 func CreateCompactionJob(
-	ctx context.Context, createdByInfo *jobs.CreatedByInfo, txn *kv.Txn, jobRegistry *jobs.Registry,
+	ctx context.Context,
+	createdByInfo *jobs.CreatedByInfo,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	jobRegistry *jobs.Registry,
 ) (jobspb.JobID, error) {
 	record := jobs.Record{
 		Description: "automatic SQL Stats compaction",
@@ -94,7 +98,7 @@ func CreateCompactionJob(
 	}
 
 	jobID := jobRegistry.MakeJobID()
-	if _, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, record, jobID, txn); err != nil {
+	if _, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, record, jobID, txn, ie); err != nil {
 		return jobspb.InvalidJobID, err
 	}
 	return jobID, nil

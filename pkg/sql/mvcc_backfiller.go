@@ -280,7 +280,7 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 		details.ResumeSpanList[progress.MutationIdx[idx]].ResumeSpans = progress.TodoSpans[idx]
 	}
 
-	return imt.jobMu.job.SetDetails(ctx, nil, details)
+	return imt.jobMu.job.SetDetails(ctx, nil /* txn */, nil /* ie */, details)
 }
 
 // FlushFractionCompleted writes out the fraction completed based on the number of total
@@ -307,7 +307,7 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 
 		imt.jobMu.Lock()
 		defer imt.jobMu.Unlock()
-		if err := imt.jobMu.job.FractionProgressed(ctx, nil,
+		if err := imt.jobMu.job.FractionProgressed(ctx, nil /* txn */, nil, /* ie */
 			jobs.FractionUpdater(frac)); err != nil {
 			return jobs.SimplifyInvalidStatusError(err)
 		}

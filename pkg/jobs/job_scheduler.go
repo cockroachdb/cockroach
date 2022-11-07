@@ -182,7 +182,7 @@ func (s *jobScheduler) processSchedule(
 		schedule.ScheduledRunTime(), schedule.NextRun())
 
 	execCtx := logtags.AddTag(ctx, "schedule", schedule.ScheduleID())
-	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn); err != nil {
+	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn, nil); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 

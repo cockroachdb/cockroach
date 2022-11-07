@@ -159,17 +159,18 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 		return record.Progress.(jobspb.StreamReplicationProgress).Expiration
 	}
 	runJobWithProtectedTimestamp := func(ptsID uuid.UUID, ts hlc.Timestamp, jr jobs.Record) error {
-		return source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			deprecatedTenantSpan := roachpb.Spans{*makeTenantSpan(30)}
-			tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(30)})
-			if err := ptp.Protect(ctx, txn,
-				jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), ts,
-					deprecatedTenantSpan, jobsprotectedts.Jobs, tenantTarget)); err != nil {
+		return source.InternalExecutorFactory().(sqlutil.InternalExecutorFactory).TxnWithExecutor(
+			ctx, source.DB(), nil, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				deprecatedTenantSpan := roachpb.Spans{*makeTenantSpan(30)}
+				tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(30)})
+				if err := ptp.Protect(ctx, txn,
+					jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), ts,
+						deprecatedTenantSpan, jobsprotectedts.Jobs, tenantTarget)); err != nil {
+					return err
+				}
+				_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn, ie)
 				return err
-			}
-			_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn)
-			return err
-		})
+			})
 	}
 	getPTSRecord := func(ptsID uuid.UUID) (r *ptpb.Record, err error) {
 		ief := source.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)

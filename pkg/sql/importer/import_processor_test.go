@@ -726,7 +726,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	js := queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return js.prog.ResumePos[0] > 0 })
 
 	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
+	if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, ""); err != nil {
 		t.Fatal(err)
 	}
 	// Send cancellation and unblock breakpoint.
@@ -739,7 +739,7 @@ func TestCSVImportCanBeResumed(t *testing.T) {
 	t.Logf("Resume pos: %v\n", js.prog.ResumePos[0])
 
 	// Unpause the job and wait for it to complete.
-	if err := registry.Unpause(ctx, nil, jobID); err != nil {
+	if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID); err != nil {
 		t.Fatal(err)
 	}
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })
@@ -830,7 +830,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	proceedImport := controllerBarrier.Enter()
 
 	// Pause the job;
-	if err := registry.PauseRequested(ctx, nil, jobID, ""); err != nil {
+	if err := registry.PauseRequested(ctx, nil /* txn */, nil /* ie */, jobID, ""); err != nil {
 		t.Fatal(err)
 	}
 
@@ -845,7 +845,7 @@ func TestCSVImportMarksFilesFullyProcessed(t *testing.T) {
 	proceedImport()
 
 	// Unpause the job and wait for it to complete.
-	if err := registry.Unpause(ctx, nil, jobID); err != nil {
+	if err := registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID); err != nil {
 		t.Fatal(err)
 	}
 	js = queryJobUntil(t, sqlDB.DB, jobID, func(js jobState) bool { return jobs.StatusSucceeded == js.status })

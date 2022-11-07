@@ -33,7 +33,7 @@ type replicationStreamManagerImpl struct {
 func (r *replicationStreamManagerImpl) StartReplicationStream(
 	ctx context.Context, tenantID uint64,
 ) (streampb.StreamID, error) {
-	return startReplicationStreamJob(ctx, r.evalCtx, r.txn, tenantID)
+	return startReplicationStreamJob(ctx, r.evalCtx, r.txn, r.ie, tenantID)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -61,7 +61,7 @@ func (r *replicationStreamManagerImpl) GetReplicationStreamSpec(
 func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
-	return completeReplicationStream(ctx, r.evalCtx, r.txn, streamID, successfulIngestion)
+	return completeReplicationStream(ctx, r.evalCtx, r.txn, r.ie, streamID, successfulIngestion)
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(

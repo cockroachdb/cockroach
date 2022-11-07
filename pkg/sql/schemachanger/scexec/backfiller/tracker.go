@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -102,15 +103,15 @@ func newTrackerConfig(codec keys.SQLCodec, rc RangeCounter, job *jobs.Job) track
 		numRangesInSpanContainedBy: rc.NumRangesInSpanContainedBy,
 		writeProgressFraction: func(ctx context.Context, fractionProgressed float32) error {
 			if err := job.FractionProgressed(
-				ctx, nil /* txn */, jobs.FractionUpdater(fractionProgressed),
+				ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(fractionProgressed),
 			); err != nil {
 				return jobs.SimplifyInvalidStatusError(err)
 			}
 			return nil
 		},
 		writeCheckpoint: func(ctx context.Context, bps []scexec.BackfillProgress, mps []scexec.MergeProgress) error {
-			return job.Update(ctx, nil /* txn */, func(
-				txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+			return job.Update(ctx, nil /* txn */, nil /* ie */, func(
+				_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
 				pl := md.Payload
 				backfillJobProgress, err := convertToJobBackfillProgress(codec, bps)

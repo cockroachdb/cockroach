@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -173,15 +174,11 @@ func (n *controlSchedulesNode) startExec(params runParams) error {
 			if controller, ok := ex.(jobs.ScheduledJobController); ok {
 				scheduleControllerEnv := scheduledjobs.MakeProdScheduleControllerEnv(
 					params.ExecCfg().ProtectedTimestampProvider, params.ExecCfg().InternalExecutor)
-				additionalDroppedSchedules, err := controller.OnDrop(
-					params.ctx,
-					scheduleControllerEnv,
-					scheduledjobs.ProdJobSchedulerEnv,
-					schedule,
-					params.p.Txn(),
-					params.p.Descriptors(),
-				)
-				if err != nil {
+				var additionalDroppedSchedules int
+				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+					additionalDroppedSchedules, err = controller.OnDrop(params.ctx, scheduleControllerEnv, scheduledjobs.ProdJobSchedulerEnv, schedule, params.p.Txn(), params.p.Descriptors(), ie)
+					return err
+				}); err != nil {
 					return errors.Wrap(err, "failed to run OnDrop")
 				}
 				n.numRows += additionalDroppedSchedules

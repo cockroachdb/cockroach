@@ -405,13 +405,13 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 	// pauseOrCancelJob pauses or cancels a job. If pauseJob is true, the job is paused,
 	// otherwise the job is canceled.
 	pauseOrCancelJob := func(
-		t *testing.T, ctx context.Context, db *kv.DB, registry *Registry, jobID jobspb.JobID, pauseJob bool,
+		t *testing.T, ctx context.Context, db *kv.DB, ief sqlutil.InternalExecutorFactory, registry *Registry, jobID jobspb.JobID, pauseJob bool,
 	) {
-		assert.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		assert.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			if pauseJob {
-				return registry.PauseRequested(ctx, txn, jobID, "")
+				return registry.PauseRequested(ctx, txn, ie, jobID, "")
 			}
-			return registry.CancelRequested(ctx, txn, jobID)
+			return registry.CancelRequested(ctx, txn, ie, jobID)
 		}))
 	}
 	// nextDelay returns the next delay based calculated from the given retryCnt
@@ -614,16 +614,18 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		cleanup := testInfraSetUp(ctx, &bti)
 		defer cleanup()
 
+		ief := bti.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+
 		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
 		retryCnt := 0
 		expectedResumed := int64(0)
 		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
 			<-bti.resumeCh
-			pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, pause)
+			pauseOrCancelJob(t, ctx, bti.kvDB, ief, bti.registry, jobID, pause)
 			bti.errCh <- nil
 			<-bti.transitionCh
 			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
-			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
+			require.NoError(t, bti.registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID))
 		})
 	})
 
@@ -661,10 +663,12 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		cleanup := testInfraSetUp(ctx, &bti)
 		defer cleanup()
 
+		ief := bti.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+
 		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
 		bti.clock.AdvanceTo(lastRun)
 		<-bti.resumeCh
-		pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, cancel)
+		pauseOrCancelJob(t, ctx, bti.kvDB, ief, bti.registry, jobID, cancel)
 		bti.errCh <- nil
 		<-bti.failOrCancelCh
 		bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state"))
@@ -691,6 +695,8 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		cleanup := testInfraSetUp(ctx, &bti)
 		defer cleanup()
 
+		ief := bti.s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+
 		jobID, lastRun := createJob(ctx, bti.s, bti.registry, bti.tdb, bti.kvDB)
 		bti.clock.AdvanceTo(lastRun)
 		<-bti.resumeCh
@@ -702,7 +708,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 		retryCnt := 1
 		runTest(t, jobID, retryCnt, expectedResumed, lastRun, &bti, func(_ int64) {
 			<-bti.failOrCancelCh
-			pauseOrCancelJob(t, ctx, bti.kvDB, bti.registry, jobID, pause)
+			pauseOrCancelJob(t, ctx, bti.kvDB, ief, bti.registry, jobID, pause)
 			// We have to return error here because, otherwise, the job will be marked as
 			// failed regardless of the fact that it is currently pause-requested in the
 			// jobs table. This is because we currently do not check the current status
@@ -710,7 +716,7 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 			bti.errCh <- MarkAsRetryJobError(errors.New("injecting error in reverting state to retry"))
 			<-bti.transitionCh
 			waitUntilStatus(t, bti.tdb, jobID, StatusPaused)
-			require.NoError(t, bti.registry.Unpause(ctx, nil, jobID))
+			require.NoError(t, bti.registry.Unpause(ctx, nil /* txn */, nil /* ie */, jobID))
 		})
 	})
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -416,33 +417,41 @@ func (p *planner) markTableMutationJobsSuccessful(
 			delete(p.ExtendedEvalContext().SchemaChangeJobRecords, tableDesc.ID)
 			continue
 		}
-		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
-		if err != nil {
+
+		var mutationJob *jobs.Job
+		var err error
+		if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			mutationJob, err = p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn, ie)
+			return err
+		}); err != nil {
 			if jobs.HasJobNotFoundError(err) {
 				log.Warningf(ctx, "mutation job %d not found", jobID)
 				continue
 			}
 			return err
 		}
-		if err := mutationJob.Update(
-			ctx, p.txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-				status := md.Status
-				switch status {
-				case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
-					log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
+
+		if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return mutationJob.Update(
+				ctx, p.txn, ie, func(txn *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+					status := md.Status
+					switch status {
+					case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
+						log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
+						return nil
+					case jobs.StatusRunning, jobs.StatusPending:
+						status = jobs.StatusSucceeded
+					default:
+						// We shouldn't mark jobs as succeeded if they're not in a state where
+						// they're eligible to ever succeed, so mark them as failed.
+						status = jobs.StatusFailed
+					}
+					log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
+					ju.UpdateStatus(status)
 					return nil
-				case jobs.StatusRunning, jobs.StatusPending:
-					status = jobs.StatusSucceeded
-				default:
-					// We shouldn't mark jobs as succeeded if they're not in a state where
-					// they're eligible to ever succeed, so mark them as failed.
-					status = jobs.StatusFailed
-				}
-				log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
-				ju.UpdateStatus(status)
-				return nil
-			}); err != nil {
-			return errors.Wrap(err, "updating mutation job for dropped table")
+				})
+		}); err != nil {
+			return err
 		}
 	}
 	return nil

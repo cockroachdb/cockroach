@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -395,7 +396,8 @@ func (r *Registry) runJob(
 	span.SetTag("job-id", attribute.Int64Value(int64(job.ID())))
 	defer span.Finish()
 	if span.TraceID() != 0 {
-		if err := job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md JobMetadata,
+		if err := job.Update(ctx, nil /* txn */, nil /* ie */, func(
+			_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata,
 			ju *JobUpdater) error {
 			progress := *md.Progress
 			progress.TraceID = span.TraceID()
@@ -441,7 +443,7 @@ RETURNING id, status
 `
 
 func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqlliveness.Session) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return r.internalExecutorFactory.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
 		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
@@ -451,7 +453,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		// job - because we have to make sure that the query executes without an
 		// error (otherwise, the system.jobs table might diverge from the jobs
 		// registry).
-		rows, err := r.ex.QueryBufferedEx(
+		rows, err := ie.QueryBufferedEx(
 			ctx, "cancel/pause-requested", txn, sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 			pauseAndCancelUpdate, s.ID().UnsafeBytes(), r.ID(),
 		)
@@ -467,7 +469,7 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 				r.cancelRegisteredJobContext(id)
 				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
-				if err := job.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
+				if err := job.Update(ctx, txn, ie, func(_ *kv.Txn, _ sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error {
 					r.cancelRegisteredJobContext(id)
 					md.Payload.Error = errJobCanceled.Error()
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)

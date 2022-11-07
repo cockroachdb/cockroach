@@ -259,7 +259,7 @@ func TestProtectedTimestamps(t *testing.T) {
 
 	// Release the record that had succeeded and ensure that GC eventually
 	// happens up to the protected timestamp of the new record.
-	require.NoError(t, ptsWithDB.Release(ctx, nil, ptsRec.ID.GetUUID()))
+	require.NoError(t, ptsWithDB.Release(ctx, nil /* txn */, ieNotBoundToTxn, ptsRec.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
 		trace, _, err = s.Enqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */, false /* async */)
 		require.NoError(t, err)
@@ -275,8 +275,8 @@ func TestProtectedTimestamps(t *testing.T) {
 	})
 
 	// Release the failed record.
-	require.NoError(t, ptsWithDB.Release(ctx, nil, failedRec.ID.GetUUID()))
-	require.NoError(t, ptsWithDB.Release(ctx, nil, laterRec.ID.GetUUID()))
+	require.NoError(t, ptsWithDB.Release(ctx, nil /* txn */, ieNotBoundToTxn, failedRec.ID.GetUUID()))
+	require.NoError(t, ptsWithDB.Release(ctx, nil /* txn */, ieNotBoundToTxn, laterRec.ID.GetUUID()))
 	state, err := ptsWithDB.GetState(ctx, nil /* txn */, ieNotBoundToTxn)
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)

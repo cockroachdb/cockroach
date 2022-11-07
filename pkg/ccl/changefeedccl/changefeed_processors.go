@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -1224,8 +1225,8 @@ func (cf *changeFrontier) checkpointJobProgress(
 	var updateSkipped error
 	if cf.js.job != nil {
 
-		if err := cf.js.job.Update(cf.Ctx, nil, func(
-			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		if err := cf.js.job.Update(cf.Ctx, nil /* txn */, nil /* ie */, func(
+			txn *kv.Txn, ie sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			// If we're unable to update the job due to the job state, such as during
 			// pause-requested, simply skip the checkpoint
@@ -1249,7 +1250,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			if !changefeedbase.ActiveProtectedTimestampsEnabled.Get(&cf.flowCtx.Cfg.Settings.SV) {
 				timestampManager = cf.deprecatedManageProtectedTimestamps
 			}
-			if err := timestampManager(cf.Ctx, txn, changefeedProgress); err != nil {
+			if err := timestampManager(cf.Ctx, txn, ie, changefeedProgress); err != nil {
 				log.Warningf(cf.Ctx, "error managing protected timestamp record: %v", err)
 				return err
 			}
@@ -1295,7 +1296,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 // the changefeed's targets to the current highwater mark.  The record is
 // cleared during changefeedResumer.OnFailOrCancel
 func (cf *changeFrontier) manageProtectedTimestamps(
-	ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	progress *jobspb.ChangefeedProgress,
 ) error {
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.flowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
@@ -1319,8 +1323,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		}
 	} else {
 		log.VEventf(ctx, 2, "updating protected timestamp %v at %v", recordID, highWater)
-		// TODO(janexing): update the ie after refactoring Job.Update().
-		if err := pts.UpdateTimestamp(ctx, txn, nil /* ie */, recordID, highWater); err != nil {
+		if err := pts.UpdateTimestamp(ctx, txn, ie, recordID, highWater); err != nil {
 			return err
 		}
 	}
@@ -1333,10 +1336,13 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 // sufficient degree after a backfill.  This was deprecated in favor of always
 // maintaining a timestamp record to avoid issues with a low gcttl setting.
 func (cf *changeFrontier) deprecatedManageProtectedTimestamps(
-	ctx context.Context, txn *kv.Txn, progress *jobspb.ChangefeedProgress,
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	progress *jobspb.ChangefeedProgress,
 ) error {
 	pts := cf.flowCtx.Cfg.ProtectedTimestampProvider
-	if err := cf.deprecatedMaybeReleaseProtectedTimestamp(ctx, progress, pts, txn); err != nil {
+	if err := cf.deprecatedMaybeReleaseProtectedTimestamp(ctx, progress, pts, txn, ie); err != nil {
 		return err
 	}
 
@@ -1351,7 +1357,11 @@ func (cf *changeFrontier) deprecatedManageProtectedTimestamps(
 }
 
 func (cf *changeFrontier) deprecatedMaybeReleaseProtectedTimestamp(
-	ctx context.Context, progress *jobspb.ChangefeedProgress, pts protectedts.Storage, txn *kv.Txn,
+	ctx context.Context,
+	progress *jobspb.ChangefeedProgress,
+	pts protectedts.Storage,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	if progress.ProtectedTimestampRecord == uuid.Nil {
 		return nil
@@ -1362,7 +1372,7 @@ func (cf *changeFrontier) deprecatedMaybeReleaseProtectedTimestamp(
 	}
 	log.VEventf(ctx, 2, "releasing protected timestamp %v",
 		progress.ProtectedTimestampRecord)
-	if err := pts.Release(ctx, txn, progress.ProtectedTimestampRecord); err != nil {
+	if err := pts.Release(ctx, txn, ie, progress.ProtectedTimestampRecord); err != nil {
 		return err
 	}
 	progress.ProtectedTimestampRecord = uuid.Nil

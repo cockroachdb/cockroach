@@ -34,6 +34,7 @@ type ValidateForwardIndexesFn func(
 	jobID jobspb.JobID,
 	codec keys.SQLCodec,
 	db *kv.DB,
+	ief sqlutil.InternalExecutorFactory,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -50,6 +51,7 @@ type ValidateInvertedIndexesFn func(
 	jobID jobspb.JobID,
 	codec keys.SQLCodec,
 	db *kv.DB,
+	ief sqlutil.InternalExecutorFactory,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
@@ -98,7 +100,7 @@ func (vd validator) ValidateForwardIndexes(
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
 	return vd.validateForwardIndexes(
-		ctx, jobID, vd.codec, vd.db, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
+		ctx, jobID, vd.codec, vd.db, vd.ieFactory, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
 		withFirstMutationPublic, gatherAllInvalid, override, vd.protectedTimestampProvider,
 		vd.systemConfig,
 	)
@@ -116,7 +118,7 @@ func (vd validator) ValidateInvertedIndexes(
 	const withFirstMutationPublic = true
 	const gatherAllInvalid = false
 	return vd.validateInvertedIndexes(
-		ctx, jobID, vd.codec, vd.db, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
+		ctx, jobID, vd.codec, vd.db, vd.ieFactory, tbl, indexes, vd.makeHistoricalInternalExecTxnRunner(),
 		withFirstMutationPublic, gatherAllInvalid, override, vd.protectedTimestampProvider,
 		vd.systemConfig,
 	)

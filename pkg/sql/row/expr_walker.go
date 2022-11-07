@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -286,9 +287,10 @@ func importGenUUID(
 // SeqChunkProvider uses the import job progress to read and write its sequence
 // value chunks.
 type SeqChunkProvider struct {
-	JobID    jobspb.JobID
-	Registry *jobs.Registry
-	DB       *kv.DB
+	JobID                   jobspb.JobID
+	Registry                *jobs.Registry
+	DB                      *kv.DB
+	InternalExecutorFactory sqlutil.InternalExecutorFactory
 }
 
 // RequestChunk updates seqMetadata with information about the chunk of sequence
@@ -299,9 +301,9 @@ func (j *SeqChunkProvider) RequestChunk(
 	ctx context.Context, evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) error {
 	var hasAllocatedChunk bool
-	return j.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return j.InternalExecutorFactory.TxnWithExecutor(ctx, j.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		var foundFromPreviouslyAllocatedChunk bool
-		resolveChunkFunc := func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		resolveChunkFunc := func(_ *kv.Txn, _ sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 
 			// Check if we have already reserved a chunk corresponding to this row in a
@@ -357,7 +359,7 @@ func (j *SeqChunkProvider) RequestChunk(
 			return nil
 		}
 		const useReadLock = true
-		err := j.Registry.UpdateJobWithTxn(ctx, j.JobID, txn, useReadLock, resolveChunkFunc)
+		err := j.Registry.UpdateJobWithTxn(ctx, j.JobID, txn, ie, useReadLock, resolveChunkFunc)
 		if err != nil {
 			return err
 		}

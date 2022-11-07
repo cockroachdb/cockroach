@@ -57,22 +57,26 @@ func (s *storageWithDatabase) GetRecord(
 	return s.s.GetRecord(ctx, txn, id, executor)
 }
 
-func (s *storageWithDatabase) MarkVerified(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
+func (s *storageWithDatabase) MarkVerified(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id uuid.UUID,
+) error {
 	if txn == nil {
-		return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return s.s.Release(ctx, txn, id)
+		return s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, executor sqlutil.InternalExecutor) error {
+			return s.s.Release(ctx, newTxn, executor, id)
 		})
 	}
-	return s.s.Release(ctx, txn, id)
+	return s.s.Release(ctx, txn, ie, id)
 }
 
-func (s *storageWithDatabase) Release(ctx context.Context, txn *kv.Txn, id uuid.UUID) error {
+func (s *storageWithDatabase) Release(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id uuid.UUID,
+) error {
 	if txn == nil {
-		return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return s.s.Release(ctx, txn, id)
+		return s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, executor sqlutil.InternalExecutor) error {
+			return s.s.Release(ctx, newTxn, executor, id)
 		})
 	}
-	return s.s.Release(ctx, txn, id)
+	return s.s.Release(ctx, txn, ie, id)
 }
 
 func (s *storageWithDatabase) GetMetadata(

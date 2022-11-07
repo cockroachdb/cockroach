@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 func init() {
@@ -54,7 +55,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
-	if err := n.job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := n.job.Update(ctx, nil /* txn */, nil /* ie */, func(txn *kv.Txn, ie sqlutil.InternalExecutor, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		return nil
 	}); err != nil {
 		// TODO(ajwerner): Detect transient errors and classify as retriable here or

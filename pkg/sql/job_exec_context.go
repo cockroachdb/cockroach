@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -72,6 +73,13 @@ func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 }
 func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 
+func (e *plannerJobExecContext) WithInternalExecutor(
+	ctx context.Context,
+	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+) error {
+	return e.p.WithInternalExecutor(ctx, run)
+}
+
 // ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
 func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
 	ctx context.Context,
@@ -107,4 +115,8 @@ type JobExecContext interface {
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	Txn() *kv.Txn
+	WithInternalExecutor(
+		ctx context.Context,
+		run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
+	) error
 }

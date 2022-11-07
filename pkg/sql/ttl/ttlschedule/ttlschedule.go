@@ -58,6 +58,7 @@ func (s rowLevelTTLExecutor) OnDrop(
 	schedule *jobs.ScheduledJob,
 	txn *kv.Txn,
 	descsCol *descs.Collection,
+	ie sqlutil.InternalExecutor,
 ) (int, error) {
 
 	var args catpb.ScheduledRowLevelTTLArgs
@@ -126,6 +127,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	args := &catpb.ScheduledRowLevelTTLArgs{}
 	if err := pbtypes.UnmarshalAny(sj.ExecutionArgs().Args, args); err != nil {
@@ -146,6 +148,7 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 			Name: jobs.CreatedByScheduledJobs,
 		},
 		txn,
+		ie,
 		p.(sql.PlanHookState).ExtendedEvalContext().Descs,
 		p.(sql.PlanHookState).ExecCfg().JobRegistry,
 		*args,
@@ -242,6 +245,7 @@ func createRowLevelTTLJob(
 	ctx context.Context,
 	createdByInfo *jobs.CreatedByInfo,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	descsCol *descs.Collection,
 	jobRegistry *jobs.Registry,
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
@@ -267,7 +271,7 @@ func createRowLevelTTLJob(
 	}
 
 	jobID := jobRegistry.MakeJobID()
-	if _, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, record, jobID, txn); err != nil {
+	if _, err := jobRegistry.CreateAdoptableJobWithTxn(ctx, record, jobID, txn, ie); err != nil {
 		return jobspb.InvalidJobID, err
 	}
 	return jobID, nil

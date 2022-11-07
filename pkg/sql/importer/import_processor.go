@@ -163,9 +163,10 @@ func newReadImportDataProcessor(
 	// job progress within the import processor.
 	if cp.flowCtx.Cfg.JobRegistry != nil {
 		cp.seqChunkProvider = &row.SeqChunkProvider{
-			JobID:    cp.spec.Progress.JobID,
-			Registry: cp.flowCtx.Cfg.JobRegistry,
-			DB:       cp.flowCtx.Cfg.DB,
+			JobID:                   cp.spec.Progress.JobID,
+			Registry:                cp.flowCtx.Cfg.JobRegistry,
+			DB:                      cp.flowCtx.Cfg.DB,
+			InternalExecutorFactory: cp.flowCtx.Cfg.InternalExecutorFactory,
 		}
 	}
 

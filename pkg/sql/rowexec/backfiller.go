@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -195,6 +196,7 @@ func GetResumeSpans(
 	ctx context.Context,
 	jobsRegistry *jobs.Registry,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
 	col *descs.Collection,
 	tableID descpb.ID,
@@ -244,7 +246,7 @@ func GetResumeSpans(
 			"no job found for mutation %d", errors.Safe(mutationID))
 	}
 
-	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
+	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn, ie)
 	if err != nil {
 		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", errors.Safe(jobID))
 	}
@@ -268,12 +270,17 @@ func GetResumeSpans(
 
 // SetResumeSpansInJob adds a list of resume spans into a job details field.
 func SetResumeSpansInJob(
-	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn *kv.Txn, job *jobs.Job,
+	ctx context.Context,
+	spans []roachpb.Span,
+	mutationIdx int,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	job *jobs.Job,
 ) error {
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
-	return job.SetDetails(ctx, txn, details)
+	return job.SetDetails(ctx, txn, ie, details)
 }

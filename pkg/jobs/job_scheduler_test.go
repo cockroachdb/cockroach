@@ -239,11 +239,12 @@ type recordScheduleExecutor struct {
 }
 
 func (n *recordScheduleExecutor) ExecuteJob(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
-	_ *kv.Txn,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	n.executed = append(n.executed, schedule.ScheduleID())
 	return nil
@@ -469,11 +470,12 @@ type returnErrorExecutor struct {
 }
 
 func (e *returnErrorExecutor) ExecuteJob(
-	_ context.Context,
-	_ *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
+	ctx context.Context,
+	cfg *scheduledjobs.JobExecutionConfig,
+	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
-	_ *kv.Txn,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	e.numCalls++
 	return errors.Newf("error for schedule %d", schedule.ScheduleID())
@@ -635,6 +637,7 @@ func (e *txnConflictExecutor) ExecuteJob(
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	// Read number of rows -- this count will be used when updating
 	// a single row in the table.
@@ -830,6 +833,7 @@ func (e *blockUntilCancelledExecutor) ExecuteJob(
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	done := func() {}
 	e.once.Do(func() {

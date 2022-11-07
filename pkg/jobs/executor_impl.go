@@ -43,9 +43,10 @@ const retryFailedJobAfter = time.Minute
 func (e *inlineScheduledJobExecutor) ExecuteJob(
 	ctx context.Context,
 	cfg *scheduledjobs.JobExecutionConfig,
-	_ scheduledjobs.JobSchedulerEnv,
+	env scheduledjobs.JobSchedulerEnv,
 	schedule *ScheduledJob,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) error {
 	sqlArgs := &jobspb.SqlStatementExecutionArg{}
 

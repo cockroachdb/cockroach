@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -640,7 +641,15 @@ func dryRunInvokeBackup(
 	if err != nil {
 		return eventpb.RecoveryEvent{}, err
 	}
-	return invokeBackup(ctx, backupFn, p.ExecCfg().JobRegistry, p.Txn())
+	var recoverEnv eventpb.RecoveryEvent
+	if err := p.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		recoverEnv, err = invokeBackup(ctx, backupFn, p.ExecCfg().JobRegistry, p.Txn(), ie)
+		return err
+	}); err != nil {
+		return eventpb.RecoveryEvent{}, err
+	}
+
+	return recoverEnv, nil
 }
 
 func fullyQualifyScheduledBackupTargetTables(

@@ -170,7 +170,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 	// Create few jobs not started by any schedule.
 	for i := 0; i < numJobs; i++ {
 		_, err := registry.CreateAdoptableJobWithTxn(
-			context.Background(), record, registry.MakeJobID(), nil, /* txn */
+			context.Background(), record, registry.MakeJobID(), nil /* txn */, nil, /* ie */
 		)
 		require.NoError(t, err)
 	}
@@ -203,7 +203,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 				}
 				jobID := registry.MakeJobID()
 				_, err := registry.CreateAdoptableJobWithTxn(
-					context.Background(), record, jobID, nil, /* txn */
+					context.Background(), record, jobID, nil /* txn */, nil, /* ie */
 				)
 				require.NoError(t, err)
 
@@ -298,7 +298,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 				ID:   scheduleID,
 			}
 			jobID := registry.MakeJobID()
-			_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
+			_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */, nil /* ie */)
 			require.NoError(t, err)
 			th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
 		}
@@ -413,7 +413,7 @@ func TestJobControlByType(t *testing.T) {
 
 							jobID := registry.MakeJobID()
 							jobIDStrings = append(jobIDStrings, fmt.Sprintf("%d", jobID))
-							_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */)
+							_, err := registry.CreateAdoptableJobWithTxn(context.Background(), record, jobID, nil /* txn */, nil /* ie */)
 							require.NoError(t, err)
 							th.sqlDB.Exec(t, "UPDATE system.jobs SET status=$1 WHERE id=$2", status, jobID)
 						}

@@ -136,7 +136,10 @@ func distImport(
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
-		if err := job.FractionProgressed(ctx, nil, /* txn */
+		if err := job.FractionProgressed(
+			ctx,
+			nil, /* txn */
+			nil, /* ie */
 			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				prog := details.(*jobspb.Progress_Import).Import
 				prog.ReadProgress = make([]float32, len(from))
@@ -159,7 +162,10 @@ func distImport(
 	fractionProgress := make([]uint32, len(from))
 
 	updateJobProgress := func() error {
-		return job.FractionProgressed(ctx, nil, /* txn */
+		return job.FractionProgressed(
+			ctx,
+			nil, /* txn */
+			nil, /* ie */
 			func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 				var overall float32
 				prog := details.(*jobspb.Progress_Import).Import

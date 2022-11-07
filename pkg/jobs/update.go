@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -38,7 +39,7 @@ import (
 //
 // The function is free to modify contents of JobMetadata in place (but the
 // changes will be ignored unless JobUpdater is used).
-type UpdateFn func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error
+type UpdateFn func(txn *kv.Txn, ie sqlutil.InternalExecutor, md JobMetadata, ju *JobUpdater) error
 
 // RunStats consists of job-run statistics: num of runs and last-run timestamp.
 type RunStats struct {
@@ -135,12 +136,20 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 //
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
-func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error {
+func (j *Job) Update(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, updateFn UpdateFn,
+) error {
 	const useReadLock = false
-	return j.update(ctx, txn, useReadLock, updateFn)
+	return j.update(ctx, txn, ie, useReadLock, updateFn)
 }
 
-func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateFn UpdateFn) error {
+func (j *Job) update(
+	ctx context.Context,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	useReadLock bool,
+	updateFn UpdateFn,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "update-job")
 	defer sp.Finish()
 
@@ -149,11 +158,11 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 	var status Status
 	var runStats *RunStats
 
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
+	if err := j.runInTxn(ctx, txn, ie, func(ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor) error {
 		payload, progress, runStats = nil, nil, nil
 		var err error
 		var row tree.Datums
-		row, err = j.registry.ex.QueryRowEx(
+		row, err = executor.QueryRowEx(
 			ctx, "select-job", txn,
 			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 			getSelectStmtForJobUpdate(j.session != nil, useReadLock), j.ID(),
@@ -218,7 +227,7 @@ func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateF
 		}
 
 		var ju JobUpdater
-		if err := updateFn(txn, md, &ju); err != nil {
+		if err := updateFn(txn, executor, md, &ju); err != nil {
 			return err
 		}
 		if j.registry.knobs.BeforeUpdate != nil {

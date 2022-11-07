@@ -37,6 +37,7 @@ go_test(
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlliveness/slinstance",
         "//pkg/sql/sqltestutils",
+        "//pkg/sql/sqlutil",
         "//pkg/sql/tests",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

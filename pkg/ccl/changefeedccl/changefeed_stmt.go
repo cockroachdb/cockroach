@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -918,7 +919,7 @@ func (b *changefeedResumer) setJobRunningStatus(
 	}
 
 	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
-	if err := b.job.RunningStatus(ctx, nil,
+	if err := b.job.RunningStatus(ctx, nil /* txn */, nil, /* ie */
 		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return status, nil
 		},
@@ -967,17 +968,20 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.PauseRequested(ctx, jobExec.Txn(), func(ctx context.Context,
-			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
-			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
-			if err != nil {
-				return err
-			}
-			// directly update running status to avoid the running/reverted job status check
-			progress.RunningStatus = errorMessage
-			log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-			return nil
-		}, errorMessage)
+		return jobExec.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return b.job.PauseRequested(ctx, jobExec.Txn(), ie, func(ctx context.Context,
+				planHookState interface{}, newTxn *kv.Txn, executor sqlutil.InternalExecutor, progress *jobspb.Progress) error {
+				err := b.OnPauseRequest(ctx, jobExec, newTxn, executor, progress)
+				if err != nil {
+					return err
+				}
+				// directly update running status to avoid the running/reverted job status check
+				progress.RunningStatus = errorMessage
+				log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
+				return nil
+			}, errorMessage)
+		})
+
 	default:
 		return errors.Wrapf(changefeedErr, "unrecognized option value: %s=%s for handling error",
 			changefeedbase.OptOnError, details.Opts[changefeedbase.OptOnError])
@@ -1059,7 +1063,7 @@ func (b *changefeedResumer) OnFailOrCancel(
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
-	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
+	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.InternalExecutorFactory, execCfg.DB, execCfg.ProtectedTimestampProvider,
 		progress.GetChangefeed().ProtectedTimestampRecord)
 
 	// If this job has failed (not canceled), increment the counter.
@@ -1077,13 +1081,17 @@ func (b *changefeedResumer) OnFailOrCancel(
 
 // Try to clean up a protected timestamp created by the changefeed.
 func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
-	ctx context.Context, db *kv.DB, pts protectedts.Storage, ptsID uuid.UUID,
+	ctx context.Context,
+	ief sqlutil.InternalExecutorFactory,
+	db *kv.DB,
+	pts protectedts.Storage,
+	ptsID uuid.UUID,
 ) {
 	if ptsID == uuid.Nil {
 		return
 	}
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return pts.Release(ctx, txn, ptsID)
+	if err := ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		return pts.Release(ctx, txn, ie, ptsID)
 	}); err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 		// NB: The record should get cleaned up by the reconciliation loop.
 		// No good reason to cause more trouble by returning an error here.
@@ -1097,7 +1105,11 @@ var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 // OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
 // paused, we may want to clear the protected timestamp record.
 func (b *changefeedResumer) OnPauseRequest(
-	ctx context.Context, jobExec interface{}, txn *kv.Txn, progress *jobspb.Progress,
+	ctx context.Context,
+	jobExec interface{},
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	progress *jobspb.Progress,
 ) error {
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 
@@ -1108,7 +1120,7 @@ func (b *changefeedResumer) OnPauseRequest(
 		// Release existing pts record to avoid a single changefeed left on pause
 		// resulting in storage issues
 		if cp.ProtectedTimestampRecord != uuid.Nil {
-			if err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, cp.ProtectedTimestampRecord); err != nil {
+			if err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, ie, cp.ProtectedTimestampRecord); err != nil {
 				log.Warningf(ctx, "failed to release protected timestamp %v: %v", cp.ProtectedTimestampRecord, err)
 			} else {
 				cp.ProtectedTimestampRecord = uuid.Nil

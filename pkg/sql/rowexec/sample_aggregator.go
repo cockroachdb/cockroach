@@ -231,10 +231,10 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		// If it changed by less than 1%, just check for cancellation (which is more
 		// efficient).
 		if fractionCompleted < 1.0 && fractionCompleted < lastReportedFractionCompleted+0.01 {
-			return job.CheckStatus(ctx, nil /* txn */)
+			return job.CheckStatus(ctx, nil /* txn */, nil /* ie */)
 		}
 		lastReportedFractionCompleted = fractionCompleted
-		return job.FractionProgressed(ctx, nil /* txn */, jobs.FractionUpdater(fractionCompleted))
+		return job.FractionProgressed(ctx, nil /* txn */, nil /* ie */, jobs.FractionUpdater(fractionCompleted))
 	}
 
 	var rowsProcessed uint64

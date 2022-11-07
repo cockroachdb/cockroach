@@ -84,14 +84,14 @@ type Storage interface {
 	// MarkVerified will mark a protected timestamp as verified.
 	//
 	// This method is generally used by an implementation of Verifier.
-	MarkVerified(context.Context, *kv.Txn, uuid.UUID) error
+	MarkVerified(context.Context, *kv.Txn, sqlutil.InternalExecutor, uuid.UUID) error
 
 	// Release allows spans which were previously protected to now be garbage
 	// collected.
 	//
 	// If the specified UUID does not exist ErrNotFound is returned but the
 	// passed txn remains safe for future use.
-	Release(context.Context, *kv.Txn, uuid.UUID) error
+	Release(context.Context, *kv.Txn, sqlutil.InternalExecutor, uuid.UUID) error
 
 	// GetMetadata retrieves the metadata with the provided Txn.
 	GetMetadata(context.Context, *kv.Txn, sqlutil.InternalExecutor) (ptpb.Metadata, error)

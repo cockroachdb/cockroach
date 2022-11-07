@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,6 +43,7 @@ import (
 func TestingWriteResumeSpan(
 	ctx context.Context,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	codec keys.SQLCodec,
 	col *descs.Collection,
 	id descpb.ID,
@@ -54,14 +56,14 @@ func TestingWriteResumeSpan(
 	defer traceSpan.Finish()
 
 	resumeSpans, job, mutationIdx, err := rowexec.GetResumeSpans(
-		ctx, jobsRegistry, txn, codec, col, id, mutationID, filter,
+		ctx, jobsRegistry, txn, ie, codec, col, id, mutationID, filter,
 	)
 	if err != nil {
 		return err
 	}
 
 	resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
-	return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
+	return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, ie, job)
 }
 
 func TestWriteResumeSpan(t *testing.T) {
@@ -134,13 +136,13 @@ func TestWriteResumeSpan(t *testing.T) {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
 
-	require.NoError(t, job.Update(ctx, nil, /* txn */
-		func(_ *kv.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	require.NoError(t, job.Update(ctx, nil /* txn */, nil, /* ie */
+		func(_ *kv.Txn, _ sqlutil.InternalExecutor, _ jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			ju.UpdateStatus(jobs.StatusRunning)
 			return nil
 		}))
 
-	err = job.SetDetails(ctx, nil /* txn */, details)
+	err = job.SetDetails(ctx, nil /* txn */, nil /* ie */, details)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,12 +181,15 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		if err := server.InternalExecutorFactory().(descs.TxnManager).DescsTxnWithExecutor(ctx, server.DB(), nil /* sessionData */, func(
+			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+		) error {
 			return TestingWriteResumeSpan(
 				ctx,
 				txn,
+				ie,
 				keys.SystemSQLCodec,
-				col,
+				descsCol,
 				tableDesc.ID,
 				mutationID,
 				backfill.IndexMutationFilter,
@@ -219,9 +224,10 @@ func TestWriteResumeSpan(t *testing.T) {
 	}
 
 	var got []roachpb.Span
-	if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
+	ief := server.InternalExecutorFactory().(descs.TxnManager)
+	if err := ief.DescsTxnWithExecutor(ctx, server.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) (err error) {
 		got, _, _, err = rowexec.GetResumeSpans(
-			ctx, registry, txn, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
+			ctx, registry, txn, ie, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err
 	}); err != nil {
 		t.Error(err)

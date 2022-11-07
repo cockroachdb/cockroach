@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -540,8 +541,8 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		checkGCBlockedByPTS(t, sj, tenID)
 
 		// Release the record.
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			require.NoError(t, ptp.Release(ctx, txn, rec.ID.GetUUID()))
+		require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			require.NoError(t, ptp.Release(ctx, txn, ie, rec.ID.GetUUID()))
 			return nil
 		}))
 
@@ -575,9 +576,9 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		checkTenantGCed(t, sj, roachpb.MakeTenantID(tenID))
 
 		// Cleanup.
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			require.NoError(t, ptp.Release(ctx, txn, clusterRec.ID.GetUUID()))
-			require.NoError(t, ptp.Release(ctx, txn, tenantRec.ID.GetUUID()))
+		require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			require.NoError(t, ptp.Release(ctx, txn, ie, clusterRec.ID.GetUUID()))
+			require.NoError(t, ptp.Release(ctx, txn, ie, tenantRec.ID.GetUUID()))
 			return nil
 		}))
 	})
@@ -634,8 +635,8 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			checkGCBlockedByPTS(t, sj, tenID)
 
 			// Release the record.
-			require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				require.NoError(t, ptp.Release(ctx, txn, rec.ID.GetUUID()))
+			require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+				require.NoError(t, ptp.Release(ctx, txn, ie, rec.ID.GetUUID()))
 				return nil
 			}))
 
