@@ -96,42 +96,42 @@ func TestRunWithMaybeRetry(t *testing.T) {
 
 	attempt := 0
 	cases := []struct {
-		f                func() (RunResultDetails, error)
-		shouldRetryFn    func(res RunResultDetails) bool
+		f                func() (*RunResultDetails, error)
+		shouldRetryFn    func(res *RunResultDetails) bool
 		expectedAttempts int
 		shouldError      bool
 	}{
 		{ // Happy path: no error, no retry required
-			f: func() (RunResultDetails, error) {
+			f: func() (*RunResultDetails, error) {
 				return newResult(0), nil
 			},
 			expectedAttempts: 1,
 			shouldError:      false,
 		},
 		{ // Error, but not retry function specified
-			f: func() (RunResultDetails, error) {
+			f: func() (*RunResultDetails, error) {
 				return newResult(1), nil
 			},
 			expectedAttempts: 1,
 			shouldError:      true,
 		},
 		{ // Error, with retries exhausted
-			f: func() (RunResultDetails, error) {
+			f: func() (*RunResultDetails, error) {
 				return newResult(255), nil
 			},
-			shouldRetryFn:    func(d RunResultDetails) bool { return d.RemoteExitStatus == 255 },
+			shouldRetryFn:    func(d *RunResultDetails) bool { return d.RemoteExitStatus == 255 },
 			expectedAttempts: 3,
 			shouldError:      true,
 		},
 		{ // Eventual success after retries
-			f: func() (RunResultDetails, error) {
+			f: func() (*RunResultDetails, error) {
 				attempt++
 				if attempt == 3 {
 					return newResult(0), nil
 				}
 				return newResult(255), nil
 			},
-			shouldRetryFn:    func(d RunResultDetails) bool { return d.RemoteExitStatus == 255 },
+			shouldRetryFn:    func(d *RunResultDetails) bool { return d.RemoteExitStatus == 255 },
 			expectedAttempts: 3,
 			shouldError:      false,
 		},
@@ -148,12 +148,12 @@ func TestRunWithMaybeRetry(t *testing.T) {
 	}
 }
 
-func newResult(exitCode int) RunResultDetails {
+func newResult(exitCode int) *RunResultDetails {
 	var err error
 	if exitCode != 0 {
 		err = errors.Newf("Error with exit code %v", exitCode)
 	}
-	return RunResultDetails{RemoteExitStatus: exitCode, Err: err}
+	return &RunResultDetails{RemoteExitStatus: exitCode, Err: err}
 }
 
 func nilLogger() *logger.Logger {

@@ -172,9 +172,9 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	l.Printf("%s: starting nodes", c.Name)
-	if err := c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) (RunResultDetails, error) {
+	if err := c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) (*RunResultDetails, error) {
 		node := nodes[nodeIdx]
-		res := RunResultDetails{Node: node}
+		res := &RunResultDetails{Node: node}
 		// NB: if cockroach started successfully, we ignore the output as it is
 		// some harmless start messaging.
 		if _, err := c.startNode(ctx, l, node, startOpts); err != nil {
@@ -317,7 +317,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 	resultChan := make(chan result, len(c.Nodes))
 
 	display := fmt.Sprintf("%s: executing sql", c.Name)
-	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (RunResultDetails, error) {
+	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
 		sess, res, err := c.setupSession(node)
 		if err != nil {
@@ -333,7 +333,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, &res)
+		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)

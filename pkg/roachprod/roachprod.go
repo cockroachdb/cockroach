@@ -449,9 +449,9 @@ func IP(
 		}
 	} else {
 		var err error
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (install.RunResultDetails, error) {
+		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := c.Nodes[i]
-			res := install.RunResultDetails{Node: node}
+			res := &install.RunResultDetails{Node: node}
 			res.Stdout, res.Err = c.GetInternalIP(ctx, nodes[i])
 			ips[i] = res.Stdout
 			return res, err
@@ -864,9 +864,9 @@ func PgURL(
 		}
 	} else {
 		var err error
-		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (install.RunResultDetails, error) {
+		if err := c.Parallel(l, "", len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 			node := c.Nodes[i]
-			res := install.RunResultDetails{Node: node}
+			res := &install.RunResultDetails{Node: node}
 			res.Stdout, res.Err = c.GetInternalIP(ctx, nodes[i])
 			ips[i] = res.Stdout
 			return res, err
@@ -997,9 +997,9 @@ func Pprof(l *logger.Logger, clusterName string, opts PprofOpts) error {
 	httpClient := httputil.NewClientWithTimeout(timeout)
 	startTime := timeutil.Now().Unix()
 	nodes := c.TargetNodes()
-	failed, err := c.ParallelE(l, description, len(nodes), 0, func(i int) (install.RunResultDetails, error) {
+	failed, err := c.ParallelE(l, description, len(nodes), 0, func(i int) (*install.RunResultDetails, error) {
 		node := c.Nodes[i]
-		res := install.RunResultDetails{Node: node}
+		res := &install.RunResultDetails{Node: node}
 		host := c.Host(node)
 		port := c.NodeUIPort(node)
 		scheme := "http"
