@@ -1003,10 +1003,25 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 	return nil
 }
 
+var allowMultiRegionSystemDatabase = settings.RegisterBoolSetting(
+	settings.TenantReadOnly,
+	"sql.multiregion.systemdb.enabled",
+	"if enabled, allows the root user to make the system database multi-region",
+	false,
+)
+
 func (n *alterDatabasePrimaryRegionNode) startExec(params runParams) error {
-	// Block adding a primary region to the system database. This ensures that the system
-	// database can never be made into a multi-region database.
-	if n.desc.GetID() == keys.SystemDatabaseID {
+	// Block adding a primary region to the system database unless the user is
+	// root. This ensures that the system database can only be made into a
+	// multi-region database by the root user.
+	//
+	// TODO(ajwerner): In the future, lock this down even further.
+	multiRegionSystemDatabasePermitted := func() bool {
+		return allowMultiRegionSystemDatabase.Get(&params.EvalContext().Settings.SV) &&
+			params.SessionData().User() != username.RootUserName()
+	}
+	if n.desc.GetID() == keys.SystemDatabaseID &&
+		!multiRegionSystemDatabasePermitted() {
 		return pgerror.Newf(
 			pgcode.FeatureNotSupported,
 			"adding a primary region to the system database is not supported",
