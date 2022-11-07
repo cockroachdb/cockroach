@@ -144,6 +144,10 @@ func TestRunWithMaybeRetry(t *testing.T) {
 
 			require.Equal(t, tc.shouldError, res.Err != nil)
 			require.Equal(t, tc.expectedAttempts, res.Attempt)
+
+			if tc.shouldError && tc.expectedAttempts == 3 {
+				require.True(t, errors.Is(res.Err, ErrAfterRetry))
+			}
 		})
 	}
 }
