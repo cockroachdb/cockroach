@@ -19,13 +19,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // RunStatementPhase executes in-transaction schema changes for the targeted
@@ -57,7 +57,7 @@ func runTransactionPhase(
 	if len(state.Current) == 0 {
 		return scpb.CurrentState{}, jobspb.InvalidJobID, nil
 	}
-	sc, err := scplan.MakePlan(state, scplan.Params{
+	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
 		ExecutionPhase:             phase,
 		SchemaChangerJobIDSupplier: deps.TransactionalJobRegistry().SchemaChangerJobID,
 	})
@@ -93,7 +93,7 @@ func RunSchemaChangesInJob(
 	if err != nil {
 		return errors.Wrapf(err, "failed to construct state for job %d", jobID)
 	}
-	sc, err := scplan.MakePlan(state, scplan.Params{
+	sc, err := scplan.MakePlan(ctx, state, scplan.Params{
 		ExecutionPhase:             scop.PostCommitPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 	})
@@ -136,20 +136,18 @@ func executeStage(
 	stageIdx int,
 	stage scplan.Stage,
 ) (err error) {
+	defer scerrors.StartEventf(
+		ctx,
+		"executing declarative schema change %s (rollback=%v) for %s",
+		redact.Safe(stage),
+		redact.Safe(p.InRollback),
+		redact.Safe(p.StatementTags()),
+	).HandlePanicAndLogError(ctx, &err)
 	if knobs != nil && knobs.BeforeStage != nil {
 		if err := knobs.BeforeStage(p, stageIdx); err != nil {
 			return err
 		}
 	}
-
-	log.Infof(ctx, "executing %s (rollback=%v)", stage, p.InRollback)
-	start := timeutil.Now()
-	defer func() {
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "executing %s (rollback=%v) took %v: err = %v",
-				stage, p.InRollback, timeutil.Since(start), err)
-		}
-	}()
 	if err := scexec.ExecuteStage(ctx, deps, stage.Ops()); err != nil {
 		// Don't go through the effort to wrap the error if it's a retry or it's a
 		// cancelation.
@@ -170,7 +168,12 @@ func executeStage(
 
 func makeState(
 	ctx context.Context, deps JobRunDependencies, descriptorIDs []descpb.ID, rollback bool,
-) (scpb.CurrentState, error) {
+) (state scpb.CurrentState, err error) {
+	defer scerrors.StartEventf(
+		ctx,
+		"rebuilding declarative schema change state from descriptors %v",
+		redact.Safe(descriptorIDs),
+	).HandlePanicAndLogError(ctx, &err)
 	var descriptorStates []*scpb.DescriptorState
 	if err := deps.WithTxnInJob(ctx, func(ctx context.Context, txnDeps scexec.Dependencies) error {
 		descriptorStates = nil
@@ -198,7 +201,7 @@ func makeState(
 	}); err != nil {
 		return scpb.CurrentState{}, err
 	}
-	state, err := scpb.MakeCurrentStateFromDescriptors(descriptorStates)
+	state, err = scpb.MakeCurrentStateFromDescriptors(descriptorStates)
 	if err != nil {
 		return scpb.CurrentState{}, err
 	}
