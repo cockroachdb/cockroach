@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -42,6 +43,7 @@ type SQLTranslator struct {
 
 	txn      *kv.Txn
 	descsCol *descs.Collection
+	ie       sqlutil.InternalExecutor
 }
 
 // Factory is used to construct transaction-scoped SQLTranslators.
@@ -68,7 +70,9 @@ func NewFactory(
 // NewSQLTranslator constructs and returns a transaction-scoped
 // spanconfig.SQLTranslator. The caller must ensure that the collection passed
 // in is associated with the supplied transaction.
-func (f *Factory) NewSQLTranslator(txn *kv.Txn, descsCol *descs.Collection) *SQLTranslator {
+func (f *Factory) NewSQLTranslator(
+	txn *kv.Txn, ie sqlutil.InternalExecutor, descsCol *descs.Collection,
+) *SQLTranslator {
 	return &SQLTranslator{
 		ptsProvider: f.ptsProvider,
 		codec:       f.codec,
