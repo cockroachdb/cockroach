@@ -271,6 +271,14 @@ var dchKeywords = []keyWord{
 	//{"", 0, false, 0},
 }
 
+// Months in roman-numeral
+// (Must be in reverse order for seq_search (in FROM_CHAR), because
+// 'VIII' must have higher precedence than 'V')
+var (
+	ucMonthRomanNumerals = []string{"XII", "XI", "X", "IX", "VIII", "VII", "VI", "V", "IV", "III", "II", "I"}
+	lcMonthRomanNumerals = []string{"xii", "xi", "x", "ix", "viii", "vii", "vi", "v", "iv", "iii", "ii", "i"}
+)
+
 // From https://github.com/postgres/postgres/blob/b0b72c64a0ce7bf5dd78a80b33d85c89c943ad0d/src/backend/utils/adt/formatting.c#L194-L198.
 type formatNodeType int
 
