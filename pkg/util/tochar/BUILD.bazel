@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/duration",
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -24,6 +25,9 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":tochar"],
     deps = [
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/types",
+        "//pkg/util/duration",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
         "@com_github_cockroachdb_datadriven//:datadriven",

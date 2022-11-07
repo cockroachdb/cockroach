@@ -19,18 +19,134 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 )
 
 // TimeToChar converts a time and a `to_char` format string to a string.
 func TimeToChar(t time.Time, f string) (string, error) {
+	return timeToChar(timeWrapper{t}, parseFormat(f))
+}
+
+// DurationToChar converts a duration and a `to_char` format string to a string.
+func DurationToChar(d duration.Duration, f string) (string, error) {
 	// TODO(#sql-experience): consider caching parse formats.
-	return timeToChar(t, parseFormat(f))
+	return timeToChar(makeDurationWrapper(d), parseFormat(f))
+}
+
+// timeInterface is intended as a pass through to timeToChar.
+type timeInterface interface {
+	Year() int
+	Month() time.Month
+	Day() int
+	Minute() int
+	Hour() int
+	Second() int
+	Nanosecond() int
+	YearDay() int
+	Weekday() time.Weekday
+	ISOWeek() (int, int)
+	Zone() (string, int)
+	isInterval() bool
+}
+
+// timeWrapper wraps time.Time to implement timeInterface.
+type timeWrapper struct {
+	time.Time
+}
+
+func (timeWrapper) isInterval() bool {
+	return false
+}
+
+// durationWrapper wraps duration.Duration to implement timeInterface.
+type durationWrapper struct {
+	year, day                   int
+	month                       time.Month
+	hour, minute, second, nanos int
+	yday                        int
+}
+
+func makeDurationWrapper(d duration.Duration) durationWrapper {
+	n := time.Duration(d.Nanos())
+	return durationWrapper{
+		year:   int(d.Months / 12),
+		month:  time.Month(d.Months % 12),
+		day:    int(d.Days),
+		nanos:  int(n % time.Second),
+		second: int(n/time.Second) % 60,
+		minute: int(n/time.Minute) % 60,
+		hour:   int(n / time.Hour),
+		// Approximation that PostgreSQL uses.
+		yday: int(d.Months*30 + d.Days),
+	}
+}
+
+func (d durationWrapper) Year() int {
+	return d.year
+}
+
+func (d durationWrapper) Month() time.Month {
+	return d.month
+}
+
+func (d durationWrapper) Day() int {
+	return d.day
+}
+
+func (d durationWrapper) Minute() int {
+	return d.minute
+}
+
+func (d durationWrapper) Hour() int {
+	return d.hour
+}
+
+func (d durationWrapper) Second() int {
+	return d.second
+}
+
+func (d durationWrapper) Nanosecond() int {
+	return d.nanos
+}
+
+func (d durationWrapper) YearDay() int {
+	return d.yday
+}
+
+func (d durationWrapper) Weekday() time.Weekday {
+	return time.Monday
+}
+
+func (d durationWrapper) ISOWeek() (int, int) {
+	return 0, 0
+}
+
+func (d durationWrapper) Zone() (string, int) {
+	return "", 0
+}
+
+func (d durationWrapper) isInterval() bool {
+	return true
+}
+
+func makeIntervalUnsupportedError(s string) error {
+	return errors.WithDetailf(
+		errors.WithHint(
+			pgerror.New(
+				pgcode.InvalidDatetimeFormat,
+				"invalid format specification for an interval value",
+			),
+			"intervals are not tied to specific calendar dates",
+		),
+		"format %s",
+		s,
+	)
 }
 
 // timeToChar maps to DCHToChar.
-func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
+func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 	var sb strings.Builder
 	for _, fn := range formatNodes {
 		if fn.typ != formatNodeAction {
@@ -67,11 +183,10 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			}
 		case DCH_HH, DCH_HH12:
 			hour := t.Hour()
-			if hour > 12 {
-				hour %= 12
-			}
-			if hour == 0 {
+			if hour%12 == 0 {
 				hour = 12
+			} else {
+				hour = hour % 12
 			}
 			// Note t.Hour() and hour are deliberately different.
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad2PlusNeg(t.Hour()), hour))
@@ -114,12 +229,21 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%d", val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_tz:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			n, _ := t.Zone()
 			sb.WriteString(strings.ToLower(n))
 		case DCH_TZ:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			n, _ := t.Zone()
 			sb.WriteString(n)
 		case DCH_TZH:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			_, offset := t.Zone()
 			posStr := "+"
 			if offset < 0 {
@@ -129,12 +253,18 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(posStr)
 			sb.WriteString(fmt.Sprintf("%02d", offset/3600))
 		case DCH_TZM:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			_, offset := t.Zone()
 			if offset < 0 {
 				offset = -offset
 			}
 			sb.WriteString(fmt.Sprintf("%02d", (offset%3600)/60))
 		case DCH_OF:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			_, offset := t.Zone()
 			posStr := "+"
 			if offset < 0 {
@@ -152,30 +282,45 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 				sb.WriteString(fmt.Sprintf(":%02d", minOffset))
 			}
 		case DCH_A_D, DCH_B_C:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			if t.Year() <= 0 {
 				sb.WriteString("B.C.")
 			} else {
 				sb.WriteString("A.D.")
 			}
 		case DCH_AD, DCH_BC:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			if t.Year() <= 0 {
 				sb.WriteString("BC")
 			} else {
 				sb.WriteString("AD")
 			}
 		case DCH_a_d, DCH_b_c:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			if t.Year() <= 0 {
 				sb.WriteString("b.c.")
 			} else {
 				sb.WriteString("a.d.")
 			}
 		case DCH_ad, DCH_bc:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			if t.Year() <= 0 {
 				sb.WriteString("bc")
 			} else {
 				sb.WriteString("ad")
 			}
 		case DCH_MONTH, DCH_Month, DCH_month:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			m := t.Month().String()
 			switch fn.key.id {
 			case DCH_MONTH:
@@ -185,6 +330,9 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			}
 			sb.WriteString(fmt.Sprintf("%*s", fn.suffix.zeroPad(-9), m))
 		case DCH_MON, DCH_Mon, DCH_mon:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			m := t.Month().String()[:3]
 			switch fn.key.id {
 			case DCH_MON:
@@ -198,6 +346,9 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad2PlusNeg(val), val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_DAY, DCH_Day, DCH_day:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			d := t.Weekday().String()
 			switch fn.key.id {
 			case DCH_DAY:
@@ -207,6 +358,9 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			}
 			sb.WriteString(fmt.Sprintf("%*s", fn.suffix.zeroPad(-9), d))
 		case DCH_DY, DCH_Dy, DCH_dy:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			d := t.Weekday().String()[:3]
 			switch fn.key.id {
 			case DCH_DY:
@@ -223,6 +377,10 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad(2), t.Day()))
 			sb.WriteString(fn.suffix.thVal(t.Day()))
 		case DCH_IDDD:
+			// Added by us, as ISOWeek() does not work.
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			_, w := t.ISOWeek()
 			val := (w-1)*7 + int(t.Weekday())
 			if t.Weekday() == 0 {
@@ -231,10 +389,16 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad(3), val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_D:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			val := int(t.Weekday()) + 1
 			sb.WriteString(fmt.Sprintf("%d", val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_ID:
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			val := int(t.Weekday())
 			if val == 0 {
 				val = 7
@@ -246,6 +410,10 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad(2), val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_IW:
+			// Added by us, as ISOWeek() does not work.
+			if t.isInterval() {
+				return "", makeIntervalUnsupportedError(fn.key.name)
+			}
 			_, val := t.ISOWeek()
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad(2), val))
 			sb.WriteString(fn.suffix.thVal(val))
@@ -259,10 +427,14 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_CC:
 			var val int
-			if t.Year() > 0 {
-				val = (t.Year()-1)/100 + 1
+			if t.isInterval() {
+				val = t.Year() / 100
 			} else {
-				val = t.Year()/100 - 1
+				if t.Year() > 0 {
+					val = (t.Year()-1)/100 + 1
+				} else {
+					val = t.Year()/100 - 1
+				}
 			}
 			if val <= 99 || val >= 99 {
 				sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad2PlusNeg(val), val))
@@ -272,7 +444,7 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_Y_YYY:
 			year := t.Year()
-			if year < 0 {
+			if !t.isInterval() && year < 0 {
 				year = -year + 1
 			}
 			preComma := year / 1000
@@ -283,9 +455,13 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 			val := t.Year()
 			switch fn.key.id {
 			case DCH_IYYY, DCH_IYY, DCH_IY, DCH_I:
+				// Added by us, as ISOWeek() does not work.
+				if t.isInterval() {
+					return "", makeIntervalUnsupportedError(fn.key.name)
+				}
 				val, _ = t.ISOWeek()
 			}
-			if val < 0 {
+			if !t.isInterval() && val < 0 {
 				val = -val + 1
 			}
 			zeroPad := 0
@@ -308,6 +484,10 @@ func timeToChar(t time.Time, formatNodes []formatNode) (string, error) {
 				val %= 100
 			case DCH_I, DCH_Y:
 				val %= 10
+			}
+			// For intervals, negative values get an extra digit.
+			if t.isInterval() && val < 0 {
+				zeroPad++
 			}
 			sb.WriteString(fmt.Sprintf("%0*d", zeroPad, val))
 			sb.WriteString(fn.suffix.thVal(val))
@@ -400,6 +580,7 @@ func (d dchSuffix) zeroPad2PlusNeg(val int) int {
 // parseFormat matches parse_format. We do not take in a flags as we only do
 // the DCH mode.
 // Taken from https://github.com/postgres/postgres/blob/b0b72c64a0ce7bf5dd78a80b33d85c89c943ad0d/src/backend/utils/adt/formatting.c#L1146.
+// TODO(#sql-experience): consider caching parse formats.
 func parseFormat(f string) []formatNode {
 	var ret []formatNode
 	for len(f) > 0 {
