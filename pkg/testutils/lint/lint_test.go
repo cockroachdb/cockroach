@@ -1670,57 +1670,6 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestGolint", func(t *testing.T) {
-		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(crdb.Dir, "golint", pkgScope)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(
-			stream.Sequence(
-				filter,
-				stream.GrepNot("migration/.*exported func TestingNewCluster returns unexported type"),
-				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
-				stream.GrepNot("pkg/sql/types/types.go.* var Uuid should be UUID"),
-				stream.GrepNot("pkg/sql/oidext/oidext.go.*don't use underscores in Go names; const T_"),
-				stream.GrepNot("server/api_v2.go.*package comment should be of the form"),
-				stream.GrepNot("pkg/util/timeutil/time_zone_util.go.*error strings should not be capitalized or end with punctuation or a newline"),
-
-				// The Observability Service doesn't want this blunt rule.
-				stream.GrepNot("pkg/obsservice.*error strings should not be capitalized or end with punctuation or a newline"),
-
-				// The constants here are copied from PG.
-				stream.GrepNot("pkg/util/tochar/constants.go.*don't use ALL_CAPS in Go names"),
-				stream.GrepNot("pkg/util/tochar/constants.go.*don't use underscores in Go names"),
-
-				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method ExtendedEvalContext returns unexported type"),
-				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method SessionDataMutatorIterator returns unexported type"),
-
-				stream.GrepNot("type name will be used as password.PasswordHash by other packages, and that stutters; consider calling this Hash"),
-				stream.GrepNot("type name will be used as ptp.PTPClock by other packages, and that stutters; consider calling this Limit"),
-				stream.GrepNot("type name will be used as row.RowLimit by other packages, and that stutters; consider calling this Limit"),
-				stream.GrepNot("type name will be used as tracing.TracingMode by other packages, and that stutters; consider calling this Mode"),
-				stream.GrepNot("pkg/build/bazel/bes/.*empty.go.*don't use an underscore in package name"),
-				stream.GrepNot("pkg/sql/types/types.go.*var Json should be JSON"),
-				stream.GrepNot(`pkg/sql/schemachanger/scplan/internal/rules/.*/.*go:.* should not use dot imports`),
-			), func(s string) {
-				t.Errorf("\n%s", s)
-			}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
 	t.Run("TestStaticCheck", func(t *testing.T) {
 		// staticcheck uses 2.4GB of ram (as of 2019-05-10), so don't parallelize it.
 		skip.UnderShort(t)

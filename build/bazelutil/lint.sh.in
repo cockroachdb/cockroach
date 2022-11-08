@@ -28,7 +28,6 @@ rlocation_ck () {
 test_bin="$(rlocation_ck com_github_cockroachdb_cockroach/$PACKAGE/${NAME}_/$NAME)"
 go_bin="$(rlocation_ck go_sdk/bin/go)"
 crlfmt_bin="$(rlocation_ck com_github_cockroachdb_crlfmt/crlfmt_/crlfmt)"
-golint_bin="$(rlocation_ck org_golang_x_lint/golint/golint_/golint)"
 optfmt_bin="$(rlocation_ck com_github_cockroachdb_cockroach/pkg/sql/opt/optgen/cmd/optfmt/optfmt_/optfmt)"
 
 # Need to run this so that Go can find the runfiles.
@@ -42,6 +41,6 @@ fi
 cd "$BUILD_WORKSPACE_DIRECTORY/$PACKAGE"
 
 TEST_WORKSPACE=com_github_cockroachdb_cockroach \
-    PATH="$(dirname $go_bin):$(dirname $crlfmt_bin):$(dirname $golint_bin):$(dirname $optfmt_bin):$PATH" \
+    PATH="$(dirname $go_bin):$(dirname $crlfmt_bin):$(dirname $optfmt_bin):$PATH" \
     GOROOT="$(dirname $(dirname $go_bin))" \
     "$test_bin" "$@"

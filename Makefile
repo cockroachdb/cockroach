@@ -402,7 +402,6 @@ bin/.bootstrap: $(GITHOOKS) vendor/modules.txt | bin/.submodules-initialized
 		github.com/mmatczuk/go_generics/cmd/go_generics \
 		github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc \
 		github.com/wadey/gocovmerge \
-		golang.org/x/lint/golint \
 		golang.org/x/perf/cmd/benchstat \
 		golang.org/x/tools/cmd/goyacc \
 		golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow \
