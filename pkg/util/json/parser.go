@@ -34,6 +34,7 @@ func parseUsingFastParser(s string, cfg parseConfig) (JSON, error) {
 		decoder:     tokenizer.MakeDecoder(input),
 		state:       (*fastJSONParser).parseTopValue,
 	}
+	defer p.decoder.Close()
 
 	j, err := p.parse()
 	if err != nil {

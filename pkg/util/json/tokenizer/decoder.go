@@ -66,6 +66,11 @@ func (d *Decoder) More() bool {
 	return d.scanner.More()
 }
 
+// Close releases acquired resources.
+func (d *Decoder) Close() {
+	d.scanner.Close()
+}
+
 type stack []bool
 
 func (s *stack) push(v bool) {
