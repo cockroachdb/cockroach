@@ -183,7 +183,7 @@ func WrapProgressDetails(details ProgressDetails) interface {
 	case SchemaTelemetryProgress:
 		return &Progress_SchemaTelemetry{SchemaTelemetry: &d}
 	default:
-		panic(errors.AssertionFailedf("WrapProgressDetails: unknown details type %T", d))
+		panic(errors.AssertionFailedf("WrapProgressDetails: unknown progress type %T", d))
 	}
 }
 
