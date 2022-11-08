@@ -5,7 +5,7 @@ SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 id  active  length  name
 1   true    12      system
 
-# Create two tenants.
+# Create three tenants.
 
 query I
 SELECT crdb_internal.create_tenant(5)
@@ -17,15 +17,21 @@ SELECT crdb_internal.create_tenant(10, 'tenant-number-ten')
 ----
 10
 
+query I
+SELECT crdb_internal.create_tenant('tenant-number-eleven')
+----
+2
+
 query IBTT colnames
 SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name               crdb_internal.pb_to_json
-1   true    system             {"id": "1", "name": "system", "state": "ACTIVE"}
-5   true    NULL               {"id": "5", "name": "", "state": "ACTIVE"}
-10  true    tenant-number-ten  {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
+id  active  name                  crdb_internal.pb_to_json
+1   true    system                {"id": "1", "name": "system", "state": "ACTIVE"}
+2   true    tenant-number-eleven  {"id": "2", "name": "tenant-number-eleven", "state": "ACTIVE"}
+5   true    NULL                  {"id": "5", "name": "", "state": "ACTIVE"}
+10  true    tenant-number-ten     {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
 # Check we can add a name where none existed before.
 query I
@@ -38,6 +44,7 @@ SELECT id, active, name FROM system.tenants ORDER BY id
 ----
 id  active  name
 1   true    system
+2   true    tenant-number-eleven
 5   true    my-tenant
 10  true    tenant-number-ten
 
@@ -52,11 +59,15 @@ SELECT crdb_internal.rename_tenant(5, 'my-new-tenant-name')
 query error name "tenant-number-ten" is already taken
 SELECT crdb_internal.rename_tenant(5, 'tenant-number-ten')
 
+query error tenant with name "tenant-number-eleven" already exists
+SELECT crdb_internal.create_tenant('tenant-number-eleven')
+
 query IBT colnames
 SELECT id, active, name FROM system.tenants ORDER BY id
 ----
 id  active  name
 1   true    system
+2   true    tenant-number-eleven
 5   true    my-new-tenant-name
 10  true    tenant-number-ten
 
@@ -77,10 +88,11 @@ SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantI
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name                crdb_internal.pb_to_json
-1   true    system              {"id": "1", "name": "system", "state": "ACTIVE"}
-5   false   my-new-tenant-name  {"id": "5", "name": "my-new-tenant-name", "state": "DROP"}
-10  true    tenant-number-ten   {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
+id  active  name                  crdb_internal.pb_to_json
+1   true    system                {"id": "1", "name": "system", "state": "ACTIVE"}
+2   true    tenant-number-eleven  {"id": "2", "name": "tenant-number-eleven", "state": "ACTIVE"}
+5   false   my-new-tenant-name    {"id": "5", "name": "my-new-tenant-name", "state": "DROP"}
+10  true    tenant-number-ten     {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
 
 # Try to recreate an existing tenant.
@@ -188,6 +200,7 @@ ORDER BY id
 ----
 id  active  crdb_internal.pb_to_json
 1   true    {"id": "1", "name": "system", "state": "ACTIVE"}
+2   true    {"id": "2", "name": "tenant-number-eleven", "state": "ACTIVE"}
 10  true    {"id": "10", "name": "tenant-number-ten", "state": "ACTIVE"}
 
 query error tenant resource limits require a CCL binary
@@ -197,6 +210,9 @@ user testuser
 
 statement error only users with the admin role are allowed to create tenant
 SELECT crdb_internal.create_tenant(314)
+
+statement error only users with the admin role are allowed to create tenant
+SELECT crdb_internal.create_tenant('not-allowed')
 
 statement error only users with the admin role are allowed to destroy tenant
 SELECT crdb_internal.destroy_tenant(314)

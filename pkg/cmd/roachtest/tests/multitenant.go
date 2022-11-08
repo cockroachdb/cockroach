@@ -29,7 +29,7 @@ func runAcceptanceMultitenant(ctx context.Context, t test.Test, c cluster.Cluste
 
 	const tenantID = 123
 	{
-		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1)`, tenantID)
+		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
 		require.NoError(t, err)
 	}
 
