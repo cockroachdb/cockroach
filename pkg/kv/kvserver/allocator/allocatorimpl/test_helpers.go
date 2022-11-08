@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -36,11 +37,12 @@ func CreateTestAllocator(
 func CreateTestAllocatorWithKnobs(
 	ctx context.Context, numNodes int, deterministic bool, knobs *allocator.TestingKnobs,
 ) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
-	stopper, g, manual, storePool, _ := storepool.CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, manual, storePool, _ := storepool.CreateTestStorePool(ctx, st,
 		storepool.TestTimeUntilStoreDeadOff, deterministic,
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
+	a := MakeAllocator(st, storePool, func(string) (time.Duration, bool) {
 		return 0, true
 	}, knobs)
 	return stopper, g, storePool, a, manual

@@ -20,6 +20,7 @@ go_library(
         "//pkg/rpc",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/log",
@@ -40,6 +41,7 @@ go_test(
     deps = [
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/testutils/gossiputil",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
