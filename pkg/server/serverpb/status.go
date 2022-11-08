@@ -41,6 +41,9 @@ type SQLStatusServer interface {
 	TransactionContentionEvents(context.Context, *TransactionContentionEventsRequest) (*TransactionContentionEventsResponse, error)
 	NodesList(context.Context, *NodesListRequest) (*NodesListResponse, error)
 	ListExecutionInsights(context.Context, *ListExecutionInsightsRequest) (*ListExecutionInsightsResponse, error)
+	LogFilesList(context.Context, *LogFilesListRequest) (*LogFilesListResponse, error)
+	LogFile(context.Context, *LogFileRequest) (*LogEntriesResponse, error)
+	Logs(context.Context, *LogsRequest) (*LogEntriesResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
