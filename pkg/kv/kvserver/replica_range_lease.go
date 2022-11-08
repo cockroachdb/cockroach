@@ -1036,6 +1036,10 @@ func newNotLeaseHolderError(
 		if stillMember {
 			err.Lease = new(roachpb.Lease)
 			*err.Lease = l
+			// TODO(arul): We only need to return this for the 22.1 <-> 22.2 mixed
+			// version state, as v22.1 use this field to log NLHE messages. We can
+			// get rid of this, and the field, in v23.1.
+			err.DeprecatedLeaseHolder = &err.Lease.Replica
 		}
 	}
 	return err
