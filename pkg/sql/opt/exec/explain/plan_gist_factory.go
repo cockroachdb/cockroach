@@ -596,6 +596,11 @@ func (u *unknownTable) IsRegionalByRow() bool {
 	return false
 }
 
+// IsMultiregion is part of the cat.Table interface.
+func (u *unknownTable) IsMultiregion() bool {
+	return false
+}
+
 // HomeRegionColName is part of the cat.Table interface.
 func (u *unknownTable) HomeRegionColName() (colName string, ok bool) {
 	return "", false

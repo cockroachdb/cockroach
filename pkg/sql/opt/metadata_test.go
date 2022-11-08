@@ -427,6 +427,7 @@ func TestTableMeta_GetRegionsInDatabase(t *testing.T) {
 	tab.DatabaseID = 1 // must be non-zero to trigger the region lookup
 	a := md.AddTable(tab, tn)
 	tabMeta := md.TableMeta(a)
+	tab.SetMultiRegion(true)
 
 	p := &fakeGetMultiregionConfigPlanner{}
 	// Call the function once, make sure our planner method gets invoked.

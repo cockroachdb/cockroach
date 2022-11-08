@@ -1306,6 +1306,12 @@ func (ot *optTable) IsRegionalByRow() bool {
 	return localityConfig.GetRegionalByRow() != nil
 }
 
+// IsMultiregion is part of the cat.Table interface.
+func (ot *optTable) IsMultiregion() bool {
+	localityConfig := ot.desc.GetLocalityConfig()
+	return localityConfig != nil
+}
+
 // HomeRegionColName is part of the cat.Table interface.
 func (ot *optTable) HomeRegionColName() (colName string, ok bool) {
 	localityConfig := ot.desc.GetLocalityConfig()
@@ -2282,6 +2288,11 @@ func (ot *optVirtualTable) IsGlobalTable() bool {
 
 // IsRegionalByRow is part of the cat.Table interface.
 func (ot *optVirtualTable) IsRegionalByRow() bool {
+	return false
+}
+
+// IsMultiregion is part of the cat.Table interface.
+func (ot *optVirtualTable) IsMultiregion() bool {
 	return false
 }
 
