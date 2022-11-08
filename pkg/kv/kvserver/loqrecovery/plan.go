@@ -503,15 +503,14 @@ func checkDescriptor(rankedDescriptors rankedReplicas) (problems []Problem) {
 				},
 			})
 		case loqrecoverypb.DescriptorChangeType_ReplicaChange:
-			// Check if our own replica is being removed as part of descriptor
-			// change.
-			_, ok := change.Desc.GetReplicaDescriptor(rankedDescriptors.storeID())
-			if !ok {
-				problems = append(problems, rangeReplicaRemoval{
-					rangeID: rankedDescriptors.rangeID(),
-					span:    rankedDescriptors.span(),
-				})
-			}
+			// Any change of descriptor even if it doesn't change current replica
+			// is not safe to apply if we change replica id.
+			// Until we have a way to remove this change, we should treat this as
+			// a problem.
+			problems = append(problems, rangeReplicaChange{
+				rangeID: rankedDescriptors.rangeID(),
+				span:    rankedDescriptors.span(),
+			})
 		}
 	}
 	return
