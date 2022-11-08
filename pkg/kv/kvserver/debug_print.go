@@ -63,6 +63,23 @@ func SprintEngineKey(key storage.EngineKey) string {
 	return fmt.Sprintf("%s %x (%#x): ", key.Key, key.Version, key.Encode())
 }
 
+// SprintEngineRangeKey pretty-prints the specified engine range key. All range
+// keys are currently MVCC range keys, so it will utilize SprintMVCCRangeKey for
+// proper MVCC formatting.
+func SprintEngineRangeKey(s roachpb.Span, suffix []byte) string {
+	if ts, err := storage.DecodeMVCCTimestampSuffix(suffix); err == nil {
+		rk := storage.MVCCRangeKey{StartKey: s.Key, EndKey: s.EndKey, Timestamp: ts}
+		return SprintMVCCRangeKey(rk)
+	}
+	return fmt.Sprintf("%s %x (%#x-%#x)", s, suffix, s.Key, s.EndKey)
+}
+
+// SprintKeySpan pretty-prints a key span.
+func SprintKeySpan(s roachpb.Span) string {
+	return fmt.Sprintf("%s (%#x-%#x)", s, storage.EncodeMVCCKeyPrefix(s.Key),
+		storage.EncodeMVCCKeyPrefix(s.EndKey))
+}
+
 // SprintMVCCKey pretty-prints the specified MVCCKey.
 func SprintMVCCKey(key storage.MVCCKey) string {
 	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, storage.EncodeMVCCKey(key))
@@ -70,7 +87,7 @@ func SprintMVCCKey(key storage.MVCCKey) string {
 
 // SprintMVCCRangeKey pretty-prints the specified MVCCRangeKey.
 func SprintMVCCRangeKey(rangeKey storage.MVCCRangeKey) string {
-	return fmt.Sprintf("%s %s (%#x-%#x): ", rangeKey.Timestamp, rangeKey.Bounds(),
+	return fmt.Sprintf("%s %s (%#x-%#x)", rangeKey.Timestamp, rangeKey.Bounds(),
 		storage.EncodeMVCCKeyPrefix(rangeKey.StartKey), storage.EncodeMVCCKeyPrefix(rangeKey.EndKey))
 }
 
@@ -153,7 +170,7 @@ func SprintMVCCKeyValue(kv storage.MVCCKeyValue, printKey bool) string {
 func SprintMVCCRangeKeyValue(rkv storage.MVCCRangeKeyValue, printKey bool) string {
 	var sb strings.Builder
 	if printKey {
-		sb.WriteString(SprintMVCCRangeKey(rkv.RangeKey))
+		sb.WriteString(SprintMVCCRangeKey(rkv.RangeKey) + ": ")
 	}
 
 	decoders := append(DebugSprintMVCCRangeKeyValueDecoders,
@@ -264,6 +281,57 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 			}
 			sb.WriteString(fmt.Sprintf(
 				"Delete Range: [%s, %s)\n", SprintEngineKey(engineStartKey), SprintEngineKey(engineEndKey),
+			))
+		case storage.BatchTypeRangeKeySet:
+			engineStartKey, err := r.EngineKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			engineEndKey, err := r.EngineEndKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			rangeKeys, err := r.EngineRangeKeys()
+			if err != nil {
+				return sb.String(), err
+			}
+			span := roachpb.Span{Key: engineStartKey.Key, EndKey: engineEndKey.Key}
+			for _, rangeKey := range rangeKeys {
+				sb.WriteString(fmt.Sprintf(
+					"Set Range Key: %s\n", SprintEngineRangeKeyValue(span, rangeKey),
+				))
+			}
+		case storage.BatchTypeRangeKeyUnset:
+			engineStartKey, err := r.EngineKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			engineEndKey, err := r.EngineEndKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			rangeKeys, err := r.EngineRangeKeys()
+			if err != nil {
+				return sb.String(), err
+			}
+			span := roachpb.Span{Key: engineStartKey.Key, EndKey: engineEndKey.Key}
+			for _, rangeKey := range rangeKeys {
+				sb.WriteString(fmt.Sprintf(
+					"Unset Range Key: %s\n", SprintEngineRangeKey(span, rangeKey.Version),
+				))
+			}
+		case storage.BatchTypeRangeKeyDelete:
+			engineStartKey, err := r.EngineKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			engineEndKey, err := r.EngineEndKey()
+			if err != nil {
+				return sb.String(), err
+			}
+			sb.WriteString(fmt.Sprintf(
+				"Delete Range Keys: %s\n",
+				SprintKeySpan(roachpb.Span{Key: engineStartKey.Key, EndKey: engineEndKey.Key}),
 			))
 		default:
 			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
@@ -457,14 +525,4 @@ func maybeUnmarshalInline(v []byte, dest protoutil.Message) error {
 		RawBytes: meta.RawBytes,
 	}
 	return value.GetProto(dest)
-}
-
-type stringifyWriteBatch kvserverpb.WriteBatch
-
-func (s *stringifyWriteBatch) String() string {
-	wbStr, err := decodeWriteBatch((*kvserverpb.WriteBatch)(s))
-	if err == nil {
-		return wbStr
-	}
-	return fmt.Sprintf("failed to stringify write batch (%x): %s", s.Data, err)
 }
