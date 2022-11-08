@@ -1,0 +1,71 @@
+timestamp_fmt
+2020-02-22 00:16:17
+tz
+TZ
+TZH
+TZM
+OF
+FMOF
+----
+tz: utc
+TZ: UTC
+TZH: +00
+TZM: 00
+OF: +00
+FMOF: +0
+
+timestamp_fmt tz=Australia/Adelaide
+2020-02-22 00:16:17
+tz
+TZ
+TZH
+TZM
+OF
+FMOF
+----
+tz: acdt
+TZ: ACDT
+TZH: +10
+TZM: 30
+OF: +10:30
+FMOF: +10:30
+
+timestamp_fmt tz=America/St_Johns
+2020-02-22 00:16:17
+tz
+TZ
+TZH
+TZM
+OF
+FMOF
+----
+tz: nst
+TZ: NST
+TZH: -03
+TZM: 30
+OF: -03:30
+FMOF: -3:30
+
+interval_fmt
+1 day
+tz
+TZ
+TZH
+TZM
+OF
+----
+tz: [ERROR] invalid format specification for an interval value
+  DETAIL: format tz
+  HINT: intervals are not tied to specific calendar dates
+TZ: [ERROR] invalid format specification for an interval value
+  DETAIL: format TZ
+  HINT: intervals are not tied to specific calendar dates
+TZH: [ERROR] invalid format specification for an interval value
+  DETAIL: format TZH
+  HINT: intervals are not tied to specific calendar dates
+TZM: [ERROR] invalid format specification for an interval value
+  DETAIL: format TZM
+  HINT: intervals are not tied to specific calendar dates
+OF: [ERROR] invalid format specification for an interval value
+  DETAIL: format OF
+  HINT: intervals are not tied to specific calendar dates
