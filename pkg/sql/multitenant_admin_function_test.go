@@ -109,6 +109,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			desc:                 "ALTER TABLE x UNSPLIT AT",
 			setup:                "ALTER TABLE t SPLIT AT VALUES (1);",
 			query:                "ALTER TABLE t UNSPLIT AT VALUES (1);",
+			errorMessage:         "request [1 AdmUnsplit] not permitted",
 			allowSplitAndScatter: true,
 		},
 		{
@@ -119,6 +120,7 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				"ALTER INDEX t@idx SPLIT AT VALUES (1);",
 			},
 			query:                "ALTER INDEX t@idx UNSPLIT AT VALUES (1);",
+			errorMessage:         "request [1 AdmUnsplit] not permitted",
 			allowSplitAndScatter: true,
 		},
 		{

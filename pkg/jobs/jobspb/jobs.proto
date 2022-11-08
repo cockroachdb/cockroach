@@ -1026,8 +1026,8 @@ message RowLevelTTLProgress {
   // ProcessorProgresses is the progress per DistSQL processor.
   repeated RowLevelTTLProcessorProgress processor_progresses = 2 [(gogoproto.nullable)=false];
 
-  // UseDistSQL is true if the TTL job distributed the work to DistSQL processors (requires cluster v22.2).
-  bool use_dist_sql = 3 [(gogoproto.customname) = "UseDistSQL"];
+  // UseDistSQL is no longer used in v23.1+ as all TTL jobs are using DistSQL.
+  reserved 3;
 
   // JobSpanCount is the number of spans for the entire TTL job.
   int64 job_span_count = 4;

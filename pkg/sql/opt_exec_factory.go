@@ -1971,10 +1971,6 @@ func (ef *execFactory) ConstructAlterTableUnsplit(
 		return nil, err
 	}
 
-	if !ef.planner.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54254)
-	}
-
 	return &unsplitNode{
 		tableDesc: index.Table().(*optTable).desc,
 		index:     index.(*optIndex).idx,
