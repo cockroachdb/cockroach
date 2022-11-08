@@ -168,10 +168,6 @@ const (
 
 	// v22.2 versions.
 
-	// V22_2PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
-	// version that recombines all user keys that may be split across multiple
-	// files into a single table.
-	V22_2PebbleFormatSplitUserKeysMarkedCompacted
 	// V22_2EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
 	// migration that bumps Pebble's format major version to a version that
 	// supports range keys.
@@ -356,10 +352,6 @@ var rawVersionsSingleton = keyedVersions{
 	},
 
 	// v22.2 versions. Internal versions must be even.
-	{
-		Key:     V22_2PebbleFormatSplitUserKeysMarkedCompacted,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},
-	},
 	{
 		Key:     V22_2EnsurePebbleFormatVersionRangeKeys,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
