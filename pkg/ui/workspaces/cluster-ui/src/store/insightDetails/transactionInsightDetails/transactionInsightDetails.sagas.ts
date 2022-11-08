@@ -13,20 +13,20 @@ import { all, call, put, takeLatest } from "redux-saga/effects";
 import { actions } from "./transactionInsightDetails.reducer";
 import {
   getTransactionInsightEventDetailsState,
-  TransactionInsightEventDetailsRequest,
-  TransactionInsightEventDetailsResponse,
+  TxnContentionInsightDetailsRequest,
 } from "src/api/insightsApi";
+import { TxnContentionInsightDetails } from "src/insights";
 import { PayloadAction } from "@reduxjs/toolkit";
 import { ErrorWithKey } from "src/api";
 
 export function* refreshTransactionInsightDetailsSaga(
-  action: PayloadAction<TransactionInsightEventDetailsRequest>,
+  action: PayloadAction<TxnContentionInsightDetailsRequest>,
 ) {
   yield put(actions.request(action.payload));
 }
 
 export function* requestTransactionInsightDetailsSaga(
-  action: PayloadAction<TransactionInsightEventDetailsRequest>,
+  action: PayloadAction<TxnContentionInsightDetailsRequest>,
 ): any {
   try {
     const result = yield call(
@@ -48,9 +48,9 @@ const CACHE_INVALIDATION_PERIOD = 5 * 60 * 1000; // 5 minutes in ms
 const timeoutsByExecID = new Map<string, NodeJS.Timeout>();
 
 export function receivedTxnInsightsDetailsSaga(
-  action: PayloadAction<TransactionInsightEventDetailsResponse>,
+  action: PayloadAction<TxnContentionInsightDetails>,
 ) {
-  const execID = action.payload.executionID;
+  const execID = action.payload.transactionExecutionID;
   clearTimeout(timeoutsByExecID.get(execID));
   const id = setTimeout(() => {
     actions.invalidated({ key: execID });
