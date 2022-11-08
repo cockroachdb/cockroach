@@ -8,10 +8,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/streamingccl/streampb",
-        "//pkg/jobs/jobspb",
         "//pkg/kv",
         "//pkg/sql/sem/eval",
-        "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

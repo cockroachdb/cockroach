@@ -30,6 +30,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/sqlutil",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",

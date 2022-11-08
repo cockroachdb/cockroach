@@ -30,6 +30,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/ccl/streamingccl/streampb",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/geo",
@@ -86,7 +87,6 @@ go_library(
         "//pkg/sql/storageparam",
         "//pkg/sql/storageparam/indexstorageparam",
         "//pkg/sql/types",
-        "//pkg/streaming",
         "//pkg/util",
         "//pkg/util/arith",
         "//pkg/util/bitarray",

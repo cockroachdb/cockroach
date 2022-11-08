@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -36,16 +35,16 @@ import (
 // 2. TODO(casper): Updates the protected timestamp for spans being replicated
 func startReplicationStreamJob(
 	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantID uint64,
-) (streaming.StreamID, error) {
+) (streampb.StreamID, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 
 	if err != nil {
-		return streaming.InvalidStreamID, err
+		return streampb.InvalidStreamID, err
 	}
 
 	if !hasAdminRole {
-		return streaming.InvalidStreamID, errors.New("admin role required to start stream replication jobs")
+		return streampb.InvalidStreamID, errors.New("admin role required to start stream replication jobs")
 	}
 
 	registry := execConfig.JobRegistry
@@ -53,7 +52,7 @@ func startReplicationStreamJob(
 	ptsID := uuid.MakeV4()
 	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
-		return streaming.InvalidStreamID, err
+		return streampb.InvalidStreamID, err
 	}
 
 	ptp := execConfig.ProtectedTimestampProvider
@@ -68,9 +67,9 @@ func startReplicationStreamJob(
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 
 	if err := ptp.Protect(ctx, txn, pts); err != nil {
-		return streaming.InvalidStreamID, err
+		return streampb.InvalidStreamID, err
 	}
-	return streaming.StreamID(jr.JobID), nil
+	return streampb.StreamID(jr.JobID), nil
 }
 
 // Convert the producer job's status into corresponding replication
@@ -99,7 +98,7 @@ func updateReplicationStreamProgress(
 	expiration time.Time,
 	ptsProvider protectedts.Provider,
 	registry *jobs.Registry,
-	streamID streaming.StreamID,
+	streamID streampb.StreamID,
 	consumedTime hlc.Timestamp,
 	txn *kv.Txn,
 ) (status streampb.StreamReplicationStatus, err error) {
@@ -157,9 +156,9 @@ func updateReplicationStreamProgress(
 func heartbeatReplicationStream(
 	ctx context.Context,
 	evalCtx *eval.Context,
-	streamID streaming.StreamID,
-	frontier hlc.Timestamp,
 	txn *kv.Txn,
+	streamID streampb.StreamID,
+	frontier hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
@@ -198,7 +197,7 @@ func heartbeatReplicationStream(
 
 // getReplicationStreamSpec gets a replication stream specification for the specified stream.
 func getReplicationStreamSpec(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, streamID streaming.StreamID,
+	ctx context.Context, evalCtx *eval.Context, streamID streampb.StreamID,
 ) (*streampb.ReplicationStreamSpec, error) {
 	jobExecCtx := evalCtx.JobExecContext.(sql.JobExecContext)
 	// Returns error if the replication stream is not active
@@ -257,7 +256,7 @@ func completeReplicationStream(
 	ctx context.Context,
 	evalCtx *eval.Context,
 	txn *kv.Txn,
-	streamID streaming.StreamID,
+	streamID streampb.StreamID,
 	successfulIngestion bool,
 ) error {
 	registry := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig).JobRegistry

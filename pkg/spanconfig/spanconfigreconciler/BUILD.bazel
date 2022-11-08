@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlliveness",
+        "//pkg/sql/sqlutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/retry",

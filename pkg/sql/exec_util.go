@@ -1539,6 +1539,10 @@ type TenantTestingKnobs struct {
 	// TABLE ... SPLIT AT and SCATTER SQL commands.
 	AllowSplitAndScatter bool
 
+	// SkipSQLSystemTentantCheck is a temporary knob to test which admin functions fail for secondary tenants.
+	// TODO(ewall): Remove when https://github.com/cockroachdb/cockroach/issues/91434 is fixed.
+	SkipSQLSystemTentantCheck bool
+
 	// BeforeCheckingForDescriptorIDSequence, if set, is called before
 	// the connExecutor checks for the presence of system.descriptor_id_seq after
 	// handling a system tenant descriptor ID generator migration error.
@@ -3487,4 +3491,14 @@ func (cfg *ExecutorConfig) GetRowMetrics(internal bool) *rowinfra.Metrics {
 		return cfg.InternalRowMetrics
 	}
 	return cfg.RowMetrics
+}
+
+// IsSystemTenant returns true either if TenantTestingKnobs.SkipSQLSystemTentantCheck is true
+// or if the ExecutorConfig tenant is the system tenant.
+func (cfg *ExecutorConfig) IsSystemTenant() bool {
+	knobs := cfg.TenantTestingKnobs
+	if knobs != nil && knobs.SkipSQLSystemTentantCheck {
+		return true
+	}
+	return cfg.Codec.ForSystemTenant()
 }
