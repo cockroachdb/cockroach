@@ -1036,7 +1036,7 @@ func (m *Manager) SetDraining(
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for id, t := range m.mu.descriptors {
+	for _, t := range m.mu.descriptors {
 		leases := func() []*storedLease {
 			t.mu.Lock()
 			defer t.mu.Unlock()
@@ -1045,7 +1045,6 @@ func (m *Manager) SetDraining(
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
 		}
-		delete(m.mu.descriptors, id)
 		if reporter != nil {
 			// Report progress through the Drain RPC.
 			reporter(len(leases), "descriptor leases")
