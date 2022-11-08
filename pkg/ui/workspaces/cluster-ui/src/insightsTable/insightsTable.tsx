@@ -26,6 +26,7 @@ import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
 import { performanceTuningRecipes } from "../util";
 import { InsightRecommendation, insightType } from "../insights";
+import { limitText } from "src/util";
 
 const cx = classNames.bind(styles);
 
@@ -34,15 +35,17 @@ export class InsightsSortedTable extends SortedTable<InsightRecommendation> {}
 const insightColumnLabels = {
   insights: "Insights",
   details: "Details",
+  query: "Statement",
   actions: "",
 };
 export type InsightsTableColumnKeys = keyof typeof insightColumnLabels;
 
 type InsightsTableTitleType = {
-  [key in InsightsTableColumnKeys]: () => JSX.Element;
+  [key in InsightsTableColumnKeys]: () => React.ReactElement;
 };
 
 export const insightsTableTitles: InsightsTableTitleType = {
+  query: () => <span>insightColumnLabels.query</span>,
   insights: () => {
     return (
       <Tooltip
@@ -298,6 +301,13 @@ export function makeInsightsColumns(
       cell: (item: InsightRecommendation) =>
         descriptionCell(item, disableStmtLink),
       sort: (item: InsightRecommendation) => item.type,
+    },
+    {
+      name: "query",
+      title: insightsTableTitles.query(),
+      cell: (item: InsightRecommendation) =>
+        limitText(item.execution?.statement, 100) ?? "N/A",
+      sort: (item: InsightRecommendation) => item.execution?.statement,
     },
     {
       name: "action",

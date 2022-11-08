@@ -17,6 +17,7 @@ const selectTransactionInsightsData = (state: AppState) =>
   state.adminUI.transactionInsights.data;
 
 export const selectTransactionInsights = createSelector(
+  (state: AppState) => state.adminUI.executionInsights.data,
   selectTransactionInsightsData,
   selectTxnInsightsCombiner,
 );

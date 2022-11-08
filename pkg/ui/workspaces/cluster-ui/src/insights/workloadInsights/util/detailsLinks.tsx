@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { StatementInsightEvent } from "../../types";
+import { FlattenedStmtInsightEvent } from "../../types";
 import React from "react";
 import { HexStringToInt64String } from "../../../util";
 import { Link } from "react-router-dom";
@@ -19,26 +19,28 @@ import { Moment } from "moment";
 
 export function TransactionDetailsLink(
   transactionFingerprintID: string,
-  startTime: Moment,
+  startTime: Moment | null,
   setTimeScale: (tw: TimeScale) => void,
 ): React.ReactElement {
   const txnID = HexStringToInt64String(transactionFingerprintID);
   const path = `/transaction/${txnID}`;
-  const timeScale: TimeScale = {
-    windowSize: moment.duration(65, "minutes"),
-    fixedWindowEnd: moment(startTime).add(1, "hour"),
-    sampleSize: moment.duration(1, "hour"),
-    key: "Custom",
-  };
+  const timeScale: TimeScale = startTime
+    ? {
+        windowSize: moment.duration(65, "minutes"),
+        fixedWindowEnd: moment(startTime).add(1, "hour"),
+        sampleSize: moment.duration(1, "hour"),
+        key: "Custom",
+      }
+    : null;
   return (
-    <Link to={path} onClick={() => setTimeScale(timeScale)}>
+    <Link to={path} onClick={() => timeScale && setTimeScale(timeScale)}>
       <div>{String(transactionFingerprintID)}</div>
     </Link>
   );
 }
 
 export function StatementDetailsLink(
-  insightDetails: StatementInsightEvent,
+  insightDetails: FlattenedStmtInsightEvent,
   setTimeScale: (tw: TimeScale) => void,
 ): React.ReactElement {
   const linkProps = {

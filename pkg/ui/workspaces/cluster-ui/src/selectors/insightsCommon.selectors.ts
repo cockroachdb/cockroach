@@ -8,40 +8,58 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
+import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
-  StatementInsights,
-  TransactionInsightEventsResponse,
-} from "src/api/insightsApi";
-import {
-  StatementInsightEvent,
-  populateStatementInsightsFromProblemAndCauses,
+  mergeTxnInsightDetails,
+  flattenTxnInsightsToStmts,
+  FlattenedStmtInsightEvent,
+  TxnInsightEvent,
+  TxnContentionInsightEvent,
+  MergedTxnInsightEvent,
+  mergeTxnContentionAndStmtInsights,
+  TxnContentionInsightDetails,
+  TxnInsightDetails,
 } from "src/insights";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
 // and combiners that can be reused across both packages.
 
-export const selectStatementInsightsCombiner = (
-  statementInsights: StatementInsights,
-): StatementInsights => {
-  if (!statementInsights) return [];
-  return populateStatementInsightsFromProblemAndCauses(statementInsights);
+export const selectFlattenedStmtInsightsCombiner = (
+  executionInsights: TxnInsightEvent[],
+): FlattenedStmtInsights => {
+  return flattenTxnInsightsToStmts(executionInsights);
 };
 
 export const selectStatementInsightDetailsCombiner = (
-  statementInsights: StatementInsights,
+  statementInsights: FlattenedStmtInsights,
   executionID: string,
-): StatementInsightEvent | null => {
+): FlattenedStmtInsightEvent | null => {
   if (!statementInsights) {
     return null;
   }
 
-  return statementInsights.find(insight => insight.statementID === executionID);
+  return statementInsights.find(
+    insight => insight.statementExecutionID === executionID,
+  );
 };
 
 export const selectTxnInsightsCombiner = (
-  txnInsights: TransactionInsightEventsResponse,
-): TransactionInsightEventsResponse => {
-  if (!txnInsights) return [];
-  return txnInsights;
+  txnInsightsFromStmts: TxnInsightEvent[],
+  txnContentionInsights: TxnContentionInsightEvent[],
+): MergedTxnInsightEvent[] => {
+  if (!txnInsightsFromStmts && !txnContentionInsights) return [];
+
+  // Merge the two insights lists.
+  return mergeTxnContentionAndStmtInsights(
+    txnInsightsFromStmts,
+    txnContentionInsights,
+  );
+};
+
+export const selectTxnInsightDetailsCombiner = (
+  txnInsightsFromStmts: TxnInsightEvent,
+  txnContentionInsights: TxnContentionInsightDetails,
+): TxnInsightDetails => {
+  return mergeTxnInsightDetails(txnInsightsFromStmts, txnContentionInsights);
 };
