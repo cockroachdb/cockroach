@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -34,10 +33,6 @@ type scatterNode struct {
 // (`ALTER TABLE/INDEX ... SCATTER ...` statement)
 // Privileges: INSERT on table.
 func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error) {
-	knobs := p.ExecCfg().TenantTestingKnobs
-	if !(knobs != nil && knobs.AllowSplitAndScatter) && !p.ExecCfg().Codec.ForSystemTenant() {
-		return nil, errorutil.UnsupportedWithMultiTenancy(54255)
-	}
 
 	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT, true /* skipCache */)
 	if err != nil {
@@ -134,10 +129,17 @@ type scatterRun struct {
 }
 
 func (n *scatterNode) startExec(params runParams) error {
-	db := params.p.ExecCfg().DB
+	execCfg := params.p.ExecCfg()
+	db := execCfg.DB
+	knobs := execCfg.TenantTestingKnobs
+	class := roachpb.AdminScatterRequest_ARBITRARY
+	if knobs != nil && knobs.AllowSplitAndScatter {
+		class = roachpb.AdminScatterRequest_ORGANIZATION
+	}
 	req := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeader{Key: n.run.span.Key, EndKey: n.run.span.EndKey},
 		RandomizeLeases: true,
+		Class:           class,
 	}
 	res, pErr := kv.SendWrapped(params.ctx, db.NonTransactionalSender(), req)
 	if pErr != nil {

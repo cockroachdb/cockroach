@@ -168,12 +168,13 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 		*roachpb.QueryLocksRequest,
 		*roachpb.InitPutRequest,
 		*roachpb.ExportRequest,
-		*roachpb.AdminScatterRequest,
 		*roachpb.AddSSTableRequest,
 		*roachpb.RefreshRequest,
 		*roachpb.RefreshRangeRequest,
 		*roachpb.IsSpanEmptyRequest:
 		return true
+	case *roachpb.AdminScatterRequest:
+		return t.Class != roachpb.AdminScatterRequest_ARBITRARY || tenID.IsSystem()
 	case *roachpb.AdminSplitRequest:
 		return t.Class != roachpb.AdminSplitRequest_ARBITRARY || tenID.IsSystem()
 	case *roachpb.AdminUnsplitRequest:
