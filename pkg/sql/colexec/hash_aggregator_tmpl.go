@@ -128,10 +128,6 @@ func (op *hashAggregator) populateEqChains(
 func findSplit(
 	op *hashAggregator, start int, end int, sel []int, useSel bool, ascending bool,
 ) (bool, int) {
-	if !useSel {
-		_ = op.distinctOutput[start]
-		_ = op.distinctOutput[end]
-	}
 	if ascending {
 		for i := start; i <= end; i++ {
 			if useSel {
@@ -148,13 +144,11 @@ func findSplit(
 	} else {
 		for i := start; i >= end; i-- {
 			if useSel {
-				//gcassert:bce
 				idx := sel[i]
 				if op.distinctOutput[idx] {
 					return true, i
 				}
 			} else {
-				//gcassert:bce
 				if op.distinctOutput[i] {
 					return true, i
 				}
