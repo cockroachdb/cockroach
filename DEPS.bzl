@@ -1342,10 +1342,10 @@ def go_deps():
         name = "com_github_cockroachdb_cockroach_go_v2",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/cockroach-go/v2",
-        sha256 = "c69c60f98ba1e3449bb60985b44fcfb0e8ae0fd4e3974abb1c997a0b9d5faca0",
-        strip_prefix = "github.com/cockroachdb/cockroach-go/v2@v2.2.6",
+        sha256 = "98f04abc613bb08b9366a0d7719b1ac36876dbc4371013cc8cb002ff6e3c991e",
+        strip_prefix = "github.com/cockroachdb/cockroach-go/v2@v2.2.17",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.2.6.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/cockroach-go/v2/com_github_cockroachdb_cockroach_go_v2-v2.2.17.zip",
         ],
     )
     go_repository(
@@ -4689,10 +4689,10 @@ def go_deps():
         name = "com_github_jinzhu_now",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jinzhu/now",
-        sha256 = "8c56b1bd3f10b4597c75e1a880bc37c02df633b2afa8d576ab484d681c4c9609",
-        strip_prefix = "github.com/jinzhu/now@v1.1.1",
+        sha256 = "245473b8e50be3897751ec66dd6be93588de261920e0345b500f692924575872",
+        strip_prefix = "github.com/jinzhu/now@v1.1.4",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jinzhu/now/com_github_jinzhu_now-v1.1.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jinzhu/now/com_github_jinzhu_now-v1.1.4.zip",
         ],
     )
     go_repository(
@@ -4719,10 +4719,10 @@ def go_deps():
         name = "com_github_jmoiron_sqlx",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/jmoiron/sqlx",
-        sha256 = "84cf22439d71b3dfe534639a128f4459664976271941c2a33bef5c5aa4f7ed70",
-        strip_prefix = "github.com/jmoiron/sqlx@v1.3.1",
+        sha256 = "5900777a64016e4a5b3847126ef4bed4ed5d3543ed980ae8a79ab110c9da8fc6",
+        strip_prefix = "github.com/jmoiron/sqlx@v1.3.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jmoiron/sqlx/com_github_jmoiron_sqlx-v1.3.1.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/jmoiron/sqlx/com_github_jmoiron_sqlx-v1.3.5.zip",
         ],
     )
     go_repository(
@@ -7384,10 +7384,10 @@ def go_deps():
         name = "com_github_shopspring_decimal",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/shopspring/decimal",
-        sha256 = "65c34c248e7f736cadf03a7caa0c0870d15499eb593f933fe106c96c2b7699a7",
-        strip_prefix = "github.com/shopspring/decimal@v1.2.0",
+        sha256 = "7986d6c8489c4a55c077e3469a3c9a218f7ce4afbd25d68aa2b26a6ea5015438",
+        strip_prefix = "github.com/shopspring/decimal@v1.3.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shopspring/decimal/com_github_shopspring_decimal-v1.2.0.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/shopspring/decimal/com_github_shopspring_decimal-v1.3.1.zip",
         ],
     )
     go_repository(
@@ -8867,20 +8867,20 @@ def go_deps():
         name = "io_gorm_driver_postgres",
         build_file_proto_mode = "disable_global",
         importpath = "gorm.io/driver/postgres",
-        sha256 = "a35ed3044796b91cf9ead206329ceb34b256da3044a3528a3aa185cd128f8ac8",
-        strip_prefix = "gorm.io/driver/postgres@v1.0.8",
+        sha256 = "834b2c3a1ddf3fe5dc3b34614365205d9007d51f243b688b467dff9d44e9fc8c",
+        strip_prefix = "gorm.io/driver/postgres@v1.3.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/gorm.io/driver/postgres/io_gorm_driver_postgres-v1.0.8.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gorm.io/driver/postgres/io_gorm_driver_postgres-v1.3.5.zip",
         ],
     )
     go_repository(
         name = "io_gorm_gorm",
         build_file_proto_mode = "disable_global",
         importpath = "gorm.io/gorm",
-        sha256 = "4048b3c1d2cd0b8372755fcf9bc33d621c1e532e4e2b791c17036e02ac9b0694",
-        strip_prefix = "gorm.io/gorm@v1.21.4",
+        sha256 = "34219a6d2ac9b9c340f811e5863a98b150db6d1fd5b8f02777299863c1628e0f",
+        strip_prefix = "gorm.io/gorm@v1.23.5",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/gorm.io/gorm/io_gorm_gorm-v1.21.4.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/gorm.io/gorm/io_gorm_gorm-v1.23.5.zip",
         ],
     )
     go_repository(
