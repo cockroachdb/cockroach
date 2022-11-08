@@ -4,6 +4,9 @@ CREATE TABLE t (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, w INT, INDEX 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4), (5, 6, 7, 8)
 
+statement error pgcode 0A000 .* contains duplicate column \"y\"
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y, y)
+
 statement ok
 ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (y, z)
 

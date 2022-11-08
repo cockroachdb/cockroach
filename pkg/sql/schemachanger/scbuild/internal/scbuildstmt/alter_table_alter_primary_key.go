@@ -206,6 +206,7 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		panic(err)
 	}
 
+	usedColumns := make(map[tree.Name]bool, len(t.Columns))
 	for _, col := range t.Columns {
 		if col.Column == "" && col.Expr != nil {
 			panic(errors.WithHint(
@@ -217,6 +218,11 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 				"use columns instead",
 			))
 		}
+		if usedColumns[col.Column] {
+			panic(pgerror.Newf(pgcode.FeatureNotSupported,
+				"new primary key contains duplicate column %q", col.Column))
+		}
+		usedColumns[col.Column] = true
 
 		colElems := b.ResolveColumn(tbl.TableID, col.Column, ResolveParams{
 			IsExistenceOptional: false,
