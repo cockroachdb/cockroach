@@ -463,6 +463,8 @@ CREATE TABLE system.sqlliveness (
   	FAMILY fam0_session_id_expiration (session_id, expiration)
 )`
 
+	// system.migrations stores completion records for upgrades performed by the
+	// upgrade package. Only completed upgrades have a row in this table.
 	MigrationsTableSchema = `
 CREATE TABLE system.migrations (
     major        INT8 NOT NULL,

@@ -138,7 +138,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	return nil
 }
 
-// CheckIfMigrationCompleted queries the system.upgrades table to determine
+// CheckIfMigrationCompleted queries the system.migrations table to determine
 // if the upgrade associated with this version has already been completed.
 // The txn may be nil, in which case the check will be run in its own
 // transaction.
