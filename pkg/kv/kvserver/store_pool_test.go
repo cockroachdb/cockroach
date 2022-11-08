@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -36,7 +38,8 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	clock := hlc.NewClock(manual, time.Nanosecond /* maxOffset */)
 	ctx := context.Background()
 	// We're going to manually mark stores dead in this test.
-	stopper, g, _, sp, _ := storepool.CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, _ := storepool.CreateTestStorePool(ctx, st,
 		storepool.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -164,7 +167,9 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 123)), time.Nanosecond /* maxOffset */)
-	stopper, _, _, sp, _ := storepool.CreateTestStorePool(ctx,
+	cfg := TestStoreConfig(clock)
+	var stopper *stop.Stopper
+	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
 		storepool.TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -174,7 +179,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
 	eng := storage.NewDefaultInMemForTesting()
 	stopper.AddCloser(eng)
-	cfg := TestStoreConfig(clock)
+
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings, cfg.AmbientCtx.Tracer)
 	store := NewStore(ctx, cfg, eng, &node)
 	// Fake an ident because this test doesn't want to start the store
@@ -203,11 +208,11 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	// Update StorePool, which should be a no-op.
 	storeID := roachpb.StoreID(1)
-	if _, ok := sp.GetStoreDescriptor(storeID); ok {
+	if _, ok := cfg.StorePool.GetStoreDescriptor(storeID); ok {
 		t.Fatalf("StoreDescriptor not gossiped, should not be found")
 	}
-	sp.UpdateLocalStoreAfterRebalance(storeID, rangeUsageInfo, roachpb.ADD_VOTER)
-	if _, ok := sp.GetStoreDescriptor(storeID); ok {
+	cfg.StorePool.UpdateLocalStoreAfterRebalance(storeID, rangeUsageInfo, roachpb.ADD_VOTER)
+	if _, ok := cfg.StorePool.GetStoreDescriptor(storeID); ok {
 		t.Fatalf("StoreDescriptor still not gossiped, should not be found")
 	}
 }
