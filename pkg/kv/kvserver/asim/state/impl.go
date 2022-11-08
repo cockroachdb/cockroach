@@ -729,6 +729,7 @@ func (s *state) NodeCountFn() storepool.NodeCountFunc {
 // populates the storepool with the current state.
 func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
 	return allocatorimpl.MakeAllocator(
+		s.stores[storeID].storepool.st,
 		s.stores[storeID].storepool,
 		func(addr string) (time.Duration, bool) { return 0, true },
 		&allocator.TestingKnobs{
