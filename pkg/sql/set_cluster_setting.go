@@ -546,12 +546,27 @@ func setVersionSetting(
 				}
 			}
 			// Only if the version has increased, alter the setting.
-			_, err = execCfg.InternalExecutor.ExecEx(
+			if _, err = execCfg.InternalExecutor.ExecEx(
 				ctx, "update-setting", txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
 				name, string(rawValue), setting.Typ(),
-			)
+			); err != nil {
+				return err
+			}
+
+			// If we're the system tenant, also send an override to each tenant
+			// to ensure that they know about the new cluster version.
+			if forSystemTenant {
+				if _, err = execCfg.InternalExecutor.ExecEx(
+					ctx, "update-setting", txn,
+					sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+					`UPSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES ($1, $2, $3, now(), $4)`,
+					tree.NewDInt(0), name, string(rawValue), setting.Typ(),
+				); err != nil {
+					return err
+				}
+			}
 			return err
 		})
 	}
