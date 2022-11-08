@@ -60,6 +60,19 @@ func (v Version) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("%d.%d-%d", v.Major, v.Minor, v.Internal)
 }
 
+// PrettyPrint returns the value in a format that makes it apparent whether or
+// not it is a fence version.
+func (v Version) PrettyPrint() string {
+	// If we're a version greater than v20.2 and have an odd internal version,
+	// we're a fence version. See fenceVersionFor in pkg/upgrade to understand
+	// what these are.
+	fenceVersion := !v.LessEq(Version{Major: 20, Minor: 2}) && (v.Internal%2) == 1
+	if !fenceVersion {
+		return v.String()
+	}
+	return redact.Sprintf("%s%s", v.String(), "(fence)").StripMarkers()
+}
+
 // ParseVersion parses a Version from a string of the form
 // "<major>.<minor>-<internal>" where the "-<internal>" is optional. We don't
 // use the Patch component, so it is always zero.
