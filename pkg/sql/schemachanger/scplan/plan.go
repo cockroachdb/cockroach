@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Params holds the arguments for planning.
@@ -79,6 +81,13 @@ func (p Plan) StagesForCurrentPhase() []scstage.Stage {
 // MakePlan generates a Plan for a particular phase of a schema change, given
 // the initial state for a set of targets. Returns an error when planning fails.
 func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p Plan, err error) {
+	defer scerrors.StartEventf(
+		ctx,
+		"building declarative schema changer plan in %s (rollback=%v) for %s",
+		redact.Safe(params.ExecutionPhase),
+		redact.Safe(params.InRollback),
+		redact.Safe(initial.StatementTags()),
+	).HandlePanicAndLogError(ctx, &err)
 	p = Plan{
 		CurrentState: initial,
 		Params:       params,
@@ -91,16 +100,6 @@ func MakePlan(ctx context.Context, initial scpb.CurrentState, params Params) (p 
 }
 
 func makePlan(ctx context.Context, p *Plan) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			rAsErr, ok := r.(error)
-			if !ok {
-				rAsErr = errors.Errorf("panic during MakePlan: %v", r)
-			}
-			err = rAsErr
-		}
-		err = errors.WithAssertionFailure(err)
-	}()
 	{
 		start := timeutil.Now()
 		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)

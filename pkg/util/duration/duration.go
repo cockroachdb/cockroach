@@ -17,10 +17,12 @@ import (
 	"math/big"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/errors"
 )
@@ -1023,4 +1025,56 @@ func Truncate(d time.Duration, r time.Duration) time.Duration {
 		panic(errors.AssertionFailedf("zero passed as resolution"))
 	}
 	return d - (d % r)
+}
+
+// ParseInterval parses the given interval in the given style.
+func ParseInterval(
+	style IntervalStyle, s string, itm types.IntervalTypeMetadata,
+) (Duration, error) {
+	// At this time the only supported interval formats are:
+	// - SQL standard.
+	// - Postgres compatible.
+	// - iso8601 format (with designators only), see interval.go for
+	//   sources of documentation.
+	// - Golang time.parseDuration compatible.
+
+	// If it's a blank string, exit early.
+	if len(s) == 0 {
+		return Duration{}, makeParseError(s, types.Interval, nil)
+	}
+	if s[0] == 'P' {
+		// If it has a leading P we're most likely working with an iso8601
+		// interval.
+		dur, err := iso8601ToDuration(s)
+		if err != nil {
+			return Duration{}, makeParseError(s, types.Interval, err)
+		}
+		return dur, nil
+	}
+	if strings.IndexFunc(s, unicode.IsLetter) == -1 {
+		// If it has no letter, then we're most likely working with a SQL standard
+		// interval, as both postgres and golang have letter(s) and iso8601 has been tested.
+		dur, err := sqlStdToDuration(s, itm)
+		if err != nil {
+			return Duration{}, makeParseError(s, types.Interval, err)
+		}
+		return dur, nil
+	}
+
+	// We're either a postgres string or a Go duration.
+	// Our postgres syntax parser also supports golang, so just use that for both.
+	dur, err := parseDuration(style, s, itm)
+	if err != nil {
+		return Duration{}, makeParseError(s, types.Interval, err)
+	}
+	return dur, nil
+}
+
+func makeParseError(s string, typ *types.T, err error) error {
+	if err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidTextRepresentation,
+			"could not parse %q as type %s", s, typ)
+	}
+	return pgerror.Newf(pgcode.InvalidTextRepresentation,
+		"could not parse %q as type %s", s, typ)
 }

@@ -1,0 +1,583 @@
+# Test various month operations.
+timestamp_fmt
+2020-07-22 00:15:18
+MONTHX
+MonthX
+monthX
+FMMONTHX
+FMMonthX
+FMmonthX
+MON
+Mon
+mon
+MM
+MMTH
+MMth
+FMMM
+----
+MONTHX: JULY     X
+MonthX: July     X
+monthX: july     X
+FMMONTHX: JULYX
+FMMonthX: JulyX
+FMmonthX: julyX
+MON: JUL
+Mon: Jul
+mon: jul
+MM: 07
+MMTH: 07TH
+MMth: 07th
+FMMM: 7
+
+interval_fmt
+1 hour
+MONTHX
+MonthX
+monthX
+FMMONTHX
+FMMonthX
+FMmonthX
+MON
+Mon
+mon
+MM
+MMTH
+MMth
+FMMM
+----
+MONTHX: [ERROR] invalid format specification for an interval value
+  DETAIL: format MONTH
+  HINT: intervals are not tied to specific calendar dates
+MonthX: [ERROR] invalid format specification for an interval value
+  DETAIL: format Month
+  HINT: intervals are not tied to specific calendar dates
+monthX: [ERROR] invalid format specification for an interval value
+  DETAIL: format month
+  HINT: intervals are not tied to specific calendar dates
+FMMONTHX: [ERROR] invalid format specification for an interval value
+  DETAIL: format MONTH
+  HINT: intervals are not tied to specific calendar dates
+FMMonthX: [ERROR] invalid format specification for an interval value
+  DETAIL: format Month
+  HINT: intervals are not tied to specific calendar dates
+FMmonthX: [ERROR] invalid format specification for an interval value
+  DETAIL: format month
+  HINT: intervals are not tied to specific calendar dates
+MON: [ERROR] invalid format specification for an interval value
+  DETAIL: format MON
+  HINT: intervals are not tied to specific calendar dates
+Mon: [ERROR] invalid format specification for an interval value
+  DETAIL: format Mon
+  HINT: intervals are not tied to specific calendar dates
+mon: [ERROR] invalid format specification for an interval value
+  DETAIL: format mon
+  HINT: intervals are not tied to specific calendar dates
+MM: 00
+MMTH: 00TH
+MMth: 00th
+FMMM: 0
+
+interval_fmt
+25 months 3 days 1 hour
+MM: 00
+MMTH: 00TH
+MMth: 00th
+FMMM: 0
+----
+MM: 00: 01: 00
+MMTH: 00TH: 01ST: 00TH
+MMth: 00th: 01st: 00th
+FMMM: 0: 1: 0
+
+# Test day of week operations.
+timestamp_fmt
+2020-07-18 00:15:18
+DAYX
+DayX
+dayX
+FMDAYX
+FMDayX
+FMdayX
+DY
+Dy
+dy
+D
+ID
+Dth
+IDTH
+----
+DAYX: saturday X
+DayX: Saturday X
+dayX: saturday X
+FMDAYX: saturdayX
+FMDayX: SaturdayX
+FMdayX: saturdayX
+DY: sat
+Dy: Sat
+dy: sat
+D: 7
+ID: 6
+Dth: 7th
+IDTH: 6TH
+
+timestamp_fmt
+2020-07-19 00:15:18
+DAYX
+DayX
+dayX
+FMDAYX
+FMDayX
+FMdayX
+DY
+Dy
+dy
+D
+ID
+Dth
+IDTH
+----
+DAYX: sunday   X
+DayX: Sunday   X
+dayX: sunday   X
+FMDAYX: sundayX
+FMDayX: SundayX
+FMdayX: sundayX
+DY: sun
+Dy: Sun
+dy: sun
+D: 1
+ID: 7
+Dth: 1st
+IDTH: 7TH
+
+interval_fmt
+1 hour
+DAYX
+DayX
+dayX
+FMDAYX
+FMDayX
+FMdayX
+DY
+Dy
+dy
+D
+ID
+Dth
+IDTH
+----
+DAYX: [ERROR] invalid format specification for an interval value
+  DETAIL: format DAY
+  HINT: intervals are not tied to specific calendar dates
+DayX: [ERROR] invalid format specification for an interval value
+  DETAIL: format Day
+  HINT: intervals are not tied to specific calendar dates
+dayX: [ERROR] invalid format specification for an interval value
+  DETAIL: format day
+  HINT: intervals are not tied to specific calendar dates
+FMDAYX: [ERROR] invalid format specification for an interval value
+  DETAIL: format DAY
+  HINT: intervals are not tied to specific calendar dates
+FMDayX: [ERROR] invalid format specification for an interval value
+  DETAIL: format Day
+  HINT: intervals are not tied to specific calendar dates
+FMdayX: [ERROR] invalid format specification for an interval value
+  DETAIL: format day
+  HINT: intervals are not tied to specific calendar dates
+DY: [ERROR] invalid format specification for an interval value
+  DETAIL: format DY
+  HINT: intervals are not tied to specific calendar dates
+Dy: [ERROR] invalid format specification for an interval value
+  DETAIL: format Dy
+  HINT: intervals are not tied to specific calendar dates
+dy: [ERROR] invalid format specification for an interval value
+  DETAIL: format dy
+  HINT: intervals are not tied to specific calendar dates
+D: [ERROR] invalid format specification for an interval value
+  DETAIL: format D
+  HINT: intervals are not tied to specific calendar dates
+ID: [ERROR] invalid format specification for an interval value
+  DETAIL: format ID
+  HINT: intervals are not tied to specific calendar dates
+Dth: [ERROR] invalid format specification for an interval value
+  DETAIL: format D
+  HINT: intervals are not tied to specific calendar dates
+IDTH: [ERROR] invalid format specification for an interval value
+  DETAIL: format ID
+  HINT: intervals are not tied to specific calendar dates
+
+# Test day of year operations.
+timestamp_fmt
+2020-07-20 00:15:18
+DDD
+DDDTH
+IDDD
+----
+DDD: 202
+DDDTH: 202ND
+IDDD: 204
+
+interval_fmt
+3 years 1 day
+DDD
+DDDTH
+IDDD
+----
+DDD: 1081
+DDDTH: 1081ST
+IDDD: [ERROR] invalid format specification for an interval value
+  DETAIL: format IDDD
+  HINT: intervals are not tied to specific calendar dates
+
+timestamp
+IDDD
+2019-12-29 00:15:18
+2019-12-30 00:15:18
+2020-01-03 01:02:03
+2020-01-04 01:02:03
+2020-01-05 01:02:03
+2020-01-06 01:02:03
+----
+2019-12-29 00:15:18: 364
+2019-12-30 00:15:18: 001
+2020-01-03 01:02:03: 005
+2020-01-04 01:02:03: 006
+2020-01-05 01:02:03: 007
+2020-01-06 01:02:03: 008
+
+# Test day operations.
+timestamp_fmt
+2020-07-03 01:13:15
+DD
+FMDD
+FMDDth
+----
+DD: 03
+FMDD: 3
+FMDDth: 3rd
+
+interval_fmt
+37 months 5 days
+DD
+FMDD
+FMDDth
+----
+DD: 05
+FMDD: 5
+FMDDth: 5th
+
+# Test years and isoyears.
+timestamp_fmt
+0005-01-02 01:02:03
+YYYY
+IYYY
+YYYYth
+FMIYYY
+YYY
+IYY
+YY
+IY
+Y
+I
+----
+YYYY: 0005
+IYYY: 0004
+YYYYth: 0005th
+FMIYYY: 4
+YYY: 005
+IYY: 004
+YY: 05
+IY: 04
+Y: 5
+I: 4
+
+interval_fmt
+37 months 5 days
+0005-01-02 01:02:03
+YYYY
+IYYY
+YYYYth
+FMIYYY
+YYY
+IYY
+YY
+IY
+Y
+I
+----
+0005-01-02 01:02:03: 0005-01-02 01:02:03
+YYYY: 0003
+IYYY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IYYY
+  HINT: intervals are not tied to specific calendar dates
+YYYYth: 0003rd
+FMIYYY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IYYY
+  HINT: intervals are not tied to specific calendar dates
+YYY: 003
+IYY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IYY
+  HINT: intervals are not tied to specific calendar dates
+YY: 03
+IY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IY
+  HINT: intervals are not tied to specific calendar dates
+Y: 3
+I: [ERROR] invalid format specification for an interval value
+  DETAIL: format I
+  HINT: intervals are not tied to specific calendar dates
+
+interval_fmt
+-37 months 5 days
+YYYY
+IYYY
+YYYYth
+FMIYYY
+YYY
+IYY
+YY
+IY
+Y
+I
+----
+YYYY: -0003
+IYYY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IYYY
+  HINT: intervals are not tied to specific calendar dates
+YYYYth: -0003rd
+FMIYYY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IYYY
+  HINT: intervals are not tied to specific calendar dates
+YYY: -003
+IYY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IYY
+  HINT: intervals are not tied to specific calendar dates
+YY: -03
+IY: [ERROR] invalid format specification for an interval value
+  DETAIL: format IY
+  HINT: intervals are not tied to specific calendar dates
+Y: -3
+I: [ERROR] invalid format specification for an interval value
+  DETAIL: format I
+  HINT: intervals are not tied to specific calendar dates
+
+timestamp_fmt
+0003-01-02 BC 01:02:03
+YYYY
+IYYY
+YYYYth
+FMIYYY
+YYY
+IYY
+YY
+IY
+Y
+I
+----
+YYYY: 0003
+IYYY: 0003
+YYYYth: 0003rd
+FMIYYY: 3
+YYY: 003
+IYY: 003
+YY: 03
+IY: 03
+Y: 3
+I: 3
+
+# Test comma years
+timestamp
+Y,YYY
+0005-01-02 BC 01:02:03
+0005-01-02 01:02:03
+0105-01-02 01:02:03
+2005-01-02 01:02:03
+20005-01-02 01:02:03
+----
+0005-01-02 BC 01:02:03: 0,005
+0005-01-02 01:02:03: 0,005
+0105-01-02 01:02:03: 0,105
+2005-01-02 01:02:03: 2,005
+20005-01-02 01:02:03: 20,005
+
+interval
+Y,YYY
+3 months
+15 months
+12500 months
+-120 months
+-1500 months
+----
+3 months: 0,000
+15 months: 0,001
+12500 months: 1,041
+-120 months: 0,-10
+-1500 months: 0,-125
+
+# Week
+timestamp_fmt
+2022-01-07 01:02:03
+WW
+FMWWth
+IW
+FMIW
+FMIWth
+----
+WW: 01
+FMWWth: 1st
+IW: 01
+FMIW: 1
+FMIWth: 1st
+
+interval_fmt
+36 months
+WW
+FMWWth
+IW
+FMIW
+FMIWth
+----
+WW: 155
+FMWWth: 155th
+IW: [ERROR] invalid format specification for an interval value
+  DETAIL: format IW
+  HINT: intervals are not tied to specific calendar dates
+FMIW: [ERROR] invalid format specification for an interval value
+  DETAIL: format IW
+  HINT: intervals are not tied to specific calendar dates
+FMIWth: [ERROR] invalid format specification for an interval value
+  DETAIL: format IW
+  HINT: intervals are not tied to specific calendar dates
+
+# Quarters
+timestamp
+Q
+2022-01-01 01:02:03
+2022-02-01 01:02:03
+2022-03-01 01:02:03
+2022-04-01 01:02:03
+2022-05-01 01:02:03
+2022-06-01 01:02:03
+2022-07-01 01:02:03
+2022-08-01 01:02:03
+2022-09-01 01:02:03
+2022-10-01 01:02:03
+2022-11-01 01:02:03
+2022-12-01 01:02:03
+----
+2022-01-01 01:02:03: 1
+2022-02-01 01:02:03: 1
+2022-03-01 01:02:03: 1
+2022-04-01 01:02:03: 2
+2022-05-01 01:02:03: 2
+2022-06-01 01:02:03: 2
+2022-07-01 01:02:03: 3
+2022-08-01 01:02:03: 3
+2022-09-01 01:02:03: 3
+2022-10-01 01:02:03: 4
+2022-11-01 01:02:03: 4
+2022-12-01 01:02:03: 4
+
+interval
+Q
+1 month
+3 months
+12 months
+13 months
+----
+1 month: 1
+3 months: 1
+12 months: 
+13 months: 1
+
+# Century
+timestamp
+CC
+0005-01-02 BC 01:02:03
+1005-01-02 BC 01:02:03
+1999-01-01 01:02:03
+2000-01-01 01:02:03
+2001-01-01 01:02:03
+----
+0005-01-02 BC 01:02:03: -01
+1005-01-02 BC 01:02:03: -11
+1999-01-01 01:02:03: 20
+2000-01-01 01:02:03: 20
+2001-01-01 01:02:03: 21
+
+timestamp
+FMCCth
+0005-01-02 BC 01:02:03
+----
+0005-01-02 BC 01:02:03: -1st
+
+interval
+CC
+12000 months
+5 months
+-12000 months
+----
+12000 months: 10
+5 months: 00
+-12000 months: -10
+
+# Week of month.
+timestamp
+Wth
+2020-01-01 01:02:03
+2020-01-06 01:02:03
+2020-01-07 01:02:03
+2020-01-08 01:02:03
+----
+2020-01-01 01:02:03: 1st
+2020-01-06 01:02:03: 1st
+2020-01-07 01:02:03: 1st
+2020-01-08 01:02:03: 2nd
+
+# Julian
+timestamp
+Jth
+2020-04-07 01:02:03
+----
+2020-04-07 01:02:03: 2458947th
+
+interval
+J
+3 years 6 months 01:02:03
+----
+3 years 6 months 01:02:03: 1722306
+
+# RM
+timestamp
+RM"x"
+2020-02-01 BC 01:02:03
+2020-12-01 01:02:03
+2020-01-01 01:02:03
+----
+2020-02-01 BC 01:02:03: II  x
+2020-12-01 01:02:03: XII x
+2020-01-01 01:02:03: I   x
+
+timestamp
+rm"< spaces here"
+2020-02-01 BC 01:02:03
+2020-12-01 01:02:03
+2020-01-01 01:02:03
+----
+2020-02-01 BC 01:02:03: ii  < spaces here
+2020-12-01 01:02:03: xii < spaces here
+2020-01-01 01:02:03: i   < spaces here
+
+interval
+FMRM" < no spaces here"
+1 day
+1 month 1 day
+-1 month 1 day
+-13 months
+13 months
+----
+1 day:  < no spaces here
+1 month 1 day: I < no spaces here
+-1 month 1 day: XI < no spaces here
+-13 months: XI < no spaces here
+13 months: I < no spaces here
