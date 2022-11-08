@@ -54,7 +54,7 @@ ALTER TABLE kv UNSPLIT AT VALUES ('foo')
 statement error operation is unsupported in multi-tenancy mode
 ALTER TABLE kv UNSPLIT ALL
 
-statement error operation is unsupported in multi-tenancy mode
+statement error pq: rpc error: code = Unauthenticated desc = request \[1 AdmScatter\] not permitted
 ALTER TABLE kv SCATTER
 
 statement error operation is unsupported in multi-tenancy mode

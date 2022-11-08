@@ -3184,7 +3184,7 @@ func splitAndScatter(
 	if err := db.AdminSplit(ctx, key, expirationTime, oppurpose.SplitSchema); err != nil {
 		return err
 	}
-	_, err := db.AdminScatter(ctx, key, 0 /* maxSize */)
+	_, err := db.AdminScatter(ctx, key, 0 /* maxSize */, oppurpose.ScatterSchema)
 	return err
 }
 
