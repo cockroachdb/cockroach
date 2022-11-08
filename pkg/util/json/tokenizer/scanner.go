@@ -70,6 +70,7 @@ const (
 type Scanner struct {
 	data   []byte
 	offset int
+	tmpBuf *buffer
 }
 
 var whitespace = [256]bool{
@@ -131,6 +132,23 @@ func (s *Scanner) Next() []byte {
 	// it's all whitespace, ignore it
 	s.offset += len(w)
 	return nil // eof
+}
+
+var bufferPool = sync.Pool{New: func() interface{} { return &buffer{} }}
+
+// Release releases scanner resources.
+func (s *Scanner) Release() {
+	if s.tmpBuf != nil {
+		bufferPool.Put(s.tmpBuf)
+	}
+}
+
+func (s *Scanner) scratch() *buffer {
+	if s.tmpBuf == nil {
+		s.tmpBuf = bufferPool.Get().(*buffer)
+	}
+	s.tmpBuf.Reset()
+	return s.tmpBuf
 }
 
 // buf returns unread portion of the input.
@@ -198,8 +216,6 @@ func (s *Scanner) parseString() []byte {
 	return nil // eof
 }
 
-var bufferPool = sync.Pool{New: func() interface{} { return &buffer{} }}
-
 // parseStringSlow parses string containing escape sequences.
 // Everything up to pos does not have escape sequence, and buf[pos] is the first '\'
 // encountered when parsing the string.
@@ -213,10 +229,7 @@ func (s *Scanner) parseStringSlow(pos int) ([]byte, int) {
 	// Escaped characters necessitate that the returned token will be
 	// different from the input token.  Reset scratch buffer, and copy
 	// everything processed so far.
-	b := bufferPool.Get().(*buffer)
-	b.Reset()
-	defer bufferPool.Put(b)
-
+	b := s.scratch()
 	b.Append(w[:pos])
 	w = w[pos:]
 
