@@ -1693,6 +1693,10 @@ func TestLint(t *testing.T) {
 				// The Observability Service doesn't want this blunt rule.
 				stream.GrepNot("pkg/obsservice.*error strings should not be capitalized or end with punctuation or a newline"),
 
+				// The constants here are copied from PG.
+				stream.GrepNot("pkg/util/tochar/constants.go.*don't use ALL_CAPS in Go names"),
+				stream.GrepNot("pkg/util/tochar/constants.go.*don't use underscores in Go names"),
+
 				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method ExtendedEvalContext returns unexported type"),
 				stream.GrepNot("pkg/sql/job_exec_context_test_util.go.*exported method SessionDataMutatorIterator returns unexported type"),
 

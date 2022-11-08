@@ -109,6 +109,7 @@ go_library(
         "//pkg/util/timetz",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "//pkg/util/tochar",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingpb",
         "//pkg/util/trigram",

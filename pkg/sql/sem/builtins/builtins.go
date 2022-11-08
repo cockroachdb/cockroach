@@ -88,6 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
@@ -2435,6 +2436,42 @@ var regularBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Convert an timestamp to a string assuming the ISO, MDY DateStyle.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"interval", types.Interval}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := tree.MustBeDInterval(args[0])
+				f := tree.MustBeDString(args[1])
+				s, err := tochar.DurationToChar(d.Duration, string(f))
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert an interval to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamp", types.Timestamp}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestamp(args[0])
+				f := tree.MustBeDString(args[1])
+				s, err := tochar.TimeToChar(ts.Time, string(f))
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert an timestamp to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"timestamptz", types.TimestampTZ}, {"format", types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ts := tree.MustBeDTimestampTZ(args[0])
+				f := tree.MustBeDString(args[1])
+				s, err := tochar.TimeToChar(ts.Time, string(f))
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert a timestamp with time zone to a string using the given format.",
+			Volatility: volatility.Stable,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"date", types.Date}},
@@ -9130,24 +9167,6 @@ func extractTimeSpanFromTimeOfDay(t timeofday.TimeOfDay, timeSpan string) (tree.
 	}
 }
 
-// dateToJulianDay is based on the date2j function in PostgreSQL 10.5.
-func dateToJulianDay(year int, month int, day int) int {
-	if month > 2 {
-		month++
-		year += 4800
-	} else {
-		month += 13
-		year += 4799
-	}
-
-	century := year / 100
-	jd := year*365 - 32167
-	jd += year/4 - century + century/4
-	jd += 7834*month/256 + day
-
-	return jd
-}
-
 func extractTimeSpanFromTimestampTZ(
 	ctx *eval.Context, fromTime time.Time, timeSpan string,
 ) (tree.Datum, error) {
@@ -9274,7 +9293,7 @@ func extractTimeSpanFromTimestamp(
 		return tree.NewDFloat(tree.DFloat(fromTime.YearDay())), nil
 
 	case "julian":
-		julianDay := float64(dateToJulianDay(fromTime.Year(), int(fromTime.Month()), fromTime.Day())) +
+		julianDay := float64(pgdate.DateToJulianDay(fromTime.Year(), int(fromTime.Month()), fromTime.Day())) +
 			(float64(fromTime.Hour()*duration.SecsPerHour+fromTime.Minute()*duration.SecsPerMinute+fromTime.Second())+
 				float64(fromTime.Nanosecond())/float64(time.Second))/duration.SecsPerDay
 		return tree.NewDFloat(tree.DFloat(julianDay)), nil
