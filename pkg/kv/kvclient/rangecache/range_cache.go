@@ -234,7 +234,7 @@ type EvictionToken struct {
 
 	// desc, lease, and closedts represent the information retrieved from the
 	// cache. This can advance throughout the life of the token, as various
-	// methods re-synchronize with the cache. However, it it changes, the
+	// methods re-synchronize with the cache. However, if it changes, the
 	// descriptor only changes to other "compatible" descriptors (same range id
 	// and key bounds).
 	desc     *roachpb.RangeDescriptor
@@ -666,7 +666,7 @@ func (rc *RangeCache) lookupInternal(
 	// Retry while we're hitting lookupCoalescingErrors.
 	for {
 		newToken, err := rc.tryLookup(ctx, key, evictToken, useReverseScan)
-		if errors.HasType(err, (lookupCoalescingError{})) {
+		if errors.HasType(err, lookupCoalescingError{}) {
 			log.VEventf(ctx, 2, "bad lookup coalescing; retrying: %s", err)
 			continue
 		}
@@ -782,20 +782,24 @@ func (rc *RangeCache) tryLookup(
 			// we're interested in.
 			entry := insertedEntries[0]
 			// There's 3 cases here:
-			// 1. We succeeded in inserting rs[0].
-			// 2. We didn't succeed in inserting rs[0], but insertedEntries[0] still was non-nil. This
-			// means that the cache had a newer version of the descriptor. In that
-			// case it's all good, we just pretend that that's the version we were inserting; we put it in our
-			// token and continue.
-			// 3. insertedEntries[0] is nil. The cache has newer entries in them and
-			// they're not compatible with the descriptor we were trying to insert.
-			// This case should be rare, since very recently (before starting the
-			// singleflight), the cache didn't have any entry for the requested key.
-			// We'll continue with the stale rs[0]; we'll pretend that we did by
-			// putting a dummy entry in the eviction token. This will make eviction
-			// no-ops (which makes sense - there'll be nothing to evict since we
-			// didn't insert anything).
-			// TODO(andrei): It'd be better to retry the cache/database lookup in case 3.
+			//
+			//  1. We succeeded in inserting rs[0].
+			//  2. We didn't succeed in inserting rs[0], but insertedEntries[0] still
+			//     was non-nil. This means that the cache had a newer version of the
+			//     descriptor. In that case it's all good, we just pretend that
+			//     that's the version we were inserting; we put it in our token and
+			//     continue.
+			//  3. insertedEntries[0] is nil. The cache has newer entries in them
+			//     and they're not compatible with the descriptor we were trying to
+			//     insert. This case should be rare, since very recently (before
+			//     starting the singleflight), the cache didn't have any entry for
+			//     the requested key. We'll continue with the stale rs[0]; we'll
+			//     pretend that we did by putting a dummy entry in the eviction
+			//     token. This will make eviction no-ops (which makes sense -
+			//     there'll be nothing to evict since we didn't insert anything).
+			//
+			// TODO(andrei): It'd be better to retry the cache/database lookup in
+			// case 3.
 			if entry == nil {
 				entry = &CacheEntry{
 					desc:     rs[0],
