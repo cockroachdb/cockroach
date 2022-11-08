@@ -11,14 +11,72 @@
 package scerrors
 
 import (
+	"context"
 	"fmt"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
+
+// EventLogger is a convenience object used for logging schema changer events.
+type EventLogger struct {
+	msg   redact.SafeValue
+	start time.Time
+}
+
+// StartEventf logs the start of a schema change event, and returns an object
+// with a HandlePanicAndLogError method to handle panics and log errors at the
+// end of the event.
+//
+// Typical usage is along the lines of:
+// - defer StartEventf(...).HandlePanicAndLogError(...)
+func StartEventf(ctx context.Context, format string, args ...interface{}) EventLogger {
+	msg := redact.Safe(fmt.Sprintf(format, args...))
+	log.InfofDepth(ctx, 1, "%s", msg)
+	return EventLogger{
+		msg:   msg,
+		start: timeutil.Now(),
+	}
+}
+
+// HandlePanicAndLogError handles panics by recovering them in an error,
+// which it then also logs. See also StartEventf.
+func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
+	switch recErr := recover().(type) {
+	case nil:
+		// No panicked error.
+	case runtime.Error:
+		*err = errors.WithAssertionFailure(recErr)
+	case error:
+		*err = recErr
+	default:
+		*err = errors.AssertionFailedf("recovered from uncategorizable panic: %v", recErr)
+	}
+	if *err == nil {
+		*err = ctx.Err()
+	}
+	if errors.Is(*err, context.Canceled) {
+		return
+	}
+	if *err == nil {
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.InfofDepth(ctx, 1, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
+		}
+		return
+	}
+	log.WarningfDepth(ctx, 1, "failed %s with error: %v", el.msg, *err)
+	if errors.HasAssertionFailure(*err) {
+		*err = errors.Wrapf(*err, "%s", el.msg)
+	}
+}
 
 type notImplementedError struct {
 	n      tree.NodeFormatter
