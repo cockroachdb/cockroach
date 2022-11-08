@@ -6,7 +6,6 @@ STRINGER_SRCS = [
   "//pkg/ccl/changefeedccl/schemafeed:tableeventtype_string.go",
   "//pkg/ccl/sqlproxyccl:errorcode_string.go",
   "//pkg/cli:keytype_string.go",
-  "//pkg/clusterversion:key_string.go",
   "//pkg/keys:commenttype_string.go",
   "//pkg/kv/kvclient/kvcoord:txnstate_string.go",
   "//pkg/kv/kvserver/closedts/sidetransport:cantclosereason_string.go",

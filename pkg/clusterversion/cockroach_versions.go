@@ -158,8 +158,6 @@ type Key int
 // All "is active" checks for the key will always evaluate to true. You'll also
 // want to delete the constant and remove its entry in the `versionsSingleton`
 // block below.
-//
-//go:generate stringer -type=Key
 const (
 	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
@@ -327,6 +325,10 @@ const (
 	// Do not add new versions to a patch release.
 	// *************************************************
 )
+
+func (k Key) String() string {
+	return ByKey(k).String()
+}
 
 // TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
 // previously referenced a < 22.1 version until that check/gate can be removed.

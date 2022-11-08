@@ -31,12 +31,12 @@ go_library(
 
 go_test(
     name = "scplan_test",
-    size = "small",
+    size = "medium",
     srcs = [
         "main_test.go",
         "plan_test.go",
     ],
-    args = ["-test.timeout=55s"],
+    args = ["-test.timeout=295s"],
     data = glob(["testdata/**"]),
     deps = [
         ":scplan",

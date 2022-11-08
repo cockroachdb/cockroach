@@ -1198,7 +1198,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 
 		// At this point, we've established the invariant: all engines hold the
 		// version currently visible to the setting. Going forward whenever we
-		// set an active cluster version (`SetActiveClusterVersion`), we'll
+		// set an active cluster version (`SetActiveVersion`), we'll
 		// persist it to all the engines first (`WriteClusterVersionToEngines`).
 		// This happens at two places:
 		//
