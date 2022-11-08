@@ -3630,6 +3630,8 @@ func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 91548)
+
 	// Set TestingKnobs to return a known session for easier
 	// comparison.
 	testSession := sqllivenesstestutils.NewAlwaysAliveSession("known-test-session")
