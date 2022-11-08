@@ -300,6 +300,13 @@ func (c *Columnarizer) Close(context.Context) error {
 		return nil
 	}
 	c.helper.Release()
+	if c.Ctx == nil {
+		// The columnarizer wasn't initialized, so the wrapped processors might
+		// not have been started leaving them in a state unsafe for the
+		// InternalClose, so we skip that. Mostly likely this happened because a
+		// panic was encountered in Init.
+		return nil
+	}
 	c.InternalClose()
 	return nil
 }
