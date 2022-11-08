@@ -13,6 +13,7 @@ package storepool
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"math/rand"
 	"reflect"
 	"sort"
@@ -52,7 +53,8 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 0 }, /* NodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -120,8 +122,9 @@ func TestStorePoolGetStoreList(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	// We're going to manually mark stores dead in this test.
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx,
+	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -417,7 +420,8 @@ func TestStorePoolGetStoreDetails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -439,7 +443,8 @@ func TestStorePoolFindDeadReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -544,7 +549,8 @@ func TestStorePoolDefaultState(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, _, _, sp, _ := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, _, _, sp, _ := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -574,7 +580,8 @@ func TestStorePoolThrottle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -583,7 +590,7 @@ func TestStorePoolThrottle(t *testing.T) {
 	sg := gossiputil.NewStoreGossiper(g)
 	sg.GossipStores(uniqueStore, t)
 
-	expected := sp.Clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.St.SV))
+	expected := sp.Clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
 	sp.Throttle(ThrottleFailed, "", 1)
 
 	sp.DetailsMu.Lock()
@@ -599,7 +606,8 @@ func TestStorePoolSuspected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDeadOff, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -610,8 +618,8 @@ func TestStorePoolSuspected(t *testing.T) {
 	store := uniqueStore[0]
 
 	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.St.SV)
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	// See state transition diagram in storeDetail.status() for a visual
 	// representation of what this test asserts.
@@ -665,7 +673,8 @@ func TestGetLocalities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, _ := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, _ := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -746,7 +755,8 @@ func TestStorePoolDecommissioningReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	stopper, g, _, sp, mnl := CreateTestStorePool(ctx,
+	st := cluster.MakeTestingClusterSettings()
+	stopper, g, _, sp, mnl := CreateTestStorePool(ctx, st,
 		TestTimeUntilStoreDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)

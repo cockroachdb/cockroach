@@ -766,7 +766,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
 				return TestingRaftStatusFn(r)
 			}
-			a.StorePool.IsStoreReadyForRoutineReplicaTransfer = func(_ context.Context, this roachpb.StoreID) bool {
+			a.StorePool.OverrideIsStoreReadyForRoutineReplicaTransferFn = func(_ context.Context, this roachpb.StoreID) bool {
 				for _, deadStore := range deadStores {
 					// NodeID match StoreIDs here, so this comparison is valid.
 					if deadStore.StoreID == this {

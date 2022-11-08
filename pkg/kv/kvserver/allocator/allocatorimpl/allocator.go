@@ -463,7 +463,8 @@ type AllocatorMetrics struct {
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
-	StorePool     *storepool.StorePool
+	st            *cluster.Settings
+	StorePool     storepool.AllocatorStorePool
 	nodeLatencyFn func(addr string) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
 	// wrapped inside a mutex, to avoid misuse.
@@ -494,6 +495,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 
 // MakeAllocator creates a new allocator using the specified StorePool.
 func MakeAllocator(
+	st *cluster.Settings,
 	storePool *storepool.StorePool,
 	nodeLatencyFn func(addr string) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -502,12 +504,13 @@ func MakeAllocator(
 	// There are number of test cases that make a test store but don't add
 	// gossip or a store pool. So we can't rely on the existence of the
 	// store pool in those cases.
-	if storePool != nil && storePool.Deterministic {
+	if storePool != nil && storePool.IsDeterministic() {
 		randSource = rand.NewSource(777)
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
 	allocator := Allocator{
+		st:            st,
 		StorePool:     storePool,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
@@ -916,7 +919,7 @@ func (a *Allocator) allocateTarget(
 	// as possible, and therefore any store that is good enough will be
 	// considered.
 	var selector CandidateSelector
-	if replicaStatus == Alive || recoveryStoreSelector.Get(&a.StorePool.St.SV) == "best" {
+	if replicaStatus == Alive || recoveryStoreSelector.Get(&a.st.SV) == "best" {
 		selector = a.NewBestCandidateSelector()
 	} else {
 		selector = a.NewGoodCandidateSelector()
@@ -1500,8 +1503,8 @@ func (a Allocator) RebalanceNonVoter(
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
 		StoreHealthOptions:      a.StoreHealthOptions(ctx),
-		deterministic:           a.StorePool.Deterministic,
-		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
+		deterministic:           a.StorePool.IsDeterministic(),
+		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
 	}
 }
 
@@ -1510,7 +1513,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
 			StoreHealthOptions:      a.StoreHealthOptions(ctx),
-			deterministic:           a.StorePool.Deterministic,
+			deterministic:           a.StorePool.IsDeterministic(),
 			rangeRebalanceThreshold: 0,
 		},
 		// We set jitter to be equal to the padding around replica-count rebalancing
@@ -1519,7 +1522,7 @@ func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerO
 		// made by the replicateQueue during normal course of operations. In other
 		// words, we don't want stores that are too far away from the mean to be
 		// affected by the jitter.
-		jitter: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
+		jitter: RangeRebalanceThreshold.Get(&a.st.SV),
 	}
 }
 
@@ -1676,10 +1679,10 @@ func (a *Allocator) leaseholderShouldMoveDueToPreferences(
 // storeHealthLogOnly. By default storeHealthBlockRebalanceTo is the action taken. When
 // there is a mixed version cluster, storeHealthNoAction is set instead.
 func (a *Allocator) StoreHealthOptions(_ context.Context) StoreHealthOptions {
-	enforcementLevel := StoreHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.StorePool.St.SV))
+	enforcementLevel := StoreHealthEnforcement(l0SublevelsThresholdEnforce.Get(&a.st.SV))
 	return StoreHealthOptions{
 		EnforcementLevel:    enforcementLevel,
-		L0SublevelThreshold: l0SublevelsThreshold.Get(&a.StorePool.St.SV),
+		L0SublevelThreshold: l0SublevelsThreshold.Get(&a.st.SV),
 	}
 }
 
@@ -1842,9 +1845,9 @@ func (a *Allocator) TransferLeaseTarget(
 			storeDescMap,
 			&QPSScorerOptions{
 				StoreHealthOptions:                a.StoreHealthOptions(ctx),
-				DeprecatedRangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.StorePool.St.SV),
-				QPSRebalanceThreshold:             allocator.QPSRebalanceThreshold.Get(&a.StorePool.St.SV),
-				MinRequiredQPSDiff:                allocator.MinQPSDifferenceForTransfers.Get(&a.StorePool.St.SV),
+				DeprecatedRangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
+				QPSRebalanceThreshold:             allocator.QPSRebalanceThreshold.Get(&a.st.SV),
+				MinRequiredQPSDiff:                allocator.MinQPSDifferenceForTransfers.Get(&a.st.SV),
 			},
 		)
 
@@ -2047,7 +2050,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 	// stats and locality information to base our decision on.
 	if statSummary == nil ||
 		statSummary.LocalityCounts == nil ||
-		!enableLoadBasedLeaseRebalancing.Get(&a.StorePool.St.SV) {
+		!enableLoadBasedLeaseRebalancing.Get(&a.st.SV) {
 		return decideWithoutStats, roachpb.ReplicaDescriptor{}
 	}
 	replicaLocalities := a.StorePool.GetLocalitiesByNode(existing)
@@ -2109,7 +2112,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 		if !ok {
 			continue
 		}
-		addr, err := a.StorePool.Gossip.GetNodeIDAddress(repl.NodeID)
+		addr, err := a.StorePool.GossipNodeIDAddress(repl.NodeID)
 		if err != nil {
 			log.KvDistribution.Errorf(ctx, "missing address for n%d: %+v", repl.NodeID, err)
 			continue
@@ -2121,7 +2124,7 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 
 		remoteWeight := math.Max(minReplicaWeight, replicaWeights[repl.NodeID])
 		replScore, rebalanceAdjustment := loadBasedLeaseRebalanceScore(
-			ctx, a.StorePool.St, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, candidateLeasesMean)
+			ctx, a.st, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, candidateLeasesMean)
 		if replScore > bestReplScore {
 			bestReplScore = replScore
 			bestRepl = repl
