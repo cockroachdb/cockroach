@@ -17,11 +17,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -380,7 +382,7 @@ func getStatementDetails(
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
-	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit)
+	statementStatisticsPerPlanHash, err := getStatementDetailsPerPlanHash(ctx, ie, whereClause, args, limit, settings)
 	if err != nil {
 		return nil, serverError(ctx, err)
 	}
@@ -541,20 +543,14 @@ func getTotalStatementDetails(
 	}
 	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
-	args = []interface{}{}
-	args = append(args, aggregatedMetadata.Query)
-	query = fmt.Sprintf(
-		`SELECT prettify_statement($1, %d, %d, %d)`,
-		tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase)
-	row, err = ie.QueryRowEx(ctx, "combined-stmts-details-format-query", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
-
+	queryTree, err := parser.ParseOne(aggregatedMetadata.Query)
 	if err != nil {
 		return statement, serverError(ctx, err)
 	}
-	aggregatedMetadata.FormattedQuery = string(tree.MustBeDString(row[0]))
+	cfg := tree.DefaultPrettyCfg()
+	cfg.Align = tree.PrettyAlignOnly
+	cfg.LineWidth = tree.ConsoleLineWidth
+	aggregatedMetadata.FormattedQuery = cfg.Pretty(queryTree.AST)
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
 		Metadata:            aggregatedMetadata,
@@ -702,9 +698,28 @@ func getStatementDetailsPerPlanHash(
 	whereClause string,
 	args []interface{},
 	limit int64,
+	settings *cluster.Settings,
 ) ([]serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash, error) {
+
 	query := fmt.Sprintf(
 		`SELECT
+				plan_hash,
+				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
+				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
+				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
+				max(sampled_plan) as sampled_plan,
+				aggregation_interval
+		FROM crdb_internal.statement_statistics %s
+		GROUP BY
+				plan_hash,
+				plan_gist,
+				aggregation_interval
+		LIMIT $%d`, whereClause, len(args)+1)
+	expectedNumDatums := 6
+
+	if settings.Version.IsActive(ctx, clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations) {
+		query = fmt.Sprintf(
+			`SELECT
 				plan_hash,
 				(statistics -> 'statistics' -> 'planGists'->>0) as plan_gist,
 				crdb_internal.merge_stats_metadata(array_agg(metadata)) AS metadata,
@@ -719,9 +734,10 @@ func getStatementDetailsPerPlanHash(
 				aggregation_interval,
 				index_recommendations
 		LIMIT $%d`, whereClause, len(args)+1)
+		expectedNumDatums = 7
+	}
 
 	args = append(args, limit)
-	const expectedNumDatums = 7
 
 	it, err := ie.QueryIteratorEx(ctx, "combined-stmts-details-by-plan-hash", nil,
 		sessiondata.InternalExecutorOverride{
