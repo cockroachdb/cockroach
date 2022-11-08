@@ -27,7 +27,7 @@ type AllocationOp interface {
 	trackPlanningMetrics()
 	// applyImpact updates the given storepool to reflect the result of
 	// applying this operation.
-	applyImpact(storepool *storepool.StorePool)
+	applyImpact(storepool storepool.AllocatorStorePool)
 	// lhBeingRemoved returns true when the leaseholder is will be removed if
 	// this operation succeeds, otherwise false.
 	lhBeingRemoved() bool
@@ -49,7 +49,7 @@ func (o AllocationTransferLeaseOp) lhBeingRemoved() bool {
 	return true
 }
 
-func (o AllocationTransferLeaseOp) applyImpact(storepool *storepool.StorePool) {
+func (o AllocationTransferLeaseOp) applyImpact(storepool storepool.AllocatorStorePool) {
 	// TODO(kvoli): Currently the local storepool is updated directly in the
 	// lease transfer call, rather than in this function. Move the storepool
 	// tracking from rq.TransferLease to this function once #89771 is merged.
@@ -89,7 +89,7 @@ func (o AllocationChangeReplicasOp) lhBeingRemoved() bool {
 
 // applyEstimatedImpact updates the given storepool to reflect the result
 // of applying this operation.
-func (o AllocationChangeReplicasOp) applyImpact(storepool *storepool.StorePool) {
+func (o AllocationChangeReplicasOp) applyImpact(storepool storepool.AllocatorStorePool) {
 	for _, chg := range o.chgs {
 		storepool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, o.usage, chg.ChangeType)
 	}
@@ -109,16 +109,16 @@ type AllocationFinalizeAtomicReplicationOp struct{}
 
 // TODO(kvoli): This always returns false, however it is possible that the LH
 // may have been removed here.
-func (o AllocationFinalizeAtomicReplicationOp) lhBeingRemoved() bool                       { return false }
-func (o AllocationFinalizeAtomicReplicationOp) applyImpact(storepool *storepool.StorePool) {}
-func (o AllocationFinalizeAtomicReplicationOp) trackPlanningMetrics()                      {}
+func (o AllocationFinalizeAtomicReplicationOp) lhBeingRemoved() bool                               { return false }
+func (o AllocationFinalizeAtomicReplicationOp) applyImpact(storepool storepool.AllocatorStorePool) {}
+func (o AllocationFinalizeAtomicReplicationOp) trackPlanningMetrics()                              {}
 
 // AllocationNoop represents no operation.
 type AllocationNoop struct{}
 
-func (o AllocationNoop) lhBeingRemoved() bool                       { return false }
-func (o AllocationNoop) applyImpact(storepool *storepool.StorePool) {}
-func (o AllocationNoop) trackPlanningMetrics()                      {}
+func (o AllocationNoop) lhBeingRemoved() bool                               { return false }
+func (o AllocationNoop) applyImpact(storepool storepool.AllocatorStorePool) {}
+func (o AllocationNoop) trackPlanningMetrics()                              {}
 
 // effectBuilder is a utility struct to track a list of effects, which may be
 // used to construct a single effect function that in turn calls all tracked
