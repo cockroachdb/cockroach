@@ -265,19 +265,6 @@ func (cv ClusterVersion) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Print(cv.Version)
 }
 
-// PrettyPrint returns the value in a format that makes it apparent whether or
-// not it is a fence version.
-func (cv ClusterVersion) PrettyPrint() string {
-	// If we're a version greater than v20.2 and have an odd internal version,
-	// we're a fence version. See fenceVersionFor in pkg/upgrade to understand
-	// what these are.
-	fenceVersion := !cv.Version.LessEq(roachpb.Version{Major: 20, Minor: 2}) && (cv.Internal%2) == 1
-	if !fenceVersion {
-		return cv.String()
-	}
-	return redact.Sprintf("%s%s", cv.String(), "(fence)").StripMarkers()
-}
-
 // ClusterVersionImpl implements the settings.ClusterVersionImpl interface.
 func (cv ClusterVersion) ClusterVersionImpl() {}
 

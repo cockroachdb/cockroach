@@ -638,16 +638,16 @@ func ByKey(key Key) roachpb.Version {
 
 // ListBetween returns the list of cluster versions in the range
 // (from, to].
-func ListBetween(from, to ClusterVersion) []ClusterVersion {
+func ListBetween(from, to roachpb.Version) []roachpb.Version {
 	return listBetweenInternal(from, to, versionsSingleton)
 }
 
-func listBetweenInternal(from, to ClusterVersion, vs keyedVersions) []ClusterVersion {
-	var cvs []ClusterVersion
+func listBetweenInternal(from, to roachpb.Version, vs keyedVersions) []roachpb.Version {
+	var cvs []roachpb.Version
 	for _, keyedV := range vs {
 		// Read: "from < keyedV <= to".
-		if from.Less(keyedV.Version) && keyedV.Version.LessEq(to.Version) {
-			cvs = append(cvs, ClusterVersion{Version: keyedV.Version})
+		if from.Less(keyedV.Version) && keyedV.Version.LessEq(to) {
+			cvs = append(cvs, keyedV.Version)
 		}
 	}
 	return cvs

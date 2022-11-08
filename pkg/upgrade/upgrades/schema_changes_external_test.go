@@ -242,8 +242,8 @@ func testMigrationWithFailures(
 	skip.UnderRace(t, "very slow")
 
 	// We're going to be migrating from startCV to endCV.
-	startCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 2041}}
-	endCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 2042}}
+	startCV := roachpb.Version{Major: 2041}
+	endCV := roachpb.Version{Major: 2042}
 
 	// The tests follows the following procedure.
 	//
@@ -321,10 +321,10 @@ func testMigrationWithFailures(
 
 			// Number of schema-change jobs that are skipped.
 			settings := cluster.MakeTestingClusterSettingsWithVersions(
-				endCV.Version, startCV.Version, false, /* initializeVersion */
+				endCV, startCV, false, /* initializeVersion */
 			)
 			require.NoError(t, clusterversion.Initialize(
-				ctx, startCV.Version, &settings.SV,
+				ctx, startCV, &settings.SV,
 			))
 			jobsKnobs := jobs.NewTestingKnobsWithShortIntervals()
 			jobsKnobs.BeforeUpdate = beforeUpdate
@@ -335,7 +335,7 @@ func testMigrationWithFailures(
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							DisableAutomaticVersionUpgrade: make(chan struct{}),
-							BinaryVersionOverride:          startCV.Version,
+							BinaryVersionOverride:          startCV,
 						},
 						JobsTestingKnobs: jobsKnobs,
 						SQLExecutor: &sql.ExecutorTestingKnobs{
@@ -349,12 +349,12 @@ func testMigrationWithFailures(
 							},
 						},
 						UpgradeManager: &upgrade.TestingKnobs{
-							ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
-								return []clusterversion.ClusterVersion{
+							ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
+								return []roachpb.Version{
 									endCV,
 								}
 							},
-							RegistryOverride: func(cv clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
+							RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
 								if cv.Equal(endCV) {
 									return upgrade.NewTenantUpgrade("testing",
 										endCV,
@@ -402,7 +402,7 @@ func testMigrationWithFailures(
 			// Channel to wait for the migration job to complete.
 			finishChan := make(chan struct{})
 			go upgrades.UpgradeToVersion(
-				t, sqlDB, endCV.Version, finishChan, true, /* expectError */
+				t, sqlDB, endCV, finishChan, true, /* expectError */
 			)
 
 			var migJobID jobspb.JobID
@@ -465,7 +465,7 @@ func testMigrationWithFailures(
 
 			// Restart the migration job.
 			t.Log("retrying migration, expecting to succeed")
-			go upgrades.UpgradeToVersion(t, sqlDB, endCV.Version, finishChan, false /* expectError */)
+			go upgrades.UpgradeToVersion(t, sqlDB, endCV, finishChan, false /* expectError */)
 
 			// Wait until the new migration job observes an existing mutation job.
 			if test.waitForMigrationRestart {
