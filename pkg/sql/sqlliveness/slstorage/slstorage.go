@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
@@ -89,7 +89,7 @@ type Storage struct {
 	metrics    Metrics
 	gcInterval func() time.Duration
 	newTimer   func() timeutil.TimerI
-	tableID    descpb.ID
+	keyCodec   keyCodec
 
 	mu struct {
 		syncutil.Mutex
@@ -119,7 +119,8 @@ func NewTestingStorage(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	sqllivenessTableID descpb.ID,
+	sqllivenessTableID catid.DescID,
+	rbrIndexID catid.IndexID,
 	newTimer func() timeutil.TimerI,
 ) *Storage {
 	s := &Storage{
@@ -130,7 +131,7 @@ func NewTestingStorage(
 		clock:    clock,
 		db:       db,
 		codec:    codec,
-		tableID:  sqllivenessTableID,
+		keyCodec: makeKeyCodec(codec, sqllivenessTableID, rbrIndexID),
 		newTimer: newTimer,
 		gcInterval: func() time.Duration {
 			baseInterval := GCInterval.Get(&settings.SV)
@@ -160,7 +161,8 @@ func NewStorage(
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
 ) *Storage {
-	return NewTestingStorage(ambientCtx, stopper, clock, db, codec, settings, keys.SqllivenessID,
+	const rbrIndexID = 2
+	return NewTestingStorage(ambientCtx, stopper, clock, db, codec, settings, keys.SqllivenessID, rbrIndexID,
 		timeutil.DefaultTimeSource{}.NewTimer)
 }
 
@@ -311,7 +313,10 @@ func (s *Storage) deleteOrFetchSession(
 		// Reset captured variable in case of retry.
 		deleted, expiration, prevExpiration = false, hlc.Timestamp{}, hlc.Timestamp{}
 
-		k := s.makeSessionKey(sid)
+		k, err := s.keyCodec.encode(sid)
+		if err != nil {
+			return err
+		}
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err
@@ -409,7 +414,7 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 	var toCheck []sqlliveness.SessionID
 	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		toCheck = nil // reset for restarts
-		start := s.makeTablePrefix()
+		start := s.keyCodec.indexPrefix()
 		end := start.PrefixEnd()
 		now := s.clock.Now()
 		const maxRows = 1024 // arbitrary but plenty
@@ -428,7 +433,7 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 					continue
 				}
 				if exp.Less(now) {
-					id, err := decodeSessionKey(rows[i].Key)
+					id, err := s.keyCodec.decode(rows[i].Key)
 					if err != nil {
 						log.Warningf(ctx, "failed to decode row %s session: %v", rows[i].Key.String(), err)
 					}
@@ -453,7 +458,10 @@ func (s *Storage) fetchExpiredSessionIDs(ctx context.Context) ([]sqlliveness.Ses
 func (s *Storage) Insert(
 	ctx context.Context, sid sqlliveness.SessionID, expiration hlc.Timestamp,
 ) (err error) {
-	k := s.makeSessionKey(sid)
+	k, err := s.keyCodec.encode(sid)
+	if err != nil {
+		return err
+	}
 	v := encodeValue(expiration)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.db.InitPut(ctx, k, &v, true); err != nil {
@@ -472,7 +480,10 @@ func (s *Storage) Update(
 ) (sessionExists bool, err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		k := s.makeSessionKey(sid)
+		k, err := s.keyCodec.encode(sid)
+		if err != nil {
+			return err
+		}
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err
@@ -512,36 +523,6 @@ func (s *cachedStorage) IsAlive(
 	ctx context.Context, sid sqlliveness.SessionID,
 ) (alive bool, err error) {
 	return (*Storage)(s).isAlive(ctx, sid, async)
-}
-
-func (s *Storage) makeTablePrefix() roachpb.Key {
-	return s.codec.IndexPrefix(uint32(s.tableID), 1)
-}
-
-func (s *Storage) makeSessionKey(id sqlliveness.SessionID) roachpb.Key {
-	return keys.MakeFamilyKey(encoding.EncodeBytesAscending(s.makeTablePrefix(), id.UnsafeBytes()), 0)
-}
-
-func decodeSessionKey(k roachpb.Key) (sqlliveness.SessionID, error) {
-	prefix, err := keys.GetRowPrefixLength(k)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to decode session key")
-	}
-	k = k[:prefix]
-	rem, _, err := keys.DecodeTenantPrefix(k)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to decode tenant prefix from session key")
-	}
-	rem, _, _, err = keys.DecodeTableIDIndexID(rem)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to decode table and index prefix from session key")
-	}
-
-	_, idBytes, err := encoding.DecodeBytesAscending(rem, nil)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to decode session ID from session key")
-	}
-	return sqlliveness.SessionID(idBytes), nil
 }
 
 func decodeValue(kv kv.KeyValue) (hlc.Timestamp, error) {
