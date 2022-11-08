@@ -449,17 +449,17 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 		{
 			desc:     "no split 22_1",
 			splitAts: []int{},
-			version:  clusterversion.V22_1,
+			version:  clusterversion.TODOAlwaysTrue,
 		},
 		{
 			desc:     "1 split 22_1",
 			splitAts: []int{10_000},
-			version:  clusterversion.V22_1,
+			version:  clusterversion.TODOAlwaysTrue,
 		},
 		{
 			desc:     "2 splits 22_1",
 			splitAts: []int{10_000, 20_000},
-			version:  clusterversion.V22_1,
+			version:  clusterversion.TODOAlwaysTrue,
 		},
 		{
 			desc:     "no split",

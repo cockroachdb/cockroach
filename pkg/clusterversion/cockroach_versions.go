@@ -328,9 +328,10 @@ const (
 	// *************************************************
 )
 
-// TODOPreV22_1 is an alias for V22_1 for use in any version gate/check that
-// previously referenced a < 22.1 version until that check/gate can be removed.
-const TODOPreV22_1 = V22_1
+// TODOAlwaysTrue is a placeholder for any version gate/check that previously
+// referenced a < 22.2 version. References to TODOAlwaysTrue denotes that
+// conditional version gate/check logic is now safe to remove.
+const TODOAlwaysTrue = V22_2
 
 // rawVersionsSingleton lists all historical versions here in chronological
 // order, with comments describing what backwards-incompatible features were

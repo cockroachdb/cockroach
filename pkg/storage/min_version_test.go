@@ -96,9 +96,9 @@ func TestSetMinVersion(t *testing.T) {
 	defer p.Close()
 	require.Equal(t, pebble.FormatMostCompatible, p.db.FormatMajorVersion())
 
-	// Advancing the store cluster version to TODOPreV22_1
+	// Advancing the store cluster version to TODOAlwaysTrue
 	// should also advance the store's format major version.
-	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.TODOPreV22_1))
+	err = p.SetMinVersion(clusterversion.ByKey(clusterversion.TODOAlwaysTrue))
 	require.NoError(t, err)
 	require.Equal(t, pebble.FormatSplitUserKeysMarked, p.db.FormatMajorVersion())
 

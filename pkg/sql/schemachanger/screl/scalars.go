@@ -115,7 +115,7 @@ func MinVersion(el scpb.Element) clusterversion.Key {
 		*scpb.Namespace, *scpb.Owner, *scpb.UserPrivileges,
 		*scpb.DatabaseRegionConfig, *scpb.DatabaseRoleSetting, *scpb.DatabaseComment,
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.ObjectParent:
-		return clusterversion.V22_1
+		return clusterversion.TODOAlwaysTrue
 	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
 		return clusterversion.V22_2UseDelRangeInGCJob
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData:
