@@ -722,7 +722,7 @@ func (b *Batch) adminSplit(
 	b.initResult(1, 0, notRaw, nil)
 }
 
-func (b *Batch) adminUnsplit(splitKeyIn interface{}) {
+func (b *Batch) adminUnsplit(splitKeyIn interface{}, class roachpb.AdminUnsplitRequest_Class) {
 	splitKey, err := marshalKey(splitKeyIn)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -731,6 +731,7 @@ func (b *Batch) adminUnsplit(splitKeyIn interface{}) {
 		RequestHeader: roachpb.RequestHeader{
 			Key: splitKey,
 		},
+		Class: class,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

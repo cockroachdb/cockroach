@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -254,7 +253,6 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			jobSpanCount += len(spanPartition.Spans)
 		}
 
-		useDistSQL := execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2TTLDistSQL)
 		jobRegistry := execCfg.JobRegistry
 		if err := jobRegistry.UpdateJobWithTxn(
 			ctx,
@@ -264,33 +262,12 @@ func (t rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) err
 			func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				progress := md.Progress
 				rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
-				rowLevelTTL.UseDistSQL = useDistSQL
 				rowLevelTTL.JobSpanCount = int64(jobSpanCount)
 				ju.UpdateProgress(progress)
 				return nil
 			},
 		); err != nil {
 			return err
-		}
-
-		if !useDistSQL { // TODO(ewall): Remove !useDistSQL block and ttlProcessorOverride in 23.1
-			var spans []roachpb.Span
-			for _, spanPartition := range spanPartitions {
-				spans = append(spans, spanPartition.Spans...)
-			}
-			tp := ttlProcessor{
-				ttlSpec: *newTTLSpec(spans),
-				ttlProcessorOverride: &ttlProcessorOverride{
-					descsCol:       evalCtx.Descs,
-					db:             execCfg.DB,
-					codec:          execCfg.Codec,
-					jobRegistry:    jobRegistry,
-					sqlInstanceID:  execCfg.NodeInfo.NodeID.SQLInstanceID(),
-					settingsValues: settingsValues,
-					ie:             execCfg.InternalExecutor,
-				},
-			}
-			return tp.work(ctx)
 		}
 
 		sqlInstanceIDToTTLSpec := make(map[base.SQLInstanceID]*execinfrapb.TTLSpec, len(spanPartitions))

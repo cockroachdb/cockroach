@@ -630,9 +630,11 @@ func (db *DB) AdminScatter(
 // If splitKey is not the start key of a range, then this method will throw an
 // error. If the range specified by splitKey does not have a sticky bit set,
 // then this method will not throw an error and is a no-op.
-func (db *DB) AdminUnsplit(ctx context.Context, splitKey interface{}) error {
+func (db *DB) AdminUnsplit(
+	ctx context.Context, splitKey interface{}, class roachpb.AdminUnsplitRequest_Class,
+) error {
 	b := &Batch{}
-	b.adminUnsplit(splitKey)
+	b.adminUnsplit(splitKey, class)
 	return getOneErr(db.Run(ctx, b), b)
 }
 
