@@ -50,7 +50,6 @@ def lint_binary(name, test):
             "//pkg/sql/opt/optgen/cmd/optfmt",
             "@com_github_cockroachdb_crlfmt//:crlfmt",
             "@go_sdk//:bin/go",
-            "@org_golang_x_lint//golint:golint",
         ],
         deps = ["@bazel_tools//tools/bash/runfiles"],
         testonly = 1,
