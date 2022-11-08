@@ -162,6 +162,10 @@ type Table interface {
 	// BY ROW.
 	IsRegionalByRow() bool
 
+	// IsMultiregion returns true if the table is a Multiregion table, defined
+	// with one of the LOCALITY clauses.
+	IsMultiregion() bool
+
 	// HomeRegionColName returns the name of the crdb_internal_region column name
 	// specifying the home region of each row in the table, if this table is a
 	// REGIONAL BY ROW TABLE, otherwise "", false is returned.
