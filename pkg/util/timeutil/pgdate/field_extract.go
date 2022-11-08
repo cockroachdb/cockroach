@@ -861,7 +861,7 @@ func (fe *fieldExtract) SetDayOfYear(chunk numberChunk) error {
 	if !ok {
 		return errors.AssertionFailedf("year must be set before day of year")
 	}
-	y, m, d := julianDayToDate(dateToJulianDay(y, 1, 1) + chunk.v - 1)
+	y, m, d := julianDayToDate(DateToJulianDay(y, 1, 1) + chunk.v - 1)
 	if err := fe.Reset(fieldYear, y); err != nil {
 		return err
 	}

@@ -20,8 +20,8 @@ var daysInMonth = [2][13]int{
 	{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
 }
 
-// dateToJulianDay is based on the date2j function in PostgreSQL 10.5.
-func dateToJulianDay(year int, month int, day int) int {
+// DateToJulianDay is based on the date2j function in PostgreSQL 10.5.
+func DateToJulianDay(year int, month int, day int) int {
 	if month > 2 {
 		month++
 		year += 4800
