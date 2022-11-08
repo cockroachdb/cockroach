@@ -125,13 +125,11 @@ type SystemUpgrade struct {
 type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps, *jobs.Job) error
 
 // NewSystemUpgrade constructs a SystemUpgrade.
-func NewSystemUpgrade(
-	description string, cv clusterversion.ClusterVersion, fn SystemUpgradeFunc,
-) *SystemUpgrade {
+func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFunc) *SystemUpgrade {
 	return &SystemUpgrade{
 		upgrade: upgrade{
 			description: description,
-			cv:          cv,
+			v:           v,
 		},
 		fn: fn,
 	}
@@ -139,8 +137,8 @@ func NewSystemUpgrade(
 
 // Run kickstarts the actual upgrade process for system-level upgrades.
 func (m *SystemUpgrade) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps, job *jobs.Job,
+	ctx context.Context, v roachpb.Version, d SystemDeps, job *jobs.Job,
 ) error {
-	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", cv), nil)
-	return m.fn(ctx, cv, d, job)
+	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
+	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d, job)
 }

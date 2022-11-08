@@ -1341,9 +1341,7 @@ func (t *logicTest) newCluster(
 
 			// If we're injecting fake versions, hook up logic to simulate the end
 			// version existing.
-			from := clusterversion.ClusterVersion{Version: cfg.BootstrapVersion}
-			to := clusterversion.ClusterVersion{Version: cfg.BinaryVersion}
-			if len(clusterversion.ListBetween(from, to)) == 0 {
+			if len(clusterversion.ListBetween(cfg.BootstrapVersion, cfg.BinaryVersion)) == 0 {
 				mm, ok := nodeParams.Knobs.UpgradeManager.(*upgrade.TestingKnobs)
 				if !ok {
 					mm = &upgrade.TestingKnobs{}

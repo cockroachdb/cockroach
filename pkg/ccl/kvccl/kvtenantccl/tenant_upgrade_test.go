@@ -252,15 +252,14 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			TestingKnobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				UpgradeManager: &upgrade.TestingKnobs{
-					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
-						return []clusterversion.ClusterVersion{{Version: v1}, {Version: v2}}
+					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
+						return []roachpb.Version{v1, v2}
 					},
-					RegistryOverride: func(cv clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
-						switch cv.Version {
+					RegistryOverride: func(v roachpb.Version) (upgrade.Upgrade, bool) {
+						switch v {
 						case v1:
-							return upgrade.NewTenantUpgrade("testing", clusterversion.ClusterVersion{
-								Version: v1,
-							},
+							return upgrade.NewTenantUpgrade("testing",
+								v1,
 								upgrades.NoPrecondition,
 								func(
 									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
@@ -268,9 +267,8 @@ func TestTenantUpgradeFailure(t *testing.T) {
 									return nil
 								}), true
 						case v2:
-							return upgrade.NewTenantUpgrade("testing next", clusterversion.ClusterVersion{
-								Version: v2,
-							},
+							return upgrade.NewTenantUpgrade("testing next",
+								v2,
 								upgrades.NoPrecondition,
 								func(
 									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,

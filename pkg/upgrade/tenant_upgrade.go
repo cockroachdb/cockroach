@@ -78,14 +78,14 @@ var _ Upgrade = (*TenantUpgrade)(nil)
 // NewTenantUpgrade constructs a TenantUpgrade.
 func NewTenantUpgrade(
 	description string,
-	cv clusterversion.ClusterVersion,
+	v roachpb.Version,
 	precondition PreconditionFunc,
 	fn TenantUpgradeFunc,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
 			description: description,
-			cv:          cv,
+			v:           v,
 		},
 		fn:           fn,
 		precondition: precondition,
@@ -95,10 +95,10 @@ func NewTenantUpgrade(
 
 // Run kick-starts the actual upgrade process for tenant-level upgrades.
 func (m *TenantUpgrade) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps, job *jobs.Job,
+	ctx context.Context, v roachpb.Version, d TenantDeps, job *jobs.Job,
 ) error {
-	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", cv), nil)
-	return m.fn(ctx, cv, d, job)
+	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
+	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d, job)
 }
 
 // Precondition runs the precondition check if there is one and reports
