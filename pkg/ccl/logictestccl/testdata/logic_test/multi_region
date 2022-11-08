@@ -526,9 +526,22 @@ USE new_db
 statement error cannot set LOCALITY on a table in a database that is not multi-region enabled
 CREATE TABLE cannot_create_table_no_multiregion (a int) LOCALITY GLOBAL
 
+# For now, just test to see that non-root admin users cannot make the system
+# database a multi-region database.
+
+statement ok
+GRANT admin TO testuser
+
+user testuser
+
 # Test adding a primary region to the system database.
 statement error adding a primary region to the system database is not supported
 ALTER DATABASE system PRIMARY REGION "ap-southeast-2"
+
+user root
+
+statement ok
+REVOKE admin FROM testuser
 
 statement ok
 CREATE DATABASE alter_test_db primary region "ca-central-1"
