@@ -413,12 +413,12 @@ func (e *NotLeaseHolderError) message(_ *Error) string {
 	} else {
 		fmt.Fprint(&buf, "replica not lease holder; ")
 	}
-	if e.DeprecatedLeaseHolder == nil {
-		fmt.Fprint(&buf, "lease holder unknown")
-	} else if e.Lease != nil {
+	if e.Lease != nil {
 		fmt.Fprintf(&buf, "current lease is %s", e.Lease)
-	} else {
+	} else if e.DeprecatedLeaseHolder != nil {
 		fmt.Fprintf(&buf, "replica %s is", *e.DeprecatedLeaseHolder)
+	} else {
+		fmt.Fprint(&buf, "lease holder unknown")
 	}
 	return buf.String()
 }

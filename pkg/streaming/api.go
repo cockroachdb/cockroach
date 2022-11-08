@@ -14,118 +14,38 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 // StreamID is the ID of a replication stream.
-type StreamID int64
-
-// SafeValue implements the redact.SafeValue interface.
-func (j StreamID) SafeValue() {}
-
-// InvalidStreamID is the zero value for StreamID corresponding to no stream.
-const InvalidStreamID StreamID = 0
+type StreamID = streampb.StreamID
 
 // GetReplicationStreamManagerHook is the hook to get access to the producer side replication APIs.
 // Used by builtin functions to trigger streaming replication.
-var GetReplicationStreamManagerHook func(ctx context.Context, evalCtx *eval.Context) (ReplicationStreamManager, error)
+var GetReplicationStreamManagerHook func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn) (eval.ReplicationStreamManager, error)
 
 // GetStreamIngestManagerHook is the hook to get access to the ingestion side replication APIs.
 // Used by builtin functions to trigger streaming replication.
-var GetStreamIngestManagerHook func(ctx context.Context, evalCtx *eval.Context) (StreamIngestManager, error)
-
-// ReplicationStreamManager represents a collection of APIs that streaming replication supports
-// on the production side.
-type ReplicationStreamManager interface {
-	// StartReplicationStream starts a stream replication job for the specified tenant on the producer side.
-	StartReplicationStream(
-		ctx context.Context,
-		evalCtx *eval.Context,
-		txn *kv.Txn,
-		tenantID uint64,
-	) (StreamID, error)
-
-	// HeartbeatReplicationStream sends a heartbeat to the replication stream producer, indicating
-	// consumer has consumed until the given 'frontier' timestamp. This updates the producer job
-	// progress and extends its life, and the new producer progress will be returned.
-	// If 'frontier' is hlc.MaxTimestamp, returns the producer progress without updating it.
-	HeartbeatReplicationStream(
-		ctx context.Context,
-		evalCtx *eval.Context,
-		streamID StreamID,
-		frontier hlc.Timestamp,
-		txn *kv.Txn) (streampb.StreamReplicationStatus, error)
-
-	// StreamPartition starts streaming replication on the producer side for the partition specified
-	// by opaqueSpec which contains serialized streampb.StreamPartitionSpec protocol message and
-	// returns a value generator which yields events for the specified partition.
-	StreamPartition(
-		evalCtx *eval.Context,
-		streamID StreamID,
-		opaqueSpec []byte,
-	) (eval.ValueGenerator, error)
-
-	// GetReplicationStreamSpec gets a stream replication spec on the producer side.
-	GetReplicationStreamSpec(
-		ctx context.Context,
-		evalCtx *eval.Context,
-		txn *kv.Txn,
-		streamID StreamID,
-	) (*streampb.ReplicationStreamSpec, error)
-
-	// CompleteReplicationStream completes a replication stream job on the producer side.
-	// 'successfulIngestion' indicates whether the stream ingestion finished successfully and
-	// determines the fate of the producer job, succeeded or canceled.
-	CompleteReplicationStream(
-		ctx context.Context,
-		evalCtx *eval.Context,
-		txn *kv.Txn,
-		streamID StreamID,
-		successfulIngestion bool,
-	) error
-}
-
-// StreamIngestManager represents a collection of APIs that streaming replication supports
-// on the ingestion side.
-type StreamIngestManager interface {
-	// CompleteStreamIngestion signals a running stream ingestion job to complete on the consumer side.
-	CompleteStreamIngestion(
-		ctx context.Context,
-		evalCtx *eval.Context,
-		txn *kv.Txn,
-		ingestionJobID jobspb.JobID,
-		cutoverTimestamp hlc.Timestamp,
-	) error
-
-	// GetStreamIngestionStats gets a statistics summary for a stream ingestion job.
-	GetStreamIngestionStats(
-		ctx context.Context,
-		evalCtx *eval.Context,
-		txn *kv.Txn,
-		ingestionJobID jobspb.JobID,
-	) (*streampb.StreamIngestionStats, error)
-}
+var GetStreamIngestManagerHook func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn) (eval.StreamIngestManager, error)
 
 // GetReplicationStreamManager returns a ReplicationStreamManager if a CCL binary is loaded.
 func GetReplicationStreamManager(
-	ctx context.Context, evalCtx *eval.Context,
-) (ReplicationStreamManager, error) {
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
+) (eval.ReplicationStreamManager, error) {
 	if GetReplicationStreamManagerHook == nil {
 		return nil, errors.New("replication streaming requires a CCL binary")
 	}
-	return GetReplicationStreamManagerHook(ctx, evalCtx)
+	return GetReplicationStreamManagerHook(ctx, evalCtx, txn)
 }
 
 // GetStreamIngestManager returns a StreamIngestManager if a CCL binary is loaded.
 func GetStreamIngestManager(
-	ctx context.Context, evalCtx *eval.Context,
-) (StreamIngestManager, error) {
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
+) (eval.StreamIngestManager, error) {
 	if GetReplicationStreamManagerHook == nil {
 		return nil, errors.New("replication streaming requires a CCL binary")
 	}
-	return GetStreamIngestManagerHook(ctx, evalCtx)
+	return GetStreamIngestManagerHook(ctx, evalCtx, txn)
 }

@@ -75,7 +75,7 @@ func (p *partitionedStreamClient) Create(
 	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantID.ToUint64())
 	err := row.Scan(&streamID)
 	if err != nil {
-		return streaming.InvalidStreamID,
+		return streampb.InvalidStreamID,
 			errors.Wrapf(err, "error creating replication stream for tenant %s", tenantID.String())
 	}
 

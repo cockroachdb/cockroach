@@ -457,6 +457,7 @@ go_library(
         "//pkg/sql/vtable",
         "//pkg/storage",
         "//pkg/storage/enginepb",
+        "//pkg/streaming",
         "//pkg/testutils/serverutils",
         "//pkg/upgrade",
         "//pkg/util",

@@ -14,13 +14,13 @@ import (
 	"context"
 	gojson "encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -50,7 +50,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -58,7 +58,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				ingestionJobID := jobspb.JobID(*args[0].(*tree.DInt))
 				cutoverTime := args[1].(*tree.DTimestampTZ).Time
 				cutoverTimestamp := hlc.Timestamp{WallTime: cutoverTime.UnixNano()}
-				err = mgr.CompleteStreamIngestion(ctx, evalCtx, evalCtx.Txn, ingestionJobID, cutoverTimestamp)
+				err = mgr.CompleteStreamIngestion(ctx, ingestionJobID, cutoverTimestamp)
 				if err != nil {
 					return nil, err
 				}
@@ -91,12 +91,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, errors.New("job_id cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
 				if err != nil {
 					return nil, err
 				}
 				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				stats, err := mgr.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
 				if err != nil {
 					return nil, err
 				}
@@ -131,12 +131,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull {
 					return tree.DNull, errors.New("job_id cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetStreamIngestManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetStreamIngestManager(ctx)
 				if err != nil {
 					return nil, err
 				}
 				ingestionJobID := int64(tree.MustBeDInt(args[0]))
-				stats, err := mgr.GetStreamIngestionStats(ctx, evalCtx, evalCtx.Txn, jobspb.JobID(ingestionJobID))
+				stats, err := mgr.GetStreamIngestionStats(ctx, jobspb.JobID(ingestionJobID))
 				if err != nil {
 					return nil, err
 				}
@@ -164,7 +164,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -172,7 +172,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				jobID, err := mgr.StartReplicationStream(ctx, evalCtx, evalCtx.Txn, uint64(tenantID))
+				jobID, err := mgr.StartReplicationStream(ctx, uint64(tenantID))
 				if err != nil {
 					return nil, err
 				}
@@ -201,7 +201,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if args[0] == tree.DNull || args[1] == tree.DNull {
 					return tree.DNull, errors.New("stream_id or frontier_ts cannot be specified with null argument")
 				}
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -209,8 +209,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				streamID := streaming.StreamID(int(tree.MustBeDInt(args[0])))
-				sps, err := mgr.HeartbeatReplicationStream(ctx, evalCtx, streamID, frontier, evalCtx.Txn)
+				streamID := streampb.StreamID(int(tree.MustBeDInt(args[0])))
+				sps, err := mgr.HeartbeatReplicationStream(ctx, streamID, frontier)
 				if err != nil {
 					return nil, err
 				}
@@ -243,13 +243,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 				[]string{"stream_event"},
 			),
 			func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
 				return mgr.StreamPartition(
-					evalCtx,
-					streaming.StreamID(tree.MustBeDInt(args[0])),
+					streampb.StreamID(tree.MustBeDInt(args[0])),
 					[]byte(tree.MustBeDBytes(args[1])),
 				)
 			},
@@ -269,13 +268,13 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
 
 				streamID := int64(tree.MustBeDInt(args[0]))
-				spec, err := mgr.GetReplicationStreamSpec(ctx, evalCtx, evalCtx.Txn, streaming.StreamID(streamID))
+				spec, err := mgr.GetReplicationStreamSpec(ctx, streampb.StreamID(streamID))
 				if err != nil {
 					return nil, err
 				}
@@ -304,7 +303,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := streaming.GetReplicationStreamManager(ctx, evalCtx)
+				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -312,7 +311,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				streamID := int64(tree.MustBeDInt(args[0]))
 				successfulIngestion := bool(tree.MustBeDBool(args[1]))
 				if err := mgr.CompleteReplicationStream(
-					ctx, evalCtx, evalCtx.Txn, streaming.StreamID(streamID), successfulIngestion,
+					ctx, streampb.StreamID(streamID), successfulIngestion,
 				); err != nil {
 					return nil, err
 				}

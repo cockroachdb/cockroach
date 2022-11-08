@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -230,10 +231,10 @@ func (f *fullReconciler) reconcile(
 	// view of things.
 	var records []spanconfig.Record
 
-	if err := sql.DescsTxn(ctx, f.execCfg, func(
-		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+	if err := f.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, f.execCfg.DB, nil /* session data */, func(
+		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
-		translator := f.sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
+		translator := f.sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
 		records, reconciledUpUntil, err = spanconfig.FullTranslate(ctx, translator)
 		return err
 	}); err != nil {
@@ -475,30 +476,31 @@ func (r *incrementalReconciler) reconcile(
 			var missingProtectedTimestampTargets []spanconfig.SystemTarget
 			var records []spanconfig.Record
 
-			if err := sql.DescsTxn(ctx, r.execCfg,
-				func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-					var err error
+			if err := r.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, r.execCfg.DB, nil /* session data */, func(
+				ctx context.Context, txn *kv.Txn, descsCol *descs.Collection, ie sqlutil.InternalExecutor,
+			) error {
+				var err error
 
-					// TODO(irfansharif): Instead of these filter methods for missing
-					// tables and system targets that live on the Reconciler, we could
-					// move this to the SQLTranslator instead, now that the SQLTranslator
-					// is transaction scoped.
-					missingTableIDs, err = r.filterForMissingTableIDs(ctx, txn, descsCol, sqlUpdates)
-					if err != nil {
-						return err
-					}
-
-					missingProtectedTimestampTargets, err = r.filterForMissingProtectedTimestampSystemTargets(
-						ctx, txn, sqlUpdates,
-					)
-					if err != nil {
-						return err
-					}
-
-					translator := r.sqlTranslatorFactory.NewSQLTranslator(txn, descsCol)
-					records, _, err = translator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
+				// TODO(irfansharif): Instead of these filter methods for missing
+				// tables and system targets that live on the Reconciler, we could
+				// move this to the SQLTranslator instead, now that the SQLTranslator
+				// is transaction scoped.
+				missingTableIDs, err = r.filterForMissingTableIDs(ctx, txn, descsCol, sqlUpdates)
+				if err != nil {
 					return err
-				}); err != nil {
+				}
+
+				missingProtectedTimestampTargets, err = r.filterForMissingProtectedTimestampSystemTargets(
+					ctx, txn, sqlUpdates,
+				)
+				if err != nil {
+					return err
+				}
+
+				translator := r.sqlTranslatorFactory.NewSQLTranslator(txn, ie, descsCol)
+				records, _, err = translator.Translate(ctx, allIDs, generateSystemSpanConfigurations)
+				return err
+			}); err != nil {
 				return err
 			}
 
