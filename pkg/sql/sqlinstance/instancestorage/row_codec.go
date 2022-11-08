@@ -55,23 +55,32 @@ func (d *rowCodec) encodeRow(
 	codec keys.SQLCodec,
 	tableID descpb.ID,
 ) (kv kv.KeyValue, err error) {
-	addrDatum := tree.NewDString(addr)
+	addrDatum := tree.DNull
+	if addr != "" {
+		addrDatum = tree.NewDString(addr)
+	}
 	var valueBuf []byte
 	valueBuf, err = valueside.Encode(
 		[]byte(nil), valueside.MakeColumnIDDelta(0, d.columns[1].GetID()), addrDatum, []byte(nil))
 	if err != nil {
 		return kv, err
 	}
-	sessionDatum := tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
+	sessionDatum := tree.DNull
+	if len(sessionID) > 0 {
+		sessionDatum = tree.NewDBytes(tree.DBytes(sessionID.UnsafeBytes()))
+	}
 	sessionColDiff := valueside.MakeColumnIDDelta(d.columns[1].GetID(), d.columns[2].GetID())
 	valueBuf, err = valueside.Encode(valueBuf, sessionColDiff, sessionDatum, []byte(nil))
 	if err != nil {
 		return kv, err
 	}
 	// Preserve the ordering of locality.Tiers, even though we convert it to json.
-	builder := json.NewObjectBuilder(1)
-	builder.Add("Tiers", json.FromString(locality.String()))
-	localityDatum := tree.NewDJSON(builder.Build())
+	localityDatum := tree.DNull
+	if len(locality.Tiers) > 0 {
+		builder := json.NewObjectBuilder(1)
+		builder.Add("Tiers", json.FromString(locality.String()))
+		localityDatum = tree.NewDJSON(builder.Build())
+	}
 	localityColDiff := valueside.MakeColumnIDDelta(d.columns[2].GetID(), d.columns[3].GetID())
 	valueBuf, err = valueside.Encode(valueBuf, localityColDiff, localityDatum, []byte(nil))
 	if err != nil {

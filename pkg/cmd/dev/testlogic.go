@@ -23,12 +23,13 @@ import (
 )
 
 const (
-	bigtestFlag  = "bigtest"
-	filesFlag    = "files"
-	subtestsFlag = "subtests"
-	configsFlag  = "config"
-	showSQLFlag  = "show-sql"
-	noGenFlag    = "no-gen"
+	bigtestFlag   = "bigtest"
+	filesFlag     = "files"
+	subtestsFlag  = "subtests"
+	configsFlag   = "config"
+	showSQLFlag   = "show-sql"
+	noGenFlag     = "no-gen"
+	flexTypesFlag = "flex-types"
 )
 
 func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Command {
@@ -61,6 +62,7 @@ func makeTestLogicCmd(runE func(cmd *cobra.Command, args []string) error) *cobra
 	testLogicCmd.Flags().String(stressArgsFlag, "", "additional arguments to pass to stress")
 	testLogicCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to go test binary")
 	testLogicCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
+	testLogicCmd.Flags().Bool(flexTypesFlag, false, "tolerate when a result column is produced with a different numeric type")
 
 	addCommonBuildFlags(testLogicCmd)
 	return testLogicCmd
@@ -88,6 +90,7 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 		stressCmdArgs = mustGetFlagString(cmd, stressArgsFlag)
 		testArgs      = mustGetFlagString(cmd, testArgsFlag)
 		showDiff      = mustGetFlagBool(cmd, showDiffFlag)
+		flexTypes     = mustGetFlagBool(cmd, flexTypesFlag)
 	)
 	if rewrite {
 		ignoreCache = true
@@ -132,15 +135,19 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 
 	var targets []string
 	args := []string{"test"}
+	var hasNonSqlite bool
 	for _, choice := range choices {
 		var testsDir string
 		switch choice {
 		case "base":
 			testsDir = "//pkg/sql/logictest/tests"
+			hasNonSqlite = true
 		case "ccl":
 			testsDir = "//pkg/ccl/logictestccl/tests"
+			hasNonSqlite = true
 		case "opt":
 			testsDir = "//pkg/sql/opt/exec/execbuilder/tests"
+			hasNonSqlite = true
 		case "sqlite":
 			testsDir = "//pkg/sql/sqlitelogictest/tests"
 			bigtest = true
@@ -215,6 +222,14 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	}
 	if len(files) > 0 {
 		args = append(args, "--test_arg", "-show-sql")
+	}
+	if !hasNonSqlite {
+		// If we only have sqlite targets, then we always append --flex-types
+		// argument to simulate what we do in the CI.
+		flexTypes = true
+	}
+	if flexTypes {
+		args = append(args, "--test_arg", "-flex-types")
 	}
 
 	if rewrite {

@@ -42,7 +42,7 @@ SELECT * FROM t
 
 # Check sql instance locality in the secondary tenant.
 query IT
-SELECT id, locality FROM system.sql_instances
+SELECT id, locality FROM system.sql_instances WHERE locality IS NOT NULL
 ----
 1  {"Tiers": "region=test"}
 2  {"Tiers": "region=test1"}

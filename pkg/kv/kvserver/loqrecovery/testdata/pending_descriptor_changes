@@ -49,7 +49,7 @@ ok
 make-plan
 ----
 ERROR: loss of quorum recovery error
-range has unapplied descriptor change that removes current replica
+range has unapplied descriptor change
   r2: /{Table/1-Max}
 
 
@@ -109,7 +109,8 @@ range has unapplied merge operation
 
 
 # Check that ranges with pending descriptor changes where the change removes other replicas are
-# considered safe to proceed with.
+# considered unsafe to proceed with. This is forbidden because any change will fail if replica
+# id of survivor replica reverts.
 replication-data
 - StoreID: 1
   RangeID: 1
@@ -132,7 +133,7 @@ replication-data
   RangeAppliedIndex: 11
   RaftCommittedIndex: 14
   DescriptorUpdates:
-  - Type: 2  # pending descriptor update where replicas 2 3 are replaced with 4 which is considered safe
+  - Type: 2  # pending descriptor update where replicas 2 3 are replaced with 4 which is not considered safe
     Replicas:
     - { NodeID: 1, StoreID: 1, ReplicaID: 1}
     - { NodeID: 4, StoreID: 4, ReplicaID: 4}
@@ -145,22 +146,9 @@ ok
 
 make-plan
 ----
-- RangeID: 1
-  StartKey: /Min
-  OldReplicaID: 1
-  NewReplica:
-    NodeID: 1
-    StoreID: 1
-    ReplicaID: 14
-  NextReplicaID: 15
-- RangeID: 2
-  StartKey: /Table/1
-  OldReplicaID: 1
-  NewReplica:
-    NodeID: 1
-    StoreID: 1
-    ReplicaID: 14
-  NextReplicaID: 15
+ERROR: loss of quorum recovery error
+range has unapplied descriptor change
+  r2: /{Table/1-Max}
 
 
 # Check that if descriptor didn't lose quorum, we should not fail if raft log contains future changes

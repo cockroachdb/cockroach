@@ -236,6 +236,10 @@ func (r *Reader) getAllLiveInstances(ctx context.Context) ([]instancerow, error)
 	{
 		truncated := rows[:0]
 		for _, row := range rows {
+			// Skip instances which are preallocated.
+			if row.isAvailable() {
+				continue
+			}
 			isAlive, err := r.slReader.IsAlive(ctx, row.sessionID)
 			if err != nil {
 				return nil, err
