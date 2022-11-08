@@ -16,7 +16,7 @@ import {
   SortSetting,
 } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
-import { InsightExecEnum, TransactionInsightEvent } from "src/insights";
+import { InsightExecEnum, MergedTxnInsightEvent } from "src/insights";
 import {
   InsightCell,
   insightsTableTitles,
@@ -27,7 +27,7 @@ import { Link } from "react-router-dom";
 import { TimeScale } from "../../../timeScaleDropdown";
 
 interface TransactionInsightsTable {
-  data: TransactionInsightEvent[];
+  data: MergedTxnInsightEvent[];
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   pagination: ISortedTablePagination;
@@ -37,42 +37,41 @@ interface TransactionInsightsTable {
 
 export function makeTransactionInsightsColumns(
   setTimeScale: (ts: TimeScale) => void,
-): ColumnDescriptor<TransactionInsightEvent>[] {
+): ColumnDescriptor<MergedTxnInsightEvent>[] {
   const execType = InsightExecEnum.TRANSACTION;
   return [
     {
       name: "latestExecutionID",
       title: insightsTableTitles.latestExecutionID(execType),
-      cell: (item: TransactionInsightEvent) => (
-        <Link to={`/insights/transaction/${item.transactionID}`}>
-          {String(item.transactionID)}
+      cell: item => (
+        <Link to={`/insights/transaction/${item.transactionExecutionID}`}>
+          {String(item.transactionExecutionID)}
         </Link>
       ),
-      sort: (item: TransactionInsightEvent) => item.transactionID,
+      sort: item => item.transactionExecutionID,
     },
     {
       name: "fingerprintID",
       title: insightsTableTitles.fingerprintID(execType),
-      cell: (item: TransactionInsightEvent) =>
+      cell: item =>
         TransactionDetailsLink(
-          item.fingerprintID,
+          item.transactionFingerprintID,
           item.startTime,
           setTimeScale,
         ),
-      sort: (item: TransactionInsightEvent) => item.fingerprintID,
+      sort: item => item.transactionFingerprintID,
     },
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: (item: TransactionInsightEvent) => QueriesCell(item.queries, 50),
-      sort: (item: TransactionInsightEvent) => item.queries.length,
+      cell: item => QueriesCell(item.queries, 50),
+      sort: item => (item.queries?.length ? item.queries[0] : ""),
     },
     {
       name: "insights",
       title: insightsTableTitles.insights(execType),
-      cell: (item: TransactionInsightEvent) =>
-        item.insights ? item.insights.map(insight => InsightCell(insight)) : "",
-      sort: (item: TransactionInsightEvent) =>
+      cell: item => item.insights.map(insight => InsightCell(insight)),
+      sort: item =>
         item.insights
           ? item.insights.map(insight => insight.label).toString()
           : "",
@@ -80,23 +79,20 @@ export function makeTransactionInsightsColumns(
     {
       name: "startTime",
       title: insightsTableTitles.startTime(execType),
-      cell: (item: TransactionInsightEvent) =>
-        item.startTime.format(DATE_FORMAT),
-      sort: (item: TransactionInsightEvent) => item.startTime.unix(),
+      cell: item => item.startTime?.format(DATE_FORMAT) ?? "N/A",
+      sort: item => item.startTime?.unix() || 0,
     },
     {
       name: "contention",
       title: insightsTableTitles.contention(execType),
-      cell: (item: TransactionInsightEvent) =>
-        Duration(item.contentionDuration.asMilliseconds() * 1e6),
-      sort: (item: TransactionInsightEvent) =>
-        item.contentionDuration.asMilliseconds(),
+      cell: item => Duration((item.contention?.asMilliseconds() ?? 0) * 1e6),
+      sort: item => item.contention?.asMilliseconds() ?? 0,
     },
     {
       name: "applicationName",
       title: insightsTableTitles.applicationName(execType),
-      cell: (item: TransactionInsightEvent) => item.application,
-      sort: (item: TransactionInsightEvent) => item.application,
+      cell: item => item.application,
+      sort: item => item.application,
     },
   ];
 }

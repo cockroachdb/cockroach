@@ -13,17 +13,17 @@ import { localStorageSelector } from "src/store/utils/selectors";
 import { AppState } from "src/store/reducers";
 
 import {
-  selectStatementInsightsCombiner,
+  selectFlattenedStmtInsightsCombiner,
   selectStatementInsightDetailsCombiner,
 } from "src/selectors/insightsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";
 export const selectStatementInsights = createSelector(
-  (state: AppState) => state.adminUI.statementInsights?.data,
-  selectStatementInsightsCombiner,
+  (state: AppState) => state.adminUI.executionInsights?.data,
+  selectFlattenedStmtInsightsCombiner,
 );
 
 export const selectStatementInsightsError = (state: AppState) =>
-  state.adminUI.statementInsights?.lastError;
+  state.adminUI.executionInsights?.lastError;
 
 export const selectStatementInsightDetails = createSelector(
   selectStatementInsights,

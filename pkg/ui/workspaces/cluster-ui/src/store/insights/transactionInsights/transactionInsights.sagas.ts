@@ -11,7 +11,7 @@
 import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./transactionInsights.reducer";
-import { getTransactionInsightEventState } from "src/api/insightsApi";
+import { getTxnInsightEvents } from "src/api/insightsApi";
 
 export function* refreshTransactionInsightsSaga() {
   yield put(actions.request());
@@ -19,7 +19,7 @@ export function* refreshTransactionInsightsSaga() {
 
 export function* requestTransactionInsightsSaga(): any {
   try {
-    const result = yield call(getTransactionInsightEventState);
+    const result = yield call(getTxnInsightEvents);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));

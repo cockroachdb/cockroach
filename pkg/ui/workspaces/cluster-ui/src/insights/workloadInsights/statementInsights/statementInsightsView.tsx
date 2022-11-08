@@ -30,13 +30,12 @@ import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
-import { StatementInsights } from "src/api/insightsApi";
+import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
   filterStatementInsights,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
-  populateStatementInsightsFromProblemAndCauses,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
@@ -52,7 +51,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type StatementInsightsViewStateProps = {
-  statements: StatementInsights;
+  statements: FlattenedStmtInsights;
   statementsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
