@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -98,6 +99,54 @@ func NewManager(
 
 var _ upgrade.JobDeps = (*Manager)(nil)
 
+// safeToUpgradeTenant ensures that we don't allow for tenant upgrade if it's
+// not safe to do so. Safety is defined as preventing a secondary tenant's
+// cluster version from ever exceeding the host cluster version. It is always
+// safe to upgrade the system tenant.
+func safeToUpgradeTenant(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	overrides cluster.OverridesInformer,
+	tenantClusterVersion clusterversion.ClusterVersion,
+) (bool, error) {
+	if codec.ForSystemTenant() {
+		// Unconditionally run upgrades for the system tenant.
+		return true, nil
+	}
+	// The overrides informer can be nil, but only in a system tenant.
+	if overrides == nil {
+		return false, errors.AssertionFailedf("overrides informer is nil in secondary tenant")
+	}
+	hostClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetHostClusterVersion(ctx)
+	if hostClusterVersion.Less(tenantClusterVersion.Version) {
+		// We assert here if we find a tenant with a higher cluster version than
+		// the host cluster. It's dangerous to run in this mode because the
+		// tenant may expect upgrades to be present on the host cluster which
+		// haven't yet been run. It's also not clear how we could get into this
+		// state, since a tenant can't be created at a higher level
+		// than the host cluster, and will be prevented from upgrading beyond
+		// the host cluster version by the code below.
+		return false, errors.AssertionFailedf("tenant found at higher cluster version "+
+			"than host cluster: host cluster at version %v, tenant at version"+
+			" %v.", hostClusterVersion, tenantClusterVersion)
+	}
+	if tenantClusterVersion == hostClusterVersion {
+		// The cluster version of the tenant is equal to the cluster version of
+		// the host cluster. If we allow the upgrade it will push the tenant
+		// to a higher cluster version than the host cluster. Block the upgrade.
+		return false, errors.Newf("preventing tenant upgrade from running "+
+			"as the host cluster has not yet been upgraded: "+
+			"host cluster version = %v, tenant cluster version = %v",
+			hostClusterVersion, tenantClusterVersion)
+	}
+
+	// The cluster version of the tenant is less than that of the host
+	// cluster. It's safe to run the upgrade.
+	log.Infof(ctx, "safe to upgrade tenant: host cluster at version %v, tenant at version"+
+		" %v", hostClusterVersion, tenantClusterVersion)
+	return true, nil
+}
+
 // Migrate runs the set of upgrades required to upgrade the cluster version
 // from the current version to the target one.
 func (m *Manager) Migrate(
@@ -119,6 +168,11 @@ func (m *Manager) Migrate(
 		// Nothing to do here.
 		log.Infof(ctx, "no need to migrate, cluster already at newest version")
 		return nil
+	}
+
+	// Determine whether it's safe to perform the upgrade for secondary tenants.
+	if safe, err := safeToUpgradeTenant(ctx, m.codec, m.settings.OverridesInformer, from); !safe {
+		return err
 	}
 
 	clusterVersions := m.listBetween(from, to)

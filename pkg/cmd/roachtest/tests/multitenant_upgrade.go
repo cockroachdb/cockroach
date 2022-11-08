@@ -13,6 +13,7 @@ package tests
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -187,13 +188,18 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 				withResults([][]string{{initialVersion}}))
 	}
 
+	t.Status("attempting to upgrade tenant 11 before host cluster is finalized and expecting a failure")
+	expectErr(t, tenant11.pgURL,
+		fmt.Sprintf("pq: preventing tenant upgrade from running as the host cluster has not yet been upgraded: host cluster version = %s, tenant cluster version = %s", initialVersion, initialVersion),
+		"SET CLUSTER SETTING version = crdb_internal.node_executable_version()")
+
 	t.Status("finalizing the system tenant upgrade")
 	runner.Exec(t, `SET CLUSTER SETTING cluster.preserve_downgrade_option = DEFAULT`)
 	runner.CheckQueryResultsRetry(t,
 		"SELECT version = crdb_internal.node_executable_version() FROM [SHOW CLUSTER SETTING version]",
 		[][]string{{"true"}})
 
-	t.Status("migrating the tenant 11 to the current version after system tenant is finalized")
+	t.Status("migrating tenant 11 to the current version after system tenant is finalized")
 
 	verifySQL(t, tenant11.pgURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
@@ -211,7 +217,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	t.Status("starting the tenant 12 server with the current binary")
 	tenant12.start(ctx, t, c, currentBinary)
 
-	t.Status("verify tenant 12 server works with the new binary")
+	t.Status("verify that the tenant 12 server works with the new binary")
 	verifySQL(t, tenant12.pgURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
@@ -229,7 +235,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	tenant12.stop(ctx, t, c)
 	tenant12.start(ctx, t, c, currentBinary)
 
-	t.Status("verify tenant 12 server works with the new binary after restart")
+	t.Status("verify that the tenant 12 server works with the new binary after restart")
 	verifySQL(t, tenant12.pgURL,
 		mkStmt(`SELECT * FROM foo LIMIT 1`).
 			withResults([][]string{{"1", "bar"}}),
@@ -264,7 +270,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	const tenant14ID = 14
 	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant14ID)
 
-	t.Status("verifying the tenant 14 works and has the proper version")
+	t.Status("verifying that the tenant 14 server works and has the proper version")
 	tenant14 := createTenantNode(ctx, t, c, kvNodes, tenant14ID, tenantNode, tenant14HTTPPort, tenant14SQLPort, tenantStartOpt)
 	tenant14.start(ctx, t, c, currentBinary)
 	defer tenant14.stop(ctx, t, c)
@@ -303,13 +309,18 @@ func mkStmt(stmt string, args ...interface{}) sqlVerificationStmt {
 	return sqlVerificationStmt{stmt: stmt, args: args}
 }
 
-func verifySQL(t test.Test, url string, stmts ...sqlVerificationStmt) {
+func openDBAndMakeSQLRunner(t test.Test, url string) (*sqlutils.SQLRunner, func()) {
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = db.Close() }()
-	tdb := sqlutils.MakeSQLRunner(db)
+	f := func() { _ = db.Close() }
+	return sqlutils.MakeSQLRunner(db), f
+}
+
+func verifySQL(t test.Test, url string, stmts ...sqlVerificationStmt) {
+	tdb, closer := openDBAndMakeSQLRunner(t, url)
+	defer closer()
 
 	for _, stmt := range stmts {
 		if stmt.optionalResults == nil {
@@ -319,4 +330,10 @@ func verifySQL(t test.Test, url string, stmts ...sqlVerificationStmt) {
 			require.Equal(t, stmt.optionalResults, res)
 		}
 	}
+}
+
+func expectErr(t test.Test, url string, error string, query string) {
+	runner, closer := openDBAndMakeSQLRunner(t, url)
+	defer closer()
+	runner.ExpectErr(t, error, query)
 }
