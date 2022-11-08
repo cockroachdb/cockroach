@@ -12,7 +12,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshTransactionInsights,
-  refreshStatementInsights,
+  refreshExecutionInsights,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
@@ -49,7 +49,7 @@ const transactionMapStateToProps = (
   _props: RouteComponentProps,
 ): TransactionInsightsViewStateProps => ({
   transactions: selectTransactionInsights(state),
-  transactionsError: state.cachedData?.transactionInsights.lastError,
+  transactionsError: state.cachedData?.transactionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
 });
@@ -59,7 +59,7 @@ const statementMapStateToProps = (
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
   statements: selectStatementInsights(state),
-  statementsError: state.cachedData?.statementInsights.lastError,
+  statementsError: state.cachedData?.executionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
@@ -78,7 +78,7 @@ const StatementDispatchProps: StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) =>
     filtersLocalSetting.set(filters),
   onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
-  refreshStatementInsights: refreshStatementInsights,
+  refreshStatementInsights: refreshExecutionInsights,
   onColumnsChange: (value: string[]) =>
     insightStatementColumnsLocalSetting.set(value.join(",")),
   setTimeScale: setGlobalTimeScaleAction,

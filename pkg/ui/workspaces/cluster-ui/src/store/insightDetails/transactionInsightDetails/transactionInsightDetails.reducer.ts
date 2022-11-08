@@ -12,13 +12,11 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
 import { ErrorWithKey } from "src/api/statementsApi";
-import {
-  TransactionInsightEventDetailsRequest,
-  TransactionInsightEventDetailsResponse,
-} from "src/api/insightsApi";
+import { TxnContentionInsightDetailsRequest } from "src/api/insightsApi";
+import { TxnContentionInsightDetails } from "src/insights";
 
 export type TransactionInsightDetailsState = {
-  data: TransactionInsightEventDetailsResponse | null;
+  data: TxnContentionInsightDetails | null;
   lastUpdated: Moment | null;
   lastError: Error;
   valid: boolean;
@@ -43,11 +41,8 @@ const transactionInsightDetailsSlice = createSlice({
   name: `${DOMAIN_NAME}/transactionInsightDetailsSlice`,
   initialState,
   reducers: {
-    received: (
-      state,
-      action: PayloadAction<TransactionInsightEventDetailsResponse>,
-    ) => {
-      state.cachedData.set(action.payload.executionID, {
+    received: (state, action: PayloadAction<TxnContentionInsightDetails>) => {
+      state.cachedData.set(action.payload.transactionExecutionID, {
         data: action.payload,
         valid: true,
         lastError: null,
@@ -66,11 +61,11 @@ const transactionInsightDetailsSlice = createSlice({
     },
     refresh: (
       _,
-      _action: PayloadAction<TransactionInsightEventDetailsRequest>,
+      _action: PayloadAction<TxnContentionInsightDetailsRequest>,
     ) => {},
     request: (
       _,
-      _action: PayloadAction<TransactionInsightEventDetailsRequest>,
+      _action: PayloadAction<TxnContentionInsightDetailsRequest>,
     ) => {},
   },
 });

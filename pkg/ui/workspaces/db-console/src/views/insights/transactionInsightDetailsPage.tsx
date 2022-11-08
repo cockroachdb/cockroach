@@ -17,7 +17,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import { refreshTransactionInsightDetails } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
 import {
-  selectTransactionInsightDetails,
+  selectTxnInsightDetails,
   selectTransactionInsightDetailsError,
 } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
@@ -27,7 +27,7 @@ const mapStateToProps = (
   props: RouteComponentProps,
 ): TransactionInsightDetailsStateProps => {
   return {
-    insightEventDetails: selectTransactionInsightDetails(state, props),
+    insightDetails: selectTxnInsightDetails(state, props),
     insightError: selectTransactionInsightDetailsError(state, props),
   };
 };

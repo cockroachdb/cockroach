@@ -11,7 +11,7 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./statementInsights.reducer";
-import { getStatementInsightsApi } from "src/api/insightsApi";
+import { getClusterInsightsApi } from "src/api/insightsApi";
 
 export function* refreshStatementInsightsSaga() {
   yield put(actions.request());
@@ -19,7 +19,7 @@ export function* refreshStatementInsightsSaga() {
 
 export function* requestStatementInsightsSaga(): any {
   try {
-    const result = yield call(getStatementInsightsApi);
+    const result = yield call(getClusterInsightsApi);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));

@@ -12,16 +12,17 @@ import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { createSelector } from "reselect";
 import {
-  api,
   defaultFilters,
   WorkloadInsightEventFilters,
   insightType,
   SchemaInsightEventFilters,
   SortSetting,
-  selectStatementInsightsCombiner,
+  selectFlattenedStmtInsightsCombiner,
   selectExecutionID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightsCombiner,
+  TxnContentionInsightDetails,
+  selectTxnInsightDetailsCombiner,
 } from "@cockroachlabs/cluster-ui";
 
 export const filtersLocalSetting = new LocalSetting<
@@ -40,21 +41,36 @@ export const sortSettingLocalSetting = new LocalSetting<
 });
 
 export const selectTransactionInsights = createSelector(
+  (state: AdminUIState) => state.cachedData.executionInsights?.data,
   (state: AdminUIState) => state.cachedData.transactionInsights?.data,
   selectTxnInsightsCombiner,
 );
 
-export const selectTransactionInsightDetails = createSelector(
+const selectTxnContentionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
     selectExecutionID,
   ],
-  (insight, insightId): api.TransactionInsightEventDetailsResponse => {
+  (insight, insightId): TxnContentionInsightDetails => {
     if (!insight) {
       return null;
     }
     return insight[insightId]?.data;
   },
+);
+
+const selectTxnInsightFromExecInsight = createSelector(
+  (state: AdminUIState) => state.cachedData.executionInsights?.data,
+  selectExecutionID,
+  (execInsights, execID) => {
+    return execInsights?.find(txn => txn.transactionExecutionID === execID);
+  },
+);
+
+export const selectTxnInsightDetails = createSelector(
+  selectTxnInsightFromExecInsight,
+  selectTxnContentionInsightDetails,
+  selectTxnInsightDetailsCombiner,
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
@@ -69,8 +85,8 @@ export const selectTransactionInsightDetailsError = createSelector(
 );
 
 export const selectStatementInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.statementInsights?.data,
-  selectStatementInsightsCombiner,
+  (state: AdminUIState) => state.cachedData.executionInsights?.data,
+  selectFlattenedStmtInsightsCombiner,
 );
 
 export const selectStatementInsightDetails = createSelector(

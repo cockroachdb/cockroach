@@ -29,12 +29,11 @@ import { queryByName, syncHistory } from "src/util/query";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
 
-import { TransactionInsightEventsResponse } from "src/api/insightsApi";
 import {
   filterTransactionInsights,
   getAppsFromTransactionInsights,
-  getInsightsFromState,
   WorkloadInsightEventFilters,
+  MergedTxnInsightEvent,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
@@ -48,7 +47,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type TransactionInsightsViewStateProps = {
-  transactions: TransactionInsightEventsResponse;
+  transactions: MergedTxnInsightEvent[];
   transactionsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
@@ -177,7 +176,7 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
       app: "",
     });
 
-  const transactionInsights = getInsightsFromState(transactions);
+  const transactionInsights = transactions;
   const apps = getAppsFromTransactionInsights(
     transactionInsights,
     INTERNAL_APP_NAME_PREFIX,
