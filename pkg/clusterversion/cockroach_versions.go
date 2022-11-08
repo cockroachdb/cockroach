@@ -168,8 +168,6 @@ const (
 
 	// v22.2 versions.
 
-	// V22_2LocalTimestamps enables the use of local timestamps in MVCC values.
-	V22_2LocalTimestamps
 	// V22_2PebbleFormatSplitUserKeysMarkedCompacted updates the Pebble format
 	// version that recombines all user keys that may be split across multiple
 	// files into a single table.
@@ -358,10 +356,6 @@ var rawVersionsSingleton = keyedVersions{
 	},
 
 	// v22.2 versions. Internal versions must be even.
-	{
-		Key:     V22_2LocalTimestamps,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 4},
-	},
 	{
 		Key:     V22_2PebbleFormatSplitUserKeysMarkedCompacted,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},

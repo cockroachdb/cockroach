@@ -1387,7 +1387,7 @@ func shouldWriteLocalTimestamps(ctx context.Context, settings *cluster.Settings)
 		// is safe to write local timestamps.
 		return true
 	}
-	return ver.IsActive(clusterversion.V22_2LocalTimestamps)
+	return ver.IsActive(clusterversion.TODOAlwaysTrue)
 }
 
 // ShouldWriteLocalTimestamps implements the Writer interface.
