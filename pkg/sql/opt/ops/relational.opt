@@ -377,9 +377,13 @@ define LookupJoinPrivate {
     # DerivedEquivCols is the set of lookup join equijoin columns which are part
     # of synthesized equality constraints based on another equality join
     # condition and a computed index key column in the lookup table. Since these
-    # columns are not reducing the selectivity of the join, but are just added to
-    # facilitate index lookups, they should not be used in determining join
-    # selectivity.
+    # columns are not reducing the selectivity of the join, but are just added
+    # to facilitate index lookups, they should not be used in determining join
+    # selectivity. DerivedEquivCols could also include predicates derived from
+    # foreign key constraints which are used to facilitate index lookups. The
+    # additional terms should not affect selectivity so that we have consistent
+    # join relation stats for fairness in costing lookup join vs. joins which do
+    # not use these predicates.
     DerivedEquivCols ColSet
 
     # LookupExpr represents the part of the join condition used to perform

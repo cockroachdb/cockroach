@@ -382,6 +382,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	computedColFilters := c.computedColFilters(scanPrivate, on, optionalFilters)
 	optionalFilters = append(optionalFilters, computedColFilters...)
 
+	onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey :=
+		c.GetEquijoinStrictKeyCols(on, scanPrivate, input)
+
 	var pkCols opt.ColList
 	var newScanPrivate *memo.ScanPrivate
 	var iter scanIndexIter
@@ -398,7 +401,12 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			return
 		}
 
-		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters)
+		var derivedfkOnFilters memo.FiltersExpr
+		if lookupIsKey {
+			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
+				input, scanPrivate, indexCols, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
+		}
+		lookupConstraint, foundEqualityCols := cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.

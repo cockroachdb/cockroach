@@ -13011,3 +13011,200 @@ explain
            │         └── filters
            │              └── t85353.a:1 < 10 [outer=(1), constraints=(/1: (/NULL - /9]; tight)]
            └── filters (true)
+
+### BEGIN Regression tests for issue #69617
+
+exec-ddl set=experimental_enable_unique_without_index_constraints=true
+CREATE TABLE t69617_uniq_fk_parent (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  UNIQUE WITHOUT INDEX (b),
+  UNIQUE WITHOUT INDEX (c),
+  UNIQUE INDEX (a,b,c),
+  UNIQUE INDEX (a,c)
+)
+----
+
+exec-ddl
+CREATE TABLE t69617_uniq_fk_child (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  FOREIGN KEY (a, b, c) REFERENCES t69617_uniq_fk_parent (a, b, c) ON UPDATE CASCADE
+)
+----
+
+exec-ddl
+CREATE TABLE t69617_uniq_fk_child2 (
+  a INT,
+  b INT,
+  c INT,
+  FOREIGN KEY (a, b, c) REFERENCES t69617_uniq_fk_parent (a, b, c) ON UPDATE CASCADE
+)
+----
+
+exec-ddl
+CREATE TABLE t69617_uniq_fk_child3 (
+  a INT,
+  b INT,
+  c INT,
+  FOREIGN KEY (a, b, c) REFERENCES t69617_uniq_fk_parent (a, b, c) MATCH FULL ON UPDATE CASCADE
+)
+----
+
+exec-ddl
+CREATE TABLE t69617_other_table (
+  a INT,
+  b INT,
+  c INT
+)
+----
+
+# Predicates on columns a and b should be derived and index
+# uniq_fk_parent_a_b_c_key should be used for the lookup join.
+opt expect=GenerateLookupJoins
+SELECT *
+FROM t69617_uniq_fk_child
+INNER LOOKUP JOIN t69617_uniq_fk_parent USING (b)
+----
+project
+ ├── columns: b:2!null a:1!null c:3!null a:7!null c:9!null
+ ├── fd: (9)-->(2,7), (2)-->(7,9)
+ └── inner-join (lookup t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key)
+      ├── columns: t69617_uniq_fk_child.a:1!null t69617_uniq_fk_child.b:2!null t69617_uniq_fk_child.c:3!null t69617_uniq_fk_parent.a:7!null t69617_uniq_fk_parent.b:8!null t69617_uniq_fk_parent.c:9!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1 2 3] = [7 8 9]
+      ├── lookup columns are key
+      ├── fd: (9)-->(7,8), (8)-->(7,9), (2)==(8), (8)==(2)
+      ├── scan t69617_uniq_fk_child
+      │    └── columns: t69617_uniq_fk_child.a:1!null t69617_uniq_fk_child.b:2!null t69617_uniq_fk_child.c:3!null
+      └── filters (true)
+
+# Left outer join should derive predicates.
+opt expect=GenerateLookupJoins
+SELECT *
+FROM t69617_uniq_fk_child
+LEFT OUTER LOOKUP JOIN t69617_uniq_fk_parent USING (b)
+----
+project
+ ├── columns: b:2!null a:1!null c:3!null a:7!null c:9!null
+ ├── fd: (9)-->(2,7), (2)-->(7,9)
+ └── inner-join (lookup t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key)
+      ├── columns: t69617_uniq_fk_child.a:1!null t69617_uniq_fk_child.b:2!null t69617_uniq_fk_child.c:3!null t69617_uniq_fk_parent.a:7!null t69617_uniq_fk_parent.b:8!null t69617_uniq_fk_parent.c:9!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [1 2 3] = [7 8 9]
+      ├── lookup columns are key
+      ├── fd: (9)-->(7,8), (8)-->(7,9), (2)==(8), (8)==(2)
+      ├── scan t69617_uniq_fk_child
+      │    └── columns: t69617_uniq_fk_child.a:1!null t69617_uniq_fk_child.b:2!null t69617_uniq_fk_child.c:3!null
+      └── filters (true)
+
+# Lateral join which utilizes lookup join should derive predicates.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT *
+FROM t69617_uniq_fk_child
+JOIN LATERAL (SELECT * FROM t69617_uniq_fk_parent WHERE t69617_uniq_fk_child.b = t69617_uniq_fk_parent.b)
+ON true WHERE b = 1
+----
+inner-join (lookup t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key)
+ ├── columns: a:1!null b:2!null c:3!null a:7!null b:8!null c:9!null
+ ├── key columns: [1 2 3] = [7 8 9]
+ ├── lookup columns are key
+ ├── fd: ()-->(2,7-9), (2)==(8), (8)==(2)
+ ├── select
+ │    ├── columns: t69617_uniq_fk_child.a:1!null t69617_uniq_fk_child.b:2!null t69617_uniq_fk_child.c:3!null
+ │    ├── fd: ()-->(2)
+ │    ├── scan t69617_uniq_fk_child
+ │    │    └── columns: t69617_uniq_fk_child.a:1!null t69617_uniq_fk_child.b:2!null t69617_uniq_fk_child.c:3!null
+ │    └── filters
+ │         └── t69617_uniq_fk_child.b:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── filters
+      └── t69617_uniq_fk_parent.b:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+
+# Outer join as the input to lookup join may derive predicates from the FK constraint.
+opt expect=GenerateLookupJoins
+SELECT t69617_uniq_fk_parent.* FROM
+    (t69617_other_table other RIGHT OUTER JOIN t69617_uniq_fk_child child ON other.a = child.a)
+INNER LOOKUP JOIN
+    t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key ON child.b = t69617_uniq_fk_parent.b;
+----
+project
+ ├── columns: a:13!null b:14!null c:15!null
+ ├── fd: (15)-->(13,14), (14)-->(13,15)
+ └── inner-join (lookup t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key)
+      ├── columns: other.a:1 child.a:7!null child.b:8!null child.c:9!null t69617_uniq_fk_parent.a:13!null t69617_uniq_fk_parent.b:14!null t69617_uniq_fk_parent.c:15!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [7 8 9] = [13 14 15]
+      ├── lookup columns are key
+      ├── fd: (15)-->(13,14), (14)-->(13,15), (8)==(14), (14)==(8)
+      ├── left-join (hash)
+      │    ├── columns: other.a:1 child.a:7!null child.b:8!null child.c:9!null
+      │    ├── scan t69617_uniq_fk_child [as=child]
+      │    │    └── columns: child.a:7!null child.b:8!null child.c:9!null
+      │    ├── scan t69617_other_table [as=other]
+      │    │    └── columns: other.a:1
+      │    └── filters
+      │         └── other.a:1 = child.a:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── filters (true)
+
+# The optimizer may not derive predicates on nullable columns from an FK
+# constraint which does not use the MATCH FULL option.
+opt expect-not=(GenerateLookupJoins,GenerateLookupJoinsWithFilter)
+SELECT t69617_uniq_fk_parent.* FROM
+    (t69617_other_table other RIGHT OUTER JOIN t69617_uniq_fk_child2 child ON other.a = child.a)
+INNER LOOKUP JOIN
+    t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key ON child.b = t69617_uniq_fk_parent.b;
+----
+project
+ ├── columns: a:13!null b:14!null c:15!null
+ ├── fd: (15)-->(13,14), (14)-->(13,15)
+ └── inner-join (hash)
+      ├── columns: other.a:1 child.a:7 child.b:8!null t69617_uniq_fk_parent.a:13!null t69617_uniq_fk_parent.b:14!null t69617_uniq_fk_parent.c:15!null
+      ├── flags: force lookup join (into right side)
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      ├── fd: (15)-->(13,14), (14)-->(13,15), (8)==(14), (14)==(8)
+      ├── left-join (hash)
+      │    ├── columns: other.a:1 child.a:7 child.b:8
+      │    ├── scan t69617_uniq_fk_child2 [as=child]
+      │    │    └── columns: child.a:7 child.b:8
+      │    ├── scan t69617_other_table [as=other]
+      │    │    └── columns: other.a:1
+      │    └── filters
+      │         └── other.a:1 = child.a:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      ├── scan t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key
+      │    ├── columns: t69617_uniq_fk_parent.a:13!null t69617_uniq_fk_parent.b:14!null t69617_uniq_fk_parent.c:15!null
+      │    ├── flags: force-index=t69617_uniq_fk_parent_a_b_c_key
+      │    ├── key: (15)
+      │    └── fd: (15)-->(13,14), (14)-->(13,15)
+      └── filters
+           └── child.b:8 = t69617_uniq_fk_parent.b:14 [outer=(8,14), constraints=(/8: (/NULL - ]; /14: (/NULL - ]), fd=(8)==(14), (14)==(8)]
+
+# It is OK to derive predicates on nullable columns from an FK
+# constraint which uses the MATCH FULL option.
+opt expect=GenerateLookupJoins
+SELECT t69617_uniq_fk_parent.* FROM
+    (t69617_other_table other RIGHT OUTER JOIN t69617_uniq_fk_child3 child ON other.a = child.a)
+INNER LOOKUP JOIN
+    t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key ON child.b = t69617_uniq_fk_parent.b;
+----
+project
+ ├── columns: a:13!null b:14!null c:15!null
+ ├── fd: (15)-->(13,14), (14)-->(13,15)
+ └── inner-join (lookup t69617_uniq_fk_parent@t69617_uniq_fk_parent_a_b_c_key)
+      ├── columns: other.a:1 child.a:7 child.b:8!null child.c:9 t69617_uniq_fk_parent.a:13!null t69617_uniq_fk_parent.b:14!null t69617_uniq_fk_parent.c:15!null
+      ├── flags: force lookup join (into right side)
+      ├── key columns: [7 8 9] = [13 14 15]
+      ├── lookup columns are key
+      ├── fd: (15)-->(13,14), (14)-->(13,15), (8)==(14), (14)==(8)
+      ├── left-join (hash)
+      │    ├── columns: other.a:1 child.a:7 child.b:8 child.c:9
+      │    ├── scan t69617_uniq_fk_child3 [as=child]
+      │    │    └── columns: child.a:7 child.b:8 child.c:9
+      │    ├── scan t69617_other_table [as=other]
+      │    │    └── columns: other.a:1
+      │    └── filters
+      │         └── other.a:1 = child.a:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+      └── filters (true)
+
+### END regression tests for issue #69617

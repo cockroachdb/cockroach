@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -620,4 +621,272 @@ func (c *CustomFuncs) MakeProjectionsFromValues(values *memo.ValuesExpr) memo.Pr
 		projections = append(projections, c.f.ConstructProjectionsItem(elems[i], col))
 	}
 	return projections
+}
+
+// ForeignKeyConstraintFilters examines `fkChild`, the left input to lookup join
+// (and possible foreign key child table), and `fkParentScanPrivate`, the lookup
+// table of lookup join (and possible foreign key parent table), along with the
+// `indexCols` of the current index being considered for lookup join.
+// `fkParentJoinKey` contains the ON clause equijoin columns which form a
+// reduced strict key and `fkParentEquijoinCols` contains the full set of
+// equijoin columns on the foreign key parent lookup table. If `fkParentJoinKey`
+// is a proper subset of FK constraint referencing columns on `fkChild`, then
+// equijoin predicates are built between referenced and referencing columns of
+// the FK constraint not currently represented in `fkParentEquijoinCols`, and
+// returned to the caller.
+func (c *CustomFuncs) ForeignKeyConstraintFilters(
+	fkChild memo.RelExpr,
+	fkParentScanPrivate *memo.ScanPrivate,
+	indexCols, fkParentJoinKey opt.ColSet,
+	fkParentEquijoinCols, fkChildEquijoinCols opt.ColList,
+) (fkFilters memo.FiltersExpr) {
+	md := c.mem.Metadata()
+	fkChildEquijoinColSet := fkChildEquijoinCols.ToSet()
+
+	tableIDs := make(map[opt.TableID]struct{})
+	fkChildEquijoinColSet.ForEach(func(x opt.ColumnID) {
+		tabID := md.ColumnMeta(x).Table
+		if tabID != opt.TableID(0) {
+			tableIDs[tabID] = struct{}{}
+		}
+	})
+
+	matchedEquijoinCols := make(map[opt.ColumnID]opt.ColumnID)
+	if len(fkParentEquijoinCols) != len(fkChildEquijoinCols) {
+		panic(errors.AssertionFailedf("ForeignKeyConstraintFilters expects fkParentEquijoinCols and fkChildEquijoinCols to have the same number of columns."))
+	}
+	for i := range fkParentEquijoinCols {
+		matchedEquijoinCols[fkParentEquijoinCols[i]] = fkChildEquijoinCols[i]
+	}
+
+	parentTable := md.Table(fkParentScanPrivate.Table)
+	fkChildNotNullCols := fkChild.Relational().NotNullCols
+
+	for fkChildTableID := range tableIDs {
+		fkChildTable := md.Table(fkChildTableID)
+		fkChildTableMeta := md.TableMeta(fkChildTableID)
+		if fkChildTableMeta.IgnoreForeignKeys {
+			// We can't use foreign keys from this table.
+			continue
+		}
+
+		for i := 0; i < fkChildTable.OutboundForeignKeyCount(); i++ {
+			fk := fkChildTable.OutboundForeignKey(i)
+			if !fk.Validated() {
+				// The data is not guaranteed to follow the foreign key constraint.
+				continue
+			}
+			if parentTable.ID() != fk.ReferencedTableID() {
+				continue
+			}
+			fkFilters = nil
+			fkFiltersValid := true
+			var fkParentColSet opt.ColSet
+			for j := 0; j < fk.ColumnCount() && fkFiltersValid; j++ {
+				fkParentColumnOrd := fk.ReferencedColumnOrdinal(parentTable, j)
+				fkParentColID := fkParentScanPrivate.Table.ColumnID(fkParentColumnOrd)
+				fkParentColSet.Add(fkParentColID)
+			}
+
+			// The strict key covered by equijoin columns must be a subset of the FK
+			// constraint referenced columns to guarantee equating the remaining FK
+			// columns is legal.
+			if !fkParentJoinKey.SubsetOf(fkParentColSet) {
+				continue
+			}
+			for j := 0; j < fk.ColumnCount() && fkFiltersValid; j++ {
+				fkParentColumnOrd := fk.ReferencedColumnOrdinal(parentTable, j)
+				fkChildColumnOrd := fk.OriginColumnOrdinal(fkChildTable, j)
+				fkChildColID := fkChildTableID.ColumnID(fkChildColumnOrd)
+				fkParentColID := fkParentScanPrivate.Table.ColumnID(fkParentColumnOrd)
+				if inputJoinCol, ok := matchedEquijoinCols[fkParentColID]; ok {
+					if inputJoinCol != fkChildColID {
+						// The equijoin term on fkParentColID in the ON clause doesn't
+						// equate to the same child table column as in the FK constraint. Do
+						// not derive terms from this constraint.
+						fkFiltersValid = false
+						break
+					}
+					// This FK constraint equality predicate is already in the ON clause;
+					// no need to build a new one.
+					continue
+				} else if fkParentJoinKey.Contains(fkParentColID) {
+					// If the parent column we're looking at is part of the join key, we
+					// expect an entry in matchedEquijoinCols to verify the join predicate
+					// columns and FK constraint matched columns are the same. If the
+					// entry doesn't exist, perhaps the key was reduced to a different
+					// column id than was present in the predicate, in which case we can't
+					// verify the predicate.
+					fkFiltersValid = false
+					break
+				}
+				// If the lookup table's ScanPrivate does not include the join column
+				// for the predicate we want to build, then don't build the predicate.
+				if !fkParentScanPrivate.Cols.Contains(fkParentColID) {
+					fkFiltersValid = false
+					break
+				}
+				// If the FK child table column is not included in the fkChild's output
+				// columns, it would be incorrect to build a predicate on this column.
+				if fkChild != nil && !fkChild.Relational().OutputCols.Contains(fkChildColID) {
+					fkFiltersValid = false
+					break
+				}
+				if !indexCols.Contains(fkParentColID) {
+					fkFiltersValid = false
+					break
+				}
+				if !fkChildNotNullCols.Contains(fkChildColID) {
+					// If the base table column is not nullable, the output column will
+					// also contain no nulls, unless it comes from the outer table of an
+					// outer join, in which case all columns from that source table will
+					// be null for any given output row and therefore the ON clause
+					// equijoin constraints overlapping the FK constraint will have
+					// already disqualified the row. So, addition of derived join
+					// constraints is OK.
+					if fk.MatchMethod() != tree.MatchFull {
+						// The FK child column isn't a not-null output column, so it can't
+						// be used in a filter unless this is a MATCH FULL foreign key,
+						// which only allows an FK column to be NULL if all FK columns are
+						// NULL.
+						fkFiltersValid = false
+						break
+					}
+				}
+				if fkFiltersValid {
+					fkFilters = append(fkFilters,
+						c.f.ConstructFiltersItem(
+							c.f.ConstructEq(c.f.ConstructVariable(fkChildColID),
+								c.f.ConstructVariable(fkParentColID)),
+						),
+					)
+				}
+			}
+			if fkFiltersValid && len(fkFilters) > 0 {
+				// If we got this far without fkFiltersValid being unset, then we found
+				// a useful foreign key and have built equality predicates on all PK/FK
+				// columns not contained in fkParentEquijoinCols.
+				return fkFilters
+			}
+		}
+	}
+	return nil
+}
+
+// AddDerivedOnClauseConditionsFromFKContraints examines any strict keys from
+// the left and right relations and for each key which is a strict subset of the
+// referencing columns in a PK/FK constraint, and also has equijoin predicates
+// on the strict key columns, new equijoin predicates are built involving the
+// missing PK/FK constraints columns and appended to a copy of the ON clause.
+func (c *CustomFuncs) AddDerivedOnClauseConditionsFromFKContraints(
+	on memo.FiltersExpr, leftRelExpr, rightRelExpr memo.RelExpr,
+) memo.FiltersExpr {
+
+	leftPossibleScan := leftRelExpr
+	rightPossibleScan := rightRelExpr
+
+	if selectExpr, ok := leftPossibleScan.(*memo.SelectExpr); ok {
+		leftPossibleScan = selectExpr.Input
+	}
+
+	if selectExpr, ok := rightPossibleScan.(*memo.SelectExpr); ok {
+		rightPossibleScan = selectExpr.Input
+	}
+
+	leftScan, leftScanFound := leftPossibleScan.(*memo.ScanExpr)
+	rightScan, rightScanFound := rightPossibleScan.(*memo.ScanExpr)
+	if !leftScanFound && !rightScanFound {
+		return on
+	}
+	var leftUniqueKeyCols, rightUniqueKeyCols opt.ColSet
+	var leftjoinCols, rightjoinCols, fkChildLeftTableJoinCols, fkChildRightTableJoinCols opt.ColList
+	var okLeft, okRight bool
+	if leftScanFound {
+		leftUniqueKeyCols, leftjoinCols, fkChildRightTableJoinCols, okLeft =
+			c.GetEquijoinStrictKeyCols(on, &leftScan.ScanPrivate, rightRelExpr)
+	}
+	if rightScanFound {
+		rightUniqueKeyCols, rightjoinCols, fkChildLeftTableJoinCols, okRight =
+			c.GetEquijoinStrictKeyCols(on, &rightScan.ScanPrivate, leftRelExpr)
+	}
+
+	if !okLeft && !okRight {
+		return on
+	}
+	newOn := make(memo.FiltersExpr, len(on))
+	copy(newOn, on)
+	if okLeft {
+		// Pass `leftScan.Cols` to ForeignKeyConstraintFilters because we want to
+		// allow derivation of join terms on columns in any index. It may be a waste
+		// of CPU to enumerate each index and do this call for every index as the
+		// main caller of this function is only determining the scan columns to
+		// include. The same applies to the 2nd call below and `rightScan.Cols`.
+		fkFiltersFromLeftUniqueIndex := c.ForeignKeyConstraintFilters(
+			rightRelExpr, &leftScan.ScanPrivate, leftScan.Cols,
+			leftUniqueKeyCols, leftjoinCols, fkChildRightTableJoinCols)
+		if len(fkFiltersFromLeftUniqueIndex) > 0 {
+			newOn = append(newOn, fkFiltersFromLeftUniqueIndex...)
+		}
+	}
+	if okRight {
+		fkFiltersFromRightUniqueIndex := c.ForeignKeyConstraintFilters(
+			leftRelExpr, &rightScan.ScanPrivate, rightScan.Cols,
+			rightUniqueKeyCols, rightjoinCols, fkChildLeftTableJoinCols)
+		if len(fkFiltersFromRightUniqueIndex) > 0 {
+			newOn = append(newOn, fkFiltersFromRightUniqueIndex...)
+		}
+	}
+	return newOn
+}
+
+// GetEquijoinStrictKeyCols collects the ON clause columns present in equijoin
+// predicates in a join between a Scan, `sp`, and another `input` relation of
+// indeterminate operation type. If those columns contain a strict key on `sp`,
+// the function returns the reduced strict key, plus the list of table equijoin
+// columns and positionally-matched list of `input` relation equijoin columns.
+func (c *CustomFuncs) GetEquijoinStrictKeyCols(
+	on memo.FiltersExpr, sp *memo.ScanPrivate, input memo.RelExpr,
+) (tableKeyCols opt.ColSet, tableJoinCols, inputRelJoinCols opt.ColList, ok bool) {
+	if sp == nil {
+		return opt.ColSet{}, opt.ColList{}, opt.ColList{}, false
+	}
+	md := c.mem.Metadata()
+	funcDeps := memo.MakeTableFuncDep(md, sp.Table)
+
+	// If there is no strict key, no need to proceed further.
+	_, ok = funcDeps.StrictKey()
+	if !ok {
+		return opt.ColSet{}, opt.ColList{}, opt.ColList{}, false
+	}
+
+	tempInputRelJoinCols, tempTableCols := memo.ExtractJoinEqualityColumns(
+		input.Relational().OutputCols,
+		sp.Cols,
+		on,
+	)
+
+	return getJoinKeyAndEquijoinCols(funcDeps, tempTableCols, tempInputRelJoinCols)
+}
+
+// getJoinKeyAndEquijoinCols tests if `tableJoinCols` is a strict key given a
+// the table's `funcDeps`, and if so, returns the set
+// of reduced join key columns plus the list of table equijoin
+// columns and positionally-matched list of input relation equijoin columns.
+func getJoinKeyAndEquijoinCols(
+	funcDeps *props.FuncDepSet, tableJoinCols, inputRelJoinCols opt.ColList,
+) (tableKeyCols opt.ColSet, reducedTableJoinCols, reducedInputRelJoinCols opt.ColList, ok bool) {
+	parentTableJoinColSet := tableJoinCols.ToSet()
+	if funcDeps.ColsAreStrictKey(parentTableJoinColSet) {
+		tableKeyCols = funcDeps.ReduceCols(parentTableJoinColSet)
+		reducedInputRelJoinCols = make(opt.ColList, 0, tableKeyCols.Len())
+		reducedTableJoinCols = make(opt.ColList, 0, tableKeyCols.Len())
+		for i, tableJoinCol := range tableJoinCols {
+			if tableKeyCols.Contains(tableJoinCol) {
+				reducedInputRelJoinCols = append(reducedInputRelJoinCols, inputRelJoinCols[i])
+				reducedTableJoinCols = append(reducedTableJoinCols, tableJoinCol)
+			}
+		}
+		return tableKeyCols, reducedTableJoinCols, reducedInputRelJoinCols, true
+	}
+	return opt.ColSet{}, opt.ColList{}, opt.ColList{}, false
 }
