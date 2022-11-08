@@ -110,6 +110,34 @@ func TestTenantStatusAPI(t *testing.T) {
 	t.Run("tenant_auth_statement", func(t *testing.T) {
 		testTenantAuthOnStatements(ctx, t, testHelper)
 	})
+
+	t.Run("tenant_logs", func(t *testing.T) {
+		testTenantLogs(ctx, t, testHelper)
+	})
+}
+
+func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTestHelper) {
+	tenantA := helper.TestCluster().TenantStatusSrv(0)
+
+	logsResp, err := tenantA.Logs(ctx, &serverpb.LogsRequest{
+		NodeId: helper.TestCluster().Tenant(0).GetTenant().SQLInstanceID().String(),
+		Redact: false,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, logsResp.Entries)
+
+	logsFilesListResp, err := tenantA.LogFilesList(ctx, &serverpb.LogFilesListRequest{
+		NodeId: helper.TestCluster().Tenant(0).GetTenant().SQLInstanceID().String(),
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, logsFilesListResp.Files)
+
+	logsFileResp, err := tenantA.LogFile(ctx, &serverpb.LogFileRequest{
+		NodeId: helper.TestCluster().Tenant(0).GetTenant().SQLInstanceID().String(),
+		File:   logsFilesListResp.Files[0].Name,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, logsFileResp.Entries)
 }
 
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {
