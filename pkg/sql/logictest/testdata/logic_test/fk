@@ -3075,14 +3075,14 @@ SELECT * FROM good_users ORDER BY id ASC
 20  20
 30  30
 
-query IIIT
-SELECT * FROM messages ORDER BY message_id ASC
+query IIT
+SELECT user_id_1, user_id_2, text FROM messages ORDER BY message_id ASC
 ----
-1  10  20  hi jordan
-2  20  10  hi oliver
-3  10  20  you are a good user jordan
-4  10  30  you are a good user too rohan
-5  30  10  lucy is a good user
+10  20  hi jordan
+20  10  hi oliver
+10  20  you are a good user jordan
+10  30  you are a good user too rohan
+30  10  lucy is a good user
 
 # Delete from users should work as well
 statement ok
@@ -3101,12 +3101,12 @@ SELECT * FROM good_users ORDER BY id ASC
 10  10
 20  20
 
-query IIIT
-SELECT * FROM messages ORDER BY message_id ASC
+query IIT
+SELECT user_id_1, user_id_2, text FROM messages ORDER BY message_id ASC
 ----
-1  10  20  hi jordan
-2  20  10  hi oliver
-3  10  20  you are a good user jordan
+10  20  hi jordan
+20  10  hi oliver
+10  20  you are a good user jordan
 
 # Add a foreign key on id2, which is a different column.
 # This one is restrictive on updates and deletes.
@@ -3137,24 +3137,24 @@ INSERT INTO messages (user_id_1, user_id_2, text) VALUES
   (999, 40, 'johnny is my best friend')
 
 # And sanity check everything.
-query IIIT
-SELECT * FROM messages ORDER BY message_id ASC
+query IIT
+SELECT user_id_1, user_id_2, text FROM messages ORDER BY message_id ASC
 ----
-1  10  20  hi jordan
-2  20  10  hi oliver
-3  10  20  you are a good user jordan
-7  10  40  oh hi mark
-8  40  10  youre tearing me apart lisa!
+10  20  hi jordan
+20  10  hi oliver
+10  20  you are a good user jordan
+10  40  oh hi mark
+40  10  youre tearing me apart lisa!
 
 # Delete should still be okay since the cascade from id1 should "win".
 statement ok
 DELETE FROM users WHERE id = 20
 
-query IIIT
-SELECT * FROM messages ORDER BY message_id ASC
+query IIT
+SELECT user_id_1, user_id_2, text FROM messages ORDER BY message_id ASC
 ----
-7  10  40  oh hi mark
-8  40  10  youre tearing me apart lisa!
+10  40  oh hi mark
+40  10  youre tearing me apart lisa!
 
 # Drop everything.
 statement ok
