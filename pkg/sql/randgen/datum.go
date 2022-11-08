@@ -315,6 +315,13 @@ func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 		}
 		return &tree.DBitArray{BitArray: special.(*tree.DBitArray).ToWidth(uint(typ.Width()))}
 
+	case types.StringFamily:
+		datum := special
+		if typ.Oid() == oid.T_name {
+			datum = tree.NewDName(string(*datum.(*tree.DString)))
+		}
+		return datum
+
 	default:
 		return special
 	}
