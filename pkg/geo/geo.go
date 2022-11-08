@@ -641,6 +641,11 @@ func (g *Geography) BoundingRect() s2.Rect {
 	}
 }
 
+// BoundingBoxRef returns a pointer to the BoundingBox, if any.
+func (g *Geography) BoundingBoxRef() *geopb.BoundingBox {
+	return g.spatialObject.BoundingBox
+}
+
 // BoundingCap returns the bounding s2.Cap of the given Geography.
 func (g *Geography) BoundingCap() s2.Cap {
 	return g.BoundingRect().CapBound()
