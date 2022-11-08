@@ -90,9 +90,8 @@ func RevertTables(
 					Key:    span.Key,
 					EndKey: span.EndKey,
 				},
-				TargetTime:                          targetTime,
-				IgnoreGcThreshold:                   ignoreGCThreshold,
-				EnableTimeBoundIteratorOptimization: true, // NB: Must set for 22.1 compatibility.
+				TargetTime:        targetTime,
+				IgnoreGcThreshold: ignoreGCThreshold,
 			})
 		}
 		b.Header.MaxSpanRequestKeys = batchSize
