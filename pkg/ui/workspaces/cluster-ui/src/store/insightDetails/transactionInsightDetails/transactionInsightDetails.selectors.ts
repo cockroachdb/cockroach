@@ -11,8 +11,10 @@
 import { createSelector } from "reselect";
 import { AppState } from "src/store/reducers";
 import { selectExecutionID } from "src/selectors/common";
+import { selectTxnInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
+import { TxnInsightEvent } from "src/insights";
 
-const selectTransactionInsightDetailsState = createSelector(
+const selectTxnContentionInsightsDetails = createSelector(
   (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
   selectExecutionID,
   (cachedTxnInsightDetails, execId) => {
@@ -20,12 +22,22 @@ const selectTransactionInsightDetailsState = createSelector(
   },
 );
 
+const selectTxnInsightFromExecInsight = createSelector(
+  (state: AppState) => state.adminUI.executionInsights?.data,
+  selectExecutionID,
+  (execInsights, execID): TxnInsightEvent => {
+    return execInsights.find(txn => txn.transactionExecutionID === execID);
+  },
+);
+
 export const selectTransactionInsightDetails = createSelector(
-  selectTransactionInsightDetailsState,
-  state => state.data,
+  selectTxnInsightFromExecInsight,
+  selectTxnContentionInsightsDetails,
+  (txnInsights, txnContentionInsights) =>
+    selectTxnInsightDetailsCombiner(txnInsights, txnContentionInsights?.data),
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
-  selectTransactionInsightDetailsState,
+  selectTxnContentionInsightsDetails,
   state => state.lastError,
 );

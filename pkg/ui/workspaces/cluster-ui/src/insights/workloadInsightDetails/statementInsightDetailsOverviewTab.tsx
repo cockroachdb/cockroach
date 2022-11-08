@@ -16,12 +16,7 @@ import {
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import { capitalize, Duration } from "src/util";
 import { DATE_FORMAT_24_UTC } from "src/util/format";
-import {
-  executionDetails,
-  InsightNameEnum,
-  InsightRecommendation,
-  StatementInsightEvent,
-} from "../types";
+import { FlattenedStmtInsightEvent } from "../types";
 import classNames from "classnames/bind";
 import { CockroachCloudContext } from "../../contexts";
 
@@ -36,84 +31,14 @@ import {
   TransactionDetailsLink,
 } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
+import { getStmtInsightRecommendations } from "../utils";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
-const insightsTableData = (
-  insightDetails: StatementInsightEvent | null,
-): InsightRecommendation[] => {
-  if (!insightDetails) return [];
-
-  const execDetails: executionDetails = {
-    statement: insightDetails.query,
-    fingerprintID: insightDetails.statementFingerprintID,
-    retries: insightDetails.retries,
-  };
-
-  const recs: InsightRecommendation[] = insightDetails.insights?.map(
-    insight => {
-      switch (insight.name) {
-        case InsightNameEnum.highContention:
-          return {
-            type: "HighContention",
-            execution: execDetails,
-            details: {
-              duration: insightDetails.elapsedTimeMillis,
-              description: insight.description,
-            },
-          };
-        case InsightNameEnum.failedExecution:
-          return {
-            type: "FailedExecution",
-          };
-        case InsightNameEnum.highRetryCount:
-          return {
-            type: "HighRetryCount",
-            execution: execDetails,
-            details: {
-              description: insight.description,
-            },
-          };
-          break;
-        case InsightNameEnum.planRegression:
-          return {
-            type: "PlanRegression",
-            execution: execDetails,
-            details: {
-              description: insight.description,
-            },
-          };
-        case InsightNameEnum.suboptimalPlan:
-          return {
-            type: "SuboptimalPlan",
-            database: insightDetails.databaseName,
-            execution: {
-              ...execDetails,
-              indexRecommendations: insightDetails.indexRecommendations,
-            },
-            details: {
-              description: insight.description,
-            },
-          };
-        default:
-          return {
-            type: "Unknown",
-            details: {
-              duration: insightDetails.elapsedTimeMillis,
-              description: insight.description,
-            },
-          };
-      }
-    },
-  );
-
-  return recs;
-};
-
 export interface StatementInsightDetailsOverviewTabProps {
-  insightEventDetails: StatementInsightEvent;
+  insightEventDetails: FlattenedStmtInsightEvent;
   setTimeScale: (ts: TimeScale) => void;
 }
 
@@ -128,7 +53,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
   );
 
   const insightDetails = insightEventDetails;
-  const tableData = insightsTableData(insightDetails);
+  const tableData = getStmtInsightRecommendations(insightDetails);
 
   return (
     <section className={cx("section")}>
@@ -192,7 +117,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
             />
             <SummaryCardItem
               label="Transaction Execution ID"
-              value={String(insightDetails.transactionID)}
+              value={String(insightDetails.transactionExecutionID)}
             />
             <SummaryCardItem
               label="Statement Fingerprint ID"
