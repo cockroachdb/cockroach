@@ -52,6 +52,9 @@ type batchInfoCollector struct {
 		numBatches, numTuples uint64
 	}
 
+	// ctx is used only by the init() adapter.
+	ctx context.Context
+
 	// batch is the last batch returned by the wrapped operator.
 	batch coldata.Batch
 
@@ -85,9 +88,23 @@ func makeBatchInfoCollector(
 	}
 }
 
+func (bic *batchInfoCollector) init() {
+	bic.Operator.Init(bic.ctx)
+}
+
 // Init is part of the colexecop.Operator interface.
 func (bic *batchInfoCollector) Init(ctx context.Context) {
-	bic.Operator.Init(ctx)
+	bic.ctx = ctx
+	bic.stopwatch.Start()
+	// Wrap the call to Init() with a panic catcher in order to get the correct
+	// execution time (e.g. in the statement bundle).
+	err := colexecerror.CatchVectorizedRuntimeError(bic.init)
+	bic.stopwatch.Stop()
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	// Unset the context so that it's not used outside of the init() function.
+	bic.ctx = nil
 	bic.mu.Lock()
 	// If we got here, then Init above succeeded, so the wrapped operator has
 	// been properly initialized.
@@ -131,6 +148,11 @@ func (bic *batchInfoCollector) finishAndGetStats() (
 	// including time spent waiting on its inputs.
 	for _, statsCollectors := range bic.childStatsCollectors {
 		tm -= statsCollectors.getElapsedTime()
+	}
+	if buildutil.CrdbTestBuild {
+		if tm < 0 {
+			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly execution time is negative"))
+		}
 	}
 	bic.mu.Lock()
 	defer bic.mu.Unlock()
