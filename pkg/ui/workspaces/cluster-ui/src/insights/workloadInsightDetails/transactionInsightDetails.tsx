@@ -177,7 +177,7 @@ export class TransactionInsightDetails extends React.Component<TransactionInsigh
                   insightDetails.execType,
                 )}
               </Heading>
-              <div className={tableCx("margin-bottom-large")}>
+              <div className={tableCx("table-area")}>
                 <WaitTimeDetailsTable
                   data={blockingExecutions}
                   execType={insightDetails.execType}
