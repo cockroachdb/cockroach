@@ -15,7 +15,7 @@ import { executionIdAttr, getMatchParamByName } from "src/util";
 import {
   getActiveExecutionsFromSessions,
   getWaitTimeByTxnIDFromLocks,
-} from "../activeExecutions/activeStatementUtils";
+} from "../activeExecutions";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions

@@ -12,7 +12,7 @@ import { SqlExecutionRequest, executeInternalSql } from "./sqlApi";
 
 export type DecodePlanGistResponse = {
   explainPlan?: string;
-  error?: string;
+  error?: Error;
 };
 
 export type DecodePlanGistRequest = {
@@ -48,14 +48,14 @@ export function getExplainPlanFromGist(
     ) {
       return {
         error: result.execution.txn_results
-          ? result.execution.txn_results[0].error?.message
+          ? result.execution.txn_results[0].error
           : null,
       };
     }
 
     if (result.execution.txn_results[0].error) {
       return {
-        error: result.execution.txn_results[0].error.message,
+        error: result.execution.txn_results[0].error,
       };
     }
 
