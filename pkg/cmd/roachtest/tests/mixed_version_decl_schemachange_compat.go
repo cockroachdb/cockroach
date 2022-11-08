@@ -41,7 +41,11 @@ func registerDeclSchemaChangeCompatMixedVersions(r registry.Registry) {
 
 // fetchCorpusToTmp fetches corpus for a given version to tmp
 func fetchCorpusToTmpDir(
-	ctx context.Context, t test.Test, c cluster.Cluster, versionNumber string,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	versionNumber string,
+	alternateVersion string,
 ) (corpusFilePath string, cleanupFn func()) {
 	tmpDir, err := os.MkdirTemp("", "corpus")
 	if err != nil {
@@ -55,15 +59,29 @@ func fetchCorpusToTmpDir(
 			t.L().Printf("failed to clean up tmp directory %v", err)
 		}
 	}
-	err = c.RunE(ctx, c.Node(1),
-		fmt.Sprintf(" gsutil cp gs://cockroach-corpus/corpus-%s/corpus %s",
-			versionNumber,
-			corpusFilePath))
+	versionsToCheck := []string{versionNumber}
+	if len(alternateVersion) > 0 {
+		versionsToCheck = []string{versionNumber, alternateVersion}
+	}
+	for i, version := range versionsToCheck {
+		err = c.RunE(ctx, c.Node(1),
+			fmt.Sprintf(" gsutil cp gs://cockroach-corpus/corpus-%s/corpus %s",
+				version,
+				corpusFilePath))
+		if err != nil && i != len(versionsToCheck)-1 {
+			t.L().Printf("Failed to fetch corpus %s with error %v, trying the next one",
+				version,
+				err)
+		}
+		if err == nil {
+			t.L().Printf("Fetched validation corpus for %v", version)
+			break
+		}
+	}
 	if err != nil {
 		cleanupFn()
 		t.Fatalf("Missing validation corpus for %v (%v)", versionNumber, err)
 	}
-	t.L().Printf("Fetched validation corpus for %v", versionNumber)
 	return corpusFilePath, cleanupFn
 }
 
@@ -117,19 +135,20 @@ func runDeclSchemaChangeCompatMixedVersions(
 		t.Fatal(err)
 	}
 	// Test definitions which indicates which version of the corpus to fetch,
-	// and the bianry to validate against.
+	// and the binary to validate against.
 	compatTests := []struct {
-		testName      string
-		binaryVersion string
-		corpusVersion string
+		testName               string
+		binaryVersion          string
+		corpusVersion          string
+		alternateCorpusVersion string
 	}{
-		{"backwards compatibility", predecessorVersion, fmt.Sprintf("mixed-release-%d.%d", buildVersion.Major(), buildVersion.Minor())},
-		{"forwards compatibility", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(predecessorVersion)[0])},
-		{"same version", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(buildVersion.String())[0])},
+		{"backwards compatibility", predecessorVersion, fmt.Sprintf("mixed-release-%d.%d", buildVersion.Major(), buildVersion.Minor()), "mixed-master"},
+		{"forwards compatibility", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(predecessorVersion)[0]), ""},
+		{"same version", "", fmt.Sprintf("release-%s", versionRegex.FindStringSubmatch(buildVersion.String())[0]), "master"},
 	}
-	for _, test := range compatTests {
-		binaryName := uploadVersion(ctx, t, c, c.All(), test.binaryVersion)
-		corpusPath, cleanupFn := fetchCorpusToTmpDir(ctx, t, c, test.corpusVersion)
+	for _, testInfo := range compatTests {
+		binaryName := uploadVersion(ctx, t, c, c.All(), testInfo.binaryVersion)
+		corpusPath, cleanupFn := fetchCorpusToTmpDir(ctx, t, c, testInfo.corpusVersion, testInfo.alternateCorpusVersion)
 		func() {
 			defer cleanupFn()
 			validateCorpusFile(ctx, t, c, binaryName, corpusPath)
