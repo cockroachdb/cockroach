@@ -66,6 +66,11 @@ func (d *Decoder) More() bool {
 	return d.scanner.More()
 }
 
+// Release releases acquired resources.
+func (d *Decoder) Release() {
+	d.scanner.Release()
+}
+
 type stack []bool
 
 func (s *stack) push(v bool) {
