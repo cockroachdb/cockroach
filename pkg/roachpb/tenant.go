@@ -14,6 +14,7 @@ import (
 	"context"
 	"math"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 )
@@ -125,6 +126,18 @@ func TenantIDFromString(tenantID string) (TenantID, error) {
 		return TenantID{}, errors.Wrapf(err, "invalid tenant ID %s, tenant ID should be an unsigned int greater than 0", tenantID)
 	}
 	return MakeTenantID(tID), nil
+}
+
+// TenantName is a unique name associated with a tenant in a multi-tenant
+// cluster. Unlike TenantID it is not necessary for every tenant to have a name.
+type TenantName string
+
+// SafeValue implements the redact.SafeValue interface.
+func (n TenantName) SafeValue() {}
+
+// Equal implements the gogoproto Equal interface.
+func (n TenantName) Equal(o TenantName) bool {
+	return strings.Compare(string(n), string(o)) == 0
 }
 
 // Silence unused warning.

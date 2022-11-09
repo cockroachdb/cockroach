@@ -1836,6 +1836,13 @@ func TestLogic_temp_table_txn(
 	runLogicTest(t, "temp_table_txn")
 }
 
+func TestLogic_tenant(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant")
+}
+
 func TestLogic_tenant_builtins(
 	t *testing.T,
 ) {

@@ -138,6 +138,8 @@ func TestContextualHelp(t *testing.T) {
 
 		{`CREATE EXTERNAL CONNECTION ??`, `CREATE EXTERNAL CONNECTION`},
 
+		{`CREATE TENANT ??`, `CREATE TENANT`},
+
 		{`CREATE USER blih ??`, `CREATE ROLE`},
 		{`CREATE USER blih WITH ??`, `CREATE ROLE`},
 

@@ -29,6 +29,7 @@ pkg/roachpb/metadata.go | `ReplicaType`
 pkg/roachpb/metadata.go | `StoreID`
 pkg/roachpb/method.go | `Method`
 pkg/roachpb/tenant.go | `TenantID`
+pkg/roachpb/tenant.go | `TenantName`
 pkg/rpc/connection_class.go | `ConnectionClass`
 pkg/sql/catalog/catpb/constraint.go | `ForeignKeyAction`
 pkg/sql/catalog/catpb/job_id.go | `JobID`

@@ -489,7 +489,7 @@ func addSystemTenantEntry(target *MetadataSchema) {
 		tree.NewDInt(tree.DInt(roachpb.SystemTenantID.ToUint64())),
 		tree.MakeDBool(true),
 		tree.NewDBytes(tree.DBytes(infoBytes)),
-		tree.NewDString(info.Name),
+		tree.NewDString(string(info.Name)),
 	)
 	if err != nil {
 		panic(err)

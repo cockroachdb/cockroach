@@ -561,17 +561,23 @@ var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessio
 	"cannot evaluate tenant operation in this context")
 
 // CreateTenantWithID is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenantWithID(_ context.Context, _ uint64, _ string) error {
+func (c *DummyTenantOperator) CreateTenantWithID(
+	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
+) error {
 	return errors.WithStack(errEvalTenant)
 }
 
 // CreateTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ string) (roachpb.TenantID, error) {
+func (c *DummyTenantOperator) CreateTenant(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (roachpb.TenantID, error) {
 	return roachpb.MakeTenantID(0), errors.WithStack(errEvalTenant)
 }
 
 // RenameTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) RenameTenant(_ context.Context, _ uint64, _ string) error {
+func (c *DummyTenantOperator) RenameTenant(
+	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
+) error {
 	return errors.WithStack(errEvalTenant)
 }
 
