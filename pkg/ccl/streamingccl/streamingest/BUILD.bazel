@@ -118,6 +118,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/storageutils",
         "//pkg/testutils/testcluster",
+        "//pkg/upgrade/upgradebase",
         "//pkg/util/hlc",
         "//pkg/util/json",
         "//pkg/util/leaktest",

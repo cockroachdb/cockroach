@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/logtags"
 )
 
@@ -47,7 +48,7 @@ type TenantDeps struct {
 		Default roachpb.SpanConfig
 	}
 
-	TestingKnobs              *TestingKnobs
+	TestingKnobs              *upgradebase.TestingKnobs
 	SchemaResolverConstructor func( // A constructor that returns a schema resolver for `descriptors` in `currDb`.
 		txn *kv.Txn, descriptors *descs.Collection, currDb string,
 	) (resolver.SchemaResolver, func(), error)
@@ -75,11 +76,17 @@ type PreconditionFunc func(context.Context, clusterversion.ClusterVersion, Tenan
 // sql. It includes the system tenant.
 type TenantUpgrade struct {
 	upgrade
-	fn           TenantUpgradeFunc
+	fn TenantUpgradeFunc
+	// precondition is executed before fn. Note that permanent upgrades (see
+	// upgrade.permanent) cannot have preconditions.
 	precondition PreconditionFunc
 }
 
-var _ Upgrade = (*TenantUpgrade)(nil)
+var _ upgradebase.Upgrade = (*TenantUpgrade)(nil)
+
+// NoPrecondition can be used with NewTenantUpgrade to signify that the
+// respective upgrade does not need any preconditions checked.
+var NoPrecondition PreconditionFunc = nil
 
 // NewTenantUpgrade constructs a TenantUpgrade.
 func NewTenantUpgrade(
@@ -89,9 +96,27 @@ func NewTenantUpgrade(
 		upgrade: upgrade{
 			description: description,
 			v:           v,
+			permanent:   false,
 		},
 		fn:           fn,
 		precondition: precondition,
+	}
+	return m
+}
+
+// NewPermanentTenantUpgrade constructs a TenantUpgrade marked as "permanent":
+// an upgrade that will run regardless of the cluster's bootstrap version.
+func NewPermanentTenantUpgrade(
+	description string, v roachpb.Version, fn TenantUpgradeFunc,
+) *TenantUpgrade {
+	m := &TenantUpgrade{
+		upgrade: upgrade{
+			description: description,
+			v:           v,
+			permanent:   true,
+		},
+		fn:           fn,
+		precondition: nil,
 	}
 	return m
 }
@@ -108,5 +133,8 @@ func (m *TenantUpgrade) Precondition(
 	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps,
 ) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s,precondition", cv), nil)
-	return m.precondition(ctx, cv, d)
+	if m.precondition != nil {
+		return m.precondition(ctx, cv, d)
+	}
+	return nil
 }

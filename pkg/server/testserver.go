@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -51,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1533,6 +1535,14 @@ var TestServerFactory = testServerFactoryImpl{}
 
 // New is part of TestServerFactory interface.
 func (testServerFactoryImpl) New(params base.TestServerArgs) (interface{}, error) {
+	if params.Knobs.JobsTestingKnobs != nil {
+		if params.Knobs.JobsTestingKnobs.(*jobs.TestingKnobs).DisableAdoptions {
+			if params.Knobs.UpgradeManager == nil || !params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).DontUseJobs {
+				return nil, errors.AssertionFailedf("DontUseJobs needs to be set when DisableAdoptions is set")
+			}
+		}
+	}
+
 	cfg := makeTestConfigFromParams(params)
 	ts := &TestServer{Cfg: &cfg, params: params}
 
