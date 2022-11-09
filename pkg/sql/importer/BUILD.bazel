@@ -115,7 +115,6 @@ go_library(
         "//pkg/workload",
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_fraugster_parquet_go//:parquet-go",
         "@com_github_fraugster_parquet_go//parquet",
         "@com_github_fraugster_parquet_go//parquetschema",

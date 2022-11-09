@@ -13,6 +13,7 @@
 package execinfra
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -297,6 +298,10 @@ type TestingKnobs struct {
 	// SetupFlowCb, when non-nil, is called by the execinfrapb.DistSQLServer
 	// when responding to SetupFlow RPCs.
 	SetupFlowCb func(base.SQLInstanceID, *execinfrapb.SetupFlowRequest) error
+
+	// VerifyContext, when non-nil, is called by the execinfrapb.DistSQLServer
+	// when responding to SetupFlow RPCs.
+	VerifyContext func(ctx context.Context)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

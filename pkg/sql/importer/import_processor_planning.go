@@ -309,7 +309,6 @@ func makeImportReaderSpecs(
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < cap(inputSpecs) {
 			spec := &execinfrapb.ReadImportDataSpec{
-				JobID:  int64(job.ID()),
 				Tables: tables,
 				Types:  typeDescs,
 				Format: format,

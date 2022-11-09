@@ -33,7 +33,6 @@ func distBackupPlanSpecs(
 	planCtx *sql.PlanningCtx,
 	execCtx sql.JobExecContext,
 	dsp *sql.DistSQLPlanner,
-	jobID int64,
 	spans roachpb.Spans,
 	introducedSpans roachpb.Spans,
 	pkIDs map[uint64]bool,
@@ -95,7 +94,6 @@ func distBackupPlanSpecs(
 	sqlInstanceIDToSpec := make(map[base.SQLInstanceID]*execinfrapb.BackupDataSpec)
 	for _, partition := range spanPartitions {
 		spec := &execinfrapb.BackupDataSpec{
-			JobID:            jobID,
 			Spans:            partition.Spans,
 			DefaultURI:       defaultURI,
 			URIsByLocalityKV: urisByLocalityKV,
@@ -117,7 +115,6 @@ func distBackupPlanSpecs(
 			// which is not the leaseholder for any of the spans, but is for an
 			// introduced span.
 			spec := &execinfrapb.BackupDataSpec{
-				JobID:            jobID,
 				IntroducedSpans:  partition.Spans,
 				DefaultURI:       defaultURI,
 				URIsByLocalityKV: urisByLocalityKV,
