@@ -1,0 +1,47 @@
+# LogicTest: !3node-tenant-default-configs
+query IBIT colnames
+SELECT id, active, length(info), name FROM system.tenants ORDER BY id
+----
+id  active  length  name
+1   true    12      system
+
+# Create a few tenants.
+
+statement ok
+CREATE TENANT "tenant-one"
+
+statement ok
+CREATE TENANT "two"
+
+statement ok
+CREATE TENANT three
+
+query IBTT colnames
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+FROM system.tenants
+ORDER BY id
+----
+id  active  name          crdb_internal.pb_to_json
+1   true    system        {"id": "1", "name": "system", "state": "ACTIVE"}
+2   true    "tenant-one"  {"id": "2", "name": "\"tenant-one\"", "state": "ACTIVE"}
+3   true    two           {"id": "3", "name": "two", "state": "ACTIVE"}
+4   true    three         {"id": "4", "name": "three", "state": "ACTIVE"}
+
+# Test creating a tenant with the same name as an existing tenant, but a unique
+# ID.
+statement error tenant with name "three" already exists
+CREATE TENANT three;
+
+statement ok
+set default_transaction_read_only = on;
+
+statement error cannot execute CREATE TENANT in a read-only transaction
+CREATE TENANT four;
+
+statement ok
+set default_transaction_read_only = off;
+
+user testuser
+
+statement error only users with the admin role are allowed to create tenant
+CREATE TENANT "not-allowed"
