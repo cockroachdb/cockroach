@@ -14032,3 +14032,260 @@ func TestStoreTenantMetricsAndRateLimiterRefcount(t *testing.T) {
 		tc.store.tenantRateLimiters.Release(tenLimiter)
 	}()
 }
+
+// TestRangeSplitRacesWithRead performs a range split and repeatedly reads a
+// span that straddles both the LHS and RHS post split. We ensure that as long
+// as the read wins it observes the entire result set; if (once) the split wins
+// the read should return the appropriate error. However, it should never be
+// possible for the read to return without error and with a partial result (e.g.
+// just the post split LHS). This would indicate a bug in the synchronization
+// between read and split operations.
+//
+// We include subtests for both follower reads and reads served from the
+// leaseholder.
+func TestRangeSplitRacesWithRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "followerRead", func(t *testing.T, followerRead bool) {
+		ctx := context.Background()
+		tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+		defer tc.Stopper().Stop(ctx)
+		key := tc.ScratchRange(t)
+		key = key[:len(key):len(key)] // bound capacity, avoid aliasing
+		desc := tc.LookupRangeOrFatal(t, key)
+		tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+		var stores []*Store
+		for i := 0; i < tc.NumServers(); i++ {
+			server := tc.Server(i)
+			store, err := server.GetStores().(*Stores).GetStore(server.GetFirstStoreID())
+			require.NoError(t, err)
+			stores = append(stores, store)
+		}
+		writer := stores[0]
+		reader := stores[0]
+		if followerRead {
+			reader = stores[1]
+		}
+
+		keyA := append(key, byte('a'))
+		keyB := append(key, byte('b'))
+		keyC := append(key, byte('c'))
+		keyD := append(key, byte('d'))
+		splitKey := keyB
+
+		now := tc.Server(0).Clock().Now()
+		ts1 := now.Add(1, 0)
+		h1 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts1}
+
+		val := []byte("value")
+		for _, k := range [][]byte{keyA, keyC} {
+			pArgs := putArgs(k, val)
+			_, pErr := kv.SendWrappedWith(ctx, writer, h1, &pArgs)
+			require.Nil(t, pErr)
+		}
+
+		// If the test wants to read from a follower, drop the closed timestamp
+		// duration and then wait until the follower can serve requests at ts1.
+		if followerRead {
+			_, err := tc.ServerConn(0).Exec(
+				`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+			require.NoError(t, err)
+
+			testutils.SucceedsSoon(t, func() error {
+				var ba roachpb.BatchRequest
+				ba.RangeID = desc.RangeID
+				ba.ReadConsistency = roachpb.INCONSISTENT
+				ba.Add(&roachpb.QueryResolvedTimestampRequest{
+					RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
+				})
+				br, pErr := reader.Send(ctx, ba)
+				require.Nil(t, pErr)
+				rts := br.Responses[0].GetQueryResolvedTimestamp().ResolvedTS
+				if rts.Less(ts1) {
+					return errors.Errorf("resolved timestamp %s < %s", rts, ts1)
+				}
+				return nil
+			})
+		}
+
+		read := func() {
+			scanArgs := scanArgs(keyA, keyD)
+			for {
+				resp, pErr := kv.SendWrappedWith(ctx, reader, h1, scanArgs)
+				if pErr == nil {
+					t.Logf("read won the race: %v", resp)
+					require.NotNil(t, resp)
+					res := resp.(*roachpb.ScanResponse).Rows
+					require.Equal(t, 2, len(res))
+					require.Equal(t, keyA, res[0].Key)
+					require.Equal(t, keyC, res[1].Key)
+				} else {
+					t.Logf("read lost the race: %v", pErr)
+					mismatchErr := &roachpb.RangeKeyMismatchError{}
+					require.ErrorAs(t, pErr.GoError(), &mismatchErr)
+					return
+				}
+			}
+		}
+
+		split := func() {
+			splitArgs := &roachpb.AdminSplitRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: splitKey,
+				},
+				SplitKey: splitKey,
+			}
+			_, pErr := kv.SendWrappedWith(ctx, writer, h1, splitArgs)
+			require.Nil(t, pErr, "err: %v", pErr.GoError())
+			rhsDesc := tc.LookupRangeOrFatal(t, splitKey.Next())
+			// Remove the RHS from the reader.
+			if followerRead {
+				tc.RemoveVotersOrFatal(t, roachpb.Key(rhsDesc.StartKey), tc.Target(1))
+			} else {
+				tc.TransferRangeLeaseOrFatal(t, rhsDesc, tc.Target(1))
+				tc.RemoveVotersOrFatal(t, roachpb.Key(rhsDesc.StartKey), tc.Target(0))
+			}
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); split() }()
+		go func() { defer wg.Done(); read() }()
+		wg.Wait()
+	})
+}
+
+// TestRangeSplitAndRHSRemovalRacesWithFollowerReads acts as a regression test
+// for the hazard described in
+// https://github.com/cockroachdb/cockroach/issues/67016.
+//
+// Specifically, the test sets up the following scenario:
+// - Follower read begins and checks the request is contained entirely within
+// the range's bounds. A storage snapshot isn't acquired just quite yet.
+// - The range is split such that the follower read is no longer within the post
+// split range; the post-split RHS replica is removed from the node serving the
+// follower read.
+// - Follower read resumes. The expectation is for the follower read to fail
+// with a RangeKeyMismatchError.
+func TestRangeSplitAndRHSRemovalRacesWithFollowerRead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	startSplit := make(chan struct{})
+	unblockRead := make(chan struct{})
+	scratchRangeID := roachpb.RangeID(-1)
+	tc := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			1: {
+				Knobs: base.TestingKnobs{
+					Store: &StoreTestingKnobs{
+						PreStorageSnapshotButChecksCompleteInterceptor: func(r *Replica) {
+							if r.GetRangeID() != scratchRangeID {
+								return
+							}
+							close(startSplit)
+							<-unblockRead
+						},
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+	key := tc.ScratchRange(t)
+	key = key[:len(key):len(key)] // bound capacity, avoid aliasing
+	desc := tc.LookupRangeOrFatal(t, key)
+	tc.AddVotersOrFatal(t, key, tc.Target(1))
+
+	var stores []*Store
+	for i := 0; i < tc.NumServers(); i++ {
+		server := tc.Server(i)
+		store, err := server.GetStores().(*Stores).GetStore(server.GetFirstStoreID())
+		require.NoError(t, err)
+		stores = append(stores, store)
+	}
+	writer := stores[0]
+	reader := stores[1]
+
+	keyA := append(key, byte('a'))
+	keyB := append(key, byte('b'))
+	keyC := append(key, byte('c'))
+	keyD := append(key, byte('d'))
+	splitKey := keyB
+
+	now := tc.Server(0).Clock().Now()
+	ts1 := now.Add(1, 0)
+	h1 := roachpb.Header{RangeID: desc.RangeID, Timestamp: ts1}
+
+	val := []byte("value")
+	for _, k := range [][]byte{keyA, keyC} {
+		pArgs := putArgs(k, val)
+		_, pErr := kv.SendWrappedWith(ctx, writer, h1, &pArgs)
+		require.Nil(t, pErr)
+	}
+
+	// Drop the closed timestamp duration and wait until the follower can serve
+	// requests at ts1.
+	_, err := tc.ServerConn(0).Exec(
+		`SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'`)
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		var ba roachpb.BatchRequest
+		ba.RangeID = desc.RangeID
+		ba.ReadConsistency = roachpb.INCONSISTENT
+		ba.Add(&roachpb.QueryResolvedTimestampRequest{
+			RequestHeader: roachpb.RequestHeader{Key: key, EndKey: key.Next()},
+		})
+		br, pErr := reader.Send(ctx, ba)
+		require.Nil(t, pErr)
+		rts := br.Responses[0].GetQueryResolvedTimestamp().ResolvedTS
+		if rts.Less(ts1) {
+			return errors.Errorf("resolved timestamp %s < %s", rts, ts1)
+		}
+		return nil
+	})
+
+	// Set this thing after we've checked for the resolved timestamp, as we don't
+	// want the QueryResolvedTimestampRequest to block.
+	scratchRangeID = desc.RangeID
+
+	read := func() {
+		scanArgs := scanArgs(keyA, keyD)
+		_, pErr := kv.SendWrappedWith(ctx, reader, h1, scanArgs)
+		require.NotNil(t, pErr)
+		mismatchErr := &roachpb.RangeKeyMismatchError{}
+		require.ErrorAs(t, pErr.GoError(), &mismatchErr)
+	}
+
+	split := func() {
+		select {
+		case <-startSplit:
+		case <-time.After(5 * time.Second):
+			panic("timed out waiting for read to block")
+		}
+		splitArgs := &roachpb.AdminSplitRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key: splitKey,
+			},
+			SplitKey: splitKey,
+		}
+		_, pErr := kv.SendWrappedWith(ctx, writer, h1, splitArgs)
+		require.Nil(t, pErr, "err: %v", pErr.GoError())
+		rhsDesc := tc.LookupRangeOrFatal(t, splitKey.Next())
+		tc.RemoveVotersOrFatal(t, roachpb.Key(rhsDesc.StartKey), tc.Target(1))
+		close(unblockRead)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); split() }()
+	go func() { defer wg.Done(); read() }()
+	wg.Wait()
+}

@@ -438,6 +438,11 @@ type StoreTestingKnobs struct {
 	// MVCCGCQueueLeaseCheckInterceptor intercepts calls to Replica.LeaseStatusAt when
 	// making high priority replica scans.
 	MVCCGCQueueLeaseCheckInterceptor func(ctx context.Context, replica *Replica, now hlc.ClockTimestamp) bool
+
+	// PreStorageSnapshotButChecksCompleteInterceptor intercepts calls to
+	// Replica.executeReadOnlyBatch after checks have successfully determined
+	// execution can proceed but a storage snapshot has not been acquired.
+	PreStorageSnapshotButChecksCompleteInterceptor func(replica *Replica)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
