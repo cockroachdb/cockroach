@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"golang.org/x/exp/rand"
 )
 
 // Load-based splitting.
@@ -199,4 +200,28 @@ func (f *Finder) PopularKeyFrequency() float64 {
 	}
 
 	return float64(popularKeyCount) / float64(splitKeySampleSize)
+}
+
+// TestFinder is a wrapper of Finder compatible with the load-based splitter
+// testing framework.
+type TestFinder struct {
+	f          Finder
+	randSource *rand.Rand
+}
+
+// NewTestFinder initiates a TestFinder with a random source.
+func NewTestFinder(randSource *rand.Rand) *TestFinder {
+	return &TestFinder{
+		randSource: randSource,
+	}
+}
+
+// Record records the span, ignoring weight as this Finder is unweighted.
+func (tf *TestFinder) Record(span roachpb.Span, weight float32) {
+	tf.f.Record(span, tf.randSource.Intn)
+}
+
+// Key finds a split key.
+func (tf *TestFinder) Key() roachpb.Key {
+	return tf.f.Key()
 }
