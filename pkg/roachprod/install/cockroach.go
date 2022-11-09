@@ -319,9 +319,9 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -333,7 +333,9 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 			c.NodeURL("localhost", c.NodePort(node)) + " " +
 			ssh.Escape(args)
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
