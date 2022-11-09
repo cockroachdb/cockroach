@@ -12,7 +12,6 @@ package scbuild
 
 import (
 	"context"
-	"runtime"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,9 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Build constructs a new state from an initial state and a statement.
@@ -39,13 +36,11 @@ import (
 func Build(
 	ctx context.Context, dependencies Dependencies, initial scpb.CurrentState, n tree.Statement,
 ) (_ scpb.CurrentState, err error) {
-	start := timeutil.Now()
-	defer func() {
-		if err != nil || !log.ExpensiveLogEnabled(ctx, 2) {
-			return
-		}
-		log.Infof(ctx, "build for %s took %v", n.StatementTag(), timeutil.Since(start))
-	}()
+	defer scerrors.StartEventf(
+		ctx,
+		"building declarative schema change targets for %s",
+		redact.Safe(n.StatementTag()),
+	).HandlePanicAndLogError(ctx, &err)
 	initial = initial.DeepCopy()
 	bs := newBuilderState(ctx, dependencies, initial)
 	els := newEventLogState(dependencies, initial, n)
@@ -64,21 +59,6 @@ func Build(
 		TreeAnnotator:        an,
 		SchemaFeatureChecker: dependencies.FeatureChecker(),
 	}
-	defer func() {
-		switch recErr := recover().(type) {
-		case nil:
-			// No error.
-		case runtime.Error:
-			err = errors.WithAssertionFailure(recErr)
-		case error:
-			err = recErr
-		default:
-			err = errors.AssertionFailedf(
-				"unexpected error encountered while building schema change plan %s",
-				recErr,
-			)
-		}
-	}()
 	scbuildstmt.Process(b, an.GetStatement())
 	an.ValidateAnnotations()
 	els.statements[len(els.statements)-1].RedactedStatement =
