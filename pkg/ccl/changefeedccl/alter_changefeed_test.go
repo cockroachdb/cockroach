@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -426,7 +427,7 @@ func TestAlterChangefeedTelemetry(t *testing.T) {
 		feed := testFeed.(cdctest.EnterpriseTestFeed)
 
 		require.NoError(t, feed.Pause())
-
+		jobutils.WaitForJobToHaveNoLease(t, sqlDB, feed.JobID())
 		sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d DROP bar, foo ADD baz UNSET diff SET resolved, format=json`, feed.JobID()))
 
 		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
