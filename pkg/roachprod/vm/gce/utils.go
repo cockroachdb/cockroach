@@ -69,7 +69,7 @@ for d in $(ls /dev/nvme?n? /dev/disk/by-id/google-persistent-disk-[1-9]); do
   zpool list -v -P | grep ${d} > /dev/null
   if [ $? -ne 0 ]; then
 {{ else }}
-for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do 
+for d in $(ls /dev/disk/by-id/google-local-* /dev/disk/by-id/google-persistent-disk-[1-9]); do
   if ! mount | grep ${d}; then
 {{ end }}
     disks+=("${d}")
@@ -152,24 +152,6 @@ net.ipv4.tcp_keepalive_intvl=60
 net.ipv4.tcp_keepalive_probes=5
 EOF
 
-# Enable core dumps
-cat <<EOF > /etc/security/limits.d/core_unlimited.conf
-* soft core unlimited
-* hard core unlimited
-root soft core unlimited
-root hard core unlimited
-EOF
-
-mkdir -p /mnt/data1/cores
-chmod a+w /mnt/data1/cores
-CORE_PATTERN="/mnt/data1/cores/core.%e.%p.%h.%t"
-echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
-sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
-sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
-echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
-
-sysctl --system  # reload sysctl settings
-
 sudo apt-get update -q
 sudo apt-get install -qy chrony
 
@@ -210,6 +192,31 @@ for service in apport.service atd.service; do
   systemctl stop $service
   systemctl mask $service
 done
+
+# Enable core dumps, do this last, something above resets /proc/sys/kernel/core_pattern
+# to just "core".
+cat <<EOF > /etc/security/limits.d/core_unlimited.conf
+* soft core unlimited
+* hard core unlimited
+root soft core unlimited
+root hard core unlimited
+EOF
+
+mkdir -p /mnt/data1/cores
+chmod a+w /mnt/data1/cores
+cat <<'EOF' > /bin/gzip_core.sh
+#!/bin/sh
+exec /bin/gzip -f - > /mnt/data1/cores/core.$1.$2.$3.$4.gz
+EOF
+chmod +x /bin/gzip_core.sh
+
+CORE_PATTERN="|/bin/gzip_core.sh %e %p %h %t"
+echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
+sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
+sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
+echo "kernel.core_pattern=$CORE_PATTERN" >> /etc/sysctl.conf
+
+sysctl --system  # reload sysctl settings
 
 sudo touch /mnt/data1/.roachprod-initialized
 `

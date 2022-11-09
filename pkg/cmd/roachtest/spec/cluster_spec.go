@@ -60,6 +60,8 @@ type ClusterSpec struct {
 	FileSystem fileSystemType
 
 	RandomlyUseZfs bool
+
+	GatherCores bool
 }
 
 // MakeClusterSpec makes a ClusterSpec.
