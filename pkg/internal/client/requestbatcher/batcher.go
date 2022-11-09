@@ -119,6 +119,13 @@ type Config struct {
 	// request. If MaxKeysPerBatchReq <= 0 then no limit is enforced.
 	MaxKeysPerBatchReq int
 
+	// MaxBytesPerBatchReq is the maximum number of bytes that each batch is
+	// allowed to touch during one of its requests. If the limit is exceeded,
+	// the batch is paginated over a series of individual requests. This limit
+	// corresponds to the TargetBytes assigned to the Header of each request. If
+	// MaxBytesPerBatchReq <= 0 then no limit is enforced.
+	MaxBytesPerBatchReq int
+
 	// MaxWait is the maximum amount of time a message should wait in a batch
 	// before being sent. If MaxWait is <= 0 then no wait timeout is enforced.
 	// It is inadvisable to disable both MaxIdle and MaxWait.
@@ -288,14 +295,14 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 			}
 		}
 		// Send requests in a loop to support pagination, which may be necessary
-		// if MaxKeysPerBatchReq is set. If so, partial responses with resume
-		// spans may be returned for requests, indicating that the limit was hit
-		// before they could complete and that they should be resumed over the
-		// specified key span. Requests in the batch are neither guaranteed to
-		// be ordered nor guaranteed to be non-overlapping, so we can make no
-		// assumptions about the requests that will result in full responses
-		// (with no resume spans) vs. partial responses vs. empty responses (see
-		// the comment on roachpb.Header.MaxSpanRequestKeys).
+		// if MaxKeysPerBatchReq or MaxBytesPerBatchReq is set. If so, partial
+		// responses with resume spans may be returned for requests, indicating
+		// that the limit was hit before they could complete and that they should
+		// be resumed over the specified key span. Requests in the batch are
+		// neither guaranteed to be ordered nor guaranteed to be non-overlapping,
+		// so we can make no assumptions about the requests that will result in
+		// full responses (with no resume spans) vs. partial responses vs. empty
+		// responses (see the comment on roachpb.Header.MaxSpanRequestKeys).
 		//
 		// To accommodate this, we keep track of all partial responses from
 		// previous iterations. After receiving a batch of responses during an
@@ -536,6 +543,9 @@ func (b *batch) batchRequest(cfg *Config) *roachpb.BatchRequest {
 	}
 	if cfg.MaxKeysPerBatchReq > 0 {
 		req.MaxSpanRequestKeys = int64(cfg.MaxKeysPerBatchReq)
+	}
+	if cfg.MaxBytesPerBatchReq > 0 {
+		req.TargetBytes = int64(cfg.MaxBytesPerBatchReq)
 	}
 	return req
 }

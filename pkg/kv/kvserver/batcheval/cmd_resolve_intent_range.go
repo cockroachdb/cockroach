@@ -52,13 +52,14 @@ func ResolveIntentRange(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	numKeys, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-		ctx, readWriter, ms, update, h.MaxSpanRequestKeys)
+	numKeys, numBytes, resumeSpan, err := storage.MVCCResolveWriteIntentRangeWithByteSizePagination(
+		ctx, readWriter, ms, update, h.MaxSpanRequestKeys, h.TargetBytes, h.AllowEmpty)
 	if err != nil {
 		return result.Result{}, err
 	}
 	reply := resp.(*roachpb.ResolveIntentRangeResponse)
 	reply.NumKeys = numKeys
+	reply.NumBytes = numBytes
 	if resumeSpan != nil {
 		update.EndKey = resumeSpan.Key
 		reply.ResumeSpan = resumeSpan

@@ -93,10 +93,19 @@ func ResolveIntent(
 		// The observation was from the wrong node. Ignore.
 		update.ClockWhilePending = roachpb.ObservedTimestamp{}
 	}
-	ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+	ok, resumeSpan, numBytes, err := storage.MVCCResolveWriteIntentWithByteSizePagination(ctx, readWriter, ms, update, h.TargetBytes, h.AllowEmpty)
 	if err != nil {
 		return result.Result{}, err
 	}
+	reply := resp.(*roachpb.ResolveIntentResponse)
+	if resumeSpan != nil {
+		reply.ResumeSpan = resumeSpan
+		reply.ResumeReason = roachpb.RESUME_BYTE_LIMIT
+		reply.ResumeNextBytes = numBytes
+		return result.Result{}, nil
+	}
+
+	reply.NumBytes = numBytes
 
 	var res result.Result
 	res.Local.ResolvedLocks = []roachpb.LockUpdate{update}

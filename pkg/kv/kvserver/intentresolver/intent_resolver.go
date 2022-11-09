@@ -119,6 +119,7 @@ type Config struct {
 	MaxGCBatchIdle               time.Duration
 	MaxIntentResolutionBatchWait time.Duration
 	MaxIntentResolutionBatchIdle time.Duration
+	MaxBytesPerBatchReq          int
 }
 
 // RangeCache is a simplified interface to the rngcache.RangeCache.
@@ -180,6 +181,9 @@ func setConfigDefaults(c *Config) {
 	if c.RangeDescriptorCache == nil {
 		c.RangeDescriptorCache = nopRangeDescriptorCache{}
 	}
+	if c.MaxBytesPerBatchReq == 0 {
+		c.MaxBytesPerBatchReq = 4 << 20
+	}
 }
 
 type nopRangeDescriptorCache struct{}
@@ -226,23 +230,25 @@ func New(c Config) *IntentResolver {
 		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
-		AmbientCtx:      c.AmbientCtx,
-		Name:            "intent_resolver_ir_batcher",
-		MaxMsgsPerBatch: intentResolutionBatchSize,
-		MaxWait:         c.MaxIntentResolutionBatchWait,
-		MaxIdle:         c.MaxIntentResolutionBatchIdle,
-		Stopper:         c.Stopper,
-		Sender:          c.DB.NonTransactionalSender(),
+		AmbientCtx:          c.AmbientCtx,
+		Name:                "intent_resolver_ir_batcher",
+		MaxMsgsPerBatch:     intentResolutionBatchSize,
+		MaxBytesPerBatchReq: c.MaxBytesPerBatchReq,
+		MaxWait:             c.MaxIntentResolutionBatchWait,
+		MaxIdle:             c.MaxIntentResolutionBatchIdle,
+		Stopper:             c.Stopper,
+		Sender:              c.DB.NonTransactionalSender(),
 	})
 	ir.irRangeBatcher = requestbatcher.New(requestbatcher.Config{
-		AmbientCtx:         c.AmbientCtx,
-		Name:               "intent_resolver_ir_range_batcher",
-		MaxMsgsPerBatch:    intentResolutionRangeBatchSize,
-		MaxKeysPerBatchReq: intentResolverRangeRequestSize,
-		MaxWait:            c.MaxIntentResolutionBatchWait,
-		MaxIdle:            c.MaxIntentResolutionBatchIdle,
-		Stopper:            c.Stopper,
-		Sender:             c.DB.NonTransactionalSender(),
+		AmbientCtx:          c.AmbientCtx,
+		Name:                "intent_resolver_ir_range_batcher",
+		MaxMsgsPerBatch:     intentResolutionRangeBatchSize,
+		MaxKeysPerBatchReq:  intentResolverRangeRequestSize,
+		MaxBytesPerBatchReq: c.MaxBytesPerBatchReq,
+		MaxWait:             c.MaxIntentResolutionBatchWait,
+		MaxIdle:             c.MaxIntentResolutionBatchIdle,
+		Stopper:             c.Stopper,
+		Sender:              c.DB.NonTransactionalSender(),
 	})
 	return ir
 }
