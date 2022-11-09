@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tochar"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/errors"
@@ -62,10 +63,11 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 // ServerImpl implements the server for the distributed SQL APIs.
 type ServerImpl struct {
 	execinfra.ServerConfig
-	flowRegistry     *flowinfra.FlowRegistry
-	remoteFlowRunner *flowinfra.RemoteFlowRunner
-	memMonitor       *mon.BytesMonitor
-	regexpCache      *tree.RegexpCache
+	flowRegistry      *flowinfra.FlowRegistry
+	remoteFlowRunner  *flowinfra.RemoteFlowRunner
+	memMonitor        *mon.BytesMonitor
+	regexpCache       *tree.RegexpCache
+	toCharFormatCache *tochar.FormatCache
 }
 
 var _ execinfrapb.DistSQLServer = &ServerImpl{}
@@ -75,10 +77,11 @@ func NewServer(
 	ctx context.Context, cfg execinfra.ServerConfig, remoteFlowRunner *flowinfra.RemoteFlowRunner,
 ) *ServerImpl {
 	ds := &ServerImpl{
-		ServerConfig:     cfg,
-		regexpCache:      tree.NewRegexpCache(512),
-		flowRegistry:     flowinfra.NewFlowRegistry(),
-		remoteFlowRunner: remoteFlowRunner,
+		ServerConfig:      cfg,
+		regexpCache:       tree.NewRegexpCache(512),
+		toCharFormatCache: tochar.NewFormatCache(512),
+		flowRegistry:      flowinfra.NewFlowRegistry(),
+		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(
 			"distsql",
 			mon.MemoryResource,
@@ -353,6 +356,7 @@ func (ds *ServerImpl) setupFlow(
 			NodeID:                    ds.ServerConfig.NodeID,
 			Codec:                     ds.ServerConfig.Codec,
 			ReCache:                   ds.regexpCache,
+			ToCharFormatCache:         ds.toCharFormatCache,
 			Locality:                  ds.ServerConfig.Locality,
 			Tracer:                    ds.ServerConfig.Tracer,
 			Planner:                   &faketreeeval.DummyEvalPlanner{Monitor: monitor},
