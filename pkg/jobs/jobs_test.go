@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1204,10 +1205,11 @@ func TestJobLifecycle(t *testing.T) {
 
 	done := make(chan struct{})
 	defer close(done)
-
+	resumeSignaler := newResumeStartedSignaler()
 	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
 			OnResume: func(ctx context.Context) error {
+				resumeSignaler.SignalResumeStarted()
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -1461,6 +1463,10 @@ func TestJobLifecycle(t *testing.T) {
 		if err := exp.verify(job.ID(), jobs.StatusRunning); err != nil {
 			t.Fatal(err)
 		}
+
+		// Wait for job to be adopted so that we have the
+		// lease and can move to succeeded.
+		resumeSignaler.WaitForResumeStarted()
 
 		// PauseRequested fails after job is successful.
 		if err := job.Succeeded(ctx); err != nil {
@@ -3161,6 +3167,35 @@ func checkBundle(t *testing.T, zipFile string, expectedFiles []string) {
 	require.Equal(t, expectedFiles, filesInZip)
 }
 
+type resumeStartedSignaler struct {
+	syncutil.Mutex
+	cond      *sync.Cond
+	isStarted bool
+}
+
+func newResumeStartedSignaler() *resumeStartedSignaler {
+	ret := &resumeStartedSignaler{}
+	ret.cond = sync.NewCond(&ret.Mutex)
+	return ret
+
+}
+
+func (r *resumeStartedSignaler) SignalResumeStarted() {
+	r.Lock()
+	r.isStarted = true
+	r.cond.Signal()
+	r.Unlock()
+}
+
+func (r *resumeStartedSignaler) WaitForResumeStarted() {
+	r.Lock()
+	for !r.isStarted {
+		r.cond.Wait()
+	}
+	r.isStarted = false
+	r.Unlock()
+}
+
 // TestPauseReason tests pausing a job with a user specified reason.
 func TestPauseReason(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -3177,10 +3212,11 @@ func TestPauseReason(t *testing.T) {
 
 	done := make(chan struct{})
 	defer close(done)
-
+	resumeSignaler := newResumeStartedSignaler()
 	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{
 			OnResume: func(ctx context.Context) error {
+				resumeSignaler.SignalResumeStarted()
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
@@ -3212,9 +3248,16 @@ func TestPauseReason(t *testing.T) {
 		return n
 	}
 	mustNotHaveClaim := func() {
-		require.Equal(t, 0, countRowsWithClaimInfo())
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if countRowsWithClaimInfo() == 0 {
+				return nil
+			}
+			return errors.New("still waiting for claim to clear")
+		})
 	}
 	mustHaveClaim := func() {
+		t.Helper()
 		testutils.SucceedsSoon(t, func() error {
 			if countRowsWithClaimInfo() == 1 {
 				return nil
@@ -3227,6 +3270,7 @@ func TestPauseReason(t *testing.T) {
 	q := fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", jobID)
 	tdb.CheckQueryResultsRetry(t, q, [][]string{{"running"}})
 	mustHaveClaim()
+	resumeSignaler.WaitForResumeStarted()
 
 	getStatusAndPayload := func(t *testing.T, id jobspb.JobID) (string, jobspb.Payload) {
 		var payloadBytes []byte
@@ -3260,6 +3304,7 @@ func TestPauseReason(t *testing.T) {
 
 		checkStatusAndPauseReason(t, jobID, "running", "for testing")
 		mustHaveClaim()
+		resumeSignaler.WaitForResumeStarted()
 	}
 	{
 		// Pause the job again with a different reason. Verify that the job is paused with the reason.

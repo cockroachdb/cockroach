@@ -1522,7 +1522,7 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		return
 	}
 	if updateErr != nil {
-		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, err)
+		log.Warningf(ctx, "failed to record error for job %d: %v: %v", j.ID(), err, updateErr)
 	}
 }
 

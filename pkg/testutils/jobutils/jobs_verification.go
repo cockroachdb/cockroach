@@ -82,6 +82,19 @@ func waitForJobToHaveStatus(
 	}
 }
 
+func WaitForJobToHaveNoLease(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
+	t.Helper()
+	testutils.SucceedsWithin(t, func() error {
+		var sessionID []byte
+		var instanceID gosql.NullInt64
+		db.QueryRow(t, `SELECT claim_session_id, claim_instance_id FROM system.jobs WHERE id = $1`, jobID).Scan(&sessionID, &instanceID)
+		if sessionID == nil && !instanceID.Valid {
+			return nil
+		}
+		return errors.Newf("job %d still has claim information")
+	}, 2*time.Minute)
+}
+
 // RunJob runs the provided job control statement, initializing, notifying and
 // closing the chan at the passed pointer (see below for why) and returning the
 // jobID and error result. PAUSE JOB and CANCEL JOB are racy in that it's hard
