@@ -272,9 +272,9 @@ type cleanupOperations struct {
 	constrainedDeleteStmt   string
 }
 
-// N.B. when changing the constraint queries below, make sure also change
-//
-//	the test file in pkg/sql/opt/exec/execbuilder/testdata/sql_activity_stats_compaction.
+// TODO(#91600): Add deterministic execbuilder tests for these queries at
+// pkg/sql/opt/exec/execbuilder/testdata/sql_activity_stats_compaction
+// When changing the constraint queries below, make sure to also change the queries in those tests.
 var (
 	stmtStatsCleanupOps = &cleanupOperations{
 		initialScanStmtTemplate: `
