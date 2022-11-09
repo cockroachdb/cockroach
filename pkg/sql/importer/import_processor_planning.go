@@ -257,19 +257,19 @@ func distImport(
 		}
 	})
 
-	if testingKnobs.beforeRunDSP != nil {
-		if err := testingKnobs.beforeRunDSP(); err != nil {
-			return roachpb.BulkOpSummary{}, err
-		}
-	}
-
 	g.GoCtx(func(ctx context.Context) error {
 		defer cancelReplanner()
 		defer close(stopProgress)
 
+		if testingKnobs.beforeRunDSP != nil {
+			if err := testingKnobs.beforeRunDSP(); err != nil {
+				return err
+			}
+		}
+
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, testingKnobs.onSetupFinish)
 		return rowResultWriter.Err()
 	})
 

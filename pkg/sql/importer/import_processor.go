@@ -52,6 +52,8 @@ var csvOutputTypes = []*types.T{
 
 const readImportDataProcessorName = "readImportDataProcessor"
 
+var progressUpdateInterval = time.Second * 10
+
 var importPKAdderBufferSize = func() *settings.ByteSizeSetting {
 	s := settings.RegisterByteSizeSetting(
 		settings.TenantWritable,
@@ -123,6 +125,8 @@ type readImportDataProcessor struct {
 	spec    execinfrapb.ReadImportDataSpec
 	output  execinfra.RowReceiver
 
+	cancel context.CancelFunc
+	wg     ctxgroup.Group
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 
 	seqChunkProvider *row.SeqChunkProvider
@@ -144,16 +148,20 @@ func newReadImportDataProcessor(
 	post *execinfrapb.PostProcessSpec,
 	output execinfra.RowReceiver,
 ) (execinfra.Processor, error) {
-	cp := &readImportDataProcessor{
+	idp := &readImportDataProcessor{
 		flowCtx: flowCtx,
 		spec:    spec,
 		output:  output,
 		progCh:  make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress),
 	}
-	if err := cp.Init(ctx, cp, post, csvOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
+	if err := idp.Init(ctx, idp, post, csvOutputTypes, flowCtx, processorID, output, nil, /* memMonitor */
 		execinfra.ProcStateOpts{
 			// This processor doesn't have any inputs to drain.
 			InputsToDrain: nil,
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				idp.close()
+				return nil
+			},
 		}); err != nil {
 		return nil, err
 	}
@@ -161,28 +169,31 @@ func newReadImportDataProcessor(
 	// Load the import job running the import in case any of the columns have a
 	// default expression which uses sequences. In this case we need to update the
 	// job progress within the import processor.
-	if cp.flowCtx.Cfg.JobRegistry != nil {
-		cp.seqChunkProvider = &row.SeqChunkProvider{
-			JobID:    cp.spec.Progress.JobID,
-			Registry: cp.flowCtx.Cfg.JobRegistry,
-			DB:       cp.flowCtx.Cfg.DB,
+	if idp.flowCtx.Cfg.JobRegistry != nil {
+		idp.seqChunkProvider = &row.SeqChunkProvider{
+			JobID:    idp.spec.Progress.JobID,
+			Registry: idp.flowCtx.Cfg.JobRegistry,
+			DB:       idp.flowCtx.Cfg.DB,
 		}
 	}
 
-	return cp, nil
+	return idp, nil
 }
 
 // Start is part of the RowSource interface.
 func (idp *readImportDataProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", idp.spec.JobID)
 	ctx = idp.StartInternal(ctx, readImportDataProcessorName)
-	// We don't have to worry about this go routine leaking because next we loop over progCh
-	// which is closed only after the go routine returns.
-	go func() {
+
+	grpCtx, cancel := context.WithCancel(ctx)
+	idp.cancel = cancel
+	idp.wg = ctxgroup.WithContext(grpCtx)
+	idp.wg.GoCtx(func(ctx context.Context) error {
 		defer close(idp.progCh)
 		idp.summary, idp.importErr = runImport(ctx, idp.flowCtx, &idp.spec, idp.progCh,
 			idp.seqChunkProvider)
-	}()
+		return nil
+	})
 }
 
 // Next is part of the RowSource interface.
@@ -219,6 +230,22 @@ func (idp *readImportDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pro
 		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
 		rowenc.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 	}, nil
+}
+
+func (idp *readImportDataProcessor) ConsumerClosed() {
+	idp.close()
+}
+
+func (idp *readImportDataProcessor) close() {
+	// ipd.Closed is set by idp.InternalClose().
+	if idp.Closed {
+		return
+	}
+
+	idp.cancel()
+	_ = idp.wg.Wait()
+
+	idp.InternalClose()
 }
 
 func injectTimeIntoEvalCtx(evalCtx *eval.Context, walltime int64) {
@@ -444,7 +471,7 @@ func ingestKvs(
 		offset++
 	}
 
-	pushProgress := func() {
+	pushProgress := func(ctx context.Context) {
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.ResumePos = make(map[int32]int64)
 		prog.CompletedFraction = make(map[int32]float32)
@@ -465,14 +492,18 @@ func ingestKvs(
 			bulkSummaryMu.summary.Reset()
 			bulkSummaryMu.Unlock()
 		}
-		progCh <- prog
+		select {
+		case progCh <- prog:
+		case <-ctx.Done():
+		}
+
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
 	stopProgress := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		tick := time.NewTicker(time.Second * 10)
+		tick := time.NewTicker(progressUpdateInterval)
 		defer tick.Stop()
 		done := ctx.Done()
 		for {
@@ -482,7 +513,7 @@ func ingestKvs(
 			case <-stopProgress:
 				return nil
 			case <-tick.C:
-				pushProgress()
+				pushProgress(ctx)
 			}
 		}
 	})
@@ -544,7 +575,7 @@ func ingestKvs(
 			if flowCtx.Cfg.TestingKnobs.BulkAdderFlushesEveryBatch {
 				_ = pkIndexAdder.Flush(ctx)
 				_ = indexAdder.Flush(ctx)
-				pushProgress()
+				pushProgress(ctx)
 			}
 		}
 		return nil
