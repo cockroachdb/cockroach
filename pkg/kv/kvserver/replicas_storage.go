@@ -686,6 +686,11 @@ type RaftMutationBatch struct {
 	// business of validating that such semantics are being upheld.
 	Lo, Hi uint64
 	// Term represents the term of those entries.
+	// TODO(sep-raft-log): there may be multiple terms here, so this needs
+	// to change. But I (tbg) also don't understand why this struct has to
+	// contain the term. RangeStorage must simply remove all entries > Hi;
+	// additionally it's too late to SingleDelete any existing entries since
+	// that write would now apply to the new entries, not the old ones.
 	Term uint64
 	// HardState, if non-nil, specifies the HardState value being set by
 	// MutationBatch.
