@@ -725,14 +725,14 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// removeClaimsFromDeadSessions queries the jobs table for non-terminal
 	// jobs and nullifies their claims if the claims are owned by known dead sessions.
 	removeClaimsFromDeadSessions := func(ctx context.Context, s sqlliveness.Session) {
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := r.internalExecutorFactory.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			// Run the expiration transaction at low priority to ensure that it does
 			// not contend with foreground reads. Note that the adoption and cancellation
 			// queries also use low priority so they will interact nicely.
 			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
 				return errors.WithAssertionFailure(err)
 			}
-			_, err := r.ex.ExecEx(
+			_, err := ie.ExecEx(
 				ctx, "expire-sessions", txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				removeClaimsForDeadSessionsQuery,
@@ -775,14 +775,14 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// removeClaimsFromJobs queries the jobs table for non-terminal jobs and
 	// nullifies their claims if the claims are owned by the current session.
 	removeClaimsFromSession := func(ctx context.Context, s sqlliveness.Session) {
-		if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := r.internalExecutorFactory.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 			// Run the expiration transaction at low priority to ensure that it does
 			// not contend with foreground reads. Note that the adoption and cancellation
 			// queries also use low priority so they will interact nicely.
 			if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
 				return errors.WithAssertionFailure(err)
 			}
-			_, err := r.ex.ExecEx(
+			_, err := ie.ExecEx(
 				ctx, "remove-claims-for-session", txn,
 				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 				removeClaimsForSessionQuery, s.ID().UnsafeBytes(),
@@ -808,7 +808,8 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			r.cancelAllAdoptedJobs()
 			return
 		}
-		if err := r.processClaimedJobs(ctx, s); err != nil {
+		ieNotBoundToTxn := r.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+		if err := r.processClaimedJobs(ctx, s, ieNotBoundToTxn); err != nil {
 			log.Errorf(ctx, "error processing claimed jobs: %s", err)
 		}
 	})
@@ -936,7 +937,8 @@ const expiredJobsQuery = "SELECT id, payload, status, created FROM system.jobs "
 func (r *Registry) cleanupOldJobsPage(
 	ctx context.Context, olderThan time.Time, minID jobspb.JobID, pageSize int,
 ) (done bool, maxID jobspb.JobID, retErr error) {
-	it, err := r.ex.QueryIterator(ctx, "gc-jobs", nil /* txn */, expiredJobsQuery, olderThan, minID, pageSize)
+	ieNotBoundToTxn := r.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+	it, err := ieNotBoundToTxn.QueryIterator(ctx, "gc-jobs", nil /* txn */, expiredJobsQuery, olderThan, minID, pageSize)
 	if err != nil {
 		return false, 0, err
 	}
@@ -976,7 +978,7 @@ func (r *Registry) cleanupOldJobsPage(
 		log.VEventf(ctx, 2, "attempting to clean up %d expired job records", len(toDelete.Array))
 		const stmt = `DELETE FROM system.jobs WHERE id = ANY($1)`
 		var nDeleted int
-		if nDeleted, err = r.ex.Exec(
+		if nDeleted, err = ieNotBoundToTxn.Exec(
 			ctx, "gc-jobs", nil /* txn */, stmt, toDelete,
 		); err != nil {
 			log.Warningf(ctx, "error cleaning up %d jobs: %v", len(toDelete.Array), err)
