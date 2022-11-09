@@ -57,6 +57,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/metric",
+        "//pkg/util/pprofutil",
         "//pkg/util/protoutil",
         "//pkg/util/retry",
         "//pkg/util/stop",
