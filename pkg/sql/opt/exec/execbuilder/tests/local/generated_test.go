@@ -480,13 +480,6 @@ func TestExecBuild_spool(
 	runExecBuildLogicTest(t, "spool")
 }
 
-func TestExecBuild_sql_activity_stats_compaction(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runExecBuildLogicTest(t, "sql_activity_stats_compaction")
-}
-
 func TestExecBuild_sql_fn(
 	t *testing.T,
 ) {
