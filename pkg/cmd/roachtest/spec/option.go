@@ -102,6 +102,17 @@ func (o nodeLifetimeOption) apply(spec *ClusterSpec) {
 	spec.Lifetime = time.Duration(o)
 }
 
+type gatherCoresOption struct{}
+
+func (o gatherCoresOption) apply(spec *ClusterSpec) {
+	spec.GatherCores = true
+}
+
+// GatherCores enables core gathering after test runs.
+func GatherCores() Option {
+	return gatherCoresOption{}
+}
+
 // clusterReusePolicy indicates what clusters a particular test can run on and
 // who (if anybody) can reuse the cluster after the test has finished running
 // (either passing or failing). See the individual policies for details.
