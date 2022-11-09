@@ -475,8 +475,8 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		recordID := uuid.MakeV4()
 		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
 			jobsprotectedts.Jobs, target)
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return ptp.Protect(ctx, txn, rec)
+		require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+			return ptp.Protect(ctx, txn, ie, rec)
 		}))
 		return rec
 	}
@@ -598,8 +598,8 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		rec := jobsprotectedts.MakeRecord(recordID, int64(1),
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, nil, /* deprecatedSpans */
 			jobsprotectedts.Jobs, clusterTarget)
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return tenPtp.Protect(ctx, txn, rec)
+		require.NoError(t, ten.ExecutorConfig().(sql.ExecutorConfig).InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+			return tenPtp.Protect(ctx, txn, ie, rec)
 		}))
 
 		sqlDB.Exec(t, fmt.Sprintf(`SELECT crdb_internal.destroy_tenant(%d)`,

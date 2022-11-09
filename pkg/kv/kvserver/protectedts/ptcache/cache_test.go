@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
@@ -58,9 +59,7 @@ func TestCacheBasic(t *testing.T) {
 	s := tc.Server(0)
 	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
-		ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
 		ief,
 	)
@@ -139,10 +138,7 @@ func TestRefresh(t *testing.T) {
 	s := tc.Server(0)
 	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
-		ptstorage.New(
-			s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			ptsKnobs),
+		ptstorage.New(s.ClusterSettings(), ptsKnobs),
 		s.DB(),
 		ief,
 	)
@@ -298,10 +294,7 @@ func TestQueryRecord(t *testing.T) {
 	s := tc.Server(0)
 	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
-		ptstorage.New(
-			s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
 		ief,
 	)
@@ -364,9 +357,7 @@ func TestIterate(t *testing.T) {
 	s := tc.Server(0)
 	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
-		ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
 		ief,
 	)
@@ -516,9 +507,7 @@ func TestGetProtectionTimestamps(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			p := ptstorage.WithDatabase(
-				ptstorage.New(s.ClusterSettings(),
-					s.InternalExecutor().(sqlutil.InternalExecutor),
-					&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+				ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 				s.DB(),
 				ief,
 			)
@@ -548,9 +537,7 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	s := tc.Server(0)
 	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
 	p := ptstorage.WithDatabase(
-		ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
+		ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
 		s.DB(),
 		ief,
 	)
@@ -613,13 +600,18 @@ func protect(
 		DeprecatedSpans: spans,
 	}
 	ctx := context.Background()
-	txn := s.DB().NewTxn(ctx, "test")
-	ieNotBoundToTxn := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory).MakeInternalExecutorWithoutTxn()
-	require.NoError(t, p.Protect(ctx, txn, r))
-	require.NoError(t, txn.Commit(ctx))
-	_, err := p.GetRecord(ctx, nil /* txn */, r.ID.GetUUID(), ieNotBoundToTxn)
+
+	ief := s.InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
+	err := ief.TxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
+		require.NoError(t, p.Protect(ctx, txn, ie, r))
+		createdAt = txn.CommitTimestamp()
+		return nil
+	})
 	require.NoError(t, err)
-	createdAt = txn.CommitTimestamp()
+
+	ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
+	_, err = p.GetRecord(ctx, nil /* txn */, r.ID.GetUUID(), ieNotBoundToTxn)
+	require.NoError(t, err)
 	return r, createdAt
 }
 

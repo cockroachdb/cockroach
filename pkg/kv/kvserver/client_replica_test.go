@@ -4452,8 +4452,8 @@ func TestStrictGCEnforcement(t *testing.T) {
 		// Create a protected timestamp, and make sure it's not respected since the
 		// KVSubscriber is blocked.
 		rec := mkRecord()
-		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return ptp.Protect(ctx, txn, &rec)
+		require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return ptp.Protect(ctx, txn, ie, &rec)
 		}))
 		defer func() {
 			require.NoError(t, ief.TxnWithExecutor(ctx, db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {

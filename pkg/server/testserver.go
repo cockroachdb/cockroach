@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -615,9 +616,9 @@ type tenantProtectedTSProvider struct {
 }
 
 func (d tenantProtectedTSProvider) Protect(
-	ctx context.Context, txn *kv.Txn, rec *ptpb.Record,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, rec *ptpb.Record,
 ) error {
-	return d.Provider.Protect(ctx, txn, rec)
+	return d.Provider.Protect(ctx, txn, ie, rec)
 }
 
 // TestTenant is an in-memory instantiation of the SQL-only process created for

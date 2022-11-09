@@ -1318,7 +1318,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	recordID := progress.ProtectedTimestampRecord
 	if recordID == uuid.Nil {
 		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
-		if err := pts.Protect(ctx, txn, ptr); err != nil {
+		if err := pts.Protect(ctx, txn, ie, ptr); err != nil {
 			return err
 		}
 	} else {
@@ -1351,7 +1351,7 @@ func (cf *changeFrontier) deprecatedManageProtectedTimestamps(
 	if cf.frontier.schemaChangeBoundaryReached() && shouldProtectBoundaries {
 		highWater := cf.frontier.Frontier()
 		ptr := createProtectedTimestampRecord(ctx, cf.flowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater, progress)
-		return pts.Protect(ctx, txn, ptr)
+		return pts.Protect(ctx, txn, ie, ptr)
 	}
 	return nil
 }

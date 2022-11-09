@@ -72,7 +72,7 @@ func testJobsProtectedTimestamp(
 	mkJobAndRecord := func() (j *jobs.Job, rec *ptpb.Record) {
 		ts := clock.Now()
 		jobID := jr.MakeJobID()
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 			if j, err = jr.CreateJobWithTxn(ctx, mkJobRec(), jobID, txn); err != nil {
 				return err
 			}
@@ -80,7 +80,7 @@ func testJobsProtectedTimestamp(
 			targetToProtect := ptpb.MakeClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(jobID), ts,
 				deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
-			return ptp.Protect(ctx, txn, rec)
+			return ptp.Protect(ctx, txn, ie, rec)
 		}))
 		return j, rec
 	}
@@ -205,14 +205,14 @@ func testSchedulesProtectedTimestamp(
 		ts := clock.Now()
 		var rec *ptpb.Record
 		var sj *jobs.ScheduledJob
-		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+		require.NoError(t, execCfg.InternalExecutorFactory.TxnWithExecutor(ctx, execCfg.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) (err error) {
 			sj = mkScheduledJobRec(scheduleLabel)
 			require.NoError(t, sj.Create(ctx, execCfg.InternalExecutor, txn))
 			deprecatedSpansToProtect := roachpb.Spans{{Key: keys.MinKey, EndKey: keys.MaxKey}}
 			targetToProtect := ptpb.MakeClusterTarget()
 			rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), sj.ScheduleID(), ts,
 				deprecatedSpansToProtect, jobsprotectedts.Schedules, targetToProtect)
-			return ptp.Protect(ctx, txn, rec)
+			return ptp.Protect(ctx, txn, ie, rec)
 		}))
 		return sj, rec
 	}

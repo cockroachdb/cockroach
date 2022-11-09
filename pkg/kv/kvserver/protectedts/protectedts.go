@@ -68,7 +68,7 @@ type Storage interface {
 	//
 	// An error will be returned if the ID of the provided record already exists
 	// so callers should be sure to generate new IDs when creating records.
-	Protect(context.Context, *kv.Txn, *ptpb.Record) error
+	Protect(context.Context, *kv.Txn, sqlutil.InternalExecutor, *ptpb.Record) error
 
 	// GetRecord retreives the record with the specified UUID as well as the MVCC
 	// timestamp at which it was written. If no corresponding record exists

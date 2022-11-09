@@ -500,10 +500,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			details.ProtectedTimestampRecord = &protectedtsID
 
 			if details.ProtectedTimestampRecord != nil {
-				if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-					return protectTimestampForBackup(
-						ctx, p.ExecCfg(), txn, b.job.ID(), m, details,
-					)
+				if err := p.ExecCfg().InternalExecutorFactory.TxnWithExecutor(ctx, p.ExecCfg().DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+					return protectTimestampForBackup(ctx, p.ExecCfg(), txn, ie, b.job.ID(), m, details)
 				}); err != nil {
 					return err
 				}

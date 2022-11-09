@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -182,8 +181,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	beforeWrites := s0.Clock().Now()
 	gcSoon()
 
-	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor),
-		nil /* knobs */)
+	pts := ptstorage.New(s0.ClusterSettings(), nil /* knobs */)
 	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB(), ief)
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),
@@ -191,7 +189,8 @@ func TestProtectedTimestamps(t *testing.T) {
 		Mode:      ptpb.PROTECT_AFTER,
 		Target:    ptpb.MakeSchemaObjectsTarget([]descpb.ID{getTableID()}),
 	}
-	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &ptsRec))
+	ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
+	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, ieNotBoundToTxn, &ptsRec))
 	upsertUntilBackpressure()
 	// We need to be careful choosing a time. We're a little limited because the
 	// ttl is defined in seconds and we need to wait for the threshold to be
@@ -229,8 +228,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	failedRec.ID = uuid.MakeV4().GetBytes()
 	failedRec.Timestamp = beforeWrites
 	failedRec.Timestamp.Logical = 0
-	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &failedRec))
-	ieNotBoundToTxn := ief.MakeInternalExecutorWithoutTxn()
+	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, ieNotBoundToTxn, &failedRec))
 	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID(), ieNotBoundToTxn)
 	require.NoError(t, err)
 
@@ -249,7 +247,7 @@ func TestProtectedTimestamps(t *testing.T) {
 	laterRec.ID = uuid.MakeV4().GetBytes()
 	laterRec.Timestamp = afterWrites
 	laterRec.Timestamp.Logical = 0
-	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
+	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, ieNotBoundToTxn, &laterRec))
 	require.NoError(
 		t,
 		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(

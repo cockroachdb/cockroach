@@ -35,13 +35,15 @@ type storageWithDatabase struct {
 	s   protectedts.Storage
 }
 
-func (s *storageWithDatabase) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
+func (s *storageWithDatabase) Protect(
+	ctx context.Context, txn *kv.Txn, executor sqlutil.InternalExecutor, r *ptpb.Record,
+) error {
 	if txn == nil {
-		return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return s.s.Protect(ctx, txn, r)
+		return s.ief.TxnWithExecutor(ctx, s.db, nil /* sessionData */, func(ctx context.Context, newTxn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return s.s.Protect(ctx, newTxn, ie, r)
 		})
 	}
-	return s.s.Protect(ctx, txn, r)
+	return s.s.Protect(ctx, txn, executor, r)
 }
 
 func (s *storageWithDatabase) GetRecord(

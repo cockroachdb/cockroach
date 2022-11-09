@@ -1168,6 +1168,7 @@ func protectTimestampForBackup(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 	jobID jobspb.JobID,
 	backupManifest backuppb.BackupManifest,
 	backupDetails jobspb.BackupDetails,
@@ -1188,7 +1189,7 @@ func protectTimestampForBackup(
 	target.IgnoreIfExcludedFromBackup = true
 	rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
 		tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
-	return execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
+	return execCfg.ProtectedTimestampProvider.Protect(ctx, txn, ie, rec)
 }
 
 // checkForNewDatabases returns an error if any new complete databases were

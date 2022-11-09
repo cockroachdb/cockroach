@@ -275,12 +275,12 @@ func changefeedPlanHook(
 
 			jr.Progress = *progress.GetChangefeed()
 
-			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := p.ExecCfg().InternalExecutorFactory.TxnWithExecutor(ctx, p.ExecCfg().DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
 					return err
 				}
 				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
+					return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ie, ptr)
 				}
 				return nil
 			}); err != nil {
@@ -1136,7 +1136,7 @@ func (b *changefeedResumer) OnPauseRequest(
 		}
 		pts := execCfg.ProtectedTimestampProvider
 		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
-		return pts.Protect(ctx, txn, ptr)
+		return pts.Protect(ctx, txn, ie, ptr)
 	}
 
 	return nil

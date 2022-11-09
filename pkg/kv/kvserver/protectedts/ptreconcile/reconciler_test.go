@@ -64,7 +64,7 @@ func TestReconciler(t *testing.T) {
 		r := ptreconcile.New(settings, s0.DB(), ief, ptp,
 			ptreconcile.StatusFuncs{
 				testTaskType: func(
-					ctx context.Context, txn *kv.Txn, meta []byte,
+					ctx context.Context, txn *kv.Txn, _ sqlutil.InternalExecutor, meta []byte,
 				) (shouldRemove bool, err error) {
 					state.mu.Lock()
 					defer state.mu.Unlock()
@@ -86,8 +86,8 @@ func TestReconciler(t *testing.T) {
 		} else {
 			rec1.Target = ptpb.MakeClusterTarget()
 		}
-		require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return ptp.Protect(ctx, txn, &rec1)
+		require.NoError(t, ief.TxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return ptp.Protect(ctx, txn, ie, &rec1)
 		}))
 
 		t.Run("update settings", func(t *testing.T) {

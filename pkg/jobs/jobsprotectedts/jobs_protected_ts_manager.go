@@ -194,7 +194,7 @@ func (p *Manager) Protect(
 				target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
 				rec := MakeRecord(*protectedtsID,
 					int64(jobID), readAsOf, nil, Jobs, target)
-				return p.protectedTSProvider.Protect(ctx, txn, rec)
+				return p.protectedTSProvider.Protect(ctx, txn, ie, rec)
 			})
 		}
 		// Refresh the existing timestamp.

@@ -68,11 +68,10 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 			var rec *ptpb.Record
 			ts := s0.Clock().Now()
 			jobID := jr.MakeJobID()
-
-			require.NoError(t, s0.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+			require.NoError(t, ief.TxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				rec = jobsprotectedts.MakeRecord(uuid.MakeV4(), int64(jobID), ts,
 					nil /* deprecatedSpans */, jobsprotectedts.Jobs, testCase.target)
-				return ptp.Protect(ctx, txn, rec)
+				return ptp.Protect(ctx, txn, ie, rec)
 			}))
 
 			rows, err := tc.Server(0).DB().Scan(ctx, k, k.PrefixEnd(), 0 /* maxRows */)

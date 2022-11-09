@@ -218,8 +218,7 @@ func manageFullBackupPTSChaining(
 	// inc schedule ID as the records' Meta. This ensures that even if the full
 	// schedule is dropped, the reconciliation job will not release the pts
 	// record stored on the inc schedule, and the chaining will continue.
-	ptsRecord, err := protectTimestampRecordForSchedule(ctx, targetToProtect, deprecatedSpansToProtect,
-		backupDetails.EndTime, incSj.ScheduleID(), exec, txn)
+	ptsRecord, err := protectTimestampRecordForSchedule(ctx, targetToProtect, deprecatedSpansToProtect, backupDetails.EndTime, incSj.ScheduleID(), exec, txn, ie)
 	if err != nil {
 		return errors.Wrap(err, "protect pts record for schedule")
 	}
@@ -311,9 +310,10 @@ func protectTimestampRecordForSchedule(
 	scheduleID int64,
 	exec *sql.ExecutorConfig,
 	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
 ) (uuid.UUID, error) {
 	protectedtsID := uuid.MakeV4()
 	rec := jobsprotectedts.MakeRecord(protectedtsID, scheduleID, tsToProtect, deprecatedSpansToProtect,
 		jobsprotectedts.Schedules, targetToProtect)
-	return protectedtsID, exec.ProtectedTimestampProvider.Protect(ctx, txn, rec)
+	return protectedtsID, exec.ProtectedTimestampProvider.Protect(ctx, txn, ie, rec)
 }

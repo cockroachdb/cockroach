@@ -44,9 +44,7 @@ import (
 // storage interacts with the durable state of the protectedts subsystem.
 type storage struct {
 	settings *cluster.Settings
-	ex       sqlutil.InternalExecutor
-
-	knobs *protectedts.TestingKnobs
+	knobs    *protectedts.TestingKnobs
 }
 
 var _ protectedts.Storage = (*storage)(nil)
@@ -59,13 +57,11 @@ func useDeprecatedProtectedTSStorage(
 }
 
 // New creates a new Storage.
-func New(
-	settings *cluster.Settings, ex sqlutil.InternalExecutor, knobs *protectedts.TestingKnobs,
-) protectedts.Storage {
+func New(settings *cluster.Settings, knobs *protectedts.TestingKnobs) protectedts.Storage {
 	if knobs == nil {
 		knobs = &protectedts.TestingKnobs{}
 	}
-	return &storage{settings: settings, ex: ex, knobs: knobs}
+	return &storage{settings: settings, knobs: knobs}
 }
 
 var errNoTxn = errors.New("must provide a non-nil transaction")
@@ -90,14 +86,14 @@ func (p *storage) UpdateTimestamp(
 }
 
 func (p *storage) deprecatedProtect(
-	ctx context.Context, txn *kv.Txn, r *ptpb.Record, meta []byte,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, r *ptpb.Record, meta []byte,
 ) error {
 	s := makeSettings(p.settings)
 	encodedSpans, err := protoutil.Marshal(&Spans{Spans: r.DeprecatedSpans})
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
-	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-deprecated-protect", txn,
+	it, err := ie.QueryIteratorEx(ctx, "protectedts-deprecated-protect", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		protectQueryWithoutTarget,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
@@ -139,7 +135,9 @@ func (p *storage) deprecatedProtect(
 	return nil
 }
 
-func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) error {
+func (p *storage) Protect(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, r *ptpb.Record,
+) error {
 	if err := validateRecordForProtect(ctx, r, p.settings, p.knobs); err != nil {
 		return err
 	}
@@ -163,7 +161,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	//
 	// TODO(adityamaru): Delete in 22.2 once we exclusively protect `target`s.
 	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
-		return p.deprecatedProtect(ctx, txn, r, meta)
+		return p.deprecatedProtect(ctx, txn, ie, r, meta)
 	}
 
 	// Clear the `DeprecatedSpans` field even if it has been set by the caller.
@@ -177,7 +175,7 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 	if err != nil { // how can this possibly fail?
 		return errors.Wrap(err, "failed to marshal spans")
 	}
-	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-protect", txn,
+	it, err := ie.QueryIteratorEx(ctx, "protectedts-protect", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		protectQuery,
 		s.maxSpans, s.maxBytes, len(r.DeprecatedSpans),
@@ -214,9 +212,9 @@ func (p *storage) Protect(ctx context.Context, txn *kv.Txn, r *ptpb.Record) erro
 }
 
 func (p *storage) deprecatedGetRecord(
-	ctx context.Context, txn *kv.Txn, id uuid.UUID,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, id uuid.UUID,
 ) (*ptpb.Record, error) {
-	row, err := p.ex.QueryRowEx(ctx, "protectedts-deprecated-GetRecord", txn,
+	row, err := ie.QueryRowEx(ctx, "protectedts-deprecated-GetRecord", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getRecordWithoutTargetQuery, id.GetBytesMut())
 	if err != nil {
@@ -245,7 +243,7 @@ func (p *storage) GetRecord(
 	//
 	// TODO(adityamaru): Delete in 22.2 once we exclusively protect `target`s.
 	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
-		return p.deprecatedGetRecord(ctx, txn, id)
+		return p.deprecatedGetRecord(ctx, txn, executor, id)
 	}
 
 	row, err := executor.QueryRowEx(ctx, "protectedts-GetRecord", txn,
@@ -270,7 +268,7 @@ func (p *storage) MarkVerified(
 	if txn == nil {
 		return errNoTxn
 	}
-	numRows, err := p.ex.ExecEx(ctx, "protectedts-MarkVerified", txn,
+	numRows, err := executor.ExecEx(ctx, "protectedts-MarkVerified", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		markVerifiedQuery, id.GetBytesMut())
 	if err != nil {
@@ -343,8 +341,10 @@ func (p *storage) GetState(
 	}, nil
 }
 
-func (p *storage) deprecatedGetRecords(ctx context.Context, txn *kv.Txn) ([]ptpb.Record, error) {
-	it, err := p.ex.QueryIteratorEx(ctx, "protectedts-deprecated-GetRecords", txn,
+func (p *storage) deprecatedGetRecords(
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
+) ([]ptpb.Record, error) {
+	it, err := ie.QueryIteratorEx(ctx, "protectedts-deprecated-GetRecords", txn,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
 		getRecordsWithoutTargetQuery)
 	if err != nil {
@@ -370,7 +370,7 @@ func (p *storage) getRecords(
 	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 ) ([]ptpb.Record, error) {
 	if useDeprecatedProtectedTSStorage(ctx, p.settings, p.knobs) {
-		return p.deprecatedGetRecords(ctx, txn)
+		return p.deprecatedGetRecords(ctx, txn, ie)
 	}
 
 	it, err := ie.QueryIteratorEx(ctx, "protectedts-GetRecords", txn,

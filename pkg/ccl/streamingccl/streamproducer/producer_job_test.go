@@ -163,9 +163,8 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			ctx, source.DB(), nil, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 				deprecatedTenantSpan := roachpb.Spans{*makeTenantSpan(30)}
 				tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(30)})
-				if err := ptp.Protect(ctx, txn,
-					jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), ts,
-						deprecatedTenantSpan, jobsprotectedts.Jobs, tenantTarget)); err != nil {
+				if err := ptp.Protect(ctx, txn, ie, jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), ts,
+					deprecatedTenantSpan, jobsprotectedts.Jobs, tenantTarget)); err != nil {
 					return err
 				}
 				_, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn, ie)

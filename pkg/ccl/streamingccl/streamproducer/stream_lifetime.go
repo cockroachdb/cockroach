@@ -71,7 +71,7 @@ func startReplicationStreamJob(
 	pts := jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), statementTime,
 		deprecatedSpansToProtect, jobsprotectedts.Jobs, targetToProtect)
 
-	if err := ptp.Protect(ctx, txn, pts); err != nil {
+	if err := ptp.Protect(ctx, txn, ie, pts); err != nil {
 		return streampb.InvalidStreamID, err
 	}
 	return streampb.StreamID(jr.JobID), nil
