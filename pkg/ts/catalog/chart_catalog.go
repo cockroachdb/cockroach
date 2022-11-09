@@ -704,6 +704,7 @@ var charts = []sectionDescription{
 			{
 				Title: "Allocator Load-Based Lease Transfer Decisions",
 				Metrics: []string{
+					"kv.allocator.load_based_lease_transfers.follow_the_workload",
 					"kv.allocator.load_based_lease_transfers.should_transfer",
 					"kv.allocator.load_based_lease_transfers.missing_stats_for_existing_stores",
 					"kv.allocator.load_based_lease_transfers.delta_not_significant",
