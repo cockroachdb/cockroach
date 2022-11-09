@@ -2141,6 +2141,7 @@ ActiveQuery represents a query in flight on some Session.
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this query started execution. | [reserved](#support-status) |
 | plan_gist | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
 | placeholders | [string](#cockroach.server.serverpb.ListSessionsResponse-string) | repeated | The placeholders if any. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The database the statement was executed on. | [reserved](#support-status) |
 
 
 
@@ -2285,6 +2286,7 @@ ActiveQuery represents a query in flight on some Session.
 | elapsed_time | [google.protobuf.Duration](#cockroach.server.serverpb.ListSessionsResponse-google.protobuf.Duration) |  | Time elapsed since this query started execution. | [reserved](#support-status) |
 | plan_gist | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The compressed plan that can be converted back into the statement's logical plan. Empty if the statement is in the PREPARING state. | [reserved](#support-status) |
 | placeholders | [string](#cockroach.server.serverpb.ListSessionsResponse-string) | repeated | The placeholders if any. | [reserved](#support-status) |
+| database | [string](#cockroach.server.serverpb.ListSessionsResponse-string) |  | The database the statement was executed on. | [reserved](#support-status) |
 
 
 

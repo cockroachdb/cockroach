@@ -3238,6 +3238,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 			Progress:       float32(progress),
 			IsFullScan:     query.isFullScan,
 			PlanGist:       query.planGist,
+			Database:       query.database,
 		})
 	}
 	lastActiveQuery := ""
