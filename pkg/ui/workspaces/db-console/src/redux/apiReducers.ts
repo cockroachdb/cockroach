@@ -43,7 +43,7 @@ export const clusterReducerObj = new CachedDataReducer(
 export const refreshCluster = clusterReducerObj.refresh;
 
 const eventsReducerObj = new CachedDataReducer(
-  api.getEvents,
+  clusterUiApi.getNonRedactedEvents,
   "events",
   moment.duration(10, "s"),
 );
@@ -486,7 +486,7 @@ export const refreshSnapshot = snapshotReducerObj.refresh;
 
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
-  events: CachedDataReducerState<api.EventsResponseMessage>;
+  events: CachedDataReducerState<clusterUiApi.EventsResponse>;
   health: HealthState;
   nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
