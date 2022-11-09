@@ -933,14 +933,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		stats.tAppendBegin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := r.maybeSideloadEntriesRaftMuLocked(ctx, rd.Entries)
+		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := maybeSideloadEntries(ctx, rd.Entries, r.raftMu.sideloaded)
 		if err != nil {
 			const expl = "during sideloading"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 		raftLogSize += sideLoadedEntriesSize
-		if lastIndex, lastTerm, raftLogSize, err = r.append(
-			ctx, batch, lastIndex, lastTerm, raftLogSize, thinEntries,
+		if lastIndex, lastTerm, raftLogSize, err = logAppend(
+			ctx, r.raftMu.stateLoader.RaftLogPrefix(), batch, lastIndex, lastTerm, raftLogSize, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return stats, expl, errors.Wrap(err, expl)

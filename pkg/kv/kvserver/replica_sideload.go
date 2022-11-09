@@ -59,25 +59,20 @@ type SideloadStorage interface {
 	Filename(_ context.Context, index, term uint64) (string, error)
 }
 
-// maybeSideloadEntriesRaftMuLocked should be called with a slice of "fat"
-// entries before appending them to the Raft log. For those entries which are
-// sideloadable, this is where the actual sideloading happens: in come fat
-// proposals, out go thin proposals. Note that this method is to be called
-// before modifications are persisted to the log. The other way around is
-// incorrect since an ill-timed crash gives you thin proposals and no files.
+// maybeSideloadEntries optimizes handling for AddSST requests. AddSST are
+// typically >> 1mb in size, and this makes them a poor fit for writing into the
+// raft log (which is backed by an LSM) directly. Furthermore, we want to
+// optimize by ingesting the SST directly into the LSM. We do this by writing
+// out the SST payloads into files; this is called "sideloading".
 //
-// The passed-in slice is not mutated.
-func (r *Replica) maybeSideloadEntriesRaftMuLocked(
-	ctx context.Context, entriesToAppend []raftpb.Entry,
-) (_ []raftpb.Entry, numSideloaded int, sideloadedEntriesSize, otherEntriesSize int64, _ error) {
-	return maybeSideloadEntriesImpl(ctx, entriesToAppend, r.raftMu.sideloaded)
-}
-
-// maybeSideloadEntriesImpl iterates through the provided slice of entries. If
-// no sideloadable entries are found, it returns the same slice. Otherwise, it
-// returns a new slice in which all applicable entries have been sideloaded to
-// the specified SideloadStorage.
-func maybeSideloadEntriesImpl(
+// This method iterates through the provided slice of entries and looks for
+// entries that can be sideloaded, for (the result of evaluations of) AddSST
+// requests. It adds these SSTs to the provided sideloaded storage, and in
+// their place returns an entry with a nil payload (but otherwise identical).
+//
+// The provided slice is not modified, though the returned slice may be backed
+// in parts or entirely by the same memory.
+func maybeSideloadEntries(
 	ctx context.Context, entriesToAppend []raftpb.Entry, sideloaded SideloadStorage,
 ) (
 	_ []raftpb.Entry,

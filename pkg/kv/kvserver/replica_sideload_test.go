@@ -552,7 +552,7 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 			eng := storage.NewDefaultInMemForTesting()
 			defer eng.Close()
 			sideloaded := newTestingSideloadStorage(t, eng)
-			postEnts, numSideloaded, size, nonSideloadedSize, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
+			postEnts, numSideloaded, size, nonSideloadedSize, err := maybeSideloadEntries(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
 			}
