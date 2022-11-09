@@ -340,7 +340,8 @@ func TestConnectorRangeLookup(t *testing.T) {
 	rangeLookupRespC <- &roachpb.RangeLookupResponse{
 		Descriptors: descs, PrefetchedDescriptors: preDescs,
 	}
-	resDescs, resPreDescs, err := c.RangeLookup(ctx, roachpb.RKey("a"), false /* useReverseScan */)
+	const rc = roachpb.READ_UNCOMMITTED
+	resDescs, resPreDescs, err := c.RangeLookup(ctx, roachpb.RKey("a"), rc, false /* useReverseScan */)
 	require.Equal(t, descs, resDescs)
 	require.Equal(t, preDescs, resPreDescs)
 	require.NoError(t, err)
@@ -349,7 +350,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 	rangeLookupRespC <- &roachpb.RangeLookupResponse{
 		Error: roachpb.NewErrorf("hit error"),
 	}
-	resDescs, resPreDescs, err = c.RangeLookup(ctx, roachpb.RKey("a"), false /* useReverseScan */)
+	resDescs, resPreDescs, err = c.RangeLookup(ctx, roachpb.RKey("a"), rc, false /* useReverseScan */)
 	require.Nil(t, resDescs)
 	require.Nil(t, resPreDescs)
 	require.Regexp(t, "hit error", err)
@@ -366,7 +367,7 @@ func TestConnectorRangeLookup(t *testing.T) {
 		blockingC <- struct{}{}
 		cancel()
 	}()
-	resDescs, resPreDescs, err = c.RangeLookup(canceledCtx, roachpb.RKey("a"), false /* useReverseScan */)
+	resDescs, resPreDescs, err = c.RangeLookup(canceledCtx, roachpb.RKey("a"), rc, false /* useReverseScan */)
 	require.Nil(t, resDescs)
 	require.Nil(t, resPreDescs)
 	require.Regexp(t, context.Canceled.Error(), err)
@@ -547,7 +548,9 @@ func TestConnectorRetriesError(t *testing.T) {
 			// iterations as server choice is random and we need to hit failure only once
 			// to check if it was retried.
 			for i := 0; i < 100; i++ {
-				_, _, err := c.RangeLookup(ctx, roachpb.RKey("a"), false)
+				_, _, err := c.RangeLookup(
+					ctx, roachpb.RKey("a"), roachpb.READ_UNCOMMITTED, false,
+				)
 				if atomic.LoadInt32(&errorsReported) == 0 {
 					continue
 				}
