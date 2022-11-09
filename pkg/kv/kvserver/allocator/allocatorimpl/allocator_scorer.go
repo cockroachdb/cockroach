@@ -233,9 +233,6 @@ type ScorerOptions interface {
 	// getStoreHealthOptions returns the scorer options for store health. It is
 	// used to inform scoring based on the health of a store.
 	getStoreHealthOptions() StoreHealthOptions
-	// getRangeRebalanceThreshold returns the current range count based rebalance
-	// threshold.
-	getRangeRebalanceThreshold() float64
 }
 
 func jittered(val float64, jitter float64, rand allocatorRand) float64 {
@@ -262,10 +259,6 @@ var _ ScorerOptions = &ScatterScorerOptions{}
 
 func (o *ScatterScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.RangeCountScorerOptions.StoreHealthOptions
-}
-
-func (o *ScatterScorerOptions) getRangeRebalanceThreshold() float64 {
-	return o.RangeCountScorerOptions.rangeRebalanceThreshold
 }
 
 func (o *ScatterScorerOptions) maybeJitterStoreStats(
@@ -296,10 +289,6 @@ var _ ScorerOptions = &RangeCountScorerOptions{}
 
 func (o *RangeCountScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.StoreHealthOptions
-}
-
-func (o *RangeCountScorerOptions) getRangeRebalanceThreshold() float64 {
-	return o.rangeRebalanceThreshold
 }
 
 func (o *RangeCountScorerOptions) maybeJitterStoreStats(
@@ -415,12 +404,6 @@ type QPSScorerOptions struct {
 	StoreHealthOptions StoreHealthOptions
 	Deterministic      bool
 
-	// NB: For mixed version compatibility with 21.2, we need to include the range
-	// count based rebalance threshold here. This is because in 21.2, the store
-	// rebalancer took range count into account when trying to rank candidate
-	// stores.
-	DeprecatedRangeRebalanceThreshold float64
-
 	QPSRebalanceThreshold, MinRequiredQPSDiff float64
 
 	// QPS-based rebalancing assumes that:
@@ -442,10 +425,6 @@ type QPSScorerOptions struct {
 
 func (o *QPSScorerOptions) getStoreHealthOptions() StoreHealthOptions {
 	return o.StoreHealthOptions
-}
-
-func (o *QPSScorerOptions) getRangeRebalanceThreshold() float64 {
-	return o.DeprecatedRangeRebalanceThreshold
 }
 
 func (o *QPSScorerOptions) maybeJitterStoreStats(
@@ -991,36 +970,7 @@ func rankedCandidateListForAllocation(
 		}
 		diversityScore := diversityAllocateScore(s, existingStoreLocalities)
 		balanceScore := options.balanceScore(candidateStores, s.Capacity)
-		// NB: This is only applicable in mixed version (21.2 along with 22.1)
-		// clusters. `rankedCandidateListForAllocation` will never be called in 22.1
-		// with a `qpsScorerOptions`.
-		//
-		// TODO(aayush): Remove this some time in the 22.2 cycle.
-		var convergesScore int
-		if qpsOpts, ok := options.(*QPSScorerOptions); ok {
-			if qpsOpts.QPSRebalanceThreshold > 0 {
-				if s.Capacity.QueriesPerSecond < UnderfullQPSThreshold(
-					qpsOpts, candidateStores.CandidateQueriesPerSecond.Mean,
-				) {
-					convergesScore = 1
-				} else if s.Capacity.QueriesPerSecond < candidateStores.CandidateQueriesPerSecond.Mean {
-					convergesScore = 0
-				} else if s.Capacity.QueriesPerSecond < OverfullQPSThreshold(
-					qpsOpts, candidateStores.CandidateQueriesPerSecond.Mean,
-				) {
-					convergesScore = -1
-				} else {
-					convergesScore = -2
-				}
 
-				// NB: Maintain parity with the 21.2 implementation, which computed the
-				// `balanceScore` using range-counts instead of QPS even during
-				// load-based rebalancing.
-				balanceScore = (&RangeCountScorerOptions{
-					rangeRebalanceThreshold: options.getRangeRebalanceThreshold(),
-				}).balanceScore(candidateStores, s.Capacity)
-			}
-		}
 		var hasNonVoter bool
 		if targetType == VoterTarget {
 			if nonVoterReplTargets == nil {
@@ -1033,7 +983,6 @@ func rankedCandidateListForAllocation(
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
-			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			hasNonVoter:    hasNonVoter,
 			rangeCount:     int(s.Capacity.RangeCount),

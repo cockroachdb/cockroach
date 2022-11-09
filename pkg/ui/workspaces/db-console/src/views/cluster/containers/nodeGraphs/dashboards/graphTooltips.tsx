@@ -161,8 +161,8 @@ export const CircuitBreakerTrippedReplicasTooltip: React.FC = () => (
 
 export const CircuitBreakerTrippedEventsTooltip: React.FC = () => (
   <div>
-    The number of circuit breaker events occurred per second across all nodes
-    since the process started.
+    The number of circuit breaker events occurred per aggregated interval of
+    time across all nodes since the process started.
   </div>
 );
 
