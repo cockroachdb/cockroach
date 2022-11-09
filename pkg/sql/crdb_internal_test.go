@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -797,6 +798,10 @@ func TestInternalJobsTableRetryColumns(t *testing.T) {
 				Knobs: base.TestingKnobs{
 					JobsTestingKnobs: &jobs.TestingKnobs{
 						DisableAdoptions: true,
+					},
+					// DisableAdoptions needs this.
+					UpgradeManager: &upgradebase.TestingKnobs{
+						DontUseJobs: true,
 					},
 				},
 			})

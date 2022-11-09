@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -348,17 +349,17 @@ func testMigrationWithFailures(
 								}
 							},
 						},
-						UpgradeManager: &upgrade.TestingKnobs{
+						UpgradeManager: &upgradebase.TestingKnobs{
 							ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 								return []roachpb.Version{
 									endCV,
 								}
 							},
-							RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+							RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 								if cv.Equal(endCV) {
 									return upgrade.NewTenantUpgrade("testing",
 										endCV,
-										upgrades.NoPrecondition,
+										upgrade.NoPrecondition,
 										migrationFunc,
 									), true
 								}

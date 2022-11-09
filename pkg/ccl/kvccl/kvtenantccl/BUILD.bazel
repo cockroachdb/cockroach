@@ -82,7 +82,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/upgrade",
-        "//pkg/upgrade/upgrades",
+        "//pkg/upgrade/upgradebase",
         "//pkg/util",
         "//pkg/util/grpcutil",
         "//pkg/util/hlc",

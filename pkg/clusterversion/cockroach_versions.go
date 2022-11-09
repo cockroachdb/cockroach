@@ -161,6 +161,19 @@ type Key int
 const (
 	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
+	// VPrimordial versions are used by upgrades below BinaryMinSupportedVersion,
+	// for whom the exact version they were associated with no longer matters.
+
+	VPrimordial1
+	VPrimordial2
+	VPrimordial3
+	VPrimordial4
+	VPrimordial5
+	VPrimordial6
+	VPrimordial7
+	VPrimordial8
+	VPrimordialMax
+
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
@@ -360,6 +373,42 @@ const TODOPreV22_1 = V22_1
 // large number to every major if building from master, so as to ensure that
 // master builds cannot be upgraded to release-branch builds.
 var rawVersionsSingleton = keyedVersions{
+	{
+		Key:     VPrimordial1,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 2},
+	},
+	{
+		Key:     VPrimordial2,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 4},
+	},
+	{
+		Key:     VPrimordial3,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 6},
+	},
+	{
+		Key:     VPrimordial4,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 8},
+	},
+	{
+		Key:     VPrimordial5,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 10},
+	},
+	{
+		Key:     VPrimordial6,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 12},
+	},
+	{
+		Key:     VPrimordial7,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 14},
+	},
+	{
+		Key:     VPrimordial8,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 16},
+	},
+	{
+		Key:     VPrimordialMax,
+		Version: roachpb.Version{Major: 0, Minor: 0, Internal: 424242},
+	},
 	{
 		Key:     V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
@@ -585,8 +634,16 @@ var versionsSingleton = func() keyedVersions {
 		// then on to 1000004, etc.
 		skipFirst := envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
 		const devOffset = 1000000
+		first := true
 		for i := range rawVersionsSingleton {
-			if i == 0 && skipFirst {
+			// VPrimordial versions are not offset; they don't matter for the logic
+			// offsetting is used for.
+			if rawVersionsSingleton[i].Major == rawVersionsSingleton.MustByKey(VPrimordialMax).Major {
+				continue
+			}
+
+			if skipFirst && first {
+				first = false
 				continue
 			}
 			rawVersionsSingleton[i].Major += devOffset

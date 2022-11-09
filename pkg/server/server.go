@@ -1715,8 +1715,9 @@ func (s *Server) PreStart(ctx context.Context) error {
 	s.ctSender.Run(workersCtx, state.nodeID)
 
 	// Attempt to upgrade cluster version now that the sql server has been
-	// started. At this point we know that all startupmigrations have successfully
-	// been run so it is safe to upgrade to the binary's current version.
+	// started. At this point we know that all startupmigrations and permanent
+	// upgrades have successfully been run so it is safe to upgrade to the
+	// binary's current version.
 	//
 	// NB: We run this under the startup ctx (not workersCtx) so as to ensure
 	// all the upgrade steps are traced, for use during troubleshooting.

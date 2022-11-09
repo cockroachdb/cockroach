@@ -378,7 +378,6 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.compact_engine_span(node_id: int, store_id: int, start_key: bytes, end_key: bytes) -> bool`:                          1356,
 	`crdb_internal.complete_replication_stream(stream_id: int, successful_ingestion: bool) -> int`:                                      1552,
 	`crdb_internal.complete_stream_ingestion_job(job_id: int, cutover_ts: timestamptz) -> int`:                                          1545,
-	`crdb_internal.completed_migrations() -> string[]`:                                                                                  1344,
 	`crdb_internal.create_join_token() -> string`:                                                                                       1303,
 	`crdb_internal.create_regclass(oid: oid, name: string) -> regclass`:                                                                 2022,
 	`crdb_internal.create_regnamespace(oid: oid, name: string) -> regnamespace`:                                                         2024,

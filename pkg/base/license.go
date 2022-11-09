@@ -32,6 +32,13 @@ var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, feature stri
 	return errEnterpriseNotEnabled // nb: this is squarely in the hot path on OSS builds
 }
 
+// CCLDistributionAndEnterpriseEnabled is a simpler version of
+// CheckEnterpriseEnabled which doesn't take in feature-related info and doesn't
+// return an error with a nice message.
+var CCLDistributionAndEnterpriseEnabled = func(st *cluster.Settings, clusterID uuid.UUID) bool {
+	return CheckEnterpriseEnabled(st, clusterID, "" /* feature */) == nil
+}
+
 var licenseTTLMetadata = metric.Metadata{
 	// This metric name isn't namespaced for backwards
 	// compatibility. The prior version of this metric was manually
