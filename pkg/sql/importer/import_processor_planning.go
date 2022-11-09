@@ -32,9 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/logtags"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -217,8 +220,9 @@ func distImport(
 		}
 	}
 
+	flowCtx, watcher := newCancelWatcher(ctx, 3*progressUpdateInterval)
 	recv := sql.MakeDistSQLReceiver(
-		ctx,
+		flowCtx,
 		sql.NewMetadataCallbackWriter(rowResultWriter, metaFn),
 		tree.Rows,
 		nil, /* rangeCache */
@@ -239,6 +243,10 @@ func distImport(
 
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
+		watcher.watch(ctx, recv)
+		return nil
+	})
+	g.GoCtx(func(ctx context.Context) error {
 		tick := time.NewTicker(time.Second * 10)
 		defer tick.Stop()
 		done := ctx.Done()
@@ -257,19 +265,20 @@ func distImport(
 		}
 	})
 
-	if testingKnobs.beforeRunDSP != nil {
-		if err := testingKnobs.beforeRunDSP(); err != nil {
-			return roachpb.BulkOpSummary{}, err
-		}
-	}
-
 	g.GoCtx(func(ctx context.Context) error {
 		defer cancelReplanner()
 		defer close(stopProgress)
+		defer watcher.stop()
+
+		if testingKnobs.beforeRunDSP != nil {
+			if err := testingKnobs.beforeRunDSP(); err != nil {
+				return err
+			}
+		}
 
 		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := *evalCtx
-		dsp.Run(ctx, planCtx, nil, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(flowCtx, planCtx, nil, p, recv, &evalCtxCopy, testingKnobs.onSetupFinish)
 		return rowResultWriter.Err()
 	})
 
@@ -280,6 +289,64 @@ func distImport(
 	}
 
 	return res, nil
+}
+
+// cancelWatcher is used to watch the given context for
+// cancelation.
+type cancelWatcher struct {
+	watchedCtx context.Context
+	timeout    time.Duration
+
+	done   chan struct{}
+	cancel context.CancelFunc
+}
+
+// newCancelWatcher constructs a cancelWatcher. To start the watcher
+// call watch. On cancellation the DistSQLReceiver passed to watch
+// will be notified via SetError and returned channel will be canceled
+// after the given timeout.
+func newCancelWatcher(
+	ctxToWatch context.Context, timeout time.Duration,
+) (context.Context, *cancelWatcher) {
+	ctx, cancel := context.WithCancel(
+		logtags.AddTags(
+			context.Background(),
+			logtags.FromContext(ctxToWatch)))
+	return ctx, &cancelWatcher{
+		watchedCtx: ctxToWatch,
+		timeout:    timeout,
+
+		done:   make(chan struct{}),
+		cancel: cancel,
+	}
+}
+
+// watch watches the context given to the constructor for cancellation
+// and notifies the DistSQLReceiver when a cancellation occurs.
+//
+// After cancellation, if the watcher is not stopped before the
+// configured timeout, the context returned from the constructor is
+// cancelled.
+func (c *cancelWatcher) watch(ctx context.Context, recv *sql.DistSQLReceiver) {
+	select {
+	case <-c.watchedCtx.Done():
+		recv.SetError(c.watchedCtx.Err())
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(c.timeout)
+		select {
+		case <-c.done:
+		case <-timer.C:
+			timer.Read = true
+			log.Warningf(ctx, "watcher not stopped after %s, canceling watched context", c.timeout)
+			c.cancel()
+		}
+	case <-c.done:
+	}
+}
+
+func (c *cancelWatcher) stop() {
+	close(c.done)
 }
 
 func getLastImportSummary(job *jobs.Job) roachpb.BulkOpSummary {
