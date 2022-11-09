@@ -10,6 +10,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs/jobspb",
+        "//pkg/sql/schemachanger/scerrors",
         "//pkg/sql/schemachanger/scop",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/scplan/internal/opgen",
@@ -23,6 +24,7 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/treeprinter",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

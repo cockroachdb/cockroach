@@ -11,6 +11,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
@@ -50,7 +51,7 @@ a given corpus file.
 						return jobID
 					},
 				}
-				_, err := scplan.MakePlan(*state, params)
+				_, err := scplan.MakePlan(context.Background(), *state, params)
 				if err != nil {
 					fmt.Printf("failed to validate %s with error %v\n", name, err)
 				} else {
