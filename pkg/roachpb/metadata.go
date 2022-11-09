@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	time "time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -547,11 +548,12 @@ func (sc StoreCapacity) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (sc StoreCapacity) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
-		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
+		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f cpu-time=%s, "+
 		"l0Sublevels=%d, ioThreshold={%v} bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
 		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
+		humanizeutil.Duration(time.Duration(int64(sc.CpuNanosPerSecond))),
 		sc.L0Sublevels, sc.IOThreshold, sc.BytesPerReplica, sc.WritesPerReplica)
 }
 
@@ -581,6 +583,7 @@ func (sc StoreCapacity) Load() state.Load {
 	dims[state.QueriesDimension] = sc.QueriesPerSecond
 	dims[state.WriteKeysDimension] = sc.WritesPerSecond
 	dims[state.StorageDimension] = float64(sc.Available)
+	dims[state.CPUTimeDimension] = sc.CpuNanosPerSecond
 	return dims
 
 }

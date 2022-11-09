@@ -776,6 +776,10 @@ type StoreList struct {
 	// candidateWritesPerSecond tracks L0 sub-level stats for Stores that are
 	// eligible to be rebalance targets.
 	CandidateL0Sublevels Stat
+
+	// CandidateCPUTime tracks the cpu-time-per-second stats for the Stores
+	// that are eligible to be rebalance targets.
+	CandidateCPUTimePerSecond Stat
 }
 
 // MakeStoreList constructs a new store list based on the passed in descriptors.
@@ -791,6 +795,7 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		sl.CandidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
 		sl.CandidateL0Sublevels.update(float64(desc.Capacity.L0Sublevels))
+		sl.CandidateCPUTimePerSecond.update(desc.Capacity.CpuNanosPerSecond)
 	}
 	return sl
 }
@@ -798,11 +803,12 @@ func MakeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,
-		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v",
+		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v avg-cpu-time-per-second=%v",
 		sl.CandidateRanges.Mean,
 		sl.CandidateLeases.Mean,
 		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.Mean)),
 		sl.CandidateQueriesPerSecond.Mean,
+		humanizeutil.Duration(time.Duration(int64(sl.CandidateCPUTimePerSecond.Mean))),
 	)
 	if len(sl.Stores) > 0 {
 		fmt.Fprintf(&buf, "\n")
@@ -810,11 +816,12 @@ func (sl StoreList) String() string {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.Stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f l0-sublevels=%d\n",
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f l0-sublevels=%d cpu-time-per-second=%v\n",
 			desc.StoreID, desc.Capacity.RangeCount,
 			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes),
 			desc.Capacity.QueriesPerSecond,
 			desc.Capacity.L0Sublevels,
+			humanizeutil.Duration(time.Duration(int64(desc.Capacity.CpuNanosPerSecond))),
 		)
 	}
 	return buf.String()
@@ -844,6 +851,7 @@ func (sl StoreList) LoadMeans() state.Load {
 	dims[state.QueriesDimension] = sl.CandidateQueriesPerSecond.Mean
 	dims[state.WriteKeysDimension] = sl.candidateWritesPerSecond.Mean
 	dims[state.StorageDimension] = sl.candidateLogicalBytes.Mean
+	dims[state.CPUTimeDimension] = sl.CandidateCPUTimePerSecond.Mean
 	return dims
 }
 

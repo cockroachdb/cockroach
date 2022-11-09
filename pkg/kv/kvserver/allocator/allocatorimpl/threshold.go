@@ -35,6 +35,8 @@ func getLoadThreshold(dim state.LoadDimension, sv *settings.Values) float64 {
 		panic("load threshold not implemented for write keys")
 	case state.StorageDimension:
 		panic("load threshold not implemented for storage")
+	case state.CPUTimeDimension:
+		return CPURebalanceThreshold.Get(sv)
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -67,6 +69,8 @@ func getLoadMinThreshold(dim state.LoadDimension) float64 {
 		panic("load min threshold not implemented for write keys")
 	case state.StorageDimension:
 		panic("load min threshold not implemented for storage")
+	case state.CPUTimeDimension:
+		return float64(minCPURebalanceThreshold)
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}
@@ -100,6 +104,8 @@ func getLoadRebalanceMinRequiredDiff(dim state.LoadDimension, sv *settings.Value
 		panic("load min required diff not implemented for write keys")
 	case state.StorageDimension:
 		panic("load min required diff not implemented for storage keys")
+	case state.CPUTimeDimension:
+		return float64(minCPURebalanceThreshold * 2)
 	default:
 		panic(errors.AssertionFailedf("Unkown load dimension %d", dim))
 	}

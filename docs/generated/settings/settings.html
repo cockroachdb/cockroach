@@ -42,9 +42,10 @@
 <tr><td><code>feature.schema_change.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable schema changes, false to disable; default is true</td></tr>
 <tr><td><code>feature.stats.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to true to enable CREATE STATISTICS/ANALYZE, false to disable; default is true</td></tr>
 <tr><td><code>jobs.retention_time</code></td><td>duration</td><td><code>336h0m0s</code></td><td>the amount of time to retain records for completed jobs before</td></tr>
+<tr><td><code>kv.allocator.cpu_rebalance_threshold</code></td><td>float</td><td><code>0.1</code></td><td>minimum fraction away from the mean a store's cpu time can be before it is considered overfull or underfull</td></tr>
 <tr><td><code>kv.allocator.load_based_lease_rebalancing.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to enable rebalancing of range leases based on load and latency</td></tr>
 <tr><td><code>kv.allocator.load_based_rebalancing</code></td><td>enumeration</td><td><code>leases and replicas</code></td><td>whether to rebalance based on the distribution of load across stores [off = 0, leases = 1, leases and replicas = 2]</td></tr>
-<tr><td><code>kv.allocator.load_based_rebalancing_dimension</code></td><td>enumeration</td><td><code>qps</code></td><td>what dimension of load does rebalancing consider [qps = 0]</td></tr>
+<tr><td><code>kv.allocator.load_based_rebalancing_dimension</code></td><td>enumeration</td><td><code>qps</code></td><td>what dimension of load does rebalancing consider [qps = 0, cpu = 1]</td></tr>
 <tr><td><code>kv.allocator.load_based_rebalancing_interval</code></td><td>duration</td><td><code>1m0s</code></td><td>the rough interval at which each store will check for load-based lease / replica rebalancing opportunities</td></tr>
 <tr><td><code>kv.allocator.qps_rebalance_threshold</code></td><td>float</td><td><code>0.1</code></td><td>minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull</td></tr>
 <tr><td><code>kv.allocator.range_rebalance_threshold</code></td><td>float</td><td><code>0.05</code></td><td>minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull</td></tr>

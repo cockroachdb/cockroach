@@ -47,28 +47,30 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 			StoreID: 1,
 			Node:    roachpb.NodeDescriptor{NodeID: 1},
 			Capacity: roachpb.StoreCapacity{
-				Capacity:         100,
-				Available:        50,
-				RangeCount:       5,
-				LeaseCount:       1,
-				LogicalBytes:     30,
-				QueriesPerSecond: 100,
-				WritesPerSecond:  30,
-				L0Sublevels:      4,
+				Capacity:          100,
+				Available:         50,
+				RangeCount:        5,
+				LeaseCount:        1,
+				LogicalBytes:      30,
+				QueriesPerSecond:  100,
+				WritesPerSecond:   30,
+				L0Sublevels:       4,
+				CpuNanosPerSecond: 8,
 			},
 		},
 		{
 			StoreID: 2,
 			Node:    roachpb.NodeDescriptor{NodeID: 2},
 			Capacity: roachpb.StoreCapacity{
-				Capacity:         100,
-				Available:        55,
-				RangeCount:       4,
-				LeaseCount:       2,
-				LogicalBytes:     25,
-				QueriesPerSecond: 50,
-				WritesPerSecond:  25,
-				L0Sublevels:      8,
+				Capacity:          100,
+				Available:         55,
+				RangeCount:        4,
+				LeaseCount:        2,
+				LogicalBytes:      25,
+				QueriesPerSecond:  50,
+				WritesPerSecond:   25,
+				L0Sublevels:       8,
+				CpuNanosPerSecond: 16,
 			},
 		},
 	}
@@ -85,6 +87,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	for _, store := range stores {
 		replica.loadStats.batchRequests.RecordCount(1, store.Node.NodeID)
 		replica.loadStats.writeKeys.RecordCount(1, store.Node.NodeID)
+		replica.loadStats.nanos.RecordCount(1, store.Node.NodeID)
 	}
 	manual.Advance(replicastats.MinStatsDuration + time.Second)
 
@@ -112,6 +115,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if expectedL0Sublevels := int64(4); desc.Capacity.L0Sublevels != expectedL0Sublevels {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedL0Sublevels, desc.Capacity.L0Sublevels)
 	}
+	if expectedCPUPerSecond := int64(8); desc.Capacity.CpuNanosPerSecond != float64(expectedCPUPerSecond) {
+		t.Errorf("expected CPUPerSecond %d, but got %d", expectedCPUPerSecond, desc.Capacity.CpuNanosPerSecond)
+	}
 
 	sp.UpdateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeUsageInfo, roachpb.REMOVE_VOTER)
 	desc, ok = sp.GetStoreDescriptor(roachpb.StoreID(2))
@@ -132,6 +138,9 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	}
 	if expectedL0Sublevels := int64(8); desc.Capacity.L0Sublevels != expectedL0Sublevels {
 		t.Errorf("expected L0 Sub-Levels %d, but got %d", expectedL0Sublevels, desc.Capacity.L0Sublevels)
+	}
+	if expectedCPUPerSecond := int64(16); desc.Capacity.CpuNanosPerSecond != float64(expectedCPUPerSecond) {
+		t.Errorf("expected CPUPerSecond %d, but got %d", expectedCPUPerSecond, desc.Capacity.CpuNanosPerSecond)
 	}
 
 	sp.UpdateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeUsageInfo)

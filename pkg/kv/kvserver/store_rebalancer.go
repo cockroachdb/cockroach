@@ -83,6 +83,7 @@ var LoadBasedRebalancingDimension = settings.RegisterEnumSetting(
 	"qps",
 	map[int64]string{
 		int64(LBRebalancingQueries): "qps",
+		int64(LBRebalancingCPU):     "cpu",
 	},
 ).WithPublic()
 
@@ -108,12 +109,16 @@ type LBRebalancingDimension int64
 const (
 	// LBRebalancingQueries is a rebalancing mode that balances queries (QPS).
 	LBRebalancingQueries LBRebalancingDimension = iota
+	// LBRebalancingCPU is a rebalancing mode that balances cpu time.
+	LBRebalancingCPU
 )
 
 func (d LBRebalancingDimension) toDimension() state.LoadDimension {
 	switch d {
 	case LBRebalancingQueries:
 		return state.QueriesDimension
+	case LBRebalancingCPU:
+		return state.CPUTimeDimension
 	default:
 		panic("unknown dimension")
 	}

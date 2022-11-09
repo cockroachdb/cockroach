@@ -70,6 +70,10 @@ const (
 	// away from the mean.
 	minRangeRebalanceThreshold = 2
 
+	// minCPURebalanceThreshold is the amount of cpu time by which a store must
+	// deviate from the mean amount to be considered overfull or underfull.
+	minCPURebalanceThreshold = 100 * time.Millisecond
+
 	// MaxL0SublevelThreshold is the number of L0 sub-levels of a store
 	// descriptor, that when greater than this value and in excees of the
 	// average L0 sub-levels in the cluster - will have the action defined by
@@ -124,6 +128,21 @@ var RangeRebalanceThreshold = func() *settings.FloatSetting {
 		"kv.allocator.range_rebalance_threshold",
 		"minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull",
 		0.05,
+		settings.NonNegativeFloat,
+	)
+	s.SetVisibility(settings.Public)
+	return s
+}()
+
+// CPURebalanceThreshold is the minimum ratio of a store's cpu time to the mean
+// cput time at which that store is considered overfull or underfull of cpu
+// usage.
+var CPURebalanceThreshold = func() *settings.FloatSetting {
+	s := settings.RegisterFloatSetting(
+		settings.SystemOnly,
+		"kv.allocator.cpu_rebalance_threshold",
+		"minimum fraction away from the mean a store's cpu time can be before it is considered overfull or underfull",
+		0.1,
 		settings.NonNegativeFloat,
 	)
 	s.SetVisibility(settings.Public)

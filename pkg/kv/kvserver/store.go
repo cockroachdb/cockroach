@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -3042,10 +3041,12 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	var l0SublevelsMax int64
 	var totalQueriesPerSecond float64
 	var totalWritesPerSecond float64
+	var totalCPUTimePerSecond float64
 	replicaCount := s.metrics.ReplicaCount.Value()
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
-	rankingsAccumulator := s.replRankings.NewAccumulator(state.QueriesDimension)
+	rankingsAccumulator := s.replRankings.NewAccumulator(
+		LBRebalancingDimension(LoadBasedRebalancingDimension.Get(&s.ClusterSettings().SV)).toDimension())
 
 	// Query the current L0 sublevels and record the updated maximum to metrics.
 	l0SublevelsMax = int64(syncutil.LoadFloat64(&s.metrics.l0SublevelsWindowedMax))
@@ -3063,6 +3064,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		// leases/replicas.
 		totalQueriesPerSecond += usage.QueriesPerSecond
 		totalWritesPerSecond += usage.WritesPerSecond
+		totalCPUTimePerSecond += usage.CPUTimePerSecond
 		writesPerReplica = append(writesPerReplica, usage.WritesPerSecond)
 
 		rankingsAccumulator.AddReplica(candidateReplica{
@@ -3076,6 +3078,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 	capacity.LogicalBytes = logicalBytes
 	capacity.QueriesPerSecond = totalQueriesPerSecond
 	capacity.WritesPerSecond = totalWritesPerSecond
+	capacity.CpuNanosPerSecond = totalCPUTimePerSecond
 	capacity.L0Sublevels = l0SublevelsMax
 	{
 		s.ioThreshold.Lock()

@@ -22,6 +22,7 @@ type RangeUsageInfo struct {
 	LogicalBytes     int64
 	QueriesPerSecond float64
 	WritesPerSecond  float64
+	CPUTimePerSecond float64
 	RequestLocality  *RangeRequestLocalityInfo
 }
 
@@ -40,5 +41,6 @@ func (r RangeUsageInfo) Load() state.Load {
 	dims[state.QueriesDimension] = r.QueriesPerSecond
 	dims[state.WriteKeysDimension] = r.WritesPerSecond
 	dims[state.StorageDimension] = float64(r.LogicalBytes)
+	dims[state.CPUTimeDimension] = r.CPUTimePerSecond
 	return dims
 }

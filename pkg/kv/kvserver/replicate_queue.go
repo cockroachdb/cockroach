@@ -2006,5 +2006,9 @@ func RangeUsageInfoForRepl(repl *Replica) allocator.RangeUsageInfo {
 		info.WritesPerSecond = writesPerSecond
 	}
 
+	if cpuTimePerSecond, dur := repl.loadStats.nanos.AverageRatePerSecond(); dur >= replicastats.MinStatsDuration {
+		info.CPUTimePerSecond = cpuTimePerSecond
+	}
+
 	return info
 }

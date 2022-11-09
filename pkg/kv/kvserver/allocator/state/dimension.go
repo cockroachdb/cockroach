@@ -30,6 +30,8 @@ const (
 	WriteKeysDimension
 	// StorageDimension refers to the number of bytes stored persistently.
 	StorageDimension
+	// CPUTimeDimension refers to the amount of cpu time used.
+	CPUTimeDimension
 )
 
 // LoadDimensionNames contains a mapping of a load dimension, to a human
@@ -40,6 +42,7 @@ var LoadDimensionNames = map[LoadDimension]string{
 	QueriesDimension:    "queries-per-second",
 	WriteKeysDimension:  "write-keys-per-second",
 	StorageDimension:    "disk-storage",
+	CPUTimeDimension:    "cpu-time",
 }
 
 // Load represents a named collection of load dimensions. It is used for
@@ -72,7 +75,7 @@ type Load interface {
 
 // StaticDimensionContainer is a static container which implements the Load
 // interface.
-type StaticDimensionContainer [5]float64
+type StaticDimensionContainer [6]float64
 
 // Dim returns the value of the LoadDimension given.
 func (s StaticDimensionContainer) Dim(dim LoadDimension) float64 {
