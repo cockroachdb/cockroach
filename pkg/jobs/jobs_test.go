@@ -3160,9 +3160,16 @@ func TestPauseReason(t *testing.T) {
 		return n
 	}
 	mustNotHaveClaim := func() {
-		require.Equal(t, 0, countRowsWithClaimInfo())
+		t.Helper()
+		testutils.SucceedsSoon(t, func() error {
+			if countRowsWithClaimInfo() == 0 {
+				return nil
+			}
+			return errors.New("still waiting for claim to clear")
+		})
 	}
 	mustHaveClaim := func() {
+		t.Helper()
 		testutils.SucceedsSoon(t, func() error {
 			if countRowsWithClaimInfo() == 1 {
 				return nil
