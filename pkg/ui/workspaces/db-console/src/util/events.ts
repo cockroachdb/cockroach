@@ -8,24 +8,18 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import * as protobuf from "protobufjs/minimal";
-
-import * as protos from "src/js/protos";
 import * as eventTypes from "src/util/eventTypes";
-
-type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 /**
  * getEventDescription returns a short summary of an event.
  */
-export function getEventDescription(e: Event$Properties): string {
-  const info: EventInfo = protobuf.util.isset(e, "info")
-    ? JSON.parse(e.info)
-    : {};
+export function getEventDescription(e: clusterUiApi.EventColumns): string {
+  const info: EventInfo = e.info ? JSON.parse(e.info) : {};
   let privs = "";
   let comment = "";
 
-  switch (e.event_type) {
+  switch (e.eventType) {
     case eventTypes.CREATE_DATABASE:
       return `Database Created: User ${info.User} created database ${info.DatabaseName}`;
     case eventTypes.DROP_DATABASE: {
@@ -203,14 +197,10 @@ export function getEventDescription(e: Event$Properties): string {
     eventTypes.UNSAFE_UPSERT_DESCRIPTOR,
     eventTypes.UNSAFE_DELETE_DESCRIPTOR):
       return `Unsafe: User ${info.User} executed crdb_internal.${
-        e.event_type
+        e.eventType
       }, Info: ${JSON.stringify(info, null, 2)}`;
     default:
-      return `Event: ${e.event_type}, content: ${JSON.stringify(
-        info,
-        null,
-        2,
-      )}`;
+      return `Event: ${e.eventType}, content: ${JSON.stringify(info, null, 2)}`;
   }
 }
 
