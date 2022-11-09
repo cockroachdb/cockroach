@@ -55,6 +55,12 @@ func TestDownload(t *testing.T) {
 		{
 			Binary:  "cockroach",
 			Dir:     dir,
+			Version: "v21.2.12",
+			GOOS:    "darwin",
+		},
+		{
+			Binary:  "cockroach",
+			Dir:     dir,
 			Version: "LATEST",
 			GOOS:    "windows",
 		},

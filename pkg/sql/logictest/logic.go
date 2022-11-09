@@ -37,6 +37,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	_ "github.com/cockroachdb/cockroach-go/v2/testserver" // placeholder until mixed-version functionality is added.
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/externalconn/providers" // imported to register ExternalConnection providers
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
