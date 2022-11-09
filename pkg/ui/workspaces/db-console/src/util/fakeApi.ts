@@ -66,16 +66,15 @@ export function stubClusterSettings(
 }
 
 export function buildSQLApiDatabasesResponse(databases: string[]) {
-  const rows: clusterUiApi.DatabasesColumns[] = [];
-  databases.forEach(database => {
-    rows.push({
+  const rows: clusterUiApi.DatabasesColumns[] = databases.map(database => {
+    return {
       database_name: database,
       owner: "root",
       primary_region: null,
       secondary_region: null,
       regions: [],
       survival_goal: null,
-    });
+    };
   });
   return {
     num_statements: 1,
@@ -126,9 +125,53 @@ export function buildSQLApiDatabasesResponse(databases: string[]) {
   };
 }
 
+export function buildSQLApiEventsResponse(events: clusterUiApi.EventsResponse) {
+  return {
+    num_statements: 1,
+    execution: {
+      txn_results: [
+        {
+          statement: 1,
+          tag: "SELECT",
+          start: "2022-11-14T16:26:45.06819Z",
+          end: "2022-11-14T16:26:45.073657Z",
+          rows_affected: 0,
+          columns: [
+            {
+              name: "timestamp",
+              type: "TIMESTAMP",
+              oid: 1114,
+            },
+            {
+              name: "eventType",
+              type: "STRING",
+              oid: 25,
+            },
+            {
+              name: "reportingID",
+              type: "INT8",
+              oid: 20,
+            },
+            {
+              name: "info",
+              type: "STRING",
+              oid: 25,
+            },
+            {
+              name: "uniqueID",
+              type: "BYTES",
+              oid: 17,
+            },
+          ],
+          rows: events,
+        },
+      ],
+    },
+  };
+}
+
 export function stubDatabases(databases: string[]) {
   const response = buildSQLApiDatabasesResponse(databases);
-  console.log("SQL API PATH", clusterUiApi.SQL_API_PATH);
   fetchMock.mock({
     headers: {
       Accept: "application/json",
@@ -141,7 +184,6 @@ export function stubDatabases(databases: string[]) {
       expect(JSON.parse(requestObj.body.toString())).toEqual(
         clusterUiApi.databasesRequest,
       );
-      console.log("STRINGIFY", JSON.stringify(response));
       return {
         body: JSON.stringify(response),
       };
