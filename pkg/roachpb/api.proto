@@ -464,13 +464,6 @@ message RevertRangeRequest {
   // for that time are still there — or the request will fail.
   util.hlc.Timestamp target_time = 2 [(gogoproto.nullable) = false];
 
-  // This parameter has no effect on 22.2, as TBI is always enabled. For
-  // compatibility with 22.1 nodes, callers must continue to set this as
-  // appropriate until 22.2.
-  //
-  // TODO(erikgrinaker): Remove this in 22.2.
-  bool enable_time_bound_iterator_optimization = 3;
-
   // IgnoreGcThreshold can be set by a caller to ignore the target-time when
   // checking that the earliest time at which the command operates is above the
   // GC threshold. This is safe to set only in very specific situations, such as
@@ -479,6 +472,8 @@ message RevertRangeRequest {
   // it only writes new keys, no keys to which it would need to revert have been
   // shadowed / could have been GC'ed, so it can safely ignore the GC threshold.
   bool ignore_gc_threshold = 4;
+
+  reserved 3;
 }
 
 // A RevertRangeResponse is the return value from the RevertRange() method.
@@ -1541,13 +1536,6 @@ message ExportRequest {
 	// ingesting the SSTs via `AddSSTable`.
   bool split_mid_key = 13;
 
-  // This parameter has no effect on 22.2, as TBI is always enabled. For
-  // compatibility with 22.1 nodes, callers must continue to set this as
-  // appropriate until 22.2.
-  //
-  // TODO(erikgrinaker): Remove this in 22.2.
-  bool enable_time_bound_iterator_optimization = 7;
-
   FileEncryptionOptions encryption = 9;
 
   // TargetFileSize is the byte size target for individual files in the
@@ -1558,7 +1546,7 @@ message ExportRequest {
   // then there is no limit.
   int64 target_file_size = 10;
 
-  reserved 2, 5, 8, 11;
+  reserved 2, 5, 7, 8, 11;
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the
