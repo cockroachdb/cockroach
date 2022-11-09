@@ -258,7 +258,8 @@ go_test(
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CclLogicTest }}
         "//pkg/ccl/logictestccl:testdata",  # keep{{ end }}{{ if .LogicTest }}
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
-        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
+        "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
+        "//pkg/cmd/cockroach-short",  # keep{{ end }}
     ],
     shard_count = {{ if gt .TestCount 16 }}16{{ else }}{{ .TestCount }}{{end}},
     tags = ["cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}"],
