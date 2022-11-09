@@ -53,7 +53,7 @@ type InflightTraceZipper interface {
 type InternalInflightTraceZipper struct {
 	traceStrBuf         *bytes.Buffer
 	nodeTraceCollection *tracingpb.TraceCollection
-	ie                  sqlutil.InternalExecutor
+	ieNotBoundToTxn     sqlutil.InternalExecutor
 	z                   *memzipper.Zipper
 }
 
@@ -78,7 +78,7 @@ func (i *InternalInflightTraceZipper) getZipper() *memzipper.Zipper {
 func (i *InternalInflightTraceZipper) Zip(
 	ctx context.Context, traceID int64,
 ) (zipBytes []byte, retErr error) {
-	it, err := i.ie.QueryIterator(ctx, "internal-zipper", nil, fmt.Sprintf(inflightTracesQuery, traceID))
+	it, err := i.ieNotBoundToTxn.QueryIterator(ctx, "internal-zipper", nil, fmt.Sprintf(inflightTracesQuery, traceID))
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func MakeInternalExecutorInflightTraceZipper(
 	t := &InternalInflightTraceZipper{
 		traceStrBuf:         &bytes.Buffer{},
 		nodeTraceCollection: nil,
-		ie:                  ie,
+		ieNotBoundToTxn:     ie,
 	}
 	t.z = &memzipper.Zipper{}
 	t.z.Init()
