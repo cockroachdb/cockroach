@@ -2456,27 +2456,34 @@ func (*SchemaChangerTestingKnobs) ModuleTestingKnobs() {}
 func (sc *SchemaChanger) txn(
 	ctx context.Context, f func(context.Context, *kv.Txn, *descs.Collection) error,
 ) error {
-	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
-		if err := fn(sc.job.ID()); err != nil {
-			return err
-		}
-	}
-	return sc.execCfg.InternalExecutorFactory.DescsTxn(ctx, sc.db, f)
+	return sc.txnWithExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData,
+		collection *descs.Collection, _ sqlutil.InternalExecutor,
+	) error {
+		return f(ctx, txn, collection)
+	})
 }
 
 // txnWithExecutor is to run internal executor within a txn.
 func (sc *SchemaChanger) txnWithExecutor(
 	ctx context.Context,
-	sd *sessiondata.SessionData,
-	f func(context.Context, *kv.Txn, *descs.Collection, sqlutil.InternalExecutor) error,
+	f func(
+		context.Context, *kv.Txn, *sessiondata.SessionData,
+		*descs.Collection, sqlutil.InternalExecutor,
+	) error,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeDescTxn; fn != nil {
 		if err := fn(sc.job.ID()); err != nil {
 			return err
 		}
 	}
-	return sc.execCfg.InternalExecutorFactory.
-		DescsTxnWithExecutor(ctx, sc.db, sd, f)
+	sd := NewFakeSessionData(sc.execCfg.SV())
+	return sc.execCfg.InternalExecutorFactory.DescsTxnWithExecutor(ctx, sc.db, sd, func(
+		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ie sqlutil.InternalExecutor,
+	) error {
+		return f(ctx, txn, sd, descriptors, ie)
+	})
 }
 
 // createSchemaChangeEvalCtx creates an extendedEvalContext() to be used for backfills.
