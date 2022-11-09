@@ -19,7 +19,7 @@ import (
 )
 
 var _ catalog.TableElementMaybeMutation = maybeMutation{}
-var _ catalog.TableElementMaybeMutation = constraintToUpdate{}
+var _ catalog.TableElementMaybeMutation = constraint{}
 var _ catalog.TableElementMaybeMutation = primaryKeySwap{}
 var _ catalog.TableElementMaybeMutation = computedColumnSwap{}
 var _ catalog.TableElementMaybeMutation = materializedViewRefresh{}
@@ -85,67 +85,68 @@ func (mm maybeMutation) Dropped() bool {
 	return mm.mutationDirection == descpb.DescriptorMutation_DROP
 }
 
-// constraintToUpdate implements the catalog.ConstraintToUpdate interface.
-// It also
-type constraintToUpdate struct {
+// constraint implements the catalog.Constraint interface by wrapping
+// the protobuf descriptor (*descpb.ConstraintToUpdate) along with
+// some metadata if this constraint is a mutation.
+type constraint struct {
 	maybeMutation
 	desc *descpb.ConstraintToUpdate
 }
 
 // ConstraintToUpdateDesc returns the underlying protobuf descriptor.
-func (c constraintToUpdate) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
+func (c constraint) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
 	return c.desc
 }
 
 // GetName returns the name of this constraint update mutation.
-func (c constraintToUpdate) GetName() string {
+func (c constraint) GetName() string {
 	return c.desc.Name
 }
 
 // IsCheck returns true iff this is an update for a check constraint.
-func (c constraintToUpdate) IsCheck() bool {
+func (c constraint) IsCheck() bool {
 	return c.desc.ConstraintType == descpb.ConstraintToUpdate_CHECK
 }
 
 // Check returns the underlying check constraint, if there is one.
-func (c constraintToUpdate) Check() descpb.TableDescriptor_CheckConstraint {
+func (c constraint) Check() descpb.TableDescriptor_CheckConstraint {
 	return c.desc.Check
 }
 
 // IsForeignKey returns true iff this is an update for a fk constraint.
-func (c constraintToUpdate) IsForeignKey() bool {
+func (c constraint) IsForeignKey() bool {
 	return c.desc.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY
 }
 
 // ForeignKey returns the underlying fk constraint, if there is one.
-func (c constraintToUpdate) ForeignKey() descpb.ForeignKeyConstraint {
+func (c constraint) ForeignKey() descpb.ForeignKeyConstraint {
 	return c.desc.ForeignKey
 }
 
 // IsNotNull returns true iff this is an update for a not-null constraint.
-func (c constraintToUpdate) IsNotNull() bool {
+func (c constraint) IsNotNull() bool {
 	return c.desc.ConstraintType == descpb.ConstraintToUpdate_NOT_NULL
 }
 
 // NotNullColumnID returns the underlying not-null column ID, if there is one.
-func (c constraintToUpdate) NotNullColumnID() descpb.ColumnID {
+func (c constraint) NotNullColumnID() descpb.ColumnID {
 	return c.desc.NotNullColumn
 }
 
 // IsUniqueWithoutIndex returns true iff this is an update for a unique without
 // index constraint.
-func (c constraintToUpdate) IsUniqueWithoutIndex() bool {
+func (c constraint) IsUniqueWithoutIndex() bool {
 	return c.desc.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
 }
 
 // UniqueWithoutIndex returns the underlying unique without index constraint, if
 // there is one.
-func (c constraintToUpdate) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
+func (c constraint) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
 	return c.desc.UniqueWithoutIndexConstraint
 }
 
 // GetConstraintID returns the ID for the constraint.
-func (c constraintToUpdate) GetConstraintID() descpb.ConstraintID {
+func (c constraint) GetConstraintID() descpb.ConstraintID {
 	switch c.desc.ConstraintType {
 	case descpb.ConstraintToUpdate_CHECK:
 		return c.desc.Check.ConstraintID
@@ -295,7 +296,7 @@ type mutation struct {
 	maybeMutation
 	column            catalog.Column
 	index             catalog.Index
-	constraint        catalog.ConstraintToUpdate
+	constraint        catalog.Constraint
 	pkSwap            catalog.PrimaryKeySwap
 	ccSwap            catalog.ComputedColumnSwap
 	mvRefresh         catalog.MaterializedViewRefresh
@@ -315,9 +316,9 @@ func (m mutation) AsIndex() catalog.Index {
 	return m.index
 }
 
-// AsConstraint returns the corresponding ConstraintToUpdate if the
+// AsConstraint returns the corresponding Constraint if the
 // mutation is on a constraint, nil otherwise.
-func (m mutation) AsConstraint() catalog.ConstraintToUpdate {
+func (m mutation) AsConstraint() catalog.Constraint {
 	return m.constraint
 }
 
@@ -370,7 +371,7 @@ func newMutationCache(desc *descpb.TableDescriptor) *mutationCache {
 	backingStructs := make([]mutation, len(desc.Mutations))
 	var columns []column
 	var indexes []index
-	var constraints []constraintToUpdate
+	var constraints []constraint
 	var pkSwaps []primaryKeySwap
 	var ccSwaps []computedColumnSwap
 	var mvRefreshes []materializedViewRefresh
@@ -401,7 +402,7 @@ func newMutationCache(desc *descpb.TableDescriptor) *mutationCache {
 			})
 			backingStructs[i].index = &indexes[len(indexes)-1]
 		} else if pb := m.GetConstraint(); pb != nil {
-			constraints = append(constraints, constraintToUpdate{
+			constraints = append(constraints, constraint{
 				maybeMutation: mm,
 				desc:          pb,
 			})
