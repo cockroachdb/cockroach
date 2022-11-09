@@ -164,10 +164,12 @@ func getProcessQuery(
 }
 
 // processClaimedJobs processes all jobs currently claimed by the registry.
-func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+func (r *Registry) processClaimedJobs(
+	ctx context.Context, s sqlliveness.Session, ieNotBoundToTxn sqlutil.InternalExecutor,
+) error {
 	query, args := getProcessQuery(ctx, s, r)
 
-	it, err := r.ex.QueryIteratorEx(
+	it, err := ieNotBoundToTxn.QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, query, args...,
 	)
@@ -246,8 +248,9 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	resumeQuery := resumeQueryWithBackoff
 	args := []interface{}{jobID, s.ID().UnsafeBytes(),
 		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
-	row, err := r.ex.QueryRowEx(
-		ctx, "get-job-row", nil,
+	ieNotBoundToTxn := r.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+	row, err := ieNotBoundToTxn.QueryRowEx(
+		ctx, "get-job-row", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, resumeQuery, args...,
 	)
 	if err != nil {
