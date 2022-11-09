@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -395,6 +396,17 @@ func (dsp *DistSQLPlanner) setupFlows(
 	if len(statementSQL) > setupFlowRequestStmtMaxLength {
 		statementSQL = statementSQL[:setupFlowRequestStmtMaxLength]
 	}
+	getJobTag := func(ctx context.Context) string {
+		tags := logtags.FromContext(ctx)
+		if tags != nil {
+			for _, tag := range tags.Get() {
+				if tag.Key() == "job" {
+					return tag.ValueStr()
+				}
+			}
+		}
+		return ""
+	}
 	setupReq := execinfrapb.SetupFlowRequest{
 		LeafTxnInputState: leafInputState,
 		Version:           execinfra.Version,
@@ -402,6 +414,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
+		JobTag:            getJobTag(ctx),
 	}
 
 	var isVectorized bool

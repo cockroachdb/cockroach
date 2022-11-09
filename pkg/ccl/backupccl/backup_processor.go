@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -165,7 +164,6 @@ func newBackupDataProcessor(
 
 // Start is part of the RowSource interface.
 func (bp *backupDataProcessor) Start(ctx context.Context) {
-	ctx = logtags.AddTag(ctx, "job", bp.spec.JobID)
 	ctx = bp.StartInternal(ctx, backupProcessorName)
 	ctx, cancel := context.WithCancel(ctx)
 

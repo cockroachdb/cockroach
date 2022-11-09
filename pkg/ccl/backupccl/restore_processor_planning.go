@@ -59,7 +59,6 @@ var replanRestoreFrequency = settings.RegisterDurationSetting(
 func distRestore(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	jobID int64,
 	chunks [][]execinfrapb.RestoreSpanEntry,
 	pkIDs map[uint64]bool,
 	encryption *jobspb.BackupEncryptionOptions,
@@ -114,7 +113,6 @@ func distRestore(
 		}
 
 		restoreDataSpec := execinfrapb.RestoreDataSpec{
-			JobID:        jobID,
 			RestoreTime:  restoreTime,
 			Encryption:   fileEncryption,
 			TableRekeys:  tableRekeys,
