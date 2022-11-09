@@ -1378,8 +1378,7 @@ func (t *logicTest) newCluster(
 		t.tenantAddrs = make([]string, cfg.NumNodes)
 		for i := 0; i < cfg.NumNodes; i++ {
 			tenantArgs := base.TestTenantArgs{
-				TenantID:                    serverutils.TestTenantID(),
-				AllowSettingClusterSettings: true,
+				TenantID: serverutils.TestTenantID(),
 				TestingKnobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
 						DeterministicExplain:            true,

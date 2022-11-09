@@ -434,15 +434,6 @@ func writeNonDefaultSettingValue(
 		}
 	}
 
-	if knobs := execCfg.TenantTestingKnobs; knobs != nil && knobs.ClusterSettingsUpdater != nil {
-		encVal := settings.EncodedValue{
-			Value: encoded,
-			Type:  setting.Typ(),
-		}
-		if err := execCfg.TenantTestingKnobs.ClusterSettingsUpdater.Set(ctx, name, encVal); err != nil {
-			return reportedValue, expectedEncodedValue, err
-		}
-	}
 	return reportedValue, expectedEncodedValue, nil
 }
 

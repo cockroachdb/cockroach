@@ -855,9 +855,8 @@ func TestConsumption(t *testing.T) {
 	testProvider := newTestProvider()
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		Settings:                    st,
-		AllowSettingClusterSettings: true,
+		TenantID: serverutils.TestTenantID(),
+		Settings: st,
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
@@ -932,9 +931,8 @@ func TestSQLLivenessExemption(t *testing.T) {
 	slinstance.DefaultHeartBeat.Override(ctx, &st.SV, 10*time.Millisecond)
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		TenantID:                    tenantID,
-		Settings:                    st,
-		AllowSettingClusterSettings: true,
+		TenantID: tenantID,
+		Settings: st,
 	})
 
 	r := sqlutils.MakeSQLRunner(tenantDB)
@@ -994,9 +992,8 @@ func TestScheduledJobsConsumption(t *testing.T) {
 	var tenantServer serverutils.TestTenantInterface
 	var tenantDB *gosql.DB
 	tenantServer, tenantDB = serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		Settings:                    st,
-		AllowSettingClusterSettings: true,
+		TenantID: serverutils.TestTenantID(),
+		Settings: st,
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
@@ -1081,9 +1078,8 @@ func TestConsumptionChangefeeds(t *testing.T) {
 	testProvider := newTestProvider()
 
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		Settings:                    st,
-		AllowSettingClusterSettings: true,
+		TenantID: serverutils.TestTenantID(),
+		Settings: st,
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				OverrideTokenBucketProvider: func(kvtenant.TokenBucketProvider) kvtenant.TokenBucketProvider {
@@ -1153,10 +1149,9 @@ func TestConsumptionExternalStorage(t *testing.T) {
 
 	testProvider := newTestProvider()
 	_, tenantDB := serverutils.StartTenant(t, hostServer, base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		Settings:                    st,
-		AllowSettingClusterSettings: true,
-		ExternalIODir:               dir,
+		TenantID:      serverutils.TestTenantID(),
+		Settings:      st,
+		ExternalIODir: dir,
 		TestingKnobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				BlobClientFactory: blobClientFactory,
@@ -1260,9 +1255,8 @@ func BenchmarkExternalIOAccounting(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	tenantcostmodel.ExternalIOEgressCostPerMiB.Override(context.Background(), &st.SV, 0.0)
 	tenantS, _ := serverutils.StartTenant(b, hostServer, base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		Settings:                    st,
-		AllowSettingClusterSettings: true,
+		TenantID: serverutils.TestTenantID(),
+		Settings: st,
 	})
 
 	nullsink.NullRequiresExternalIOAccounting = true

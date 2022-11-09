@@ -1522,10 +1522,6 @@ func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
 // TenantTestingKnobs contains knobs for tenant behavior.
 type TenantTestingKnobs struct {
-	// ClusterSettingsUpdater is a field that if set, allows the tenant to set
-	// in-memory cluster settings. SQL tenants are otherwise prohibited from
-	// setting cluster settings.
-	ClusterSettingsUpdater settings.Updater
 
 	// TenantIDCodecOverride overrides the tenant ID used to construct the SQL
 	// server's codec, but nothing else (e.g. its certs).

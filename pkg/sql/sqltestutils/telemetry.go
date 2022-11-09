@@ -175,9 +175,8 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	tt.prepareCluster(tt.serverDB)
 
 	tt.tenant, tt.tenantDB = serverutils.StartTenant(tt.t, tt.server, base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		AllowSettingClusterSettings: true,
-		TestingKnobs:                mapServerArgs[0].Knobs,
+		TenantID:     serverutils.TestTenantID(),
+		TestingKnobs: mapServerArgs[0].Knobs,
 	})
 	tt.prepareCluster(tt.tenantDB)
 }

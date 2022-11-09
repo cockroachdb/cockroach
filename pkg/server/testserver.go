@@ -533,17 +533,16 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
-		TenantID:                    serverutils.TestTenantID(),
-		MemoryPoolSize:              ts.params.SQLMemoryPoolSize,
-		TempStorageConfig:           &tempStorageConfig,
-		Locality:                    ts.params.Locality,
-		ExternalIODir:               ts.params.ExternalIODir,
-		ExternalIODirConfig:         ts.params.ExternalIODirConfig,
-		ForceInsecure:               ts.Insecure(),
-		UseDatabase:                 ts.params.UseDatabase,
-		SSLCertsDir:                 ts.params.SSLCertsDir,
-		AllowSettingClusterSettings: true,
-		TestingKnobs:                ts.params.Knobs,
+		TenantID:            serverutils.TestTenantID(),
+		MemoryPoolSize:      ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:   &tempStorageConfig,
+		Locality:            ts.params.Locality,
+		ExternalIODir:       ts.params.ExternalIODir,
+		ExternalIODirConfig: ts.params.ExternalIODirConfig,
+		ForceInsecure:       ts.Insecure(),
+		UseDatabase:         ts.params.UseDatabase,
+		SSLCertsDir:         ts.params.SSLCertsDir,
+		TestingKnobs:        ts.params.Knobs,
 	}
 
 	// Since we're creating a tenant, it doesn't make sense to pass through the
@@ -894,16 +893,6 @@ func (ts *TestServer) StartTenant(
 		newAddr := net.JoinHostPort(addr, strconv.Itoa(params.StartingHTTPPort+int(params.TenantID.ToUint64())))
 		baseCfg.HTTPAddr = newAddr
 		baseCfg.HTTPAdvertiseAddr = newAddr
-	}
-	if params.AllowSettingClusterSettings {
-		tenantKnobs, ok := baseCfg.TestingKnobs.TenantTestingKnobs.(*sql.TenantTestingKnobs)
-		if !ok {
-			tenantKnobs = &sql.TenantTestingKnobs{}
-			baseCfg.TestingKnobs.TenantTestingKnobs = tenantKnobs
-		}
-		if tenantKnobs.ClusterSettingsUpdater == nil {
-			tenantKnobs.ClusterSettingsUpdater = st.MakeUpdater()
-		}
 	}
 	sw, err := NewTenantServer(
 		ctx,
