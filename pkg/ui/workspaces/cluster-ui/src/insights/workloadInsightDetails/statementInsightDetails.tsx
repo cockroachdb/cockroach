@@ -30,6 +30,7 @@ import { TimeScale } from "../../timeScaleDropdown";
 
 // Styles
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
+import LoadingError from "../../sqlActivity/errorComponent";
 
 const cx = classNames.bind(insightsDetailsStyles);
 
@@ -52,6 +53,12 @@ export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
   StatementInsightDetailsDispatchProps &
   RouteComponentProps<unknown>;
 
+type ExplainPlanState = {
+  explainPlan: string;
+  loaded: boolean;
+  error: Error;
+};
+
 export const StatementInsightDetails: React.FC<
   StatementInsightDetailsProps
 > = ({
@@ -63,7 +70,11 @@ export const StatementInsightDetails: React.FC<
   setTimeScale,
   refreshStatementInsights,
 }) => {
-  const [explain, setExplain] = useState<string>(null);
+  const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
+    explainPlan: null,
+    loaded: false,
+    error: null,
+  });
 
   const prevPage = (): void => history.goBack();
 
@@ -72,12 +83,16 @@ export const StatementInsightDetails: React.FC<
       !isTenant &&
       key === TabKeysEnum.EXPLAIN &&
       insightEventDetails?.planGist &&
-      !explain
+      !explainPlanState.loaded
     ) {
       // Get the explain plan.
       getExplainPlanFromGist({ planGist: insightEventDetails.planGist }).then(
         res => {
-          setExplain(res.explainPlan || res.error);
+          setExplainPlanState({
+            explainPlan: res.explainPlan,
+            loaded: true,
+            error: res.error,
+          });
         },
       );
     }
@@ -140,10 +155,29 @@ export const StatementInsightDetails: React.FC<
                 <section className={cx("section")}>
                   <Row gutter={24}>
                     <Col span={24}>
-                      <SqlBox
-                        value={explain || "Not available."}
-                        size={SqlBoxSize.custom}
-                      />
+                      <Loading
+                        loading={
+                          !explainPlanState.loaded &&
+                          insightEventDetails?.planGist?.length > 0
+                        }
+                        page={"stmt_insight_details"}
+                        error={explainPlanState.error}
+                        renderError={() =>
+                          LoadingError({
+                            statsType: "explain plan",
+                            timeout: explainPlanState.error?.name
+                              ?.toLowerCase()
+                              .includes("timeout"),
+                          })
+                        }
+                      >
+                        <SqlBox
+                          value={
+                            explainPlanState.explainPlan || "Not available."
+                          }
+                          size={SqlBoxSize.custom}
+                        />
+                      </Loading>
                     </Col>
                   </Row>
                 </section>
