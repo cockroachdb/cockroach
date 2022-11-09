@@ -69,26 +69,47 @@ type PreconditionFunc func(context.Context, clusterversion.ClusterVersion, Tenan
 // sql. It includes the system tenant.
 type TenantUpgrade struct {
 	upgrade
-	fn           TenantUpgradeFunc
+	fn TenantUpgradeFunc
+	// precondition is executed before fn. Note that permanent upgrades (see
+	// upgrade.permanent) cannot have preconditions.
 	precondition PreconditionFunc
 }
 
 var _ Upgrade = (*TenantUpgrade)(nil)
 
+// NoPrecondition can be used with NewTenantUpgrade to signify that the
+// respective upgrade does not need any preconditions checked.
+var NoPrecondition PreconditionFunc = nil
+
 // NewTenantUpgrade constructs a TenantUpgrade.
 func NewTenantUpgrade(
-	description string,
-	v roachpb.Version,
-	precondition PreconditionFunc,
-	fn TenantUpgradeFunc,
+	description string, v roachpb.Version, precondition PreconditionFunc, fn TenantUpgradeFunc,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
 			description: description,
 			v:           v,
+			permanent:   false,
 		},
 		fn:           fn,
 		precondition: precondition,
+	}
+	return m
+}
+
+// NewTenantPermanentUpgrade constructs a TenantUpgrade marked as "permanent":
+// an upgrade that will run regardless of the cluster's bootstrap version.
+func NewTenantPermanentUpgrade(
+	description string, v roachpb.Version, fn TenantUpgradeFunc,
+) *TenantUpgrade {
+	m := &TenantUpgrade{
+		upgrade: upgrade{
+			description: description,
+			v:           v,
+			permanent:   true,
+		},
+		fn:           fn,
+		precondition: nil,
 	}
 	return m
 }
@@ -107,5 +128,8 @@ func (m *TenantUpgrade) Precondition(
 	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps,
 ) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s,precondition", cv), nil)
-	return m.precondition(ctx, cv, d)
+	if m.precondition != nil {
+		return m.precondition(ctx, cv, d)
+	}
+	return nil
 }

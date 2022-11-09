@@ -135,6 +135,22 @@ func NewSystemUpgrade(description string, v roachpb.Version, fn SystemUpgradeFun
 	}
 }
 
+// NewPermanentSystemUpgrade constructs a SystemUpgrade that is marked as
+// "permanent": an upgrade that will run regardless of the cluster's bootstrap
+// version.
+func NewPermanentSystemUpgrade(
+	description string, v roachpb.Version, fn SystemUpgradeFunc,
+) *SystemUpgrade {
+	return &SystemUpgrade{
+		upgrade: upgrade{
+			description: description,
+			v:           v,
+			permanent:   true,
+		},
+		fn: fn,
+	}
+}
+
 // Run kickstarts the actual upgrade process for system-level upgrades.
 func (m *SystemUpgrade) Run(
 	ctx context.Context, v roachpb.Version, d SystemDeps, job *jobs.Job,

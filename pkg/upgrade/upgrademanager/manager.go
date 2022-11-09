@@ -148,8 +148,36 @@ func safeToUpgradeTenant(
 	return true, nil
 }
 
-// Migrate runs the set of upgrades required to upgrade the cluster version
-// from the current version to the target one.
+// RunPermanentUpgrades runs all the upgrades associated with cluster versions
+// <= upToVersion that are marked as permanent. Upgrades that have already run
+// to completion, or that are currently running, are not run again, but the call
+// will block for their completion.
+//
+// NOTE: All upgrades, permanent and non-permanent, end up running in order.
+// RunPermanentUpgrades(v1) is called before Migrate(v1,v2). Of course,
+// non-permanent upgrades for versions <= v1 are not run at all; they're assumed
+// to be baked into the bootstrap metadata.
+func (m *Manager) RunPermanentUpgrades(
+	ctx context.Context, upToVersion roachpb.Version, user username.SQLUsername,
+) error {
+	// TODO(andrei): In the common case, all the upgrades have already been run
+	// and runMigration() will find their tombstones. We should have an
+	// optimization recognizing this common case in order to avoid looking them
+	// all up.
+	vers := m.listBetween(roachpb.Version{}, upToVersion)
+	for _, v := range vers {
+		upgrade, exists := m.GetUpgrade(v)
+		if !exists || !upgrade.Permanent() {
+			continue
+		}
+		log.Infof(ctx, "running permanent upgrade for version %s", v)
+		if err := m.runMigration(ctx, upgrade, user, v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *Manager) Migrate(
 	ctx context.Context,
 	user username.SQLUsername,
@@ -200,8 +228,11 @@ func (m *Manager) Migrate(
 		log.Infof(ctx, "stepping through %s", clusterVersion)
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
 		// First, run the actual upgrade if any.
-		if err := m.runMigration(ctx, user, clusterVersion); err != nil {
-			return err
+		mig, exists := m.GetUpgrade(clusterVersion)
+		if exists {
+			if err := m.runMigration(ctx, mig, user, clusterVersion); err != nil {
+				return err
+			}
 		}
 
 		// Next we'll push out the version gate to every node in the cluster.
@@ -353,12 +384,8 @@ func forEveryNodeUntilClusterStable(
 }
 
 func (m *Manager) runMigration(
-	ctx context.Context, user username.SQLUsername, version roachpb.Version,
+	ctx context.Context, mig upgrade.Upgrade, user username.SQLUsername, version roachpb.Version,
 ) error {
-	mig, exists := m.GetUpgrade(version)
-	if !exists {
-		return nil
-	}
 	_, isSystemMigration := mig.(*upgrade.SystemUpgrade)
 	if isSystemMigration && !m.codec.ForSystemTenant() {
 		return nil

@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -84,7 +83,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 						if v != endCV {
 							return nil, false
 						}
-						return upgrade.NewTenantUpgrade("test", v, upgrades.NoPrecondition, func(
+						return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
 							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
@@ -427,7 +426,7 @@ func TestPauseMigration(t *testing.T) {
 						if cv != endCV {
 							return nil, false
 						}
-						return upgrade.NewTenantUpgrade("test", cv, upgrades.NoPrecondition, func(
+						return upgrade.NewTenantUpgrade("test", cv, upgrade.NoPrecondition, func(
 							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
 						) error {
 							canResume := make(chan error)
@@ -561,7 +560,7 @@ func TestPrecondition(t *testing.T) {
 					), true
 				case v2:
 					return upgrade.NewTenantUpgrade("v2", cv,
-						upgrades.NoPrecondition,
+						upgrade.NoPrecondition,
 						cf(&migrationRun, &migrationErr),
 					), true
 				default:

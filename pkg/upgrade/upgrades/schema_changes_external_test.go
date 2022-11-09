@@ -284,7 +284,7 @@ CREATE TABLE test.test_table (
 								if cv.Equal(endCV) {
 									return upgrade.NewTenantUpgrade("testing",
 										endCV,
-										upgrades.NoPrecondition,
+										upgrade.NoPrecondition,
 										migrationFunc,
 									), true
 								}

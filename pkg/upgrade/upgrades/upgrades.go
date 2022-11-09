@@ -28,12 +28,10 @@ import (
 // one exists.
 func GetUpgrade(key roachpb.Version) (upgrade.Upgrade, bool) {
 	m, ok := registry[key]
+	if !ok {
+		return nil, false
+	}
 	return m, ok
-}
-
-// NoPrecondition is a PreconditionFunc that doesn't check anything.
-func NoPrecondition(context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps) error {
-	return nil
 }
 
 // NoTenantUpgradeFunc is a TenantUpgradeFunc that doesn't do anything.
@@ -58,48 +56,48 @@ var upgrades = []upgrade.Upgrade{
 	upgrade.NewTenantUpgrade(
 		"remove grant privilege from users",
 		toCV(clusterversion.V22_2RemoveGrantPrivilege),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		removeGrantMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"upgrade sequences to be referenced by ID",
 		toCV(clusterversion.V22_2UpgradeSequenceToBeReferencedByID),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		upgradeSequenceToBeReferencedByID,
 	),
 	upgrade.NewTenantUpgrade(
 		"update system.statement_diagnostics_requests to support sampling probabilities",
 		toCV(clusterversion.V22_2SampledStmtDiagReqs),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		sampledStmtDiagReqsMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"add the system.privileges table",
 		toCV(clusterversion.V22_2SystemPrivilegesTable),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		systemPrivilegesTableMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"add column locality to table system.sql_instances",
 		toCV(clusterversion.V22_2AlterSystemSQLInstancesAddLocality),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		alterSystemSQLInstancesAddLocality,
 	),
 	upgrade.NewTenantUpgrade(
 		"add the system.external_connections table",
 		toCV(clusterversion.V22_2SystemExternalConnectionsTable),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
 	upgrade.NewTenantUpgrade(
 		"add column index_recommendations to table system.statement_statistics",
 		toCV(clusterversion.V22_2AlterSystemStatementStatisticsAddIndexRecommendations),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		alterSystemStatementStatisticsAddIndexRecommendations,
 	),
 	upgrade.NewTenantUpgrade("add system.role_id_sequence",
 		toCV(clusterversion.V22_2RoleIDSequence),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		roleIDSequenceMigration,
 	),
 	// Add user_id column, the column will not be backfilled.
@@ -110,38 +108,38 @@ var upgrades = []upgrade.Upgrade{
 	// more users can be created without ids.
 	upgrade.NewTenantUpgrade("alter system.users to include user_id column",
 		toCV(clusterversion.V22_2AddSystemUserIDColumn),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		alterSystemUsersAddUserIDColumnWithIndex,
 	),
 	upgrade.NewTenantUpgrade("backfill users with ids and add an index on the id column",
 		toCV(clusterversion.V22_2SystemUsersIDColumnIsBackfilled),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		backfillSystemUsersIDColumn,
 	),
 	upgrade.NewTenantUpgrade("set user_id column to not null",
 		toCV(clusterversion.V22_2SetSystemUsersUserIDColumnNotNull),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		setUserIDNotNull,
 	),
 	upgrade.NewTenantUpgrade(
 		"add default SQL schema telemetry schedule",
 		toCV(clusterversion.V22_2SQLSchemaTelemetryScheduledJobs),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		ensureSQLSchemaTelemetrySchedule,
 	),
 	upgrade.NewTenantUpgrade("alter system.role_options to include user_id column",
 		toCV(clusterversion.V22_2RoleOptionsTableHasIDColumn),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		alterSystemRoleOptionsAddUserIDColumnWithIndex,
 	),
 	upgrade.NewTenantUpgrade("backfill entries in system.role_options to include IDs",
 		toCV(clusterversion.V22_2RoleOptionsIDColumnIsBackfilled),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		backfillSystemRoleOptionsIDColumn,
 	),
 	upgrade.NewTenantUpgrade("set system.role_options user_id column to not null",
 		toCV(clusterversion.V22_2SetRoleOptionsUserIDColumnNotNull),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		setSystemRoleOptionsUserIDColumnNotNull,
 	),
 	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
@@ -152,32 +150,32 @@ var upgrades = []upgrade.Upgrade{
 	upgrade.NewTenantUpgrade(
 		"wait for all in-flight schema changes",
 		toCV(clusterversion.V22_2NoNonMVCCAddSSTable),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		waitForAllSchemaChanges,
 	),
 	upgrade.NewTenantUpgrade("update invalid column IDs in sequence back references",
 		toCV(clusterversion.V22_2UpdateInvalidColumnIDsInSequenceBackReferences),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		updateInvalidColumnIDsInSequenceBackReferences,
 	),
 	upgrade.NewTenantUpgrade("fix corrupt user-file related table descriptors",
 		toCV(clusterversion.V22_2FixUserfileRelatedDescriptorCorruption),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		fixInvalidObjectsThatLookLikeBadUserfileConstraint,
 	),
 	upgrade.NewTenantUpgrade("add a name column to system.tenants and populate a system tenant entry",
 		toCV(clusterversion.V23_1TenantNames),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		addTenantNameColumnAndSystemTenantEntry,
 	),
 	upgrade.NewTenantUpgrade("set the value or system.descriptor_id_seq for the system tenant",
 		toCV(clusterversion.V23_1DescIDSequenceForSystemTenant),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		descIDSequenceForSystemTenant,
 	),
 	upgrade.NewTenantUpgrade("add a partial predicate column to system.table_statistics",
 		toCV(clusterversion.V23_1AddPartialStatisticsPredicateCol),
-		NoPrecondition,
+		upgrade.NoPrecondition,
 		alterSystemTableStatisticsAddPartialPredicate,
 	),
 }

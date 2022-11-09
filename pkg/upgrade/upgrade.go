@@ -63,6 +63,10 @@ import (
 type Upgrade interface {
 	Version() roachpb.Version
 	Name() string
+	// Permanent returns true for "permanent" upgrades - i.e. upgrades that are
+	// not baked into the bootstrap image and need to be run on new cluster
+	// regardless of the cluster's bootstrap version.
+	Permanent() bool
 	internal() // restrict implementations to this package
 }
 
@@ -80,12 +84,23 @@ type JobDeps interface {
 
 type upgrade struct {
 	description string
-	v           roachpb.Version
+	// v is the version that this upgrade is associated with. The upgrade runs
+	// when the cluster's version is incremented to v or, for permanent upgrades
+	// (see below) when the cluster is bootstrapped at v or above.
+	v roachpb.Version
+	// permanent is set for "permanent" upgrades - i.e. upgrades that are not
+	// baked into the bootstrap image and need to be run on new clusters
+	// regardless of the cluster's bootstrap version.
+	permanent bool
 }
 
 // ClusterVersion makes SystemUpgrade an Upgrade.
 func (m *upgrade) Version() roachpb.Version {
 	return m.v
+}
+
+func (m *upgrade) Permanent() bool {
+	return m.permanent
 }
 
 // Name returns a human-readable name for this upgrade.

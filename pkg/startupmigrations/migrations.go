@@ -334,12 +334,7 @@ type migrationDescriptor struct {
 	workFn func(context.Context, runner) error
 	// includedInBootstrap is set for migrations that need to be performed for
 	// updating old clusters, but are also covered by the MetadataSchema that gets
-	// created by hand for a new cluster when it bootstraps itself. This kind of
-	// duplication between a migration and the MetadataSchema is useful for
-	// migrations that create system descriptor - for new clusters (particularly
-	// for tests) we want to create these tables by hand so that a corresponding
-	// range is created at bootstrap time. Otherwise, we'd have the split queue
-	// asynchronously creating some ranges which is annoying for tests.
+	// created by hand for a new cluster when it bootstraps itself.
 	//
 	// Generally when setting this field you'll want to introduce a new cluster
 	// version.

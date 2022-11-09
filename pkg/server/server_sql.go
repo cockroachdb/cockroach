@@ -195,6 +195,10 @@ type SQLServer struct {
 	// Server is closed. Every InternalExecutor created via the factory
 	// uses this memory monitor.
 	internalExecutorFactoryMemMonitor *mon.BytesMonitor
+
+	// upgradesManager deals with cluster version upgrades on bootstrap and on
+	// `set cluster setting version = <v>`.
+	upgradesManager *upgrademanager.Manager
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -1068,6 +1072,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
+	var upgradesMgr *upgrademanager.Manager
 	{
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
@@ -1096,12 +1101,12 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		}
 
 		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgrade.TestingKnobs)
-		migrationMgr := upgrademanager.NewManager(
+		upgradesMgr = upgrademanager.NewManager(
 			systemDeps, leaseMgr, cfg.circularInternalExecutor, cfg.internalExecutorFactory, jobRegistry, codec,
 			cfg.Settings, knobs,
 		)
-		execCfg.UpgradeJobDeps = migrationMgr
-		execCfg.VersionUpgradeHook = migrationMgr.Migrate
+		execCfg.UpgradeJobDeps = upgradesMgr
+		execCfg.VersionUpgradeHook = upgradesMgr.Migrate
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
@@ -1245,6 +1250,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		isMeta1Leaseholder:                cfg.isMeta1Leaseholder,
 		cfg:                               cfg.BaseConfig,
 		internalExecutorFactoryMemMonitor: ieFactoryMonitor,
+		upgradesManager:                   upgradesMgr,
 	}, nil
 }
 
@@ -1453,6 +1459,25 @@ func (s *SQLServer) preStart(
 	// Run startup upgrades (note: these depend on jobs subsystem running).
 	if err := startupMigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
 		return errors.Wrap(err, "ensuring SQL migrations")
+	}
+
+	// Run all the "permanent" upgrades that haven't already run in this cluster,
+	// until the currently active version. Upgrades for higher versions, if any,
+	// will be run in response to `SET CLUSTER SETTING version = <v>`, just like
+	// non-permanent upgrade.
+	//
+	// NOTE: We're going to run the permanent upgrades up to the active version.
+	// For mixed kv/sql nodes, I think we could use bootstrapVersion here instead.
+	// If the active version has diverged from bootstrap version, then all
+	// upgrades in between the two must have run when the cluster version
+	// advanced. But for sql-only servers the bootstrap version is not
+	// well-defined, so we use the active version.
+	if err := s.upgradesManager.RunPermanentUpgrades(
+		ctx,
+		s.cfg.Settings.Version.ActiveVersion(ctx).Version, /* upToVersion */
+		username.RootUserName(),
+	); err != nil {
+		return err
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
