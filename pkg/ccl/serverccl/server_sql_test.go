@@ -82,7 +82,7 @@ func TestTenantCannotSetClusterSetting(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	// StartTenant with the default permissions to
-	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID(), AllowSettingClusterSettings: false})
+	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID()})
 	defer db.Close()
 	_, err := db.Exec(`SET CLUSTER SETTING sql.defaults.vectorize=off`)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
 
-	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID(), AllowSettingClusterSettings: false})
+	_, db := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: serverutils.TestTenantID()})
 	defer db.Close()
 
 	_, err := db.Exec(`BACKUP INTO 'userfile:///backup'`)

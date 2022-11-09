@@ -243,10 +243,6 @@ type TestTenantArgs struct {
 	// tenant cluster.
 	Settings *cluster.Settings
 
-	// AllowSettingClusterSettings, if true, allows the tenant to set in-memory
-	// cluster settings.
-	AllowSettingClusterSettings bool
-
 	// Stopper, if not nil, is used to stop the tenant manually otherwise the
 	// TestServer stopper will be used.
 	Stopper *stop.Stopper
