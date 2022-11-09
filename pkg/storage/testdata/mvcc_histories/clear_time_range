@@ -99,7 +99,7 @@ run stats ok
 clear_time_range k=a end=z ts=7 targetTs=0
 ----
 >> clear_time_range k=a end=z ts=7 targetTs=0
-stats: key_count=-8 key_bytes=-184 val_count=-14 val_bytes=-63 range_key_count=-8 range_key_bytes=-167 range_val_count=-15 range_val_bytes=-13 live_count=-2 live_bytes=-42 gc_bytes_age=-37212
+stats: key_count=-8 key_bytes=-184 val_count=-14 val_bytes=-63 range_key_count=-8 range_key_bytes=-167 range_val_count=-15 range_val_bytes=-16 live_count=-2 live_bytes=-42 gc_bytes_age=-37503
 >> at end:
 <no data>
 stats: 
@@ -183,7 +183,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=8 key_bytes=184 val_count=14 val_bytes=63 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=2 live_bytes=42 gc_bytes_age=37212
+stats: key_count=8 key_bytes=184 val_count=14 val_bytes=63 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=16 live_count=2 live_bytes=42 gc_bytes_age=37503
 
 run stats ok
 clear_time_range k=a end=z ts=6 targetTs=5
@@ -212,7 +212,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=8 key_bytes=172 val_count=13 val_bytes=56 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=1 live_bytes=21 gc_bytes_age=37406
+stats: key_count=8 key_bytes=172 val_count=13 val_bytes=56 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=16 live_count=1 live_bytes=21 gc_bytes_age=37697
 
 run stats ok
 clear_time_range k=a end=z ts=5 targetTs=4
@@ -238,7 +238,7 @@ data: "g"/4.000000000,0 -> /<empty>
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=7 key_bytes=158 val_count=12 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=2 live_bytes=42 gc_bytes_age=26579
+stats: key_count=7 key_bytes=158 val_count=12 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=2 live_bytes=42 gc_bytes_age=26870
 
 run stats ok
 clear_time_range k=a end=z ts=4 targetTs=3
@@ -259,13 +259,13 @@ data: "f"/3.000000000,0 -> /<empty>
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=15925
+stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=16216
 
 run stats ok
 clear_time_range k=a end=z ts=3 targetTs=2
 ----
 >> clear_time_range k=a end=z ts=3 targetTs=2
-stats: key_count=-2 key_bytes=-40 val_count=-3 val_bytes=-14 range_key_count=-5 range_key_bytes=-83 range_val_count=-7 range_val_bytes=-13 gc_bytes_age=-14638
+stats: key_count=-2 key_bytes=-40 val_count=-3 val_bytes=-14 range_key_count=-5 range_key_bytes=-83 range_val_count=-7 range_val_bytes=-16 gc_bytes_age=-14929
 >> at end:
 rangekey: {a-k}/[1.000000000,0=/<empty>]
 data: "a"/2.000000000,0 -> /BYTES/a2
@@ -370,7 +370,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=8 key_bytes=172 val_count=13 val_bytes=63 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=34044
+stats: key_count=8 key_bytes=172 val_count=13 val_bytes=63 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=34335
 
 run stats ok
 clear_time_range k=b end=c ts=6 targetTs=3
@@ -398,7 +398,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=158 val_count=12 val_bytes=63 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=32700
+stats: key_count=7 key_bytes=158 val_count=12 val_bytes=63 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=32991
 
 run stats ok
 clear_time_range k=c end=d ts=6 targetTs=3
@@ -425,7 +425,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=158 val_count=12 val_bytes=63 range_key_count=7 range_key_bytes=136 range_val_count=12 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=29701
+stats: key_count=7 key_bytes=158 val_count=12 val_bytes=63 range_key_count=7 range_key_bytes=136 range_val_count=12 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=29992
 
 run stats ok
 clear_time_range k=d end=e ts=6 targetTs=3
@@ -452,7 +452,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=146 val_count=11 val_bytes=56 range_key_count=8 range_key_bytes=149 range_val_count=13 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=27169
+stats: key_count=7 key_bytes=146 val_count=11 val_bytes=56 range_key_count=8 range_key_bytes=149 range_val_count=13 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=27460
 
 run stats ok
 clear_time_range k=e end=f ts=6 targetTs=3
@@ -479,7 +479,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=146 val_count=11 val_bytes=56 range_key_count=8 range_key_bytes=149 range_val_count=13 range_val_bytes=13 live_count=5 live_bytes=105 gc_bytes_age=25174
+stats: key_count=7 key_bytes=146 val_count=11 val_bytes=56 range_key_count=8 range_key_bytes=149 range_val_count=13 range_val_bytes=16 live_count=5 live_bytes=105 gc_bytes_age=25465
 
 run stats ok
 clear_time_range k=f end=g ts=6 targetTs=3
@@ -504,7 +504,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=134 val_count=10 val_bytes=49 range_key_count=7 range_key_bytes=127 range_val_count=11 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=23242
+stats: key_count=7 key_bytes=134 val_count=10 val_bytes=49 range_key_count=7 range_key_bytes=127 range_val_count=11 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=23533
 
 run stats ok
 clear_time_range k=g end=h ts=6 targetTs=3
@@ -527,7 +527,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=122 val_count=9 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=19093
+stats: key_count=7 key_bytes=122 val_count=9 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=19384
 
 run stats ok
 clear_time_range k=h end=i ts=6 targetTs=3
@@ -550,7 +550,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=122 val_count=9 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=19093
+stats: key_count=7 key_bytes=122 val_count=9 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=19384
 
 run stats ok
 clear_time_range k=i end=j ts=6 targetTs=3
@@ -572,7 +572,7 @@ data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=110 val_count=8 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=5 live_bytes=105 gc_bytes_age=15925
+stats: key_count=7 key_bytes=110 val_count=8 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=5 live_bytes=105 gc_bytes_age=16216
 
 run stats ok
 clear_time_range k=j end=k ts=6 targetTs=3
@@ -594,7 +594,7 @@ data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=110 val_count=8 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=5 live_bytes=105 gc_bytes_age=15925
+stats: key_count=7 key_bytes=110 val_count=8 val_bytes=49 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=5 live_bytes=105 gc_bytes_age=16216
 
 run stats ok
 clear_time_range k=k end=l ts=6 targetTs=3
@@ -615,7 +615,7 @@ data: "f"/3.000000000,0 -> /<empty>
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=15925
+stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=16216
 
 run stats ok
 clear_time_range k=l end=m ts=6 targetTs=3
@@ -636,7 +636,7 @@ data: "f"/3.000000000,0 -> /<empty>
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=15925
+stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=16216
 
 run stats ok
 clear_time_range k=m end=n ts=6 targetTs=3
@@ -657,14 +657,14 @@ data: "f"/3.000000000,0 -> /<empty>
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=15925
+stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=6 range_key_bytes=96 range_val_count=8 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=16216
 
 # Clear individual keys n-a for times 0-3.
 run stats ok
 clear_time_range k=m end=n ts=3 targetTs=0
 ----
 >> clear_time_range k=m end=n ts=3 targetTs=0
-stats: range_key_count=-1 range_key_bytes=-13 range_val_count=-1 range_val_bytes=-13 gc_bytes_age=-2522
+stats: range_key_count=-1 range_key_bytes=-13 range_val_count=-1 range_val_bytes=-16 gc_bytes_age=-2813
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -939,7 +939,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=8 key_bytes=160 val_count=12 val_bytes=49 range_key_count=10 range_key_bytes=216 range_val_count=18 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=36385
+stats: key_count=8 key_bytes=160 val_count=12 val_bytes=49 range_key_count=10 range_key_bytes=216 range_val_count=18 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=36676
 
 run stats ok
 clear_time_range k=a+ end=b+ ts=4 targetTs=0
@@ -968,7 +968,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=146 val_count=11 val_bytes=49 range_key_count=10 range_key_bytes=218 range_val_count=18 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=35237
+stats: key_count=7 key_bytes=146 val_count=11 val_bytes=49 range_key_count=10 range_key_bytes=218 range_val_count=18 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=35528
 
 run stats ok
 clear_time_range k=foo end=i ts=6 targetTs=2
@@ -992,7 +992,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=7 key_bytes=134 val_count=10 val_bytes=49 range_key_count=6 range_key_bytes=120 range_val_count=10 range_val_bytes=13 live_count=4 live_bytes=84 gc_bytes_age=22516
+stats: key_count=7 key_bytes=134 val_count=10 val_bytes=49 range_key_count=6 range_key_bytes=120 range_val_count=10 range_val_bytes=16 live_count=4 live_bytes=84 gc_bytes_age=22807
 
 run stats ok
 clear_time_range k=k end=mmm ts=6 targetTs=0
@@ -1015,7 +1015,7 @@ data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=120 val_count=9 val_bytes=42 range_key_count=6 range_key_bytes=122 range_val_count=10 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=22710
+stats: key_count=6 key_bytes=120 val_count=9 val_bytes=42 range_key_count=6 range_key_bytes=122 range_val_count=10 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=23001
 
 run stats ok
 clear_time_range k=c+ end=cc+ ts=6 targetTs=3
@@ -1040,7 +1040,7 @@ data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/4.000000000,0 -> /<empty>
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=120 val_count=9 val_bytes=42 range_key_count=8 range_key_bytes=181 range_val_count=15 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=28437
+stats: key_count=6 key_bytes=120 val_count=9 val_bytes=42 range_key_count=8 range_key_bytes=181 range_val_count=15 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=28728
 
 run stats ok
 clear_time_range k=a end=z ts=6 targetTs=3
@@ -1059,7 +1059,7 @@ data: "f"/3.000000000,0 -> /<empty>
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "i"/3.000000000,0 -> /BYTES/i3
-stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=4 range_key_bytes=65 range_val_count=5 range_val_bytes=13 live_count=5 live_bytes=105 gc_bytes_age=10839
+stats: key_count=6 key_bytes=96 val_count=7 val_bytes=42 range_key_count=4 range_key_bytes=65 range_val_count=5 range_val_bytes=16 live_count=5 live_bytes=105 gc_bytes_age=11130
 
 run stats ok
 clear_time_range k=ccc end=mmm ts=6 targetTs=0
@@ -1071,7 +1071,7 @@ rangekey: a{-+}/[1.000000000,0=/<empty>]
 rangekey: {b+-ccc}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {mmm-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 data: "a"/2.000000000,0 -> /BYTES/a2
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=7 range_key_count=3 range_key_bytes=54 range_val_count=4 range_val_bytes=13 live_count=1 live_bytes=21 gc_bytes_age=6545
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=7 range_key_count=3 range_key_bytes=54 range_val_count=4 range_val_bytes=16 live_count=1 live_bytes=21 gc_bytes_age=6836
 
 run stats ok
 clear_time_range k=a end=a+ ts=6 targetTs=0
@@ -1081,13 +1081,13 @@ stats: key_count=-1 key_bytes=-14 val_count=-1 val_bytes=-7 range_key_count=-1 r
 >> at end:
 rangekey: {b+-ccc}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {mmm-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-stats: range_key_count=2 range_key_bytes=40 range_val_count=3 range_val_bytes=13 gc_bytes_age=5159
+stats: range_key_count=2 range_key_bytes=40 range_val_count=3 range_val_bytes=16 gc_bytes_age=5450
 
 run stats ok
 clear_time_range k=b+ end=n ts=3 targetTs=0
 ----
 >> clear_time_range k=b+ end=n ts=3 targetTs=0
-stats: range_key_count=-2 range_key_bytes=-40 range_val_count=-3 range_val_bytes=-13 gc_bytes_age=-5159
+stats: range_key_count=-2 range_key_bytes=-40 range_val_count=-3 range_val_bytes=-16 gc_bytes_age=-5450
 >> at end:
 <no data>
 stats: 

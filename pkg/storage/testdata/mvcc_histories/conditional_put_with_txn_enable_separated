@@ -60,10 +60,10 @@ with t=A
   txn_remove
 ----
 >> resolve_intent k=k t=A
-stats: val_bytes=-38 live_bytes=-38 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=+23
+stats: val_bytes=-35 live_bytes=-35 intent_count=-1 intent_bytes=-19 separated_intent_count=-1 intent_age=+23
 >> at end:
 data: "k"/124.000000000,0 -> {localTs=123.000000000,0}/BYTES/v3
-stats: key_count=1 key_bytes=14 val_count=1 val_bytes=21 live_count=1 live_bytes=35
+stats: key_count=1 key_bytes=14 val_count=1 val_bytes=24 live_count=1 live_bytes=38
 
 # Write value4 with an old timestamp without txn...should get a write
 # too old error.

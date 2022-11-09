@@ -97,7 +97,7 @@ error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j"
 run ok
 export k=a end=z ts=6 allRevisions
 ----
-export: data_size:165
+export: data_size:177
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -140,7 +140,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z ts=3 allRevisions
 ----
-export: data_size:77
+export: data_size:80
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -156,7 +156,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=4 allRevisions
 ----
-export: data_size:104
+export: data_size:107
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -178,7 +178,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=5 allRevisions
 ----
-export: data_size:157
+export: data_size:169
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -203,7 +203,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z ts=6 allRevisions
 ----
-export: data_size:165
+export: data_size:177
 export: {a-b}/[1.000000000,0=/<empty>]
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
@@ -229,7 +229,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=1 ts=6 allRevisions
 ----
-export: data_size:151
+export: data_size:163
 export: "a"/4.000000000,0 -> /<empty>
 export: "a"/2.000000000,0 -> /BYTES/a2
 export: {b-c}/[3.000000000,0=/<empty>]
@@ -253,7 +253,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=2 ts=6 allRevisions
 ----
-export: data_size:127
+export: data_size:139
 export: "a"/4.000000000,0 -> /<empty>
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -274,7 +274,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=3 ts=6 allRevisions
 ----
-export: data_size:88
+export: data_size:97
 export: "a"/4.000000000,0 -> /<empty>
 export: "b"/4.000000000,0 -> /<empty>
 export: {c-g}/[5.000000000,0=/<empty>]
@@ -288,7 +288,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=4 ts=6 allRevisions
 ----
-export: data_size:61
+export: data_size:70
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "f"/6.000000000,0 -> /BYTES/f6
 export: "k"/5.000000000,0 -> /BYTES/k5
@@ -354,7 +354,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=1 ts=6
 ----
-export: data_size:91
+export: data_size:103
 export: "a"/4.000000000,0 -> /<empty>
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -369,7 +369,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=2 ts=6
 ----
-export: data_size:91
+export: data_size:103
 export: "a"/4.000000000,0 -> /<empty>
 export: {b-c}/[3.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
@@ -384,7 +384,7 @@ export: {m-n}/[3.000000000,0=/<empty>]
 run ok
 export k=a end=z startTs=3 ts=6
 ----
-export: data_size:72
+export: data_size:81
 export: "a"/4.000000000,0 -> /<empty>
 export: "b"/4.000000000,0 -> /<empty>
 export: {c-g}/[5.000000000,0=/<empty>]
@@ -396,7 +396,7 @@ export: "k"/5.000000000,0 -> /BYTES/k5
 run ok
 export k=a end=z startTs=4 ts=6
 ----
-export: data_size:61
+export: data_size:70
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "f"/6.000000000,0 -> /BYTES/f6
 export: "k"/5.000000000,0 -> /BYTES/k5
@@ -431,7 +431,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z startTs=2 ts=3 allRevisions
 ----
-export: data_size:39
+export: data_size:42
 export: {b-d}/[3.000000000,0=/<empty>]
 export: "e"/3.000000000,0 -> /BYTES/e3
 export: {f-h}/[3.000000000,0=/<empty>]
@@ -452,7 +452,7 @@ export: "h"/4.000000000,0 -> /<empty>
 run ok
 export k=a end=z startTs=4 ts=5 allRevisions
 ----
-export: data_size:53
+export: data_size:62
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "k"/5.000000000,0 -> /BYTES/k5
 
@@ -478,7 +478,7 @@ export: "g"/2.000000000,0 -> /BYTES/g2
 run ok
 export k=a end=z startTs=2 ts=3
 ----
-export: data_size:39
+export: data_size:42
 export: {b-d}/[3.000000000,0=/<empty>]
 export: "e"/3.000000000,0 -> /BYTES/e3
 export: {f-h}/[3.000000000,0=/<empty>]
@@ -499,7 +499,7 @@ export: "h"/4.000000000,0 -> /<empty>
 run ok
 export k=a end=z startTs=4 ts=5
 ----
-export: data_size:53
+export: data_size:62
 export: {c-g}/[5.000000000,0=/<empty>]
 export: "k"/5.000000000,0 -> /BYTES/k5
 
@@ -632,7 +632,7 @@ error: (*storage.ExceedMaxSizeError:) export size (18 bytes) exceeds max size (1
 run ok
 export k=b end=k ts=6 allRevisions
 ----
-export: data_size:131
+export: data_size:140
 export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 export: "b"/4.000000000,0 -> /<empty>
 export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -653,7 +653,7 @@ export: "h"/3.000000000,0 -> /BYTES/h3
 run ok
 export k=bbb end=ggg startTs=2 ts=5 allRevisions
 ----
-export: data_size:89
+export: data_size:98
 export: {bbb-c}/[3.000000000,0=/<empty>]
 export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 export: {d-f}/[5.000000000,0=/<empty>]
@@ -667,7 +667,7 @@ export: "g"/4.000000000,0 -> /BYTES/g4
 run ok
 export k=bbb end=ggg startTs=2 ts=5
 ----
-export: data_size:61
+export: data_size:70
 export: {bbb-c}/[3.000000000,0=/<empty>]
 export: {c-g}/[5.000000000,0=/<empty>]
 export: g{-gg}/[3.000000000,0=/<empty>]
@@ -713,7 +713,7 @@ export: "b"/4.000000000,0 -> /<empty>
 run ok
 export k=f kTs=4 end=g ts=6 allRevisions
 ----
-export: data_size:35
+export: data_size:38
 export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 export: "f"/4.000000000,0 -> /BYTES/f4
 export: "f"/2.000000000,0 -> /BYTES/f2
