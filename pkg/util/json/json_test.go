@@ -155,7 +155,7 @@ var parseJSONImpls = []struct {
 	opts []ParseOption
 }{
 	{name: "gostd", typ: useStdGoJSON, opts: []ParseOption{WithGoStandardParser()}},
-	{name: "lexer", typ: useJSONLexer, opts: []ParseOption{WithFastJSONParser()}},
+	{name: "lexer", typ: useFastJSONParser, opts: []ParseOption{WithFastJSONParser()}},
 }
 
 func TestJSONRoundTrip(t *testing.T) {
@@ -311,63 +311,63 @@ func TestJSONErrors(t *testing.T) {
 
 	testCases := []testCaseDef{
 		testCase(`true false`, trailingChars, useStdGoJSON),
-		testCase(`true false`, trailingChars, useJSONLexer),
+		testCase(`true false`, trailingChars, useFastJSONParser),
 		testCase(`trues`, trailingChars, useStdGoJSON),
-		testCase(`trues`, trailingChars, useJSONLexer),
+		testCase(`trues`, trailingChars, useFastJSONParser),
 		testCase(`1 2 3`, trailingChars, useStdGoJSON),
-		testCase(`1 2 3`, trailingChars, useJSONLexer),
+		testCase(`1 2 3`, trailingChars, useFastJSONParser),
 		testCase(`[1, 2, 3]]`, trailingChars, useStdGoJSON),
-		testCase(`[1, 2, 3]]`, trailingChars, useJSONLexer),
+		testCase(`[1, 2, 3]]`, trailingChars, useFastJSONParser),
 		testCase(`[1, 2, 3]   }   `, trailingChars, useStdGoJSON),
-		testCase(`[1, 2, 3]   }   `, trailingChars, useJSONLexer),
+		testCase(`[1, 2, 3]   }   `, trailingChars, useFastJSONParser),
 		// Here the decoder just grabs the 0 and leaves the 1. JSON numbers can't have
 		// leading 0s.
 		testCase(`01`, trailingChars, useStdGoJSON),
-		testCase(`01`, trailingChars, useJSONLexer),
+		testCase(`01`, trailingChars, useFastJSONParser),
 		testCase(`--01`, `invalid character '-' in numeric literal`, useStdGoJSON),
-		testCase(`--01`, `invalid JSON token`, useJSONLexer),
+		testCase(`--01`, `invalid JSON token`, useFastJSONParser),
 		testCase(`-`, `unexpected EOF`, useStdGoJSON),
-		testCase(`-`, `unable to decode JSON`, useJSONLexer),
+		testCase(`-`, `unable to decode JSON`, useFastJSONParser),
 
 		testCase(`{foo: 1}`,
 			`invalid character 'f' looking for beginning of object key string`, useStdGoJSON),
 		testCase(`{foo: 1}`, `
 ...|{foo: 1}|...
-...|.^......|...: invalid JSON token`, useJSONLexer),
+...|.^......|...: invalid JSON token`, useFastJSONParser),
 
 		testCase(`{'foo': 1}`,
 			`invalid character '\\'' looking for beginning of object key string`, useStdGoJSON),
 		testCase(`{'foo': 1}`, `
 ...|{'foo': 1}|...
-...|.^.........|...: invalid JSON token`, useJSONLexer),
+...|.^.........|...: invalid JSON token`, useFastJSONParser),
 
 		testCase(`{"foo": 01}`,
 			`invalid character '1' after object key:value pair`, useStdGoJSON),
 		testCase(`{"foo": 01}`, `
 ...|{"foo": 01}|...
-...|.........^.|...: stateObjectComma: expecting comma`, useJSONLexer),
+...|.........^.|...: stateObjectComma: expecting comma`, useFastJSONParser),
 
 		testCase(`{`, `unexpected EOF`, useStdGoJSON),
-		testCase(`{`, `unable to decode JSON`, useJSONLexer),
+		testCase(`{`, `unable to decode JSON`, useFastJSONParser),
 
 		testCase(`"\v"`, `invalid character 'v' in string escape code`, useStdGoJSON),
 		testCase(`"\v"`, `
 ...|"\v"|...
-...|^...|...: invalid string literal token`, useJSONLexer),
+...|^...|...: invalid string literal token`, useFastJSONParser),
 
 		testCase(`"\x00"`, `invalid character 'x' in string escape code`, useStdGoJSON),
 		testCase(`"\x00"`, `
 ...|"\x00"|...
-...|^.....|...: invalid string literal token`, useJSONLexer),
+...|^.....|...: invalid string literal token`, useFastJSONParser),
 
 		testCase(string([]byte{'"', '\n', '"'}), `invalid character`, useStdGoJSON),
-		testCase(string([]byte{'"', '\n', '"'}), `while decoding 3 bytes at offset 0`, useJSONLexer),
+		testCase(string([]byte{'"', '\n', '"'}), `while decoding 3 bytes at offset 0`, useFastJSONParser),
 
 		testCase(string([]byte{'"', 8, '"'}), `invalid character`, useStdGoJSON),
-		testCase(string([]byte{'"', 8, '"'}), `while decoding 3 bytes at offset 0`, useJSONLexer),
+		testCase(string([]byte{'"', 8, '"'}), `while decoding 3 bytes at offset 0`, useFastJSONParser),
 
 		testCase(`{"a":["b","c"]}]`, trailingChars, useStdGoJSON),
-		testCase(`{"a":["b","c"]}]`, trailingChars, useJSONLexer),
+		testCase(`{"a":["b","c"]}]`, trailingChars, useFastJSONParser),
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", tc.implName, tc.input), func(t *testing.T) {
