@@ -53,9 +53,8 @@ func TestTenantReport(t *testing.T) {
 	defer rt.Close()
 
 	tenantArgs := base.TestTenantArgs{
-		TenantID:                    serverutils.TestTenantID(),
-		AllowSettingClusterSettings: true,
-		TestingKnobs:                rt.testingKnobs,
+		TenantID:     serverutils.TestTenantID(),
+		TestingKnobs: rt.testingKnobs,
 	}
 	tenant, tenantDB := serverutils.StartTenant(t, rt.server, tenantArgs)
 	reporter := tenant.DiagnosticsReporter().(*diagnostics.Reporter)
