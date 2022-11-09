@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package upgrade
+package upgradebase
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -26,6 +26,12 @@ type TestingKnobs struct {
 
 	// RegistryOverride is used to inject upgrades for specific cluster versions.
 	RegistryOverride func(v roachpb.Version) (Upgrade, bool)
+	// !!! comment
+	DontUseJobs bool
+
+	// AfterRunPermanentUpgrades is called after each call to
+	// RunPermanentUpgrades.
+	AfterRunPermanentUpgrades func()
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

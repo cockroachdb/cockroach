@@ -11,6 +11,7 @@
 package roachpb
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -70,7 +71,7 @@ func (v Version) PrettyPrint() string {
 	if !fenceVersion {
 		return v.String()
 	}
-	return redact.Sprintf("%s%s", v.String(), "(fence)").StripMarkers()
+	return fmt.Sprintf("%v (fence)", v)
 }
 
 // ParseVersion parses a Version from a string of the form

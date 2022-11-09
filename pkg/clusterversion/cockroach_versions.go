@@ -161,6 +161,16 @@ type Key int
 const (
 	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
+	VPrimordial1
+	VPrimordial2
+	VPrimordial3
+	VPrimordial4
+	VPrimordial5
+	VPrimordial6
+	VPrimordial7
+	VPrimordial8
+	VPrimordialMax
+
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
@@ -360,6 +370,42 @@ const TODOPreV22_1 = V22_1
 // large number to every major if building from master, so as to ensure that
 // master builds cannot be upgraded to release-branch builds.
 var rawVersionsSingleton = keyedVersions{
+	{
+		Key:     VPrimordial1,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 0},
+	},
+	{
+		Key:     VPrimordial2,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 1},
+	},
+	{
+		Key:     VPrimordial3,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 2},
+	},
+	{
+		Key:     VPrimordial4,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 3},
+	},
+	{
+		Key:     VPrimordial5,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 4},
+	},
+	{
+		Key:     VPrimordial6,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 5},
+	},
+	{
+		Key:     VPrimordial7,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 6},
+	},
+	{
+		Key:     VPrimordial8,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 7},
+	},
+	{
+		Key:     VPrimordialMax,
+		Version: roachpb.Version{Major: 1, Minor: 0, Internal: 99999},
+	},
 	{
 		Key:     V22_1,
 		Version: roachpb.Version{Major: 22, Minor: 1},
@@ -641,6 +687,19 @@ func ByKey(key Key) roachpb.Version {
 func ListBetween(from, to roachpb.Version) []roachpb.Version {
 	return listBetweenInternal(from, to, versionsSingleton)
 }
+
+func LastVersion() roachpb.Version {
+	return versionsSingleton.LastVersion()
+}
+
+// !!!
+//func ListPermanentUpTo(to roachpb.Version) []roachpb.Version {
+//	vers := listBetweenInternal(roachpb.Version{}, to, versionsSingleton)
+//	var res []roachpb.Version
+//	for _, v := vers {
+//
+//	}
+//}
 
 func listBetweenInternal(from, to roachpb.Version, vs keyedVersions) []roachpb.Version {
 	var cvs []roachpb.Version

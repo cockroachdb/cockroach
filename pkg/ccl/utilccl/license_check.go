@@ -137,6 +137,9 @@ func init() {
 	base.LicenseType = getLicenseType
 	base.UpdateMetricOnLicenseChange = UpdateMetricOnLicenseChange
 	server.ApplyTenantLicense = ApplyTenantLicense
+	base.CCLDistributionAndEnterpriseEnabled = func(st *cluster.Settings, clusterID uuid.UUID, org string) bool {
+		return IsEnterpriseEnabled(st, clusterID, "" /* feature */)
+	}
 }
 
 var licenseMetricUpdateFrequency = 1 * time.Minute

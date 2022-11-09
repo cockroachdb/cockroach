@@ -833,6 +833,8 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// TODO(andrei): the startupmigrations pkg is gone and so are migrations
+	// requiring backfill. The test crashes when run, though; it rotted.
 	skip.WithIssue(t, 51798, "fails in the presence of migrations requiring backfill, "+
 		"but cannot import startupmigrations")
 

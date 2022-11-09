@@ -1,0 +1,30 @@
+$ bazel test pkg/sql:all --test_env=GOTRACEBACK=all --test_filter=TestInternalJobsTableRetry --test_arg -test.v --test_arg -show-logs --test_sharding_strategy=disabled --test_output streamed
+$ bazel test pkg/sql:all --test_env=GOTRACEBACK=all --test_filter=TestInternalJobsTableRetry --test_arg -test.v --test_arg -show-logs --test_sharding_strategy=disabled --test_output streamed
+INFO: Invocation ID: 1ed0737a-07f2-4c42-9367-6e2c5264cae2
+INFO: Invocation ID: 1ed0737a-07f2-4c42-9367-6e2c5264cae2
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+WARNING: Streamed test output requested. All tests will be run locally, without sharding, one at a time
+Loading: 
+Loading: 
+Loading: 0 packages loaded
+Loading: 0 packages loaded
+Analyzing: 13 targets (0 packages loaded, 0 targets configured)
+Analyzing: 13 targets (0 packages loaded, 0 targets configured)
+INFO: Analyzed 13 targets (0 packages loaded, 0 targets configured).
+INFO: Analyzed 13 targets (0 packages loaded, 0 targets configured).
+INFO: Found 11 targets and 2 test targets...
+INFO: Found 11 targets and 2 test targets...
+[0 / 8] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+[0 / 8] [Prepa] BazelWorkspaceStatusAction stable-status.txt
+[309 / 648] GoLink pkg/sql/gen-reports-TxnStateTransitions_stateNoTxn_bin_/gen-reports-TxnStateTransitions_stateNoTxn_bin; 0s remote-cache, linux-sandbox ... (4 actions, 2 running)
+[309 / 648] GoLink pkg/sql/gen-reports-TxnStateTransitions_stateNoTxn_bin_/gen-reports-TxnStateTransitions_stateNoTxn_bin; 0s remote-cache, linux-sandbox ... (4 actions, 2 running)
+[371 / 648] GoLink pkg/sql/gen-reports-TxnStateTransitions_stateNoTxn_bin_/gen-reports-TxnStateTransitions_stateNoTxn_bin; 1s remote-cache, linux-sandbox ... (11 actions, 2 running)
+[371 / 648] GoLink pkg/sql/gen-reports-TxnStateTransitions_stateNoTxn_bin_/gen-reports-TxnStateTransitions_stateNoTxn_bin; 1s remote-cache, linux-sandbox ... (11 actions, 2 running)
+[586 / 648] GoLink pkg/sql/gen-reports-TxnStateTransitions_stateNoTxn_bin_/gen-reports-TxnStateTransitions_stateNoTxn_bin; 2s remote-cache, linux-sandbox ... (12 actions, 2 running)
+[586 / 648] GoLink pkg/sql/gen-reports-TxnStateTransitions_stateNoTxn_bin_/gen-reports-TxnStateTransitions_stateNoTxn_bin; 2s remote-cache, linux-sandbox ... (12 actions, 2 running)
+[620 / 648] GoCompilePkg pkg/sql/sql_test.internal.recompileinternal.a; 1s remote-cache, linux-sandbox ... (5 actions, 4 running)
+[620 / 648] GoCompilePkg pkg/sql/sql_test.internal.recompileinternal.a; 1s remote-cache, linux-sandbox ... (5 actions, 4 running)
+[621 / 648] GoCompilePkg pkg/sql/sql_test.internal.recompileinternal.a; 2s remote-cache, linux-sandbox ... (4 actions running)
+[621 / 648] GoCompilePkg pkg/sql/sql_test.internal.recompileinternal.a; 2s remote-cache, linux-sandbox ... (4 actions running)
+[622 / 648] GoCompilePkg pkg/sql/sql_test.internal.recompileinternal.a; 5s remote-cache, linux-sandbox
+[622 / 648] GoCompilePkg pkg/sql/sql_test.internal.recompileinternal.a; 5s remote-cache, linux-sandbox
