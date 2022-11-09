@@ -31,7 +31,7 @@ func registerCostFuzz(r registry.Registry) {
 		var clusterSpec spec.ClusterSpec
 		switch setupName {
 		case sqlsmith.SeedMultiRegionSetupName:
-			clusterSpec = r.MakeClusterSpec(9, spec.Geo())
+			clusterSpec = r.MakeClusterSpec(9, spec.Geo(), spec.GatherCores())
 		default:
 			clusterSpec = r.MakeClusterSpec(1)
 		}
