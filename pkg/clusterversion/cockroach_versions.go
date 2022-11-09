@@ -559,29 +559,37 @@ const (
 	finalVersion = invalidVersionKey
 )
 
-// devVersionsAbove is the version key above which all versions are offset to be
-// development version when developmentBranch is true. By default this is all
-// versions, by setting this to -1, but an env var can override this, to leave
-// the first version un-offset. Doing so means that that version, which is
-// generally minBinaryVersion as well, is unchanged, and thus allows upgrading a
-// stable release data-dir to a dev version if desired.
-var devVersionsAbove Key = func() Key {
-	if envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false) {
-		return invalidVersionKey + 1
-	}
-	return invalidVersionKey
-}()
-
 var versionsSingleton = func() keyedVersions {
 	if developmentBranch {
+		// If this is a dev branch, we offset every version +1M major versions into
+		// the future. This means a cluster that runs the migrations in a dev build,
+		// while they are still in flux, will persist this offset version, and thus
+		// cannot then "upgrade" to the released build, as its non-offset versions
+		// would then be a downgrade, which is blocked.
+		//
+		// By default, when offsetting versions in a dev binary, we offset *all of
+		// them*, which includes the minimum version from upgrades are supported.
+		// This means a dev binary cannot join, resume or upgrade a release version
+		// cluster, which is by design as it avoids unintentionally but irreversibly
+		// upgrading a cluster to dev versions. Opting in to such an upgrade is
+		// possible however via setting COCKROACH_UPGRADE_TO_DEV_VERSION. Doing so
+		// skips offsetting the earliest version this binary supports, meaning it
+		// will support an upgrade from as low as that released version that then
+		// advances into the dev-numbered versions.
+		//
+		// Note that such upgrades may in fact be a *downgrade* of the logical
+		// version! For example, on a cluster that is on released version 3, a dev
+		// binary containing versions 1, 2, 3, and 4 started with this flag would
+		// renumber only 2-4 to be +1M. It would then step from 3 "up" to 1000002 --
+		// which conceptually is actually back down to 2 -- then back to to 1000003,
+		// then on to 1000004, etc.
+		skipFirst := envutil.EnvOrDefaultBool("COCKROACH_UPGRADE_TO_DEV_VERSION", false)
 		const devOffset = 1000000
-		// Throw every version above the last release (which will be none on a release
-		// branch) 1 million major versions into the future, so any "upgrade" to a
-		// release branch build will be a downgrade and thus blocked.
 		for i := range rawVersionsSingleton {
-			if rawVersionsSingleton[i].Key > devVersionsAbove {
-				rawVersionsSingleton[i].Major += devOffset
+			if i == 0 && skipFirst {
+				continue
 			}
+			rawVersionsSingleton[i].Major += devOffset
 		}
 	}
 	return rawVersionsSingleton
