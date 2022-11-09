@@ -39,7 +39,7 @@ func WithGoStandardParser() ParseOption {
 // WithFastJSONParser returns an option that forces the use of fast json parser.
 func WithFastJSONParser() ParseOption {
 	return funcOpt(func(cfg *parseConfig) {
-		cfg.impl = useJSONLexer
+		cfg.impl = useFastJSONParser
 	})
 }
 
@@ -50,11 +50,11 @@ type parseJSONImplType int
 const (
 	// useStdGoJSON : encoding/json
 	useStdGoJSON parseJSONImplType = iota
-	// useJSONLexer : uses json lexer (built on top of pkg/json high performance library)
-	useJSONLexer
+	// useFastJSONParser : uses fast JSON parser (built on top of pkg/json high performance library)
+	useFastJSONParser
 
 	// Note: Other libraries tested and rejected include:
-	//  * json-iter: A fine library; however, json lexer consistently
+	//  * json-iter: A fine library; however, fastJSONParser consistently
 	//    performed better, with much better memory allocation behavior.
 	//  * go-json: universally slower, worse (allocation) than either
 	//    standard or json-iter for larger inputs.
@@ -68,7 +68,7 @@ const (
 // default configuration for parsing JSON.
 var parseJSONDefaultConfig = func() (cfg parseConfig) {
 	cfg.impl = util.ConstantWithMetamorphicTestChoice(
-		"parse-json-impl", useJSONLexer, useStdGoJSON,
+		"parse-json-impl", useFastJSONParser, useStdGoJSON,
 	).(parseJSONImplType)
 	return cfg
 }()
@@ -82,7 +82,7 @@ func (c parseConfig) parseJSON(s string) (JSON, error) {
 	switch c.impl {
 	case useStdGoJSON:
 		return parseJSONGoStd(s, c)
-	case useJSONLexer:
+	case useFastJSONParser:
 		return parseUsingFastParser(s, c)
 	default:
 		return nil, errors.AssertionFailedf("invalid ParseJSON implementation %v", c.impl)
