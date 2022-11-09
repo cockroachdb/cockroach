@@ -2177,3 +2177,16 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 	ctx.WriteString(" AS ")
 	ctx.FormatNode(node.As)
 }
+
+// CreateTenant represents a CREATE TENANT statement.
+type CreateTenant struct {
+	Name Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateTenant) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE TENANT ")
+	// NB: we do not anonymize the tenant name because we assume that tenant names
+	// do not contain sensitive information.
+	ctx.FormatNode(&node.Name)
+}

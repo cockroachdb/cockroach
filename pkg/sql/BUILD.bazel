@@ -62,6 +62,7 @@ go_library(
         "create_sequence.go",
         "create_stats.go",
         "create_table.go",
+        "create_tenant.go",
         "create_type.go",
         "create_view.go",
         "created_sequence.go",

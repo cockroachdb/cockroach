@@ -236,7 +236,9 @@ func (p *planner) CreateTenant(ctx context.Context, name string) (roachpb.Tenant
 		return roachpb.TenantID{}, err
 	}
 
-	// Find the next available ID that can be assigned to the created tenant.
+	// Find the first available ID that can be assigned to the created tenant.
+	// Note, this ID could have previously belonged to another tenant that has
+	// since been dropped and gc'ed.
 	row, err := p.execCfg.InternalExecutor.QueryRowEx(ctx, "next-tenant-id", p.Txn(), sessiondata.NodeUserSessionDataOverride, `
    SELECT id+1 AS newid
     FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)
