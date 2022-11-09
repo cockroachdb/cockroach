@@ -172,13 +172,17 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
 ) descs.HistoricalInternalExecTxnRunner {
-	return descs.NewHistoricalInternalExecTxnRunner(readAsOf, func(ctx context.Context, retryable descs.InternalExecFn) error {
-		return sc.fixedTimestampTxn(ctx, readAsOf, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	return descs.NewHistoricalInternalExecTxnRunner(readAsOf, func(
+		ctx context.Context, retryable descs.InternalExecFn,
+	) error {
+		return sc.fixedTimestampTxnWithExecutor(ctx, readAsOf, func(
+			ctx context.Context,
+			txn *kv.Txn,
+			_ *sessiondata.SessionData,
+			descriptors *descs.Collection,
+			ie sqlutil.InternalExecutor,
 		) error {
-			// We need to re-create the evalCtx since the txn may retry.
-			ie := sc.ieFactory.NewInternalExecutor(NewFakeSessionData(sc.execCfg.SV()))
-			return retryable(ctx, txn, ie, nil /* descriptors */)
+			return retryable(ctx, txn, ie, descriptors)
 		})
 	})
 }
@@ -188,10 +192,10 @@ func (sc *SchemaChanger) fixedTimestampTxn(
 	readAsOf hlc.Timestamp,
 	retryable func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error,
 ) error {
-	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
-			return err
-		}
+	return sc.fixedTimestampTxnWithExecutor(ctx, readAsOf, func(
+		ctx context.Context, txn *kv.Txn, _ *sessiondata.SessionData,
+		descriptors *descs.Collection, _ sqlutil.InternalExecutor,
+	) error {
 		return retryable(ctx, txn, descriptors)
 	})
 }
@@ -207,9 +211,9 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 		ie sqlutil.InternalExecutor,
 	) error,
 ) error {
-	sd := NewFakeSessionData(sc.execCfg.SV())
-	return sc.txnWithExecutor(ctx, sd, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	return sc.txnWithExecutor(ctx, func(
+		ctx context.Context, txn *kv.Txn, sd *sessiondata.SessionData,
+		descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 	) error {
 		if err := txn.SetFixedTimestamp(ctx, readAsOf); err != nil {
 			return err
