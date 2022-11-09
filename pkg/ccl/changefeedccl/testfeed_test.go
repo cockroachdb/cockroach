@@ -1320,7 +1320,10 @@ func (s *fakeKafkaSink) Dial() error {
 						return err
 					}
 				}
-				s.feedCh <- m
+				select {
+				case s.feedCh <- m:
+				case <-s.tg.done:
+				}
 				return nil
 			},
 		}}, nil
