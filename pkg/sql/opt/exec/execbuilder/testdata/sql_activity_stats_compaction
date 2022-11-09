@@ -15,6 +15,7 @@ SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ - '2h'::I
 let $current_agg_ts
 SELECT concat('''', date_trunc('hour', '2022-05-04 16:10'::TIMESTAMPTZ)::STRING, '''::TIMESTAMPTZ')
 
+skipif config local
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.statement_statistics
@@ -73,6 +74,7 @@ vectorized: true
                               spans: /0-/0/2022-05-04T15:59:59.999999001Z
                               limit: 1024
 
+skipif config local
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.transaction_statistics
@@ -129,6 +131,7 @@ vectorized: true
                               spans: /0-/0/2022-05-04T15:59:59.999999001Z
                               limit: 1024
 
+skipif config local
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.statement_statistics
@@ -197,6 +200,7 @@ vectorized: true
                               spans: /0/2022-05-04T14:00:00Z/"123"/"234"/"345"/"test"/1-/0/2022-05-04T15:59:59.999999001Z
                               limit: 1024
 
+skipif config local
 query T
 EXPLAIN (VERBOSE)
 DELETE FROM system.transaction_statistics
