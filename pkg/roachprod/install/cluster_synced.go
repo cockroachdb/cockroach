@@ -130,11 +130,14 @@ func runWithMaybeRetry(
 	var err error
 	var res *RunResultDetails
 
+	var cmdErr error
+
 	for r := retry.Start(retryOpts); r.Next(); {
 		res, err = f()
 		res.Attempt = r.CurrentAttempt() + 1
 		// nil err indicates a potentially retryable res.Err
 		if err == nil && res.Err != nil {
+			cmdErr = errors.CombineErrors(cmdErr, res.Err)
 			if shouldRetryFn != nil && shouldRetryFn(res) {
 				l.Printf("Encountered [%v] on attempt %v of %v", res.Err, r.CurrentAttempt()+1, defaultRunRetryOpt.MaxRetries+1)
 				continue
@@ -146,7 +149,7 @@ func runWithMaybeRetry(
 	if res.Err != nil && res.Attempt > 1 {
 		// An error cannot be marked with more than one reference error. Since res.Err may already be marked, we create
 		// a new error here and mark it.
-		res.Err = errors.Mark(errors.Wrapf(res.Err, "error persisted after %v attempts", res.Attempt), ErrAfterRetry)
+		res.Err = errors.Mark(errors.Wrapf(cmdErr, "error persisted after %v attempts", res.Attempt), ErrAfterRetry)
 	}
 	return res, err
 }
@@ -294,9 +297,9 @@ func (c *SyncedCluster) Stop(
 	}
 	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -342,7 +345,9 @@ fi`,
 			sig,                       // [3]
 			waitCmd,                   // [4]
 		)
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 		return res, res.Err
 	})
 }
@@ -355,9 +360,9 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 	}
 	return c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -382,7 +387,9 @@ sudo rm -fr logs &&
 				cmd += "sudo rm -fr tenant-certs* ;\n"
 			}
 		}
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 		return res, res.Err
 	})
 }
@@ -402,9 +409,9 @@ func (c *SyncedCluster) Status(ctx context.Context, l *logger.Logger) ([]NodeSta
 	results := make([]NodeStatus, len(c.Nodes))
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -421,7 +428,9 @@ else
   echo ${out}
 fi
 `
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
@@ -641,9 +650,18 @@ type RunResultDetails struct {
 	Attempt          int
 }
 
-// Error vs result
-// An error is an unexpected state within roachprod
-// A result is the output of running a exitCode (could be interpreted as an error)
+func newRunResultDetails(node Node, err error) *RunResultDetails {
+	res := RunResultDetails{
+		Node: node,
+		Err:  err,
+	}
+	if exitCode, success := rperrors.GetExitCode(err); success {
+		res.RemoteExitStatus = exitCode
+	}
+
+	return &res
+}
+
 func (c *SyncedCluster) runCmdOnSingleNode(
 	ctx context.Context,
 	l *logger.Logger,
@@ -652,9 +670,9 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	combined bool,
 	stdout, stderr io.Writer,
 ) (*RunResultDetails, error) {
-	sess, res, err := c.setupSession(node)
+	sess, err := c.newSession(node)
 	if err != nil {
-		return res, err
+		return newRunResultDetails(node, err), err
 	}
 	defer sess.Close()
 
@@ -664,8 +682,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	}
 	expandedCmd, err := e.expand(ctx, l, c, cmd)
 	if err != nil {
-		res.Err = err
-		return res, err
+		return newRunResultDetails(node, err), err
 	}
 
 	// Be careful about changing these command strings. In particular, we need
@@ -682,17 +699,20 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 		nodeCmd = fmt.Sprintf("cd %s; %s", c.localVMDir(node), nodeCmd)
 	}
 
-	// if running on 2+ nodes
+	var res *RunResultDetails
 	if combined {
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, nodeCmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, nodeCmd)
+		res = newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 	} else {
+		// We stream the output if running on a single node.
 		var stdoutBuffer, stderrBuffer bytes.Buffer
 		multStdout := io.MultiWriter(&stdoutBuffer, stdout)
 		multStderr := io.MultiWriter(&stderrBuffer, stderr)
 		sess.SetStdout(multStdout)
 		sess.SetStderr(multStderr)
 
-		getRunResult(func() error { return sess.Run(ctx, nodeCmd) }, res)
+		res = newRunResultDetails(node, sess.Run(ctx, nodeCmd))
 		res.Stderr = stderrBuffer.String()
 		res.Stdout = stdoutBuffer.String()
 	}
@@ -711,7 +731,7 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 // is cached and then emitted all together once all commands are completed.
 //
 // stdout: Where stdout messages are written
-// stderr: Where stderr messages areå written
+// stderr: Where stderr messages are written
 // nodes: The cluster nodes where the command will be run.
 // title: A description of the command being run that is output to the logs.
 // cmd: The command to run.
@@ -726,8 +746,12 @@ func (c *SyncedCluster) Run(
 	}
 
 	results := make([]*RunResultDetails, len(nodes))
+
+	// A result is the output of running a exitCode (could be interpreted as an error)
 	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) {
-		//err is a non command failure
+		// An err returned here is an unexpected state within roachprod (non-command error).
+		// For errors that occur as part of running a command over ssh, the `result` will contain
+		// the actual error on a specific node.
 		result, err := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, !stream, stdout, stderr)
 		results[i] = result
 		return result, err
@@ -738,7 +762,8 @@ func (c *SyncedCluster) Run(
 	return selectError(results, stream, stdout)
 }
 
-// selectError returns the error from the RunResultDetails with the highest RemoteExitStatus
+// selectError returns the error from the RunResultDetails with the highest RemoteExitStatus.
+// This preserves the heuristic in the previously implemented and used `rperrors.SelectPriorityError`.
 func selectError(results []*RunResultDetails, stream bool, stdout io.Writer) error {
 	var resultWithError *RunResultDetails
 	for i, r := range results {
@@ -774,13 +799,13 @@ func (c *SyncedCluster) RunWithDetails(
 	// be processed further by the caller.
 	resultPtrs := make([]*RunResultDetails, len(nodes))
 
-	if _, err := c.ParallelE(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) { //nolint:errcheck
+	// Both return values are explicitly ignored because, in this case, resultPtrs
+	// capture both error and result state for each node
+	_, _ = c.ParallelE(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) { //nolint:errcheck
 		result, err := c.runCmdOnSingleNode(ctx, l, nodes[i], cmd, false, l.Stdout, l.Stderr)
 		resultPtrs[i] = result
 		return result, err
-	}); err != nil {
-		l.Printf("%v", err)
-	}
+	})
 
 	// Return values to preserve API
 	results := make([]RunResultDetails, len(nodes))
@@ -863,29 +888,14 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	return nil
 }
 
-func getRunResult(f func() error, res *RunResultDetails) {
-	err := f()
-	res.Err = err
-	res.RemoteExitStatus, _ = rperrors.GetExitCode(err)
-}
-
-func getCombinedResult(f func() ([]byte, error), res *RunResultDetails) {
-	out, err := f()
-	res.Err = err
-	res.CombinedOut = out
-	res.RemoteExitStatus, _ = rperrors.GetExitCode(err)
-}
-
 // setupSession is a helper which creates a new session and
 // populates RunResultDetails with an error if one occurrs (unlikely
 // given the code in `newSession`)
 // RunResultDetails is used across all functions which
 // create a session and holds error and stdout information
-func (c *SyncedCluster) setupSession(node Node) (session, *RunResultDetails, error) {
-	res := RunResultDetails{Node: node}
+func (c *SyncedCluster) setupSession(node Node) (session, error) {
 	sess, err := c.newSession(node)
-	res.Err = err
-	return sess, &res, err
+	return sess, err
 }
 
 // SetupSSH configures the cluster for use with SSH. This is generally run after
@@ -917,9 +927,9 @@ func (c *SyncedCluster) SetupSSH(ctx context.Context, l *logger.Logger) error {
 	// cluster in order to allow inter-node ssh.
 	var sshTar []byte
 	if err := c.Parallel(l, "generating ssh key", 1, 0, func(i int) (*RunResultDetails, error) {
-		sess, res, err := c.setupSession(1)
+		sess, err := c.setupSession(1)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(1, err), err
 		}
 		defer sess.Close()
 
@@ -938,7 +948,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		sess.SetStdout(&stdout)
 		sess.SetStderr(&stderr)
 
-		getRunResult(func() error { return sess.Run(ctx, cmd) }, res)
+		res := newRunResultDetails(1, sess.Run(ctx, cmd))
 
 		res.Stdout = stdout.String()
 		res.Stderr = stderr.String()
@@ -955,16 +965,18 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	nodes := c.Nodes[1:]
 	if err := c.Parallel(l, "distributing ssh key", len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
 		sess.SetStdin(bytes.NewReader(sshTar))
 		cmd := `tar xf -`
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "%s: output:\n%s", cmd, res.CombinedOut)
@@ -1006,9 +1018,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	var knownHostsData []byte
 	if err := c.Parallel(l, "scanning hosts", 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -1039,7 +1051,7 @@ exit 1
 		sess.SetStdout(&stdout)
 		sess.SetStderr(&stderr)
 
-		getRunResult(func() error { return sess.Run(ctx, cmd) }, res)
+		res := newRunResultDetails(node, sess.Run(ctx, cmd))
 
 		res.Stdout = stdout.String()
 		res.Stderr = stderr.String()
@@ -1054,9 +1066,9 @@ exit 1
 
 	if err := c.Parallel(l, "distributing known_hosts", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -1088,7 +1100,9 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
         '"'"'{}'"'"' ~` + config.SharedUser + `/.ssh' \;
 fi
 `
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "%s: output:\n%s", cmd, res.CombinedOut)
@@ -1106,9 +1120,9 @@ fi
 		// platforms.
 		if err := c.Parallel(l, "adding additional authorized keys", len(c.Nodes), 0, func(i int) (*RunResultDetails, error) {
 			node := c.Nodes[i]
-			sess, res, err := c.setupSession(node)
+			sess, err := c.newSession(node)
 			if err != nil {
-				return res, err
+				return newRunResultDetails(node, err), err
 			}
 			defer sess.Close()
 
@@ -1135,7 +1149,9 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
         "${tmp2}" ~` + config.SharedUser + `/.ssh/authorized_keys
 fi
 `
-			getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+			out, cmdErr := sess.CombinedOutput(ctx, cmd)
+			res := newRunResultDetails(node, cmdErr)
+			res.CombinedOut = out
 
 			if res.Err != nil {
 				return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
@@ -1170,9 +1186,9 @@ func (c *SyncedCluster) DistributeCerts(ctx context.Context, l *logger.Logger) e
 	var msg string
 	display := fmt.Sprintf("%s: initializing certs", c.Name)
 	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
-		sess, res, err := c.setupSession(1)
+		sess, err := c.setupSession(1)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(1, err), err
 		}
 		defer sess.Close()
 
@@ -1190,7 +1206,9 @@ mkdir -p certs
 tar cvf %[3]s certs
 `, cockroachNodeBinary(c, 1), strings.Join(nodeNames, " "), certsTarName)
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(1, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			msg = fmt.Sprintf("%s: %v", res.CombinedOut, res.Err)
@@ -1258,9 +1276,9 @@ func (c *SyncedCluster) createTenantCertBundle(
 	display := fmt.Sprintf("%s: initializing tenant certs", c.Name)
 	return c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -1294,7 +1312,9 @@ tar cvf %[5]s $CERT_DIR
 			bundleName,
 		)
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "certificate creation error: %s", res.CombinedOut)
@@ -1376,13 +1396,15 @@ func (c *SyncedCluster) fileExistsOnFirstNode(
 	display := fmt.Sprintf("%s: checking %s", c.Name, path)
 	if err := c.Parallel(l, display, 1, 0, func(i int) (*RunResultDetails, error) {
 		node := c.Nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, `test -e `+path) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, `test -e `+path)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		existsErr = res.Err
 		return res, nil
@@ -1453,9 +1475,9 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 	display := c.Name + ": distributing certs"
 	return c.Parallel(l, display, len(nodes), 0, func(i int) (*RunResultDetails, error) {
 		node := nodes[i]
-		sess, res, err := c.setupSession(node)
+		sess, err := c.newSession(node)
 		if err != nil {
-			return res, err
+			return newRunResultDetails(node, err), err
 		}
 		defer sess.Close()
 
@@ -1470,7 +1492,9 @@ func (c *SyncedCluster) distributeLocalCertsTar(
 			cmd += "tar xf -"
 		}
 
-		getCombinedResult(func() ([]byte, error) { return sess.CombinedOutput(ctx, cmd) }, res)
+		out, cmdErr := sess.CombinedOutput(ctx, cmd)
+		res := newRunResultDetails(node, cmdErr)
+		res.CombinedOut = out
 
 		if res.Err != nil {
 			return res, errors.Wrapf(res.Err, "~ %s\n%s", cmd, res.CombinedOut)
