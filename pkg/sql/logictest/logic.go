@@ -1227,6 +1227,7 @@ func (t *logicTest) newCluster(
 		!t.cfg.BootstrapVersion.Less(clusterversion.ByKey(clusterversion.V22_2SetSystemUsersUserIDColumnNotNull))) &&
 		(t.cfg.BinaryVersion.Equal(roachpb.Version{}) ||
 			!t.cfg.BinaryVersion.Less(clusterversion.ByKey(clusterversion.V22_2SetSystemUsersUserIDColumnNotNull)))
+	useMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
 		(globalMVCCRangeTombstone || useMVCCRangeTombstonesForPointDeletes)
 
@@ -3820,6 +3821,9 @@ type TestServerArgs struct {
 	// DeclarativeCorpusCollection corpus will be collected for the declarative
 	// schema changer.
 	DeclarativeCorpusCollection bool
+	// If set, then we will disable the metamorphic randomization of
+	// useMVCCRangeTombstonesForPointDeletes variable.
+	DisableUseMVCCRangeTombstonesForPointDeletes bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
