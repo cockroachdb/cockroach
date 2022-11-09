@@ -30,6 +30,7 @@ go_library(
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/mon",
+        "//pkg/util/pprofutil",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/grpcinterceptor",
