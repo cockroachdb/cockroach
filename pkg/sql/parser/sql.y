@@ -4164,6 +4164,14 @@ create_tenant_stmt:
   {
     $$.val = &tree.CreateTenant{Name: tree.Name($3)}
   }
+| CREATE TENANT name FROM REPLICATION OF name ON string_or_placeholder
+  {
+    $$.val = &tree.CreateTenantFromReplication{
+      Name: tree.Name($3),
+      ReplicationSourceTenantName: tree.Name($7),
+      ReplicationSourceAddress: $9.expr(),
+    }
+  }
 | CREATE TENANT error // SHOW HELP: CREATE TENANT
 
 // %Help: CREATE EXTENSION - pseudo-statement for PostgreSQL compatibility
