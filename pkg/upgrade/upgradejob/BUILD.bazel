@@ -7,6 +7,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
@@ -18,11 +19,10 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/sqlutil",
         "//pkg/upgrade",
-        "//pkg/util/timeutil",
+        "//pkg/upgrade/upgradebase",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

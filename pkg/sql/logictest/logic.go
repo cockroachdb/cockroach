@@ -70,7 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1344,9 +1344,9 @@ func (t *logicTest) newCluster(
 			// If we're injecting fake versions, hook up logic to simulate the end
 			// version existing.
 			if len(clusterversion.ListBetween(cfg.BootstrapVersion, cfg.BinaryVersion)) == 0 {
-				mm, ok := nodeParams.Knobs.UpgradeManager.(*upgrade.TestingKnobs)
+				mm, ok := nodeParams.Knobs.UpgradeManager.(*upgradebase.TestingKnobs)
 				if !ok {
-					mm = &upgrade.TestingKnobs{}
+					mm = &upgradebase.TestingKnobs{}
 					nodeParams.Knobs.UpgradeManager = mm
 				}
 				mm.ListBetweenOverride = func(

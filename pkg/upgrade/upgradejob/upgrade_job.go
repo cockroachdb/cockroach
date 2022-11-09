@@ -14,7 +14,9 @@ package upgradejob
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -26,11 +28,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/errors"
 )
 
@@ -68,7 +69,11 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	v := pl.GetMigration().ClusterVersion.Version
 	ie := execCtx.ExecCfg().InternalExecutor
 
-	alreadyCompleted, err := CheckIfMigrationCompleted(ctx, nil /* txn */, ie, v)
+	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(
+		execCtx.ExecCfg().Settings, execCtx.ExecCfg().NodeInfo.LogicalClusterID())
+	alreadyCompleted, err := CheckIfMigrationCompleted(
+		ctx, v, nil /* txn */, ie, enterpriseEnabled, ConsistentRead,
+	)
 	if alreadyCompleted || err != nil {
 		return errors.Wrapf(err, "checking migration completion for %v", v)
 	}
@@ -131,33 +136,61 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 
 	// Mark the upgrade as having been completed so that subsequent iterations
 	// no-op and new jobs are not created.
-	if err := markMigrationCompleted(ctx, ie, v); err != nil {
+	if err := upgradebase.MarkMigrationCompleted(ctx, ie, v); err != nil {
 		return errors.Wrapf(err, "marking migration complete for %v", v)
 	}
 	return nil
 }
 
-// CheckIfMigrationCompleted queries the system.migrations table to determine
+type StaleReadOpt bool
+
+const (
+	StaleRead      StaleReadOpt = true
+	ConsistentRead              = false
+)
+
+// CheckIfMigrationCompleted queries the system.upgrades table to determine
 // if the upgrade associated with this version has already been completed.
 // The txn may be nil, in which case the check will be run in its own
 // transaction.
+//
+// staleOpt dictates whether the check will run a consistent read or a stale,
+// follower read. If txn is not nil, only ConsistentRead can be specified. If
+// enterpriseEnabled is set and the StaleRead option is passed, then AS OF
+// SYSTEM TIME with_max_staleness('1h') is used for the query.
 func CheckIfMigrationCompleted(
-	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, v roachpb.Version,
+	ctx context.Context,
+	v roachpb.Version,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	enterpriseEnabled bool,
+	staleOpt StaleReadOpt,
 ) (alreadyCompleted bool, _ error) {
+	if txn != nil && staleOpt == StaleRead {
+		return false, errors.AssertionFailedf(
+			"CheckIfMigrationCompleted: cannot ask for stale read when running in a txn")
+	}
+	queryFormat := `
+SELECT count(*)
+	FROM system.migrations
+  %s
+ WHERE major = $1
+	 AND minor = $2
+	 AND patch = $3
+	 AND internal = $4
+`
+	var query string
+	if staleOpt == StaleRead && enterpriseEnabled {
+		query = fmt.Sprintf(queryFormat, "AS OF SYSTEM TIME with_max_staleness('1h')")
+	} else {
+		query = fmt.Sprintf(queryFormat, "")
+	}
+
 	row, err := ie.QueryRow(
 		ctx,
 		"migration-job-find-already-completed",
 		txn,
-		`
-SELECT EXISTS(
-        SELECT *
-          FROM system.migrations
-         WHERE major = $1
-           AND minor = $2
-           AND patch = $3
-           AND internal = $4
-       );
-`,
+		query,
 		v.Major,
 		v.Minor,
 		v.Patch,
@@ -165,34 +198,8 @@ SELECT EXISTS(
 	if err != nil {
 		return false, err
 	}
-	return bool(*row[0].(*tree.DBool)), nil
-}
-
-func markMigrationCompleted(
-	ctx context.Context, ie sqlutil.InternalExecutor, v roachpb.Version,
-) error {
-	_, err := ie.ExecEx(
-		ctx,
-		"migration-job-mark-job-succeeded",
-		nil, /* txn */
-		sessiondata.NodeUserSessionDataOverride,
-		`
-INSERT
-  INTO system.migrations
-        (
-            major,
-            minor,
-            patch,
-            internal,
-            completed_at
-        )
-VALUES ($1, $2, $3, $4, $5)`,
-		v.Major,
-		v.Minor,
-		v.Patch,
-		v.Internal,
-		timeutil.Now())
-	return err
+	count := *row[0].(*tree.DInt)
+	return count != 0, nil
 }
 
 // The long-running upgrade resumer has no reverting logic.

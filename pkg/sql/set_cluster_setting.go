@@ -618,7 +618,7 @@ func runMigrationsAndUpgradeVersion(
 	prev tree.Datum,
 	value tree.Datum,
 	updateVersionSystemSetting UpdateVersionSystemSettingHook,
-) error {
+) error { // _err
 	var from, to clusterversion.ClusterVersion
 
 	fromVersionVal := []byte(string(*prev.(*tree.DString)))
