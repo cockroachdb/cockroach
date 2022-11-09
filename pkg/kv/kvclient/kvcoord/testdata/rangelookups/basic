@@ -1,0 +1,62 @@
+send-get key=a
+----
+{
+  "header": {
+    "now": {
+      "wallTime": "1"
+    }
+  },
+  "requests": [
+    {
+      "get": {
+        "header": {
+          "key": "iQ=="
+        }
+      }
+    }
+  ]
+}
+{
+  "iQ==": "/Table/1"
+}
+
+recv
+----
+{
+  "header": {
+    "maxSpanRequestKeys": "9",
+    "now": {
+      "logical": 2,
+      "wallTime": "1"
+    },
+    "rangeId": "1",
+    "readConsistency": "INCONSISTENT",
+    "replica": {
+      "nodeId": 1,
+      "replicaId": 1,
+      "storeId": 1
+    },
+    "routingPolicy": "NEAREST",
+    "timestamp": {
+      "logical": 2,
+      "wallTime": "1"
+    }
+  },
+  "requests": [
+    {
+      "scan": {
+        "header": {
+          "endKey": "Av//",
+          "key": "AokAAA=="
+        }
+      }
+    }
+  ]
+}
+{
+  "AokAAA==": "/Meta1/Table/1/NULL/NULL",
+  "Av//": "/Meta1/Max"
+}
+
+send-scan-response key=Meta2Max
+----

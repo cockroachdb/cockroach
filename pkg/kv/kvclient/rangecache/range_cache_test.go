@@ -123,7 +123,7 @@ func (db *testDescriptorDB) FirstRange() (*roachpb.RangeDescriptor, error) {
 }
 
 func (db *testDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, _ RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Notify the test of the lookup, if the test wants notifications.
 	if ch, ok := db.listeners[key.String()]; ok {
