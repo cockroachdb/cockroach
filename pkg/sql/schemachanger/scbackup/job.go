@@ -12,6 +12,7 @@ package scbackup
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -30,9 +31,7 @@ import (
 //
 // It should only be called for backups which do not restore the jobs table
 // directly.
-func CreateDeclarativeSchemaChangeJobs(
-	ctx context.Context, registry *jobs.Registry, txn *kv.Txn, allMut nstree.Catalog,
-) error {
+func CreateDeclarativeSchemaChangeJobs(ctx context.Context, registry *jobs.Registry, txn *kv.Txn, ie sqlutil.InternalExecutor, allMut nstree.Catalog) error {
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
 	_ = allMut.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
 		if s := d.GetDeclarativeSchemaChangerState(); s != nil {
@@ -71,6 +70,6 @@ func CreateDeclarativeSchemaChangeJobs(
 			runningStatus,
 		))
 	}
-	_, err := registry.CreateJobsWithTxn(ctx, txn, records)
+	_, err := registry.CreateJobsWithTxn(ctx, txn, ie, records)
 	return err
 }

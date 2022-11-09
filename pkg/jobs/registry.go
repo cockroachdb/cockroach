@@ -326,9 +326,7 @@ func (r *Registry) makeProgress(record *Record) jobspb.Progress {
 // CreateJobsWithTxn creates jobs in fixed-size batches. There must be at least
 // one job to create, otherwise the function returns an error. The function
 // returns the IDs of the jobs created.
-func (r *Registry) CreateJobsWithTxn(
-	ctx context.Context, txn *kv.Txn, records []*Record,
-) ([]jobspb.JobID, error) {
+func (r *Registry) CreateJobsWithTxn(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, records []*Record) ([]jobspb.JobID, error) {
 	created := make([]jobspb.JobID, 0, len(records))
 	for toCreate := records; len(toCreate) > 0; {
 		const maxBatchSize = 100
@@ -336,7 +334,7 @@ func (r *Registry) CreateJobsWithTxn(
 		if batchSize > maxBatchSize {
 			batchSize = maxBatchSize
 		}
-		createdInBatch, err := r.createJobsInBatchWithTxn(ctx, txn, toCreate[:batchSize])
+		createdInBatch, err := r.createJobsInBatchWithTxn(ctx, txn, ie, toCreate[:batchSize])
 		if err != nil {
 			return nil, err
 		}
@@ -348,9 +346,7 @@ func (r *Registry) CreateJobsWithTxn(
 
 // createJobsInBatchWithTxn creates a batch of jobs from given records in a
 // transaction.
-func (r *Registry) createJobsInBatchWithTxn(
-	ctx context.Context, txn *kv.Txn, records []*Record,
-) ([]jobspb.JobID, error) {
+func (r *Registry) createJobsInBatchWithTxn(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, records []*Record) ([]jobspb.JobID, error) {
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting live session")
@@ -364,8 +360,10 @@ func (r *Registry) createJobsInBatchWithTxn(
 	if err != nil {
 		return nil, err
 	}
-	if _, err = r.ex.Exec(
-		ctx, "job-rows-batch-insert", txn, stmt, args...,
+	if _, err = ie.ExecEx(
+		ctx, "job-rows-batch-insert", txn, sessiondata.InternalExecutorOverride{
+			User: username.RootUserName(),
+		}, stmt, args...,
 	); err != nil {
 		return nil, err
 	}

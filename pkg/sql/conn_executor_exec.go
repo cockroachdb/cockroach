@@ -15,6 +15,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"runtime/pprof"
 	"strconv"
 	"strings"
@@ -1033,7 +1035,15 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 	for _, record := range ex.extraTxnState.schemaChangeJobRecords {
 		records = append(records, record)
 	}
-	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.Txn(), records)
+	var jobIDs []jobspb.JobID
+	var err error
+	if err := ex.planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		jobIDs, err = ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.Txn(), ie, records)
+		return err
+	}); err != nil {
+		return err
+	}
+
 	if err != nil {
 		return err
 	}

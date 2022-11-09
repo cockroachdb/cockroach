@@ -1980,9 +1980,7 @@ func (r *restoreResumer) publishDescriptors(
 
 	// Go through the descriptors and find any declarative schema change jobs
 	// affecting them.
-	if err := scbackup.CreateDeclarativeSchemaChangeJobs(
-		ctx, r.execCfg.JobRegistry, txn, all,
-	); err != nil {
+	if err := scbackup.CreateDeclarativeSchemaChangeJobs(ctx, r.execCfg.JobRegistry, txn, ie, all); err != nil {
 		return err
 	}
 

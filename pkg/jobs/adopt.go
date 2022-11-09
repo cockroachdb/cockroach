@@ -92,13 +92,13 @@ func (r *Registry) maybeDumpTrace(
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return r.internalExecutorFactory.TxnWithExecutor(ctx, r.db, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
 		if err := txn.SetUserPriority(roachpb.MinUserPriority); err != nil {
 			return errors.WithAssertionFailure(err)
 		}
-		numRows, err := r.ex.Exec(
+		numRows, err := ie.Exec(
 			ctx, "claim-jobs", txn, claimQuery,
 			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop)
 		if err != nil {
