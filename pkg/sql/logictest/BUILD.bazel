@@ -27,6 +27,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/build/bazel",
         "//pkg/cloud/externalconn/providers",
         "//pkg/clusterversion",
         "//pkg/col/coldata",
@@ -60,6 +61,7 @@ go_library(
         "//pkg/testutils/sqlutils",
         "//pkg/upgrade/upgradebase",
         "//pkg/util",
+        "//pkg/util/binfetcher",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/randutil",
