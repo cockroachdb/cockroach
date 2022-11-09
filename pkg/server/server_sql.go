@@ -99,10 +99,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/stmtdiagnostics"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradecluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrademanager"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -195,6 +195,10 @@ type SQLServer struct {
 	// Server is closed. Every InternalExecutor created via the factory
 	// uses this memory monitor.
 	internalExecutorFactoryMemMonitor *mon.BytesMonitor
+
+	// upgradeManager deals with cluster version upgrades on bootstrap and on
+	// `set cluster setting version = <v>`.
+	upgradeManager *upgrademanager.Manager
 }
 
 // sqlServerOptionalKVArgs are the arguments supplied to newSQLServer which are
@@ -1076,6 +1080,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.StmtDiagnosticsRecorder = stmtDiagnosticsRegistry
 
+	var upgradeMgr *upgrademanager.Manager
 	{
 		// We only need to attach a version upgrade hook if we're the system
 		// tenant. Regular tenants are disallowed from changing cluster
@@ -1090,26 +1095,28 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				DB:                cfg.db,
 			})
 			systemDeps = upgrade.SystemDeps{
-				Cluster:    c,
-				DB:         cfg.db,
-				DistSender: cfg.distSender,
-				Stopper:    cfg.stopper,
+				Cluster:          c,
+				DB:               cfg.db,
+				InternalExecutor: cfg.circularInternalExecutor,
+				DistSender:       cfg.distSender,
+				Stopper:          cfg.stopper,
 			}
 		} else {
 			c = upgradecluster.NewTenantCluster(cfg.db)
 			systemDeps = upgrade.SystemDeps{
-				Cluster: c,
-				DB:      cfg.db,
+				Cluster:          c,
+				DB:               cfg.db,
+				InternalExecutor: cfg.circularInternalExecutor,
 			}
 		}
 
-		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgrade.TestingKnobs)
-		migrationMgr := upgrademanager.NewManager(
+		knobs, _ := cfg.TestingKnobs.UpgradeManager.(*upgradebase.TestingKnobs)
+		upgradeMgr = upgrademanager.NewManager(
 			systemDeps, leaseMgr, cfg.circularInternalExecutor, cfg.internalExecutorFactory, jobRegistry, codec,
-			cfg.Settings, knobs,
+			cfg.Settings, clusterIDForSQL.Get(), knobs,
 		)
-		execCfg.UpgradeJobDeps = migrationMgr
-		execCfg.VersionUpgradeHook = migrationMgr.Migrate
+		execCfg.UpgradeJobDeps = upgradeMgr
+		execCfg.VersionUpgradeHook = upgradeMgr.Migrate
 		execCfg.UpgradeTestingKnobs = knobs
 	}
 
@@ -1253,6 +1260,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		isMeta1Leaseholder:                cfg.isMeta1Leaseholder,
 		cfg:                               cfg.BaseConfig,
 		internalExecutorFactoryMemMonitor: ieFactoryMonitor,
+		upgradeManager:                    upgradeMgr,
 	}, nil
 }
 
@@ -1373,15 +1381,6 @@ func (s *SQLServer) preStart(
 		return err
 	}
 
-	// Before serving SQL requests, we have to make sure the database is
-	// in an acceptable form for this version of the software.
-	// We have to do this after actually starting up the server to be able to
-	// seamlessly use the kv client against other nodes in the cluster.
-	var mmKnobs startupmigrations.MigrationManagerTestingKnobs
-	if migrationManagerTestingKnobs := knobs.StartupMigrationManager; migrationManagerTestingKnobs != nil {
-		mmKnobs = *migrationManagerTestingKnobs.(*startupmigrations.MigrationManagerTestingKnobs)
-	}
-
 	s.leaseMgr.RefreshLeases(ctx, stopper, s.execCfg.DB)
 	s.leaseMgr.PeriodicallyRefreshSomeLeases(ctx)
 
@@ -1402,17 +1401,6 @@ func (s *SQLServer) preStart(
 				DistSQLMode: sessiondatapb.DistSQLOff,
 			},
 		})
-	startupMigrationsMgr := startupmigrations.NewManager(
-		stopper,
-		s.execCfg.DB,
-		s.execCfg.Codec,
-		&migrationsExecutor,
-		s.execCfg.Clock,
-		mmKnobs,
-		s.execCfg.NodeInfo.NodeID.SQLInstanceID().String(),
-		s.execCfg.Settings,
-		s.jobRegistry,
-	)
 
 	if err := s.jobRegistry.Start(ctx, stopper); err != nil {
 		return err
@@ -1457,9 +1445,22 @@ func (s *SQLServer) preStart(
 		return errors.Wrap(err, "initializing settings")
 	}
 
-	// Run startup upgrades (note: these depend on jobs subsystem running).
-	if err := startupMigrationsMgr.EnsureMigrations(ctx, bootstrapVersion); err != nil {
-		return errors.Wrap(err, "ensuring SQL migrations")
+	// Run all the "permanent" upgrades that haven't already run in this cluster,
+	// until the currently active version. Upgrades for higher versions, if any,
+	// will be run in response to `SET CLUSTER SETTING version = <v>`, just like
+	// non-permanent upgrade.
+	//
+	// NOTE: We're going to run the permanent upgrades up to the active version.
+	// For mixed kv/sql nodes, I think we could use bootstrapVersion here instead.
+	// If the active version has diverged from bootstrap version, then all
+	// upgrades in between the two must have run when the cluster version
+	// advanced. But for sql-only servers the bootstrap version is not
+	// well-defined, so we use the active version.
+	if err := s.upgradeManager.RunPermanentUpgrades(
+		ctx,
+		s.cfg.Settings.Version.ActiveVersion(ctx).Version, /* upToVersion */
+	); err != nil {
+		return err
 	}
 
 	log.Infof(ctx, "done ensuring all necessary startup migrations have run")
