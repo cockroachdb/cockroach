@@ -4850,7 +4850,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				tenantName := tree.MustBeDString(args[1])
-				if err := evalCtx.Tenant.CreateTenantWithID(ctx, uint64(sTenID), string(tenantName)); err != nil {
+				if err := evalCtx.Tenant.CreateTenantWithID(ctx, uint64(sTenID), roachpb.TenantName(tenantName)); err != nil {
 					return nil, err
 				}
 				return args[0], nil
@@ -4867,7 +4867,7 @@ value if you rely on the HLC for accuracy.`,
 				tenantName := tree.MustBeDString(args[0])
 				var tenantID roachpb.TenantID
 				var err error
-				if tenantID, err = evalCtx.Tenant.CreateTenant(ctx, string(tenantName)); err != nil {
+				if tenantID, err = evalCtx.Tenant.CreateTenant(ctx, roachpb.TenantName(tenantName)); err != nil {
 					return nil, err
 				}
 				return tree.NewDInt(tree.DInt(tenantID.ToUint64())), nil
@@ -4894,7 +4894,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				tenantName := tree.MustBeDString(args[1])
-				if err := evalCtx.Tenant.RenameTenant(ctx, uint64(sTenID), string(tenantName)); err != nil {
+				if err := evalCtx.Tenant.RenameTenant(ctx, uint64(sTenID), roachpb.TenantName(tenantName)); err != nil {
 					return nil, err
 				}
 				return args[0], nil

@@ -1113,6 +1113,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> create_schema_stmt
 %type <tree.Statement> create_table_stmt
 %type <tree.Statement> create_table_as_stmt
+%type <tree.Statement> create_tenant_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
 %type <tree.Statement> create_func_stmt
@@ -4140,7 +4141,7 @@ comment_text:
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
-// CREATE ROLE, CREATE TYPE, CREATE EXTENSION
+// CREATE ROLE, CREATE TYPE, CREATE EXTENSION, CREATE TENANT
 create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
@@ -4149,8 +4150,19 @@ create_stmt:
 | create_changefeed_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
+| create_tenant_stmt // EXTEND WITH HELP: CREATE TENANT
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
+
+// %Help: CREATE TENANT - create new tenant
+// %Category: Group
+// %Text: CREATE TENANT name
+create_tenant_stmt:
+  CREATE TENANT name
+  {
+    $$.val = &tree.CreateTenant{Name: tree.Name($3)}
+  }
+| CREATE TENANT error // SHOW HELP: CREATE TENANT
 
 // %Help: CREATE EXTENSION - pseudo-statement for PostgreSQL compatibility
 // %Category: Cfg
