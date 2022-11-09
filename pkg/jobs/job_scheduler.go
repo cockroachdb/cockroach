@@ -112,13 +112,14 @@ func lookupNumRunningJobs(
 	scheduleID int64,
 	env scheduledjobs.JobSchedulerEnv,
 	ie sqlutil.InternalExecutor,
+	txn *kv.Txn,
 ) (int64, error) {
 	lookupStmt := fmt.Sprintf(
 		"SELECT count(*) FROM %s WHERE created_by_type = '%s' AND created_by_id = %d AND status IN %s",
 		env.SystemJobsTableName(), CreatedByScheduledJobs, scheduleID, NonTerminalStatusTupleString)
 	row, err := ie.QueryRowEx(
 		ctx, "lookup-num-running",
-		/*txn=*/ nil,
+		txn,
 		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
 		lookupStmt)
 	if err != nil {
@@ -129,9 +130,7 @@ func lookupNumRunningJobs(
 
 const recheckRunningAfter = 1 * time.Minute
 
-func (s *jobScheduler) processSchedule(
-	ctx context.Context, schedule *ScheduledJob, numRunning int64, txn *kv.Txn,
-) error {
+func (s *jobScheduler) processSchedule(ctx context.Context, schedule *ScheduledJob, numRunning int64, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 	if numRunning > 0 {
 		switch schedule.ScheduleDetails().Wait {
 		case jobspb.ScheduleDetails_WAIT:
@@ -141,14 +140,14 @@ func (s *jobScheduler) processSchedule(
 			schedule.SetNextRun(s.env.Now().Add(recheckRunningAfter))
 			schedule.SetScheduleStatus("delayed due to %d already running", numRunning)
 			s.metrics.RescheduleWait.Inc(1)
-			return schedule.Update(ctx, s.InternalExecutor, txn)
+			return schedule.Update(ctx, ie, txn)
 		case jobspb.ScheduleDetails_SKIP:
 			if err := schedule.ScheduleNextRun(); err != nil {
 				return err
 			}
 			schedule.SetScheduleStatus("rescheduled due to %d already running", numRunning)
 			s.metrics.RescheduleSkip.Inc(1)
-			return schedule.Update(ctx, s.InternalExecutor, txn)
+			return schedule.Update(ctx, ie, txn)
 		}
 	}
 
@@ -166,7 +165,7 @@ func (s *jobScheduler) processSchedule(
 		schedule.SetNextRun(time.Time{})
 	}
 
-	if err := schedule.Update(ctx, s.InternalExecutor, txn); err != nil {
+	if err := schedule.Update(ctx, ie, txn); err != nil {
 		return err
 	}
 
@@ -182,14 +181,14 @@ func (s *jobScheduler) processSchedule(
 		schedule.ScheduledRunTime(), schedule.NextRun())
 
 	execCtx := logtags.AddTag(ctx, "schedule", schedule.ScheduleID())
-	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn, nil); err != nil {
+	if err := executor.ExecuteJob(execCtx, s.JobExecutionConfig, s.env, schedule, txn, ie); err != nil {
 		return errors.Wrapf(err, "executing schedule %d", schedule.ScheduleID())
 	}
 
 	s.metrics.NumStarted.Inc(1)
 
 	// Persist any mutations to the underlying schedule.
-	return schedule.Update(ctx, s.InternalExecutor, txn)
+	return schedule.Update(ctx, ie, txn)
 }
 
 type savePointError struct {
@@ -235,10 +234,8 @@ func withSavePoint(ctx context.Context, txn *kv.Txn, fn func() error) error {
 
 // executeCandidateSchedule attempts to execute schedule.
 // The schedule is executed only if it's running.
-func (s *jobScheduler) executeCandidateSchedule(
-	ctx context.Context, candidate int64, txn *kv.Txn,
-) error {
-	schedule, err := loadCandidateScheduleForExecution(ctx, candidate, s.env, s.InternalExecutor, txn)
+func (s *jobScheduler) executeCandidateSchedule(ctx context.Context, candidate int64, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+	schedule, err := loadCandidateScheduleForExecution(ctx, candidate, s.env, ie, txn)
 	if err != nil {
 		if errors.Is(err, errScheduleNotRunnable) {
 			return nil
@@ -254,7 +251,7 @@ func (s *jobScheduler) executeCandidateSchedule(
 		return nil
 	}
 
-	numRunning, err := lookupNumRunningJobs(ctx, schedule.ScheduleID(), s.env, s.InternalExecutor)
+	numRunning, err := lookupNumRunningJobs(ctx, schedule.ScheduleID(), s.env, ie, txn)
 	if err != nil {
 		return err
 	}
@@ -265,10 +262,10 @@ func (s *jobScheduler) executeCandidateSchedule(
 			return contextutil.RunWithTimeout(
 				ctx, fmt.Sprintf("process-schedule-%d", schedule.ScheduleID()), timeout,
 				func(ctx context.Context) error {
-					return s.processSchedule(ctx, schedule, numRunning, txn)
+					return s.processSchedule(ctx, schedule, numRunning, txn, ie)
 				})
 		}
-		return s.processSchedule(ctx, schedule, numRunning, txn)
+		return s.processSchedule(ctx, schedule, numRunning, txn, ie)
 	}); processErr != nil {
 		if errors.HasType(processErr, (*savePointError)(nil)) {
 			return errors.Wrapf(processErr, "savepoint error for schedule %d", schedule.ScheduleID())
@@ -342,8 +339,8 @@ func (s *jobScheduler) executeSchedules(ctx context.Context, maxSchedules int64)
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		candidateID := int64(tree.MustBeDInt(row[0]))
-		if err := s.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return s.executeCandidateSchedule(ctx, candidateID, txn)
+		if err := s.InternalExecutorFactory.TxnWithExecutor(ctx, s.DB, nil /* sessionData */, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+			return s.executeCandidateSchedule(ctx, candidateID, txn, ie)
 		}); err != nil {
 			log.Errorf(ctx, "error executing candidate schedule %d: %s", candidateID, err)
 		}
