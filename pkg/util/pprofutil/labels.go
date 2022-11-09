@@ -37,7 +37,7 @@ func SetProfilerLabels(ctx context.Context, labels ...string) (_ context.Context
 func SetProfilerLabelsFromCtxTags(ctx context.Context) (_ context.Context, undo func()) {
 	tags := logtags.FromContext(ctx)
 	if tags == nil || len(tags.Get()) == 0 {
-		return
+		return ctx, func() {}
 	}
 	var labels []string
 	for _, tag := range tags.Get() {
