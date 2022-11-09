@@ -37,8 +37,10 @@ import "cloud/cloudpb/external_storage.proto";
 // descriptor in the database, and doesn't emit any rows nor support
 // any post-processing.
 message BackfillerSpec {
+  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
+  // dropped, the new way to send the job tag is using 'job_tag' in the
+  // SetupFlowRequest message.
   optional int64 job_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
-
   enum Type {
     Invalid = 0;
     Column = 1;
@@ -105,6 +107,9 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
+  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
+  // dropped, the new way to send the job tag is using 'job_tag' in the
+  // SetupFlowRequest message.
   optional int64 job_id = 19 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
@@ -241,6 +246,9 @@ message StreamIngestionFrontierSpec {
 }
 
 message BackupDataSpec {
+  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
+  // dropped, the new way to send the job tag is using 'job_tag' in the
+  // SetupFlowRequest message.
   optional int64 job_id = 11 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   repeated roachpb.Span spans = 1 [(gogoproto.nullable) = false];
   repeated roachpb.Span introduced_spans = 2 [(gogoproto.nullable) = false];
@@ -294,6 +302,9 @@ message RestoreSpanEntry {
 }
 
 message RestoreDataSpec {
+  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
+  // dropped, the new way to send the job tag is using 'job_tag' in the
+  // SetupFlowRequest message.
   optional int64 job_id = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   optional util.hlc.Timestamp restore_time = 1 [(gogoproto.nullable) = false];
   optional roachpb.FileEncryptionOptions encryption = 2;
@@ -309,6 +320,9 @@ message RestoreDataSpec {
 }
 
 message SplitAndScatterSpec {
+  // TODO(lidor): job_id is not needed when interoperability with 22.2 is
+  // dropped, the new way to send the job tag is using 'job_tag' in the
+  // SetupFlowRequest message.
   optional int64 job_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "JobID"];
   message RestoreEntryChunk {
     repeated RestoreSpanEntry entries = 1 [(gogoproto.nullable) = false];
