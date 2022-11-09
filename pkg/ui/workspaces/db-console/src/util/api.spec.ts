@@ -20,7 +20,10 @@ import * as api from "./api";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Severity = cockroach.util.log.Severity;
-import { buildSQLApiDatabasesResponse } from "src/util/fakeApi";
+import {
+  buildSQLApiDatabasesResponse,
+  buildSQLApiEventsResponse,
+} from "src/util/fakeApi";
 
 describe("rest api", function () {
   describe("databases request", function () {
@@ -297,95 +300,90 @@ describe("rest api", function () {
   });
 
   describe("events request", function () {
-    const eventsPrefixMatcher = `begin:${api.API_PREFIX}/events?`;
-
     afterEach(fetchMock.restore);
 
     it("correctly requests events", function () {
       // Mock out the fetch query
       fetchMock.mock({
-        matcher: eventsPrefixMatcher,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
-          const encodedResponse =
-            protos.cockroach.server.serverpb.EventsResponse.encode({
-              events: [{ event_type: "test" }],
-            }).finish();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.buildEventsSQLRequest({}),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return {
-            body: encodedResponse,
+            body: JSON.stringify(
+              buildSQLApiEventsResponse([
+                {
+                  eventType: "test",
+                  timestamp: "2016-01-25T10:10:10.555555",
+                  reportingID: "1",
+                  info: `{"Timestamp":1668442242840943000,"EventType":"test","NodeID":1,"StartedAt":1668442242644228000,"LastUp":1668442242644228000}`,
+                  uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
+                },
+              ]),
+            ),
           };
         },
       });
 
-      return api
-        .getEvents(new protos.cockroach.server.serverpb.EventsRequest())
-        .then(result => {
-          expect(fetchMock.calls(eventsPrefixMatcher).length).toBe(1);
-          expect(result.events.length).toBe(1);
-        });
+      return clusterUiApi.getNonRedactedEvents().then(result => {
+        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(result.length).toBe(1);
+      });
     });
 
     it("correctly requests filtered events", function () {
-      const req = new protos.cockroach.server.serverpb.EventsRequest({
-        type: "test type",
-      });
+      const req: clusterUiApi.NonRedactedEventsRequest = { type: "test" };
 
       // Mock out the fetch query
       fetchMock.mock({
-        matcher: eventsPrefixMatcher,
-        method: "GET",
-        response: (url: string, requestObj: RequestInit) => {
-          const params = url.split("?")[1].split("&");
-          expect(params.length).toBe(2);
-          _.each(params, param => {
-            let [k, v] = param.split("=");
-            k = decodeURIComponent(k);
-            v = decodeURIComponent(v);
-            switch (k) {
-              case "type":
-                expect(req.type).toEqual(v);
-                break;
-
-              case "unredacted_events":
-                break;
-
-              default:
-                throw new Error(`Unknown property ${k}`);
-            }
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
+        response: (_url: string, requestObj: RequestInit) => {
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.buildEventsSQLRequest(req),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
           });
-          expect(requestObj.body).toBeUndefined();
-          const encodedResponse =
-            protos.cockroach.server.serverpb.EventsResponse.encode({
-              events: [{ event_type: "test" }],
-            }).finish();
           return {
-            body: encodedResponse,
+            body: JSON.stringify(
+              buildSQLApiEventsResponse([
+                {
+                  eventType: "test",
+                  timestamp: "2016-01-25T10:10:10.555555",
+                  reportingID: "1",
+                  info: `{"Timestamp":1668442242840943000,"EventType":"test","NodeID":1,"StartedAt":1668442242644228000,"LastUp":1668442242644228000}`,
+                  uniqueID: "\\\x4ce0d9e74bd5480ab1d9e6f98cc2f483",
+                },
+              ]),
+            ),
           };
         },
       });
 
-      return api
-        .getEvents(new protos.cockroach.server.serverpb.EventsRequest(req))
-        .then(result => {
-          expect(fetchMock.calls(eventsPrefixMatcher).length).toBe(1);
-          expect(result.events.length).toBe(1);
-        });
+      return clusterUiApi.getNonRedactedEvents(req).then(result => {
+        expect(fetchMock.calls(clusterUiApi.SQL_API_PATH).length).toBe(1);
+        expect(result.length).toBe(1);
+      });
     });
 
     it("correctly handles an error", function (done) {
       // Mock out the fetch query, but return a 500 status code
       fetchMock.mock({
-        matcher: eventsPrefixMatcher,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.buildEventsSQLRequest({}),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return { throws: new Error() };
         },
       });
 
-      api
-        .getEvents(new protos.cockroach.server.serverpb.EventsRequest())
+      clusterUiApi
+        .getNonRedactedEvents()
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })
@@ -398,19 +396,19 @@ describe("rest api", function () {
     it("correctly times out", function (done) {
       // Mock out the fetch query, but return a promise that's never resolved to test the timeout
       fetchMock.mock({
-        matcher: eventsPrefixMatcher,
-        method: "GET",
+        matcher: clusterUiApi.SQL_API_PATH,
+        method: "POST",
         response: (_url: string, requestObj: RequestInit) => {
-          expect(requestObj.body).toBeUndefined();
+          expect(JSON.parse(requestObj.body.toString())).toEqual({
+            ...clusterUiApi.buildEventsSQLRequest({}),
+            application_name: clusterUiApi.INTERNAL_SQL_API_APP,
+          });
           return new Promise<any>(() => {});
         },
       });
 
-      api
-        .getEvents(
-          new protos.cockroach.server.serverpb.EventsRequest(),
-          moment.duration(0),
-        )
+      clusterUiApi
+        .getNonRedactedEvents({}, moment.duration(0))
         .then(_result => {
           done(new Error("Request unexpectedly succeeded."));
         })

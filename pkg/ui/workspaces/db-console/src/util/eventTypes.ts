@@ -12,10 +12,6 @@
 
 import _ from "lodash";
 
-import * as protos from "src/js/protos";
-
-type Event = protos.cockroach.server.serverpb.EventsResponse.Event;
-
 // Recorded when a database is created.
 export const CREATE_DATABASE = "create_database";
 // Recorded when a database is dropped.
@@ -180,29 +176,3 @@ export const allEvents = [
   ...settingsEvents,
   ...jobEvents,
 ];
-
-const nodeEventSet = _.invert(nodeEvents);
-const databaseEventSet = _.invert(databaseEvents);
-const tableEventSet = _.invert(tableEvents);
-const settingsEventSet = _.invert(settingsEvents);
-const jobsEventSet = _.invert(jobEvents);
-
-export function isNodeEvent(e: Event): boolean {
-  return !_.isUndefined(nodeEventSet[e.event_type]);
-}
-
-export function isDatabaseEvent(e: Event): boolean {
-  return !_.isUndefined(databaseEventSet[e.event_type]);
-}
-
-export function isTableEvent(e: Event): boolean {
-  return !_.isUndefined(tableEventSet[e.event_type]);
-}
-
-export function isSettingsEvent(e: Event): boolean {
-  return !_.isUndefined(settingsEventSet[e.event_type]);
-}
-
-export function isJobsEvent(e: Event): boolean {
-  return !_.isUndefined(jobsEventSet[e.event_type]);
-}
