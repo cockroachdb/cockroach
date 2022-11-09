@@ -72,6 +72,20 @@ func (k *rangeCacheKey) Compare(o llrb.Comparable) int {
 	return bytes.Compare(*k, *o.(*rangeCacheKey))
 }
 
+// RangeLookupConsistency is an alias for ReadConsistencyType. In the
+// cases it is referenced, the only acceptable values are READ_UNCOMMITTED
+// and STALE_READ_UNCOMMITTED. The hope with this alias and the consts below
+// it increase code clarity and lead readers of the code here.
+type RangeLookupConsistency = roachpb.ReadConsistencyType
+
+const (
+	// ReadFromFollower is the RangeLookupConsistency used to read from a follower.
+	ReadFromFollower = roachpb.STALE_READ_UNCOMMITTED
+	// ReadFromLeaseholder is the RangeLookupConsistency used to read from the
+	// leaseholder.
+	ReadFromLeaseholder = roachpb.READ_UNCOMMITTED
+)
+
 // RangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. This interface is used by RangeCache to
 // initially retrieve information which will be cached.
@@ -80,8 +94,17 @@ type RangeDescriptorDB interface {
 	// descriptors are returned. The first of these slices holds descriptors
 	// whose [startKey,endKey) spans contain the given key (possibly from
 	// intents), and the second holds prefetched adjacent descriptors.
+	//
+	// Note that the acceptable consistency values are the constants defined
+	// in this package: ReadFromFollower and ReadFromLeaseholder. The
+	// RangeLookupConsistency type is aliased to roachpb.ReadConsistencyType
+	// in order to permit implementations of this interface to import this
+	// package.
 	RangeLookup(
-		ctx context.Context, key roachpb.RKey, useReverseScan bool,
+		ctx context.Context,
+		key roachpb.RKey,
+		consistency RangeLookupConsistency,
+		useReverseScan bool,
 	) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error)
 
 	// FirstRange returns the descriptor for the first Range. This is the
@@ -574,7 +597,7 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 // the cache, and then querying the two-level lookup table of range descriptors
 // which cockroach maintains. The function should be provided with an
 // EvictionToken if one was acquired from this function on a previous lookup. If
-// not, a nil EvictionToken can be provided.
+// not, a zero-valued EvictionToken can be provided.
 //
 // This method first looks up the specified key in the first level of
 // range metadata, which returns the location of the key within the
@@ -586,6 +609,33 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 // The returned EvictionToken contains the descriptor and, possibly, the lease.
 // It can also be used to evict information from the cache if it's found to be
 // stale.
+//
+// In the common cache miss case, the lookup will be routed to a
+// follower replica. In cases where a stale view of the range descriptor
+// no longer corresponds to any replicas in the range, relying on a stale
+// view of the range addressing as might be served from a follower does not
+// ensure that the client will be able to make progress. Fortunately, this
+// scenario can be detected through the use of evictToken.
+//
+// This method is called with a non-zero evictToken in two cases:
+//
+//  1. When iterating through a range iterator, it is called with a token
+//     corresponding to the *previous* descriptor. This is particularly
+//     valuable because the token's key is used to key the singleflight
+//     group for the next fetch. This will ensure that concurrent iteration
+//     of range iterators joins a shared singleflight.
+//  2. After a sendError is returned from (*DistSender).sendToReplicas. In
+//     this case, the eviction token from the previous iteration of the
+//     sendPartialBatch loop (the one that failed) is provided. In this case
+//     the key is the bound of the evictToken. This property is utilized to
+//     ensure that if an optimistic read
+//
+// In the case 2, where a new version of the descriptor is assumed to be
+// required to make progress, we'll ensure that the optimistic read which
+// maybe have been evaluated on follower returns a result with a generation
+// number greater than the generation stored in evictToken. If the initial
+// read which maybe routed to followers returns a result that is not newer,
+// the request will be re-issued to the leaseholder.
 func (rc *RangeCache) LookupWithEvictionToken(
 	ctx context.Context, key roachpb.RKey, evictToken EvictionToken, useReverseScan bool,
 ) (EvictionToken, error) {
@@ -718,6 +768,18 @@ func (rc *RangeCache) tryLookup(
 		prevDesc = evictToken.Desc()
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
+
+	// lookupResultIsStale is used to determine if the result of a lookup which
+	// was performed on a follower is known to be stale given the current
+	// eviction token. In many cases, there is no previous descriptor. The case
+	// of interest is when we're doing a lookup
+	lookupResultIsStale := func(EvictionToken) bool { return false }
+	if evictToken.Valid() && (useReverseScan && key.Equal(evictToken.Desc().EndKey) ||
+		!useReverseScan && key.Equal(evictToken.Desc().StartKey)) {
+		lookupResultIsStale = func(res EvictionToken) bool {
+			return res.Desc().Generation <= evictToken.desc.Generation
+		}
+	}
 	// Fork a context with a new span before reqCtx is captured by the DoChan
 	// closure below; the parent span might get finished by the time the closure
 	// starts. In the "leader" case, the closure will take ownership of the new
@@ -726,7 +788,7 @@ func (rc *RangeCache) tryLookup(
 	resC, leader := rc.lookupRequests.DoChan(requestKey, func() (interface{}, error) {
 		defer reqSpan.Finish()
 		var lookupRes EvictionToken
-		if err := rc.stopper.RunTaskWithErr(reqCtx, "rangecache: range lookup", func(ctx context.Context) error {
+		if err := rc.stopper.RunTaskWithErr(reqCtx, "rangecache: range lookup", func(ctx context.Context) (err error) {
 			// Clear the context's cancelation. This request services potentially many
 			// callers waiting for its result, and using the flight's leader's
 			// cancelation doesn't make sense.
@@ -735,84 +797,22 @@ func (rc *RangeCache) tryLookup(
 			defer cancel()
 			ctx = tracing.ContextWithSpan(ctx, reqSpan)
 
-			// Since we don't inherit any other cancelation, let's put in a generous
-			// timeout as some protection against unavailable meta ranges.
-			var rs, preRs []roachpb.RangeDescriptor
-			if err := contextutil.RunWithTimeout(ctx, "range lookup", 10*time.Second,
-				func(ctx context.Context) error {
-					var err error
-					rs, preRs, err = rc.performRangeLookup(ctx, key, useReverseScan)
+			// Attempt to perform the lookup by reading from a follower. If the
+			// result is too old for the leader of this group, then we'll fall back
+			// to reading from the leaseholder. Note that it's possible that the
+			// leader will have no freshness constraints on its view of the range
+			// addressing but one of the shared members of the group will see the
+			// result as too old. That case will be detected below and will result
+			// in that goroutine re-fetching.
+			{
+				lookupRes, err = tryLookupImpl(ctx, rc, key, ReadFromFollower, useReverseScan)
+				if (err == nil && !lookupResultIsStale(lookupRes)) ||
+					!errors.Is(err, errFailedToFindNewerDescriptor) {
 					return err
-				}); err != nil {
-				return err
-			}
-
-			switch {
-			case len(rs) == 0:
-				return fmt.Errorf("no range descriptors returned for %s", key)
-			case len(rs) > 2:
-				panic(fmt.Sprintf("more than 2 matching range descriptors returned for %s: %v", key, rs))
-			}
-
-			// We want to be assured that all goroutines which experienced a cache miss
-			// have joined our in-flight request, and all others will experience a
-			// cache hit. This requires atomicity across cache population and
-			// notification, hence this exclusive lock.
-			rc.rangeCache.Lock()
-			defer rc.rangeCache.Unlock()
-
-			// Insert the descriptor and the prefetched ones. We don't insert rs[1]
-			// (if any), since it overlaps with rs[0]; rs[1] will be handled by
-			// rs[0]'s eviction token. Note that ranges for which the cache has more
-			// up-to-date information will not be clobbered - for example ranges for
-			// which the cache has the prefetched descriptor already plus a lease.
-			newEntries := make([]*CacheEntry, len(preRs)+1)
-			newEntries[0] = &CacheEntry{
-				desc: rs[0],
-				// We don't have any lease information.
-				lease: roachpb.Lease{},
-				// We don't know the closed timestamp policy.
-				closedts: roachpb.LAG_BY_CLUSTER_SETTING,
-			}
-			for i, preR := range preRs {
-				newEntries[i+1] = &CacheEntry{desc: preR}
-			}
-			insertedEntries := rc.insertLockedInner(ctx, newEntries)
-			// entry corresponds to rs[0], which is the descriptor covering the key
-			// we're interested in.
-			entry := insertedEntries[0]
-			// There's 3 cases here:
-			//
-			//  1. We succeeded in inserting rs[0].
-			//  2. We didn't succeed in inserting rs[0], but insertedEntries[0] still
-			//     was non-nil. This means that the cache had a newer version of the
-			//     descriptor. In that case it's all good, we just pretend that
-			//     that's the version we were inserting; we put it in our token and
-			//     continue.
-			//  3. insertedEntries[0] is nil. The cache has newer entries in them
-			//     and they're not compatible with the descriptor we were trying to
-			//     insert. This case should be rare, since very recently (before
-			//     starting the singleflight), the cache didn't have any entry for
-			//     the requested key. We'll continue with the stale rs[0]; we'll
-			//     pretend that we did by putting a dummy entry in the eviction
-			//     token. This will make eviction no-ops (which makes sense -
-			//     there'll be nothing to evict since we didn't insert anything).
-			//
-			// TODO(andrei): It'd be better to retry the cache/database lookup in
-			// case 3.
-			if entry == nil {
-				entry = &CacheEntry{
-					desc:     rs[0],
-					lease:    roachpb.Lease{},
-					closedts: roachpb.LAG_BY_CLUSTER_SETTING,
 				}
 			}
-			if len(rs) == 1 {
-				lookupRes = rc.makeEvictionToken(entry, nil /* nextDesc */)
-			} else {
-				lookupRes = rc.makeEvictionToken(entry, &rs[1] /* nextDesc */)
-			}
-			return nil
+			lookupRes, err = tryLookupImpl(ctx, rc, key, ReadFromLeaseholder, useReverseScan)
+			return err
 		}); err != nil {
 			return nil, err
 		}
@@ -872,8 +872,119 @@ func (rc *RangeCache) tryLookup(
 	if useReverseScan {
 		containsFn = (*roachpb.RangeDescriptor).ContainsKeyInverted
 	}
-	if !containsFn(desc, key) {
+	if !containsFn(desc, key) ||
+		// The result may be stale relative to the requirements implied by the
+		// eviction token, but our goroutine joined a single-flight which was
+		// content to accept a result we know was stale. To get here, we must
+		// have exhausted sending to the replicas at the generation in our
+		// EvictionToken.
+		(res.Shared && lookupResultIsStale(lookupRes)) {
 		return EvictionToken{}, newLookupCoalescingError(key, desc)
+	}
+	return lookupRes, nil
+}
+
+var errFailedToFindNewerDescriptor = errors.New("failed to find descriptor")
+
+// tryLookupImpl is the implementation of one attempt of rc.tryLookupImpl at a
+// specified consistency. Note that if the consistency is ReadFromFollower,
+// this call may return errFailedToFindNewerDescriptor, which the caller
+// should handle by performing a fresh lookup at ReadFromLeaseholder. If
+// the consistency is ReadFromLeaseholder, that error will not be returned.
+func tryLookupImpl(
+	ctx context.Context,
+	rc *RangeCache,
+	key roachpb.RKey,
+	consistency RangeLookupConsistency,
+	useReverseScan bool,
+) (lookupRes EvictionToken, _ error) {
+	// Since we don't inherit any other cancelation, let's put in a generous
+	// timeout as some protection against unavailable meta ranges.
+	var rs, preRs []roachpb.RangeDescriptor
+	if err := contextutil.RunWithTimeout(ctx, "range lookup", 10*time.Second,
+		func(ctx context.Context) error {
+			var err error
+			rs, preRs, err = rc.performRangeLookup(ctx, key, consistency, useReverseScan)
+			return err
+		}); err != nil {
+		return EvictionToken{}, err
+	}
+
+	switch {
+	case len(rs) == 0:
+		// TODO(ajwerner): What is this case? How does it happen and should it
+		// not get this special treatment?
+		if consistency == ReadFromFollower {
+			return EvictionToken{}, errFailedToFindNewerDescriptor
+		}
+		return EvictionToken{}, fmt.Errorf("no range descriptors returned for %s", key)
+	case len(rs) > 2:
+		panic(fmt.Sprintf("more than 2 matching range descriptors returned for %s: %v", key, rs))
+	}
+
+	// We want to be assured that all goroutines which experienced a cache miss
+	// have joined our in-flight request, and all others will experience a
+	// cache hit. This requires atomicity across cache population and
+	// notification, hence this exclusive lock.
+	rc.rangeCache.Lock()
+	defer rc.rangeCache.Unlock()
+
+	// Insert the descriptor and the prefetched ones. We don't insert rs[1]
+	// (if any), since it overlaps with rs[0]; rs[1] will be handled by
+	// rs[0]'s eviction token. Note that ranges for which the cache has more
+	// up-to-date information will not be clobbered - for example ranges for
+	// which the cache has the prefetched descriptor already plus a lease.
+	newEntries := make([]*CacheEntry, len(preRs)+1)
+	newEntries[0] = &CacheEntry{
+		desc: rs[0],
+		// We don't have any lease information.
+		lease: roachpb.Lease{},
+		// We don't know the closed timestamp policy.
+		closedts: roachpb.LAG_BY_CLUSTER_SETTING,
+	}
+	for i, preR := range preRs {
+		newEntries[i+1] = &CacheEntry{desc: preR}
+	}
+	insertedEntries := rc.insertLockedInner(ctx, newEntries)
+	// entry corresponds to rs[0], which is the descriptor covering the key
+	// we're interested in.
+	entry := insertedEntries[0]
+	// There's 4 cases here:
+	//
+	//  1. We succeeded in inserting rs[0].
+	//  2. We didn't succeed in inserting rs[0], but insertedEntries[0] still
+	//     was non-nil. This means that the cache had a newer version of the
+	//     descriptor. In that case it's all good, we just pretend that
+	//     that's the version we were inserting; we put it in our token and
+	//     continue.
+	//  3. insertedEntries[0] is nil and we did a consistent read. The cache
+	//     has newer entries in them and they're not compatible with the
+	//     descriptor we were trying to insert. This case should be rare, since
+	//     very recently (before starting the singleflight), the cache didn't
+	//     have any entry for the requested key. We'll continue with the stale
+	//     rs[0]; we'll pretend that we did by putting a dummy entry in the
+	//     eviction token. This will make eviction no-ops (which makes sense -
+	//     there'll be nothing to evict since we didn't insert anything).
+	//  4. insertedEntries[0] is nil and we did a potentially stale read. The
+	//     caller should retry by routing a request to the leaseholder for the
+	//     meta range.
+	//
+	// TODO(andrei): It'd be better to retry the cache/database lookup in
+	// case 3.
+	if entry == nil {
+		if consistency == ReadFromFollower {
+			return EvictionToken{}, errFailedToFindNewerDescriptor
+		}
+		entry = &CacheEntry{
+			desc:     rs[0],
+			lease:    roachpb.Lease{},
+			closedts: roachpb.LAG_BY_CLUSTER_SETTING,
+		}
+	}
+	if len(rs) == 1 {
+		lookupRes = rc.makeEvictionToken(entry, nil /* nextDesc */)
+	} else {
+		lookupRes = rc.makeEvictionToken(entry, &rs[1] /* nextDesc */)
 	}
 	return lookupRes, nil
 }
@@ -881,7 +992,7 @@ func (rc *RangeCache) tryLookup(
 // performRangeLookup handles delegating the range lookup to the cache's
 // RangeDescriptorDB.
 func (rc *RangeCache) performRangeLookup(
-	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, consistency RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Tag inner operations.
 	ctx = logtags.AddTag(ctx, "range-lookup", key)
@@ -897,7 +1008,7 @@ func (rc *RangeCache) performRangeLookup(
 		return []roachpb.RangeDescriptor{*desc}, nil, nil
 	}
 
-	return rc.db.RangeLookup(ctx, key, useReverseScan)
+	return rc.db.RangeLookup(ctx, key, consistency, useReverseScan)
 }
 
 // Clear clears all RangeDescriptors from the RangeCache.

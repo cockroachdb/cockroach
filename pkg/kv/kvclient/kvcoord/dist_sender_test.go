@@ -434,7 +434,7 @@ func TestSendRPCOrder(t *testing.T) {
 type MockRangeDescriptorDB func(roachpb.RKey, bool) (rs, preRs []roachpb.RangeDescriptor, err error)
 
 func (mdb MockRangeDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, _ roachpb.ReadConsistencyType, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	return mdb(key, useReverseScan)
 }

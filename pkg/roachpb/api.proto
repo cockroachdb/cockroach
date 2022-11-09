@@ -46,6 +46,11 @@ enum ReadConsistencyType {
   // They are more efficient, but may read stale values as pending
   // intents are ignored.
   INCONSISTENT = 2;
+  // STALE_READ_UNCOMMITTED is a hybrid of READ_UNCOMMITTED and INCONSISTENT.
+  // Like READ_UNCOMMITTED, it will return any outstanding intents. However,
+  // unlike READ_UNCOMMITTED, and like INCONSISTENT, it can be evaluated on
+  // followers, and, thus, may return arbitrarily stale data.
+  STALE_READ_UNCOMMITTED = 3;
 }
 
 // RoutingPolicy specifies how a request should be routed to the

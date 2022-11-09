@@ -141,10 +141,12 @@ import (
 //	 RangeMetaKey(existingSplitBoundary)
 //
 // Lookups for range metadata keys usually want to perform reads at the
-// READ_UNCOMMITTED read consistency level read in order to observe intents as
-// well. However, some callers need a consistent result; both are supported be
-// specifying the ReadConsistencyType. If the lookup is consistent, the Sender
-// provided should be a TxnCoordSender.
+// READ_UNCOMMITTED or STALE_READ_UNCOMMITTED read consistency level read in
+// order to observe intents as well. The former will be routed to the
+// leaseholder, and the latter will be routed to any replica, meaning it may
+// return arbitrarily stale results. However, some callers need a consistent
+// result; both are supported be specifying the ReadConsistencyType. If the
+// lookup is consistent, the Sender provided should be a TxnCoordSender.
 //
 // This method has an important optimization if the prefetchNum arg is larger
 // than 0: instead of just returning the request RangeDescriptor, it also
@@ -277,6 +279,11 @@ func lookupRangeFwdScan(
 
 	ba := &roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
+	// If the caller is asking for a potentially stale result, we want to route
+	// the request to the nearest replica rather than the leaseholder.
+	if rc == roachpb.STALE_READ_UNCOMMITTED {
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+	}
 	if prefetchReverse {
 		// Even if we're prefetching in the reverse direction, we still scan
 		// forward first to get the first range. There are two cases, which we
@@ -370,6 +377,11 @@ func lookupRangeRevScan(
 
 	ba := &roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
+	// If the caller is asking for a potentially stale result, we want to route
+	// the request to the nearest replica rather than the leaseholder.
+	if rc == roachpb.STALE_READ_UNCOMMITTED {
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+	}
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),

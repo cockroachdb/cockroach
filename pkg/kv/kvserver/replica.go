@@ -1545,7 +1545,9 @@ func (r *Replica) checkLeaseRLocked(
 	//
 	// If the request is an INCONSISTENT request (and thus a read), it similarly
 	// doesn't check the lease.
-	if !ba.IsSingleSkipsLeaseCheckRequest() && ba.ReadConsistency != roachpb.INCONSISTENT {
+	if !ba.IsSingleSkipsLeaseCheckRequest() &&
+		ba.ReadConsistency != roachpb.INCONSISTENT &&
+		ba.ReadConsistency != roachpb.STALE_READ_UNCOMMITTED {
 		// Check the lease.
 		var err error
 		shouldExtend, err = r.leaseGoodToGoForStatusRLocked(ctx, now, reqTS, st)
