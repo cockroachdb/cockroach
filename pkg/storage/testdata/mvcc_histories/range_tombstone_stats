@@ -67,7 +67,7 @@ stats: key_count=+1 key_bytes=+14 val_count=+1 gc_bytes_age=+1386
 >> del_range_ts k=d end=j ts=3
 stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 live_count=-2 live_bytes=-42 gc_bytes_age=+5335
 >> del_range_ts k=d end=f ts=4 localTs=3 # Write as two to test split/merge.
-stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 range_val_bytes=+13 gc_bytes_age=+3369
+stats: range_key_count=+1 range_key_bytes=+22 range_val_count=+2 range_val_bytes=+16 gc_bytes_age=+3657
 >> del_range_ts k=f end=j ts=4 localTs=3
 stats: range_key_count=-1 range_key_bytes=-13 range_val_count=-1 gc_bytes_age=-1261
 >> put k=d ts=6 v=d6
@@ -105,7 +105,7 @@ data: "h"/5.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
 data: "i"/5.000000000,0 -> /<empty>
 data: "i"/1.000000000,0 -> /<empty>
-stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=13 live_count=5 live_bytes=107 gc_bytes_age=21946
+stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=16 live_count=5 live_bytes=107 gc_bytes_age=22234
 
 # Finally, let's delete everything -- first in parts, then all again. We can't
 # delete the inline value at "a" though.
@@ -118,11 +118,11 @@ del_range_ts k=f end=j ts=8
 del_range_ts k=b end=j ts=9
 ----
 >> del_range_ts k=c end=d ts=8 localTs=7
-stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2392
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+16 gc_bytes_age=+2668
 >> del_range_ts k=e end=f ts=8 localTs=7
-stats: range_key_count=+2 range_key_bytes=+53 range_val_count=+5 range_val_bytes=+39 live_count=-1 live_bytes=-21 gc_bytes_age=+10678
+stats: range_key_count=+2 range_key_bytes=+53 range_val_count=+5 range_val_bytes=+48 live_count=-1 live_bytes=-21 gc_bytes_age=+11530
 >> del_range_ts k=d end=e ts=8 localTs=7
-stats: range_key_count=-1 range_key_bytes=-22 range_val_count=-2 range_val_bytes=-13 live_count=-1 live_bytes=-21 gc_bytes_age=-1437
+stats: range_key_count=-1 range_key_bytes=-22 range_val_count=-2 range_val_bytes=-16 live_count=-1 live_bytes=-21 gc_bytes_age=-1725
 >> del_range_ts k=b end=c ts=8 localTs=7
 stats: live_count=-1 live_bytes=-21 gc_bytes_age=+1932
 >> del_range_ts k=f end=j ts=8
@@ -151,4 +151,4 @@ data: "h"/5.000000000,0 -> /<empty>
 data: "h"/1.000000000,0 -> /BYTES/h1
 data: "i"/5.000000000,0 -> /<empty>
 data: "i"/1.000000000,0 -> /<empty>
-stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=3 range_key_bytes=102 range_val_count=10 range_val_bytes=52 live_count=1 live_bytes=23 gc_bytes_age=40700
+stats: key_count=9 key_bytes=222 val_count=18 val_bytes=77 range_key_count=3 range_key_bytes=102 range_val_count=10 range_val_bytes=64 live_count=1 live_bytes=23 gc_bytes_age=41828

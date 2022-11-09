@@ -42,19 +42,19 @@ del_range_ts k=eee end=f ts=2 localTs=1
 rangekey: {a-bbb}/[1.000000000,0=/<empty>]
 rangekey: {bbb-cc}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {cc-f}/[1.000000000,0=/<empty>]
-stats: range_key_count=+2 range_key_bytes=+41 range_val_count=+3 range_val_bytes=+13 gc_bytes_age=+5317
+stats: range_key_count=+2 range_key_bytes=+41 range_val_count=+3 range_val_bytes=+16 gc_bytes_age=+5611
 >> del_range_ts k=d end=eee ts=2 localTs=1
 rangekey: {a-bbb}/[1.000000000,0=/<empty>]
 rangekey: {bbb-cc}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {cc-d}/[1.000000000,0=/<empty>]
 rangekey: {d-eee}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {eee-f}/[1.000000000,0=/<empty>]
-stats: range_key_count=+2 range_key_bytes=+39 range_val_count=+3 range_val_bytes=+13 gc_bytes_age=+5120
+stats: range_key_count=+2 range_key_bytes=+39 range_val_count=+3 range_val_bytes=+16 gc_bytes_age=+5414
 >> del_range_ts k=cc end=d ts=2 localTs=1
 rangekey: {a-bbb}/[1.000000000,0=/<empty>]
 rangekey: {bbb-eee}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {eee-f}/[1.000000000,0=/<empty>]
-stats: range_key_count=-2 range_key_bytes=-37 range_val_count=-3 range_val_bytes=-13 gc_bytes_age=-4923
+stats: range_key_count=-2 range_key_bytes=-37 range_val_count=-3 range_val_bytes=-16 gc_bytes_age=-5217
 >> del_range_ts k=a end=bbb ts=2 localTs=1
 rangekey: {a-eee}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {eee-f}/[1.000000000,0=/<empty>]
@@ -62,7 +62,7 @@ stats: range_key_count=-1 range_key_bytes=-17 range_val_count=-1 gc_bytes_age=-1
 >> del_range_ts k=eee end=f ts=2 localTs=1
 rangekey: {a-f}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 stats: range_key_count=-1 range_key_bytes=-17 range_val_count=-1 gc_bytes_age=-1681
-stats: range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=13 gc_bytes_age=3439
+stats: range_key_count=1 range_key_bytes=22 range_val_count=2 range_val_bytes=16 gc_bytes_age=3733
 
 # Writing a key from the middle of the existing stack to outside the bounds
 # should fragment appropriately.
@@ -73,8 +73,8 @@ del_range_ts k=d end=h ts=3
 rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {f-h}/[3.000000000,0=/<empty>]
-stats: range_key_count=+2 range_key_bytes=+44 range_val_count=+4 range_val_bytes=+13 gc_bytes_age=+5569
-stats: range_key_count=3 range_key_bytes=66 range_val_count=6 range_val_bytes=26 gc_bytes_age=9008
+stats: range_key_count=+2 range_key_bytes=+44 range_val_count=+4 range_val_bytes=+16 gc_bytes_age=+5863
+stats: range_key_count=3 range_key_bytes=66 range_val_count=6 range_val_bytes=32 gc_bytes_age=9596
 
 # Writing range tombstones at the same or higher local timestamp should
 # still merge, since the values are normalized to empty. However, writing
@@ -103,7 +103,7 @@ rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<e
 rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {f-j}/[3.000000000,0=/<empty>]
 rangekey: {j-k}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
-stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+16 gc_bytes_age=+2813
 >> del_range_ts k=k end=l ts=3 localTs=2
 rangekey: {a-d}/[2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<empty> 1.000000000,0=/<empty>]
@@ -116,5 +116,5 @@ rangekey: {d-f}/[3.000000000,0=/<empty> 2.000000000,0={localTs=1.000000000,0}/<e
 rangekey: {f-j}/[3.000000000,0=/<empty>]
 rangekey: {j-l}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
 rangekey: {l-m}/[3.000000000,0={localTs=1.000000000,0}/<empty>]
-stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
-stats: range_key_count=5 range_key_bytes=92 range_val_count=8 range_val_bytes=52 gc_bytes_age=14052
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+16 gc_bytes_age=+2813
+stats: range_key_count=5 range_key_bytes=92 range_val_count=8 range_val_bytes=64 gc_bytes_age=15222

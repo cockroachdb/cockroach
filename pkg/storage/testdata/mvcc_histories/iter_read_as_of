@@ -68,7 +68,7 @@ stats: key_bytes=+12 val_count=+1 live_count=-1 live_bytes=-21 gc_bytes_age=+316
 >> put k=k ts=5 v=k5
 stats: key_count=+1 key_bytes=+14 val_count=+1 val_bytes=+7 live_count=+1 live_bytes=+21
 >> del_range_ts k=m end=n ts=3 localTs=2
-stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+13 gc_bytes_age=+2522
+stats: range_key_count=+1 range_key_bytes=+13 range_val_count=+1 range_val_bytes=+16 gc_bytes_age=+2813
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -91,7 +91,7 @@ data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/4.000000000,0 -> /<empty>
 data: "h"/3.000000000,0 -> /BYTES/h3
 data: "k"/5.000000000,0 -> /BYTES/k5
-stats: key_count=8 key_bytes=172 val_count=13 val_bytes=70 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=13 live_count=3 live_bytes=63 gc_bytes_age=34685
+stats: key_count=8 key_bytes=172 val_count=13 val_bytes=70 range_key_count=8 range_key_bytes=167 range_val_count=15 range_val_bytes=16 live_count=3 live_bytes=63 gc_bytes_age=34976
 
 # Scan with no asOf timestamp.
 run ok
