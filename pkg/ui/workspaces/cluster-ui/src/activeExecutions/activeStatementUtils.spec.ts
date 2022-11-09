@@ -19,7 +19,7 @@ import {
 } from "./types";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment";
-import { TimestampToMoment } from "../util/convert";
+import { TimestampToMoment } from "../util";
 import Long from "long";
 import {
   getActiveExecutionsFromSessions,
@@ -54,6 +54,7 @@ const defaultActiveStatement: ActiveStatement = {
   start: MOCK_START_TIME,
   elapsedTime: moment.duration(60),
   application: "test",
+  database: "db_test",
   user: "user",
   clientAddress: "clientAddress",
   isFullScan: false,

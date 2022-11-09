@@ -106,6 +106,7 @@ export function getActiveExecutionsFromSessions(
         const queryTxnID = byteArrayToUuid(query.txn_id);
         activeStmt = {
           statementID: query.id,
+          stmtNoConstants: query.sql_no_constants,
           transactionID: queryTxnID,
           sessionID,
           // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
@@ -117,6 +118,7 @@ export function getActiveExecutionsFromSessions(
           start: TimestampToMoment(query.start),
           elapsedTime: DurationToMomentDuration(query.elapsed_time),
           application: session.application_name,
+          database: query.database,
           user: session.username,
           clientAddress: session.client_address,
           isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.

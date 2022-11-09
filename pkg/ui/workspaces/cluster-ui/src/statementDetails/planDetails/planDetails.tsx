@@ -142,7 +142,9 @@ function ExplainPlan({
       {hasInsights && (
         <Insights
           idxRecommendations={plan.stats.index_recommendations}
-          plan={plan}
+          database={plan.metadata.databases[0]}
+          query={plan.metadata.query}
+          implicitTxn={plan.metadata.implicit_txn}
           statementFingerprintID={statementFingerprintID}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
@@ -154,8 +156,10 @@ function ExplainPlan({
 
 function formatIdxRecommendations(
   idxRecs: string[],
-  plan: PlanHashStats,
-  statementFingerprintID: string,
+  database: string,
+  query: string,
+  implicitTxn?: boolean,
+  statementFingerprintID?: string,
 ): InsightRecommendation[] {
   const recs = [];
   for (let i = 0; i < idxRecs.length; i++) {
@@ -178,16 +182,13 @@ function formatIdxRecommendations(
     }
     const idxRec: InsightRecommendation = {
       type: idxType,
-      database: plan.metadata.databases[0],
+      database: database,
       query: rec.split(" : ")[1],
       execution: {
-        statement: plan.metadata.query,
-        summary:
-          plan.metadata.query.length > 120
-            ? plan.metadata.query.slice(0, 120) + "..."
-            : plan.metadata.query,
+        statement: query,
+        summary: query.length > 120 ? query.slice(0, 120) + "..." : query,
         fingerprintID: statementFingerprintID,
-        implicit: plan.metadata.implicit_txn,
+        implicit: implicitTxn,
       },
     };
     recs.push(idxRec);
@@ -198,24 +199,30 @@ function formatIdxRecommendations(
 
 interface InsightsProps {
   idxRecommendations: string[];
-  plan: PlanHashStats;
-  statementFingerprintID: string;
-  sortSetting: SortSetting;
-  onChangeSortSetting: (ss: SortSetting) => void;
+  database: string;
+  query: string;
+  implicitTxn?: boolean;
+  statementFingerprintID?: string;
+  sortSetting?: SortSetting;
+  onChangeSortSetting?: (ss: SortSetting) => void;
 }
 
-function Insights({
+export function Insights({
   idxRecommendations,
-  plan,
+  database,
+  query,
+  implicitTxn,
   statementFingerprintID,
   sortSetting,
   onChangeSortSetting,
 }: InsightsProps): React.ReactElement {
-  const isCockroachCloud = useContext(CockroachCloudContext);
-  const insightsColumns = makeInsightsColumns(isCockroachCloud, true);
+  const hideAction = useContext(CockroachCloudContext) && database?.length == 0;
+  const insightsColumns = makeInsightsColumns(hideAction, true);
   const data = formatIdxRecommendations(
     idxRecommendations,
-    plan,
+    database,
+    query,
+    implicitTxn,
     statementFingerprintID,
   );
   return (

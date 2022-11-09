@@ -26,12 +26,14 @@ export const SessionStatusType =
 
 export interface ActiveExecution {
   statementID?: string; // Empty for transactions not currently executing a statement.
+  stmtNoConstants?: string; // Empty for transactions not currently executing a statement.
   transactionID: string;
   sessionID: string;
   status: ExecutionStatus;
   start: Moment;
   elapsedTime: moment.Duration;
   application: string;
+  database?: string;
   query?: string; // For transactions, this is the latest query executed.
   timeSpentWaiting?: moment.Duration;
 }

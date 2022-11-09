@@ -32,6 +32,9 @@ import "antd/lib/row/style";
 import styles from "./statementDetails.module.scss";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
+import { Insights } from "./planDetails";
+import { getIdxRecommendationsFromExecution } from "../api/idxRecForStatementApi";
+import { SortSetting } from "../sortedtable";
 const cx = classNames.bind(styles);
 
 export type ActiveStatementDetailsStateProps = {
@@ -73,6 +76,11 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
     loaded: false,
     error: null,
   });
+  const [indexRecommendations, setIndexRecommendations] = useState<string[]>();
+  const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "insights",
+  });
 
   useEffect(() => {
     if (statement == null) {
@@ -96,6 +104,13 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
           error: res.error,
         });
       });
+      getIdxRecommendationsFromExecution({
+        planGist: statement.planGist,
+        query: statement.stmtNoConstants,
+        appName: statement.application,
+      }).then(res => {
+        setIndexRecommendations(res.recommendations);
+      });
     }
   };
 
@@ -103,6 +118,7 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
     history.push("/sql-activity?tab=Statements&view=active");
   };
 
+  const hasInsights = indexRecommendations?.length > 0;
   return (
     <div className={cx("root")}>
       <Helmet title={`Details`} />
@@ -166,6 +182,15 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
                     value={explainPlanState.explainPlan || "Not available."}
                     size={SqlBoxSize.custom}
                   />
+                  {hasInsights && (
+                    <Insights
+                      idxRecommendations={indexRecommendations}
+                      query={statement.stmtNoConstants}
+                      database={statement.database}
+                      sortSetting={insightsSortSetting}
+                      onChangeSortSetting={setInsightsSortSetting}
+                    />
+                  )}
                 </Loading>
               </Col>
             </Row>
