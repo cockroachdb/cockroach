@@ -256,7 +256,8 @@ go_test(
     args = ["-test.timeout=3595s"],{{ end }}
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
-        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CclLogicTest }}
+        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
+        "//pkg/cmd/cockroach-short",  # keep{{ end }}{{ if .CclLogicTest }}
         "//pkg/ccl/logictestccl:testdata",  # keep{{ end }}{{ if .LogicTest }}
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
