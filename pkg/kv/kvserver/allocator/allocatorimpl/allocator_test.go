@@ -5439,7 +5439,7 @@ func TestLoadBasedLeaseRebalanceScore(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	enableLoadBasedLeaseRebalancing.Override(ctx, &st.SV, true)
+	EnableLoadBasedLeaseRebalancing.Override(ctx, &st.SV, true)
 
 	remoteStore := roachpb.StoreDescriptor{
 		Node: roachpb.NodeDescriptor{
