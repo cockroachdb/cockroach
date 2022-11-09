@@ -376,11 +376,13 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	if buildutil.CrdbTestBuild && f.FlowBase.Started() {
+	if buildutil.CrdbTestBuild && f.FlowBase.Started() && !f.FlowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 		// Check that all closers have been closed. Note that we don't check
 		// this in case the flow was never started in the first place (it is ok
 		// to not check this since closers haven't allocated any resources in
-		// such a case).
+		// such a case). We also don't check when the panic injection is
+		// enabled since then Close() might be legitimately not called (if a
+		// panic is injected in Init() of the wrapped operator).
 		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
 			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
 		}
@@ -625,7 +627,8 @@ type vectorizedFlowCreator struct {
 	fdSemaphore     semaphore.Semaphore
 
 	// numClosers and numClosed are used to assert during testing that the
-	// expected number of components are closed.
+	// expected number of components are closed. The assertion only happens if
+	// the panic injection is not enabled.
 	numClosers int32
 	numClosed  int32
 }
@@ -1200,8 +1203,7 @@ func (s *vectorizedFlowCreator) setupFlow(
 			}
 			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
-			}
-			if buildutil.CrdbTestBuild {
+			} else if buildutil.CrdbTestBuild {
 				toCloseCopy := append(colexecop.Closers{}, result.ToClose...)
 				for i := range toCloseCopy {
 					func(idx int) {
