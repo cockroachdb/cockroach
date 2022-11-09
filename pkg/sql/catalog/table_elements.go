@@ -71,9 +71,9 @@ type Mutation interface {
 	// nil otherwise.
 	AsIndex() Index
 
-	// AsConstraint returns the corresponding ConstraintToUpdate if the mutation
+	// AsConstraint returns the corresponding Constraint if the mutation
 	// is on a constraint, nil otherwise.
-	AsConstraint() ConstraintToUpdate
+	AsConstraint() Constraint
 
 	// AsPrimaryKeySwap returns the corresponding PrimaryKeySwap if the mutation
 	// is a primary key swap, nil otherwise.
@@ -396,8 +396,8 @@ type Column interface {
 	GetGeneratedAsIdentitySequenceOption(defaultIntSize int32) (*descpb.TableDescriptor_SequenceOpts, error)
 }
 
-// ConstraintToUpdate is an interface around a constraint mutation.
-type ConstraintToUpdate interface {
+// Constraint is an interface around a constraint.
+type Constraint interface {
 	TableElementMaybeMutation
 
 	// ConstraintToUpdateDesc returns the underlying protobuf descriptor.
