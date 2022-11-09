@@ -1655,7 +1655,7 @@ func (s descriptorDBRangeIterator) Valid() bool {
 }
 
 func (s *descriptorDBRangeIterator) Seek(ctx context.Context, key roachpb.RKey, dir ScanDirection) {
-	descs, _, err := s.db.RangeLookup(ctx, key, dir == Descending)
+	descs, _, err := s.db.RangeLookup(ctx, key, roachpb.READ_UNCOMMITTED, dir == Descending)
 	if err != nil {
 		panic(err)
 	}
