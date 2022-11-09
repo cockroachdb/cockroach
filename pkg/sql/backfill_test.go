@@ -22,10 +22,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// constraintToUpdateForTest implements the catalog.ConstraintToUpdate interface.
+// constraintToUpdateForTest implements the catalog.Constraint interface.
 // It's only used for testing
 type constraintToUpdateForTest struct {
-	catalog.ConstraintToUpdate
+	catalog.Constraint
 	desc *descpb.ConstraintToUpdate
 }
 

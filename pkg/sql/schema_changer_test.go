@@ -6068,7 +6068,7 @@ func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 	var runBeforeConstraintValidation func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
+			RunBeforeConstraintValidation: func(constraints []catalog.Constraint) error {
 				return runBeforeConstraintValidation()
 			},
 		},
@@ -6121,7 +6121,7 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 	errorReturned := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
+			RunBeforeConstraintValidation: func(constraints []catalog.Constraint) error {
 				return runBeforeConstraintValidation()
 			},
 		},
@@ -7515,11 +7515,11 @@ func TestShardColumnConstraintSkipValidation(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	constraintsToValidate := make(chan []catalog.ConstraintToUpdate, 1)
+	constraintsToValidate := make(chan []catalog.Constraint, 1)
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			RunBeforeConstraintValidation: func(constraints []catalog.ConstraintToUpdate) error {
+			RunBeforeConstraintValidation: func(constraints []catalog.Constraint) error {
 				constraintsToValidate <- constraints
 				return nil
 			},
