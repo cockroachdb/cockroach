@@ -18,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -124,18 +124,8 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 			// Guard against crashes in the code below (e.g. #56356).
 			defer func() {
-				if r := recover(); r != nil {
-					// This code allows us to propagate internal errors without having to add
-					// error checks everywhere throughout the code. This is only possible
-					// because the code does not update shared state and does not manipulate
-					// locks.
-					if ok, e := errorutil.ShouldCatch(r); ok {
-						err = e
-					} else {
-						// Other panic objects can't be considered "safe" and thus are
-						// propagated as crashes that terminate the session.
-						panic(r)
-					}
+				if e := opt.CatchOptimizerError(); e != nil {
+					err = e
 				}
 			}()
 

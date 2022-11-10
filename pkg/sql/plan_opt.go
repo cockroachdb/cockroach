@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -708,19 +707,9 @@ func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
 // optimal plan.
 func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(ctx, 1, "%v", err)
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			err = e
+			log.VEventf(ctx, 1, "%v", err)
 		}
 	}()
 

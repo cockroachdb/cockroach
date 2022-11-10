@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -240,19 +239,9 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	log.VEventf(o.ctx, 1, "optimize start")
 	defer log.VEventf(o.ctx, 1, "optimize finish")
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(o.ctx, 1, "%v", err)
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			err = e
+			log.VEventf(o.ctx, 1, "%v", err)
 		}
 	}()
 

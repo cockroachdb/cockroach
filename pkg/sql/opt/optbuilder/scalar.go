@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -1017,16 +1016,8 @@ func NewScalar(
 // expression equivalent to expr.
 func (sb *ScalarBuilder) Build(expr tree.Expr) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			err = e
 		}
 	}()
 

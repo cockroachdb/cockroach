@@ -13,10 +13,10 @@ package explain
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -26,15 +26,11 @@ import (
 func getResultColumns(
 	op execOperator, args interface{}, inputs ...colinfo.ResultColumns,
 ) (out colinfo.ResultColumns, err error) {
+	// If we have a bug in the code below, it's easily possible to hit panic
+	// (like out-of-bounds). Catch these here and return as an error.
 	defer func() {
-		if r := recover(); r != nil {
-			// If we have a bug in the code below, it's easily possible to hit panic
-			// (like out-of-bounds). Catch these here and return as an error.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			err = e
 		}
 	}()
 

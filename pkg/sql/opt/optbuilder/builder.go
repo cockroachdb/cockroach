@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -184,17 +183,9 @@ func (b *Builder) Build() (err error) {
 	log.VEventf(b.ctx, 1, "optbuilder start")
 	defer log.VEventf(b.ctx, 1, "optbuilder finish")
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(b.ctx, 1, "%v", err)
-			} else {
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			err = e
+			log.VEventf(b.ctx, 1, "%v", err)
 		}
 	}()
 

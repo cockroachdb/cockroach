@@ -303,16 +303,8 @@ func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
 // exploration phase can begin.
 func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			err = e
 		}
 	}()
 

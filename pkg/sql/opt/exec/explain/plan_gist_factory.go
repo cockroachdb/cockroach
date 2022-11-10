@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -155,18 +155,8 @@ func (f *PlanGistFactory) PlanGist() PlanGist {
 // DecodePlanGistToRows converts a gist to a logical plan and returns the rows.
 func DecodePlanGistToRows(gist string, catalog cat.Catalog) (_ []string, retErr error) {
 	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having
-			// to add error checks everywhere throughout the code. This is only
-			// possible because the code does not update shared state and does
-			// not manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				retErr = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
+		if e := opt.CatchOptimizerError(); e != nil {
+			retErr = e
 		}
 	}()
 
