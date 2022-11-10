@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 var _ catalog.TableElementMaybeMutation = maybeMutation{}
@@ -174,6 +175,19 @@ func (c constraint) GetConstraintID() descpb.ConstraintID {
 		return c.UniqueWithoutIndex().ConstraintID
 	}
 	panic("unknown constraint type")
+}
+
+// GetConstraintValidity returns the ID for the constraint.
+func (c constraint) GetConstraintValidity() descpb.ConstraintValidity {
+	if c.IsCheck() || c.IsNotNull() {
+		return c.Check().Validity
+	} else if c.IsForeignKey() {
+		return c.ForeignKey().Validity
+	} else if c.IsUniqueWithoutIndex() {
+		return c.UniqueWithoutIndex().Validity
+	} else {
+		panic(errors.AssertionFailedf("unknown constraint type"))
+	}
 }
 
 // modifyRowLevelTTL implements the catalog.ModifyRowLevelTTL interface.

@@ -488,6 +488,11 @@ func (w index) Unique() catalog.Index {
 	return w
 }
 
+// GetConstraintValidity implements catalog.Constraint interface.
+func (w index) GetConstraintValidity() descpb.ConstraintValidity {
+	return w.validityIfConstraint
+}
+
 // partitioning is the backing struct for a catalog.Partitioning interface.
 type partitioning struct {
 	desc *catpb.PartitioningDescriptor

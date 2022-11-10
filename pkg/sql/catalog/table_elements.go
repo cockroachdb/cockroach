@@ -447,6 +447,9 @@ type Constraint interface {
 
 	// GetConstraintID returns the ID for the constraint.
 	GetConstraintID() descpb.ConstraintID
+
+	// GetConstraintValidity returns the validity of this constraint.
+	GetConstraintValidity() descpb.ConstraintValidity
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.
