@@ -41,11 +41,15 @@ bazel_test_env=(--test_env=GO_TEST_WRAP_TESTV=1 \
   --test_env=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   --test_env=AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" \
   --test_env=AWS_SHARED_CREDENTIALS_FILE="$AWS_SHARED_CREDENTIALS_FILE" \
-  --test_env=AWS_CONFIG_FILE="$AWS_CONFIG_FILE")
+  --test_env=AWS_CONFIG_FILE="$AWS_CONFIG_FILE" \
+  --test_env=AZURE_ACCOUNT_NAME="$AZURE_ACCOUNT_NAME" \
+  --test_env=AZURE_ACCOUNT_KEY="$AZURE_ACCOUNT_KEY" \
+  --test_env=AZURE_CONTAINER="$AZURE_CONTAINER")
 exit_status=0
 
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
     //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test //pkg/ccl/cloudccl/amazon:amazon_test \
+    //pkg/cloud/azure:azure_test //pkg/cloud/azure:azure_test \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
     || exit_status=$?
