@@ -544,37 +544,16 @@ func (p *planner) copySplitPointsToNewIndexes(
 func (p *planner) reassignIndexComments(
 	ctx context.Context, table *tabledesc.Mutable, indexIDMapping map[descpb.IndexID]descpb.IndexID,
 ) error {
-	// Check if there are any index comments that need to be updated.
-	row, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
-		ctx,
-		"update-table-comments",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		`SELECT count(*) FROM system.comments WHERE object_id = $1 AND type = $2`,
-		table.ID,
-		keys.IndexCommentType,
-	)
-	if err != nil {
-		return err
-	}
-	if row == nil {
-		return errors.New("failed to update table comments")
-	}
-	if int(tree.MustBeDInt(row[0])) > 0 {
-		for old, new := range indexIDMapping {
-			if _, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-				ctx,
-				"update-table-comments",
-				p.txn,
-				sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-				`UPDATE system.comments SET sub_id=$1 WHERE sub_id=$2 AND object_id=$3 AND type=$4`,
-				new,
-				old,
-				table.ID,
-				keys.IndexCommentType,
-			); err != nil {
-				return err
-			}
+	for old, new := range indexIDMapping {
+		cmt, found := p.descCollection.GetComment(table.GetID(), uint32(old), keys.IndexCommentType)
+		if !found {
+			continue
+		}
+		if err := p.updateComment(ctx, table.GetID(), uint32(old), keys.IndexCommentType, nil /* cmt */); err != nil {
+			return err
+		}
+		if err := p.updateComment(ctx, table.GetID(), uint32(new), keys.IndexCommentType, &cmt); err != nil {
+			return err
 		}
 	}
 	return nil

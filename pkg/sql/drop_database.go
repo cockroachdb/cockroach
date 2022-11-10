@@ -204,10 +204,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := metadataUpdater.DeleteDescriptorComment(
-		int64(n.dbDesc.GetID()),
-		0, /* subID */
-		keys.DatabaseCommentType,
+	if err := p.updateComment(
+		ctx, n.dbDesc.GetID(), 0 /* subID */, keys.DatabaseCommentType, nil,
 	); err != nil {
 		return err
 	}

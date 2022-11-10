@@ -15,17 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type commentOnTableNode struct {
-	n               *tree.CommentOnTable
-	tableDesc       catalog.TableDescriptor
-	metadataUpdater scexec.DescriptorMetadataUpdater
+	n         *tree.CommentOnTable
+	tableDesc catalog.TableDescriptor
 }
 
 // CommentOnTable add comment on a table.
@@ -54,30 +51,14 @@ func (p *planner) CommentOnTable(ctx context.Context, n *tree.CommentOnTable) (p
 	return &commentOnTableNode{
 		n:         n,
 		tableDesc: tableDesc,
-		metadataUpdater: descmetadata.NewMetadataUpdater(
-			ctx,
-			p.ExecCfg().InternalExecutorFactory,
-			p.Descriptors(),
-			&p.ExecCfg().Settings.SV,
-			p.txn,
-			p.SessionData(),
-		),
 	}, nil
 }
 
 func (n *commentOnTableNode) startExec(params runParams) error {
-	if n.n.Comment != nil {
-		err := n.metadataUpdater.UpsertDescriptorComment(
-			int64(n.tableDesc.GetID()), 0, keys.TableCommentType, *n.n.Comment)
-		if err != nil {
-			return err
-		}
-	} else {
-		err := n.metadataUpdater.DeleteDescriptorComment(
-			int64(n.tableDesc.GetID()), 0, keys.TableCommentType)
-		if err != nil {
-			return err
-		}
+	if err := params.p.updateComment(
+		params.ctx, n.tableDesc.GetID(), 0 /* subID */, keys.TableCommentType, n.n.Comment,
+	); err != nil {
+		return err
 	}
 
 	comment := ""

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -42,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -1379,22 +1377,6 @@ func insertJSONStatistic(
 	return err
 }
 
-func (p *planner) removeColumnComment(
-	ctx context.Context, tableID descpb.ID, pgAttributeNum descpb.PGAttributeNum,
-) error {
-	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.ExecEx(
-		ctx,
-		"delete-column-comment",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-		keys.ColumnCommentType,
-		tableID,
-		pgAttributeNum)
-
-	return err
-}
-
 // validateConstraintNameIsNotUsed checks that the name of the constraint we're
 // trying to add isn't already used, and, if it is, whether the constraint
 // addition should be skipped:
@@ -1807,7 +1789,9 @@ func dropColumnImpl(
 		}
 	}
 
-	if err := params.p.removeColumnComment(params.ctx, tableDesc.ID, colToDrop.GetPGAttributeNum()); err != nil {
+	if err := params.p.updateComment(
+		params.ctx, tableDesc.ID, uint32(colToDrop.GetPGAttributeNum()), keys.ColumnCommentType, nil, /* cmt */
+	); err != nil {
 		return nil, err
 	}
 

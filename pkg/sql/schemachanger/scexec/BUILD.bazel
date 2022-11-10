@@ -64,7 +64,6 @@ go_test(
         "//pkg/config/zonepb",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/keys",
         "//pkg/kv",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

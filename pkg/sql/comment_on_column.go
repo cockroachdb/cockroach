@@ -14,11 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -60,33 +59,10 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 		return err
 	}
 
-	if n.n.Comment != nil {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"set-column-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"UPSERT INTO system.comments VALUES ($1, $2, $3, $4)",
-			keys.ColumnCommentType,
-			n.tableDesc.GetID(),
-			col.GetPGAttributeNum(),
-			*n.n.Comment)
-		if err != nil {
-			return err
-		}
-	} else {
-		_, err := params.p.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
-			params.ctx,
-			"delete-column-comment",
-			params.p.Txn(),
-			sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-			"DELETE FROM system.comments WHERE type=$1 AND object_id=$2 AND sub_id=$3",
-			keys.ColumnCommentType,
-			n.tableDesc.GetID(),
-			col.GetPGAttributeNum())
-		if err != nil {
-			return err
-		}
+	if err := params.p.updateComment(
+		params.ctx, n.tableDesc.GetID(), uint32(col.GetPGAttributeNum()), keys.ColumnCommentType, n.n.Comment,
+	); err != nil {
+		return err
 	}
 
 	comment := ""
@@ -112,3 +88,34 @@ func (n *commentOnColumnNode) startExec(params runParams) error {
 func (n *commentOnColumnNode) Next(runParams) (bool, error) { return false, nil }
 func (n *commentOnColumnNode) Values() tree.Datums          { return tree.Datums{} }
 func (n *commentOnColumnNode) Close(context.Context)        {}
+
+func (p *planner) updateComment(
+	ctx context.Context, objID descpb.ID, subID uint32, cmtType keys.CommentType, cmt *string,
+) error {
+	b := p.Txn().NewBatch()
+	if cmt != nil {
+		if err := p.descCollection.WriteCommentToBatch(
+			ctx,
+			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			b,
+			objID,
+			subID,
+			cmtType,
+			*cmt,
+		); err != nil {
+			return err
+		}
+	} else {
+		if err := p.descCollection.DeleteComment(
+			ctx,
+			p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+			b,
+			objID,
+			subID,
+			cmtType,
+		); err != nil {
+			return err
+		}
+	}
+	return p.Txn().Run(ctx, b)
+}

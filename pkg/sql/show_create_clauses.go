@@ -47,6 +47,8 @@ type comment struct {
 
 // selectComment retrieves all the comments pertaining to a table (comments on the table
 // itself but also column and index comments.)
+// TODO(chengxiong): consider plumbing the collection through here so that we
+// can just fetch comments from collection cache instead of firing extra query.
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
 	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
 

@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/faketreeeval"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
@@ -1758,29 +1757,27 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 		// Clean up any comments related to the mutations, specifically if we need
 		// to drop them.
-		metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
-			sc.ieFactory,
-			descsCol,
-			&sc.settings.SV,
-			txn,
-			NewFakeSessionData(&sc.settings.SV))
 		for _, comment := range commentsToDelete {
-			err := metaDataUpdater.DeleteDescriptorComment(
-				comment.id,
-				comment.subID,
-				comment.commentType)
-			if err != nil {
+			if err := descsCol.DeleteComment(
+				ctx, false /* kvTrace */, b, descpb.ID(comment.id), uint32(comment.subID), comment.commentType,
+			); err != nil {
 				return err
 			}
 		}
+
 		for _, comment := range commentsToSwap {
-			err := metaDataUpdater.SwapDescriptorSubComment(
-				comment.id,
-				comment.oldSubID,
-				comment.newSubID,
-				comment.commentType,
-			)
-			if err != nil {
+			cmt, found := descsCol.GetComment(descpb.ID(comment.id), uint32(comment.oldSubID), comment.commentType)
+			if !found {
+				continue
+			}
+			if err := descsCol.DeleteComment(
+				ctx, false /* kvTrace */, b, descpb.ID(comment.id), uint32(comment.oldSubID), comment.commentType,
+			); err != nil {
+				return err
+			}
+			if err := descsCol.WriteCommentToBatch(
+				ctx, false /* kvTrace */, b, descpb.ID(comment.id), uint32(comment.newSubID), comment.commentType, cmt,
+			); err != nil {
 				return err
 			}
 		}
