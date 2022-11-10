@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
+	debugReplay "github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -180,6 +181,18 @@ func analyzeLSM(dir string, writer io.Writer) error {
 
 	lsm.SetOutput(writer)
 	return lsm.RunE(lsm, []string{db.ManifestFilename})
+}
+
+func (ds *Server) RegisterWorkloadCollector(
+	engines []storage.Engine, stores *kvserver.Stores,
+) error {
+	h := debugReplay.HTTPHandler{}
+	err := h.SetupStoreMap(engines, stores)
+	if err != nil {
+		return err
+	}
+	ds.mux.HandleFunc("/debug/workload_capture", h.HandleRequest)
+	return nil
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
