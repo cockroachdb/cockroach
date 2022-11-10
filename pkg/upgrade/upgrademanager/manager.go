@@ -205,7 +205,7 @@ func (m *Manager) Migrate(
 		// Next we'll push out the version gate to every node in the cluster.
 		// Each node will persist the version, bump the local version gates, and
 		// then return. The upgrade associated with the specific version is
-		// executed before every node in the cluster has the corresponding
+		// executed before any node in the cluster has the corresponding
 		// version activated. Migrations that depend on a certain version
 		// already being activated will need to registered using a cluster
 		// version greater than it.

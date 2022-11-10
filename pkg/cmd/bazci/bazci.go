@@ -416,7 +416,11 @@ func processTestXmls(testXmls []string) error {
 		// env var on PR builds, but we'll have it for builds that are triggered
 		// from the release branches.
 		if os.Getenv("GITHUB_API_TOKEN") == "" {
-			return errors.New("GITHUB_API_TOKEN must be set")
+			fmt.Println("GITHUB_API_TOKEN must be set to post results to GitHub; skipping error reporting")
+			// TODO(ricky): Certain jobs (nightlies) probably really
+			// do need to fail outright in this case rather than
+			// silently continuing here. How do we handle them?
+			return nil
 		}
 		var postErrors []string
 		for _, testXml := range testXmls {
