@@ -1167,6 +1167,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		}
 		queryMeta.planGist = planner.instrumentation.planGist.String()
 		queryMeta.phase = executing
+		queryMeta.database = planner.CurrentDatabase()
 		// TODO(yuzefovich): introduce ternary PlanDistribution into queryMeta.
 		queryMeta.isDistributed = distributePlan.WillDistribute()
 		progAtomic := &queryMeta.progressAtomic

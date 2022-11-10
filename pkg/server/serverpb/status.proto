@@ -920,6 +920,8 @@ message ActiveQuery {
   // The placeholders if any.
   repeated string placeholders = 13;
 
+  // The database the statement was executed on.
+  string database = 14;
 }
 
 // Request object for ListSessions and ListLocalSessions.

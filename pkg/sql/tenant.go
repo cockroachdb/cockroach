@@ -231,7 +231,34 @@ func updateTenantRecord(
 }
 
 // CreateTenant implements the tree.TenantOperator interface.
-func (p *planner) CreateTenant(ctx context.Context, tenID uint64, name string) error {
+func (p *planner) CreateTenant(ctx context.Context, name string) (roachpb.TenantID, error) {
+	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
+		return roachpb.TenantID{}, err
+	}
+
+	// Find the next available ID that can be assigned to the created tenant.
+	row, err := p.execCfg.InternalExecutor.QueryRowEx(ctx, "next-tenant-id", p.Txn(), sessiondata.NodeUserSessionDataOverride, `
+   SELECT id+1 AS newid
+    FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)
+   WHERE NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.id=u.id+1)
+     AND NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.name=$1)
+   ORDER BY id LIMIT 1
+`, name)
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	if row == nil {
+		return roachpb.TenantID{}, errors.Newf("tenant with name %q already exists", name)
+	}
+	nextID := *row[0].(*tree.DInt)
+	if err := p.CreateTenantWithID(ctx, uint64(nextID), name); err != nil {
+		return roachpb.TenantID{}, err
+	}
+	return roachpb.MakeTenantID(uint64(nextID)), nil
+}
+
+// CreateTenantWithID implements the tree.TenantOperator interface.
+func (p *planner) CreateTenantWithID(ctx context.Context, tenID uint64, name string) error {
 	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
 		return err
 	}

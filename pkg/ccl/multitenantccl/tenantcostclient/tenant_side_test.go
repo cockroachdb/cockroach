@@ -922,7 +922,7 @@ func TestSQLLivenessExemption(t *testing.T) {
 
 	// Create a tenant with ridiculously low resource limits.
 	host := sqlutils.MakeSQLRunner(hostDB)
-	host.Exec(t, "SELECT crdb_internal.create_tenant($1)", tenantID.ToUint64())
+	host.Exec(t, "SELECT crdb_internal.create_tenant($1::INT)", tenantID.ToUint64())
 	host.Exec(t, "SELECT crdb_internal.update_tenant_resource_limits($1, 0, 0.001, 0, now(), 0)", tenantID.ToUint64())
 
 	st := cluster.MakeTestingClusterSettings()
