@@ -1526,13 +1526,13 @@ func (e InvalidIndexesError) Error() string {
 func ValidateCheckConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	constraint *descpb.ConstraintDetail,
+	constraint catalog.Constraint,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-	if constraint.CheckConstraint == nil {
-		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetConstraintName())
+	if !constraint.IsCheck() {
+		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetName())
 	}
 
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
@@ -1551,7 +1551,7 @@ func ValidateCheckConstraint(
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
 		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, constraint.CheckConstraint.Expr,
+			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, constraint.Check().Expr,
 				tableDesc.(*tabledesc.Mutable), ie)
 		})
 	})
