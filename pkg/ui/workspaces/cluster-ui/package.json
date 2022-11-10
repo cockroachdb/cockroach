@@ -1,6 +1,6 @@
 {
   "name": "@cockroachlabs/cluster-ui",
-  "version": "22.2.0-prerelease-5",
+  "version": "23.1.0-prerelease.0",
   "description": "Cluster UI is a library of large features shared between CockroachDB and CockroachCloud",
   "repository": {
     "type": "git",
@@ -22,7 +22,8 @@
     "test": "jest --watch",
     "start": "npm-run-all -p build:watch tsc:watch",
     "storybook": "start-storybook -p 6006",
-    "build-storybook": "build-storybook"
+    "build-storybook": "build-storybook",
+    "bump": "yarn version --prerelease --preid prerelease --no-git-tag-version"
   },
   "keywords": [],
   "license": "MIT",
