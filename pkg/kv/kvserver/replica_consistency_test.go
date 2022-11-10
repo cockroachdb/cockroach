@@ -54,13 +54,21 @@ func TestReplicaChecksumVersion(t *testing.T) {
 		} else {
 			cc.Version = 1
 		}
+
 		var g errgroup.Group
 		g.Go(func() error { return tc.repl.computeChecksumPostApply(ctx, cc) })
-		rc, err := tc.repl.getChecksum(ctx, cc.ChecksumID)
+		shortCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		rc, err := tc.repl.getChecksum(shortCtx, cc.ChecksumID)
 		taskErr := g.Wait()
+
 		if !matchingVersion {
 			require.ErrorContains(t, taskErr, "incompatible versions")
-			require.ErrorContains(t, err, "checksum task failed to start")
+			require.Error(t, err)
+			// There is a race between computeChecksumPostApply and getChecksum, so we
+			// either get an early error, or a timeout, both of which are correct.
+			require.True(t, strings.Contains(err.Error(), "checksum task failed to start") ||
+				strings.Contains(err.Error(), "did not start in time"))
 			require.Nil(t, rc.Checksum)
 		} else {
 			require.NoError(t, taskErr)
