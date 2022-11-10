@@ -195,7 +195,7 @@ func asCommentEventPayload(
 				return nil, err
 			}
 		} else {
-			constraintName = constraint.GetConstraintName()
+			constraintName = constraint.GetName()
 		}
 		return &eventpb.CommentOnConstraint{
 			TableName:      fullName,
