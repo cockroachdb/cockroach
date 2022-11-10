@@ -265,6 +265,7 @@ export class StatementDetails extends React.Component<
   }
 
   componentDidUpdate(prevProps: StatementDetailsProps): void {
+    this.handleResize();
     if (
       prevProps.timeScale != this.props.timeScale ||
       prevProps.statementFingerprintID != this.props.statementFingerprintID ||
