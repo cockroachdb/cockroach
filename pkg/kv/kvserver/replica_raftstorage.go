@@ -619,23 +619,18 @@ func snapshot(
 	}, nil
 }
 
-// append the given entries to the raft log. Takes the previous values of
-// r.mu.lastIndex, r.mu.lastTerm, and r.mu.raftLogSize, and returns new values.
-// We do this rather than modifying them directly because these modifications
-// need to be atomic with the commit of the batch. This method requires that
-// r.raftMu is held.
+// logAppend adds the given entries to the raft log. Takes the previous
+// lastIndex, lastTerm, raftLogSize, and returns new values. It's the
+// caller's responsibility to maintain exclusive access to the raft log
+// for the duration of the method call.
 //
-// append is intentionally oblivious to the existence of sideloaded proposals.
-// They are managed by the caller, including cleaning up obsolete on-disk
-// payloads in case the log tail is replaced.
-//
-// NOTE: This method takes a engine.Writer because reads are unnecessary when
-// prevLastIndex is 0 and prevLastTerm is invalidLastTerm. In the case where
-// reading is necessary (I.E. entries are getting overwritten or deleted), a
-// engine.ReadWriter must be passed in.
-func (r *Replica) append(
+// logAppend is intentionally oblivious to the existence of sideloaded
+// proposals. They are managed by the caller, including cleaning up obsolete
+// on-disk payloads in case the log tail is replaced.
+func logAppend(
 	ctx context.Context,
-	writer storage.Writer,
+	raftLogPrefix roachpb.Key,
+	rw storage.ReadWriter,
 	prevLastIndex uint64,
 	prevLastTerm uint64,
 	prevRaftLogSize int64,
@@ -644,12 +639,11 @@ func (r *Replica) append(
 	if len(entries) == 0 {
 		return prevLastIndex, prevLastTerm, prevRaftLogSize, nil
 	}
-	prefix := r.raftMu.stateLoader.RaftLogPrefix()
 	var diff enginepb.MVCCStats
 	var value roachpb.Value
 	for i := range entries {
 		ent := &entries[i]
-		key := keys.RaftLogKeyFromPrefix(prefix, ent.Index)
+		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, ent.Index)
 
 		if err := value.SetProto(ent); err != nil {
 			return 0, 0, 0, err
@@ -657,15 +651,9 @@ func (r *Replica) append(
 		value.InitChecksum(key)
 		var err error
 		if ent.Index > prevLastIndex {
-			err = storage.MVCCBlindPut(ctx, writer, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
+			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
 		} else {
-			// We type assert `writer` to also be an engine.ReadWriter only in
-			// the case where we're replacing existing entries.
-			eng, ok := writer.(storage.ReadWriter)
-			if !ok {
-				panic("expected writer to be a engine.ReadWriter when overwriting log entries")
-			}
-			err = storage.MVCCPut(ctx, eng, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
+			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
 			return 0, 0, 0, err
@@ -676,16 +664,10 @@ func (r *Replica) append(
 	lastTerm := entries[len(entries)-1].Term
 	// Delete any previously appended log entries which never committed.
 	if prevLastIndex > 0 {
-		// We type assert `writer` to also be an engine.ReadWriter only in the
-		// case where we're deleting existing entries.
-		eng, ok := writer.(storage.ReadWriter)
-		if !ok {
-			panic("expected writer to be a engine.ReadWriter when deleting log entries")
-		}
 		for i := lastIndex + 1; i <= prevLastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
-			_, err := storage.MVCCDelete(ctx, eng, &diff, keys.RaftLogKeyFromPrefix(prefix, i),
+			_, err := storage.MVCCDelete(ctx, rw, &diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
 				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
 				return 0, 0, 0, err
