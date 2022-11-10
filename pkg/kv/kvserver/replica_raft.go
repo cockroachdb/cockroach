@@ -962,6 +962,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 
 	if !raft.IsEmptyHardState(rd.HardState) {
+		// TODO(tbg): don't call this method here, it raises questions about synchronization.
+		// Everything is fine btw. We hold raftMu and IsInitialized is identical to
+		// len(desc.EndKey) > 0 and desc can only change under raftMu.
 		if !r.IsInitialized() && rd.HardState.Commit != 0 {
 			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
 		}

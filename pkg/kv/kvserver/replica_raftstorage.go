@@ -899,6 +899,9 @@ func (r *Replica) applySnapshot(
 	}
 
 	// Update HardState.
+	// TODO(tbg) this is bad why do we need to update the HardState here?
+	// Commit index needs to be updated, that's true, but why pass this in from so far?
+	// What about the Term?
 	if err := r.raftMu.stateLoader.SetHardState(ctx, &unreplicatedSST, hs); err != nil {
 		return errors.Wrapf(err, "unable to write HardState to unreplicated SST writer")
 	}
@@ -954,6 +957,7 @@ func (r *Replica) applySnapshot(
 	var ingestStats pebble.IngestOperationStats
 	if ingestStats, err =
 		r.store.engine.IngestExternalFilesWithStats(ctx, inSnap.SSTStorageScratch.SSTs()); err != nil {
+		_ = useReplicasStorage // here we'd actually call
 		return errors.Wrapf(err, "while ingesting %s", inSnap.SSTStorageScratch.SSTs())
 	}
 	if r.store.cfg.KVAdmissionController != nil {

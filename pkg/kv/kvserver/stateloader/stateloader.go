@@ -425,7 +425,10 @@ func (rsl StateLoader) LoadHardState(
 
 // SetHardState overwrites the HardState.
 func (rsl StateLoader) SetHardState(
-	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
+	// TODO(tbg): StateLoader should be specific to the state machine only (contents of the replicated replica)
+	ctx context.Context,
+	writer storage.Writer,
+	hs raftpb.HardState,
 ) error {
 	// "Blind" because ms == nil and timestamp.IsEmpty().
 	return storage.MVCCBlindPutProto(
