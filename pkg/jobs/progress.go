@@ -143,7 +143,7 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 	p.completed += delta
 	completed := p.completed
 	shouldReport := p.completed-p.reported > progressFractionThreshold
-	shouldReport = shouldReport && p.lastReported.Add(progressTimeThreshold).Before(timeutil.Now())
+	shouldReport = shouldReport || (p.completed > p.reported && p.lastReported.Add(progressTimeThreshold).Before(timeutil.Now()))
 
 	if shouldReport {
 		p.reported = p.completed

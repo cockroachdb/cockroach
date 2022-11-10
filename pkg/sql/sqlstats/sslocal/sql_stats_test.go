@@ -1109,6 +1109,8 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 91710)
+
 	skip.UnderStress(t, "These tests assert timings are within 10ms, which fails under stress.")
 
 	ctx := context.Background()

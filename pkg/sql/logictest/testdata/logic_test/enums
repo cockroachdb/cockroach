@@ -389,11 +389,11 @@ query TT
 SHOW CREATE t1
 ----
 t1  CREATE TABLE public.t1 (
-    x test.public.greeting NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-    INDEX i (x ASC)
-)
+      x test.public.greeting NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+      INDEX i (x ASC)
+    )
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
 # descriptor scan is used.
@@ -503,13 +503,13 @@ query TT
 SHOW CREATE enum_default
 ----
 enum_default  CREATE TABLE public.enum_default (
-              x INT8 NULL,
-              y test.public.greeting NULL DEFAULT 'hello':::test.public.greeting,
-              z BOOL NULL DEFAULT 'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting),
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
-              FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
-)
+                x INT8 NULL,
+                y test.public.greeting NULL DEFAULT 'hello':::test.public.greeting,
+                z BOOL NULL DEFAULT 'hello':::test.public.greeting IS OF (test.public.greeting, test.public.greeting),
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
+                FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
+              )
 
 # Test crdb_internal.table_columns.
 query TT
@@ -560,14 +560,14 @@ query TT
 SHOW CREATE enum_computed
 ----
 enum_computed  CREATE TABLE public.enum_computed (
-               x INT8 NULL,
-               y test.public.greeting NULL AS ('hello':::test.public.greeting) STORED,
-               z BOOL NULL AS (w = 'howdy':::test.public.greeting) STORED,
-               w test.public.greeting NULL,
-               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
-               FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
-)
+                 x INT8 NULL,
+                 y test.public.greeting NULL AS ('hello':::test.public.greeting) STORED,
+                 z BOOL NULL AS (w = 'howdy':::test.public.greeting) STORED,
+                 w test.public.greeting NULL,
+                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                 CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
+                 FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+               )
 
 # Test information_schema.columns. generation_expression should not be
 # formatted with type annotations.
@@ -597,12 +597,12 @@ query TT
 SHOW CREATE enum_checks
 ----
 enum_checks  CREATE TABLE public.enum_checks (
-             x test.public.greeting NULL,
-             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-             CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
-             CONSTRAINT check_x CHECK (x = 'hello':::test.public.greeting),
-             CONSTRAINT "check" CHECK ('hello':::test.public.greeting = 'hello':::test.public.greeting)
-)
+               x test.public.greeting NULL,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
+               CONSTRAINT check_x CHECK (x = 'hello':::test.public.greeting),
+               CONSTRAINT "check" CHECK ('hello':::test.public.greeting = 'hello':::test.public.greeting)
+             )
 
 # Ensure that we can add check constraints to tables with enums.
 statement ok
@@ -1530,13 +1530,13 @@ query TT
 SHOW CREATE TABLE arr_t6
 ----
 arr_t6  CREATE TABLE public.arr_t6 (
-        i test_57196.public.arr_typ2[] NULL DEFAULT ARRAY['a':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[],
-        j test_57196.public.arr_typ2 NULL DEFAULT (ARRAY['b':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[])[1:::INT8],
-        k test_57196.public.arr_typ2[] NULL DEFAULT ARRAY['c':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[],
-        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
-        FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
-)
+          i test_57196.public.arr_typ2[] NULL DEFAULT ARRAY['a':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[],
+          j test_57196.public.arr_typ2 NULL DEFAULT (ARRAY['b':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[])[1:::INT8],
+          k test_57196.public.arr_typ2[] NULL DEFAULT ARRAY['c':::test_57196.public.arr_typ2]:::test_57196.public.arr_typ2[],
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
+          FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
+        )
 
 
 subtest regression_63138

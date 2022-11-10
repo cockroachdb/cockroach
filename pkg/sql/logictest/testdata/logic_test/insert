@@ -478,21 +478,21 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE sw]
 ----
 CREATE TABLE public.sw (
-   a CHAR NULL,
-   b CHAR(3) NULL,
-   c VARCHAR NULL,
-   d VARCHAR(3) NULL,
-   e STRING NULL,
-   f STRING(3) NULL,
-   g "char" NULL,
-   ac CHAR COLLATE en NULL,
-   bc CHAR(3) COLLATE en NULL,
-   cc VARCHAR COLLATE en NULL,
-   dc VARCHAR(3) COLLATE en NULL,
-   ec STRING COLLATE en NULL,
-   fc STRING(3) COLLATE en NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
+  a CHAR NULL,
+  b CHAR(3) NULL,
+  c VARCHAR NULL,
+  d VARCHAR(3) NULL,
+  e STRING NULL,
+  f STRING(3) NULL,
+  g "char" NULL,
+  ac CHAR COLLATE en NULL,
+  bc CHAR(3) COLLATE en NULL,
+  cc VARCHAR COLLATE en NULL,
+  dc VARCHAR(3) COLLATE en NULL,
+  ec STRING COLLATE en NULL,
+  fc STRING(3) COLLATE en NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT sw_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -602,9 +602,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE t29494]
 ----
 CREATE TABLE public.t29494 (
-   x INT8 NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check that the new column is not usable in RETURNING.
@@ -641,10 +641,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE t32759]
 ----
 CREATE TABLE public.t32759 (
-   x INT8 NULL,
-   z INT8 NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t32759_pkey PRIMARY KEY (rowid ASC)
+  x INT8 NULL,
+  z INT8 NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t32759_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check that values cannot be inserted into the dropped column.

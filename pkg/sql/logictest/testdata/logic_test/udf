@@ -136,16 +136,16 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f];
 ----
 CREATE FUNCTION public.f(IN a test.public.notmyworkday)
-    RETURNS INT8
-    IMMUTABLE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT a FROM test.public.t;
-    SELECT b FROM test.public.t@t_idx_b;
-    SELECT c FROM test.public.t@t_idx_c;
-    SELECT nextval('public.sq1'::REGCLASS);
+  RETURNS INT8
+  IMMUTABLE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT a FROM test.public.t;
+  SELECT b FROM test.public.t@t_idx_b;
+  SELECT c FROM test.public.t@t_idx_c;
+  SELECT nextval('public.sq1'::REGCLASS);
 $$
 
 statement error pq: unimplemented: alter function depends on extension not supported.*
@@ -1511,13 +1511,13 @@ query T
 SELECT @2 FROM [SHOW CREATE FUNCTION f_udt_rewrite];
 ----
 CREATE FUNCTION public.f_udt_rewrite()
-    RETURNS test.public.notmyworkday
-    VOLATILE
-    NOT LEAKPROOF
-    CALLED ON NULL INPUT
-    LANGUAGE SQL
-    AS $$
-    SELECT 'Monday':::test.public.notmyworkday;
+  RETURNS test.public.notmyworkday
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  AS $$
+  SELECT 'Monday':::test.public.notmyworkday;
 $$
 
 query T

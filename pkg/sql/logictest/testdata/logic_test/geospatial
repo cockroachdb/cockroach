@@ -75,9 +75,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE geom_table_negative_values]
 ----
 CREATE TABLE public.geom_table_negative_values (
-   a GEOMETRY(GEOMETRY) NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
+  a GEOMETRY(GEOMETRY) NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement ok
@@ -89,9 +89,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE geog_table_negative_values]
 ----
 CREATE TABLE public.geog_table_negative_values (
-   a GEOGRAPHY(GEOMETRY) NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC)
+  a GEOGRAPHY(GEOMETRY) NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT geog_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 )
 
 statement error SRID 3857 cannot be used for geography as it is not in a lon/lat coordinate system
