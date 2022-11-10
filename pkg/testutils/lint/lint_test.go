@@ -1995,9 +1995,11 @@ func TestLint(t *testing.T) {
 		skip.UnderBazelWithIssue(t, 65485, "Doesn't work in Bazel -- not really sure why yet")
 
 		t.Parallel()
-		var buf strings.Builder
-		if err := gcassert.GCAssert(&buf,
+
+		gcassertPaths := []string{
 			"../../col/coldata",
+			"../../kv/kvclient/rangecache",
+			"../../sql/catalog/descs",
 			"../../sql/colcontainer",
 			"../../sql/colconv",
 			"../../sql/colexec",
@@ -2013,9 +2015,62 @@ func TestLint(t *testing.T) {
 			"../../sql/colfetcher",
 			"../../sql/opt",
 			"../../sql/row",
-			"../../kv/kvclient/rangecache",
 			"../../storage",
-		); err != nil {
+			"../../storage/enginepb",
+			"../../util",
+			"../../util/hlc",
+		}
+
+		// Ensure that all packages that have '//gcassert' or '// gcassert'
+		// assertions are included into gcassertPaths.
+		t.Run("Coverage", func(t *testing.T) {
+			t.Parallel()
+			cmd, stderr, filter, err := dirCmd(
+				pkgDir,
+				"git",
+				"grep",
+				"-nE",
+				`// ?gcassert`,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := stream.ForEach(stream.Sequence(
+				filter,
+				stream.GrepNot("sql/colexec/execgen/cmd/execgen/*"),
+				stream.GrepNot("sql/colexec/execgen/testdata/*"),
+				stream.GrepNot("testutils/lint/lint_test.go"),
+			), func(s string) {
+				// s here is of the form
+				//   util/hlc/timestamp.go:203:// gcassert:inline
+				// and we want to extract the package path.
+				filePath := s[:strings.Index(s, ":")]                  // up to the line number
+				pkgPath := filePath[:strings.LastIndex(filePath, "/")] // up to the file name
+				gcassertPath := "../../" + pkgPath
+				for i := range gcassertPaths {
+					if gcassertPath == gcassertPaths[i] {
+						return
+					}
+				}
+				t.Errorf("\n%s <- is not enforced, include %q into gcassertPaths", s, gcassertPath)
+			}); err != nil {
+				t.Error(err)
+			}
+
+			if err := cmd.Wait(); err != nil {
+				if out := stderr.String(); len(out) > 0 {
+					t.Fatalf("err=%s, stderr=%s", err, out)
+				}
+			}
+		})
+
+		var buf strings.Builder
+		if err := gcassert.GCAssert(&buf, gcassertPaths...); err != nil {
 			t.Fatal(err)
 		}
 		output := buf.String()
