@@ -64,13 +64,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/cacheutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -88,6 +88,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -1248,28 +1249,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}, nil
 }
 
-// Checks if tenant exists. This function does a very superficial check to see if the system db
-// has been bootstrapped for the tenant. This is not a complete check and is only sufficient
-// to be used in the dev environment.
-func checkTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB) error {
-	if codec.ForSystemTenant() {
-		return errors.AssertionFailedf("asked to check for tenant but system codec specified")
-	}
-
-	key := catalogkeys.MakeDatabaseNameKey(codec, systemschema.SystemDatabaseName)
-	result, err := db.Get(ctx, key)
-	if err != nil {
-		return err
-	}
-	if result.Value == nil || result.ValueInt() != keys.SystemDatabaseID {
-		return errors.New("system DB uninitialized, check if tenant is non existent")
-	}
-	// Tenant has been confirmed to be bootstrapped successfully
-	// as the system database, which is a part of the bootstrap data for
-	// a tenant keyspace, exists in the namespace table.
-	return nil
-}
-
 func (s *SQLServer) setInstanceID(
 	ctx context.Context, instanceID base.SQLInstanceID, sessionID sqlliveness.SessionID,
 ) error {
@@ -1289,7 +1268,6 @@ func (s *SQLServer) preStart(
 	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
 	// until a connection is established to the cluster and its ID has been
@@ -1298,13 +1276,44 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
-		// Confirm tenant exists prior to initialization. This is a sanity
-		// check for the dev environment to ensure that a tenant has been
-		// successfully created before attempting to initialize a SQL
-		// server for it.
-		if err := checkTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
+	}
+
+	// Load the multi-region enum by reading the system database's descriptor.
+	// This also serves as a simple check to see if a tenant exist (i.e. by
+	// checking whether the system db has been bootstrapped).
+	var mrEnumTypeDesc catalog.TypeDescriptor
+	if err := s.internalExecutorFactory.DescsTxn(ctx, s.execCfg.DB, func(
+		ctx context.Context, txn *kv.Txn, collection *descs.Collection,
+	) error {
+		mrEnumTypeDesc = nil // reset for retry
+		flags := tree.CommonLookupFlags{
+			Required:    true,
+			AvoidLeased: true,
+		}
+		_, systemDB, err := collection.GetImmutableDatabaseByID(
+			ctx, txn, keys.SystemDatabaseID, flags,
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not retrieve system DB")
+		}
+		if !systemDB.IsMultiRegion() {
+			return nil
+		}
+		id, err := systemDB.MultiRegionEnumID()
+		if err != nil {
 			return err
 		}
+		mrEnumTypeDesc, err = collection.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
+			CommonLookupFlags: flags,
+		})
+		return err
+	}); err != nil {
+		return err
+	}
+
+	// TODO(jaylim-crl): Populate regional data for sqlInstanceStorage.
+	if err := s.sqlLivenessProvider.SetRegionalData(s.distSQLServer.Locality, mrEnumTypeDesc); err != nil {
+		return err
 	}
 
 	// Start the sql liveness subsystem. We'll need it to get a session.
