@@ -79,6 +79,7 @@ type cdcTestArgs struct {
 	tpccWarehouseCount int
 	workloadDuration   string
 	initialScan        bool
+	initialScanOnly    bool
 	kafkaChaos         bool
 	crdbChaos          bool
 	whichSink          sinkType
@@ -95,6 +96,9 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {
+
+	args.initialScan = args.initialScan || args.initialScanOnly
+
 	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
 	workloadNode := c.Node(c.Spec().NodeCount)
 	kafkaNode := c.Node(c.Spec().NodeCount)
@@ -206,6 +210,12 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		args.crdbChaos,
 	)
 	defer verifier.maybeLogLatencyHist()
+	if args.initialScanOnly {
+		verifier.jobShouldTerminateSuccessfully = true
+		// Add in a little time to ensure there's data for each node to emit
+		// during the initial scan.
+		time.Sleep(2 * time.Second)
+	}
 
 	m.Go(func(ctx context.Context) error {
 		// Some of the tests have a tight enough bound on targetSteadyLatency
@@ -249,18 +259,19 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 			targets = `ledger.customer, ledger.transaction, ledger.entry, ledger.session`
 		}
 
-		var options []cdcOption
+		var resolvedInterval string
 		if args.whichSink == cloudStorageSink || args.whichSink == webhookSink {
-			options = []cdcOption{
-				{"resolved", "'10s'"},
-				{"envelope", "wrapped"},
-				{"min_checkpoint_frequency", "'10s'"},
-			}
-		} else {
-			options = []cdcOption{{"resolved", ""}, {"min_checkpoint_frequency", "'10s'"}}
+			resolvedInterval = "'10s'"
 		}
+
+		options := []cdcOption{{"min_checkpoint_frequency", "'10s'"}}
 		if !args.initialScan {
 			options = append(options, cdcOption{"cursor", "'-1s'"})
+		}
+		if args.initialScanOnly {
+			options = append(options, cdcOption{"initial_scan", "'only'"})
+		} else {
+			options = append(options, cdcOption{"resolved", resolvedInterval})
 		}
 
 		jobID, err := newChangefeedCreator(db, targets, sinkURI).With(options...).Create()
@@ -812,9 +823,6 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
 		Name:            "cdc/pubsub-sink/assume-role",
 		Owner:           `cdc`,
@@ -824,12 +832,11 @@ func registerCDC(r registry.Registry) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
 				tpccWarehouseCount:       1,
-				workloadDuration:         "30m",
-				initialScan:              true,
+				workloadDuration:         "1m",
+				initialScanOnly:          true,
 				whichSink:                pubsubSink,
 				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
 				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
 			})
 		},
 	})
@@ -839,9 +846,6 @@ func registerCDC(r registry.Registry) {
 	// the first account on the assume-role chain:
 	// cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com. See
 	// https://cloud.google.com/iam/docs/create-short-lived-credentials-direct.
-	//
-	// TODO(rui): Change to a shorter test as it just needs to validate
-	// permissions and shouldn't need to run a full 30m workload.
 	r.Add(registry.TestSpec{
 		Name:            "cdc/cloud-sink-gcs/assume-role",
 		Owner:           `cdc`,
@@ -849,13 +853,12 @@ func registerCDC(r registry.Registry) {
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				tpccWarehouseCount:       50,
-				workloadDuration:         "30m",
-				initialScan:              true,
+				tpccWarehouseCount:       1,
+				workloadDuration:         "1m",
+				initialScanOnly:          true,
 				whichSink:                cloudStorageSink,
 				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
 				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
 			})
 		},
 	})
@@ -1631,17 +1634,19 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 }
 
 type latencyVerifier struct {
-	statementTime            time.Time
-	targetSteadyLatency      time.Duration
-	targetInitialScanLatency time.Duration
-	tolerateErrors           bool
-	logger                   *logger.Logger
-	setTestStatus            func(...interface{})
+	statementTime                  time.Time
+	targetSteadyLatency            time.Duration
+	targetInitialScanLatency       time.Duration
+	jobShouldTerminateSuccessfully bool
+	tolerateErrors                 bool
+	logger                         *logger.Logger
+	setTestStatus                  func(...interface{})
 
 	initialScanLatency   time.Duration
 	maxSeenSteadyLatency time.Duration
 	maxSeenSteadyEveryN  log.EveryN
 	latencyBecameSteady  bool
+	jobSucceeded         bool
 
 	latencyHist *hdrhistogram.Histogram
 }
@@ -1714,7 +1719,9 @@ func (lv *latencyVerifier) pollLatency(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-stopper:
-			return nil
+			if !lv.jobShouldTerminateSuccessfully {
+				return nil
+			}
 		case <-time.After(time.Second):
 		}
 
@@ -1726,6 +1733,11 @@ func (lv *latencyVerifier) pollLatency(
 			}
 			return err
 		}
+		if info.status == `succeeded` {
+			lv.jobSucceeded = true
+			lv.logger.Printf("changefeed complete")
+			return nil
+		}
 		if info.status != `running` {
 			lv.logger.Printf("unexpected status: %s, error: %s", info.status, info.errMsg)
 			return errors.Errorf(`unexpected status: %s`, info.status)
@@ -1735,6 +1747,13 @@ func (lv *latencyVerifier) pollLatency(
 }
 
 func (lv *latencyVerifier) assertValid(t test.Test) {
+	if lv.jobSucceeded {
+		if lv.jobShouldTerminateSuccessfully {
+			return
+		}
+		t.Fatalf("job unexpectedly reported succeeded")
+	}
+
 	if lv.initialScanLatency == 0 {
 		t.Fatalf("initial scan did not complete")
 	}
