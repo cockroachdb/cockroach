@@ -1014,3 +1014,25 @@ func (e *ElasticCPUGrantCoordinator) close() {
 func (e *ElasticCPUGrantCoordinator) tryGrant() {
 	e.elasticCPUGranter.tryGrant()
 }
+
+// PacerMaker is used to construct a new admission.Pacer.
+//
+// PacerMaker interface should be used in the SQL layer in lieu of
+// ElasticCPUGrantCoordinator because the ElasticCPUGrantCoordinator
+// implements several features which are irrelevant to SQL.
+type PacerMaker interface {
+	// NewPacer constructs a new admission.Pacer, which may be nil.
+	NewPacer(unit time.Duration, wi WorkInfo) *Pacer
+}
+
+// NewPacer implements the PacerMaker interface.
+func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *Pacer {
+	if e == nil {
+		return nil
+	}
+	return &Pacer{
+		unit: unit,
+		wi:   wi,
+		wq:   e.ElasticCPUWorkQueue,
+	}
+}

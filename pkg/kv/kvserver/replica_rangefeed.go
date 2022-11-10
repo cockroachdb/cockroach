@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"sync"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -135,7 +135,7 @@ func (tp *rangefeedTxnPusher) ResolveIntents(
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
 // the number of rangefeeds using catch-up iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *kvadmission.Pacer,
+	args *roachpb.RangeFeedRequest, stream roachpb.RangeFeedEventSink, pacer *admission.Pacer,
 ) *roachpb.Error {
 	return r.rangeFeedWithRangeID(r.RangeID, args, stream, pacer)
 }
@@ -144,7 +144,7 @@ func (r *Replica) rangeFeedWithRangeID(
 	_forStacks roachpb.RangeID,
 	args *roachpb.RangeFeedRequest,
 	stream roachpb.RangeFeedEventSink,
-	pacer *kvadmission.Pacer,
+	pacer *admission.Pacer,
 ) *roachpb.Error {
 	if !r.isRangefeedEnabled() && !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See %s",

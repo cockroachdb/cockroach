@@ -13,9 +13,9 @@ package rangefeed
 import (
 	"bytes"
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -66,7 +66,7 @@ type CatchUpIterator struct {
 	close     func()
 	span      roachpb.Span
 	startTime hlc.Timestamp // exclusive
-	pacer     *kvadmission.Pacer
+	pacer     *admission.Pacer
 }
 
 // NewCatchUpIterator returns a CatchUpIterator for the given Reader over the
@@ -79,7 +79,7 @@ func NewCatchUpIterator(
 	span roachpb.Span,
 	startTime hlc.Timestamp,
 	closer func(),
-	pacer *kvadmission.Pacer,
+	pacer *admission.Pacer,
 ) *CatchUpIterator {
 	return &CatchUpIterator{
 		simpleCatchupIter: storage.NewMVCCIncrementalIterator(reader,

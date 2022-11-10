@@ -879,6 +879,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
 		eventsServer:             eventsServer,
+		pacerMaker:               gcoords.Elastic,
 	})
 	if err != nil {
 		return nil, err
