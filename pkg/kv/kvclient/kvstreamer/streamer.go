@@ -660,7 +660,25 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	// is expected to produce requests with such cases one at a time.
 	allowDebt := len(reqs) == 1
 	if err = s.budget.consume(ctx, toConsume, allowDebt); err != nil {
-		return err
+		if allowDebt {
+			// This error indicates that we're using the whole --max-sql-memory
+			// budget, so we'll just give up in order to protect the node.
+			return err
+		}
+		// We have two things (used only to reduce allocations) we could dispose of
+		// without sacrificing the correctness:
+		// - don't reuse the truncation helper (if present)
+		// - clear the overhead of the results buffer.
+		// Once disposed of those, we attempt to consume the budget again.
+		if s.truncationHelper != nil {
+			s.truncationHelper = nil
+			s.budget.release(ctx, s.truncationHelperAccountedFor)
+			s.truncationHelperAccountedFor = 0
+		}
+		s.results.clearOverhead(ctx)
+		if err = s.budget.consume(ctx, toConsume, allowDebt); err != nil {
+			return err
+		}
 	}
 
 	// Memory reservation was approved, so the requests are good to go.

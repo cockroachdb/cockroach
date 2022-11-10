@@ -40,7 +40,6 @@ import (
 	_ "github.com/mmatczuk/go_generics/cmd/go_generics"
 	_ "github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc"
 	_ "github.com/wadey/gocovmerge"
-	_ "golang.org/x/lint/golint"
 	_ "golang.org/x/perf/cmd/benchstat"
 	_ "golang.org/x/tools/cmd/goyacc"
 	_ "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow"

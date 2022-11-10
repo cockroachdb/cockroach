@@ -117,7 +117,7 @@ func safeToUpgradeTenant(
 	if overrides == nil {
 		return false, errors.AssertionFailedf("overrides informer is nil in secondary tenant")
 	}
-	hostClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetHostClusterVersion(ctx)
+	hostClusterVersion := overrides.(*settingswatcher.SettingsWatcher).GetStorageClusterVersion()
 	if hostClusterVersion.Less(tenantClusterVersion.Version) {
 		// We assert here if we find a tenant with a higher cluster version than
 		// the host cluster. It's dangerous to run in this mode because the
