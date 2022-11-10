@@ -42,7 +42,7 @@ import (
 // batch's view of ReplicaState. Then the batch is committed, the side-effects
 // are applied and the local result is processed.
 type replicatedCmd struct {
-	decodedRaftEntry
+	*raftlog.Entry
 
 	// proposal is populated on the proposing Replica only and comes from the
 	// Replica's proposal map.
@@ -75,24 +75,33 @@ type replicatedCmd struct {
 	response    proposalResult
 }
 
-// decodedRaftEntry represents the deserialized content of a raftpb.Entry.
-type decodedRaftEntry struct {
-	*raftlog.Entry
-}
-
 // decode populates the receiver from the provided entry.
 func (c *replicatedCmd) decode(e *raftpb.Entry) error {
-	return c.decodedRaftEntry.decode(e)
+	if c.Entry != nil {
+		c.Entry.Release()
+		c.Entry = nil
+	}
+
+	var err error
+	c.Entry, err = raftlog.NewEntry(*e)
+	if err != nil {
+		return wrapWithNonDeterministicFailure(err, "while decoding raft entry")
+	}
+	return nil
 }
 
 // Index implements the apply.Command interface.
 func (c *replicatedCmd) Index() uint64 {
-	return c.decodedRaftEntry.Index
+	return c.Entry.Index
 }
 
 // IsTrivial implements the apply.Command interface.
 func (c *replicatedCmd) IsTrivial() bool {
 	return isTrivial(c.replicatedResult())
+}
+
+func (c *replicatedCmd) replicatedResult() *kvserverpb.ReplicatedEvalResult {
+	return &c.Entry.Cmd.ReplicatedEvalResult
 }
 
 // IsLocal implements the apply.Command interface.
@@ -196,23 +205,4 @@ func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
 func (c *replicatedCmd) finishTracingSpan() {
 	c.sp.Finish()
 	c.ctx, c.sp = nil, nil
-}
-
-// decode decodes the entry e into the decodedRaftEntry.
-func (d *decodedRaftEntry) decode(e *raftpb.Entry) error {
-	if d.Entry != nil {
-		d.Entry.Release()
-		*d = decodedRaftEntry{}
-	}
-
-	var err error
-	d.Entry, err = raftlog.NewEntry(*e)
-	if err != nil {
-		return wrapWithNonDeterministicFailure(err, "while decoding raft entry")
-	}
-	return nil
-}
-
-func (d *decodedRaftEntry) replicatedResult() *kvserverpb.ReplicatedEvalResult {
-	return &d.Cmd.ReplicatedEvalResult
 }

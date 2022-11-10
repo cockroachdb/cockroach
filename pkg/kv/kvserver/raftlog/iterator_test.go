@@ -134,13 +134,13 @@ func BenchmarkIterator(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			it := NewIterator(rangeID, &mockReader{})
+			it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
 			it.Close()
 		}
 	})
 
 	benchForOp := func(b *testing.B, method func(*Iterator) (bool, error)) {
-		it := NewIterator(rangeID, &mockReader{})
+		it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
 		setMockIter(it)
 
 		b.ReportAllocs()
