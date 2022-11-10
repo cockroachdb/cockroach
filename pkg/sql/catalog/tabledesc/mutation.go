@@ -186,6 +186,21 @@ func (c constraint) GetConstraintID() descpb.ConstraintID {
 	panic("unknown constraint type")
 }
 
+// GetConstraintValidity returns the ID for the constraint.
+func (c constraint) GetConstraintValidity() descpb.ConstraintValidity {
+	if c.IsPrimaryKey() || c.IsUnique() {
+		return c.ConstraintToUpdateDesc().IndexBackedConstraintValidity
+	} else if c.IsCheck() || c.IsNotNull() {
+		return c.Check().Validity
+	} else if c.IsForeignKey() {
+		return c.ForeignKey().Validity
+	} else if c.IsUniqueWithoutIndex() {
+		return c.UniqueWithoutIndex().Validity
+	} else {
+		panic("unknown constraint type")
+	}
+}
+
 // modifyRowLevelTTL implements the catalog.ModifyRowLevelTTL interface.
 type modifyRowLevelTTL struct {
 	maybeMutation
