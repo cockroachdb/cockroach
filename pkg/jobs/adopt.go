@@ -13,8 +13,10 @@ package jobs
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -72,19 +75,22 @@ func (r *Registry) maybeDumpTrace(
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
 
+	ieNotBoundToTxn := r.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+
 	// If the job has failed, and the dump mode is set to anything
 	// except noDump, then we should dump the trace.
 	// The string comparison is unfortunate but is used to differentiate a job
 	// that has failed from a job that has been canceled.
 	if jobErr != nil && !HasErrJobCanceled(jobErr) && resumerCtx.Err() == nil {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
 		return
 	}
 
 	// If the dump mode is set to `dumpOnStop` then we should dump the
 	// trace when the job is any of paused, canceled, succeeded or failed state.
 	if dumpMode == int64(dumpOnStop) {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
 	}
 }
 
@@ -124,6 +130,16 @@ const (
 	canRunArgs = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
 	// NextRunClause calculates the next execution time of a job with exponential backoff delay, calculated
 	// using last_run and num_runs values.
+	PossibleDelay = `args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT`
+	Piece1        = `COALESCE(last_run, created)`
+	Piece2        = `least(
+	IF(
+		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
+		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
+		args.max_delay
+	),
+	args.max_delay
+)::INTERVAL`
 	NextRunClause = `
 COALESCE(last_run, created) + least(
 	IF(
@@ -144,8 +160,8 @@ COALESCE(last_run, created) + least(
 
 	resumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
 	resumeQueryWhereBase   = `id = $1 AND claim_session_id = $2`
-	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` + canRunClause + ` AS can_run,` +
-		` created_by_type, created_by_id  FROM system.jobs, ` + canRunArgs + " WHERE " + resumeQueryWhereBase
+	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` +
+		` created_by_type, created_by_id, created, num_runs, last_run  FROM system.jobs WHERE ` + resumeQueryWhereBase
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
@@ -238,14 +254,49 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	}
 }
 
+// determineCanRun returns true if the current time is after the time threshold.
+func determineCanRun(
+	ts time.Time,
+	lastRun tree.Datum,
+	created tree.DTimestamp,
+	initialDelay float64,
+	numRuns tree.Datum,
+	maxDelay float64,
+) bool {
+	var startTime time.Time
+	if lastRun != nil {
+		startTime = lastRun.(*tree.DTimestamp).Time
+	} else {
+		startTime = created.Time
+	}
+
+	var exponent int
+	if numRuns != nil {
+		exponent = int(*numRuns.(*tree.DInt))
+	}
+
+	possibleDelay := initialDelay * (math.Pow(2, math.Min(62, float64(exponent))) - 1)
+	var allowedDelay float64
+	if possibleDelay >= 0 {
+		allowedDelay = math.Min(possibleDelay, maxDelay)
+	} else {
+		allowedDelay = maxDelay
+	}
+	return !ts.Before(duration.Add(startTime, duration.FromFloat64(allowedDelay)))
+}
+
 // resumeJob resumes a claimed job.
 func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session) error {
 	log.Infof(ctx, "job %d: resuming execution", jobID)
 	resumeQuery := resumeQueryWithBackoff
-	args := []interface{}{jobID, s.ID().UnsafeBytes(),
-		r.clock.Now().GoTime(), r.RetryInitialDelay(), r.RetryMaxDelay()}
-	row, err := r.ex.QueryRowEx(
-		ctx, "get-job-row", nil,
+	ts := r.clock.Now().GoTime()
+	initialDelay := r.RetryInitialDelay()
+	maxDelay := r.RetryMaxDelay()
+
+	args := []interface{}{jobID, s.ID().UnsafeBytes()}
+	ieNotBoundToTxn := r.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+	row, err := ieNotBoundToTxn.QueryRowEx(
+		ctx, "get-job-row", nil, /* txn */
 		sessiondata.InternalExecutorOverride{User: username.NodeUserName()}, resumeQuery, args...,
 	)
 	if err != nil {
@@ -255,17 +306,42 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 		return errors.Errorf("job %d: claim with session id %s does not exist", jobID, s.ID())
 	}
 
-	status := Status(*row[0].(*tree.DString))
-	if status == StatusSucceeded {
+	// Decode resumeQuery's output.
+	jobStatus := Status(*row[0].(*tree.DString))
+	jobPayload, err := UnmarshalPayload(row[1])
+	if err != nil {
+		return errors.Wrapf(err, "failed to get payload of job %q", jobID)
+	}
+	jobProgress, err := UnmarshalProgress(row[2])
+	if err != nil {
+		return errors.Wrapf(err, "failed to get progress of job %q", jobID)
+	}
+	isClaimSessionAlive := *row[3].(*tree.DBool)
+	createdBy, err := unmarshalCreatedBy(row[4], row[5])
+	if err != nil {
+		return err
+	}
+
+	created := *row[6].(*tree.DTimestamp)
+	var numRuns tree.Datum
+	if row[7] != tree.DNull {
+		numRuns = row[7].(*tree.DInt)
+	}
+	var lastRun tree.Datum
+	if row[8] != tree.DNull {
+		lastRun = row[8].(*tree.DTimestamp)
+	}
+
+	if jobStatus == StatusSucceeded {
 		// A concurrent registry could have already executed the job.
 		return nil
 	}
-	if status != StatusRunning && status != StatusReverting {
+	if jobStatus != StatusRunning && jobStatus != StatusReverting {
 		// A concurrent registry could have requested the job to be paused or canceled.
-		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, status)
+		return errors.Errorf("job %d: status changed to %s which is not resumable`", jobID, jobStatus)
 	}
 
-	if isAlive := *row[3].(*tree.DBool); !isAlive {
+	if !isClaimSessionAlive {
 		return errors.Errorf("job %d: claim with session id %s has expired", jobID, s.ID())
 	}
 
@@ -283,28 +359,14 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	//  - Ur(j): Remove jobID of j from adoptedJobs, enabling further resumers
 	//  - Up(n1->2): Update number of runs from 1 to 2
 	//  - Fl(j): Job j fails
-	if !(*row[4].(*tree.DBool)) {
+	canRun := determineCanRun(ts, lastRun, created, initialDelay, numRuns, maxDelay)
+	if !canRun {
 		return nil
 	}
 
-	payload, err := UnmarshalPayload(row[1])
-	if err != nil {
-		return err
-	}
-
-	progress, err := UnmarshalProgress(row[2])
-	if err != nil {
-		return err
-	}
-
-	createdBy, err := unmarshalCreatedBy(row[5], row[6])
-	if err != nil {
-		return err
-	}
-
 	job := &Job{id: jobID, registry: r, createdBy: createdBy}
-	job.mu.payload = *payload
-	job.mu.progress = *progress
+	job.mu.payload = *jobPayload
+	job.mu.progress = *jobProgress
 	job.session = s
 
 	resumer, err := r.createResumer(job, r.settings)
@@ -315,7 +377,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 
 	// If the job's type was registered to disable tenant cost control, then
 	// exclude the job's costs from tenant accounting.
-	if opts, ok := options[payload.Type()]; ok && opts.disableTenantCostControl {
+	if opts, ok := options[jobPayload.Type()]; ok && opts.disableTenantCostControl {
 		resumeCtx = multitenant.WithTenantCostControlExemption(resumeCtx)
 	}
 
@@ -327,7 +389,7 @@ func (r *Registry) resumeJob(ctx context.Context, jobID jobspb.JobID, s sqlliven
 	if err := r.stopper.RunAsyncTask(ctx, job.taskName(), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
 		// was one it's been set in the job status already.
-		_ = r.runJob(resumeCtx, resumer, job, status, job.taskName())
+		_ = r.runJob(resumeCtx, resumer, job, jobStatus, job.taskName())
 	}); err != nil {
 		r.unregister(jobID)
 		return err
