@@ -351,6 +351,13 @@ import (
 //   discard all raft log entries if any (see below). At this point the
 //   replica is in InitializedStateMachine state.
 //
+// TODO(sep-raft-log): if the replica is initially uninit'ed, it can't have a log,
+// so we don't actually need to sync C2. If after a crash we find a TruncatedState
+// that's nonzero and doesn't match the applied state then we just reset it back to zero.
+// ^-- this is wrong. If we do C1* C2 C3, then append a few entries to our log, then
+// crash restart, then we're screwed if we lose the applied state because we can't
+// catch up followers from below our truncated index.
+//
 // Every step above needs to be atomic. Note that we are doing 2 syncs, in
 // steps C1 and C2, for the split case, where we currently do 1 sync -- splits
 // are not common enough for this to matter. If we did not sync C2 we could
@@ -925,6 +932,12 @@ type ReplicasStorage interface {
 	//
 	// REQUIRES: The range being split is in state InitializedStateMachine, and
 	// RHS either does not exist or is in state UninitializedStateMachine.
+	//
+	// TODO(sep-raft-log): I think the RHS will always exist, since we're acquiring
+	// the splitLock before (to check for RHS conflicts). Since we're doing that
+	// the replica will be created if it isn't already there, and it will be
+	// uninitialized. There is also the case where the RHS is newer so we have
+	// to discard the right side of the split.
 	//
 	// Called below Raft -- this is being called when the split transaction commits.
 	SplitReplica(
