@@ -13,7 +13,7 @@ package tabledesc
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/vendor/github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors"
 )
 
 // constraintCache contains precomputed slices of constraints, categorized by kind and validity.
