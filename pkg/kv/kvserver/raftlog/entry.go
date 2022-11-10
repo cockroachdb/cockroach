@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -49,8 +50,8 @@ func NewEntry(ent raftpb.Entry) (*Entry, error) {
 	return e, nil
 }
 
-// NewEntryFromRawValue populates an Entry from a raw value, i.e. from bytes
-// as stored on a storage.Engine.
+// NewEntryFromRawValue populates an Entry from a raw value, i.e. from bytes as
+// stored on a storage.Engine.
 func NewEntryFromRawValue(b []byte) (*Entry, error) {
 	var meta enginepb.MVCCMetadata
 	if err := protoutil.Unmarshal(b, &meta); err != nil {
@@ -122,6 +123,22 @@ func (e *Entry) ConfChange() raftpb.ConfChangeI {
 	}
 	// NB: nil != interface{}(nil).
 	return nil
+}
+
+// ToRawBytes produces the raw bytes which would store the entry in the raft
+// log, i.e. it is the inverse to NewEntryFromRawBytes.
+func (e *Entry) ToRawBytes() ([]byte, error) {
+	var value roachpb.Value
+	if err := value.SetProto(&e.Entry); err != nil {
+		return nil, err
+	}
+
+	metaB, err := protoutil.Marshal(&enginepb.MVCCMetadata{RawBytes: value.RawBytes})
+	if err != nil {
+		return nil, err
+	}
+
+	return metaB, nil
 }
 
 // Release can be called when no more access to the Entry object will take

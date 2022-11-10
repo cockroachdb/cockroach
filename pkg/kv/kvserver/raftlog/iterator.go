@@ -12,7 +12,6 @@ package raftlog
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -66,7 +65,7 @@ func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterato
 	// TODO(tbg): can pool these most of the things below, incl. the *Iterator.
 	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
 	var upperBound roachpb.Key
-	if opts.Hi == 0 || opts.Hi == math.MaxUint64 {
+	if opts.Hi == 0 {
 		upperBound = prefixBuf.RaftLogPrefix().PrefixEnd()
 	} else {
 		upperBound = prefixBuf.RaftLogKey(opts.Hi)
@@ -75,7 +74,6 @@ func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterato
 		eng:       eng,
 		prefixBuf: prefixBuf,
 		iter: eng.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-			// TODO: could accept a tighter upper bound in NewIterator.
 			UpperBound: upperBound,
 		}),
 	}

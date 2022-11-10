@@ -25,7 +25,12 @@ go_library(
 
 go_test(
     name = "raftlog_test",
-    srcs = ["iterator_test.go"],
+    srcs = [
+        "entry_bench_test.go",
+        "entry_test.go",
+        "iter_bench_test.go",
+        "iter_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":raftlog"],
     deps = [

@@ -61,7 +61,7 @@ func (m *mockReader) NewMVCCIterator(
 	return m.iter
 }
 
-func mkEntry(b *testing.B) (_ raftpb.Entry, metaB []byte) {
+func mkBenchEnt(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 	r := rand.New(rand.NewSource(123))
 	// A realistic-ish raft command for a ~1kb write.
 	cmd := &kvserverpb.RaftCommand{
@@ -102,10 +102,11 @@ func mkEntry(b *testing.B) (_ raftpb.Entry, metaB []byte) {
 		Type:  raftpb.EntryNormal,
 		Data:  data,
 	}
-	var value roachpb.Value
-	require.NoError(b, value.SetProto(&ent))
 
-	metaB, err = protoutil.Marshal(&enginepb.MVCCMetadata{RawBytes: value.RawBytes})
+	e, err := NewEntry(ent)
+	require.NoError(b, err)
+
+	metaB, err = e.ToRawBytes()
 	require.NoError(b, err)
 
 	return ent, metaB
@@ -118,7 +119,7 @@ func BenchmarkIterator(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	b.ReportAllocs()
 
-	_, metaB := mkEntry(b)
+	_, metaB := mkBenchEnt(b)
 
 	setMockIter := func(it *Iterator) {
 		if it.iter != nil {
@@ -185,7 +186,7 @@ func BenchmarkVisit(b *testing.B) {
 	eng := storage.NewDefaultInMemForTesting()
 	defer eng.Close()
 
-	ent, metaB := mkEntry(b)
+	ent, metaB := mkBenchEnt(b)
 	require.NoError(b, eng.PutUnversioned(keys.RaftLogKey(rangeID, ent.Index), metaB))
 
 	b.ReportAllocs()
