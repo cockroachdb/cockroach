@@ -98,6 +98,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/redact"
 	sentry "github.com/getsentry/sentry-go"
 	"google.golang.org/grpc/codes"
@@ -238,6 +239,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		return nil, errors.Wrap(err, "failed to soft slot granter")
 	}
 	cfg.SoftSlotGranter = ssg
+
+	if val := os.Getenv("DEBUG_STORAGE_WORKLOAD_COLLECTOR"); val == "true" || val == "1" {
+		for _, spec := range cfg.Stores.Specs {
+			cfg.StoreToWorkloadCollector = append(cfg.StoreToWorkloadCollector, replay.NewWorkloadCollector(spec.Path))
+		}
+	}
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {
@@ -702,6 +709,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		SnapshotApplyLimit:       cfg.SnapshotApplyLimit,
 		SnapshotSendLimit:        cfg.SnapshotSendLimit,
 		RangeLogWriter:           rangeLogWriter,
+		StoreToWorkloadCollector: cfg.StoreToWorkloadCollector,
 	}
 
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
@@ -1732,6 +1740,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Connect the engines to the disk stats map constructor.
 	if err := s.node.registerEnginesForDiskStatsMap(s.cfg.Stores.Specs, s.engines); err != nil {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
+	}
+
+	if val := os.Getenv("DEBUG_STORAGE_WORKLOAD_COLLECTOR"); val == "true" || val == "1" {
+		if err := s.debug.RegisterWorkloadCollector(s.engines, s.node.stores); err != nil {
+			return errors.Wrapf(err, "failed to register workload collector with debug server")
+		}
 	}
 
 	// Register the engines debug endpoints.
