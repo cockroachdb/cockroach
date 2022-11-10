@@ -947,6 +947,8 @@ func (o *Optimizer) disableRules(probability float64) {
 		// supports distinct on an empty column set.
 		int(opt.EliminateDistinctNoColumns),
 		int(opt.EliminateEnsureDistinctNoColumns),
+		// Needed to ensure that the input of a RangeExpr is always an AndExpr.
+		int(opt.SimplifyRange),
 	)
 
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
