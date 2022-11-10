@@ -1000,6 +1000,8 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		// Needed to prevent rule cycles that lead to timeouts and OOMs.
 		int(opt.EliminateProject),
 		int(opt.EliminateSelect),
+		// Needed to ensure that the input of a RangeExpr is always an AndExpr.
+		int(opt.SimplifyRange),
 	)
 
 	var disabledRules RuleSet
