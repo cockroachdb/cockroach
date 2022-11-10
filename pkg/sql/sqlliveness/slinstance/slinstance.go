@@ -200,8 +200,11 @@ func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession boo
 // createSession tries until it can create a new session and returns an error
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
-	// TODO(jaylim-crl): Check l.currentRegion. Use enum.One if that is empty.
-	id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+	region := enum.One
+	if l.currentRegion != nil {
+		region = l.currentRegion
+	}
+	id, err := slstorage.MakeSessionID(region, uuid.MakeV4())
 	if err != nil {
 		return nil, err
 	}

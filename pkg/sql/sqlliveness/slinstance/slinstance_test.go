@@ -16,7 +16,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -57,6 +62,11 @@ func TestSQLInstance(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, a)
 
+	region, id, err := slstorage.UnsafeDecodeSessionID(s1.ID())
+	require.NoError(t, err)
+	require.Equal(t, enum.One, region)
+	require.NotNil(t, id)
+
 	s2, err := sqlInstance.Session(ctx)
 	require.NoError(t, err)
 	require.Equal(t, s1.ID(), s2.ID())
@@ -90,4 +100,60 @@ func TestSQLInstance(t *testing.T) {
 	stopper.Stop(ctx)
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
+}
+
+func TestSQLInstanceWithRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 42)), time.Nanosecond /* maxOffset */)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	mrDesc, _ := typedesc.NewBuilder((&descpb.TypeDescriptor{
+		Kind: descpb.TypeDescriptor_MULTIREGION_ENUM,
+		RegionConfig: &descpb.TypeDescriptor_RegionConfig{
+			PrimaryRegion: "us-east2",
+		},
+		EnumMembers: []descpb.TypeDescriptor_EnumMember{
+			{
+				LogicalRepresentation:  "us-east1",
+				PhysicalRepresentation: []byte{1},
+				Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
+			},
+			{
+				LogicalRepresentation:  "us-east2",
+				PhysicalRepresentation: []byte{2},
+			},
+			{
+				LogicalRepresentation:  "us-east3",
+				PhysicalRepresentation: []byte{3},
+			},
+		},
+	})).BuildImmutable().(catalog.TypeDescriptor)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
+	require.NoError(t, sqlInstance.SetRegionalData(roachpb.Locality{Tiers: []roachpb.Tier{
+		{Key: "region", Value: "us-east3"},
+	}}, mrDesc))
+	sqlInstance.Start(ctx)
+
+	s1, err := sqlInstance.Session(ctx)
+	require.NoError(t, err)
+	a, err := fakeStorage.IsAlive(ctx, s1.ID())
+	require.NoError(t, err)
+	require.True(t, a)
+
+	region, id, err := slstorage.UnsafeDecodeSessionID(s1.ID())
+	require.NoError(t, err)
+	require.Equal(t, []byte{3}, region)
+	require.NotNil(t, id)
 }
