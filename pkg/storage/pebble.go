@@ -826,6 +826,10 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		}
 	}()
 
+	overwriteEventListener := false
+	if cfg.Opts.EventListener == nil {
+		overwriteEventListener = true
+	}
 	cfg.Opts.EnsureDefaults()
 	cfg.Opts.ErrorIfNotExists = cfg.MustExist
 	if settings := cfg.Settings; settings != nil {
@@ -927,15 +931,24 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
 	}
 
-	l := pebble.TeeEventListener(
+	el := pebble.TeeEventListener(
 		pebble.MakeLoggingEventListener(pebbleLogger{
 			ctx:   logCtx,
 			depth: 2, // skip over the EventListener stack frame
 		}),
 		p.makeMetricEtcEventListener(ctx),
 	)
-	p.eventListener = &l
-	cfg.Opts.EventListener = &l
+	if overwriteEventListener {
+		cfg.Opts.EventListener = &el
+	} else {
+		t := pebble.TeeEventListener(
+			el,
+			*cfg.Opts.EventListener,
+		)
+		cfg.Opts.EventListener = &t
+	}
+
+	p.eventListener = cfg.Opts.EventListener
 	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// Read the current store cluster version.
