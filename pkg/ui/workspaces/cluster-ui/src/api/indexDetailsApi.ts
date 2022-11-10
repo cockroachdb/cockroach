@@ -45,7 +45,7 @@ export const resetIndexStats = (
   return fetchData(
     cockroach.server.serverpb.ResetIndexUsageStatsResponse,
     "/_status/resetindexusagestats",
-    null,
+    cockroach.server.serverpb.ResetIndexUsageStatsRequest,
     req,
     "30M",
   );
