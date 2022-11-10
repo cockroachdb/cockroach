@@ -329,19 +329,13 @@ func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, er
 }
 
 // FindConstraintWithID implements the TableDescriptor interface.
-func (desc *wrapper) FindConstraintWithID(
-	id descpb.ConstraintID,
-) (*descpb.ConstraintDetail, error) {
-	constraintInfo, err := desc.GetConstraintInfo()
-	if err != nil {
-		return nil, err
-	}
-	for _, info := range constraintInfo {
-		if info.ConstraintID == id {
-			return &info, nil
+func (desc *wrapper) FindConstraintWithID(id descpb.ConstraintID) (catalog.Constraint, error) {
+	all := desc.AllConstraints()
+	for _, c := range all {
+		if c.GetConstraintID() == id {
+			return c, nil
 		}
 	}
-
 	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
 }
 
