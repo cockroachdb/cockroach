@@ -302,7 +302,7 @@ TestXXA - 1.00s
 					testName: "TestMeta",
 					title:    "internal/metamorphic: TestMeta failed",
 					message:  "panic: induced panic",
-					expRepro: `go test -mod=vendor -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
+					expRepro: `go test -tags 'invariants' -exec 'stress -p 1' -timeout 0 -test.v -run TestMeta$ ./internal/metamorphic -seed 1600209371838097000 -ops "uniform:5000-10000"`,
 				},
 			},
 			formatter: formatPebbleMetamorphicIssue,
