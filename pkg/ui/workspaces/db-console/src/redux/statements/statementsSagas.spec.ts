@@ -23,40 +23,34 @@ import {
   cancelStatementDiagnosticsReportFailedAction,
   cancelStatementDiagnosticsReportAction,
 } from "./statementsActions";
-import {
-  cancelStatementDiagnosticsReport,
-  createStatementDiagnosticsReport,
-} from "src/util/api";
-import { cockroach, google } from "src/js/protos";
-import CreateStatementDiagnosticsReportRequest = cockroach.server.serverpb.CreateStatementDiagnosticsReportRequest;
-import CancelStatementDiagnosticsReportRequest = cockroach.server.serverpb.CancelStatementDiagnosticsReportRequest;
 import { throwError } from "redux-saga-test-plan/providers";
-import Duration = google.protobuf.Duration;
-import Long from "long";
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
 
 describe("statementsSagas", () => {
   describe("requestDiagnostics generator", () => {
     it("calls api#createStatementDiagnosticsReport with statement fingerprint, min exec latency, and expires after fields as payload", () => {
       const statementFingerprint = "some-id";
-      const minExecLatency = new Duration({ seconds: new Long(10) });
-      const expiresAfter = new Duration({ seconds: new Long(15 * 60) });
+      const minExecLatency = 10; // num seconds
+      const expiresAfter = 15 * 60; // num seconds (num mins * num seconds per min)
+      const insertStmtDiagnosticsRequest = {
+        stmtFingerprint: statementFingerprint,
+        minExecutionLatencySeconds: minExecLatency,
+        expiresAfterSeconds: expiresAfter,
+      };
       const action = createStatementDiagnosticsReportAction(
-        statementFingerprint,
-        minExecLatency,
-        expiresAfter,
+        insertStmtDiagnosticsRequest,
       );
-      const createDiagnosticsReportRequest =
-        new CreateStatementDiagnosticsReportRequest({
-          statement_fingerprint: statementFingerprint,
-          min_execution_latency: minExecLatency,
-          expires_after: expiresAfter,
-        });
-
       return expectSaga(createDiagnosticsReportSaga, action)
         .provide([
-          [call.fn(createStatementDiagnosticsReport), Promise.resolve()],
+          [
+            call.fn(clusterUiApi.createStatementDiagnosticsReport),
+            Promise.resolve(),
+          ],
         ])
-        .call(createStatementDiagnosticsReport, createDiagnosticsReportRequest)
+        .call(
+          clusterUiApi.createStatementDiagnosticsReport,
+          insertStmtDiagnosticsRequest,
+        )
         .put(createStatementDiagnosticsReportCompleteAction())
         .dispatch(action)
         .run();
@@ -65,25 +59,28 @@ describe("statementsSagas", () => {
 
   it("calls dispatched failed action if api#createStatementDiagnosticsReport request failed ", () => {
     const statementFingerprint = "some-id";
-    const minExecLatency = new Duration({ seconds: new Long(10) });
-    const expiresAfter = new Duration({ seconds: new Long(15 * 60) });
+    const minExecLatency = 10; // num seconds
+    const expiresAfter = 15 * 60; // num seconds (num mins * num seconds per min)
+    const insertStmtDiagnosticsRequest = {
+      stmtFingerprint: statementFingerprint,
+      minExecutionLatencySeconds: minExecLatency,
+      expiresAfterSeconds: expiresAfter,
+    };
     const action = createStatementDiagnosticsReportAction(
-      statementFingerprint,
-      minExecLatency,
-      expiresAfter,
+      insertStmtDiagnosticsRequest,
     );
-    const createDiagnosticsReportRequest =
-      new CreateStatementDiagnosticsReportRequest({
-        statement_fingerprint: statementFingerprint,
-        min_execution_latency: minExecLatency,
-        expires_after: expiresAfter,
-      });
 
     return expectSaga(createDiagnosticsReportSaga, action)
       .provide([
-        [call.fn(createStatementDiagnosticsReport), throwError(new Error())],
+        [
+          call.fn(clusterUiApi.createStatementDiagnosticsReport),
+          throwError(new Error()),
+        ],
       ])
-      .call(createStatementDiagnosticsReport, createDiagnosticsReportRequest)
+      .call(
+        clusterUiApi.createStatementDiagnosticsReport,
+        insertStmtDiagnosticsRequest,
+      )
       .put(createStatementDiagnosticsReportFailedAction())
       .dispatch(action)
       .run();
@@ -91,21 +88,23 @@ describe("statementsSagas", () => {
 
   describe("cancelDiagnostics generator", () => {
     it("calls api#cancelStatementDiagnosticsReport with the diagnostic request ID field as payload", () => {
-      const requestID = Long.fromNumber(12345);
-      const action = cancelStatementDiagnosticsReportAction(requestID);
-      const cancelDiagnosticsReportRequest =
-        new CancelStatementDiagnosticsReportRequest({
-          request_id: requestID,
-        });
+      const requestId = "810501245312335873";
+      const cancelDiagnosticsReportRequest = { requestId };
+      const action = cancelStatementDiagnosticsReportAction(
+        cancelDiagnosticsReportRequest,
+      );
 
       return expectSaga(cancelDiagnosticsReportSaga, action)
         .provide([
           [
-            call.fn(cancelStatementDiagnosticsReport),
+            call.fn(clusterUiApi.cancelStatementDiagnosticsReport),
             Promise.resolve({ error: "" }),
           ],
         ])
-        .call(cancelStatementDiagnosticsReport, cancelDiagnosticsReportRequest)
+        .call(
+          clusterUiApi.cancelStatementDiagnosticsReport,
+          cancelDiagnosticsReportRequest,
+        )
         .put(cancelStatementDiagnosticsReportCompleteAction())
         .dispatch(action)
         .run();
@@ -113,18 +112,23 @@ describe("statementsSagas", () => {
   });
 
   it("calls dispatched failed action if api#cancelStatementDiagnosticsReport request failed ", () => {
-    const requestID = new Long(12345);
-    const action = cancelStatementDiagnosticsReportAction(requestID);
-    const cancelDiagnosticsReportRequest =
-      new CancelStatementDiagnosticsReportRequest({
-        request_id: requestID,
-      });
+    const requestId = "810501245312335873";
+    const cancelDiagnosticsReportRequest = { requestId };
+    const action = cancelStatementDiagnosticsReportAction(
+      cancelDiagnosticsReportRequest,
+    );
 
     return expectSaga(cancelDiagnosticsReportSaga, action)
       .provide([
-        [call.fn(cancelStatementDiagnosticsReport), throwError(new Error())],
+        [
+          call.fn(clusterUiApi.cancelStatementDiagnosticsReport),
+          throwError(new Error()),
+        ],
       ])
-      .call(cancelStatementDiagnosticsReport, cancelDiagnosticsReportRequest)
+      .call(
+        clusterUiApi.cancelStatementDiagnosticsReport,
+        cancelDiagnosticsReportRequest,
+      )
       .put(cancelStatementDiagnosticsReportFailedAction())
       .dispatch(action)
       .run();

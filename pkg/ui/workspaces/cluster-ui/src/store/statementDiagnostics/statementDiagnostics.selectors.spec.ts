@@ -10,31 +10,30 @@
 
 import { assert } from "chai";
 import { selectDiagnosticsReportsPerStatement } from "./statementDiagnostics.selectors";
-import Long from "long";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import { StatementDiagnosticsReport } from "../../api";
+import moment from "moment";
 
-const reports: IStatementDiagnosticsReport[] = [
+const reports: StatementDiagnosticsReport[] = [
   {
-    id: Long.fromNumber(1),
+    id: "1",
     completed: false,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413981435920385),
-    requested_at: { seconds: Long.fromNumber(100), nanos: 737251000 },
+    statement_diagnostics_id: "594413981435920385",
+    requested_at: moment(100, "s"),
   },
   {
-    id: Long.fromNumber(2),
+    id: "2",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413281435920385),
-    requested_at: { seconds: Long.fromNumber(200), nanos: 737251000 },
+    statement_diagnostics_id: "594413281435920385",
+    requested_at: moment(200, "s"),
   },
   {
-    id: Long.fromNumber(3),
+    id: "3",
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413281435920385),
-    requested_at: { seconds: Long.fromNumber(300), nanos: 737251000 },
+    statement_diagnostics_id: "594413281435920385",
+    requested_at: moment(300, "s"),
   },
 ];
 
@@ -43,10 +42,7 @@ describe("statementDiagnostics selectors", () => {
     it("returns diagnostics reports sorted in descending order", () => {
       const diagnosticsPerStatement =
         selectDiagnosticsReportsPerStatement.resultFunc(reports);
-      assert.deepEqual(
-        diagnosticsPerStatement["SHOW database"][0].id,
-        Long.fromNumber(3),
-      );
+      assert.deepEqual(diagnosticsPerStatement["SHOW database"][0].id, "3");
     });
   });
 });

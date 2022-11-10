@@ -15,11 +15,9 @@ import { createMemoryHistory } from "history";
 import Long from "long";
 import { noop } from "lodash";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { RequestError } from "src/util";
+import { StatementDiagnosticsReport } from "../api";
 
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
 type IStatementStatistics = protos.cockroach.sql.IStatementStatistics;
 type IExecStats = protos.cockroach.sql.IExecStats;
 
@@ -216,37 +214,37 @@ const statementStats: Required<IStatementStatistics> = {
   },
 };
 
-const diagnosticsReports: IStatementDiagnosticsReport[] = [
+const diagnosticsReports: StatementDiagnosticsReport[] = [
   {
-    id: Long.fromNumber(594413966918975489),
+    id: '594413966918975489',
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413981435920385),
-    requested_at: { seconds: Long.fromNumber(1601471146), nanos: 737251000 },
+    statement_diagnostics_id: '594413981435920385',
+    requested_at: moment(1601471146),
   },
   {
-    id: Long.fromNumber(594413966918975429),
+    id: '594413966918975429',
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413281435920385),
-    requested_at: { seconds: Long.fromNumber(1601491146), nanos: 737251000 },
+    statement_diagnostics_id: '594413281435920385',
+    requested_at: moment(1601491146),
   },
 ];
 
-const diagnosticsReportsInProgress: IStatementDiagnosticsReport[] = [
+const diagnosticsReportsInProgress: StatementDiagnosticsReport[] = [
   {
-    id: Long.fromNumber(594413966918975489),
+    id: '594413966918975489',
     completed: false,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413981435920385),
-    requested_at: { seconds: Long.fromNumber(1601471146), nanos: 737251000 },
+    statement_diagnostics_id: '594413981435920385',
+    requested_at: moment(1601471146),
   },
   {
-    id: Long.fromNumber(594413966918975429),
+    id: '594413966918975429',
     completed: true,
     statement_fingerprint: "SHOW database",
-    statement_diagnostics_id: Long.fromNumber(594413281435920385),
-    requested_at: { seconds: Long.fromNumber(1601491146), nanos: 737251000 },
+    statement_diagnostics_id: '594413281435920385',
+    requested_at: moment(1601491146),
   },
 ];
 

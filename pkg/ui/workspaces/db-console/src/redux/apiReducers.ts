@@ -364,7 +364,7 @@ export const invalidateUserSQLRoles = userSQLRolesReducerObj.invalidateData;
 export const refreshUserSQLRoles = userSQLRolesReducerObj.refresh;
 
 const statementDiagnosticsReportsReducerObj = new CachedDataReducer(
-  api.getStatementDiagnosticsReports,
+  clusterUiApi.getStatementDiagnosticsReports,
   "statementDiagnosticsReports",
   moment.duration(5, "m"),
   moment.duration(1, "m"),
@@ -515,7 +515,7 @@ export interface APIReducersState {
   statementDetails: KeyedCachedDataReducerState<api.StatementDetailsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
-  statementDiagnosticsReports: CachedDataReducerState<api.StatementDiagnosticsReportsResponseMessage>;
+  statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
   hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<clusterUiApi.ClusterLocksResponse>;

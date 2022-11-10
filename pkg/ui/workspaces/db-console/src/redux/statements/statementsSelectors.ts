@@ -11,8 +11,8 @@
 import { chain, orderBy } from "lodash";
 import { createSelector } from "reselect";
 import { AdminUIState } from "src/redux/state";
-import { cockroach } from "src/js/protos";
-import IStatementDiagnosticsReport = cockroach.server.serverpb.IStatementDiagnosticsReport;
+import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
+import moment from "moment";
 
 export const selectStatementByFingerprint = createSelector(
   (state: AdminUIState) => state.cachedData.statements.data?.statements,
@@ -25,7 +25,7 @@ export const selectStatementByFingerprint = createSelector(
 
 export const selectDiagnosticsReportsByStatementFingerprint = createSelector(
   (state: AdminUIState) =>
-    state.cachedData.statementDiagnosticsReports.data?.reports || [],
+    state.cachedData.statementDiagnosticsReports.data || [],
   (_state: AdminUIState, statementFingerprint: string) => statementFingerprint,
   (requests, statementFingerprint) =>
     (requests || []).filter(
@@ -41,7 +41,7 @@ export const selectDiagnosticsReportsCountByStatementFingerprint =
 
 export const selectStatementDiagnosticsReports = createSelector(
   (state: AdminUIState) =>
-    state.cachedData.statementDiagnosticsReports.data?.reports,
+    state.cachedData.statementDiagnosticsReports.data || [],
   diagnosticsReports => diagnosticsReports,
 );
 
@@ -52,18 +52,18 @@ export const statementDiagnosticsReportsInFlight = createSelector(
 );
 
 type StatementDiagnosticsDictionary = {
-  [statementFingerprint: string]: IStatementDiagnosticsReport[];
+  [statementFingerprint: string]: clusterUiApi.StatementDiagnosticsReport[];
 };
 
 export const selectDiagnosticsReportsPerStatement = createSelector(
   selectStatementDiagnosticsReports,
   (
-    diagnosticsReports: IStatementDiagnosticsReport[],
+    diagnosticsReports: clusterUiApi.StatementDiagnosticsReport[],
   ): StatementDiagnosticsDictionary =>
     chain(diagnosticsReports)
       .groupBy(diagnosticsReport => diagnosticsReport.statement_fingerprint)
       .mapValues(diagnostics =>
-        orderBy(diagnostics, d => d.requested_at.seconds.toNumber(), ["desc"]),
+        orderBy(diagnostics, d => moment(d.requested_at).unix(), ["desc"]),
       )
       .value(),
 );

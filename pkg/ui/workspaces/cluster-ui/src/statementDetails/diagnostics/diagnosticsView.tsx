@@ -30,15 +30,12 @@ import {
 } from "./diagnosticsUtils";
 import { EmptyTable } from "src/empty";
 import styles from "./diagnosticsView.module.scss";
-import { getBasePath } from "../../api";
+import { getBasePath, StatementDiagnosticsReport } from "../../api";
 import { DATE_FORMAT_24_UTC } from "../../util";
-
-type IStatementDiagnosticsReport =
-  cockroach.server.serverpb.IStatementDiagnosticsReport;
 
 export interface DiagnosticsViewStateProps {
   hasData: boolean;
-  diagnosticsReports: cockroach.server.serverpb.IStatementDiagnosticsReport[];
+  diagnosticsReports: StatementDiagnosticsReport[];
   showDiagnosticsViewLink?: boolean;
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
 }
@@ -46,9 +43,7 @@ export interface DiagnosticsViewStateProps {
 export interface DiagnosticsViewDispatchProps {
   dismissAlertMessage: () => void;
   onDownloadDiagnosticBundleClick?: (statementFingerprint: string) => void;
-  onDiagnosticCancelRequestClick?: (
-    report: IStatementDiagnosticsReport,
-  ) => void;
+  onDiagnosticCancelRequestClick?: (report: StatementDiagnosticsReport) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -120,15 +115,14 @@ export class DiagnosticsView extends React.Component<
   static defaultProps: Partial<DiagnosticsViewProps> = {
     showDiagnosticsViewLink: true,
   };
-  columns: ColumnsConfig<IStatementDiagnosticsReport> = [
+  columns: ColumnsConfig<StatementDiagnosticsReport> = [
     {
       key: "activatedOn",
       title: "Activated on",
       sorter: sortByRequestedAtField,
       defaultSortOrder: "descend",
       render: (_text, record) => {
-        const timestamp = record.requested_at.seconds.toNumber() * 1000;
-        return moment.utc(timestamp).format(DATE_FORMAT_24_UTC);
+        return moment.utc(record.requested_at).format(DATE_FORMAT_24_UTC);
       },
     },
     {
@@ -156,7 +150,7 @@ export class DiagnosticsView extends React.Component<
           onDownloadDiagnosticBundleClick,
           onDiagnosticCancelRequestClick,
         } = this.props;
-        return (_text: string, record: IStatementDiagnosticsReport) => {
+        return (_text: string, record: StatementDiagnosticsReport) => {
           if (record.completed) {
             return (
               <div
