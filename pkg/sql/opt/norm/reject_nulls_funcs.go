@@ -135,6 +135,14 @@ func DeriveRejectNullCols(in memo.RelExpr, disabledRules util.FastIntSet) opt.Co
 	// TODO(andyk): Add other operators to make null rejection more comprehensive.
 	switch in.Op() {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
+		if disabledRules.Contains(int(opt.MergeSelectInnerJoin)) ||
+			disabledRules.Contains(int(opt.PushFilterIntoJoinLeft)) ||
+			disabledRules.Contains(int(opt.PushFilterIntoJoinRight)) ||
+			disabledRules.Contains(int(opt.MapFilterIntoJoinLeft)) ||
+			disabledRules.Contains(int(opt.MapFilterIntoJoinRight)) {
+			// Avoid rule cycles.
+			break
+		}
 		// Pass through null-rejecting columns from both inputs.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
 			relProps.Rule.RejectNullCols.UnionWith(
@@ -148,12 +156,13 @@ func DeriveRejectNullCols(in memo.RelExpr, disabledRules util.FastIntSet) opt.Co
 		}
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
-		if disabledRules.Contains(int(opt.RejectNullsLeftJoin)) {
+		if disabledRules.Contains(int(opt.RejectNullsLeftJoin)) ||
+			disabledRules.Contains(int(opt.PushSelectCondLeftIntoJoinLeftAndRight)) {
 			// Avoid rule cycles.
 			break
 		}
-		// Pass through null-rejection columns from left input, and request null-
-		// rejection on right columns.
+		// Pass through null-rejection columns from left input, and request
+		// null-rejection on right columns.
 		if in.Child(0).(memo.RelExpr).Relational().OuterCols.Empty() {
 			relProps.Rule.RejectNullCols.UnionWith(
 				DeriveRejectNullCols(in.Child(0).(memo.RelExpr), disabledRules),
@@ -166,8 +175,8 @@ func DeriveRejectNullCols(in memo.RelExpr, disabledRules util.FastIntSet) opt.Co
 			// Avoid rule cycles.
 			break
 		}
-		// Pass through null-rejection columns from right input, and request null-
-		// rejection on left columns.
+		// Pass through null-rejection columns from right input, and request
+		// null-rejection on left columns.
 		relProps.Rule.RejectNullCols.UnionWith(in.Child(0).(memo.RelExpr).Relational().OutputCols)
 		if in.Child(1).(memo.RelExpr).Relational().OuterCols.Empty() {
 			relProps.Rule.RejectNullCols.UnionWith(
@@ -185,14 +194,16 @@ func DeriveRejectNullCols(in memo.RelExpr, disabledRules util.FastIntSet) opt.Co
 		relProps.Rule.RejectNullCols.UnionWith(relProps.OutputCols)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		if disabledRules.Contains(int(opt.RejectNullsGroupBy)) {
+		if disabledRules.Contains(int(opt.RejectNullsGroupBy)) ||
+			disabledRules.Contains(int(opt.PushSelectIntoGroupBy)) {
 			// Avoid rule cycles.
 			break
 		}
 		relProps.Rule.RejectNullCols.UnionWith(deriveGroupByRejectNullCols(in, disabledRules))
 
 	case opt.ProjectOp:
-		if disabledRules.Contains(int(opt.RejectNullsProject)) {
+		if disabledRules.Contains(int(opt.RejectNullsProject)) ||
+			disabledRules.Contains(int(opt.PushSelectIntoProject)) {
 			// Avoid rule cycles.
 			break
 		}
