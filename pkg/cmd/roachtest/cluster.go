@@ -1488,7 +1488,7 @@ func (c *clusterImpl) FetchCores(ctx context.Context, l *logger.Logger) error {
 		return nil
 	}
 
-	if true {
+	if !c.spec.GatherCores {
 		// TeamCity does not handle giant artifacts well. We'd generally profit
 		// from having the cores, but we should push them straight into a temp
 		// bucket on S3 instead. OTOH, the ROI of this may be low; I don't know
