@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -200,6 +201,14 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 
 	err := metadataUpdater.DeleteDatabaseRoleSettings(ctx, n.dbDesc.GetID())
 	if err != nil {
+		return err
+	}
+
+	if err := metadataUpdater.DeleteDescriptorComment(
+		int64(n.dbDesc.GetID()),
+		0, /* subID */
+		keys.DatabaseCommentType,
+	); err != nil {
 		return err
 	}
 
