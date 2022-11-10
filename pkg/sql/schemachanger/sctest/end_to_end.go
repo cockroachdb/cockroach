@@ -127,26 +127,36 @@ func EndToEndSideEffects(t *testing.T, relPath string, newCluster NewClusterFunc
 	numTestStatementsObserved := 0
 	var setupStmts parser.Statements
 	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-		sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
-		stmts, err := parser.Parse(d.Input)
-		require.NoError(t, err)
-		require.NotEmpty(t, stmts)
-		execStmts := func() {
-			for _, stmt := range stmts {
-				tdb.Exec(t, stmt.SQL)
+		parseStmts := func() (parser.Statements, func()) {
+			sqlutils.VerifyStatementPrettyRoundtrip(t, d.Input)
+			stmts, err := parser.Parse(d.Input)
+			require.NoError(t, err)
+			require.NotEmpty(t, stmts)
+			return stmts, func() {
+				for _, stmt := range stmts {
+					tdb.Exec(t, stmt.SQL)
+				}
+				waitForSchemaChangesToSucceed(t, tdb)
 			}
-			waitForSchemaChangesToSucceed(t, tdb)
 		}
-
 		switch d.Cmd {
 		case "setup":
+			stmts, execStmts := parseStmts()
 			a := prettyNamespaceDump(t, tdb)
 			execStmts()
 			b := prettyNamespaceDump(t, tdb)
 			setupStmts = stmts
 			return sctestutils.Diff(a, b, sctestutils.DiffArgs{CompactLevel: 1})
-
+		case "stage-exec":
+			fallthrough
+		case "stage-query":
+			// Both of these commands are DML injections, which is not relevant
+			// for end-to-end testing. We don't actually execute statements here.
+			// So return the original output, these will get rewritten in
+			// cumulativeTest.
+			return d.Expected
 		case "test":
+			stmts, execStmts := parseStmts()
 			require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
 			numTestStatementsObserved++
 			stmtSqls := make([]string, 0, len(stmts))

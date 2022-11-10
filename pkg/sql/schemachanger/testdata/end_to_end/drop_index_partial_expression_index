@@ -5,6 +5,10 @@ CREATE INDEX idx ON t(lower(j)) WHERE i > 0
 ...
 +object {100 101 t} -> 104
 
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t (i, j) VALUES($stageKey, 'TESt1');
+----
+
 test
 DROP INDEX idx CASCADE
 ----

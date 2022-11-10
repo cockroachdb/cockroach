@@ -25,6 +25,11 @@ func TestEndToEndSideEffects_add_column(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_add_column(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_add_column(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -44,6 +49,11 @@ func TestEndToEndSideEffects_add_column_default_seq(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_add_column_default_seq(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_seq", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_add_column_default_seq(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -65,6 +75,11 @@ func TestEndToEndSideEffects_add_column_default_unique(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_add_column_default_unique(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_default_unique", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_add_column_default_unique(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -84,6 +99,11 @@ func TestEndToEndSideEffects_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_add_column_no_default(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_add_column_no_default(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -105,6 +125,11 @@ func TestEndToEndSideEffects_alter_table_add_primary_key_drop_rowid(t *testing.T
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_primary_key_drop_rowid", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_alter_table_add_primary_key_drop_rowid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_primary_key_drop_rowid", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_alter_table_add_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -124,6 +149,11 @@ func TestEndToEndSideEffects_alter_table_alter_primary_key_drop_rowid(t *testing
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_drop_rowid", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_alter_table_alter_primary_key_drop_rowid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_drop_rowid", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_alter_table_alter_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -145,6 +175,11 @@ func TestEndToEndSideEffects_alter_table_alter_primary_key_vanilla(t *testing.T)
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_vanilla", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_alter_table_alter_primary_key_vanilla(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_alter_primary_key_vanilla", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_alter_table_alter_primary_key_vanilla(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -164,6 +199,11 @@ func TestEndToEndSideEffects_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_create_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/create_index", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -185,6 +225,11 @@ func TestEndToEndSideEffects_drop_column_basic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_basic", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_drop_column_basic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_basic", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_drop_column_basic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -204,6 +249,11 @@ func TestEndToEndSideEffects_drop_column_computed_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_computed_index", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_drop_column_computed_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_computed_index", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_drop_column_computed_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -225,6 +275,11 @@ func TestEndToEndSideEffects_drop_column_create_index_separate_statements(t *tes
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_create_index_separate_statements", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_drop_column_create_index_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_create_index_separate_statements", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_drop_column_create_index_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -244,6 +299,11 @@ func TestEndToEndSideEffects_drop_column_unique_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_unique_index", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_drop_column_unique_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_unique_index", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_drop_column_unique_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -265,6 +325,11 @@ func TestEndToEndSideEffects_drop_column_with_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_index", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_drop_column_with_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_column_with_index", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_drop_column_with_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -284,6 +349,11 @@ func TestEndToEndSideEffects_drop_index_hash_sharded_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_hash_sharded_index", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_drop_index_hash_sharded_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_hash_sharded_index", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_drop_index_hash_sharded_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -305,6 +375,11 @@ func TestEndToEndSideEffects_drop_index_partial_expression_index(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_partial_expression_index", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_drop_index_partial_expression_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_partial_expression_index", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_drop_index_partial_expression_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -324,6 +399,11 @@ func TestEndToEndSideEffects_drop_index_vanilla_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_vanilla_index", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_drop_index_vanilla_index(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_index_vanilla_index", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_drop_index_vanilla_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -345,6 +425,11 @@ func TestEndToEndSideEffects_drop_multiple_columns_separate_statements(t *testin
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_multiple_columns_separate_statements", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_drop_multiple_columns_separate_statements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_multiple_columns_separate_statements", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_drop_multiple_columns_separate_statements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -365,6 +450,11 @@ func TestEndToEndSideEffects_drop_schema(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_schema", sctest.SingleNodeCluster)
 }
+func TestExecuteWithDMLInjection_drop_schema(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_schema", sctest.SingleNodeCluster)
+}
 func TestGenerateSchemaChangeCorpus_drop_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -384,6 +474,11 @@ func TestEndToEndSideEffects_drop_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_drop_table(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/drop_table", sctest.SingleNodeCluster)
 }
 func TestGenerateSchemaChangeCorpus_drop_table(t *testing.T) {
 	defer leaktest.AfterTest(t)()
