@@ -309,11 +309,11 @@ SHOW CREATE TABLE pg_catalog.pg_namespace
 ----
 table_name               create_statement
 pg_catalog.pg_namespace  CREATE TABLE pg_catalog.pg_namespace (
-                         oid OID NULL,
-                         nspname NAME NOT NULL,
-                         nspowner OID NULL,
-                         nspacl STRING[] NULL
-)
+                           oid OID NULL,
+                           nspname NAME NOT NULL,
+                           nspowner OID NULL,
+                           nspacl STRING[] NULL
+                         )
 
 query TTBTTTB colnames
 SHOW COLUMNS FROM pg_catalog.pg_namespace

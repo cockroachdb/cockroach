@@ -435,8 +435,7 @@ func (s *SettingsWatcher) GetStorageClusterVersion() clusterversion.ClusterVersi
 		// settingswatcher, it means that the storage cluster has not yet been
 		// upgraded to 23.1. As a result, assume that storage cluster is at
 		// version 22.2.
-		// TODO(ajstorm): change this to 22.2 once the new version is minted.
-		storageClusterVersion := roachpb.Version{Major: 22, Minor: 1, Internal: 76}
+		storageClusterVersion := roachpb.Version{Major: 22, Minor: 2, Internal: 0}
 		return clusterversion.ClusterVersion{Version: storageClusterVersion}
 	}
 	return s.mu.storageClusterVersion
