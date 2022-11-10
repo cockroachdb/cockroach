@@ -37,6 +37,9 @@ import {
   TransactionDetailsLink,
 } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
+import { ContentionStatementDetailsTable } from "./insightDetailsTables";
+import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
+import { Heading } from "@cockroachlabs/ui-components";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
@@ -139,6 +142,21 @@ export const StatementInsightDetailsOverviewTab: React.FC<
   const insightDetails = insightDetailsArr.length ? insightDetailsArr[0] : null;
   const tableData = insightsTableData(insightDetails);
 
+  const contentionTable =
+    insightDetails.contentionEvents == null ? null : (
+      <Row>
+        <Heading type="h5">
+          {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+            insightDetails.statementID,
+            "statement",
+          )}
+        </Heading>
+        <ContentionStatementDetailsTable
+          data={insightDetails.contentionEvents}
+        />
+      </Row>
+    );
+
   return (
     <section className={cx("section")}>
       <Row gutter={24}>
@@ -215,6 +233,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           <InsightsSortedTable columns={insightsColumns} data={tableData} />
         </Col>
       </Row>
+      {contentionTable}
     </section>
   );
 };

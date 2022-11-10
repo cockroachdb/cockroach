@@ -290,18 +290,20 @@ func BuildStmtDetailsMetadataJSON(
 // roachpb.ContentionEvent.
 // JSON Schema for contention events
 //
-//	{
-//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.contention_events",
-//	  "type": "object",
-//	  [{
-//	    "blockingTxnID": { "type": "string" },
-//	    "durationMs":    { "type": "number" },
-//	    "indexID":       { "type": "number" },
-//	    "tableID":       { "type": "number" }
-//	  }]
-//	}
-func BuildContentionEventsJSON(events []roachpb.ContentionEvent) (json.JSON, error) {
+//		{
+//		  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//		  "title": "system.statement_statistics.contention_events",
+//		  "type": "object",
+//		  [{
+//		    "blockingTxnID": { "type": "string" },
+//		    "durationInMs":  { "type": "number" },
+//		    "schemaName":    { "type": "string" },
+//		    "databaseName":  { "type": "string" },
+//	      "tableName":     { "type": "string" },
+//	      "indexName":     { "type": "string" }
+//		  }]
+//		}
+func BuildContentionEventsJSON(events []ContentionEventWithNames) (json.JSON, error) {
 	return (*contentionEvents)(&events).encodeJSON()
 }
 
