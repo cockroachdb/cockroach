@@ -135,11 +135,11 @@ export function makeStatementInsightsColumns(
       name: "contention",
       title: insightsTableTitles.contention(execType),
       cell: (item: StatementInsightEvent) =>
-        !item.timeSpentWaiting
+        !item.totalContentionTime
           ? "no samples"
-          : Duration(item.timeSpentWaiting.asMilliseconds() * 1e6),
+          : Duration(item.totalContentionTime.asMilliseconds() * 1e6),
       sort: (item: StatementInsightEvent) =>
-        item.timeSpentWaiting?.asMilliseconds() ?? -1,
+        item.totalContentionTime?.asMilliseconds() ?? -1,
       showByDefault: false,
     },
     {

@@ -64,6 +64,15 @@ export type TransactionInsightEventDetails = {
   execType: InsightExecEnum;
 };
 
+export type InsightContentionEvent = {
+  blockingTxnID: string;
+  durationInMs: number;
+  schemaName: string;
+  databaseName: string;
+  tableName: string;
+  indexColumnName: string;
+};
+
 export type StatementInsightEvent = {
   // Some of these can be moved to a common InsightEvent type if txn query is updated.
   statementID: string;
@@ -74,7 +83,8 @@ export type StatementInsightEvent = {
   startTime: Moment;
   elapsedTimeMillis: number;
   sessionID: string;
-  timeSpentWaiting?: moment.Duration;
+  totalContentionTime?: moment.Duration;
+  contentionEvents?: InsightContentionEvent[];
   isFullScan: boolean;
   endTime: Moment;
   databaseName: string;

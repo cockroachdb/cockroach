@@ -11,7 +11,11 @@
 import React from "react";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { DATE_FORMAT, Duration } from "src/util";
-import { EventExecution, InsightExecEnum } from "../types";
+import {
+  EventExecution,
+  InsightContentionEvent,
+  InsightExecEnum,
+} from "../types";
 import { insightsTableTitles, QueriesCell } from "../workloadInsights/util";
 
 interface InsightDetailsTableProps {
@@ -84,6 +88,61 @@ export const WaitTimeDetailsTable: React.FC<
   InsightDetailsTableProps
 > = props => {
   const columns = makeInsightDetailsColumns(props.execType);
+  return (
+    <SortedTable className="statements-table" columns={columns} {...props} />
+  );
+};
+
+export function makeInsightStatementContentionColumns(): ColumnDescriptor<InsightContentionEvent>[] {
+  const execType = InsightExecEnum.STATEMENT;
+  return [
+    {
+      name: "executionID",
+      title: insightsTableTitles.executionID(InsightExecEnum.TRANSACTION),
+      cell: (item: InsightContentionEvent) => item.blockingTxnID,
+      sort: (item: InsightContentionEvent) => item.blockingTxnID,
+    },
+    {
+      name: "duration",
+      title: insightsTableTitles.contention(execType),
+      cell: (item: InsightContentionEvent) => Duration(item.durationInMs * 1e6),
+      sort: (item: InsightContentionEvent) => item.durationInMs,
+    },
+    {
+      name: "schemaName",
+      title: insightsTableTitles.schemaName(execType),
+      cell: (item: InsightContentionEvent) => item.schemaName,
+      sort: (item: InsightContentionEvent) => item.schemaName,
+    },
+    {
+      name: "databaseName",
+      title: insightsTableTitles.databaseName(execType),
+      cell: (item: InsightContentionEvent) => item.databaseName,
+      sort: (item: InsightContentionEvent) => item.databaseName,
+    },
+    {
+      name: "tableName",
+      title: insightsTableTitles.tableName(execType),
+      cell: (item: InsightContentionEvent) => item.tableName,
+      sort: (item: InsightContentionEvent) => item.tableName,
+    },
+    {
+      name: "indexName",
+      title: insightsTableTitles.indexName(execType),
+      cell: (item: InsightContentionEvent) => item.indexColumnName,
+      sort: (item: InsightContentionEvent) => item.indexColumnName,
+    },
+  ];
+}
+
+interface InsightContentionTableProps {
+  data: InsightContentionEvent[];
+}
+
+export const ContentionStatementDetailsTable: React.FC<
+  InsightContentionTableProps
+> = props => {
+  const columns = makeInsightStatementContentionColumns();
   return (
     <SortedTable className="statements-table" columns={columns} {...props} />
   );

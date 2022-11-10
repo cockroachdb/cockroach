@@ -12,7 +12,6 @@ package sqlstatsutil
 
 import (
 	"encoding/hex"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -301,7 +300,7 @@ func BuildStmtDetailsMetadataJSON(
 //	    "tableID":       { "type": "number" }
 //	  }]
 //	}
-func BuildContentionEventsJSON(events []roachpb.ContentionEvent) (json.JSON, error) {
+func BuildContentionEventsJSON(events []ContentionEventWithNames) (json.JSON, error) {
 	return (*contentionEvents)(&events).encodeJSON()
 }
 
