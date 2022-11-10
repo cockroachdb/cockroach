@@ -84,6 +84,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/redact"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"go.etcd.io/etcd/raft/v3"
@@ -1120,6 +1121,9 @@ type StoreConfig struct {
 
 	// RangeLogWriter is used to write entries to the system.rangelog table.
 	RangeLogWriter RangeLogWriter
+
+	// StoreToWorkloadCollector is a map that maps a Store to a WorkloadCollector instance
+	StoreToWorkloadCollector []*replay.WorkloadCollector
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events

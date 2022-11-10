@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/replay"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
@@ -384,6 +386,8 @@ type KVConfig struct {
 	// not sent until the receiver is ready to apply, so the cost of sending is
 	// low until the receiver is ready.
 	SnapshotApplyLimit int64
+
+	StoreToWorkloadCollector []*replay.WorkloadCollector
 }
 
 // MakeKVConfig returns a KVConfig with default values.
@@ -732,6 +736,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			}
 			if len(spec.RocksDBOptions) > 0 {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
+			}
+			if val := os.Getenv("DEBUG_STORAGE_WORKLOAD_COLLECTOR"); val == "true" || val == "1" {
+				cfg.StoreToWorkloadCollector[i].Attach(pebbleConfig.Opts)
 			}
 			eng, err := storage.NewPebble(ctx, pebbleConfig)
 			if err != nil {
