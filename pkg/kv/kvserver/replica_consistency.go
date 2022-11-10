@@ -409,14 +409,19 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 	defer cleanup()
 
 	// Wait for the checksum computation to start.
+	dur := r.checksumInitialWait(ctx)
+	t := timeutil.NewTimer()
+	t.Reset(dur)
+	defer t.Stop()
 	var taskCancel context.CancelFunc
 	select {
 	case <-ctx.Done():
 		return CollectChecksumResponse{},
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
-	case <-time.After(r.checksumInitialWait(ctx)):
+	case <-t.C:
+		t.Read = true
 		return CollectChecksumResponse{},
-			errors.Errorf("checksum computation did not start in time for (ID = %s)", id)
+			errors.Errorf("checksum computation did not start in time for (ID = %s, wait=%s)", id, dur)
 	case taskCancel = <-c.started:
 		// Happy case, the computation has started.
 	}
