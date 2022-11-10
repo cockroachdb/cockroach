@@ -243,12 +243,12 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t86614]
 ----
 CREATE TABLE public.t86614 (
-   a INT8 NULL,
-   s STRING NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT t86614_pkey PRIMARY KEY (rowid ASC),
-   INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
-   FAMILY fam_0_a_s_rowid (a, s, rowid)
+  a INT8 NULL,
+  s STRING NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t86614_pkey PRIMARY KEY (rowid ASC),
+  INVERTED INDEX t86614_a_s_idx (a ASC, s gin_trgm_ops),
+  FAMILY fam_0_a_s_rowid (a, s, rowid)
 )
 
 # Regression test for #88925. Return correct result with a variable on the RHS

@@ -165,16 +165,16 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE public.a (
-   id INT8 NOT NULL,
-   CONSTRAINT a_pkey PRIMARY KEY (id ASC)
-);
-ALTER TABLE test.public.a CONFIGURE ZONE USING
-  range_min_bytes = 200001,
-  range_max_bytes = 400000,
-  gc.ttlseconds = 3600,
-  num_replicas = 1,
-  constraints = '[+region=test]',
-  lease_preferences = '[[+region=test]]'
+     id INT8 NOT NULL,
+     CONSTRAINT a_pkey PRIMARY KEY (id ASC)
+   );
+   ALTER TABLE test.public.a CONFIGURE ZONE USING
+     range_min_bytes = 200001,
+     range_max_bytes = 400000,
+     gc.ttlseconds = 3600,
+     num_replicas = 1,
+     constraints = '[+region=test]',
+     lease_preferences = '[[+region=test]]'
 
 # Check that we can reset the configuration to defaults.
 
@@ -319,18 +319,18 @@ query TT
 SHOW CREATE TABLE same_table_name
 ----
 same_table_name  CREATE TABLE public.same_table_name (
-                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                 CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
-);
-ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
-  gc.ttlseconds = 500
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
+                 );
+                 ALTER TABLE test.public.same_table_name CONFIGURE ZONE USING
+                   gc.ttlseconds = 500
 
 query TT
 SHOW CREATE TABLE alternative_schema.same_table_name
 ----
 alternative_schema.same_table_name  CREATE TABLE alternative_schema.same_table_name (
-                                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                    CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
-);
-ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
-  gc.ttlseconds = 600
+                                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                      CONSTRAINT same_table_name_pkey PRIMARY KEY (rowid ASC)
+                                    );
+                                    ALTER TABLE test.alternative_schema.same_table_name CONFIGURE ZONE USING
+                                      gc.ttlseconds = 600

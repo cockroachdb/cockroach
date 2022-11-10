@@ -1960,8 +1960,8 @@ CREATE SEQUENCE public.seqas_3 AS int2 START WITH -4 INCREMENT BY -3
 query TT colnames
 SHOW CREATE SEQUENCE seqas_3
 ----
-table_name        create_statement
-seqas_3           CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
+table_name  create_statement
+seqas_3     CREATE SEQUENCE public.seqas_3 AS INT2 MINVALUE -32768 MAXVALUE -1 INCREMENT -3 START -4
 
 statement ok
 CREATE SEQUENCE seqas_4 AS integer
@@ -1969,8 +1969,8 @@ CREATE SEQUENCE seqas_4 AS integer
 query TT colnames
 SHOW CREATE SEQUENCE seqas_4
 ----
-table_name        create_statement
-seqas_4           CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
+table_name  create_statement
+seqas_4     CREATE SEQUENCE public.seqas_4 AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
 statement ok
 CREATE SEQUENCE seqas_5 AS int8
@@ -1993,8 +1993,8 @@ CREATE SEQUENCE seqas_9 AS integer
 query TT colnames
 SHOW CREATE SEQUENCE seqas_9
 ----
-table_name        create_statement
-seqas_9           CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
+table_name  create_statement
+seqas_9     CREATE SEQUENCE public.seqas_9 AS INT4 MINVALUE 1 MAXVALUE 2147483647 INCREMENT 1 START 1
 
 statement ok
 ALTER SEQUENCE seqas_9 AS smallint
@@ -2002,8 +2002,8 @@ ALTER SEQUENCE seqas_9 AS smallint
 query TT colnames
 SHOW CREATE SEQUENCE seqas_9
 ----
-table_name        create_statement
-seqas_9           CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
+table_name  create_statement
+seqas_9     CREATE SEQUENCE public.seqas_9 AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1
 
 statement ok
 CREATE SEQUENCE seqas_10

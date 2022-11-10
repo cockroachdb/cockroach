@@ -820,10 +820,10 @@ query TT
 show create table decomputed_column
 ----
 decomputed_column  CREATE TABLE public.decomputed_column (
-                   a INT8 NOT NULL,
-                   b INT8 NULL,
-                   CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
-)
+                     a INT8 NOT NULL,
+                     b INT8 NULL,
+                     CONSTRAINT decomputed_column_pkey PRIMARY KEY (a ASC)
+                   )
 
 # Test for https://github.com/cockroachdb/cockroach/issues/26483
 # We try to create a unique column on an un-indexable type.
@@ -1159,12 +1159,12 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL,
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x)
+    )
 
 # Test that only one index gets created when adding a column
 # with references and unique.
@@ -1178,13 +1178,13 @@ query TT
 SHOW CREATE t3
 ----
 t3  CREATE TABLE public.t3 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL,
-    CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t3_x_key (x ASC)
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t3_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+      UNIQUE INDEX t3_x_key (x ASC)
+    )
 
 # We allowed the foreign key validation code to look into the mutations
 # list to validate what columns / indexes can be used for foreign keys.
@@ -1221,11 +1221,11 @@ query TT
 SHOW CREATE t1
 ----
 t1  CREATE TABLE public.t1 (
-    x INT8 NOT NULL,
-    x2 INT8 NULL,
-    CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
-    CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
-)
+      x INT8 NOT NULL,
+      x2 INT8 NULL,
+      CONSTRAINT t1_pkey PRIMARY KEY (x ASC),
+      CONSTRAINT t1_x2_fkey FOREIGN KEY (x2) REFERENCES public.t1(x)
+    )
 
 statement error pq: insert on table "t1" violates foreign key constraint "t1_x2_fkey"
 INSERT INTO t1 VALUES (1, 2)
@@ -1245,12 +1245,12 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL,
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
+    )
 
 # Test that we can also add a column and then an FK in the same txn.
 statement ok
@@ -1268,12 +1268,12 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL,
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID
+    )
 
 # Test that we can add a column and an index to an FK in the same txn.
 statement ok
@@ -1294,13 +1294,13 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL,
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
-    INDEX t2_x_idx (x ASC)
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x) NOT VALID,
+      INDEX t2_x_idx (x ASC)
+    )
 
 # Test the above on a table not created in the same txn.
 statement ok
@@ -1321,13 +1321,13 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL,
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    INDEX t2_x_idx (x ASC)
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+      INDEX t2_x_idx (x ASC)
+    )
 
 # Test that an FK can use a newly created index.
 statement ok
@@ -1347,12 +1347,12 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    x INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    INDEX t2_x_idx (x ASC)
-)
+      x INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+      INDEX t2_x_idx (x ASC)
+    )
 
 # Test when default column value leads to an FK violation.
 statement ok
@@ -1375,13 +1375,13 @@ query TT
 SHOW CREATE t2
 ----
 t2  CREATE TABLE public.t2 (
-    y INT8 NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    x INT8 NULL DEFAULT 1:::INT8,
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
-    UNIQUE INDEX t2_x_key (x ASC)
-)
+      y INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      x INT8 NULL DEFAULT 1:::INT8,
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t1(x),
+      UNIQUE INDEX t2_x_key (x ASC)
+    )
 
 # Regression 50069, computed exprs must only refer to columns inside the
 # current table.
@@ -1410,10 +1410,10 @@ query TT
 SHOW CREATE child
 ----
 child  CREATE TABLE public.child (
-       c INT8 NOT NULL,
-       CONSTRAINT child_pkey PRIMARY KEY (c ASC),
-       FAMILY fam_0_c_p (c)
-)
+         c INT8 NOT NULL,
+         CONSTRAINT child_pkey PRIMARY KEY (c ASC),
+         FAMILY fam_0_c_p (c)
+       )
 
 # Regression test for #52816.
 statement ok
@@ -1856,9 +1856,9 @@ query TT
 SHOW CREATE TABLE visible_table
 ----
 visible_table  CREATE TABLE public.visible_table (
-               a INT8 NOT NULL,
-               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
-)
+                 a INT8 NOT NULL,
+                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+               )
 
 statement ok
 ALTER TABLE visible_table ALTER COLUMN a SET NOT VISIBLE
@@ -1867,9 +1867,9 @@ query TT
 SHOW CREATE TABLE visible_table
 ----
 visible_table  CREATE TABLE public.visible_table (
-               a INT8 NOT VISIBLE NOT NULL,
-               CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
-)
+                 a INT8 NOT VISIBLE NOT NULL,
+                 CONSTRAINT visible_table_pkey PRIMARY KEY (a ASC)
+               )
 
 subtest if_table_exists_already
 
@@ -1923,13 +1923,13 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE t67234]
 ----
 CREATE TABLE public.t67234 (
-   k INT8 NOT NULL,
-   a INT8 NULL,
-   b INT8 NULL,
-   CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
-   UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
-   FAMILY fam_0_k_a_b (k, a, b),
-   CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
+  k INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  CONSTRAINT t67234_pkey PRIMARY KEY (k ASC),
+  UNIQUE INDEX t67234_c1 (a ASC) WHERE b > 0:::INT8,
+  FAMILY fam_0_k_a_b (k, a, b),
+  CONSTRAINT t67234_c2 UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
 )
 
 subtest generated_as_identity
@@ -1952,13 +1952,13 @@ query TT
 SHOW CREATE TABLE t
 ----
 t  CREATE TABLE public.t (
-   a INT8 NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
-   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
-   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX t_a_key (a ASC)
-)
+     a INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     b INT8 NOT NULL GENERATED ALWAYS AS IDENTITY,
+     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY,
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     UNIQUE INDEX t_a_key (a ASC)
+   )
 
 statement ok
 INSERT INTO t (c) VALUES (2)
@@ -2022,13 +2022,13 @@ query TT
 SHOW CREATE TABLE t
 ----
 t  CREATE TABLE public.t (
-   a INT8 NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
-   c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 CACHE 10),
-   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-   UNIQUE INDEX t_a_key (a ASC)
-)
+     a INT8 NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     b INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3),
+     c INT8 NOT NULL GENERATED BY DEFAULT AS IDENTITY (START 1 INCREMENT 3 CACHE 10),
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     UNIQUE INDEX t_a_key (a ASC)
+   )
 
 statement ok
 ALTER TABLE t DROP COLUMN c
@@ -2075,9 +2075,9 @@ query TT
 SHOW CREATE TABLE t
 ----
 t  CREATE TABLE public.t (
-   id INT8 NOT NULL,
-   CONSTRAINT t_pkey PRIMARY KEY (id ASC)
-)
+     id INT8 NOT NULL,
+     CONSTRAINT t_pkey PRIMARY KEY (id ASC)
+   )
 
 # Table has a PRIMARY KEY named index; check it errors when assinging PRIMARY KEY to id.
 statement ok
@@ -2611,10 +2611,10 @@ query TT
 SHOW CREATE TABLE tbl
 ----
 tbl  CREATE TABLE public.tbl (
-     i INT8 NOT NULL,
-     j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
-     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
-)
+       i INT8 NOT NULL,
+       j INT8 NOT NULL DEFAULT nextval('public.s1'::REGCLASS) ON UPDATE nextval('public.s2'::REGCLASS),
+       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+     )
 
 # Now use `ALTER COLUMN` to swap the use of sequence 's1' and 's2'
 
@@ -2628,10 +2628,10 @@ query TT
 SHOW CREATE TABLE tbl
 ----
 tbl  CREATE TABLE public.tbl (
-     i INT8 NOT NULL,
-     j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
-     CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
-)
+       i INT8 NOT NULL,
+       j INT8 NOT NULL DEFAULT nextval('public.s2'::REGCLASS) ON UPDATE nextval('public.s1'::REGCLASS),
+       CONSTRAINT tbl_pkey PRIMARY KEY (i ASC)
+     )
 
 # Verify that adding not-null physical column with a default or computed expression
 # fails if the expression evaluates to NULL.

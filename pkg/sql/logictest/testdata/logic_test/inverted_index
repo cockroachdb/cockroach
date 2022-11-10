@@ -37,14 +37,14 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE public.c (
-   id INT8 NOT NULL,
-   foo JSONB NULL,
-   "bAr" JSONB NULL,
-   "qUuX" JSONB NULL,
-   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX "c_bAr_idx" ("bAr")
-)
+     id INT8 NOT NULL,
+     foo JSONB NULL,
+     "bAr" JSONB NULL,
+     "qUuX" JSONB NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX "c_bAr_idx" ("bAr")
+   )
 
 # Test that only the permitted opclasses are usable to make an inverted index.
 statement error operator class \"blah_ops\" does not exist
@@ -1220,13 +1220,13 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE public.c (
-   id INT8 NOT NULL,
-   foo INT8[] NULL,
-   bar STRING[] NULL,
-   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX c_bar_idx (bar)
-)
+     id INT8 NOT NULL,
+     foo INT8[] NULL,
+     bar STRING[] NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX c_bar_idx (bar)
+   )
 
 query ITT
 SELECT * from c WHERE bar @> ARRAY['foo']
@@ -1592,13 +1592,13 @@ query T
 SELECT @2 FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----
 CREATE TABLE public.table_desc_inverted_index (
-   id INT8 NOT NULL,
-   last_accessed TIMESTAMP NULL,
-   testdata JSONB NULL,
-   CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
-   FAMILY f1 (id, last_accessed),
-   FAMILY f2 (testdata)
+  id INT8 NOT NULL,
+  last_accessed TIMESTAMP NULL,
+  testdata JSONB NULL,
+  CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
+  INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
+  FAMILY f1 (id, last_accessed),
+  FAMILY f2 (testdata)
 )
 
 subtest overlaps_with_array
