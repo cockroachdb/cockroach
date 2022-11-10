@@ -96,7 +96,7 @@ type Controller interface {
 	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
 	// catchup scans (typically CPU-intensive and affecting scheduling
 	// latencies).
-	AdmitRangefeedRequest(roachpb.TenantID, *roachpb.RangeFeedRequest) *Pacer
+	AdmitRangefeedRequest(roachpb.TenantID, *roachpb.RangeFeedRequest) *admission.Pacer
 	// SetTenantWeightProvider is used to set the provider that will be
 	// periodically polled for weights. The stopper should be used to terminate
 	// the periodic polling.
@@ -135,11 +135,11 @@ type TenantWeightsForStore struct {
 type controllerImpl struct {
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
-	kvAdmissionQ        *admission.WorkQueue
-	storeGrantCoords    *admission.StoreGrantCoordinators
-	elasticCPUWorkQueue *admission.ElasticCPUWorkQueue
-	settings            *cluster.Settings
-	every               log.EveryN
+	kvAdmissionQ               *admission.WorkQueue
+	storeGrantCoords           *admission.StoreGrantCoordinators
+	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
+	settings                   *cluster.Settings
+	every                      log.EveryN
 }
 
 var _ Controller = &controllerImpl{}
@@ -162,16 +162,16 @@ type Handle struct {
 // nil or non-nil.
 func MakeController(
 	kvAdmissionQ *admission.WorkQueue,
-	elasticCPUWorkQueue *admission.ElasticCPUWorkQueue,
+	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
-		kvAdmissionQ:        kvAdmissionQ,
-		storeGrantCoords:    storeGrantCoords,
-		elasticCPUWorkQueue: elasticCPUWorkQueue,
-		settings:            settings,
-		every:               log.Every(10 * time.Second),
+		kvAdmissionQ:               kvAdmissionQ,
+		storeGrantCoords:           storeGrantCoords,
+		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
+		settings:                   settings,
+		every:                      log.Every(10 * time.Second),
 	}
 }
 
@@ -257,7 +257,7 @@ func (n *controllerImpl) AdmitKVWork(
 			// handed out through this mechanism, as a way to provide latency
 			// isolation to non-elastic ("latency sensitive") work running on
 			// the same machine.
-			elasticWorkHandle, err := n.elasticCPUWorkQueue.Admit(
+			elasticWorkHandle, err := n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.Admit(
 				ctx, elasticCPUDurationPerExportRequest.Get(&n.settings.SV), admissionInfo,
 			)
 			if err != nil {
@@ -267,7 +267,7 @@ func (n *controllerImpl) AdmitKVWork(
 			defer func() {
 				if retErr != nil {
 					// No elastic work was done.
-					n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+					n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
 				}
 			}()
 		} else {
@@ -283,7 +283,7 @@ func (n *controllerImpl) AdmitKVWork(
 
 // AdmittedKVWorkDone implements the Controller interface.
 func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
-	n.elasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
+	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.ElasticCPUWorkHandle)
 	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
 		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID)
 	}
@@ -308,21 +308,19 @@ func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteByt
 // AdmitRangefeedRequest implements the Controller interface.
 func (n *controllerImpl) AdmitRangefeedRequest(
 	tenantID roachpb.TenantID, request *roachpb.RangeFeedRequest,
-) *Pacer {
+) *admission.Pacer {
 	if !rangefeedCatchupScanElasticControlEnabled.Get(&n.settings.SV) {
 		return nil
 	}
 
-	return &Pacer{
-		unit: elasticCPUDurationPerRangefeedScanUnit.Get(&n.settings.SV),
-		wi: admission.WorkInfo{
+	return n.elasticCPUGrantCoordinator.NewPacer(
+		elasticCPUDurationPerRangefeedScanUnit.Get(&n.settings.SV),
+		admission.WorkInfo{
 			TenantID:        tenantID,
 			Priority:        admissionpb.WorkPriority(request.AdmissionHeader.Priority),
 			CreateTime:      request.AdmissionHeader.CreateTime,
 			BypassAdmission: false,
-		},
-		wq: n.elasticCPUWorkQueue,
-	}
+		})
 }
 
 // SetTenantWeightProvider implements the Controller interface.
@@ -350,7 +348,7 @@ func (n *controllerImpl) SetTenantWeightProvider(
 					weights.Node = nil
 				}
 				n.kvAdmissionQ.SetTenantWeights(weights.Node)
-				n.elasticCPUWorkQueue.SetTenantWeights(weights.Node)
+				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
 
 				for _, storeWeights := range weights.Stores {
 					q := n.storeGrantCoords.TryGetQueueForStore(int32(storeWeights.StoreID))
@@ -440,48 +438,4 @@ func (wb *StoreWriteBytes) Release() {
 		return
 	}
 	storeWriteBytesPool.Put(wb)
-}
-
-// Pacer is used in tight loops (CPU-bound) for non-premptible elastic work.
-// Callers are expected to invoke Pace() every loop iteration and Close() once
-// done. Internally this type integrates with elastic CPU work queue, acquiring
-// tokens for the CPU work being done, and blocking if tokens are unavailable.
-// This allows for a form of cooperative scheduling with elastic CPU granters.
-type Pacer struct {
-	unit time.Duration
-	wi   admission.WorkInfo
-	wq   *admission.ElasticCPUWorkQueue
-
-	cur *admission.ElasticCPUWorkHandle
-}
-
-// Pace is part of the Pacer interface.
-func (p *Pacer) Pace(ctx context.Context) error {
-	if p == nil {
-		return nil
-	}
-
-	if overLimit, _ := p.cur.OverLimit(); overLimit {
-		p.wq.AdmittedWorkDone(p.cur)
-		p.cur = nil
-	}
-
-	if p.cur == nil {
-		handle, err := p.wq.Admit(ctx, p.unit, p.wi)
-		if err != nil {
-			return err
-		}
-		p.cur = handle
-	}
-	return nil
-}
-
-// Close is part of the Pacer interface.
-func (p *Pacer) Close() {
-	if p == nil || p.cur == nil {
-		return
-	}
-
-	p.wq.AdmittedWorkDone(p.cur)
-	p.cur = nil
 }
