@@ -192,6 +192,8 @@ type ServerConfig struct {
 
 	// RangeStatsFetcher is used to fetch range stats for keys.
 	RangeStatsFetcher eval.RangeStatsFetcher
+
+	PacerMaker admission.PacerMaker
 }
 
 // RuntimeStats is an interface through which the rowexec layer can get
