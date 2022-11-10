@@ -317,32 +317,66 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) (_ opt.Sc
 	return c.f.ConstructConstVal(result, o.ReturnType), true
 }
 
-// foldStringToRegclassCast resolves a string that is a table name into an OID
-// by resolving the table name and returning its table ID. This permits the
-// optimizer to do intelligent things like push down filters that look like:
-// ... WHERE oid = 'my_table'::REGCLASS
-func (c *CustomFuncs) foldStringToRegclassCast(
+// foldOIDFamilyCast resolves string to OID family types by resolving the name
+// and returning the object id. foldOIDFamilyCast also resolves cast from int
+// and OID types to OID. This permits the optimizer to do intelligent things
+// like push down filters that look like: ... WHERE oid = 'my_table'::REGCLASS
+// or ...WHERE oid = 101::oid
+func (c *CustomFuncs) foldOIDFamilyCast(
 	input opt.ScalarExpr, typ *types.T,
-) (opt.ScalarExpr, error) {
-	// Special case: we're casting a string to a REGCLASS oid, which is a
-	// table id lookup.
+) (_ opt.ScalarExpr, isValid bool, retErr error) {
 	flags := cat.Flags{AvoidDescriptorCaches: false, NoTableStats: true}
 	datum := memo.ExtractConstDatum(input)
-	s := tree.MustBeDString(datum)
-	tn, err := parser.ParseQualifiedTableName(string(s))
-	if err != nil {
-		return nil, err
+
+	inputFamily := input.DataType().Family()
+	var dOid *tree.DOid
+	var err error
+
+	switch typ.Oid() {
+	case oid.T_oid:
+		switch inputFamily {
+		case types.StringFamily:
+			s := tree.MustBeDString(datum)
+			dOid, err = tree.ParseDOidAsInt(string(s))
+			if err != nil {
+				return nil, true, err
+			}
+		case types.IntFamily:
+			i := tree.MustBeDInt(datum)
+			dOid, err = tree.IntToOid(i)
+			if err != nil {
+				return nil, true, err
+			}
+		case types.OidFamily:
+			dOid = tree.NewDOidWithType(tree.MustBeDOid(datum).Oid, types.Oid)
+		default:
+			return nil, false, nil
+		}
+
+	case oid.T_regclass:
+		switch inputFamily {
+		case types.StringFamily:
+			s := tree.MustBeDString(datum)
+			tn, err := parser.ParseQualifiedTableName(string(s))
+			if err != nil {
+				return nil, true, err
+			}
+
+			ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
+			if err != nil {
+				return nil, true, err
+			}
+
+			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+			dOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
+		default:
+			return nil, false, nil
+		}
+	default:
+		return nil, false, nil
 	}
-	ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
-	if err != nil {
-		return nil, err
-	}
 
-	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
-
-	regclassOid := tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
-	return c.f.ConstructConstVal(regclassOid, typ), nil
-
+	return c.f.ConstructConstVal(dOid, typ), true, nil
 }
 
 // FoldCast evaluates a cast expression with a constant input. It returns a
@@ -350,12 +384,11 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 // returns ok=false.
 func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.ScalarExpr, ok bool) {
 	if typ.Family() == types.OidFamily {
-		if typ.Oid() == types.RegClass.Oid() && input.DataType().Family() == types.StringFamily {
-			expr, err := c.foldStringToRegclassCast(input, typ)
-			if err == nil {
-				return expr, true
-			}
+		expr, valid, err := c.foldOIDFamilyCast(input, typ)
+		if err == nil && valid {
+			return expr, true
 		}
+
 		// Save this cast for the execbuilder.
 		return nil, false
 	}
