@@ -17,7 +17,7 @@ import (
 )
 
 func BenchmarkNewEntry(b *testing.B) {
-	ent, metaB := mkEntry(b)
+	ent, metaB := mkBenchEnt(b)
 	b.ResetTimer()
 	for _, fromRawValue := range []bool{false, true} {
 		for _, release := range []bool{false, true} {
