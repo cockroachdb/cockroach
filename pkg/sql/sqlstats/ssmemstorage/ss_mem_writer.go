@@ -124,6 +124,7 @@ func (s *Container) RecordStatement(
 
 	stats.mu.data.SQLType = value.StatementType.String()
 	stats.mu.data.NumRows.Record(stats.mu.data.Count, float64(value.RowsAffected))
+	stats.mu.data.IdleLat.Record(stats.mu.data.Count, value.IdleLatency)
 	stats.mu.data.ParseLat.Record(stats.mu.data.Count, value.ParseLatency)
 	stats.mu.data.PlanLat.Record(stats.mu.data.Count, value.PlanLatency)
 	stats.mu.data.RunLat.Record(stats.mu.data.Count, value.RunLatency)

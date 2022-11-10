@@ -254,6 +254,7 @@ function randomStats(
     first_attempt_count: Long.fromNumber(first_attempt_count),
     max_retries: Long.fromNumber(max_retries),
     num_rows: randomStat(100),
+    idle_lat: randomStat(),
     parse_lat: randomStat(),
     plan_lat: randomStat(),
     run_lat: randomStat(),
