@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -302,8 +301,13 @@ func (p *planner) dropTableImpl(
 		}
 	}
 
-	err := p.removeTableComments(ctx, tableDesc)
-	if err != nil {
+	b := p.Txn().NewBatch()
+	if err := p.descCollection.DeleteTableComments(
+		ctx, p.ExtendedEvalContext().Tracing.KVTracingEnabled(), b, tableDesc.GetID(),
+	); err != nil {
+		return droppedViews, err
+	}
+	if err := p.Txn().Run(ctx, b); err != nil {
 		return droppedViews, err
 	}
 
@@ -323,7 +327,7 @@ func (p *planner) dropTableImpl(
 		return droppedViews, err
 	}
 
-	err = p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc)
+	err := p.initiateDropTable(ctx, tableDesc, !droppingParent, jobDesc)
 	return droppedViews, err
 }
 
@@ -582,15 +586,4 @@ func removeMatchingReferences(
 		}
 	}
 	return updatedRefs
-}
-
-func (p *planner) removeTableComments(ctx context.Context, tableDesc *tabledesc.Mutable) error {
-	return descmetadata.NewMetadataUpdater(
-		ctx,
-		p.ExecCfg().InternalExecutorFactory,
-		p.Descriptors(),
-		&p.ExecCfg().Settings.SV,
-		p.txn,
-		p.SessionData(),
-	).DeleteAllCommentsForTables(catalog.MakeDescriptorIDSet(tableDesc.GetID()))
 }

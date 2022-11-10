@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -517,48 +516,8 @@ type noopMetadataUpdater struct{}
 
 var _ scexec.DescriptorMetadataUpdater = noopMetadataUpdater{}
 
-// UpsertDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) UpsertDescriptorComment(
-	id int64, subID int64, commentType catalogkeys.CommentType, comment string,
-) error {
-	return nil
-}
-
-// DeleteDescriptorComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteDescriptorComment(
-	id int64, subID int64, commentType catalogkeys.CommentType,
-) error {
-	return nil
-}
-
-// DeleteAllCommentsForTables implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteAllCommentsForTables(ids catalog.DescriptorIDSet) error {
-	return nil
-}
-
-// UpsertConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) UpsertConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID, comment string,
-) error {
-	return nil
-}
-
-// DeleteConstraintComment implements scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) DeleteConstraintComment(
-	tableID descpb.ID, constraintID descpb.ConstraintID,
-) error {
-	return nil
-}
-
 // DeleteDatabaseRoleSettings implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	return nil
-}
-
-// SwapDescriptorSubComment implements  scexec.DescriptorMetadataUpdater.
-func (noopMetadataUpdater) SwapDescriptorSubComment(
-	id int64, oldSubID int64, newSubID int64, commentType catalogkeys.CommentType,
-) error {
 	return nil
 }
 
