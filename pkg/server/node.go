@@ -388,7 +388,7 @@ func NewNode(
 		testingErrorEvent:     cfg.TestingKnobs.TestingResponseErrorEvent,
 	}
 	n.storeCfg.KVAdmissionController = kvadmission.MakeController(
-		kvAdmissionQ, elasticCPUGrantCoord.ElasticCPUWorkQueue, storeGrantCoords, cfg.Settings,
+		kvAdmissionQ, elasticCPUGrantCoord, storeGrantCoords, cfg.Settings,
 	)
 	n.storeCfg.SchedulerLatencyListener = elasticCPUGrantCoord.SchedulerLatencyListener
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)

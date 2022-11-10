@@ -364,6 +364,10 @@ type sqlServerArgs struct {
 	// externalStorageBuilder is the constructor for accesses to external
 	// storage.
 	externalStorageBuilder *externalStorageBuilder
+
+	// admissionPacerFactory is used for elastic CPU control when performing
+	// CPU intensive operations, such as CDC event encoding/decoding.
+	admissionPacerFactory admission.PacerFactory
 }
 
 type monitorAndMetrics struct {
@@ -742,6 +746,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ExternalIORecorder:       cfg.costController,
 		TenantCostController:     cfg.costController,
 		RangeStatsFetcher:        rangeStatsFetcher,
+		AdmissionPacerFactory:    cfg.admissionPacerFactory,
 	}
 	cfg.TempStorageConfig.Mon.SetMetrics(distSQLMetrics.CurDiskBytesCount, distSQLMetrics.MaxDiskBytesHist)
 	if distSQLTestingKnobs := cfg.TestingKnobs.DistSQL; distSQLTestingKnobs != nil {
