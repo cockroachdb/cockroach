@@ -24,12 +24,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestScheduleControl(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelper(t)
 	defer cleanup()
 
@@ -139,6 +142,8 @@ func TestScheduleControl(t *testing.T) {
 
 func TestJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	th, cleanup := newTestHelperForTables(t, jobstest.UseSystemTables, nil)
 	defer cleanup()
 
@@ -247,6 +252,7 @@ func TestJobsControlForSchedules(t *testing.T) {
 // jobs prior to executing the control command.
 func TestFilterJobsControlForSchedules(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer ResetConstructors()()
 
 	argsFn := func(args *base.TestServerArgs) {
@@ -327,6 +333,7 @@ func TestFilterJobsControlForSchedules(t *testing.T) {
 
 func TestJobControlByType(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	defer ResetConstructors()()
 
 	argsFn := func(args *base.TestServerArgs) {

@@ -972,6 +972,7 @@ func TestRunWithoutLoop(t *testing.T) {
 
 func TestJobIdleness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	intervalOverride := time.Millisecond
@@ -1110,6 +1111,7 @@ func TestJobIdleness(t *testing.T) {
 // allow other job registries in the cluster to claim and run this job.
 func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	intervalOverride := time.Millisecond
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
