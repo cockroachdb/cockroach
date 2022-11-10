@@ -12,6 +12,7 @@ package sslocal_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"math"
 	"net/url"
 	"testing"
@@ -35,12 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/jackc/pgx/v4"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1100,4 +1103,190 @@ func TestFingerprintCreation(t *testing.T) {
 			require.Equal(t, tc.count, count)
 		}
 	})
+}
+
+func TestSQLStatsIdleLatencies(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderStress(t, "These tests assert timings are within 10ms, which fails under stress.")
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	testCases := []struct {
+		name string
+		lats map[string]float64
+		ops  func(*testing.T, *gosql.DB)
+	}{
+		{
+			name: "no latency",
+			lats: map[string]float64{"SELECT _": 0},
+			ops: func(t *testing.T, db *gosql.DB) {
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				_, err = tx.Exec("SELECT 1")
+				require.NoError(t, err)
+				err = tx.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "no latency (implicit txn)",
+			lats: map[string]float64{"SELECT _": 0},
+			ops: func(t *testing.T, db *gosql.DB) {
+				// These 100ms don't count because we're not in an explicit transaction.
+				time.Sleep(100 * time.Millisecond)
+				_, err := db.Exec("SELECT 1")
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "no latency - prepared statement (implicit txn)",
+			lats: map[string]float64{"SELECT $1::INT8": 0},
+			ops: func(t *testing.T, db *gosql.DB) {
+				stmt, err := db.Prepare("SELECT $1::INT")
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				_, err = stmt.Exec(1)
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "simple statement",
+			lats: map[string]float64{"SELECT _": 0.1},
+			ops: func(t *testing.T, db *gosql.DB) {
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				_, err = tx.Exec("SELECT 1")
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				err = tx.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "compound statement",
+			lats: map[string]float64{"SELECT _": 0.1, "SELECT count(*) FROM crdb_internal.statement_statistics": 0},
+			ops: func(t *testing.T, db *gosql.DB) {
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				_, err = tx.Exec("SELECT 1; SELECT count(*) FROM crdb_internal.statement_statistics")
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				err = tx.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "multiple statements - slow generation",
+			lats: map[string]float64{"SELECT pg_sleep(_)": 0, "SELECT _": 0},
+			ops: func(t *testing.T, db *gosql.DB) {
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				_, err = tx.Exec("SELECT pg_sleep(1)")
+				require.NoError(t, err)
+				_, err = tx.Exec("SELECT 1")
+				require.NoError(t, err)
+				err = tx.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "prepared statement",
+			lats: map[string]float64{"SELECT $1::INT8": 0.1},
+			ops: func(t *testing.T, db *gosql.DB) {
+				stmt, err := db.Prepare("SELECT $1::INT")
+				require.NoError(t, err)
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				_, err = tx.Stmt(stmt).Exec(1)
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				err = tx.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "prepared statement inside transaction",
+			lats: map[string]float64{"SELECT $1::INT8": 0.1},
+			ops: func(t *testing.T, db *gosql.DB) {
+				tx, err := db.Begin()
+				require.NoError(t, err)
+				stmt, err := tx.Prepare("SELECT $1::INT")
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				_, err = stmt.Exec(1)
+				require.NoError(t, err)
+				time.Sleep(100 * time.Millisecond)
+				err = tx.Commit()
+				require.NoError(t, err)
+			},
+		},
+		{
+			name: "multiple transactions",
+			lats: map[string]float64{"SELECT _": 0.1},
+			ops: func(t *testing.T, db *gosql.DB) {
+				for i := 0; i < 3; i++ {
+					tx, err := db.Begin()
+					require.NoError(t, err)
+					time.Sleep(100 * time.Millisecond)
+					_, err = tx.Exec("SELECT 1")
+					require.NoError(t, err)
+					time.Sleep(100 * time.Millisecond)
+					err = tx.Commit()
+					require.NoError(t, err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Make a separate connection to the database, to isolate the stats
+			// we'll observe.
+			// Note that we're not using pgx here because it *always* prepares
+			// statements, and we want to test our client latency measurements
+			// both with and without prepared statements.
+			dbUrl, cleanup := sqlutils.PGUrl(t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
+			defer cleanup()
+			connector, err := pq.NewConnector(dbUrl.String())
+			require.NoError(t, err)
+			opsDB := gosql.OpenDB(connector)
+			defer func() {
+				_ = opsDB.Close()
+			}()
+
+			// Set a unique application name for our session, so we can find our stats easily.
+			appName := t.Name()
+			_, err = opsDB.Exec("SET application_name = $1", appName)
+			require.NoError(t, err)
+
+			// Run the test operations.
+			tc.ops(t, opsDB)
+
+			// Look for the latencies we expect.
+			actual := make(map[string]float64)
+			rows, err := db.Query(`
+				SELECT metadata->>'query', statistics->'statistics'->'idleLat'->'mean'
+				  FROM crdb_internal.statement_statistics
+				 WHERE app_name = $1`, appName)
+			require.NoError(t, err)
+			for rows.Next() {
+				var query string
+				var latency float64
+				err = rows.Scan(&query, &latency)
+				require.NoError(t, err)
+				actual[query] = latency
+			}
+			require.NoError(t, rows.Err())
+			require.InDeltaMapValues(t, tc.lats, actual, 0.01,
+				"expected: %v\nactual: %v", tc.lats, actual)
+		})
+	}
 }

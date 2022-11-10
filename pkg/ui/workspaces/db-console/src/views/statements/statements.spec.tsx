@@ -510,6 +510,7 @@ function makeStats(): Required<StatementStatistics> {
     legacy_last_err: "",
     legacy_last_err_redacted: "",
     num_rows: makeStat(),
+    idle_lat: makeStat(),
     parse_lat: makeStat(),
     plan_lat: makeStat(),
     run_lat: makeStat(),
