@@ -484,6 +484,10 @@ func (s spanSetReader) PinEngineStateForIterators() error {
 	return s.r.PinEngineStateForIterators()
 }
 
+func (s spanSetReader) Len() int {
+	return s.r.Len()
+}
+
 type spanSetWriter struct {
 	w     storage.Writer
 	spans *SpanSet
