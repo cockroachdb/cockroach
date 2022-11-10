@@ -38,7 +38,7 @@ export function getExplainPlanFromGist(
       },
     ],
     execute: true,
-    timeout: "10s",
+    timeout: "30s",
   };
 
   return executeInternalSql<DecodePlanGistColumns>(request).then(result => {
@@ -59,9 +59,9 @@ export function getExplainPlanFromGist(
       };
     }
 
-    const explainPlan = result.execution.txn_results[0].rows
-      .map(col => col.plan_row)
-      .join("\n");
+    const explainPlan =
+      `Plan Gist: ${req.planGist} \n\n` +
+      result.execution.txn_results[0].rows.map(col => col.plan_row).join("\n");
 
     return { explainPlan };
   });

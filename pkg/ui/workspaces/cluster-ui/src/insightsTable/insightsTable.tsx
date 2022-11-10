@@ -241,9 +241,9 @@ function descriptionCell(
 
 function actionCell(
   insightRec: InsightRecommendation,
-  isCockroachCloud: boolean,
+  hideAction: boolean,
 ): React.ReactElement {
-  if (isCockroachCloud) {
+  if (hideAction) {
     return <></>;
   }
   let query = "";
@@ -282,7 +282,7 @@ function actionCell(
 }
 
 export function makeInsightsColumns(
-  isCockroachCloud: boolean,
+  hideAction: boolean,
   disableStmtLink?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
   return [
@@ -302,7 +302,7 @@ export function makeInsightsColumns(
     {
       name: "action",
       title: insightsTableTitles.actions(),
-      cell: (item: InsightRecommendation) => actionCell(item, isCockroachCloud),
+      cell: (item: InsightRecommendation) => actionCell(item, hideAction),
     },
   ];
 }

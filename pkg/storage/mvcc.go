@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"math"
 	"runtime"
@@ -5766,9 +5767,93 @@ func MVCCIsSpanEmpty(
 	return !valid, nil
 }
 
+// MVCCExportFingerprint exports a fingerprint for point keys in the keyrange
+// [StartKey, EndKey) over the interval (StartTS, EndTS]. Each key/timestamp and
+// value is hashed using a fnv64 hasher, and combined into a running aggregate
+// via a XOR. On completion of the export this aggregate is returned as the
+// fingerprint.
+//
+// Range keys are not fingerprinted but instead written to a pebble SST that is
+// returned to the caller. This is because range keys do not have a stable,
+// discrete identity and so it is up to the caller to define a deterministic
+// fingerprinting scheme across all returned range keys.
+func MVCCExportFingerprint(
+	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, MVCCKey, uint64, error) {
+	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
+	defer span.Finish()
+
+	hasher := fnv.New64()
+	fingerprintWriter := makeFingerprintWriter(ctx, hasher, cs, dest)
+	defer fingerprintWriter.Close()
+
+	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, MVCCKey{}, 0, err
+	}
+
+	fingerprint, err := fingerprintWriter.Finish()
+	return summary, resumeKey, fingerprint, err
+}
+
 // MVCCExportToSST exports changes to the keyrange [StartKey, EndKey) over the
-// interval (StartTS, EndTS] as a Pebble SST. See MVCCExportOptions for options.
-// StartTS may be zero.
+// interval (StartTS, EndTS] as a Pebble SST. See mvccExportToWriter for more
+// details.
+func MVCCExportToSST(
+	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+) (roachpb.BulkOpSummary, MVCCKey, error) {
+	ctx, span := tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
+	defer span.Finish()
+	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
+	defer sstWriter.Close()
+
+	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &sstWriter)
+	if err != nil {
+		return roachpb.BulkOpSummary{}, MVCCKey{}, err
+	}
+
+	if summary.DataSize == 0 {
+		// If no records were added to the sstable, skip completing it and return a
+		// nil slice – the export code will discard it anyway (based on 0 DataSize).
+		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
+	}
+
+	return summary, resumeKey, sstWriter.Finish()
+}
+
+// ExportWriter is a trimmed down version of the Writer interface. It contains
+// only those methods used during ExportRequest command evaluation.
+type ExportWriter interface {
+	// PutRawMVCCRangeKey writes an MVCC range key with the provided encoded
+	// MVCCValue. It will replace any overlapping range keys at the given
+	// timestamp (even partial overlap). Only MVCC range tombstones, i.e. an empty
+	// value, are currently allowed (other kinds will need additional handling in
+	// MVCC APIs and elsewhere, e.g. stats and GC). It can be used to avoid
+	// decoding and immediately re-encoding an MVCCValue, but should generally be
+	// avoided due to the lack of type safety.
+	//
+	// It is safe to modify the contents of the arguments after PutRawMVCCRangeKey
+	// returns.
+	PutRawMVCCRangeKey(MVCCRangeKey, []byte) error
+	// PutRawMVCC sets the given key to the encoded MVCCValue. It requires that
+	// the timestamp is non-empty (see {PutUnversioned,PutIntent} if the timestamp
+	// is empty). It can be used to avoid decoding and immediately re-encoding an
+	// MVCCValue, but should generally be avoided due to the lack of type safety.
+	//
+	// It is safe to modify the contents of the arguments after PutRawMVCC
+	// returns.
+	PutRawMVCC(key MVCCKey, value []byte) error
+	// PutUnversioned sets the given key to the value provided. It is for use
+	// with inline metadata (not intents) and other unversioned keys (like
+	// Range-ID local keys).
+	//
+	// It is safe to modify the contents of the arguments after Put returns.
+	PutUnversioned(key roachpb.Key, value []byte) error
+}
+
+// mvccExportToWriter exports changes to the keyrange [StartKey, EndKey) over
+// the interval (StartTS, EndTS] to the passed in writer. See MVCCExportOptions
+// for options. StartTS may be zero.
 //
 // This comes in two principal flavors: all revisions or latest revision only.
 // In all-revisions mode, exports everything matching the span and time bounds,
@@ -5788,17 +5873,12 @@ func MVCCIsSpanEmpty(
 // intents outside are ignored.
 //
 // Returns an export summary and a resume key that allows resuming the export if
-// it reached a limit. Data is written to dest as it is collected. If an error
-// is returned then dest contents are undefined.
-func MVCCExportToSST(
-	ctx context.Context, cs *cluster.Settings, reader Reader, opts MVCCExportOptions, dest io.Writer,
+// it reached a limit. Data is written to the writer as it is collected. If an
+// error is returned then the writer's contents are undefined. It is the
+// responsibility of the caller to Finish() / Close() the passed in writer.
+func mvccExportToWriter(
+	ctx context.Context, reader Reader, opts MVCCExportOptions, writer ExportWriter,
 ) (roachpb.BulkOpSummary, MVCCKey, error) {
-	var span *tracing.Span
-	ctx, span = tracing.ChildSpan(ctx, "storage.MVCCExportToSST")
-	defer span.Finish()
-	sstWriter := MakeBackupSSTWriter(ctx, cs, dest)
-	defer sstWriter.Close()
-
 	// If we're not exporting all revisions then we can mask point keys below any
 	// MVCC range tombstones, since we don't care about them.
 	var rangeKeyMasking hlc.Timestamp
@@ -5936,7 +6016,7 @@ func MVCCExportToSST(
 				}
 				// Export only the inner roachpb.Value, not the MVCCValue header.
 				rawValue := mvccValue.Value.RawBytes
-				if err := sstWriter.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
+				if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, err
 				}
 			}
@@ -6047,11 +6127,11 @@ func MVCCExportToSST(
 			if unsafeKey.Timestamp.IsEmpty() {
 				// This should never be an intent since the incremental iterator returns
 				// an error when encountering intents.
-				if err := sstWriter.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
+				if err := writer.PutUnversioned(unsafeKey.Key, unsafeValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			} else {
-				if err := sstWriter.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
+				if err := writer.PutRawMVCC(unsafeKey, unsafeValue); err != nil {
 					return roachpb.BulkOpSummary{}, MVCCKey{}, errors.Wrapf(err, "adding key %s", unsafeKey)
 				}
 			}
@@ -6109,21 +6189,11 @@ func MVCCExportToSST(
 			}
 			// Export only the inner roachpb.Value, not the MVCCValue header.
 			rawValue := mvccValue.Value.RawBytes
-			if err := sstWriter.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
+			if err := writer.PutRawMVCCRangeKey(rangeKeys.AsRangeKey(v), rawValue); err != nil {
 				return roachpb.BulkOpSummary{}, MVCCKey{}, err
 			}
 		}
 		rows.BulkOpSummary.DataSize += rangeKeysSize
-	}
-
-	if rows.BulkOpSummary.DataSize == 0 {
-		// If no records were added to the sstable, skip completing it and return a
-		// nil slice – the export code will discard it anyway (based on 0 DataSize).
-		return roachpb.BulkOpSummary{}, MVCCKey{}, nil
-	}
-
-	if err := sstWriter.Finish(); err != nil {
-		return roachpb.BulkOpSummary{}, MVCCKey{}, err
 	}
 
 	return rows.BulkOpSummary, resumeKey, nil

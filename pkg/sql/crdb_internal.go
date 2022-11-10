@@ -1865,7 +1865,8 @@ CREATE TABLE crdb_internal.%s (
   distributed      BOOL,           -- whether the query is running distributed
   phase            STRING,         -- the current execution phase
   full_scan        BOOL,           -- whether the query contains a full table or index scan
-  plan_gist        STRING          -- Compressed logical plan.
+  plan_gist        STRING,         -- Compressed logical plan.
+  database         STRING          -- the database the statement was executed on
 )`
 
 func (p *planner) makeSessionsRequest(
@@ -2016,6 +2017,7 @@ func populateQueriesTable(
 				tree.NewDString(phase),
 				isFullScanDatum,
 				planGistDatum,
+				tree.NewDString(query.Database),
 			); err != nil {
 				return err
 			}
@@ -2041,6 +2043,7 @@ func populateQueriesTable(
 				tree.DNull,                             // phase
 				tree.DNull,                             // full_scan
 				tree.DNull,                             // plan_gist
+				tree.DNull,                             // database
 			); err != nil {
 				return err
 			}

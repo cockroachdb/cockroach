@@ -390,6 +390,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.create_sql_schema_telemetry_job() -> int`:                                                                            1378,
 	`crdb_internal.create_tenant(id: int) -> int`:                                                                                       1302,
 	`crdb_internal.create_tenant(id: int, name: string) -> int`:                                                                         2036,
+	`crdb_internal.create_tenant(name: string) -> int`:                                                                                  2043,
 	`crdb_internal.datums_to_bytes(anyelement...) -> bytes`:                                                                             1276,
 	`crdb_internal.decode_cluster_setting(setting: string, value: string) -> string`:                                                    1294,
 	`crdb_internal.decode_external_plan_gist(gist: string) -> string`:                                                                   355,

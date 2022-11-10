@@ -1968,6 +1968,9 @@ type queryMeta struct {
 	// The compressed plan for this query. This can converted  back into the
 	// logical plan. This field will only be populated in the EXECUTING phase.
 	planGist string
+
+	// The database the statement was executed on.
+	database string
 }
 
 // cancel cancels the query associated with this queryMeta, by closing the

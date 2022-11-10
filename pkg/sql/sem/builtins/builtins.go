@@ -4830,7 +4830,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Tenant.CreateTenant(ctx, uint64(sTenID), ""); err != nil {
+				if err := evalCtx.Tenant.CreateTenantWithID(ctx, uint64(sTenID), ""); err != nil {
 					return nil, err
 				}
 				return args[0], nil
@@ -4850,12 +4850,29 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				tenantName := tree.MustBeDString(args[1])
-				if err := evalCtx.Tenant.CreateTenant(ctx, uint64(sTenID), string(tenantName)); err != nil {
+				if err := evalCtx.Tenant.CreateTenantWithID(ctx, uint64(sTenID), string(tenantName)); err != nil {
 					return nil, err
 				}
 				return args[0], nil
 			},
-			Info:       "Creates a new tenant with the provided ID. Must be run by the System tenant.",
+			Info:       "Creates a new tenant with the provided ID and name. Must be run by the System tenant.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tenantName := tree.MustBeDString(args[0])
+				var tenantID roachpb.TenantID
+				var err error
+				if tenantID, err = evalCtx.Tenant.CreateTenant(ctx, string(tenantName)); err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(tenantID.ToUint64())), nil
+			},
+			Info:       "Creates a new tenant with the provided name. Must be run by the System tenant.",
 			Volatility: volatility.Volatile,
 		},
 	),

@@ -13,6 +13,7 @@ go_library(
         "doc.go",
         "engine.go",
         "engine_key.go",
+        "fingerprint_writer.go",
         "in_mem.go",
         "intent_interleaving_iter.go",
         "intent_reader_writer.go",

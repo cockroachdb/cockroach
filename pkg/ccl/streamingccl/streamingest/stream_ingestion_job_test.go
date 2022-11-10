@@ -227,7 +227,7 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 		srcPgURL.String())
 
 	existingTenantID := uint64(100)
-	destSysSQL.Exec(t, "SELECT crdb_internal.create_tenant($1)", existingTenantID)
+	destSysSQL.Exec(t, "SELECT crdb_internal.create_tenant($1::INT)", existingTenantID)
 	destSysSQL.ExpectErr(t, fmt.Sprintf("pq: tenant with id %d already exists", existingTenantID),
 		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", existingTenantID),
 		srcPgURL.String())

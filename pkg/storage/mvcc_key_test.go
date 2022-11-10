@@ -179,6 +179,8 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 		"logical and synthetic":  {"foo", hlc.Timestamp{Logical: 65535, Synthetic: true}, "666f6f0000000000000000000000ffff010e"},
 		"all":                    {"foo", hlc.Timestamp{WallTime: 1643550788737652545, Logical: 65535, Synthetic: true}, "666f6f0016cf10bc050557410000ffff010e"},
 	}
+
+	buf := []byte{}
 	for name, tc := range testcases {
 		t.Run(name, func(t *testing.T) {
 
@@ -234,6 +236,13 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 			decodedTS, err = decodeMVCCTimestamp(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
+
+			buf = EncodeMVCCTimestampToBuf(buf, tc.ts)
+			if expectTS == nil {
+				require.Empty(t, buf)
+			} else {
+				require.Equal(t, expectTS, buf)
+			}
 		})
 	}
 }

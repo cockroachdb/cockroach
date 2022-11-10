@@ -1,0 +1,605 @@
+# Tests MVCC export fingerprint.
+#
+# Sets up the following dataset, where x is MVCC point tombstone, o-o is MVCC
+# range tombstone, [] is intent.  We include some local timestamps, which should
+# not be export fingerprinted.
+#
+#  7 [a7]        [d7]                    [j7]    [l7]        [o7]
+#  6                      f6
+#  5          o---------------o               k5
+#  4  x   x       d4      f4  g4  x
+#  3      o-------o   e3  o-------oh3                 o---o
+#  2  a2                  f2  g2
+#  1  o---------------------------------------o
+#     a   b   c   d   e   f   g   h   i   j   k   l   m   n   o
+
+run ok
+del_range_ts k=a end=k ts=1
+put k=a ts=2 v=a2
+del k=a ts=4
+del_range_ts k=b end=d ts=3
+del k=b ts=4
+put k=d ts=4 v=d4
+put k=e ts=3 v=e3 localTs=2
+put k=f ts=2 v=f2
+put k=g ts=2 v=g2
+del_range_ts k=f end=h ts=3
+put k=f ts=4 v=f4
+put k=g ts=4 v=g4
+del_range_ts k=c end=g ts=5 localTs=4
+put k=f ts=6 v=f6
+put k=h ts=3 v=h3
+del k=h ts=4
+put k=k ts=5 v=k5 localTs=4
+del_range_ts k=m end=n ts=3 localTs=2
+with t=A
+  txn_begin ts=7
+  put k=a v=a7
+  put k=d v=d7
+  put k=j v=j7
+  put k=l v=l7
+  put k=o v=n7
+----
+del: "a": found key true
+del: "b": found key false
+del: "h": found key true
+>> at end:
+txn: "A" meta={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} lock=true stat=PENDING rts=7.000000000,0 wto=false gul=0,0
+rangekey: {a-b}/[1.000000000,0=/<empty>]
+rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {c-d}/[5.000000000,0={localTs=4.000000000,0}/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {d-f}/[5.000000000,0={localTs=4.000000000,0}/<empty> 1.000000000,0=/<empty>]
+rangekey: {f-g}/[5.000000000,0={localTs=4.000000000,0}/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {m-n}/[3.000000000,0={localTs=2.000000000,0}/<empty>]
+meta: "a"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "a"/7.000000000,0 -> /BYTES/a7
+data: "a"/4.000000000,0 -> /<empty>
+data: "a"/2.000000000,0 -> /BYTES/a2
+data: "b"/4.000000000,0 -> /<empty>
+meta: "d"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "d"/7.000000000,0 -> /BYTES/d7
+data: "d"/4.000000000,0 -> /BYTES/d4
+data: "e"/3.000000000,0 -> {localTs=2.000000000,0}/BYTES/e3
+data: "f"/6.000000000,0 -> /BYTES/f6
+data: "f"/4.000000000,0 -> /BYTES/f4
+data: "f"/2.000000000,0 -> /BYTES/f2
+data: "g"/4.000000000,0 -> /BYTES/g4
+data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/4.000000000,0 -> /<empty>
+data: "h"/3.000000000,0 -> /BYTES/h3
+meta: "j"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "j"/7.000000000,0 -> /BYTES/j7
+data: "k"/5.000000000,0 -> {localTs=4.000000000,0}/BYTES/k5
+meta: "l"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "l"/7.000000000,0 -> /BYTES/l7
+meta: "o"/0,0 -> txn={id=00000000 key=/Min pri=0.00000000 epo=0 ts=7.000000000,0 min=0,0 seq=0} ts=7.000000000,0 del=false klen=12 vlen=7 mergeTs=<nil> txnDidNotUpdateMeta=true
+data: "o"/7.000000000,0 -> /BYTES/n7
+
+# Exporting across intents will error.
+run error
+export fingerprint k=a end=z
+----
+error: (*roachpb.WriteIntentError:) conflicting intents on "a"
+
+run error
+export fingerprint k=a end=z maxIntents=100
+----
+error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j", "l", "o"
+
+run error
+export fingerprint k=a end=z maxIntents=3
+----
+error: (*roachpb.WriteIntentError:) conflicting intents on "a", "d", "j"
+
+# Export the entire dataset below the intents, with full revision history.
+run ok
+export fingerprint k=a end=z ts=6 allRevisions
+----
+export: data_size:165 fingerprint=true
+fingerprint: 17693463359975730253
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {h-k}/[1.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+# Export the full revision history, at increasing end time and then at
+# increasing start time.
+run ok
+export fingerprint k=a end=z ts=1 allRevisions
+----
+export: data_size:14 fingerprint=true
+fingerprint: 0
+export: {a-k}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=2 allRevisions
+----
+export: data_size:38 fingerprint=true
+fingerprint: 7394159293535633020
+export: {a-k}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=3 allRevisions
+----
+export: data_size:77 fingerprint=true
+fingerprint: 7213511226611827020
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {d-f}/[1.000000000,0=/<empty>]
+export: {f-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {h-k}/[1.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=4 allRevisions
+----
+export: data_size:104 fingerprint=true
+fingerprint: 12311975366333312460
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-d}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {d-f}/[1.000000000,0=/<empty>]
+export: {f-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {h-k}/[1.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=5 allRevisions
+----
+export: data_size:157 fingerprint=true
+fingerprint: 17505735789188331755
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {h-k}/[1.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=6 allRevisions
+----
+export: data_size:165 fingerprint=true
+fingerprint: 17693463359975730253
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {h-k}/[1.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=1 ts=6 allRevisions
+----
+export: data_size:151 fingerprint=true
+fingerprint: 17693463359975730253
+export: {b-c}/[3.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=2 ts=6 allRevisions
+----
+export: data_size:127 fingerprint=true
+fingerprint: 10598829871782564401
+export: {b-c}/[3.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=3 ts=6 allRevisions
+----
+export: data_size:88 fingerprint=true
+fingerprint: 10488959482011561217
+export: {c-g}/[5.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=4 ts=6 allRevisions
+----
+export: data_size:61 fingerprint=true
+fingerprint: 6869998736090988929
+export: {c-g}/[5.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=5 ts=6 allRevisions
+----
+export: data_size:8 fingerprint=true
+fingerprint: 539045325090296998
+
+run ok
+export fingerprint k=a end=z startTs=6 ts=6 allRevisions
+----
+export:  fingerprint=true
+fingerprint: 0
+
+# Export without revision history at increasing end time, then at increasing
+# start time.
+run ok
+export fingerprint k=a end=z ts=1
+----
+export:  fingerprint=true
+fingerprint: 0
+
+run ok
+export fingerprint k=a end=z ts=2
+----
+export: data_size:24 fingerprint=true
+fingerprint: 7394159293535633020
+
+run ok
+export fingerprint k=a end=z ts=3
+----
+export: data_size:24 fingerprint=true
+fingerprint: 17705510361986729108
+
+run ok
+export fingerprint k=a end=z ts=4
+----
+export: data_size:32 fingerprint=true
+fingerprint: 10270839490468725004
+
+run ok
+export fingerprint k=a end=z ts=5
+----
+export: data_size:16 fingerprint=true
+fingerprint: 2648504303020058862
+
+run ok
+export fingerprint k=a end=z ts=6
+----
+export: data_size:24 fingerprint=true
+fingerprint: 2574496015647063112
+
+run ok
+export fingerprint k=a end=z startTs=1 ts=6
+----
+export: data_size:91 fingerprint=true
+fingerprint: 5843921525122089813
+export: {b-c}/[3.000000000,0=/<empty>]
+export: {c-g}/[5.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=2 ts=6
+----
+export: data_size:91 fingerprint=true
+fingerprint: 5843921525122089813
+export: {b-c}/[3.000000000,0=/<empty>]
+export: {c-g}/[5.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=3 ts=6
+----
+export: data_size:72 fingerprint=true
+fingerprint: 5843921525122089813
+export: {c-g}/[5.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=4 ts=6
+----
+export: data_size:61 fingerprint=true
+fingerprint: 6869998736090988929
+export: {c-g}/[5.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=5 ts=6
+----
+export: data_size:8 fingerprint=true
+fingerprint: 539045325090296998
+
+run ok
+export fingerprint k=a end=z startTs=6 ts=6
+----
+export:  fingerprint=true
+fingerprint: 0
+
+# Incremental export fingerprint one timestamp at a time, with and without full revision
+# history.
+run ok
+export fingerprint k=a end=z startTs=0 ts=1 allRevisions
+----
+export: data_size:14 fingerprint=true
+fingerprint: 0
+export: {a-k}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=1 ts=2 allRevisions
+----
+export: data_size:24 fingerprint=true
+fingerprint: 7394159293535633020
+
+run ok
+export fingerprint k=a end=z startTs=2 ts=3 allRevisions
+----
+export: data_size:39 fingerprint=true
+fingerprint: 182077538345271088
+export: {b-d}/[3.000000000,0=/<empty>]
+export: {f-h}/[3.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=3 ts=4 allRevisions
+----
+export: data_size:27 fingerprint=true
+fingerprint: 14899990458252242048
+
+run ok
+export fingerprint k=a end=z startTs=4 ts=5 allRevisions
+----
+export: data_size:53 fingerprint=true
+fingerprint: 6353507799313519911
+export: {c-g}/[5.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=5 ts=6 allRevisions
+----
+export: data_size:8 fingerprint=true
+fingerprint: 539045325090296998
+
+run ok
+export fingerprint k=a end=z startTs=0 ts=1
+----
+export:  fingerprint=true
+fingerprint: 0
+
+run ok
+export fingerprint k=a end=z startTs=1 ts=2
+----
+export: data_size:24 fingerprint=true
+fingerprint: 7394159293535633020
+
+run ok
+export fingerprint k=a end=z startTs=2 ts=3
+----
+export: data_size:39 fingerprint=true
+fingerprint: 182077538345271088
+export: {b-d}/[3.000000000,0=/<empty>]
+export: {f-h}/[3.000000000,0=/<empty>]
+export: {m-n}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=3 ts=4
+----
+export: data_size:27 fingerprint=true
+fingerprint: 14899990458252242048
+
+run ok
+export fingerprint k=a end=z startTs=4 ts=5
+----
+export: data_size:53 fingerprint=true
+fingerprint: 6353507799313519911
+export: {c-g}/[5.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z startTs=5 ts=6
+----
+export: data_size:8 fingerprint=true
+fingerprint: 539045325090296998
+
+# TargetSize returns a resume span, and allows overflow, both when export fingerprinting the
+# whole revision history and the latest version. It is not affected by
+# stopMidKey.
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=1
+----
+export: data_size:11 fingerprint=true resume="b"/0,0
+fingerprint: 3503808496681756163
+export: {a-b}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=1 stopMidKey
+----
+export: data_size:11 fingerprint=true resume="b"/0,0
+fingerprint: 3503808496681756163
+export: {a-b}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=6 targetSize=1
+----
+export: data_size:8 fingerprint=true resume="g"/0,0
+fingerprint: 539045325090296998
+
+run ok
+export fingerprint k=a end=z startTs=1 ts=6 targetSize=1
+----
+export: data_size:1 fingerprint=true resume="b"/0,0
+fingerprint: 14380066247656349095
+
+# MaxSize returns an error if exceeded without TargetSize.
+#
+# TODO(erikgrinaker): It probably doesn't make sense for this behavior to change
+# based on whether TargetSize is set or not, but keeping the existing logic for
+# now.
+run error
+export fingerprint k=a end=z ts=6 allRevisions maxSize=1
+----
+error: (*storage.ExceedMaxSizeError:) export size (3 bytes) exceeds max size (1 bytes)
+
+run error
+export fingerprint k=a end=z ts=6 allRevisions maxSize=10
+----
+error: (*storage.ExceedMaxSizeError:) export size (12 bytes) exceeds max size (10 bytes)
+
+# MaxSize with TargetSize will bail out before exceeding MaxSize, but it
+# depends on StopMidKey.
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=1 maxSize=1
+----
+export:  fingerprint=true resume="a"/0,0
+fingerprint: 0
+
+run error
+export fingerprint k=a end=z ts=6 allRevisions targetSize=10 maxSize=10
+----
+error: (*storage.ExceedMaxSizeError:) export size (12 bytes) exceeds max size (10 bytes)
+
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=10 maxSize=10 stopMidKey
+----
+export: data_size:4 fingerprint=true resume="a"/2.000000000,0
+fingerprint: 14380066247656349095
+export: a{-\x00}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=12 maxSize=12
+----
+export: data_size:11 fingerprint=true resume="b"/0,0
+fingerprint: 3503808496681756163
+export: {a-b}/[1.000000000,0=/<empty>]
+
+run error
+export fingerprint k=a end=z ts=6 allRevisions targetSize=17 maxSize=17
+----
+error: (*storage.ExceedMaxSizeError:) export size (18 bytes) exceeds max size (17 bytes)
+
+# TargetSize and MaxSize without stopMidKey will keep going to the
+# end of the key as long as MaxSize isn't exceeded.
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=4 maxSize=12
+----
+export: data_size:11 fingerprint=true resume="b"/0,0
+fingerprint: 3503808496681756163
+export: {a-b}/[1.000000000,0=/<empty>]
+
+# Hitting MaxSize right after including a range key with the same start key as
+# the exceeding point key will emit a point-sized range key, unfortunately. This
+# is also the case when we emit a covered point. However, it won't emit that
+# range key if StopMidKey is disabled.
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=3 maxSize=3 stopMidKey
+----
+export: data_size:3 fingerprint=true resume="a"/4.000000000,0
+fingerprint: 0
+export: a{-\x00}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=4 maxSize=4 stopMidKey
+----
+export: data_size:4 fingerprint=true resume="a"/2.000000000,0
+fingerprint: 14380066247656349095
+export: a{-\x00}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a end=z ts=6 allRevisions targetSize=17 maxSize=17 stopMidKey
+----
+export: data_size:17 fingerprint=true resume="b"/4.000000000,0
+fingerprint: 3503808496681756163
+export: {a-b}/[1.000000000,0=/<empty>]
+export: b{-\x00}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run error
+export fingerprint k=a end=z ts=6 allRevisions targetSize=17 maxSize=17
+----
+error: (*storage.ExceedMaxSizeError:) export size (18 bytes) exceeds max size (17 bytes)
+
+# Resuming from various bounds, with and without other options.
+run ok
+export fingerprint k=b end=k ts=6 allRevisions
+----
+export: data_size:131 fingerprint=true
+fingerprint: 11315287205977104233
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {g-h}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+export: {h-k}/[1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=bbb end=ggg startTs=2 ts=5 allRevisions
+----
+export: data_size:89 fingerprint=true
+fingerprint: 10270839490468725004
+export: {bbb-c}/[3.000000000,0=/<empty>]
+export: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+export: {d-f}/[5.000000000,0=/<empty>]
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+export: g{-gg}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=bbb end=ggg startTs=2 ts=5
+----
+export: data_size:61 fingerprint=true
+fingerprint: 9001940358411271625
+export: {bbb-c}/[3.000000000,0=/<empty>]
+export: {c-g}/[5.000000000,0=/<empty>]
+export: g{-gg}/[3.000000000,0=/<empty>]
+
+# Resuming from a specific key version.
+run ok
+export fingerprint k=a kTs=4 end=c ts=6 allRevisions
+----
+export: data_size:16 fingerprint=true
+fingerprint: 6905610633035313899
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a kTs=3 end=c ts=6 allRevisions
+----
+export: data_size:15 fingerprint=true
+fingerprint: 10972433733941915468
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a kTs=2 end=c ts=6 allRevisions
+----
+export: data_size:15 fingerprint=true
+fingerprint: 10972433733941915468
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=a kTs=1 end=c ts=6 allRevisions
+----
+export: data_size:7 fingerprint=true
+fingerprint: 8031517972374541544
+export: {a-b}/[1.000000000,0=/<empty>]
+export: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=f kTs=4 end=g ts=6 allRevisions
+----
+export: data_size:35 fingerprint=true
+fingerprint: 11595862564133433257
+export: {f-g}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=f kTs=4 end=g startTs=2 ts=4 allRevisions
+----
+export: data_size:10 fingerprint=true
+fingerprint: 12786325629015412061
+export: {f-g}/[3.000000000,0=/<empty>]
+
+run ok
+export fingerprint k=f kTs=3 end=g startTs=2 ts=4 allRevisions
+----
+export: data_size:2 fingerprint=true
+fingerprint: 0
+export: {f-g}/[3.000000000,0=/<empty>]
+
+# Resuming from a specific key version at or below startTS.
+run ok
+export fingerprint k=a kTs=2 end=c startTs=2 ts=6
+----
+export: data_size:3 fingerprint=true
+fingerprint: 8031517972374541544
+export: {b-c}/[3.000000000,0=/<empty>]
