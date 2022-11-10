@@ -7,8 +7,10 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/enum",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
@@ -28,12 +30,19 @@ go_library(
 go_test(
     name = "slinstance_test",
     size = "small",
-    srcs = ["slinstance_test.go"],
+    srcs = [
+        "slinstance_internal_test.go",
+        "slinstance_test.go",
+    ],
     args = ["-test.timeout=55s"],
+    embed = [":slinstance"],
     deps = [
-        ":slinstance",
         "//pkg/clusterversion",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/typedesc",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",

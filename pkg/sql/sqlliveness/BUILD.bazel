@@ -8,6 +8,9 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/metric",

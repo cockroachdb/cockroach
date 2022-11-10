@@ -18,8 +18,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -121,6 +123,7 @@ type Instance struct {
 	// sessionEvents gets notified of some session state changes.
 	sessionEvents SessionEventListener
 	storage       Writer
+	currentRegion []byte
 	ttl           func() time.Duration
 	hb            func() time.Duration
 	testKnobs     sqlliveness.TestingKnobs
@@ -197,6 +200,7 @@ func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession boo
 // createSession tries until it can create a new session and returns an error
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
+	// TODO(jaylim-crl): Check l.currentRegion. Use enum.One if that is empty.
 	id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
 	if err != nil {
 		return nil, err
@@ -403,6 +407,42 @@ func (l *Instance) Start(ctx context.Context) {
 	// Detach from ctx's cancelation.
 	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
 	_ = l.stopper.RunAsyncTask(taskCtx, "slinstance", l.heartbeatLoop)
+}
+
+// SetRegionalData sets the regional data for the instance struct.
+func (l *Instance) SetRegionalData(
+	locality roachpb.Locality, mrEnumTyp sqlliveness.TypeDescriptor,
+) error {
+	if mrEnumTyp == nil {
+		return nil
+	}
+	// If we can fetch the primary region's name, it is guaranteed that
+	// mrEnumTyp is a multi-region enum.
+	primaryRegion, err := mrEnumTyp.PrimaryRegionName()
+	if err != nil {
+		return err
+	}
+	// The primary region in the enum will be used if no region is provided
+	// through locality.
+	currentRegion, _ := locality.Find("region")
+	if currentRegion == "" {
+		currentRegion = primaryRegion.String()
+	}
+	for _, member := range mrEnumTyp.TypeDesc().EnumMembers {
+		// These are regions that are not ready yet (i.e. in the process of
+		// adding/removing).
+		if member.Capability == descpb.TypeDescriptor_EnumMember_READ_ONLY {
+			continue
+		}
+		// If we couldn't even find the primary region in the enum descriptor,
+		// we'd have to assume that the regional data isn't ready, and fallback
+		// to no region.
+		if member.LogicalRepresentation == currentRegion {
+			l.currentRegion = member.PhysicalRepresentation
+			break
+		}
+	}
+	return nil
 }
 
 // Session returns a live session id. For each Sqlliveness instance the
