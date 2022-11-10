@@ -11,8 +11,6 @@
 package tabledesc
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
@@ -226,7 +224,7 @@ func mutationState(mutation catalog.Mutation) (ret descpb.DescriptorMutation_Sta
 	} else if mutation.Merging() {
 		ret = descpb.DescriptorMutation_MERGING
 	} else {
-		panic(fmt.Sprintf("Unknown mutation state"))
+		panic("Unknown mutation state")
 	}
 	return ret
 }
