@@ -2357,6 +2357,8 @@ var payloadsForTraceGeneratorType = types.MakeLabeledTuple(
 // payloadsForTraceGenerator is a value generator that iterates over all payloads
 // of a given Trace.
 type payloadsForTraceGenerator struct {
+	traceID uint64
+	planner eval.Planner
 	// Iterator over all internal rows of a query that retrieves all payloads
 	// of a trace.
 	it eval.InternalRows
@@ -2377,26 +2379,7 @@ func makePayloadsForTraceGenerator(
 		)
 	}
 	traceID := uint64(*(args[0].(*tree.DInt)))
-
-	const query = `WITH spans AS(
-									SELECT span_id
-  	 							FROM crdb_internal.node_inflight_trace_spans
- 		 							WHERE trace_id = $1
-									) SELECT *
-										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
-
-	it, err := evalCtx.Planner.QueryIteratorEx(
-		ctx,
-		"crdb_internal.payloads_for_trace",
-		sessiondata.NoSessionDataOverride,
-		query,
-		traceID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &payloadsForTraceGenerator{it: it}, nil
+	return &payloadsForTraceGenerator{traceID: traceID, planner: evalCtx.Planner}, nil
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
@@ -2405,26 +2388,52 @@ func (p *payloadsForTraceGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the tree.ValueGenerator interface.
-func (p *payloadsForTraceGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (p *payloadsForTraceGenerator) Start(ctx context.Context, _ *kv.Txn) error {
+	const query = `WITH spans AS(
+									SELECT span_id
+  	 							FROM crdb_internal.node_inflight_trace_spans
+ 		 							WHERE trace_id = $1
+									) SELECT *
+										FROM spans, LATERAL crdb_internal.payloads_for_span(spans.span_id)`
+
+	it, err := p.planner.QueryIteratorEx(
+		ctx,
+		"crdb_internal.payloads_for_trace",
+		sessiondata.NoSessionDataOverride,
+		query,
+		p.traceID,
+	)
+	if err != nil {
+		return err
+	}
+	p.it = it
 	return nil
 }
 
 // Next implements the tree.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Next(ctx context.Context) (bool, error) {
+	if p.it == nil {
+		return false, errors.AssertionFailedf("Start must be called before Next")
+	}
 	return p.it.Next(ctx)
 }
 
 // Values implements the tree.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Values() (tree.Datums, error) {
+	if p.it == nil {
+		return nil, errors.AssertionFailedf("Start must be called before Values")
+	}
 	return p.it.Cur(), nil
 }
 
 // Close implements the tree.ValueGenerator interface.
 func (p *payloadsForTraceGenerator) Close(_ context.Context) {
-	err := p.it.Close()
-	if err != nil {
-		// TODO(angelapwen, yuzefovich): The iterator's error should be surfaced here.
-		return
+	if p.it != nil {
+		err := p.it.Close()
+		if err != nil {
+			// TODO(angelapwen, yuzefovich): The iterator's error should be surfaced here.
+			return
+		}
 	}
 }
 

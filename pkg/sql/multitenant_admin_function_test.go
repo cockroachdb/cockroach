@@ -182,13 +182,15 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER TABLE x SCATTER",
-			query: "ALTER TABLE t SCATTER;",
+			desc:         "ALTER TABLE x SCATTER",
+			query:        "ALTER TABLE t SCATTER;",
+			errorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
-			desc:  "ALTER INDEX x SCATTER",
-			setup: "CREATE INDEX idx on t(i);",
-			query: "ALTER INDEX t@idx SCATTER;",
+			desc:         "ALTER INDEX x SCATTER",
+			setup:        "CREATE INDEX idx on t(i);",
+			query:        "ALTER INDEX t@idx SCATTER;",
+			errorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
 			desc:  "CONFIGURE ZONE",

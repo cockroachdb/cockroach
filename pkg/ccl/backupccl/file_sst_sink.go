@@ -12,10 +12,8 @@ import (
 	"context"
 	"fmt"
 	io "io"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -27,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/kr/pretty"
@@ -43,12 +40,6 @@ type sstSinkConf struct {
 type fileSSTSink struct {
 	dest cloud.ExternalStorage
 	conf sstSinkConf
-
-	queue []exportedSpan
-	// queueCap is the maximum byte size that the queue can grow to.
-	queueCap int64
-	// queueSize is the current byte size of the queue.
-	queueSize int
 
 	sst     storage.SSTWriter
 	ctx     context.Context
@@ -68,46 +59,10 @@ type fileSSTSink struct {
 		sizeFlushes int
 		spanGrows   int
 	}
-
-	memAcc struct {
-		ba            *mon.BoundAccount
-		reservedBytes int64
-	}
 }
 
-func makeFileSSTSink(
-	ctx context.Context, conf sstSinkConf, dest cloud.ExternalStorage, backupMem *mon.BoundAccount,
-) (*fileSSTSink, error) {
-	s := &fileSSTSink{conf: conf, dest: dest}
-	s.memAcc.ba = backupMem
-
-	// Reserve memory for the file buffer. Incrementally reserve memory in chunks
-	// upto a maximum of the `SmallFileBuffer` cluster setting value. If we fail
-	// to grow the bound account at any stage, use the buffer size we arrived at
-	// prior to the error.
-	incrementSize := int64(32 << 20)
-	maxSize := backupbase.SmallFileBuffer.Get(s.conf.settings)
-	for {
-		if s.queueCap >= maxSize {
-			break
-		}
-
-		if incrementSize > maxSize-s.queueCap {
-			incrementSize = maxSize - s.queueCap
-		}
-
-		if err := s.memAcc.ba.Grow(ctx, incrementSize); err != nil {
-			log.Infof(ctx, "failed to grow file queue by %d bytes, running backup with queue size %d bytes: %+v", incrementSize, s.queueCap, err)
-			break
-		}
-		s.queueCap += incrementSize
-	}
-	if s.queueCap == 0 {
-		return nil, errors.New("failed to reserve memory for fileSSTSink queue")
-	}
-
-	s.memAcc.reservedBytes += s.queueCap
-	return s, nil
+func makeFileSSTSink(conf sstSinkConf, dest cloud.ExternalStorage) *fileSSTSink {
+	return &fileSSTSink{conf: conf, dest: dest}
 }
 
 func (s *fileSSTSink) Close() error {
@@ -118,61 +73,13 @@ func (s *fileSSTSink) Close() error {
 	if s.cancel != nil {
 		s.cancel()
 	}
-
-	// Release the memory reserved for the file buffer.
-	s.memAcc.ba.Shrink(s.ctx, s.memAcc.reservedBytes)
-	s.memAcc.reservedBytes = 0
 	if s.out != nil {
 		return s.out.Close()
 	}
 	return nil
 }
 
-func (s *fileSSTSink) sortQueue() {
-	sort.Slice(s.queue, func(i, j int) bool {
-		return s.queue[i].metadata.Span.Key.Compare(s.queue[j].metadata.Span.Key) < 0
-	})
-}
-
-// push pushes one returned backup file into the sink. Returned files can arrive
-// out of order, but must be written to an underlying file in-order or else a
-// new underlying file has to be opened. The queue allows buffering up files and
-// sorting them before pushing them to the underlying file to try to avoid this.
-// When the queue length or sum of the data sizes in it exceeds thresholds the
-// queue is sorted and the first half is flushed.
-func (s *fileSSTSink) push(ctx context.Context, resp exportedSpan) error {
-	s.queue = append(s.queue, resp)
-	s.queueSize += len(resp.dataSST)
-
-	if s.queueSize >= int(s.queueCap) {
-		s.sortQueue()
-		// Drain the first half.
-		drain := len(s.queue) / 2
-		if drain < 1 {
-			drain = 1
-		}
-		for i := range s.queue[:drain] {
-			if err := s.write(ctx, s.queue[i]); err != nil {
-				return err
-			}
-			s.queueSize -= len(s.queue[i].dataSST)
-		}
-
-		// Shift down the remainder of the queue and slice off the tail.
-		copy(s.queue, s.queue[drain:])
-		s.queue = s.queue[:len(s.queue)-drain]
-	}
-	return nil
-}
-
 func (s *fileSSTSink) flush(ctx context.Context) error {
-	s.sortQueue()
-	for i := range s.queue {
-		if err := s.write(ctx, s.queue[i]); err != nil {
-			return err
-		}
-	}
-	s.queue = nil
 	return s.flushFile(ctx)
 }
 

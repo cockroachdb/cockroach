@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -424,7 +425,7 @@ func (b *BufferingAdder) createInitialSplits(ctx context.Context) error {
 	b.sink.currentStats.SplitWait += splitsWait
 
 	for _, splitKey := range toScatter {
-		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */)
+		resp, err := b.sink.db.AdminScatter(ctx, splitKey, 0 /* maxSize */, oppurpose.ScatterBulk)
 		if err != nil {
 			log.Warningf(ctx, "failed to scatter: %v", err)
 			continue

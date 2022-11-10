@@ -184,7 +184,7 @@ func TestTenantAuthRequest(t *testing.T) {
 	makeAdminScatterReq := func(key string) roachpb.Request {
 		s := makeSpan(key)
 		h := roachpb.RequestHeaderFromSpan(s)
-		return &roachpb.AdminScatterRequest{RequestHeader: h}
+		return &roachpb.AdminScatterRequest{RequestHeader: h, Class: roachpb.AdminScatterRequest_INGESTION}
 	}
 	makeReqs := func(reqs ...roachpb.Request) []roachpb.RequestUnion {
 		ru := make([]roachpb.RequestUnion, len(reqs))
