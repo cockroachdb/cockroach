@@ -4074,11 +4074,36 @@ func (t *logicTest) formatValues(vals []string, valsPerLine int) []string {
 	var buf bytes.Buffer
 	tw := tabwriter.NewWriter(&buf, 2, 1, 2, ' ', 0)
 
-	for line := 0; line < len(vals)/valsPerLine; line++ {
+	numLines := len(vals) / valsPerLine
+	for line := 0; line < numLines; line++ {
+		maxSubLines := 0
+		lineOffset := line * valsPerLine
+
+		// Split multi-line values into sublines to output correctly formatted rows.
+		lineSubLines := make([][]string, valsPerLine)
 		for i := 0; i < valsPerLine; i++ {
-			fmt.Fprintf(tw, "%s\t", vals[line*valsPerLine+i])
+			cellSubLines := strings.Split(vals[lineOffset+i], "\n")
+			lineSubLines[i] = cellSubLines
+			numSubLines := len(cellSubLines)
+			if numSubLines > maxSubLines {
+				maxSubLines = numSubLines
+			}
 		}
-		fmt.Fprint(tw, "\n")
+
+		for j := 0; j < maxSubLines; j++ {
+			for i := 0; i < len(lineSubLines); i++ {
+				cellSubLines := lineSubLines[i]
+				// If a value's #sublines < #maxSubLines, an empty cell (just a "\t") is written to preserve columns.
+				if j < len(cellSubLines) {
+					cellSubLine := cellSubLines[j]
+					// Replace tabs with spaces to prevent them from being interpreted by tabwriter.
+					cellSubLine = strings.ReplaceAll(cellSubLine, "\t", "  ")
+					fmt.Fprint(tw, cellSubLine)
+				}
+				fmt.Fprint(tw, "\t")
+			}
+			fmt.Fprint(tw, "\n")
+		}
 	}
 	_ = tw.Flush()
 
