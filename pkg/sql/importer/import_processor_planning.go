@@ -47,7 +47,7 @@ func distImport(
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
-	alwaysFlushProgress bool,
+	testingKnobs importTestingKnobs,
 	procsPerNode int,
 ) (roachpb.BulkOpSummary, error) {
 	dsp := execCtx.DistSQLPlanner()
@@ -153,7 +153,7 @@ func distImport(
 			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
 			accumulatedBulkSummary.Unlock()
 
-			if alwaysFlushProgress {
+			if testingKnobs.alwaysFlushJobProgress {
 				return updateJobProgress()
 			}
 		}
@@ -208,6 +208,12 @@ func distImport(
 			}
 		}
 	})
+
+	if testingKnobs.beforeRunDSP != nil {
+		if err := testingKnobs.beforeRunDSP(); err != nil {
+			return roachpb.BulkOpSummary{}, err
+		}
+	}
 
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)

@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1956,9 +1957,9 @@ func TestFailedImportGC(t *testing.T) {
 }
 
 // Verify that a failed import will clean up after itself. This means:
-//  - Delete the garbage data that it partially imported.
-//  - Delete the table descriptor for the table that was created during the
-//  import.
+//   - Delete the garbage data that it partially imported.
+//   - Delete the table descriptor for the table that was created during the
+//     import.
 func TestImportCSVStmt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2779,6 +2780,75 @@ func TestExportImportRoundTrip(t *testing.T) {
 		}
 		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT * FROM %s`, test.tbl), sqlDB.QueryStr(t, test.expected))
 	}
+}
+
+// TestImportRetriesBreakerOpenFailure tests that errors resulting from open
+// breakers on the coordinator node are retried.
+func TestImportRetriesBreakerOpenFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t, "takes >1min under race")
+
+	const nodes = 3
+	numFiles := nodes + 2
+	rowsPerFile := 1
+
+	ctx := context.Background()
+	tc := serverutils.StartNewTestCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		ExternalIODir: testutils.TestDataPath(t, "csv")}})
+	defer tc.Stopper().Stop(ctx)
+
+	aboutToRunDSP := make(chan struct{})
+	allowRunDSP := make(chan struct{})
+	for i := 0; i < tc.NumServers(); i++ {
+		tc.Server(i).JobRegistry().(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeImport: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.beforeRunDSP = func() error {
+					aboutToRunDSP <- struct{}{}
+					<-allowRunDSP
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.pk_buffer_size = '16MiB'`)
+	var tableID int64
+	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
+
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerFile)
+		fileListStr := strings.Join(testFiles.files, ", ")
+		redactedFileListStr := strings.ReplaceAll(fileListStr, "?AWS_SESSION_TOKEN=secrets", "?AWS_SESSION_TOKEN=redacted")
+		query := fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, fileListStr)
+		sqlDB.Exec(t, query)
+		return jobutils.VerifySystemJob(t, sqlDB, 0, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
+			Username:      security.RootUserName(),
+			Description:   fmt.Sprintf(`IMPORT INTO defaultdb.public.t(a, b) CSV DATA (%s)`, redactedFileListStr),
+			DescriptorIDs: []descpb.ID{descpb.ID(tableID)},
+		})
+	})
+
+	// On the first attempt, we trip the node 3 breaker between distsql planning
+	// and actually running the plan.
+	<-aboutToRunDSP
+	breaker := tc.Server(0).DistSQLServer().(*distsql.ServerImpl).PodNodeDialer.GetCircuitBreaker(roachpb.NodeID(3), rpc.DefaultClass)
+	breaker.Break()
+	allowRunDSP <- struct{}{}
+
+	// The failure above should be retried. We expect this to succeed even if we
+	// don't reset the breaker because node 3 should no longer be included in
+	// the plan.
+	<-aboutToRunDSP
+	allowRunDSP <- struct{}{}
+	require.NoError(t, g.Wait())
 }
 
 // TODO(adityamaru): Tests still need to be added incrementally as
