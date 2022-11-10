@@ -247,6 +247,7 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 	desc.mutationCache = newMutationCache(desc.TableDesc())
 	desc.indexCache = newIndexCache(desc.TableDesc(), desc.mutationCache)
 	desc.columnCache = newColumnCache(desc.TableDesc(), desc.mutationCache)
+	desc.constraintCache = newConstraintCache(desc.TableDesc(), desc.mutationCache)
 
 	desc.allChecks = make([]descpb.TableDescriptor_CheckConstraint, len(tbl.Checks))
 	for i, c := range tbl.Checks {
