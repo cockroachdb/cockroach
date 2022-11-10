@@ -354,4 +354,3 @@ statement ok
 use db1;
 REASSIGN OWNED BY testuser TO testuser2;
 
-

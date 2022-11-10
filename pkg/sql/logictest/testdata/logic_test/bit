@@ -16,13 +16,13 @@ SHOW CREATE TABLE bits
 ----
 table_name  create_statement
 bits        CREATE TABLE public.bits (
-            a BIT NULL,
-            b BIT(4) NULL,
-            c VARBIT NULL,
-            d VARBIT(4) NULL,
-            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT bits_pkey PRIMARY KEY (rowid ASC)
-)
+              a BIT NULL,
+              b BIT(4) NULL,
+              c VARBIT NULL,
+              d VARBIT(4) NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT bits_pkey PRIMARY KEY (rowid ASC)
+            )
 
 subtest bit_fixed1
 
@@ -266,9 +266,9 @@ query T
 SELECT create_statement FROM [SHOW CREATE obitsa]
 ----
 CREATE TABLE public.obitsa (
-   x VARBIT(20)[] NULL,
-   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-   CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC)
+  x VARBIT(20)[] NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC)
 )
 
 # Check unindexed ordering.

@@ -11,13 +11,13 @@ SHOW CREATE TABLE aliases
 ----
 table_name  create_statement
 aliases     CREATE TABLE public.aliases (
-            a OID NULL,
-            b NAME NULL,
-            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT aliases_pkey PRIMARY KEY (rowid ASC),
-            FAMILY "primary" (a, rowid),
-            FAMILY fam_1_b (b)
-)
+              a OID NULL,
+              b NAME NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT aliases_pkey PRIMARY KEY (rowid ASC),
+              FAMILY "primary" (a, rowid),
+              FAMILY fam_1_b (b)
+            )
 
 statement ok
 INSERT INTO aliases VALUES (100, 'abc')
