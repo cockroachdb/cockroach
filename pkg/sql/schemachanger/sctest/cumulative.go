@@ -15,6 +15,9 @@ import (
 	gosql "database/sql"
 	"flag"
 	"fmt"
+	"math"
+	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -37,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -44,42 +48,517 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type stageExecType int
+
+const (
+	_                 stageExecType = iota
+	stageExecuteQuery stageExecType = 1
+	stageExecuteStmt  stageExecType = 2
+)
+
+// stageExecStmt a statement that will be executed during a given stage,
+// including any expected errors from this statement or any schema change
+// running concurrently.
+type stageExecStmt struct {
+	execType               stageExecType
+	stmts                  []string
+	expectedOutput         string
+	observedOutput         string
+	schemaChangeErrorRegex *regexp.Regexp
+}
+
+// HasSchemaChangeError indicates if a schema change error will be observed,
+// if the current DML statement is executed.
+func (e *stageExecStmt) HasSchemaChangeError() bool {
+	return e.schemaChangeErrorRegex != nil
+}
+
+// stageKeyOrdinalLatest targets the latest ordinal in a stage.
+const stageKeyOrdinalLatest = math.MaxUint16
+
+// stageKey represents a phase and stage range to target (in an
+// inclusive manner).
+type stageKey struct {
+	minOrdinal int
+	maxOrdinal int
+	phase      scop.Phase
+}
+
+// makeStageKey constructs a stage key targeting a single ordinal.
+func makeStageKey(phase scop.Phase, ordinal int) stageKey {
+	return stageKey{
+		phase:      phase,
+		minOrdinal: ordinal,
+		maxOrdinal: ordinal,
+	}
+}
+
+// AsInt converts the stage index into a unique numeric integer.
+func (s *stageKey) AsInt() int {
+	// Assuming we never have plans with more than 1000 stages per-phase.
+	return (int(s.phase) * 1000) + s.minOrdinal
+}
+
+// String implements fmt.Stringer
+func (s *stageKey) String() string {
+	if s.minOrdinal == s.maxOrdinal {
+		return fmt.Sprintf("(phase = %s stageOrdinal=%d)",
+			s.phase, s.minOrdinal)
+	}
+	return fmt.Sprintf("(phase = %s stageMinOrdinal=%d stageMaxOrdinal=%d),",
+		s.phase, s.minOrdinal, s.maxOrdinal)
+}
+
+// IsEmpty detects if a stage key is empty.
+func (s *stageKey) IsEmpty() bool {
+	return s.phase == 0
+}
+
+type stageKeyEntry struct {
+	stageKey
+	stmt *stageExecStmt
+}
+
+// stageExecStmtMap maps statements that should be executed based on a given
+// stage. This function also tracks output that should be used for rewrites.
+type stageExecStmtMap struct {
+	entries    []stageKeyEntry
+	usedMap    map[*stageExecStmt]struct{}
+	rewriteMap map[string]*stageExecStmt
+}
+
+func makeStageExecStmtMap() *stageExecStmtMap {
+	return &stageExecStmtMap{
+		usedMap:    make(map[*stageExecStmt]struct{}),
+		rewriteMap: make(map[string]*stageExecStmt),
+	}
+}
+
+// getExecStmts gets the statements to be used for a given phase and range
+// of stages.
+func (m *stageExecStmtMap) getExecStmts(targetKey stageKey) []*stageExecStmt {
+	var stmts []*stageExecStmt
+	if targetKey.minOrdinal != targetKey.maxOrdinal {
+		panic(fmt.Sprintf("only a single ordinal key can be looked up %v ",
+			targetKey))
+	}
+	for _, key := range m.entries {
+		if key.stageKey.phase == targetKey.phase &&
+			targetKey.minOrdinal >= key.stageKey.minOrdinal &&
+			targetKey.minOrdinal <= key.stageKey.maxOrdinal {
+			stmts = append(stmts, key.stmt)
+		}
+	}
+	return stmts
+}
+
+// AssertMapIsUsed asserts that all injected DML statements injected
+// at various stages.
+func (m *stageExecStmtMap) AssertMapIsUsed(t *testing.T) {
+	if len(m.entries) != len(m.usedMap) {
+		for _, entry := range m.entries {
+			if _, ok := m.usedMap[entry.stmt]; !ok {
+				t.Logf("Missing stage: %v of type %d", entry.stageKey, entry.stmt.execType)
+			}
+		}
+	}
+	require.Equal(t, len(m.usedMap), len(m.entries), "All declared entries was not used")
+}
+
+// GetInjectionRanges gets a set of ranges that should have DML statements injected.
+// This function will return the set of ranges where we will generate spans of
+// statements that can be executed without any errors, until the first
+// schema change error is hit.
+// For example if we have the following DML statements concurrently with
+// schema changes:
+// 1) Statement A from phases 1:14 that will fail.
+// 2) Statement B from phases 15:16 where the schema change will fail.
+// We are going to generate the following runs of statements to inject:
+//  1. 1:14 with statement A
+//  2. 15:15 with statement B
+//  3. 16:16 with statement B
+//
+// For each run the original DDL (schema change will be executed) with the
+// DML statements from the given ranges.
+func (m *stageExecStmtMap) GetInjectionRanges(
+	totalPostCommit int, totalPostCommitNonRevertible int,
+) []stageKey {
+	var start stageKey
+	var end stageKey
+	var result []stageKey
+
+	// First split any ranges that have schema change errors to have their own
+	// entries. i.e. If stages 1 to N will generate schema change errors due to
+	// some statement, we need to have one entry for each one. Additionally, convert
+	// any latest ordinal values, to actual values.
+	var forcedSplitEntries []stageKeyEntry
+	for _, key := range m.entries {
+		if key.stmt.execType != stageExecuteStmt {
+			continue
+		}
+		if key.maxOrdinal == stageKeyOrdinalLatest {
+			switch key.phase {
+			case scop.PostCommitPhase:
+				key.maxOrdinal = totalPostCommit
+			case scop.PostCommitNonRevertiblePhase:
+				key.maxOrdinal = totalPostCommitNonRevertible
+			default:
+				panic("unknown phase type for latest")
+			}
+		}
+		if !key.stmt.HasSchemaChangeError() {
+			forcedSplitEntries = append(forcedSplitEntries, key)
+		} else {
+			for i := key.minOrdinal; i <= key.maxOrdinal; i++ {
+				forcedSplitEntries = append(forcedSplitEntries,
+					stageKeyEntry{
+						stageKey: stageKey{
+							minOrdinal: i,
+							maxOrdinal: i,
+							phase:      key.phase,
+						},
+						stmt: key.stmt,
+					},
+				)
+			}
+		}
+	}
+	// Next loop over those split entries, and try and generate runs until we
+	// hit a schema change error or until we run out of statements.
+	for i, key := range forcedSplitEntries {
+		addEntry := func() {
+			keyRange := stageKey{
+				minOrdinal: start.minOrdinal,
+				maxOrdinal: end.maxOrdinal,
+				phase:      end.phase,
+			}
+			result = append(result, keyRange)
+		}
+		if !key.stmt.HasSchemaChangeError() &&
+			start.IsEmpty() {
+			// If we see a schema change error, and no other statements were executed
+			// earlier, then this is an entry on its own.
+			start = key.stageKey
+			end = key.stageKey
+		} else if !start.IsEmpty() &&
+			(key.stmt.HasSchemaChangeError() ||
+				(key.phase != start.phase)) {
+			// If we already have a start, and we either hit a schema change error
+			// or separate phase, then we need to emit a new entry.
+			setStart := true
+			if (key.phase == start.phase &&
+				!key.stmt.HasSchemaChangeError()) ||
+				start.IsEmpty() {
+				setStart = false
+				end = key.stageKey
+				if start.IsEmpty() {
+					start = end
+				}
+			}
+			addEntry()
+			start, end = stageKey{}, stageKey{}
+			if setStart {
+				start = key.stageKey
+				end = key.stageKey
+				// If we are forced to emit an entry because of a phase change,
+				// then the current entry may need to be added if a schemchange
+				// error exists,
+				if key.stmt.HasSchemaChangeError() {
+					addEntry()
+					start, end = stageKey{}, stageKey{}
+				}
+			}
+		} else {
+			end = key.stageKey
+			// If the start is empty, then we had a schema change error on this
+			// entry already, so just added it directly.
+			if start.IsEmpty() {
+				start = end
+				addEntry()
+				start, end = stageKey{}, stageKey{}
+			}
+		}
+		// No matter what for the last entry always emit an entry
+		// if a start and end were set.
+		if i == len(forcedSplitEntries)-1 && !start.IsEmpty() {
+			addEntry()
+		}
+	}
+	return result
+}
+
+// ParseStageQuery parses a stage-query statement.
+func (m *stageExecStmtMap) ParseStageQuery(t *testing.T, d *datadriven.TestData) {
+	m.parseStageCommon(t, d, stageExecuteQuery)
+}
+
+// ParseStageExec parses a stage-exec statement.
+func (m *stageExecStmtMap) ParseStageExec(t *testing.T, d *datadriven.TestData) {
+	m.parseStageCommon(t, d, stageExecuteStmt)
+}
+
+// parseStageCommon common fields between stage-exec and stage-query, which
+// support the following keys:
+//   - phase - The phase in which this statement/query should be injected, of the
+//     string scop.Phase.
+//   - stage / stageStart / stageEnd - The ordinal for the stage where this
+//     statement should be injected. stageEnd accepts the special value
+//     latest which will map to the highest observed stage.
+//   - statements can refer to builtin variable names with a $
+//   - $stageKey - A unique identifier for stages and phases
+//   - $successfulStageCount - Number of stages of the that have been successfully
+//     executed with injections.
+func (m *stageExecStmtMap) parseStageCommon(
+	t *testing.T, d *datadriven.TestData, execType stageExecType,
+) {
+	var key stageKey
+	var schemaChangeErrorRegex *regexp.Regexp
+	stmts := strings.Split(d.Input, ";")
+	require.NotEmpty(t, stmts)
+	// Remove any trailing empty lines.
+	if stmts[len(stmts)-1] == "" {
+		stmts = stmts[0 : len(stmts)-1]
+	}
+	for _, cmdArgs := range d.CmdArgs {
+		switch cmdArgs.Key {
+		case "phase":
+			found := false
+			for i := scop.EarliestPhase; i <= scop.LatestPhase; i++ {
+				if cmdArgs.Vals[0] == i.String() {
+					key.phase = i
+					found = true
+					break
+				}
+			}
+			require.Truef(t, found, "invalid phase name %s", cmdArgs.Key)
+			if !found {
+				panic("phase not mapped")
+			}
+		case "stage":
+			// Detect ranges, otherwise we are looking at single value.
+			if strings.Contains(cmdArgs.Vals[0], ":") {
+				rangeVals := strings.Split(cmdArgs.Vals[0], ":")
+				key.minOrdinal = 1
+				key.maxOrdinal = stageKeyOrdinalLatest
+				if len(rangeVals) >= 1 && len(rangeVals[0]) > 0 {
+					ordinal, err := strconv.Atoi(rangeVals[0])
+					require.Greater(t, ordinal, 0, "minimum ordinal is zero")
+					require.NoError(t, err)
+					key.minOrdinal = ordinal
+				}
+				if len(rangeVals) == 2 && len(rangeVals[1]) > 0 {
+					ordinal, err := strconv.Atoi(rangeVals[1])
+					require.Greater(t, ordinal, 0, "minimum ordinal is zero")
+					require.NoError(t, err)
+					require.GreaterOrEqualf(t, key.maxOrdinal, key.minOrdinal, "ordinals range is invalid")
+					key.maxOrdinal = ordinal
+				}
+			} else {
+				ordinal, err := strconv.Atoi(cmdArgs.Vals[0])
+				require.Greater(t, ordinal, 0, "minimum ordinal is zero")
+				require.NoError(t, err)
+				key.minOrdinal = ordinal
+				key.maxOrdinal = ordinal
+			}
+		case "schemaChangeExecError":
+			schemaChangeErrorRegex = regexp.MustCompile(strings.Join(cmdArgs.Vals, " "))
+		default:
+			require.Failf(t, "unknown key encountered", "key was %s", cmdArgs.Key)
+		}
+	}
+	entry := stageKeyEntry{
+		stageKey: key,
+		stmt: &stageExecStmt{
+			execType:               execType,
+			stmts:                  stmts,
+			observedOutput:         "",
+			expectedOutput:         d.Expected,
+			schemaChangeErrorRegex: schemaChangeErrorRegex,
+		},
+	}
+	m.entries = append(m.entries, entry)
+	m.rewriteMap[d.Pos] = entry.stmt
+}
+
+// GetExpectedOutputForPos returns the expected output for a given line,
+// in rewrite mode this is updated.
+func (m *stageExecStmtMap) GetExpectedOutputForPos(pos string) string {
+	return m.rewriteMap[pos].expectedOutput
+}
+
+type execInjectionCallback func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int) []*stageExecStmt
+
+type stageExecVariables struct {
+	successfulStageCount int
+	stage                stageKey
+}
+
+// Exec executes the statements for given stage and validates the output.
+func (e *stageExecStmt) Exec(
+	t *testing.T, runner *sqlutils.SQLRunner, stageVariables *stageExecVariables, rewrite bool,
+) {
+	for idx, stmt := range e.stmts {
+		// Skip empty statements.
+		if len(stmt) == 0 {
+			continue
+		}
+		// Bind any variables for the statement.
+		boundSQL := os.Expand(stmt, func(s string) string {
+			switch s {
+			case "successfulStageCount":
+				return strconv.Itoa(stageVariables.successfulStageCount)
+			case "stageKey":
+				return strconv.Itoa(stageVariables.stage.AsInt() * 1000)
+			default:
+				t.Fatalf("unknown variable name %s", s)
+			}
+			return ""
+		})
+		if e.execType == stageExecuteStmt {
+			_, err := runner.DB.ExecContext(context.Background(), boundSQL)
+			if (e.expectedOutput == "" ||
+				idx != len(e.stmts)-1) && err != nil {
+				if !rewrite {
+					t.Fatalf("unexpected error executing query %v", err)
+				}
+				e.expectedOutput = err.Error()
+			} else if err != nil {
+				errorMatches := testutils.IsError(err, strings.TrimSuffix(e.expectedOutput, "\n"))
+				if !errorMatches {
+					if !rewrite {
+						require.Truef(t,
+							errorMatches,
+							"unexpected error got: %v expected %v",
+							err,
+							e.expectedOutput)
+					}
+					e.expectedOutput = err.Error()
+				}
+			}
+		} else {
+			var expectedQueryResult [][]string
+			for _, expectedRow := range strings.Split(
+				strings.TrimSuffix(e.expectedOutput, "\n"),
+				"\n") {
+				expectRowArray := strings.Split(expectedRow, ",")
+				expectedQueryResult = append(expectedQueryResult, expectRowArray)
+			}
+			results := runner.QueryStr(t, boundSQL)
+			if !reflect.DeepEqual(results, expectedQueryResult) {
+				if !rewrite {
+					t.Fatalf("query '%s': expected:\n%v\ngot:\n%v\n",
+						stmt, sqlutils.MatrixToStr(expectedQueryResult), sqlutils.MatrixToStr(results))
+				}
+				e.expectedOutput = sqlutils.MatrixToStr(results)
+			}
+		}
+	}
+}
+
+// GetInjectionCallback gets call back that will inject statements based on a
+// given stage.
+func (m *stageExecStmtMap) GetInjectionCallback(
+	t *testing.T, rewrite bool,
+) (execInjectionCallback, error) {
+	return func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int) []*stageExecStmt {
+		execStmts := m.getExecStmts(stage)
+		for _, execStmt := range execStmts {
+			m.usedMap[execStmt] = struct{}{}
+			execStmt.Exec(t, runner, &stageExecVariables{
+				successfulStageCount: successfulStageCount,
+				stage:                stage,
+			}, rewrite)
+		}
+		return execStmts
+	}, nil
+}
+
 // cumulativeTest is a foundational helper for building tests over the
 // datadriven format used by this package. This style of test will call
 // the passed function for each test directive in the file. The setup
 // statements passed to the function will be all statements from all
 // previous test and setup blocks combined.
+// To support injection of statements and rewriting the cumulative function
+// will go through the file twice using the data driven functions:
+//
+//  1. The first pass will collect all the stage-exec/stage-query statements,
+//     setup commands. Then executing the test statement and setup statements
+//     via the tf callback. The callback can if the rewrite is enabled update
+//     the expected output inside stageExecStmtMap (see stageExecStmt.Exec).
+//
+//  2. The second pass will for any stage-exec/stage-query functions look up
+//     the output using stageExecStmtMap.GetExpectedOutputForPos and return
+//     it, only when rewrite is enabled.
 func cumulativeTest(
 	t *testing.T,
 	relPath string,
-	tf func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement),
+	tf func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, stageExecMap *stageExecStmtMap),
 ) {
 	skip.UnderStress(t)
 	skip.UnderRace(t)
 	path := testutils.RewritableDataPath(t, relPath)
 	var setup []parser.Statement
-	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-		stmts, err := parser.Parse(d.Input)
-		require.NoError(t, err)
-		require.NotEmpty(t, stmts)
+	stageExecMap := makeStageExecStmtMap()
+	rewrite := false
+	var testStmts parser.Statements
+	var lines []string
+	numTestStmts := 0
 
+	// First pass collect stage-exec/stage-query/setup commands and execute them
+	// test once the test command is encountered. Only a single test command is
+	// allowed via an assertion which guarantees all others appear first.
+	datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+		// Assert that only one test statement shows up and nothing can follow it
+		// afterwards.
+		require.Zero(t, numTestStmts, "only one test command per-test, "+
+			"and it must be the last one.")
 		switch d.Cmd {
 		case "setup":
-			// no-op
+			stmts, err := parser.Parse(d.Input)
+			setup = append(setup, stmts...)
+			require.NoError(t, err)
+			require.NotEmpty(t, stmts)
+		// no-op
+		case "stage-exec":
+			// DML injected statements will only be executed on cumalative tests,
+			// for end-to-end tests these are fully ignored.
+			stageExecMap.ParseStageExec(t, d)
+		case "stage-query":
+			stageExecMap.ParseStageQuery(t, d)
 		case "test":
-			var lines []string
+			stmts, err := parser.Parse(d.Input)
+			require.NoError(t, err)
+			require.NotEmpty(t, stmts)
+			testStmts = stmts
 			for _, stmt := range stmts {
 				lines = append(lines, stmt.SQL)
 			}
-			t.Run(strings.Join(lines, "; "), func(t *testing.T) {
-				tf(t, path, d.Rewrite, setup, stmts)
-			})
+			rewrite = d.Rewrite
+			numTestStmts++
+			tf(t, path, rewrite, setup, testStmts, stageExecMap)
 		default:
-			return fmt.Sprintf("unknown command: %s", d.Cmd)
+			t.Fatalf("unknown command type %s", d.Cmd)
 		}
-		setup = append(setup, stmts...)
 		return d.Expected
 	})
+	// Run through and recover the observed output for statements.
+	if rewrite {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			// Retrieve the generated output from the previous execution in the
+			// rewrite mode of DML injection. We are going to the store the
+			// observed output based on the line number and file names for the
+			// stage-exec and stage-query commands.
+			case "stage-exec":
+				fallthrough
+			case "stage-query":
+				return stageExecMap.GetExpectedOutputForPos(d.Pos)
+			}
+			// cumlativeTest will rewrite only the stage-exec and stage-query commands,
+			// all others are rewritten by the end-to-end tests.
+			return d.Expected
+		})
+	}
 }
 
 // TODO(ajwerner): For all the non-rollback variants, we'd really actually
@@ -102,7 +581,7 @@ func Rollback(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	var testRollbackCase func(
 		t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, ord, n int,
 	)
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
 		n := countRevertiblePostCommitStages(t, setup, stmts)
 		if n == 0 {
 			t.Logf("test case has no revertible post-commit stages, skipping...")
@@ -217,7 +696,7 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	var testPauseCase func(
 		t *testing.T, setup, stmts []parser.Statement, ord int,
 	)
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
 		countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		if n == 0 {
@@ -294,6 +773,95 @@ func Pause(t *testing.T, relPath string, newCluster NewClusterFunc) {
 	cumulativeTest(t, relPath, testFunc)
 }
 
+// ExecuteWithDMLInjection tests that the schema changer behaviour is sane
+// once we start injecting DML statements into execution.
+func ExecuteWithDMLInjection(t *testing.T, relPath string, newCluster NewClusterFunc) {
+	jobErrorMutex := syncutil.Mutex{}
+	var testDMLInjectionCase func(
+		t *testing.T, setup, stmts []parser.Statement, key stageKey,
+	)
+	var injectionFunc execInjectionCallback
+	testFunc := func(t *testing.T, _ string, rewrite bool, setup, stmts []parser.Statement, execMap *stageExecStmtMap) {
+		var postCommit, nonRevertible int
+		processPlanInPhase(t, newCluster, setup, stmts, scop.PostCommitPhase, func(
+			p scplan.Plan,
+		) {
+			postCommit = len(p.StagesForCurrentPhase())
+			nonRevertible = len(p.Stages) - postCommit
+		}, nil)
+
+		injectionFunc, _ = execMap.GetInjectionCallback(t, rewrite)
+		injectionRanges := execMap.GetInjectionRanges(postCommit, nonRevertible)
+		defer execMap.AssertMapIsUsed(t)
+		for _, injection := range injectionRanges {
+			if !t.Run(
+				fmt.Sprintf("injection stage %v", injection),
+				func(t *testing.T) { testDMLInjectionCase(t, setup, stmts, injection) },
+			) {
+				return
+			}
+		}
+	}
+	testDMLInjectionCase = func(t *testing.T, setup, stmts []parser.Statement, injection stageKey) {
+		var schemaChangeErrorRegex *regexp.Regexp
+		usedStages := make(map[int]struct{})
+		successfulStages := 0
+		var tdb *sqlutils.SQLRunner
+		db, cleanup := newCluster(t, &scexec.TestingKnobs{
+			BeforeStage: func(p scplan.Plan, stageIdx int) error {
+				// FIXME: Support rollback detection
+				s := p.Stages[stageIdx]
+				if !p.CurrentState.InRollback &&
+					!p.InRollback &&
+					injection.phase == p.Stages[stageIdx].Phase &&
+					p.Stages[stageIdx].Ordinal >= injection.minOrdinal &&
+					p.Stages[stageIdx].Ordinal <= injection.maxOrdinal {
+					jobErrorMutex.Lock()
+					defer jobErrorMutex.Unlock()
+					key := makeStageKey(s.Phase, s.Ordinal)
+					if _, ok := usedStages[key.AsInt()]; !ok {
+						successfulStages++
+						injectStmts := injectionFunc(key, tdb, successfulStages)
+						regexSetOnce := false
+						schemaChangeErrorRegex = nil
+						for _, injectStmt := range injectStmts {
+							if injectStmt != nil &&
+								injectStmt.HasSchemaChangeError() {
+								require.Falsef(t, regexSetOnce, "multiple statements are expecting errors in the same phase.")
+								schemaChangeErrorRegex = injectStmt.schemaChangeErrorRegex
+								regexSetOnce = true
+								t.Logf("Expecting schema change error: %v", schemaChangeErrorRegex)
+							}
+						}
+						usedStages[key.AsInt()] = struct{}{}
+						t.Logf("Completed stage: %v", key)
+					} else {
+						t.Logf("Retrying stage: %v", key)
+					}
+
+				}
+				return nil
+			},
+		})
+		defer cleanup()
+		tdb = sqlutils.MakeSQLRunner(db)
+		errorDetected := false
+		onError := func(err error) error {
+			if schemaChangeErrorRegex != nil &&
+				schemaChangeErrorRegex.MatchString(err.Error()) {
+				errorDetected = true
+				return nil
+			}
+			return err
+		}
+		require.NoError(t, executeSchemaChangeTxn(
+			context.Background(), t, setup, stmts, db, nil, nil, onError,
+		))
+		require.Equal(t, errorDetected, schemaChangeErrorRegex != nil)
+	}
+	cumulativeTest(t, relPath, testFunc)
+}
+
 // Used for saving corpus information in TestGenerateCorpus
 var corpusPath string
 
@@ -321,7 +889,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, newCluster NewCluster
 	var testCorpusCollect func(
 		t *testing.T, setup, stmts []parser.Statement,
 	)
-	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, path string, rewrite bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
 		if !t.Run("starting",
 			func(t *testing.T) { testCorpusCollect(t, setup, stmts) },
 		) {
@@ -643,7 +1211,7 @@ SELECT * FROM crdb_internal.invalid_objects WHERE database_name != 'backups'
 		}
 	}
 
-	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement) {
+	testFunc := func(t *testing.T, _ string, _ bool, setup, stmts []parser.Statement, _ *stageExecStmtMap) {
 		postCommit, nonRevertible := countStages(t, setup, stmts)
 		n := postCommit + nonRevertible
 		t.Logf(
@@ -747,7 +1315,7 @@ func executeSchemaChangeTxn(
 	for _, stmt := range setup {
 		tdb.Exec(t, stmt.SQL)
 	}
-	waitForSchemaChangesToSucceed(t, tdb)
+	waitForSchemaChangesToFinish(t, tdb)
 	if before != nil {
 		before()
 	}
@@ -813,6 +1381,6 @@ func executeSchemaChangeTxn(
 	}
 
 	// Ensure we're really done here.
-	waitForSchemaChangesToSucceed(t, tdb)
+	waitForSchemaChangesToFinish(t, tdb)
 	return nil
 }

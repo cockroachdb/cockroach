@@ -5423,7 +5423,6 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 				allocator.TransferLeaseOptions{
 					ExcludeLeaseRepl:       c.excludeLeaseRepl,
 					CheckCandidateFullness: true,
-					DryRun:                 false,
 				},
 			)
 			if c.expected != target.StoreID {
