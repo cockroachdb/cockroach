@@ -67,7 +67,7 @@ const stmtColumns: ColumnDescriptor<StatementInsightEvent>[] = [
     name: "waitTime",
     title: "Time Spent Waiting",
     cell: (item: StatementInsightEvent) =>
-      Duration((item.timeSpentWaiting?.asMilliseconds() ?? 0) * 1e6),
+      Duration((item.totalContentionTime?.asMilliseconds() ?? 0) * 1e6),
     sort: (item: StatementInsightEvent) => item.elapsedTimeMillis,
   },
 ];

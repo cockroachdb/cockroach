@@ -113,6 +113,15 @@ export type TxnInsightDetails = Omit<MergedTxnInsightEvent, "contention"> & {
   execType: InsightExecEnum;
 };
 
+export type BlockedStatementContentionDetails = {
+  blockingTxnID: string;
+  durationInMs: number;
+  schemaName: string;
+  databaseName: string;
+  tableName: string;
+  indexName: string;
+};
+
 // Does not contain transaction information.
 // This is what is stored at the transaction insight level, shown
 // on the txn insights overview page.
@@ -122,7 +131,8 @@ export type StatementInsightEvent = {
   startTime: Moment;
   isFullScan: boolean;
   elapsedTimeMillis: number;
-  timeSpentWaiting?: moment.Duration;
+  totalContentionTime?: moment.Duration;
+  contentionEvents?: BlockedStatementContentionDetails[];
   endTime: Moment;
   rowsRead: number;
   rowsWritten: number;
