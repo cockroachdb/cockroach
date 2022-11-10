@@ -566,6 +566,15 @@ export function combineTransactionInsightEventDetailsState(
 
 // Statements
 
+type InsightsContentionResponseEvent = {
+  blockingTxnID: string;
+  durationInMs: number;
+  schemaName: string;
+  databaseName: string;
+  tableName: string;
+  indexName: string;
+};
+
 type ExecutionInsightsResponseRow = {
   session_id: string;
   txn_id: string;
@@ -586,6 +595,7 @@ type ExecutionInsightsResponseRow = {
   retries: number;
   exec_node_ids: number[];
   contention: string; // interval
+  contention_events: InsightsContentionResponseEvent[];
   last_retry_reason?: string;
   causes: string[];
   problem: string;
@@ -626,7 +636,10 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       priority: row.priority,
       retries: row.retries,
       lastRetryReason: row.last_retry_reason,
-      timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
+      contentionEvents: row.contention_events,
+      totalContentionTime: row.contention
+        ? moment.duration(row.contention)
+        : null,
       causes: row.causes,
       problem: row.problem,
       indexRecommendations: row.index_recommendations,
@@ -648,38 +661,38 @@ const statementInsightsQuery: InsightQuery<
 > = {
   name: InsightNameEnum.highContention,
   // We only surface the most recently observed problem for a given statement.
-  query: `SELECT *, prettify_statement(non_prettified_query, 108, 1, 1) AS query from (
-    SELECT
-      session_id,
-      txn_id,
-      encode(txn_fingerprint_id, 'hex')  AS txn_fingerprint_id,
-      implicit_txn,
-      stmt_id,
-      encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
-      query AS non_prettified_query,
-      start_time,
-      end_time,
-      full_scan,
-      app_name,
-      database_name,
-      user_name,
-      rows_read,
-      rows_written,
-      priority,
-      retries,
-      contention,
-      last_retry_reason,
-      index_recommendations,
-      problem,
-      causes,
-      plan_gist,
-      row_number()                          OVER (
+  query: `SELECT *, prettify_statement(non_prettified_query, 108, 1, 1) AS query
+          from (SELECT session_id,
+                       txn_id,
+                       encode(txn_fingerprint_id, 'hex')  AS txn_fingerprint_id,
+                       implicit_txn,
+                       stmt_id,
+                       encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
+                       query                              AS non_prettified_query,
+                       start_time,
+                       end_time,
+                       full_scan,
+                       app_name,
+                       database_name,
+                       user_name,
+                       rows_read,
+                       rows_written,
+                       priority,
+                       retries,
+                       contention,
+                       contention_events,
+                       last_retry_reason,
+                       index_recommendations,
+                       problem,
+                       causes,
+                       plan_gist,
+                       row_number()                          OVER (
         PARTITION BY txn_fingerprint_id
         ORDER BY end_time DESC
       ) AS rank
-    FROM crdb_internal.cluster_execution_insights
-    WHERE problem != 'None' AND app_name != '${INTERNAL_SQL_API_APP}'
-  ) WHERE rank = 1
+                FROM crdb_internal.cluster_execution_insights
+                WHERE problem != 'None' AND app_name != '${INTERNAL_SQL_API_APP}')
+          WHERE rank = 1
   `,
   toState: getStatementInsightsFromClusterExecutionInsightsResponse,
 };
