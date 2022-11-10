@@ -118,6 +118,7 @@ go_library(
         "//pkg/sql/sqlutil",
         "//pkg/sql/stats",
         "//pkg/sql/syntheticprivilege",
+        "//pkg/sql/tenantutils",
         "//pkg/sql/types",
         "//pkg/storage",
         "//pkg/util",

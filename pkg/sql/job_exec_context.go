@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tenantutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
@@ -70,6 +71,11 @@ func (e *plannerJobExecContext) MigrationJobDeps() upgrade.JobDeps {
 func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 	return e.p.SpanConfigReconciler()
 }
+func (e *plannerJobExecContext) CreateTenantWithID(
+	ctx context.Context, tenID uint64, name string, opts ...tenantutils.CreateTenantOption,
+) error {
+	return e.p.CreateTenantWithID(ctx, tenID, name, opts...)
+}
 func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 
 // ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
@@ -107,4 +113,6 @@ type JobExecContext interface {
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
 	Txn() *kv.Txn
+	CreateTenantWithID(ctx context.Context, tenID uint64, name string,
+		opts ...tenantutils.CreateTenantOption) error
 }

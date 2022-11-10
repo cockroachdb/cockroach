@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
+        "//pkg/sql/tenantutils",
         "//pkg/sql/types",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/mon",

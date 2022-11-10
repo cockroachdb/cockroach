@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/tenantutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -149,11 +150,10 @@ func ingestionPlanHook(
 			},
 		}
 
-		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
-		if err != nil {
-			return err
-		}
-		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig); err != nil {
+		// TODO(adityamaru): A follow up will switch this to use
+		// `p.CreateTenantWithName` allowing dynamic allocation of the tenant ID.
+		if err := p.CreateTenantWithID(ctx, tenantInfo.ID, "",
+			tenantutils.WithTenantInfo(*tenantInfo), tenantutils.WithSkipTenantKeyspaceInit()); err != nil {
 			return err
 		}
 

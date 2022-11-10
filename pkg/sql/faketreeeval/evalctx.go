@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/tenantutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -561,12 +562,16 @@ var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessio
 	"cannot evaluate tenant operation in this context")
 
 // CreateTenantWithID is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenantWithID(_ context.Context, _ uint64, _ string) error {
+func (c *DummyTenantOperator) CreateTenantWithID(
+	_ context.Context, _ uint64, _ string, _ ...tenantutils.CreateTenantOption,
+) error {
 	return errors.WithStack(errEvalTenant)
 }
 
 // CreateTenant is part of the tree.TenantOperator interface.
-func (c *DummyTenantOperator) CreateTenant(_ context.Context, _ string) (roachpb.TenantID, error) {
+func (c *DummyTenantOperator) CreateTenant(
+	_ context.Context, _ string, _ ...tenantutils.CreateTenantOption,
+) (roachpb.TenantID, error) {
 	return roachpb.MakeTenantID(0), errors.WithStack(errEvalTenant)
 }
 

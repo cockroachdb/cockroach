@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/tenantutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -231,7 +232,9 @@ func updateTenantRecord(
 }
 
 // CreateTenant implements the tree.TenantOperator interface.
-func (p *planner) CreateTenant(ctx context.Context, name string) (roachpb.TenantID, error) {
+func (p *planner) CreateTenant(
+	ctx context.Context, name string, opts ...tenantutils.CreateTenantOption,
+) (roachpb.TenantID, error) {
 	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
 		return roachpb.TenantID{}, err
 	}
@@ -251,38 +254,17 @@ func (p *planner) CreateTenant(ctx context.Context, name string) (roachpb.Tenant
 		return roachpb.TenantID{}, errors.Newf("tenant with name %q already exists", name)
 	}
 	nextID := *row[0].(*tree.DInt)
-	if err := p.CreateTenantWithID(ctx, uint64(nextID), name); err != nil {
+	if err := p.CreateTenantWithID(ctx, uint64(nextID), name, opts...); err != nil {
 		return roachpb.TenantID{}, err
 	}
 	return roachpb.MakeTenantID(uint64(nextID)), nil
 }
 
-// CreateTenantWithID implements the tree.TenantOperator interface.
-func (p *planner) CreateTenantWithID(ctx context.Context, tenID uint64, name string) error {
-	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
-		return err
-	}
-
-	info := &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{
-			ID: tenID,
-			// We synchronously initialize the tenant's keyspace below, so
-			// we can skip the ADD state and go straight to an ACTIVE state.
-			State: descpb.TenantInfo_ACTIVE,
-			Name:  name,
-		},
-	}
-
-	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
-	if err != nil {
-		return err
-	}
-
-	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info, initialTenantZoneConfig); err != nil {
-		return err
-	}
-
-	// Initialize the tenant's keyspace.
+// initializeTenantKeyspace initializes tenant tenID's keyspace by inserting KVs
+// for the bootstrap metadata, version setting and issuing relevant AdminSplits.
+func (p *planner) initializeTenantKeyspace(
+	ctx context.Context, tenID uint64, initialTenantZoneConfig *zonepb.ZoneConfig,
+) error {
 	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenID))
 	schema := bootstrap.MakeMetadataSchema(
 		codec,
@@ -339,6 +321,51 @@ func (p *planner) CreateTenantWithID(ctx context.Context, tenID uint64, name str
 		}
 	}
 
+	return nil
+}
+
+// CreateTenantWithID implements the tree.TenantOperator interface.
+func (p *planner) CreateTenantWithID(
+	ctx context.Context, tenID uint64, name string, opts ...tenantutils.CreateTenantOption,
+) error {
+	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
+		return err
+	}
+
+	options := tenantutils.CreateTenantOptions{}
+	for _, o := range opts {
+		o(&options)
+	}
+
+	info := &descpb.TenantInfoWithUsage{
+		TenantInfo: descpb.TenantInfo{
+			ID:   tenID,
+			Name: name,
+			// We synchronously initialize the tenant's keyspace below, so we can skip
+			// the ADD state and go straight to an ACTIVE state.
+			State: descpb.TenantInfo_ACTIVE,
+		},
+	}
+	if options.TenantInfo != nil {
+		info = options.TenantInfo
+	} else if options.SkipTenantKeyspaceInit {
+		return errors.AssertionFailedf("programming error; cannot skip tenant keyspace "+
+			"init without overriding the descpb.TenantInfo to create the tenant %d with name %q", tenID, name)
+	}
+
+	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+	if err != nil {
+		return err
+	}
+
+	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info, initialTenantZoneConfig); err != nil {
+		return err
+	}
+
+	// Initialize the tenant's keyspace.
+	if !options.SkipTenantKeyspaceInit {
+		return p.initializeTenantKeyspace(ctx, tenID, initialTenantZoneConfig)
+	}
 	return nil
 }
 

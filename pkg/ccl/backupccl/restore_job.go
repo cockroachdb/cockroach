@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/tenantutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -1188,10 +1189,6 @@ func createImportingDescriptors(
 			}
 
 			if len(details.Tenants) > 0 {
-				initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, txn)
-				if err != nil {
-					return err
-				}
 				for _, tenant := range details.Tenants {
 					switch tenant.State {
 					case descpb.TenantInfo_ACTIVE:
@@ -1205,7 +1202,11 @@ func createImportingDescriptors(
 					default:
 						return errors.AssertionFailedf("unknown tenant state %v", tenant)
 					}
-					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant, initialTenantZoneConfig); err != nil {
+					// TODO(adityamaru): We can probably always restore a tenant by name
+					// and allow dynamic allocation of the ID but this would require some
+					// plumbing to rekey the tenant keyspans prior to ingestion.
+					if err := p.CreateTenantWithID(ctx, tenant.ID, tenant.Name,
+						tenantutils.WithTenantInfo(tenant), tenantutils.WithSkipTenantKeyspaceInit()); err != nil {
 						return err
 					}
 				}
