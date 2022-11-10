@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -542,20 +543,14 @@ func getTotalStatementDetails(
 	}
 	statistics.Stats.SensitiveInfo.MostRecentPlanDescription = *plan
 
-	args = []interface{}{}
-	args = append(args, aggregatedMetadata.Query)
-	query = fmt.Sprintf(
-		`SELECT prettify_statement($1, %d, %d, %d)`,
-		tree.ConsoleLineWidth, tree.PrettyAlignAndDeindent, tree.UpperCase)
-	row, err = ie.QueryRowEx(ctx, "combined-stmts-details-format-query", nil,
-		sessiondata.InternalExecutorOverride{
-			User: username.NodeUserName(),
-		}, query, args...)
-
+	queryTree, err := parser.ParseOne(aggregatedMetadata.Query)
 	if err != nil {
 		return statement, serverError(ctx, err)
 	}
-	aggregatedMetadata.FormattedQuery = string(tree.MustBeDString(row[0]))
+	cfg := tree.DefaultPrettyCfg()
+	cfg.Align = tree.PrettyAlignOnly
+	cfg.LineWidth = tree.ConsoleLineWidth
+	aggregatedMetadata.FormattedQuery = cfg.Pretty(queryTree.AST)
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
 		Metadata:            aggregatedMetadata,

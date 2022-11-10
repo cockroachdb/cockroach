@@ -166,7 +166,7 @@ type FingerprintStmtsResponseColumns = {
 const fingerprintStmtsQuery = (
   stmt_fingerprint_ids: string[],
 ) => `SELECT DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
-                                          prettify_statement(metadata ->> 'query', 108, 2, 1) AS query
+                                          prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
       FROM crdb_internal.statement_statistics
       WHERE encode(fingerprint_id, 'hex') = ANY (string_to_array('${stmt_fingerprint_ids}'
         , ','))`;
@@ -648,7 +648,7 @@ const statementInsightsQuery: InsightQuery<
 > = {
   name: InsightNameEnum.highContention,
   // We only surface the most recently observed problem for a given statement.
-  query: `SELECT *, prettify_statement(non_prettified_query, 108, 2, 1) AS query from (
+  query: `SELECT *, prettify_statement(non_prettified_query, 108, 1, 1) AS query from (
     SELECT
       session_id,
       txn_id,
