@@ -41,6 +41,19 @@ postgres       root   NULL            NULL              {}       NULL           
 system         node   NULL            NULL              {}       NULL           NULL
 test           root   NULL            NULL              {}       NULL           NULL
 
+statement ok
+COMMENT ON DATABASE a IS 'AAA'
+
+query TTTTTTT colnames
+SHOW DATABASES WITH COMMENT
+----
+database_name  owner  primary_region  secondary_region  regions  survival_goal  comment
+a              root   NULL            NULL              {}       NULL           AAA
+defaultdb      root   NULL            NULL              {}       NULL           NULL
+postgres       root   NULL            NULL              {}       NULL           NULL
+system         node   NULL            NULL              {}       NULL           NULL
+test           root   NULL            NULL              {}       NULL           NULL
+
 # Verify that SHOW SCHEMAS FROM a includes user-defined schemas.
 statement ok
 CREATE SCHEMA a.s
