@@ -44,12 +44,12 @@ query TT
 SHOW CREATE TABLE foo
 ----
 foo  CREATE TABLE public.foo (
-     i INT8 NOT NULL DEFAULT nextval('public.foo_i_seq'::REGCLASS),
-     j INT8 NOT NULL DEFAULT nextval('public.test_seq'::REGCLASS),
-     k INT8 NOT NULL DEFAULT nextval('public.foo_k_seq'::REGCLASS),
-     l INT8 NOT NULL DEFAULT currval('diff_db.public.test_seq'::REGCLASS),
-     CONSTRAINT foo_pkey PRIMARY KEY (i ASC)
-)
+       i INT8 NOT NULL DEFAULT nextval('public.foo_i_seq'::REGCLASS),
+       j INT8 NOT NULL DEFAULT nextval('public.test_seq'::REGCLASS),
+       k INT8 NOT NULL DEFAULT nextval('public.foo_k_seq'::REGCLASS),
+       l INT8 NOT NULL DEFAULT currval('diff_db.public.test_seq'::REGCLASS),
+       CONSTRAINT foo_pkey PRIMARY KEY (i ASC)
+     )
 
 statement ok
 INSERT INTO foo VALUES (default, default, default, default)
@@ -135,12 +135,12 @@ query TT
 SHOW CREATE TABLE bar
 ----
 bar  CREATE TABLE public.bar (
-     i INT8 NOT NULL DEFAULT nextval('public.new_bar_i_seq'::REGCLASS),
-     j INT8 NOT NULL DEFAULT currval('public.new_s1'::REGCLASS),
-     k INT8 NOT NULL DEFAULT nextval('public.new_s2'::REGCLASS),
-     CONSTRAINT bar_pkey PRIMARY KEY (i ASC),
-     FAMILY fam_0_i_j_k (i, j, k)
-)
+       i INT8 NOT NULL DEFAULT nextval('public.new_bar_i_seq'::REGCLASS),
+       j INT8 NOT NULL DEFAULT currval('public.new_s1'::REGCLASS),
+       k INT8 NOT NULL DEFAULT nextval('public.new_s2'::REGCLASS),
+       CONSTRAINT bar_pkey PRIMARY KEY (i ASC),
+       FAMILY fam_0_i_j_k (i, j, k)
+     )
 
 # Verify that the table hasn't been corrupted.
 statement ok
@@ -192,12 +192,12 @@ query TT
 SHOW CREATE TABLE new_other_db.t
 ----
 new_other_db.public.t  CREATE TABLE public.t (
-                       i INT8 NOT NULL DEFAULT nextval('new_other_db.public.s'::REGCLASS),
-                       j INT8 NOT NULL DEFAULT currval('new_other_db.public.s2'::REGCLASS),
-                       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
-                       FAMILY fam_0_i_j_rowid (i, j, rowid)
-)
+                         i INT8 NOT NULL DEFAULT nextval('new_other_db.public.s'::REGCLASS),
+                         j INT8 NOT NULL DEFAULT currval('new_other_db.public.s2'::REGCLASS),
+                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                         CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+                         FAMILY fam_0_i_j_rowid (i, j, rowid)
+                       )
 
 # Verify the table hasn't been corrupted.
 statement ok
@@ -256,12 +256,12 @@ query TT
 SHOW CREATE TABLE tb
 ----
 tb  CREATE TABLE public.tb (
-    i INT8 NOT NULL DEFAULT nextval('test_schema.tb_i_seq'::REGCLASS),
-    j INT8 NOT NULL DEFAULT nextval('test_schema.sc_s1'::REGCLASS),
-    k INT8 NOT NULL DEFAULT currval('test_schema.sc_s2'::REGCLASS),
-    CONSTRAINT tb_pkey PRIMARY KEY (i ASC),
-    FAMILY fam_0_i_j_k (i, j, k)
-)
+      i INT8 NOT NULL DEFAULT nextval('test_schema.tb_i_seq'::REGCLASS),
+      j INT8 NOT NULL DEFAULT nextval('test_schema.sc_s1'::REGCLASS),
+      k INT8 NOT NULL DEFAULT currval('test_schema.sc_s2'::REGCLASS),
+      CONSTRAINT tb_pkey PRIMARY KEY (i ASC),
+      FAMILY fam_0_i_j_k (i, j, k)
+    )
 
 # Verify the table hasn't been corrupted.
 statement ok
@@ -311,12 +311,12 @@ query TT
 SHOW CREATE TABLE new_test_schema.foo
 ----
 new_test_schema.foo  CREATE TABLE new_test_schema.foo (
-                     i INT8 NOT NULL DEFAULT nextval('new_test_schema.foo_i_seq'::REGCLASS),
-                     j INT8 NOT NULL DEFAULT nextval('new_test_schema.s3'::REGCLASS),
-                     k INT8 NOT NULL DEFAULT currval('new_test_schema.s4'::REGCLASS),
-                     CONSTRAINT foo_pkey PRIMARY KEY (i ASC),
-                     FAMILY fam_0_i_j_k (i, j, k)
-)
+                       i INT8 NOT NULL DEFAULT nextval('new_test_schema.foo_i_seq'::REGCLASS),
+                       j INT8 NOT NULL DEFAULT nextval('new_test_schema.s3'::REGCLASS),
+                       k INT8 NOT NULL DEFAULT currval('new_test_schema.s4'::REGCLASS),
+                       CONSTRAINT foo_pkey PRIMARY KEY (i ASC),
+                       FAMILY fam_0_i_j_k (i, j, k)
+                     )
 
 # Verify the table hasn't been corrupted.
 statement ok
@@ -377,12 +377,12 @@ query TT
 SHOW CREATE TABLE t2
 ----
 t2  CREATE TABLE public.t2 (
-    i INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
-    j INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-    FAMILY fam_0_i_j_rowid (i, j, rowid)
-)
+      i INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
+      j INT8 NOT NULL DEFAULT nextval('public.s5_new'::REGCLASS),
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
+      FAMILY fam_0_i_j_rowid (i, j, rowid)
+    )
 
 query TT
 SELECT pg_get_serial_sequence('t2', 'i'), pg_get_serial_sequence('t2', 'j')
@@ -416,10 +416,10 @@ CREATE VIEW v AS (SELECT i, nextval('view_seq') FROM t3)
 query TT
 SHOW CREATE VIEW v
 ----
-v                                                                          CREATE VIEW public.v (
-                                                                           i,
-                                                                           nextval
-) AS (SELECT i, nextval('public.view_seq'::REGCLASS) FROM test.public.t3)
+v  CREATE VIEW public.v (
+     i,
+     nextval
+   ) AS (SELECT i, nextval('public.view_seq'::REGCLASS) FROM test.public.t3)
 
 # Subquery in FROM clause.
 statement ok
@@ -428,9 +428,9 @@ CREATE VIEW v2 AS SELECT currval FROM (SELECT currval('view_seq'::regclass) FROM
 query TT
 SHOW CREATE VIEW v2
 ----
-v2                                                                                          CREATE VIEW public.v2 (
-                                                                                            currval
-) AS SELECT currval FROM (SELECT currval('public.view_seq'::REGCLASS) FROM test.public.t3)
+v2  CREATE VIEW public.v2 (
+      currval
+    ) AS SELECT currval FROM (SELECT currval('public.view_seq'::REGCLASS) FROM test.public.t3)
 
 # Union containing sequences.
 statement ok
@@ -440,17 +440,10 @@ query TT
 SHOW CREATE VIEW v3
 ----
 v3  CREATE VIEW public.v3 (
-    nextval,
-    i
-) AS SELECT
-    nextval('public.view_seq'::REGCLASS), i
-  FROM
-    test.public.t3
-  UNION
-    SELECT
-      nextval('public.view_seq'::REGCLASS), i
-    FROM
-      test.public.t4
+      nextval,
+      i
+    ) AS SELECT nextval('public.view_seq'::REGCLASS), i FROM test.public.t3
+      UNION SELECT nextval('public.view_seq'::REGCLASS), i FROM test.public.t4
 
 statement ok
 CREATE VIEW v4 AS SELECT t3.i, nextval('view_seq') FROM t3 INNER JOIN (SELECT j, currval($view_seq_id) FROM t4) as t5 ON t3.i = t5.j
@@ -460,14 +453,14 @@ query TT
 SHOW CREATE VIEW v4
 ----
 v4  CREATE VIEW public.v4 (
-    i,
-    nextval
-) AS SELECT
-    t3.i, nextval('public.view_seq'::REGCLASS)
-  FROM
-    test.public.t3
-    INNER JOIN (SELECT j, currval('public.view_seq'::REGCLASS) FROM test.public.t4) AS t5 ON
-        t3.i = t5.j
+      i,
+      nextval
+    ) AS SELECT
+        t3.i, nextval('public.view_seq'::REGCLASS)
+      FROM
+        test.public.t3
+        INNER JOIN (SELECT j, currval('public.view_seq'::REGCLASS) FROM test.public.t4) AS t5 ON
+            t3.i = t5.j
 
 # Materialized view containing sequences.
 statement ok
@@ -477,13 +470,10 @@ query TT
 SHOW CREATE VIEW v5
 ----
 v5  CREATE MATERIALIZED VIEW public.v5 (
-    currval,
-    i,
-    rowid
-) AS SELECT
-    currval('public.view_seq'::REGCLASS), i
-  FROM
-    test.public.t3
+      currval,
+      i,
+      rowid
+    ) AS SELECT currval('public.view_seq'::REGCLASS), i FROM test.public.t3
 
 # Replacing an existing view.
 statement ok
@@ -495,9 +485,9 @@ CREATE OR REPLACE VIEW v6 AS SELECT currval($view_seq_id) AS i
 query TT
 SHOW CREATE VIEW v6
 ----
-v6                                                     CREATE VIEW public.v6 (
-                                                       i
-) AS SELECT currval('public.view_seq'::REGCLASS) AS i
+v6  CREATE VIEW public.v6 (
+      i
+    ) AS SELECT currval('public.view_seq'::REGCLASS) AS i
 
 # Subquery in the SELECT expr.
 statement ok
@@ -506,10 +496,10 @@ CREATE VIEW v7 AS (SELECT i, (SELECT nextval('view_seq')) FROM t3)
 query TT
 SHOW CREATE VIEW v7
 ----
-v7                                                                                  CREATE VIEW public.v7 (
-                                                                                    i,
-                                                                                    nextval
-) AS (SELECT i, (SELECT nextval('public.view_seq'::REGCLASS)) FROM test.public.t3)
+v7  CREATE VIEW public.v7 (
+      i,
+      nextval
+    ) AS (SELECT i, (SELECT nextval('public.view_seq'::REGCLASS)) FROM test.public.t3)
 
 # Sequence in the WHERE clause.
 statement ok
@@ -519,13 +509,8 @@ query TT
 SHOW CREATE VIEW v8
 ----
 v8  CREATE VIEW public.v8 (
-    i
-) AS SELECT
-    i
-  FROM
-    test.public.t3
-  WHERE
-    i = nextval('public.view_seq'::REGCLASS)
+      i
+    ) AS SELECT i FROM test.public.t3 WHERE i = nextval('public.view_seq'::REGCLASS)
 
 # Sequence in the CTE.
 statement ok
@@ -534,9 +519,9 @@ CREATE VIEW v9 AS (WITH w AS (SELECT nextval('view_seq')) SELECT nextval FROM w)
 query TT
 SHOW CREATE VIEW v9
 ----
-v9                                                                                    CREATE VIEW public.v9 (
-                                                                                      nextval
-) AS (WITH w AS (SELECT nextval('public.view_seq'::REGCLASS)) SELECT nextval FROM w)
+v9  CREATE VIEW public.v9 (
+      nextval
+    ) AS (WITH w AS (SELECT nextval('public.view_seq'::REGCLASS)) SELECT nextval FROM w)
 
 # Sequence in the LIMIT clause.
 statement ok
@@ -545,9 +530,9 @@ CREATE VIEW v10 AS (SELECT i FROM t3 LIMIT nextval('view_seq'))
 query TT
 SHOW CREATE VIEW v10
 ----
-v10                                                                             CREATE VIEW public.v10 (
-                                                                                i
-) AS (SELECT i FROM test.public.t3 LIMIT nextval('public.view_seq'::REGCLASS))
+v10  CREATE VIEW public.v10 (
+       i
+     ) AS (SELECT i FROM test.public.t3 LIMIT nextval('public.view_seq'::REGCLASS))
 
 # Test renaming sequences is fine and tables are not corrupted.
 statement ok
@@ -556,10 +541,10 @@ ALTER SEQUENCE view_seq RENAME TO view_seq2
 query TT
 SHOW CREATE VIEW v7
 ----
-v7                                                                                   CREATE VIEW public.v7 (
-                                                                                     i,
-                                                                                     nextval
-) AS (SELECT i, (SELECT nextval('public.view_seq2'::REGCLASS)) FROM test.public.t3)
+v7  CREATE VIEW public.v7 (
+      i,
+      nextval
+    ) AS (SELECT i, (SELECT nextval('public.view_seq2'::REGCLASS)) FROM test.public.t3)
 
 statement ok
 INSERT INTO t3 VALUES (8, 2)
