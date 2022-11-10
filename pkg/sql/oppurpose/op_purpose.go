@@ -30,4 +30,17 @@ const (
 	UnsplitManual = roachpb.AdminUnsplitRequest_ARBITRARY
 	// UnsplitGC is a split caused by the GC job.
 	UnsplitGC = roachpb.AdminUnsplitRequest_ORGANIZATION
+
+	// ScatterBackup is a split caused by a backup.
+	ScatterBackup = roachpb.AdminScatterRequest_INGESTION
+	// ScatterBulk is a split caused by a bulk operation.
+	ScatterBulk = roachpb.AdminScatterRequest_INGESTION
+	// ScatterSchema is a split caused by a schema change.
+	ScatterSchema = roachpb.AdminScatterRequest_INGESTION
+	// ScatterTruncate is a split caused by a truncation.
+	ScatterTruncate = roachpb.AdminScatterRequest_INGESTION
+	// ScatterManual is a split caused by a manual action.
+	ScatterManual = roachpb.AdminScatterRequest_ARBITRARY
+	// ScatterManualTest is a split caused by a manual action test.
+	ScatterManualTest = roachpb.AdminScatterRequest_INGESTION
 )

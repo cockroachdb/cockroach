@@ -11,6 +11,7 @@ package backupccl
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -39,7 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
-	"github.com/kr/pretty"
+	"github.com/cockroachdb/redact"
 )
 
 var backupOutputTypes = []*types.T{}
@@ -81,7 +83,14 @@ var (
 	)
 )
 
-const backupProcessorName = "backupDataProcessor"
+const (
+	backupProcessorName = "backupDataProcessor"
+
+	// minimumWorkerCount is the minimum number of workers we will try to start.
+	// If we can't reserve memory for at least this many workers, the backup
+	// processors will fail.
+	minimumWorkerCount = 2
+)
 
 // TODO(pbardea): It would be nice if we could add some DistSQL processor tests
 // we would probably want to have a mock cloudStorage object that we could
@@ -303,275 +312,248 @@ func runBackupProcessor(
 		return err
 	}
 
-	returnedSpansChan := make(chan exportedSpan, 1)
+	sinkConf := sstSinkConf{
+		id:       flowCtx.NodeID.SQLInstanceID(),
+		enc:      spec.Encryption,
+		progCh:   progCh,
+		settings: &flowCtx.Cfg.Settings.SV,
+	}
+	storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
+	if err != nil {
+		return err
+	}
+	defer logClose(ctx, storage, "external storage")
 
-	grp := ctxgroup.WithContext(ctx)
-	// Start a goroutine that will then start a group of goroutines which each
-	// pull spans off of `todo` and send export requests. Any spans that encounter
-	// write intent errors during Export are put back on the todo queue for later
-	// processing. Any returned SSTs are put on a  `returnedSpansChan` to be
-	// routed to a buffered sink that merges them until they are large enough to
-	// flush.
-	grp.GoCtx(func(ctx context.Context) error {
-		defer close(returnedSpansChan)
-		// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
-		//  *2). See #49798.
-		numSenders := int(kvserver.ExportRequestsLimit.Get(&clusterSettings.SV)) * 2
+	// Start start a group of goroutines which each pull spans off of `todo` and
+	// send export requests. Any spans that encounter write intent errors during
+	// Export are put back on the todo queue for later processing.
+	numSenders, release, err := reserveWorkerMemory(ctx, clusterSettings, memAcc)
+	if err != nil {
+		return err
+	}
+	log.Infof(ctx, "starting %d backup export workers", numSenders)
+	defer release()
 
-		return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
-			readTime := spec.BackupEndTime.GoTime()
+	return ctxgroup.GroupWorkers(ctx, numSenders, func(ctx context.Context, _ int) error {
+		readTime := spec.BackupEndTime.GoTime()
+		sink := makeFileSSTSink(sinkConf, storage)
+		defer func() {
+			if err := sink.flush(ctx); err != nil {
+				log.Warningf(ctx, "failed to flush SST sink: %s", err)
+			}
+			logClose(ctx, sink, "SST sink")
+		}()
 
-			// priority becomes true when we're sending re-attempts of reads far enough
-			// in the past that we want to run them with priority.
-			var priority bool
-			timer := timeutil.NewTimer()
-			defer timer.Stop()
+		// priority becomes true when we're sending re-attempts of reads far enough
+		// in the past that we want to run them with priority.
+		var priority bool
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
 
-			ctxDone := ctx.Done()
-			for {
-				select {
-				case <-ctxDone:
-					return ctx.Err()
-				case span := <-todo:
-					for len(span.span.Key) != 0 {
-						header := roachpb.Header{Timestamp: span.end}
+		ctxDone := ctx.Done()
+		for {
+			select {
+			case <-ctxDone:
+				return ctx.Err()
+			case span := <-todo:
+				for len(span.span.Key) != 0 {
+					splitMidKey := splitKeysOnTimestamps.Get(&clusterSettings.SV)
+					// If we started splitting already, we must continue until we reach the end
+					// of split span.
+					if !span.firstKeyTS.IsEmpty() {
+						splitMidKey = true
+					}
 
-						splitMidKey := splitKeysOnTimestamps.Get(&clusterSettings.SV)
-						// If we started splitting already, we must continue until we reach the end
-						// of split span.
-						if !span.firstKeyTS.IsEmpty() {
-							splitMidKey = true
-						}
+					req := &roachpb.ExportRequest{
+						RequestHeader:  roachpb.RequestHeaderFromSpan(span.span),
+						ResumeKeyTS:    span.firstKeyTS,
+						StartTime:      span.start,
+						MVCCFilter:     spec.MVCCFilter,
+						TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
+						SplitMidKey:    splitMidKey,
+					}
 
-						req := &roachpb.ExportRequest{
-							RequestHeader:  roachpb.RequestHeaderFromSpan(span.span),
-							ResumeKeyTS:    span.firstKeyTS,
-							StartTime:      span.start,
-							MVCCFilter:     spec.MVCCFilter,
-							TargetFileSize: batcheval.ExportRequestTargetFileSize.Get(&clusterSettings.SV),
-							SplitMidKey:    splitMidKey,
-						}
-
-						// If we're doing re-attempts but are not yet in the priority regime,
-						// check to see if it is time to switch to priority.
-						if !priority && span.attempts > 0 {
-							// Check if this is starting a new pass and we should delay first.
-							// We're okay with delaying this worker until then since we assume any
-							// other work it could pull off the queue will likely want to delay to
-							// a similar or later time anyway.
-							if delay := delayPerAttmpt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
-								timer.Reset(delay)
-								log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
-								select {
-								case <-ctxDone:
-									return ctx.Err()
-								case <-timer.C:
-									timer.Read = true
-								}
+					// If we're doing re-attempts but are not yet in the priority regime,
+					// check to see if it is time to switch to priority.
+					if !priority && span.attempts > 0 {
+						// Check if this is starting a new pass and we should delay first.
+						// We're okay with delaying this worker until then since we assume any
+						// other work it could pull off the queue will likely want to delay to
+						// a similar or later time anyway.
+						if delay := delayPerAttmpt.Get(&clusterSettings.SV) - timeutil.Since(span.lastTried); delay > 0 {
+							timer.Reset(delay)
+							log.Infof(ctx, "waiting %s to start attempt %d of remaining spans", delay, span.attempts+1)
+							select {
+							case <-ctxDone:
+								return ctx.Err()
+							case <-timer.C:
+								timer.Read = true
 							}
-
-							priority = timeutil.Since(readTime) > priorityAfter.Get(&clusterSettings.SV)
 						}
 
-						if priority {
-							// This re-attempt is reading far enough in the past that we just want
-							// to abort any transactions it hits.
-							header.UserPriority = roachpb.MaxUserPriority
-						} else {
-							// On the initial attempt to export this span and re-attempts that are
-							// done while it is still less than the configured time above the read
-							// time, we set WaitPolicy to Error, so that the export will return an
-							// error to us instead of instead doing blocking wait if it hits any
-							// other txns. This lets us move on to other ranges we have to export,
-							// provide an indication of why we're blocked, etc instead and come
-							// back to this range later.
-							header.WaitPolicy = lock.WaitPolicy_Error
-						}
+						priority = timeutil.Since(readTime) > priorityAfter.Get(&clusterSettings.SV)
+					}
 
+					header := roachpb.Header{
 						// We set the DistSender response target bytes field to a sentinel
 						// value. The sentinel value of 1 forces the ExportRequest to paginate
 						// after creating a single SST.
-						header.TargetBytes = 1
-						admissionHeader := roachpb.AdmissionHeader{
-							// Export requests are currently assigned BulkNormalPri.
-							//
-							// TODO(dt): Consider linking this to/from the UserPriority field.
-							Priority:                 int32(admissionpb.BulkNormalPri),
-							CreateTime:               timeutil.Now().UnixNano(),
-							Source:                   roachpb.AdmissionHeader_FROM_SQL,
-							NoMemoryReservedAtSource: true,
+						TargetBytes: 1,
+						Timestamp:   span.end,
+					}
+					if priority {
+						// This re-attempt is reading far enough in the past that we just want
+						// to abort any transactions it hits.
+						header.UserPriority = roachpb.MaxUserPriority
+					} else {
+						// On the initial attempt to export this span and re-attempts that are
+						// done while it is still less than the configured time above the read
+						// time, we set WaitPolicy to Error, so that the export will return an
+						// error to us instead of instead doing blocking wait if it hits any
+						// other txns. This lets us move on to other ranges we have to export,
+						// provide an indication of why we're blocked, etc instead and come
+						// back to this range later.
+						header.WaitPolicy = lock.WaitPolicy_Error
+					}
+
+					admissionHeader := roachpb.AdmissionHeader{
+						// Export requests are currently assigned BulkNormalPri.
+						//
+						// TODO(dt): Consider linking this to/from the UserPriority field.
+						Priority:                 int32(admissionpb.BulkNormalPri),
+						CreateTime:               timeutil.Now().UnixNano(),
+						Source:                   roachpb.AdmissionHeader_FROM_SQL,
+						NoMemoryReservedAtSource: true,
+					}
+					log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
+						span.span, span.attempts+1, header.UserPriority.String())
+					var rawResp roachpb.Response
+					var pErr *roachpb.Error
+					requestSentAt := timeutil.Now()
+					exportRequestErr := contextutil.RunWithTimeout(ctx,
+						fmt.Sprintf("ExportRequest for span %s", span.span),
+						timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
+							rawResp, pErr = kv.SendWrappedWithAdmission(
+								ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
+							if pErr != nil {
+								return pErr.GoError()
+							}
+							return nil
+						})
+					if exportRequestErr != nil {
+						if intentErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
+							span.lastTried = timeutil.Now()
+							span.attempts++
+							todo <- span
+							// TODO(dt): send a progress update to update job progress to note
+							// the intents being hit.
+							log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, intentErr.Error())
+							span = spanAndTime{}
+							continue
 						}
-						log.VEventf(ctx, 1, "sending ExportRequest for span %s (attempt %d, priority %s)",
-							span.span, span.attempts+1, header.UserPriority.String())
-						var rawResp roachpb.Response
-						var pErr *roachpb.Error
-						requestSentAt := timeutil.Now()
-						exportRequestErr := contextutil.RunWithTimeout(ctx,
-							fmt.Sprintf("ExportRequest for span %s", span.span),
-							timeoutPerAttempt.Get(&clusterSettings.SV), func(ctx context.Context) error {
-								rawResp, pErr = kv.SendWrappedWithAdmission(
-									ctx, flowCtx.Cfg.DB.NonTransactionalSender(), header, admissionHeader, req)
-								if pErr != nil {
-									return pErr.GoError()
-								}
-								return nil
-							})
-						if exportRequestErr != nil {
-							if intentErr, ok := pErr.GetDetail().(*roachpb.WriteIntentError); ok {
-								span.lastTried = timeutil.Now()
-								span.attempts++
-								todo <- span
-								// TODO(dt): send a progress update to update job progress to note
-								// the intents being hit.
-								log.VEventf(ctx, 1, "retrying ExportRequest for span %s; encountered WriteIntentError: %s", span.span, intentErr.Error())
+						// TimeoutError improves the opaque `context deadline exceeded` error
+						// message so use that instead.
+						if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
+							return errors.Wrap(exportRequestErr, "export request timeout")
+						}
+						// BatchTimestampBeforeGCError is returned if the ExportRequest
+						// attempts to read below the range's GC threshold.
+						if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*roachpb.BatchTimestampBeforeGCError); ok {
+							// If the range we are exporting is marked to be excluded from
+							// backup, it is safe to ignore the error. It is likely that the
+							// table has been configured with a low GC TTL, and so the data
+							// the backup is targeting has already been gc'ed.
+							if batchTimestampBeforeGCError.DataExcludedFromBackup {
 								span = spanAndTime{}
 								continue
 							}
-							// TimeoutError improves the opaque `context deadline exceeded` error
-							// message so use that instead.
-							if errors.HasType(exportRequestErr, (*contextutil.TimeoutError)(nil)) {
-								return errors.Wrap(exportRequestErr, "export request timeout")
-							}
-							// BatchTimestampBeforeGCError is returned if the ExportRequest
-							// attempts to read below the range's GC threshold.
-							if batchTimestampBeforeGCError, ok := pErr.GetDetail().(*roachpb.BatchTimestampBeforeGCError); ok {
-								// If the range we are exporting is marked to be excluded from
-								// backup, it is safe to ignore the error. It is likely that the
-								// table has been configured with a low GC TTL, and so the data
-								// the backup is targeting has already been gc'ed.
-								if batchTimestampBeforeGCError.DataExcludedFromBackup {
-									span = spanAndTime{}
-									continue
-								}
-							}
-							return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 						}
-
-						resp := rawResp.(*roachpb.ExportResponse)
-
-						// If the reply has a resume span, we process it immediately.
-						var resumeSpan spanAndTime
-						if resp.ResumeSpan != nil {
-							if !resp.ResumeSpan.Valid() {
-								return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
-							}
-
-							resumeTS := hlc.Timestamp{}
-							// Taking resume timestamp from the last file of response since files must
-							// always be consecutive even if we currently expect only one.
-							if fileCount := len(resp.Files); fileCount > 0 {
-								resumeTS = resp.Files[fileCount-1].EndKeyTS
-							}
-							resumeSpan = spanAndTime{
-								span:       *resp.ResumeSpan,
-								firstKeyTS: resumeTS,
-								start:      span.start,
-								end:        span.end,
-								attempts:   span.attempts,
-								lastTried:  span.lastTried,
-							}
-						}
-
-						if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
-							if backupKnobs.RunAfterExportingSpanEntry != nil {
-								backupKnobs.RunAfterExportingSpanEntry(ctx, resp)
-							}
-						}
-
-						var completedSpans int32
-						if resp.ResumeSpan == nil {
-							completedSpans = 1
-						}
-
-						if len(resp.Files) > 1 {
-							log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
-						}
-
-						for i, file := range resp.Files {
-							entryCounts := countRows(file.Exported, spec.PKIDs)
-
-							ret := exportedSpan{
-								// BackupManifest_File just happens to contain the exact fields
-								// to store the metadata we need, but there's no actual File
-								// on-disk anywhere yet.
-								metadata: backuppb.BackupManifest_File{
-									Span:        file.Span,
-									Path:        file.Path,
-									EntryCounts: entryCounts,
-								},
-								dataSST:       file.SST,
-								revStart:      resp.StartTime,
-								atKeyBoundary: file.EndKeyTS.IsEmpty()}
-							if span.start != spec.BackupStartTime {
-								ret.metadata.StartTime = span.start
-								ret.metadata.EndTime = span.end
-							}
-							// If multiple files were returned for this span, only one -- the
-							// last -- should count as completing the requested span.
-							if i == len(resp.Files)-1 {
-								ret.completedSpans = completedSpans
-							}
-							select {
-							case returnedSpansChan <- ret:
-							case <-ctxDone:
-								return ctx.Err()
-							}
-						}
-
-						// Emit the stats for the processed ExportRequest.
-						recordExportStats(backupProcessorSpan, resp, timeutil.Since(requestSentAt))
-						span = resumeSpan
+						return errors.Wrapf(exportRequestErr, "exporting %s", span.span)
 					}
-				default:
-					// No work left to do, so we can exit. Note that another worker could
-					// still be running and may still push new work (a retry) on to todo but
-					// that is OK, since that also means it is still running and thus can
-					// pick up that work on its next iteration.
-					return nil
+
+					resp := rawResp.(*roachpb.ExportResponse)
+
+					// If the reply has a resume span, we process it immediately.
+					var resumeSpan spanAndTime
+					if resp.ResumeSpan != nil {
+						if !resp.ResumeSpan.Valid() {
+							return errors.Errorf("invalid resume span: %s", resp.ResumeSpan)
+						}
+
+						resumeTS := hlc.Timestamp{}
+						// Taking resume timestamp from the last file of response since files must
+						// always be consecutive even if we currently expect only one.
+						if fileCount := len(resp.Files); fileCount > 0 {
+							resumeTS = resp.Files[fileCount-1].EndKeyTS
+						}
+						resumeSpan = spanAndTime{
+							span:       *resp.ResumeSpan,
+							firstKeyTS: resumeTS,
+							start:      span.start,
+							end:        span.end,
+							attempts:   span.attempts,
+							lastTried:  span.lastTried,
+						}
+					}
+
+					if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+						if backupKnobs.RunAfterExportingSpanEntry != nil {
+							backupKnobs.RunAfterExportingSpanEntry(ctx, resp)
+						}
+					}
+
+					var completedSpans int32
+					if resp.ResumeSpan == nil {
+						completedSpans = 1
+					}
+
+					if len(resp.Files) > 1 {
+						log.Warning(ctx, "unexpected multi-file response using header.TargetBytes = 1")
+					}
+
+					for i, file := range resp.Files {
+						entryCounts := countRows(file.Exported, spec.PKIDs)
+
+						ret := exportedSpan{
+							// BackupManifest_File just happens to contain the exact fields
+							// to store the metadata we need, but there's no actual File
+							// on-disk anywhere yet.
+							metadata: backuppb.BackupManifest_File{
+								Span:        file.Span,
+								Path:        file.Path,
+								EntryCounts: entryCounts,
+								LocalityKV:  destLocalityKV,
+							},
+							dataSST:       file.SST,
+							revStart:      resp.StartTime,
+							atKeyBoundary: file.EndKeyTS.IsEmpty()}
+						if span.start != spec.BackupStartTime {
+							ret.metadata.StartTime = span.start
+							ret.metadata.EndTime = span.end
+						}
+						// If multiple files were returned for this span, only one -- the
+						// last -- should count as completing the requested span.
+						if i == len(resp.Files)-1 {
+							ret.completedSpans = completedSpans
+						}
+
+						if err := sink.write(ctx, ret); err != nil {
+							return err
+						}
+					}
+					// Emit the stats for the processed ExportRequest.
+					recordExportStats(backupProcessorSpan, resp, timeutil.Since(requestSentAt))
+					span = resumeSpan
 				}
+			default:
+				// No work left to do, so we can exit. Note that another worker could
+				// still be running and may still push new work (a retry) on to todo but
+				// that is OK, since that also means it is still running and thus can
+				// pick up that work on its next iteration.
+				return sink.flush(ctx)
 			}
-		})
+		}
 	})
-
-	// Start another goroutine which will read from returnedSpansChan ch and push
-	// ssts from it into an fileSSTSink responsible for actually writing their
-	// contents to cloud storage.
-	grp.GoCtx(func(ctx context.Context) error {
-		sinkConf := sstSinkConf{
-			id:       flowCtx.NodeID.SQLInstanceID(),
-			enc:      spec.Encryption,
-			progCh:   progCh,
-			settings: &flowCtx.Cfg.Settings.SV,
-		}
-
-		storage, err := flowCtx.Cfg.ExternalStorage(ctx, dest)
-		if err != nil {
-			return err
-		}
-
-		sink, err := makeFileSSTSink(ctx, sinkConf, storage, memAcc)
-		if err != nil {
-			return err
-		}
-
-		defer func() {
-			err := sink.Close()
-			err = errors.CombineErrors(storage.Close(), err)
-			if err != nil {
-				log.Warningf(ctx, "failed to close backup sink(s): % #v", pretty.Formatter(err))
-			}
-		}()
-
-		for returnedSpans := range returnedSpansChan {
-			returnedSpans.metadata.LocalityKV = destLocalityKV
-			if err := sink.push(ctx, returnedSpans); err != nil {
-				return err
-			}
-		}
-		return sink.flush(ctx)
-	})
-
-	return grp.Wait()
 }
 
 // recordExportStats emits a StructuredEvent containing the stats about the
@@ -588,6 +570,42 @@ func recordExportStats(
 		exportStats.DataSize += int64(len(f.SST))
 	}
 	sp.RecordStructured(&exportStats)
+}
+
+// reserveWorkerMemory returns the number of workers after reserving the appropriate
+// amount of memory for each worker.
+func reserveWorkerMemory(
+	ctx context.Context, settings *cluster.Settings, memAcc *mon.BoundAccount,
+) (int, func(), error) {
+	// TODO(pbardea): Check to see if this benefits from any tuning (e.g. +1, or
+	//  *2). See #49798.
+	maxWorkerCount := int(kvserver.ExportRequestsLimit.Get(&settings.SV)) * 2
+	// We assume that each worker needs at least enough memory to hold onto
+	// 1 buffer used by the external storage.
+	perWorkerMemory := cloud.WriteChunkSize.Get(&settings.SV)
+	// TODO(ssd): We could also add the size of the SST we might be holding here.
+	// Previously we would reserve a fixed-size buffer, but we left the possibly
+	// in-flight SSTs unaccounted for.
+	// perWorkerMemory = perWorkerMemory + batcheval.ExportRequestTargetFileSize.Get(&settings.SV)
+	if err := memAcc.Grow(ctx, minimumWorkerCount*perWorkerMemory); err != nil {
+		return 0, nil, errors.Wrapf(err, "could not reserve memory for minimum number of backup workers (%d * %d)", minimumWorkerCount, perWorkerMemory)
+	}
+
+	workerCount := minimumWorkerCount
+	for i := 0; i < (maxWorkerCount - minimumWorkerCount); i++ {
+		if err := memAcc.Grow(ctx, perWorkerMemory); err != nil {
+			log.Warningf(ctx, "backup worker count restricted by memory limit")
+			break
+		}
+		workerCount++
+	}
+	return workerCount, func() { memAcc.Shrink(ctx, int64(workerCount)*perWorkerMemory) }, nil
+}
+
+func logClose(ctx context.Context, c io.Closer, desc string) {
+	if err := c.Close(); err != nil {
+		log.Warningf(ctx, "failed to close %s: %s", redact.SafeString(desc), err.Error())
+	}
 }
 
 func init() {

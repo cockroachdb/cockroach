@@ -140,6 +140,7 @@ func (s dbSplitAndScatterer) scatter(
 		// balancing the span being restored into.
 		RandomizeLeases: true,
 		MaxSize:         1, // don't scatter non-empty ranges on resume.
+		Class:           oppurpose.ScatterBackup,
 	}
 
 	res, pErr := kv.SendWrapped(ctx, s.db.NonTransactionalSender(), req)

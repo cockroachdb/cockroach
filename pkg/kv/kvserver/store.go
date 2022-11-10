@@ -218,11 +218,11 @@ var leaseTransferWait = func() *settings.DurationSetting {
 const leaseTransferWaitSettingName = "server.shutdown.lease_transfer_wait"
 
 // ExportRequestsLimit is the number of Export requests that can run at once.
-// Each extracts data from RocksDB to a temp file and then uploads it to cloud
-// storage. In order to not exhaust the disk or memory, or saturate the network,
+// Each extracts data from Pebble to an in-memory SST and returns it to the
+// caller. In order to not exhaust the disk or memory, or saturate the network,
 // limit the number of these that can be run in parallel. This number was chosen
 // by a guessing - it could be improved by more measured heuristics. Exported
-// here since we check it in in the caller to limit generated requests as well
+// here since we check it in the caller to limit generated requests as well
 // to prevent excessive queuing.
 var ExportRequestsLimit = settings.RegisterIntSetting(
 	settings.TenantWritable,

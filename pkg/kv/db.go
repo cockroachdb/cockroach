@@ -605,12 +605,13 @@ func (db *DB) AdminSplit(
 // to scatter that is conditional on it not resulting in excessive data movement
 // if the range is large.
 func (db *DB) AdminScatter(
-	ctx context.Context, key roachpb.Key, maxSize int64,
+	ctx context.Context, key roachpb.Key, maxSize int64, class roachpb.AdminScatterRequest_Class,
 ) (*roachpb.AdminScatterResponse, error) {
 	scatterReq := &roachpb.AdminScatterRequest{
 		RequestHeader:   roachpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
 		RandomizeLeases: true,
 		MaxSize:         maxSize,
+		Class:           class,
 	}
 	raw, pErr := SendWrapped(ctx, db.NonTransactionalSender(), scatterReq)
 	if pErr != nil {
