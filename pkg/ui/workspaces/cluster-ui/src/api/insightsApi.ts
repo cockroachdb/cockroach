@@ -502,6 +502,17 @@ function buildTxnContentionInsightDetails(
   return res;
 }
 
+// Statements
+
+type InsightsContentionResponseEvent = {
+  blockingTxnID: string;
+  durationInMs: number;
+  schemaName: string;
+  databaseName: string;
+  tableName: string;
+  indexName: string;
+};
+
 type ExecutionInsightsResponseRow = {
   session_id: string;
   txn_id: string;
@@ -522,6 +533,7 @@ type ExecutionInsightsResponseRow = {
   retries: number;
   exec_node_ids: number[];
   contention: string; // interval
+  contention_events: InsightsContentionResponseEvent[];
   last_retry_reason?: string;
   causes: string[];
   problem: string;
@@ -578,7 +590,10 @@ function organizeExecutionInsightsResponseIntoTxns(
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
       rowsWritten: row.rows_written,
-      timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
+      contentionEvents: row.contention_events,
+      totalContentionTime: row.contention
+        ? moment.duration(row.contention)
+        : null,
       causes: row.causes,
       problem: row.problem,
       indexRecommendations: row.index_recommendations,
@@ -658,6 +673,7 @@ SELECT
   priority,
   retries,
   contention,
+  contention_events,
   last_retry_reason,
   index_recommendations,
   problem,
