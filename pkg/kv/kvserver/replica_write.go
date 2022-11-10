@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -432,7 +433,8 @@ func (r *Replica) evaluateWriteBatch(
 			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 
-	ms := new(enginepb.MVCCStats)
+	ms := newMVCCStats()
+	defer releaseMVCCStats(ms)
 	rec := NewReplicaEvalContext(ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot())
 	defer rec.Release()
 	batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
@@ -513,7 +515,8 @@ func (r *Replica) evaluate1PC(
 	etArg := arg.(*roachpb.EndTxnRequest)
 
 	// Evaluate strippedBa. If the transaction allows, permit refreshes.
-	ms := new(enginepb.MVCCStats)
+	ms := newMVCCStats()
+	defer releaseMVCCStats(ms)
 	if ba.CanForwardReadTimestamp {
 		batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
 			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline)
@@ -551,7 +554,7 @@ func (r *Replica) evaluate1PC(
 		clonedTxn.Status = roachpb.ABORTED
 		batch.Close()
 		batch = r.store.Engine().NewBatch()
-		ms = new(enginepb.MVCCStats)
+		ms.Reset()
 	} else {
 		// Run commit trigger manually.
 		innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, ms, etArg, clonedTxn)
@@ -584,9 +587,18 @@ func (r *Replica) evaluate1PC(
 		}
 	}
 
-	// Add placeholder responses for end transaction requests.
-	br.Add(&roachpb.EndTxnResponse{OnePhaseCommit: true})
+	// Assign the response txn.
 	br.Txn = clonedTxn
+	// Add placeholder response for the end transaction request.
+	etAlloc := new(struct {
+		et    roachpb.EndTxnResponse
+		union roachpb.ResponseUnion_EndTxn
+	})
+	etAlloc.et.OnePhaseCommit = true
+	etAlloc.union.EndTxn = &etAlloc.et
+	br.Responses = append(br.Responses, roachpb.ResponseUnion{})
+	br.Responses[len(br.Responses)-1].Value = &etAlloc.union
+
 	return onePCResult{
 		success: onePCSucceeded,
 		stats:   *ms,
@@ -771,4 +783,17 @@ func isOnePhaseCommit(ba *roachpb.BatchRequest) bool {
 	// epochs then they couldn't have left any intents that they now need to
 	// clean up.
 	return ba.Txn.Epoch == 0 || etArg.Require1PC
+}
+
+var mvccStatsPool = sync.Pool{
+	New: func() interface{} { return new(enginepb.MVCCStats) },
+}
+
+func newMVCCStats() *enginepb.MVCCStats {
+	return mvccStatsPool.Get().(*enginepb.MVCCStats)
+}
+
+func releaseMVCCStats(ms *enginepb.MVCCStats) {
+	ms.Reset()
+	mvccStatsPool.Put(ms)
 }
