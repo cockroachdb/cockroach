@@ -43,6 +43,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/enum",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",
