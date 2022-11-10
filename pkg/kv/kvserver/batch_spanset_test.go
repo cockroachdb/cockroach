@@ -563,8 +563,8 @@ func TestSpanSetMVCCResolveWriteIntentRange(t *testing.T) {
 		Txn:    enginepb.TxnMeta{}, // unused
 		Status: roachpb.PENDING,
 	}
-	if _, _, err := storage.MVCCResolveWriteIntentRange(
-		ctx, batch, nil /* ms */, intent, 0,
+	if _, _, _, _, err := storage.MVCCResolveWriteIntentRange(
+		ctx, batch, nil /* ms */, intent, storage.MVCCResolveWriteIntentRangeOptions{},
 	); err != nil {
 		t.Fatal(err)
 	}

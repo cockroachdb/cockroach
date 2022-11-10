@@ -282,10 +282,11 @@ func EndTxn(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+				resolvedLocks, externalLocks, numBytes, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx, cArgs.Header.TargetBytes)
 				if err != nil {
 					return result.Result{}, err
 				}
+				reply.NumBytes = numBytes
 				if err := updateFinalizedTxn(
 					ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 				); err != nil {
@@ -409,10 +410,11 @@ func EndTxn(
 	// This avoids the need for the intentResolver to have to return to this range
 	// to resolve locks for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
-	resolvedLocks, externalLocks, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx)
+	resolvedLocks, externalLocks, numBytes, err := resolveLocalLocks(ctx, desc, readWriter, ms, args, reply.Txn, cArgs.EvalCtx, cArgs.Header.TargetBytes)
 	if err != nil {
 		return result.Result{}, err
 	}
+	reply.NumBytes = numBytes
 	if err := updateFinalizedTxn(
 		ctx, readWriter, ms, key, args, reply.Txn, recordAlreadyExisted, externalLocks,
 	); err != nil {
@@ -517,7 +519,8 @@ func resolveLocalLocks(
 	args *roachpb.EndTxnRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
-) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, _ error) {
+	targetBytes int64,
+) (resolvedLocks []roachpb.LockUpdate, externalLocks []roachpb.Span, numBytes int64, _ error) {
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
 		// which locks are local (note that for a split, we want to use the
@@ -532,12 +535,14 @@ func resolveLocalLocks(
 		resolveAllowance = math.MaxInt64
 	}
 
-	for _, span := range args.LockSpans {
+	i := 0
+	done := func() bool {
+		return i >= len(args.LockSpans)
+	}
+	f := func(maxKeys, maxBytes int64) (numKeys, numBytes int64, resumeSpan *roachpb.Span, err error) {
+		span := args.LockSpans[i]
+		i++
 		if err := func() error {
-			if resolveAllowance == 0 {
-				externalLocks = append(externalLocks, span)
-				return nil
-			}
 			update := roachpb.MakeLockUpdate(txn, span)
 			if len(span.EndKey) == 0 {
 				// For single-key lock updates, do a KeyAddress-aware check of
@@ -554,20 +559,26 @@ func resolveLocalLocks(
 				//
 				// Note that the underlying pebbleIterator will still be reused
 				// since readWriter is a pebbleBatch in the typical case.
-				ok, err := storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update)
+				var ok bool
+				ok, numBytes, resumeSpan, err = storage.MVCCResolveWriteIntent(ctx, readWriter, ms, update,
+					storage.MVCCResolveWriteIntentOptions{MaxBytes: maxBytes})
 				if err != nil {
 					return err
 				}
 				if ok {
-					resolveAllowance--
+					numKeys = 1
 				}
-				resolvedLocks = append(resolvedLocks, update)
-				// If requested, replace point tombstones with range tombstones.
-				if ok && evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
-					if err := storage.ReplacePointTombstonesWithRangeTombstones(
-						ctx, spanset.DisableReadWriterAssertions(readWriter),
-						ms, update.Key, update.EndKey); err != nil {
-						return err
+				if resumeSpan != nil {
+					externalLocks = append(externalLocks, *resumeSpan)
+				} else {
+					resolvedLocks = append(resolvedLocks, update)
+					// If requested, replace point tombstones with range tombstones.
+					if ok && evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
+						if err := storage.ReplacePointTombstonesWithRangeTombstones(
+							ctx, spanset.DisableReadWriterAssertions(readWriter),
+							ms, update.Key, update.EndKey); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
@@ -579,46 +590,53 @@ func resolveLocalLocks(
 			externalLocks = append(externalLocks, outSpans...)
 			if inSpan != nil {
 				update.Span = *inSpan
-				num, resumeSpan, err := storage.MVCCResolveWriteIntentRange(
-					ctx, readWriter, ms, update, resolveAllowance)
+				numKeys, numBytes, resumeSpan, _, err = storage.MVCCResolveWriteIntentRange(ctx, readWriter, ms, update,
+					storage.MVCCResolveWriteIntentRangeOptions{MaxKeys: maxKeys, MaxBytes: maxBytes})
 				if err != nil {
 					return err
 				}
 				if evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution != nil {
-					atomic.AddInt64(evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution, num)
+					atomic.AddInt64(evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution, numKeys)
 				}
-				resolveAllowance -= num
 				if resumeSpan != nil {
-					if resolveAllowance != 0 {
-						log.Fatalf(ctx, "expected resolve allowance to be exactly 0 resolving %s; got %d", update.Span, resolveAllowance)
-					}
 					update.EndKey = resumeSpan.Key
 					externalLocks = append(externalLocks, *resumeSpan)
 				}
-				resolvedLocks = append(resolvedLocks, update)
-				// If requested, replace point tombstones with range tombstones.
-				if evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
-					if err := storage.ReplacePointTombstonesWithRangeTombstones(
-						ctx, spanset.DisableReadWriterAssertions(readWriter),
-						ms, update.Key, update.EndKey); err != nil {
-						return err
+				if !update.Key.Equal(update.EndKey) {
+					resolvedLocks = append(resolvedLocks, update)
+					// If requested, replace point tombstones with range tombstones.
+					if evalCtx.EvalKnobs().UseRangeTombstonesForPointDeletes {
+						if err := storage.ReplacePointTombstonesWithRangeTombstones(
+							ctx, spanset.DisableReadWriterAssertions(readWriter),
+							ms, update.Key, update.EndKey); err != nil {
+							return err
+						}
 					}
 				}
 				return nil
 			}
 			return nil
 		}(); err != nil {
-			return nil, nil, errors.Wrapf(err, "resolving lock at %s on end transaction [%s]", span, txn.Status)
+			return 0, 0, nil, errors.Wrapf(err, "resolving lock at %s on end transaction [%s]", span, txn.Status)
 		}
+		return numKeys, numBytes, resumeSpan, nil
+	}
+	numKeys, numBytes, _, err := storage.MVCCPagination(ctx, resolveAllowance, targetBytes, done, f)
+	if err != nil {
+		return nil, nil, 0, err
 	}
 
-	removedAny := resolveAllowance != lockResolutionBatchSize
+	for ; i < len(args.LockSpans); i++ {
+		externalLocks = append(externalLocks, args.LockSpans[i])
+	}
+
+	removedAny := numKeys > 0
 	if WriteAbortSpanOnResolve(txn.Status, args.Poison, removedAny) {
 		if err := UpdateAbortSpan(ctx, evalCtx, readWriter, ms, txn.TxnMeta, args.Poison); err != nil {
-			return nil, nil, err
+			return nil, nil, 0, err
 		}
 	}
-	return resolvedLocks, externalLocks, nil
+	return resolvedLocks, externalLocks, numBytes, nil
 }
 
 // updateStagingTxn persists the STAGING transaction record with updated status
