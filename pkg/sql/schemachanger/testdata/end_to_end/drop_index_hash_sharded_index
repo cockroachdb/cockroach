@@ -128,6 +128,12 @@ upsert descriptor #104
   +        name: check_crdb_internal_j_shard_16
   +        validity: Dropping
   +      foreignKey: {}
+  +      index:
+  +        foreignKey: {}
+  +        geoConfig: {}
+  +        interleave: {}
+  +        partitioning: {}
+  +        sharded: {}
   +      name: check_crdb_internal_j_shard_16
   +      uniqueWithoutIndexConstraint: {}
   +    direction: DROP
@@ -206,6 +212,12 @@ upsert descriptor #104
   -        name: check_crdb_internal_j_shard_16
   -        validity: Dropping
   -      foreignKey: {}
+  -      index:
+  -        foreignKey: {}
+  -        geoConfig: {}
+  -        interleave: {}
+  -        partitioning: {}
+  -        sharded: {}
   -      name: check_crdb_internal_j_shard_16
   -      uniqueWithoutIndexConstraint: {}
   -    direction: DROP

@@ -514,6 +514,11 @@ message IndexDescriptor {
 // constraint is then validated for all existing rows. This ensures that
 // constraints added to columns that are being added are correctly enforced
 // before the column becomes public.
+//
+// Update: This message is now to be used as the protobuf for a *general*
+// constraint, either public or in mutation, even though the message name
+// remains unchanged (the original name was given to reflect the fact that
+// this message was previously only for constraint living on the mutation).
 message ConstraintToUpdate {
   option (gogoproto.equal) = true;
   enum ConstraintType {
@@ -525,6 +530,8 @@ message ConstraintToUpdate {
     // constraint.
     NOT_NULL = 2;
     UNIQUE_WITHOUT_INDEX = 3;
+    PRIMARY_KEY = 4;
+    UNIQUE = 5;
   }
   required ConstraintType constraint_type = 1 [(gogoproto.nullable) = false];
   required string name = 2 [(gogoproto.nullable) = false];
@@ -534,6 +541,16 @@ message ConstraintToUpdate {
   reserved 5;
   optional uint32 not_null_column = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "ColumnID"];
   optional UniqueWithoutIndexConstraint unique_without_index_constraint = 7 [(gogoproto.nullable) = false];
+  // `index` is only populated for `PRIMARY_KEY` or `UNIQUE` constraint.
+  optional IndexDescriptor index = 8 [(gogoproto.nullable) = false];
+  // `index_backed_constraint_validity` is the validity of this
+  //  index-backed constraint (PRIMARY KEY or UNIQUE).
+  // It will be
+  // - VALIDATED when the index is public;
+  // - VALIDATING when the index is being added (i.e. live on mutation slice with ADD direction);
+  // - DROPPING when the index is being dropped (i.e. live on mutation slice with DROP direction);
+  // - UNVALIDATED in no case!
+  optional ConstraintValidity index_backed_constraint_validity = 9 [(gogoproto.nullable) = false];
 }
 
 // PrimaryKeySwap is a mutation corresponding to the atomic swap phase
