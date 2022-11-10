@@ -2003,9 +2003,14 @@ func doRestorePlan(
 		types = append(types, desc)
 	}
 
+	overrideDBName := intoDB
+	if newDBName != "" {
+		overrideDBName = newDBName
+	}
+
 	// We attempt to rewrite ID's in the collected type and table descriptors
 	// to catch errors during this process here, rather than in the job itself.
-	if err := rewrite.TableDescs(tables, descriptorRewrites, intoDB); err != nil {
+	if err := rewrite.TableDescs(tables, descriptorRewrites, overrideDBName); err != nil {
 		return err
 	}
 	if err := rewrite.DatabaseDescs(databases, descriptorRewrites); err != nil {
@@ -2033,7 +2038,7 @@ func doRestorePlan(
 		BackupLocalityInfo: localityInfo,
 		TableDescs:         encodedTables,
 		Tenants:            tenants,
-		OverrideDB:         intoDB,
+		OverrideDB:         overrideDBName,
 		DescriptorCoverage: restoreStmt.DescriptorCoverage,
 		Encryption:         encryption,
 		RevalidateIndexes:  revalidateIndexes,
