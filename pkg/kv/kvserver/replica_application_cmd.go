@@ -80,9 +80,9 @@ type decodedRaftEntry struct {
 	*raftlog.Entry
 }
 
-// decode the entry e into the replicatedCmd.
-func (c *replicatedCmd) decode(ctx context.Context, e *raftpb.Entry) error {
-	return c.decodedRaftEntry.decode(ctx, e)
+// decode populates the receiver from the provided entry.
+func (c *replicatedCmd) decode(e *raftpb.Entry) error {
+	return c.decodedRaftEntry.decode(e)
 }
 
 // Index implements the apply.Command interface.
@@ -199,7 +199,7 @@ func (c *replicatedCmd) finishTracingSpan() {
 }
 
 // decode decodes the entry e into the decodedRaftEntry.
-func (d *decodedRaftEntry) decode(ctx context.Context, e *raftpb.Entry) error {
+func (d *decodedRaftEntry) decode(e *raftpb.Entry) error {
 	if d.Entry != nil {
 		d.Entry.Release()
 		*d = decodedRaftEntry{}

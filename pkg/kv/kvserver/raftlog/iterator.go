@@ -12,6 +12,7 @@ package raftlog
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,7 +21,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type storageIterI interface {
+type storageIter interface {
 	SeekGE(key storage.MVCCKey)
 	Valid() (bool, error)
 	Next()
@@ -28,8 +29,11 @@ type storageIterI interface {
 	UnsafeValue() []byte
 }
 
-// ReaderI is the subset of storage.Reader relevant for accessing the raft log.
-type ReaderI interface {
+// Reader is the subset of storage.Reader relevant for accessing the raft log.
+//
+// The raft log is a contiguous sequence of indexes (i.e. no holes) which may be
+// empty.
+type Reader interface {
 	NewMVCCIterator(storage.MVCCIterKind, storage.IterOptions) storage.MVCCIterator
 }
 
@@ -38,29 +42,41 @@ type ReaderI interface {
 // longer be used after any of its method has returned an error. The Iterator
 // must eventually be Close'd to release the resources associated to it.
 type Iterator struct {
-	eng       ReaderI
+	eng       Reader
 	prefixBuf keys.RangeIDPrefixBuf
 
-	iter storageIterI
+	iter storageIter
 	// TODO(tbg): we're not reusing memory here. Since all of our allocs come
 	// from protobuf marshaling, this is hard to avoid but we can do a little
 	// better and at least avoid a few allocations.
 	entry *Entry
 }
 
+type IterOptions struct {
+	// Hi ensures the Iterator never seeks to any Entry with index >= Hi. This is
+	// useful when the caller is interested in a slice [Lo, Hi) of the raft log.
+	Hi uint64
+}
+
 // NewIterator initializes an Iterator that reads the raft log for the given
 // RangeID from the provided Reader.
 //
 // Callers that can afford allocating a closure may prefer using Visit.
-func NewIterator(rangeID roachpb.RangeID, eng ReaderI) *Iterator {
-	// TODO(tbg): can pool these as well.
+func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterator {
+	// TODO(tbg): can pool these most of the things below, incl. the *Iterator.
 	prefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	var upperBound roachpb.Key
+	if opts.Hi == 0 || opts.Hi == math.MaxUint64 {
+		upperBound = prefixBuf.RaftLogPrefix().PrefixEnd()
+	} else {
+		upperBound = prefixBuf.RaftLogKey(opts.Hi)
+	}
 	return &Iterator{
 		eng:       eng,
 		prefixBuf: prefixBuf,
 		iter: eng.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
 			// TODO: could accept a tighter upper bound in NewIterator.
-			UpperBound: prefixBuf.RaftLogPrefix().PrefixEnd(),
+			UpperBound: upperBound,
 		}),
 	}
 }
@@ -97,30 +113,41 @@ func (it *Iterator) SeekGE(idx uint64) (bool, error) {
 // Next returns (true, nil) when the (in ascending index order) next entry is
 // available via Entry. It returns (false, nil) if there are no more
 // entries.
-// Note that Iterator does not check for gaps in the log.
+//
+// Note that a valid raft log has no gaps, and that the Iterator does not
+// validate that.
 func (it *Iterator) Next() (bool, error) {
 	it.iter.Next()
 	return it.load()
 }
 
-// Entry returns the Entry the iterator is currently positioned at.
+// Entry returns the Entry the iterator is currently positioned at. This
+// must only be called after a prior successful call to SeekGE or Next.
+//
+// The caller may invoke `(*Entry).Release` if it no longer wishes to access the
+// current Entry.
 func (it *Iterator) Entry() *Entry {
 	return it.entry
 }
 
-// Visit invokes fn with the raft log entries in ascending index order.
+// Visit invokes fn with the raft log entries whose indexes fall into [lo, hi)
+// in ascending index order. For example, if there are log entries for indexes
+// 6, 7, and 8, then [lo, hi)=[1, 8) will visit 6 and 7, and [lo, hi)=[7,9) will
+// visit 7 and 8.
+//
 // The closure may return iterutil.StopIteration(), which will stop iteration
 // without returning an error.
+//
 // The closure may invoke `(*Entry).Release` if it is no longer going to access
 // any memory in the current Entry.
 func Visit(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
-	eng ReaderI,
-	lo, hi uint64, // lo is inclusive, hi exclusive
+	eng Reader,
+	lo, hi uint64,
 	fn func(context.Context, *Entry) error,
 ) error {
-	it := NewIterator(rangeID, eng)
+	it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 	defer it.Close()
 	ok, err := it.SeekGE(lo)
 	if err != nil {
