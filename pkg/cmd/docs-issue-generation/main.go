@@ -14,7 +14,9 @@ package main
 
 import (
 	"os"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/spf13/cobra"
 )
 
@@ -36,12 +38,24 @@ func main() {
 func defaultEnvParameters() parameters {
 	const (
 		githubAPITokenEnv = "GITHUB_API_TOKEN"
-		buildVcsNumberEnv = "BUILD_VCS_NUMBER"
+		dryRunEnv         = "DRY_RUN_DOCS_ISSUE_GEN"
+		startTimeEnv      = "DOCS_ISSUE_GEN_START_TIME"
+		endTimeEnv        = "DOCS_ISSUE_GEN_END_TIME"
 	)
+	defaultStartTimeStr := timeutil.Now().Add(time.Hour * (-48)).Format(time.RFC3339)
+	defaultEndTimeStr := timeutil.Now().Format(time.RFC3339)
+
+	startTimeStr := maybeEnv(startTimeEnv, defaultStartTimeStr)
+	endTimeStr := maybeEnv(endTimeEnv, defaultEndTimeStr)
+
+	startTimeTime, _ := time.Parse(time.RFC3339, startTimeStr)
+	endTimeTime, _ := time.Parse(time.RFC3339, endTimeStr)
 
 	return parameters{
-		Token: maybeEnv(githubAPITokenEnv, ""),
-		Sha:   maybeEnv(buildVcsNumberEnv, "4dd8da9609adb3acce6795cea93b67ccacfc0270"),
+		Token:     maybeEnv(githubAPITokenEnv, ""),
+		DryRun:    stringToBool(maybeEnv(dryRunEnv, "false")),
+		StartTime: startTimeTime,
+		EndTime:   endTimeTime,
 	}
 }
 
@@ -51,4 +65,8 @@ func maybeEnv(envKey, defaultValue string) string {
 		return defaultValue
 	}
 	return v
+}
+
+func stringToBool(input string) bool {
+	return input == "true"
 }
