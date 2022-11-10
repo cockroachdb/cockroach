@@ -419,6 +419,12 @@ type Constraint interface {
 	// without index constraint.
 	IsUniqueWithoutIndex() bool
 
+	// IsPrimaryKey returns true iff this is a PRIMARY KEY constraint.
+	IsPrimaryKey() bool
+
+	// IsUnique returns true iff this is a UNIQUE constraint.
+	IsUnique() bool
+
 	// Check returns the underlying check constraint, if there is one.
 	Check() descpb.TableDescriptor_CheckConstraint
 
@@ -431,6 +437,14 @@ type Constraint interface {
 	// UniqueWithoutIndex returns the underlying unique without index constraint, if
 	// there is one.
 	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
+
+	// PrimaryKey returns the underlying index descriptor backing the UNIQUE constraint,
+	// if there is one.
+	PrimaryKey() descpb.IndexDescriptor
+
+	// Unique returns the underlying index descriptor backing the UNIQUE constraint,
+	// if there is one.
+	Unique() descpb.IndexDescriptor
 
 	// GetConstraintID returns the ID for the constraint.
 	GetConstraintID() descpb.ConstraintID

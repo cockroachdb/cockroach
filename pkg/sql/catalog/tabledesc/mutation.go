@@ -139,10 +139,32 @@ func (c constraint) IsUniqueWithoutIndex() bool {
 	return c.desc.ConstraintType == descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
 }
 
+// IsPrimaryKey returns true iff this is a PRIMARY KEY constraint.
+func (c constraint) IsPrimaryKey() bool {
+	return c.desc.ConstraintType == descpb.ConstraintToUpdate_PRIMARY_KEY
+}
+
+// IsUnique returns true iff this is a UNIQUE constraint.
+func (c constraint) IsUnique() bool {
+	return c.desc.ConstraintType == descpb.ConstraintToUpdate_UNIQUE
+}
+
 // UniqueWithoutIndex returns the underlying unique without index constraint, if
 // there is one.
 func (c constraint) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
 	return c.desc.UniqueWithoutIndexConstraint
+}
+
+// PrimaryKey returns the underlying index descriptor backing
+// this PRIMARY KEY constraint, if there is one.
+func (c constraint) PrimaryKey() descpb.IndexDescriptor {
+	return c.desc.Index
+}
+
+// Unique returns the underlying index descriptor backing
+// this UNIQUE constraint, if there is one.
+func (c constraint) Unique() descpb.IndexDescriptor {
+	return c.desc.Index
 }
 
 // GetConstraintID returns the ID for the constraint.
@@ -156,6 +178,10 @@ func (c constraint) GetConstraintID() descpb.ConstraintID {
 		return 0
 	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 		return c.UniqueWithoutIndex().ConstraintID
+	case descpb.ConstraintToUpdate_PRIMARY_KEY:
+		return c.PrimaryKey().ConstraintID
+	case descpb.ConstraintToUpdate_UNIQUE:
+		return c.Unique().ConstraintID
 	}
 	panic("unknown constraint type")
 }
