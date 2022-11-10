@@ -13,7 +13,6 @@ package azure
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"net/url"
 	"os"
 	"testing"
@@ -35,14 +34,17 @@ type azureConfig struct {
 }
 
 func (a azureConfig) filePath(f string) string {
-	return fmt.Sprintf("azure://%s/%s?%s=%s&%s=%s&%s=%s",
-		a.bucket, f,
-		AzureAccountKeyParam, url.QueryEscape(a.key),
-		AzureAccountNameParam, url.QueryEscape(a.account),
-		AzureEnvironmentKeyParam, url.QueryEscape(a.environment))
+	uri := url.URL{Scheme: "azure", Host: a.bucket, Path: f}
+	values := uri.Query()
+	values.Add(AzureAccountNameParam, a.account)
+	values.Add(AzureAccountKeyParam, a.key)
+	values.Add(AzureEnvironmentKeyParam, a.environment)
+	uri.RawQuery = values.Encode()
+	return uri.String()
 }
 
 func getAzureConfig() (azureConfig, error) {
+	// NB: the Azure Account key must not be url encoded.
 	cfg := azureConfig{
 		account:     os.Getenv("AZURE_ACCOUNT_NAME"),
 		key:         os.Getenv("AZURE_ACCOUNT_KEY"),
