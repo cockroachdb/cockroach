@@ -550,7 +550,7 @@ var rawVersionsSingleton = keyedVersions{
 // associated upgrade implementations are frozen. It can be forced to true via
 // an env var even on a release branch, to allow running a release binary in a
 // dev cluster.
-var developmentBranch = true || envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
+var developmentBranch = false || envutil.EnvOrDefaultBool("COCKROACH_FORCE_DEV_VERSION", false)
 
 const (
 	// finalVersion should be set on a release branch to the minted final cluster
