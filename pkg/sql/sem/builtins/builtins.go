@@ -12,7 +12,6 @@ package builtins
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/md5"
 	cryptorand "crypto/rand"
@@ -24,7 +23,6 @@ import (
 	"hash"
 	"hash/crc32"
 	"hash/fnv"
-	"io"
 	"math"
 	"math/bits"
 	"math/rand"
@@ -1211,23 +1209,13 @@ var regularBuiltins = map[string]builtinDefinition{
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (_ tree.Datum, err error) {
 				uncompressedData := []byte(tree.MustBeDBytes(args[0]))
 				codec := string(tree.MustBeDString(args[1]))
-				switch strings.ToUpper(codec) {
-				case "GZIP":
-					gzipBuf := bytes.NewBuffer([]byte{})
-					gz := gzip.NewWriter(gzipBuf)
-					if _, err := gz.Write(uncompressedData); err != nil {
-						return nil, err
-					}
-					if err := gz.Close(); err != nil {
-						return nil, err
-					}
-					return tree.NewDBytes(tree.DBytes(gzipBuf.Bytes())), nil
-				default:
-					return nil, pgerror.New(pgcode.InvalidParameterValue,
-						"only 'gzip' codec is supported for compress()")
+				compressedBytes, err := compress(uncompressedData, codec)
+				if err != nil {
+					return nil, err
 				}
+				return tree.NewDBytes(tree.DBytes(compressedBytes)), nil
 			},
-			Info:       "Compress `data` with the specified `codec` (`gzip`).",
+			Info:       "Compress `data` with the specified `codec` (`gzip`, 'lz4', 'snappy', 'zstd).",
 			Volatility: volatility.Immutable,
 		},
 	),
@@ -1239,24 +1227,13 @@ var regularBuiltins = map[string]builtinDefinition{
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (_ tree.Datum, err error) {
 				compressedData := []byte(tree.MustBeDBytes(args[0]))
 				codec := string(tree.MustBeDString(args[1]))
-				switch strings.ToUpper(codec) {
-				case "GZIP":
-					r, err := gzip.NewReader(bytes.NewBuffer(compressedData))
-					if err != nil {
-						return nil, errors.Wrap(err, "failed to decompress")
-					}
-					defer r.Close()
-					decompressedBytes, err := io.ReadAll(r)
-					if err != nil {
-						return nil, err
-					}
-					return tree.NewDBytes(tree.DBytes(decompressedBytes)), nil
-				default:
-					return nil, pgerror.New(pgcode.InvalidParameterValue,
-						"only 'gzip' codec is supported for decompress()")
+				decompressedBytes, err := decompress(compressedData, codec)
+				if err != nil {
+					return nil, err
 				}
+				return tree.NewDBytes(tree.DBytes(decompressedBytes)), nil
 			},
-			Info:       "Decompress `data` with the specified `codec` (`gzip`).",
+			Info:       "Decompress `data` with the specified `codec` (`gzip`, 'lz4', 'snappy', 'zstd).",
 			Volatility: volatility.Immutable,
 		},
 	),

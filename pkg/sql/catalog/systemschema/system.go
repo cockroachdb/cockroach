@@ -474,6 +474,8 @@ CREATE TABLE system.sqlliveness (
     FAMILY "primary" (crdb_region, session_uuid, expiration)
 )`
 
+	// system.migrations stores completion records for upgrades performed by the
+	// upgrade package. Only completed upgrades have a row in this table.
 	MigrationsTableSchema = `
 CREATE TABLE system.migrations (
     major        INT8 NOT NULL,
