@@ -598,6 +598,8 @@ type Reader interface {
 	// the first call to PinEngineStateForIterators.
 	// REQUIRES: ConsistentIterators returns true.
 	PinEngineStateForIterators() error
+
+	Len() int
 }
 
 // Writer is the write interface to an engine's data.

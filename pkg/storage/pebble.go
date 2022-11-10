@@ -1840,6 +1840,11 @@ func (p *Pebble) MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool,
 	return MinVersionIsAtLeastTargetVersion(p.unencryptedFS, p.path, target)
 }
 
+// Len is not supported for Pebble.
+func (p *Pebble) Len() int {
+	return 0
+}
+
 type pebbleReadOnly struct {
 	parent *Pebble
 	// The iterator reuse optimization in pebbleReadOnly is for servicing a
@@ -2042,6 +2047,11 @@ func (p *pebbleReadOnly) PinEngineStateForIterators() error {
 	return nil
 }
 
+// Len is not supported for pebbleReadOnly.
+func (p *pebbleReadOnly) Len() int {
+	return 0
+}
+
 // Writer methods are not implemented for pebbleReadOnly. Ideally, the code
 // could be refactored so that a Reader could be supplied to evaluateBatch
 
@@ -2219,6 +2229,11 @@ func (p *pebbleSnapshot) SupportsRangeKeys() bool {
 func (p *pebbleSnapshot) PinEngineStateForIterators() error {
 	// Snapshot already pins state, so nothing to do.
 	return nil
+}
+
+// Len is not supported by pebbleSnapshot.
+func (p *pebbleSnapshot) Len() int {
+	return 0
 }
 
 // ExceedMaxSizeError is the error returned when an export request
