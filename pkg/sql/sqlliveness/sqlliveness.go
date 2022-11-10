@@ -20,11 +20,22 @@ import (
 	"encoding/hex"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
+
+// TypeDescriptor represents a stripped down version of catalog.TypeDescriptor.
+// We do this to avoid a circular dependency on pkg/sql/catalog, which imports
+// pkg/sql/sem/eval. The latter package imports pkg/sql/sqlliveness.
+type TypeDescriptor interface {
+	PrimaryRegionName() (catpb.RegionName, error)
+	TypeDesc() *descpb.TypeDescriptor
+}
 
 // SessionID represents an opaque identifier for a session. This ID should be
 // globally unique. It is a string so that it can be used as a map key but it
@@ -36,6 +47,7 @@ type SessionID string
 type Provider interface {
 	Start(ctx context.Context)
 	Metrics() metric.Struct
+	SetRegionalData(locality roachpb.Locality, mrEnumTyp TypeDescriptor) error
 	Liveness
 
 	// CachedReader returns a reader which only consults its local cache and

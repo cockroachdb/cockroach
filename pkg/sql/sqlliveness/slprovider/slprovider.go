@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
@@ -62,4 +63,10 @@ func (p *provider) Start(ctx context.Context) {
 
 func (p *provider) Metrics() metric.Struct {
 	return p.Storage.Metrics()
+}
+
+func (p *provider) SetRegionalData(
+	locality roachpb.Locality, mrEnumTyp sqlliveness.TypeDescriptor,
+) error {
+	return p.Instance.SetRegionalData(locality, mrEnumTyp)
 }
