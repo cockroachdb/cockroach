@@ -324,25 +324,41 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) (_ opt.Sc
 func (c *CustomFuncs) foldStringToRegclassCast(
 	input opt.ScalarExpr, typ *types.T,
 ) (opt.ScalarExpr, error) {
-	// Special case: we're casting a string to a REGCLASS oid, which is a
-	// table id lookup.
 	flags := cat.Flags{AvoidDescriptorCaches: false, NoTableStats: true}
 	datum := memo.ExtractConstDatum(input)
+
+	if typ == types.Oid {
+		dOid := tree.MustBeDOid(datum)
+		return c.f.ConstructConstVal(dOid, typ), nil
+	}
+
 	s := tree.MustBeDString(datum)
-	tn, err := parser.ParseQualifiedTableName(string(s))
-	if err != nil {
-		return nil, err
+	var typOid *tree.DOid
+	switch typ {
+	case types.RegType:
+		typRef, err := parser.GetTypeFromValidSQLSyntax(string(s))
+		if err != nil {
+			return nil, err
+		}
+
+		resolvedType := typRef.(*types.T)
+		typOid = tree.NewDOidWithName(typ.Oid(), types.RegType, resolvedType.Name())
+	case types.RegClass:
+		tn, err := parser.ParseQualifiedTableName(string(s))
+		if err != nil {
+			return nil, err
+		}
+
+		ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
+		if err != nil {
+			return nil, err
+		}
+
+		c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+		typOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
 	}
-	ds, resName, err := c.f.catalog.ResolveDataSource(c.f.ctx, flags, tn)
-	if err != nil {
-		return nil, err
-	}
 
-	c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
-
-	regclassOid := tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
-	return c.f.ConstructConstVal(regclassOid, typ), nil
-
+	return c.f.ConstructConstVal(typOid, typ), nil
 }
 
 // FoldCast evaluates a cast expression with a constant input. It returns a
@@ -350,7 +366,7 @@ func (c *CustomFuncs) foldStringToRegclassCast(
 // returns ok=false.
 func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) (_ opt.ScalarExpr, ok bool) {
 	if typ.Family() == types.OidFamily {
-		if typ.Oid() == types.RegClass.Oid() && input.DataType().Family() == types.StringFamily {
+		if input.DataType().Family() == types.StringFamily || typ == types.Oid {
 			expr, err := c.foldStringToRegclassCast(input, typ)
 			if err == nil {
 				return expr, true

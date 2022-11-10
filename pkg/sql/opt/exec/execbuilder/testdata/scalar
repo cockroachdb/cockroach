@@ -1008,6 +1008,43 @@ vectorized: true
   spans: [/t - /t]
 
 query T
+EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  estimated row count: 10 (missing stats)
+  table: pg_class@pg_class_oid_idx
+  spans: [/t - /t]
+
+query T
+EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass::oid
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  estimated row count: 10 (missing stats)
+  table: pg_class@pg_class_oid_idx
+  spans: [/t - /t]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'bool'::regtype
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
+  estimated row count: 10 (missing stats)
+  table: pg_type@pg_type_oid_idx
+  spans: [/bool - /bool]
+
+
+query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
 ----
 distribution: local
