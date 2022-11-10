@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -151,6 +152,11 @@ func TestSQLStatsDataDriven(t *testing.T) {
 				dbName,
 			)
 			return fmt.Sprintf("%t, %t", previouslySampled, savePlanForStats)
+		case "skip":
+			var issue int
+			d.ScanArgs(t, "issue-num", &issue)
+			skip.WithIssue(t, issue)
+			return ""
 		}
 
 		return ""
