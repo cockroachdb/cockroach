@@ -66,7 +66,7 @@ func (d *replicaDecoder) DecodeAndBind(ctx context.Context, ents []raftpb.Entry)
 func (d *replicaDecoder) decode(ctx context.Context, ents []raftpb.Entry) error {
 	for i := range ents {
 		ent := &ents[i]
-		if err := d.cmdBuf.allocate().decode(ent); err != nil {
+		if err := d.cmdBuf.allocate().Decode(ent); err != nil {
 			return err
 		}
 	}
