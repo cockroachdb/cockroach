@@ -75,6 +75,15 @@ type CatalogReader interface {
 		expectedType catalog.DescriptorType,
 	) (nstree.Catalog, error)
 
+	// GetZoneConfigs gets zone config information for the desire IDs. Note: this
+	// is barely used for normal descriptors, it's only used to fetch Zone Configs
+	// for RootNameSpace and PseudoTableIDS which might zone configs but not
+	// descriptors. This fact make it not possible to scan zone configs together
+	// with descriptors.
+	GetZoneConfigs(
+		ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
+	) (nstree.Catalog, error)
+
 	// GetNamespaceEntries gets the descriptor IDs for the desired names, but
 	// looks in the system database cache first if there is one.
 	GetNamespaceEntries(
@@ -252,6 +261,26 @@ func (cr catalogReader) GetDescriptorEntries(
 			}
 		}
 	}
+	return mc.Catalog, nil
+}
+
+// GetZoneConfigs is part of the CatalogReader interface.
+func (cr catalogReader) GetZoneConfigs(
+	ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
+) (nstree.Catalog, error) {
+	var mc nstree.MutableCatalog
+	cq := catalogQuery{
+		catalogReader: cr,
+	}
+	err := cq.query(ctx, txn, &mc, func(codec keys.SQLCodec, b *kv.Batch) {
+		ids.ForEach(func(id descpb.ID) {
+			b.Get(config.MakeZoneKey(codec, id))
+		})
+	})
+	if err != nil {
+		return nstree.Catalog{}, err
+	}
+
 	return mc.Catalog, nil
 }
 

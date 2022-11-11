@@ -132,6 +132,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					oldPartitioning,
 					n.index.GetPartitioning(),
 					params.extendedEvalCtx.ExecCfg,
+					params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 				); err != nil {
 					return err
 				}
