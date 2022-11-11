@@ -6,6 +6,7 @@ on:
     paths:
       - 'pkg/ui/workspaces/cluster-ui/**/*.tsx?'
       - 'pkg/ui/workspaces/cluster-ui/yarn.lock'
+      - 'pkg/ui/workspaces/cluster-ui/package.json'
 
 jobs:
   publish_cluster_ui:
@@ -34,12 +35,26 @@ jobs:
       env:
         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+    - name: Check if version is published
+      id: version-check
+      shell: bash
+      run: |
+        PACKAGE_VERSION=$(cat ./pkg/ui/workspaces/cluster-ui/package.json | jq -r ".version");
+        VERSIONS=$(npm view @cockroachlabs/cluster-ui versions)
+        if [[ $VERSIONS == *"$PACKAGE_VERSION"* ]]; then
+          echo "published=yes" >> $GITHUB_OUTPUT
+          echo
+          echo "🛑 Cluster UI package version $PACKAGE_VERSION is already published"
+          echo "to npm. Publishing step should be skipped. 🛑"
+        else
+          echo "published=no" >> $GITHUB_OUTPUT
+        fi
+
     - name: Build Cluster UI
       run: |
         yarn install --frozen-lockfile
         bazel build //pkg/ui/workspaces/cluster-ui:cluster-ui
 
     - name: Publish prerelease version
-      run: |
-        echo "yarn version --prerelease --preid prerelease"
-        echo "yarn publish --access public --tag next"
+      if: steps.version-check.outputs.published == 'no'
+      run: npm publish --access public --tag next --dry-run"
