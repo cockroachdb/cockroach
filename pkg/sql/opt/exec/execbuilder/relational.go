@@ -2685,6 +2685,7 @@ func (b *Builder) getEnvData() exec.ExplainEnvData {
 	envOpts := exec.ExplainEnvData{ShowEnv: true}
 	var err error
 	envOpts.Tables, envOpts.Sequences, envOpts.Views, err = b.mem.Metadata().AllDataSourceNames(
+		b.evalCtx.Ctx(), b.catalog,
 		func(ds cat.DataSource) (cat.DataSourceName, error) {
 			return b.catalog.FullyQualifiedName(context.TODO(), ds)
 		},
