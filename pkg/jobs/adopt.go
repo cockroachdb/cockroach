@@ -130,16 +130,6 @@ const (
 	canRunArgs = `(SELECT $3::TIMESTAMP AS ts, $4::FLOAT AS initial_delay, $5::FLOAT AS max_delay) args`
 	// NextRunClause calculates the next execution time of a job with exponential backoff delay, calculated
 	// using last_run and num_runs values.
-	PossibleDelay = `args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT`
-	Piece1        = `COALESCE(last_run, created)`
-	Piece2        = `least(
-	IF(
-		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT >= 0.0,
-		args.initial_delay * (power(2, least(62, COALESCE(num_runs, 0))) - 1)::FLOAT,
-		args.max_delay
-	),
-	args.max_delay
-)::INTERVAL`
 	NextRunClause = `
 COALESCE(last_run, created) + least(
 	IF(
@@ -161,7 +151,8 @@ COALESCE(last_run, created) + least(
 	resumeQueryBaseCols    = "status, payload, progress, crdb_internal.sql_liveness_is_alive(claim_session_id)"
 	resumeQueryWhereBase   = `id = $1 AND claim_session_id = $2`
 	resumeQueryWithBackoff = `SELECT ` + resumeQueryBaseCols + `, ` +
-		` created_by_type, created_by_id, created, num_runs, last_run  FROM system.jobs WHERE ` + resumeQueryWhereBase
+		` created_by_type, created_by_id, created, num_runs, last_run  FROM system.jobs WHERE ` +
+		resumeQueryWhereBase
 )
 
 // getProcessQuery returns the query that selects the jobs that are claimed
