@@ -332,7 +332,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Tables introduced in 20.2.
 
 	target.AddDescriptor(systemschema.ScheduledJobsTable)
-	target.AddDescriptor(systemschema.SqllivenessTable)
+	target.AddDescriptor(systemschema.SqllivenessTable())
 	target.AddDescriptor(systemschema.MigrationsTable)
 
 	// Tables introduced in 21.1.

@@ -109,7 +109,7 @@ require (
 	github.com/cockroachdb/datadriven v1.0.1
 	github.com/cockroachdb/errors v1.9.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
-	github.com/cockroachdb/gostdlib v1.13.0
+	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f
 	github.com/cockroachdb/pebble v0.0.0-20221109022758-7b30bd86ff65
 	github.com/cockroachdb/redact v1.1.3

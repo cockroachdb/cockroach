@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -707,9 +708,62 @@ func (md *Metadata) AllViews() []cat.View {
 	return md.views
 }
 
+// getAllReferencedTables returns all the tables referenced by the metadata.
+// This includes all tables that are directly stored in the metadata in
+// md.tables, as well as recursive references from foreign keys. The tables are
+// returned in sorted order so that later tables reference earlier tables. This
+// allows tables to be re-created in order (e.g., for statement-bundle recreate)
+// using the output from SHOW CREATE TABLE without any errors due to missing
+// tables.
+// TODO(rytaft): if there is a cycle in the foreign key references,
+// statement-bundle recreate will still hit errors. To handle this case, we
+// would need to first create the tables without the foreign keys, then add the
+// foreign keys later.
+func (md *Metadata) getAllReferencedTables(
+	ctx context.Context, catalog cat.Catalog,
+) []cat.DataSource {
+	var tableSet util.FastIntSet
+	var tableList []cat.DataSource
+	var addForeignKeyReferencedTables func(tab cat.Table)
+	addForeignKeyReferencedTables = func(tab cat.Table) {
+		for i := 0; i < tab.OutboundForeignKeyCount(); i++ {
+			tabID := tab.OutboundForeignKey(i).ReferencedTableID()
+			if !tableSet.Contains(int(tabID)) {
+				tableSet.Add(int(tabID))
+				ds, _, err := catalog.ResolveDataSourceByID(ctx, cat.Flags{}, tabID)
+				if err != nil {
+					// This is a best-effort attempt to get all the tables, so don't error.
+					continue
+				}
+				refTab, ok := ds.(cat.Table)
+				if !ok {
+					// This is a best-effort attempt to get all the tables, so don't error.
+					continue
+				}
+				addForeignKeyReferencedTables(refTab)
+				tableList = append(tableList, ds)
+			}
+		}
+	}
+	for i := range md.tables {
+		tabMeta := md.tables[i]
+		tabID := tabMeta.Table.ID()
+		if !tableSet.Contains(int(tabID)) {
+			tableSet.Add(int(tabID))
+			addForeignKeyReferencedTables(tabMeta.Table)
+			tableList = append(tableList, tabMeta.Table)
+		}
+	}
+	return tableList
+}
+
 // AllDataSourceNames returns the fully qualified names of all datasources
-// referenced by the metadata.
+// referenced by the metadata. This includes all tables, sequences, and views
+// that are directly stored in the metadata, as well as tables that are
+// recursively referenced from foreign keys.
 func (md *Metadata) AllDataSourceNames(
+	ctx context.Context,
+	catalog cat.Catalog,
 	fullyQualifiedName func(ds cat.DataSource) (cat.DataSourceName, error),
 ) (tables, sequences, views []tree.TableName, _ error) {
 	// Catalog objects can show up multiple times in our lists, so deduplicate
@@ -732,8 +786,9 @@ func (md *Metadata) AllDataSourceNames(
 		return result, nil
 	}
 	var err error
-	tables, err = getNames(len(md.tables), func(i int) cat.DataSource {
-		return md.tables[i].Table
+	refTables := md.getAllReferencedTables(ctx, catalog)
+	tables, err = getNames(len(refTables), func(i int) cat.DataSource {
+		return refTables[i]
 	})
 	if err != nil {
 		return nil, nil, nil, err
