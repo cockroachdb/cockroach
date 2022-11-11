@@ -126,23 +126,23 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			ForcedError:          cmd.forcedErr,
 		})
 		if cmd.proposalRetry == 0 {
-			cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+			cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
 		}
 	}
 	if pErr == nil {
 		pErr = cmd.forcedErr
 	}
 
-	if cmd.proposalRetry != proposalNoReevaluation && pErr == nil {
+	if cmd.proposalRetry != kvserverbase.ProposalRejectionPermanent && pErr == nil {
 		log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
 	}
 	if pErr != nil {
 		// A forced error was set (i.e. we did not apply the proposal,
 		// for instance due to its log position).
 		switch cmd.proposalRetry {
-		case proposalNoReevaluation:
+		case kvserverbase.ProposalRejectionPermanent:
 			cmd.response.Err = pErr
-		case proposalIllegalLeaseIndex:
+		case kvserverbase.ProposalRejectionIllegalLeaseIndex:
 			// If we failed to apply at the right lease index, try again with a
 			// new one. This is important for pipelined writes, since they don't
 			// have a client watching to retry, so a failure to eventually apply
@@ -221,7 +221,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
-		err := newNotLeaseHolderError(
+		err := roachpb.NewNotLeaseHolderError(
 			*r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,
