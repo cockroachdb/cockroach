@@ -82,7 +82,7 @@ func checkRowLevelTTLColumn(
 		panic(errors.WithHintf(
 			pgerror.Newf(
 				pgcode.InvalidTableDefinition,
-				`cannot drop column %s while row-level TTL is active`,
+				`cannot drop column %s while ttl_expire_after is set`,
 				n.Column,
 			),
 			"use ALTER TABLE %s RESET (ttl) instead",
