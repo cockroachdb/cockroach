@@ -33,6 +33,7 @@ go_test(
     size = "enormous",
     srcs = [
         "admin_test.go",
+        "api_v2_tenant_test.go",
         "chart_catalog_test.go",
         "main_test.go",
         "role_authentication_test.go",
@@ -41,6 +42,7 @@ go_test(
         "tenant_vars_test.go",
     ],
     args = ["-test.timeout=3595s"],
+    data = glob(["testdata/**"]),
     embed = [":serverccl"],
     deps = [
         "//pkg/base",
@@ -78,6 +80,7 @@ go_test(
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_elastic_gosigar//:gosigar",
         "@com_github_lib_pq//:pq",
         "@com_github_prometheus_client_model//go",

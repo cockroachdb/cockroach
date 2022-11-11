@@ -314,6 +314,10 @@ func (c *httpClient) PostJSONChecked(
 	return httputil.PostJSON(c.client, c.baseURL+path, request, response)
 }
 
+func (c *httpClient) PostJSONRawChecked(path string, request []byte) (*http.Response, error) {
+	return httputil.PostJSONRaw(c.client, c.baseURL+path, request)
+}
+
 func (c *httpClient) Close() {
 	c.client.CloseIdleConnections()
 }
