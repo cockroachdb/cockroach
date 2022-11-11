@@ -839,7 +839,7 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	verify(false, false, 0)
 }
 
-// TestTruncateLogRecompute checks that if raftLogSize is not trusted, the raft
+// TestTruncateLogRecompute checks that if byteSize is not trusted, the raft
 // log queue picks up the replica, recomputes the log size, and considers a
 // truncation.
 func TestTruncateLogRecompute(t *testing.T) {

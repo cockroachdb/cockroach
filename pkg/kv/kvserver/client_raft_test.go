@@ -605,7 +605,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	require.NotNil(t, repl)
 	index := repl.GetLastIndex()
 
-	// Verifies the recomputed log size against what we track in `r.mu.raftLogSize`.
+	// Verifies the recomputed log size against what we track in `r.mu.byteSize`.
 	assertCorrectRaftLogSize := func() error {
 		// Recompute under raft lock so that the log doesn't change while we
 		// compute its size.

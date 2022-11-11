@@ -620,9 +620,9 @@ func snapshot(
 }
 
 type raftLogState struct {
-	lastIndex   uint64
-	lastTerm    uint64
-	raftLogSize int64
+	lastIndex uint64
+	lastTerm  uint64
+	byteSize  int64
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
@@ -680,7 +680,7 @@ func logAppend(
 			}
 		}
 	}
-	prev.raftLogSize = prev.raftLogSize + diff.SysBytes
+	newState.byteSize = prev.byteSize + diff.SysBytes
 	return newState, nil
 }
 

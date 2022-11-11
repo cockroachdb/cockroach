@@ -340,7 +340,7 @@ func (r *Replica) ShouldBackpressureWrites() bool {
 }
 
 // GetRaftLogSize returns the approximate raft log size and whether it is
-// trustworthy.. See r.mu.raftLogSize for details.
+// trustworthy.. See r.mu.byteSize for details.
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -264,7 +264,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	const anyRecipientStore roachpb.StoreID = 0
 	pendingSnapshotIndex := r.getSnapshotLogTruncationConstraintsRLocked(anyRecipientStore)
 	lastIndex := r.mu.lastIndex
-	// NB: raftLogSize above adjusts for pending truncations that have already
+	// NB: byteSize above adjusts for pending truncations that have already
 	// been successfully replicated via raft, but logSizeTrusted does not see if
 	// those pending truncations would cause a transition from trusted =>
 	// !trusted. This is done since we don't want to trigger a recomputation of

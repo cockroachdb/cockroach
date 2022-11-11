@@ -226,7 +226,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 			require.Equal(t, raftAppliedIndex+1, r.mu.state.RaftAppliedIndex)
 			require.Equal(t, truncatedIndex+1, r.mu.state.TruncatedState.Index)
 			expectedSize := raftLogSize - 1
-			// We typically have a raftLogSize > 0 (based on inspecting some test
+			// We typically have a byteSize > 0 (based on inspecting some test
 			// runs), but we can't be sure.
 			if expectedSize < 0 {
 				expectedSize = 0
@@ -351,7 +351,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 		// Asynchronous call to advance durability.
 		tc.store.raftTruncator.durabilityAdvancedCallback()
 		expectedSize := raftLogSize - 1
-		// We typically have a raftLogSize > 0 (based on inspecting some test
+		// We typically have a byteSize > 0 (based on inspecting some test
 		// runs), but we can't be sure.
 		if expectedSize < 0 {
 			expectedSize = 0
