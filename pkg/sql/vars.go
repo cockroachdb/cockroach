@@ -2166,6 +2166,78 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: globalFalse,
 	},
+
+	// CockroachDB extension.
+	`testing_optimizer_random_seed`: {
+		GetStringVal: makeIntGetStringValFn(`testing_optimizer_random_seed`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			i, err := strconv.ParseInt(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			m.SetTestingOptimizerRandomSeed(i)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return strconv.FormatInt(evalCtx.SessionData().TestingOptimizerRandomSeed, 10), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(0, 10)
+		},
+	},
+
+	// CockroachDB extension.
+	`testing_optimizer_cost_perturbation`: {
+		GetStringVal: makeFloatGetStringValFn(`testing_optimizer_cost_perturbation`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "testing_optimizer_cost_perturbation must be non-negative",
+				)
+			}
+			m.SetTestingOptimizerCostPerturbation(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatFloatAsPostgresSetting(
+				evalCtx.SessionData().TestingOptimizerCostPerturbation,
+			), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(0)
+		},
+	},
+
+	// CockroachDB extension.
+	`testing_optimizer_disable_rule_probability`: {
+		GetStringVal: makeFloatGetStringValFn(`testing_optimizer_disable_rule_probability`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 || f > 1 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"testing_optimizer_disable_rule_probability must be in the range [0.0,1.0]",
+				)
+			}
+			m.SetTestingOptimizerDisableRuleProbability(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) (string, error) {
+			return formatFloatAsPostgresSetting(
+				evalCtx.SessionData().TestingOptimizerDisableRuleProbability,
+			), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(0)
+		},
+	},
 }
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
