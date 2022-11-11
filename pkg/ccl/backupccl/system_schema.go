@@ -488,7 +488,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.ReplicationStatsTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.SqllivenessTable.GetName(): {
+	systemschema.SqllivenessTable().GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.StatementBundleChunksTable.GetName(): {
