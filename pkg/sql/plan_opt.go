@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -705,7 +706,24 @@ func (p *planner) DecodeGist(gist string, external bool) ([]string, error) {
 // indexes hypothetically added to the table. An index recommendation for the
 // query is outputted based on which hypothetical indexes are helpful in the
 // optimal plan.
-func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) error {
+func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having to add
+			// error checks everywhere throughout the code. This is only possible
+			// because the code does not update shared state and does not manipulate
+			// locks.
+			if ok, e := errorutil.ShouldCatch(r); ok {
+				err = e
+				log.VEventf(ctx, 1, "%v", err)
+			} else {
+				// Other panic objects can't be considered "safe" and thus are
+				// propagated as crashes that terminate the session.
+				panic(r)
+			}
+		}
+	}()
+
 	// Save the normalized memo created by the optbuilder.
 	savedMemo := opc.optimizer.DetachMemo(ctx)
 
@@ -723,7 +741,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) err
 	opc.optimizer.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		return ruleName.IsNormalize()
 	})
-	if _, err := opc.optimizer.Optimize(); err != nil {
+	if _, err = opc.optimizer.Optimize(); err != nil {
 		return err
 	}
 
@@ -741,7 +759,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(ctx context.Context) err
 		f.CopyWithoutAssigningPlaceholders,
 	)
 	opc.optimizer.Memo().Metadata().UpdateTableMeta(hypTables)
-	if _, err := opc.optimizer.Optimize(); err != nil {
+	if _, err = opc.optimizer.Optimize(); err != nil {
 		return err
 	}
 
