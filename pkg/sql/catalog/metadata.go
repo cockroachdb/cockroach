@@ -22,4 +22,7 @@ type ZoneConfig interface {
 
 	// Size returns the underlying bytes used by the instance.
 	Size() int
+
+	// Clone returns a deep copy of the object.
+	Clone() ZoneConfig
 }

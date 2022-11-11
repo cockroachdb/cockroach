@@ -468,6 +468,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			params.ctx,
 			params.p.txn,
 			params.p.ExecCfg(),
+			params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 			params.p.Descriptors(),
 			regionConfig,
 			desc,

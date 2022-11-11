@@ -134,7 +134,7 @@ func (r *databaseRegionChangeFinalizer) preDrop(ctx context.Context, txn *kv.Txn
 	}
 	for _, update := range zoneConfigUpdates {
 		if _, err := writeZoneConfigUpdate(
-			ctx, txn, r.localPlanner.ExecCfg(), r.localPlanner.Descriptors(), update,
+			ctx, txn, r.localPlanner.ExtendedEvalContext().Tracing.KVTracingEnabled(), r.localPlanner.Descriptors(), update,
 		); err != nil {
 			return err
 		}
@@ -211,6 +211,7 @@ func (r *databaseRegionChangeFinalizer) updateDatabaseZoneConfig(
 		txn,
 		r.localPlanner.ExecCfg(),
 		r.localPlanner.Descriptors(),
+		r.localPlanner.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	)
 }
 
@@ -296,40 +297,12 @@ func (r *databaseRegionChangeFinalizer) repartitionRegionalByRowTables(
 			tabledesc.UpdateIndexPartitioning(index.IndexDesc(), index.Primary(), newImplicitCols, newPartitioning)
 		}
 
-		// Remove zone configurations that applied to partitions that were removed
-		// in the previous step. This requires all indexes to have been
-		// repartitioned such that there is no partitioning on the removed enum
-		// value. This is because `deleteRemovedPartitionZoneConfigs` generates
-		// subzone spans for the entire table (all indexes) downstream for each
-		// index. Spans can only be generated if partitioning values are present on
-		// the type descriptor (removed enum values obviously aren't), so we must
-		// remove the partition from all indexes before trying to delete zone
-		// configurations.
-		for _, index := range tableDesc.NonDropIndexes() {
-			// Remove zone configurations that reference partition values we removed
-			// in the previous step.
-			update, err := prepareRemovedPartitionZoneConfigs(
-				ctx,
-				txn,
-				tableDesc,
-				index.GetID(),
-				oldPartitionings[index.GetID()],
-				index.GetPartitioning(),
-				r.localPlanner.ExecCfg(),
-			)
-			if err != nil {
-				return nil, nil, err
-			}
-			if update != nil {
-				zoneConfigUpdates = append(zoneConfigUpdates, update)
-			}
-		}
-
 		// Update the zone configurations now that the partition's been added.
 		update, err := prepareZoneConfigForMultiRegionTable(
 			ctx,
 			txn,
 			r.localPlanner.ExecCfg(),
+			r.localPlanner.Descriptors(),
 			regionConfig,
 			tableDesc,
 			ApplyZoneConfigForMultiRegionTableOptionTableAndIndexes,

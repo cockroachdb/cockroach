@@ -910,6 +910,7 @@ func (p *planner) configureZoneConfigForNewIndexPartitioning(
 			ctx,
 			p.txn,
 			p.ExecCfg(),
+			p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 			p.Descriptors(),
 			regionConfig,
 			tableDesc,

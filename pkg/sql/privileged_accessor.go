@@ -66,22 +66,15 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 		return "", false, err
 	}
 
-	const query = `SELECT config FROM system.zones WHERE id = $1`
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
-		ctx,
-		"crdb-internal-get-zone",
-		p.txn,
-		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		query,
-		id,
-	)
+	zc, err := p.Descriptors().GetZoneConfig(ctx, p.Txn(), descpb.ID(id))
 	if err != nil {
 		return "", false, err
 	}
-	if r == nil {
+	if zc == nil {
 		return "", false, nil
 	}
-	return tree.MustBeDBytes(r[0]), true, nil
+
+	return tree.DBytes(zc.GetRawBytesInStorage()), true, nil
 }
 
 // checkDescriptorPermissions returns nil if the executing user has permissions

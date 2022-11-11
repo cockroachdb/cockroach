@@ -346,6 +346,7 @@ go_library(
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/catalog/zone",
         "//pkg/sql/clusterunique",
         "//pkg/sql/colexec",
         "//pkg/sql/colfetcher",

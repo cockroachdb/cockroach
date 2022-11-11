@@ -17,18 +17,16 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -544,20 +542,19 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 
 		// Retrieve the partial zone configuration
-		partialZone, err := getZoneConfigRaw(
-			params.ctx, params.p.txn, params.ExecCfg().Codec, params.ExecCfg().Settings, targetID,
-		)
+		partialZoneWithRaw, err := params.p.Descriptors().GetZoneConfig(params.ctx, params.p.Txn(), targetID)
 		if err != nil {
 			return err
 		}
 
 		// No zone was found. Possibly a SubzonePlaceholder depending on the index.
-		if partialZone == nil {
-			partialZone = zonepb.NewZoneConfig()
+		if partialZoneWithRaw == nil {
+			partialZoneWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
 			if index != nil {
 				subzonePlaceholder = true
 			}
 		}
+		partialZone := partialZoneWithRaw.ZoneConfigProto()
 
 		var partialSubzone *zonepb.Subzone
 		if index != nil {
@@ -759,13 +756,15 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// here to complete the missing fields. The reason is because we don't know
 				// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
 				// And if it is a placeholder, we use getZoneConfigRaw to create one.
-				completeZone, err = getZoneConfigRaw(
-					params.ctx, params.p.txn, params.ExecCfg().Codec, params.ExecCfg().Settings, targetID,
-				)
+				completeZoneWithRaw, err := params.p.Descriptors().GetZoneConfig(params.ctx, params.p.Txn(), targetID)
 				if err != nil {
 					return err
-				} else if completeZone == nil {
+				}
+
+				if completeZoneWithRaw == nil {
 					completeZone = zonepb.NewZoneConfig()
+				} else {
+					completeZone = completeZoneWithRaw.ZoneConfigProto()
 				}
 				completeZone.SetSubzone(zonepb.Subzone{
 					IndexID:       uint32(index.GetID()),
@@ -830,8 +829,18 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		zoneToWrite := partialZone
 		// TODO(ajwerner): This is extremely fragile because we accept a nil table
 		// all the way down here.
-		n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-			targetID, table, zoneToWrite, execConfig, params.p.Descriptors(), hasNewSubzones)
+		n.run.numAffected, err = writeZoneConfig(
+			params.ctx,
+			params.p.txn,
+			targetID,
+			table,
+			zoneToWrite,
+			partialZoneWithRaw.GetRawBytesInStorage(),
+			execConfig,
+			params.p.Descriptors(),
+			hasNewSubzones,
+			params.extendedEvalCtx.Tracing.KVTracingEnabled(),
+		)
 		if err != nil {
 			return err
 		}
@@ -1108,7 +1117,7 @@ const MultitenancyZoneCfgIssueNo = 49854
 
 type zoneConfigUpdate struct {
 	id         descpb.ID
-	zoneConfig *zonepb.ZoneConfig
+	zoneConfig catalog.ZoneConfig
 }
 
 func prepareZoneConfigWrites(
@@ -1116,24 +1125,25 @@ func prepareZoneConfigWrites(
 	execCfg *ExecutorConfig,
 	targetID descpb.ID,
 	table catalog.TableDescriptor,
-	zone *zonepb.ZoneConfig,
+	z *zonepb.ZoneConfig,
+	expectedExistingRawBytes []byte,
 	hasNewSubzones bool,
 ) (_ *zoneConfigUpdate, err error) {
-	if len(zone.Subzones) > 0 {
+	if len(z.Subzones) > 0 {
 		st := execCfg.Settings
-		zone.SubzoneSpans, err = GenerateSubzoneSpans(
-			st, execCfg.NodeInfo.LogicalClusterID(), execCfg.Codec, table, zone.Subzones, hasNewSubzones)
+		z.SubzoneSpans, err = GenerateSubzoneSpans(
+			st, execCfg.NodeInfo.LogicalClusterID(), execCfg.Codec, table, z.Subzones, hasNewSubzones)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		// To keep the Subzone and SubzoneSpan arrays consistent
-		zone.SubzoneSpans = nil
+		z.SubzoneSpans = nil
 	}
-	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
+	if z.IsSubzonePlaceholder() && len(z.Subzones) == 0 {
 		return &zoneConfigUpdate{id: targetID}, nil
 	}
-	return &zoneConfigUpdate{id: targetID, zoneConfig: zone}, nil
+	return &zoneConfigUpdate{id: targetID, zoneConfig: zone.NewZoneConfigWithRawBytes(z, expectedExistingRawBytes)}, nil
 }
 
 func writeZoneConfig(
@@ -1142,89 +1152,50 @@ func writeZoneConfig(
 	targetID descpb.ID,
 	table catalog.TableDescriptor,
 	zone *zonepb.ZoneConfig,
+	expectedExistingRawBytes []byte,
 	execCfg *ExecutorConfig,
 	descriptors *descs.Collection,
 	hasNewSubzones bool,
+	kvTrace bool,
 ) (numAffected int, err error) {
-	update, err := prepareZoneConfigWrites(ctx, execCfg, targetID, table, zone, hasNewSubzones)
+	update, err := prepareZoneConfigWrites(ctx, execCfg, targetID, table, zone, expectedExistingRawBytes, hasNewSubzones)
 	if err != nil {
 		return 0, err
 	}
-	return writeZoneConfigUpdate(ctx, txn, execCfg, descriptors, update)
+	return writeZoneConfigUpdate(ctx, txn, kvTrace, descriptors, update)
 }
 
 func writeZoneConfigUpdate(
 	ctx context.Context,
 	txn *kv.Txn,
-	execCfg *ExecutorConfig,
+	kvTrace bool,
 	descriptors *descs.Collection,
 	update *zoneConfigUpdate,
-) (numAffected int, _ error) {
-	metaDataUpdater := descmetadata.NewMetadataUpdater(ctx,
-		execCfg.InternalExecutorFactory,
-		descriptors,
-		execCfg.SV(),
-		txn,
-		NewFakeSessionData(execCfg.SV()))
-	if update.zoneConfig == nil {
-		return metaDataUpdater.DeleteZoneConfig(ctx, update.id)
-	}
-	return metaDataUpdater.UpsertZoneConfig(ctx, update.id, update.zoneConfig)
-}
-
-// getZoneConfigRaw looks up the zone config with the given ID. Unlike
-// getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
-// zone config exists for the given ID, it returns nil.
-func getZoneConfigRaw(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, settings *cluster.Settings, id descpb.ID,
-) (*zonepb.ZoneConfig, error) {
-	kv, err := txn.Get(ctx, config.MakeZoneKey(codec, id))
-	if err != nil {
-		return nil, err
-	}
-	if kv.Value == nil {
-		return nil, nil
-	}
-	var zone zonepb.ZoneConfig
-	if err := kv.ValueProto(&zone); err != nil {
-		return nil, err
-	}
-	return &zone, nil
-}
-
-// getZoneConfigRawBatch looks up the zone config with the given IDs.
-// Unlike getZoneConfig, it does not attempt to ascend the zone config hierarchy.
-// If no zone config exists for the given ID, the map entry is not provided.
-func getZoneConfigRawBatch(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	settings *cluster.Settings,
-	ids []descpb.ID,
-) (map[descpb.ID]*zonepb.ZoneConfig, error) {
+) (numAffected int, err error) {
 	b := txn.NewBatch()
-	for _, id := range ids {
-		b.Get(config.MakeZoneKey(codec, id))
+	if update.zoneConfig == nil {
+		err = descriptors.DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
+	} else {
+		numAffected = 1
+		err = descriptors.WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
 	}
+	if err != nil {
+		return 0, err
+	}
+
 	if err := txn.Run(ctx, b); err != nil {
-		return nil, err
+		return 0, err
 	}
-	ret := make(map[descpb.ID]*zonepb.ZoneConfig, len(b.Results))
-	for idx, r := range b.Results {
-		if r.Err != nil {
-			return nil, r.Err
-		}
-		var zone zonepb.ZoneConfig
-		row := r.Rows[0]
-		if row.Value == nil {
-			continue
-		}
-		if err := row.ValueProto(&zone); err != nil {
-			return nil, err
-		}
-		ret[ids[idx]] = &zone
+	r := b.Results[0]
+	if r.Err != nil {
+		panic("run succeeded even through the result has an error")
 	}
-	return ret, nil
+	// We don't really care how many keys are affected since this function always
+	// write one single zone config.
+	if len(r.Keys) > 0 {
+		numAffected = 1
+	}
+	return numAffected, err
 }
 
 // RemoveIndexZoneConfigs removes the zone configurations for some
@@ -1238,19 +1209,21 @@ func RemoveIndexZoneConfigs(
 	ctx context.Context,
 	txn *kv.Txn,
 	execCfg *ExecutorConfig,
+	kvTrace bool,
 	descriptors *descs.Collection,
 	tableDesc catalog.TableDescriptor,
 	indexIDs []uint32,
 ) error {
-	zone, err := getZoneConfigRaw(ctx, txn, execCfg.Codec, execCfg.Settings, tableDesc.GetID())
+	zoneWithRaw, err := descriptors.GetZoneConfig(ctx, txn, tableDesc.GetID())
 	if err != nil {
 		return err
 	}
 	// If there are no zone configs, there's nothing to remove.
-	if zone == nil {
+	if zoneWithRaw == nil {
 		return nil
 	}
 
+	zone := zoneWithRaw.ZoneConfigProto()
 	// Look through all of the subzones and determine if we need to remove any
 	// of them. We only want to rewrite the zone config below if there's actual
 	// work to be done here.
@@ -1269,7 +1242,9 @@ func RemoveIndexZoneConfigs(
 
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
-		_, err = writeZoneConfig(ctx, txn, tableDesc.GetID(), tableDesc, zone, execCfg, descriptors, false /* hasNewSubzones */)
+		_, err = writeZoneConfig(
+			ctx, txn, tableDesc.GetID(), tableDesc, zone, zoneWithRaw.GetRawBytesInStorage(), execCfg, descriptors, false /* hasNewSubzones */, kvTrace,
+		)
 		if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 			return err
 		}

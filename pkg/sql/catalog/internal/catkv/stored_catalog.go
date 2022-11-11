@@ -124,6 +124,7 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 
 func (sc *StoredCatalog) ensureAll(ctx context.Context, c nstree.Catalog) error {
 	if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		sc.markZoneConfigInfoSeen(desc.GetID())
 		return sc.ensure(ctx, desc)
 	}); err != nil {
 		return err
@@ -437,6 +438,32 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	return nil
 }
 
+// EnsureZoneConfigFromStorage makes sure that zone config information is loaded
+// into storage layer cache. It's ok to load zone configs without descriptors,
+// and it's ok that loading descriptors can overwrite existing loaded zone
+// configs.
+func (sc *StoredCatalog) EnsureZoneConfigFromStorage(
+	ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
+) error {
+	if ids.Empty() {
+		return nil
+	}
+
+	c, err := sc.GetZoneConfigs(ctx, txn, ids)
+	if err != nil {
+		return err
+	}
+	ids.ForEach(func(id descpb.ID) {
+		sc.markZoneConfigInfoSeen(id)
+	})
+	if err := c.ForEachZoneConfigUnordered(func(id descpb.ID, zoneConfig catalog.ZoneConfig) error {
+		return sc.ensureZoneConfig(ctx, id, zoneConfig)
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
 // IterateCachedByID applies fn to all known descriptors in the cache in
 // increasing sequence of IDs.
 func (sc *StoredCatalog) IterateCachedByID(fn func(desc catalog.Descriptor) error) error {
@@ -538,6 +565,9 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 			return nil, err
 		}
 
+		for _, id := range fallbackReqs {
+			c.sc.markZoneConfigInfoSeen(id)
+		}
 		if err := c.sc.ensureAll(ctx, read); err != nil {
 			return nil, err
 		}
