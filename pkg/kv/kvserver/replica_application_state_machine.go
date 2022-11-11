@@ -303,7 +303,7 @@ func checkForcedErr(
 		// We return a NotLeaseHolderError so that the DistSender retries.
 		// NB: we set proposerStoreID to 0 because we don't know who proposed the
 		// Raft command. This is ok, as this is only used for debug information.
-		nlhe := newNotLeaseHolderError(
+		nlhe := roachpb.NewNotLeaseHolderError(
 			*replicaState.Lease, 0 /* proposerStoreID */, replicaState.Desc,
 			fmt.Sprintf(
 				"stale proposal: command was proposed under lease #%d but is being applied "+
