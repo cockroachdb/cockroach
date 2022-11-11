@@ -155,6 +155,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
+	cfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 	if params.TraceDir != "" {
 		if err := initTraceDir(params.TraceDir); err == nil {
 			cfg.InflightTraceDirName = params.TraceDir
@@ -533,16 +534,17 @@ func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
 	params := base.TestTenantArgs{
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
-		TenantID:            serverutils.TestTenantID(),
-		MemoryPoolSize:      ts.params.SQLMemoryPoolSize,
-		TempStorageConfig:   &tempStorageConfig,
-		Locality:            ts.params.Locality,
-		ExternalIODir:       ts.params.ExternalIODir,
-		ExternalIODirConfig: ts.params.ExternalIODirConfig,
-		ForceInsecure:       ts.Insecure(),
-		UseDatabase:         ts.params.UseDatabase,
-		SSLCertsDir:         ts.params.SSLCertsDir,
-		TestingKnobs:        ts.params.Knobs,
+		TenantID:                  serverutils.TestTenantID(),
+		MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:         &tempStorageConfig,
+		Locality:                  ts.params.Locality,
+		ExternalIODir:             ts.params.ExternalIODir,
+		ExternalIODirConfig:       ts.params.ExternalIODirConfig,
+		ForceInsecure:             ts.Insecure(),
+		UseDatabase:               ts.params.UseDatabase,
+		SSLCertsDir:               ts.params.SSLCertsDir,
+		TestingKnobs:              ts.params.Knobs,
+		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
 	}
 
 	// Since we're creating a tenant, it doesn't make sense to pass through the
@@ -848,6 +850,7 @@ func (ts *TestServer) StartTenant(
 	baseCfg.HeapProfileDirName = params.HeapProfileDirName
 	baseCfg.GoroutineDumpDirName = params.GoroutineDumpDirName
 	baseCfg.ClusterName = ts.Cfg.ClusterName
+	baseCfg.StartDiagnosticsReporting = params.StartDiagnosticsReporting
 
 	// For now, we don't support split RPC/SQL ports for secondary tenants
 	// in test servers.
