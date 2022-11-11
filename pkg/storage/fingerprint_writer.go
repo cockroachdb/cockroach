@@ -15,6 +15,7 @@ import (
 	"hash"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"
@@ -33,6 +34,7 @@ import (
 type fingerprintWriter struct {
 	hasher       hash.Hash64
 	timestampBuf []byte
+	options      MVCCExportFingerprintOptions
 
 	sstWriter *SSTWriter
 	xorAgg    *uintXorAggregate
@@ -40,7 +42,11 @@ type fingerprintWriter struct {
 
 // makeFingerprintWriter creates a new fingerprintWriter.
 func makeFingerprintWriter(
-	ctx context.Context, hasher hash.Hash64, cs *cluster.Settings, f io.Writer,
+	ctx context.Context,
+	hasher hash.Hash64,
+	cs *cluster.Settings,
+	f io.Writer,
+	opts MVCCExportFingerprintOptions,
 ) fingerprintWriter {
 	// TODO(adityamaru,dt): Once
 	// https://github.com/cockroachdb/cockroach/issues/90450 has been addressed we
@@ -50,6 +56,7 @@ func makeFingerprintWriter(
 		sstWriter: &sstWriter,
 		hasher:    hasher,
 		xorAgg:    &uintXorAggregate{},
+		options:   opts,
 	}
 }
 
@@ -106,14 +113,14 @@ func (f *fingerprintWriter) PutRawMVCC(key MVCCKey, value []byte) error {
 	defer f.hasher.Reset()
 
 	// Hash the key/timestamp and value of the RawMVCC.
-	if err := f.hash(key.Key); err != nil {
+	if err := f.hashKey(key.Key); err != nil {
 		return err
 	}
 	f.timestampBuf = EncodeMVCCTimestampToBuf(f.timestampBuf, key.Timestamp)
 	if err := f.hash(f.timestampBuf); err != nil {
 		return err
 	}
-	if err := f.hash(value); err != nil {
+	if err := f.hashValue(value); err != nil {
 		return err
 	}
 	f.xorAgg.add(f.hasher.Sum64())
@@ -125,15 +132,29 @@ func (f *fingerprintWriter) PutUnversioned(key roachpb.Key, value []byte) error 
 	defer f.hasher.Reset()
 
 	// Hash the key and value in the absence of a timestamp.
-	if err := f.hash(key); err != nil {
+	if err := f.hashKey(key); err != nil {
 		return err
 	}
-	if err := f.hash(value); err != nil {
+	if err := f.hashValue(value); err != nil {
 		return err
 	}
 
 	f.xorAgg.add(f.hasher.Sum64())
 	return nil
+}
+
+func (f *fingerprintWriter) hashKey(key []byte) error {
+	if f.options.StripTenantPrefix {
+		return f.hash(f.stripTenantPrefix(key))
+	}
+	return f.hash(key)
+}
+
+func (f *fingerprintWriter) hashValue(value []byte) error {
+	if f.options.StripValueChecksum {
+		return f.hash(f.stripValueChecksum(value))
+	}
+	return f.hash(value)
 }
 
 func (f *fingerprintWriter) hash(data []byte) error {
@@ -143,4 +164,19 @@ func (f *fingerprintWriter) hash(data []byte) error {
 	}
 
 	return nil
+}
+
+func (f *fingerprintWriter) stripValueChecksum(value []byte) []byte {
+	if len(value) < mvccChecksumSize {
+		return value
+	}
+	return value[mvccChecksumSize:]
+}
+
+func (f *fingerprintWriter) stripTenantPrefix(key []byte) []byte {
+	remainder, _, err := keys.DecodeTenantPrefixE(key)
+	if err != nil {
+		return key
+	}
+	return remainder
 }
