@@ -113,7 +113,8 @@ func ApplyTenantLicense() error {
 // IsEnterpriseEnabled() instead.
 //
 // The ClusterID argument should be the tenant-specific logical
-// cluster ID. is not used for the check itself; it is merely embedded
+// cluster ID.
+// `feature` is not used for the check itself; it is merely embedded
 // in the URL displayed in the error message.
 func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string) error {
 	return checkEnterpriseEnabledAt(st, timeutil.Now(), cluster, feature, true /* withDetails */)
@@ -125,7 +126,8 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature str
 // hot paths.
 //
 // The ClusterID argument should be the tenant-specific logical
-// cluster ID. is not used for the check itself; it is merely embedded
+// cluster ID.
+// `feature` is not used for the check itself; it is merely embedded
 // in the URL displayed in the error message.
 func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string) bool {
 	return checkEnterpriseEnabledAt(
