@@ -864,7 +864,7 @@ ORDER BY statistics_name, column_names::STRING
 ----
 statistics_name  column_names  row_count  distinct_count  null_count  has_histogram
 arr_stats        {rowid}       4          4               0           true
-arr_stats_x      {x}           4          3               1           false
+arr_stats_x      {x}           4          3               1           true
 
 # Test that enum columns always have histograms collected for them.
 statement ok
@@ -1900,3 +1900,58 @@ u_defaults       {d,c}
 u_defaults       {d,c,a}
 u_c_d_b          {d,c,b}
 u_defaults       {d,c,b,a}
+
+# Make sure that we can properly collect statistics on an array column that's
+# both forward and inverted indexable.
+
+statement ok
+CREATE TABLE indexed_arr(a INT[]);
+CREATE INDEX ON indexed_arr(a)
+
+statement ok
+INSERT INTO indexed_arr SELECT ARRAY[g] FROM generate_series(1,10000) g(g)
+
+statement ok
+ANALYZE indexed_arr
+
+query TTIB
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE indexed_arr]
+ORDER BY statistics_name, column_names::STRING
+----
+NULL  {a}      10000  true
+NULL  {rowid}  10000  true
+
+statement ok
+CREATE INDEX ON indexed_arr USING GIN (a)
+
+query T
+SELECT * FROM indexed_arr WHERE a = ARRAY[100]
+----
+{100}
+
+query T
+SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
+----
+{100}
+
+statement ok
+ANALYZE indexed_arr
+
+query TTIB
+SELECT statistics_name, column_names, row_count, histogram_id IS NOT NULL AS has_histogram
+FROM [SHOW STATISTICS FOR TABLE indexed_arr]
+ORDER BY statistics_name, column_names::STRING
+----
+NULL  {a}      10000  true
+NULL  {rowid}  10000  true
+
+query T
+SELECT * FROM indexed_arr WHERE a = ARRAY[100]
+----
+{100}
+
+query T
+SELECT * FROM indexed_arr WHERE a @> ARRAY[100]
+----
+{100}

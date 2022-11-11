@@ -2668,12 +2668,12 @@ ALTER TABLE t81448 ADD COLUMN b INT PRIMARY KEY
 statement ok
 DROP TABLE t81448
 
-subtest add_column_non_indexable_type
+subtest add_unique_array_column
 
 statement ok
 CREATE TABLE t1_non_indexable (n INT8);
 
-statement error pq: unimplemented: column x is of type char\[\] and thus is not indexable
+statement ok
 ALTER TABLE t1_non_indexable ADD COLUMN x CHAR(256)[] UNIQUE;
 
 subtest regression_89025
