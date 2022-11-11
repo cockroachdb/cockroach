@@ -210,6 +210,12 @@ type BaseConfig struct {
 	// diagnostics to Cockroach Labs.
 	// Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// DisableOwnHTTPListener prevents this server from starting a TCP
+	// listener for the HTTP service. Instead, it is expected
+	// that some other service (typically, the server controller)
+	// will accept and route requests instead.
+	DisableOwnHTTPListener bool
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.
