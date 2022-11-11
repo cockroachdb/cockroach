@@ -25,6 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
+const (
+	txnLogFile = "transactions.ndjson"
+)
+
 type randomLoadBenchSpec struct {
 	Nodes       int
 	Ops         int
@@ -153,7 +157,7 @@ func runSchemaChangeRandomLoad(
 		" --histograms=" + t.PerfArtifactsDir() + "/stats.json",
 		fmt.Sprintf("--max-ops %d", maxOps),
 		fmt.Sprintf("--concurrency %d", concurrency),
-		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, "transactions.json")),
+		fmt.Sprintf("--txn-log %s", filepath.Join(storeDirectory, txnLogFile)),
 	}
 	t.Status("running schemachange workload")
 	err = c.RunE(ctx, loadNode, runCmd...)
@@ -197,8 +201,8 @@ func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDir
 
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange")
 	localBackupFilePath := filepath.Join(t.ArtifactsDir(), "backup")
-	remoteTransactionsFilePath := filepath.Join(storeDirectory, "transactions.ndjson")
-	localTransactionsFilePath := filepath.Join(t.ArtifactsDir(), "transactions.ndjson")
+	remoteTransactionsFilePath := filepath.Join(storeDirectory, txnLogFile)
+	localTransactionsFilePath := filepath.Join(t.ArtifactsDir(), txnLogFile)
 
 	// Copy the backup from the store directory to the artifacts directory.
 	err = c.Get(ctx, t.L(), remoteBackupFilePath, localBackupFilePath, c.Node(1))
