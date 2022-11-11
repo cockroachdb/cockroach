@@ -89,6 +89,8 @@ func (w KVWriter) RecordToKeyValues(values ...tree.Datum) (ret []roachpb.KeyValu
 
 // Insert updates a batch with the KV operations required to insert a new record
 // into the table.
+// TODO(chengxiong): we move the `kvTrace` parameter to the KVWriter struct it
+// self to make the interface cleaner. Same to the `Update` and `Delete` method.
 func (w KVWriter) Insert(
 	ctx context.Context, b *kv.Batch, kvTrace bool, values ...tree.Datum,
 ) error {
