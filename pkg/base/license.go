@@ -28,7 +28,7 @@ var errEnterpriseNotEnabled = errors.New("OSS binaries do not include enterprise
 // enable it.
 //
 // This function is overridden by an init hook in CCL builds.
-var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, org, feature string) error {
+var CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, feature string) error {
 	return errEnterpriseNotEnabled // nb: this is squarely in the hot path on OSS builds
 }
 

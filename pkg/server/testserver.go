@@ -514,9 +514,8 @@ func (ts *TestServer) TestTenants() []serverutils.TestTenantInterface {
 // enterprise enabled build. This is due to licensing restrictions on the MT
 // capabilities.
 func (ts *TestServer) maybeStartDefaultTestTenant(ctx context.Context) error {
-	org := sql.ClusterOrganization.Get(&ts.st.SV)
 	clusterID := ts.sqlServer.execCfg.NodeInfo.LogicalClusterID
-	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), org, "SQL servers"); err != nil {
+	if err := base.CheckEnterpriseEnabled(ts.st, clusterID(), "SQL servers"); err != nil {
 		// If not enterprise enabled, we won't be able to use SQL Servers so eat
 		// the error and return without creating/starting a SQL server.
 		ts.cfg.DisableDefaultTestTenant = true

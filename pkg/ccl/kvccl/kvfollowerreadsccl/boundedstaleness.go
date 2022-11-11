@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -24,11 +23,9 @@ import (
 )
 
 func checkBoundedStalenessEnabled(evalCtx *eval.Context) error {
-	st := evalCtx.Settings
 	return utilccl.CheckEnterpriseEnabled(
-		st,
+		evalCtx.Settings,
 		evalCtx.ClusterID,
-		sql.ClusterOrganization.Get(&st.SV),
 		"bounded staleness",
 	)
 }

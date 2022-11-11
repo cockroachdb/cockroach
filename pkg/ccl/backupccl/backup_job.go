@@ -561,7 +561,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 
 		// Collect telemetry, once per backup after resolving its destination.
 		lic := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(), "",
+			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), "",
 		) != nil
 		collectTelemetry(ctx, m, initialDetails, details, lic, b.job.ID())
 	}

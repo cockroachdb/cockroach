@@ -79,8 +79,7 @@ func GenerateSubzoneSpans(
 ) ([]zonepb.SubzoneSpan, error) {
 	// Removing zone configs does not require a valid license.
 	if hasNewSubzones {
-		org := ClusterOrganization.Get(&st.SV)
-		if err := base.CheckEnterpriseEnabled(st, logicalClusterID, org,
+		if err := base.CheckEnterpriseEnabled(st, logicalClusterID,
 			"replication zones on indexes or partitions"); err != nil {
 			return nil, err
 		}
