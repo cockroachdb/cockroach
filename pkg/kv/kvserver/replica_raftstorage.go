@@ -621,9 +621,9 @@ func snapshot(
 
 // raftLogState stores information about the last entry and the size of the log.
 type raftLogState struct {
-	lastIndex   uint64
-	lastTerm    uint64
-	raftLogSize int64
+	lastIndex uint64
+	lastTerm  uint64
+	byteSize  int64
 }
 
 // logAppend adds the given entries to the raft log. Takes the previous log
@@ -679,9 +679,9 @@ func logAppend(
 		}
 	}
 	return raftLogState{
-		lastIndex:   newLastIndex,
-		lastTerm:    entries[len(entries)-1].Term,
-		raftLogSize: prev.raftLogSize + diff.SysBytes,
+		lastIndex: newLastIndex,
+		lastTerm:  entries[len(entries)-1].Term,
+		byteSize:  prev.byteSize + diff.SysBytes,
 	}, nil
 }
 
