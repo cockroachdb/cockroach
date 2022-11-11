@@ -35,7 +35,7 @@ import (
 //
 // These allow Replica to interface with the storage/apply package.
 
-// replicatedCmdBase is the part of a replicatedCmd relevant for stand-alone log
+// ReplicatedCmdBase is the part of a replicatedCmd relevant for stand-alone log
 // application, i.e. without having a surrounding *Replica present. In that
 // case, it is assumed that only one replica is processed at a given time[^1], no
 // in-memory state is kept, and no clients are waiting for responses to the
@@ -44,23 +44,23 @@ import (
 //
 // [^1]: at least when the current command includes a split or a merge, i.e.
 // changes replica boundaries.
-type replicatedCmdBase struct {
+type ReplicatedCmdBase struct {
 	*raftlog.Entry
 	// The following fields are set in shouldApplyCommand when we validate that
 	// a command applies given the current lease and GC threshold. The process
 	// of setting these fields is what transforms an apply.Command into an
 	// apply.CheckedCommand.
-	leaseIndex    uint64
-	forcedErr     *roachpb.Error
-	proposalRetry kvserverbase.ProposalRejectionType
+	LeaseIndex uint64
+	ForcedErr  *roachpb.Error
+	Rejection  kvserverbase.ProposalRejectionType
 }
 
-var _ apply.Command = (*replicatedCmdBase)(nil)
-var _ apply.CheckedCommand = (*replicatedCmdBase)(nil)
-var _ apply.AppliedCommand = (*replicatedCmdBase)(nil)
+var _ apply.Command = (*ReplicatedCmdBase)(nil)
+var _ apply.CheckedCommand = (*ReplicatedCmdBase)(nil)
+var _ apply.AppliedCommand = (*ReplicatedCmdBase)(nil)
 
-// decode populates the receiver from the provided entry.
-func (c *replicatedCmdBase) decode(e *raftpb.Entry) error {
+// Decode populates the receiver from the provided entry.
+func (c *ReplicatedCmdBase) Decode(e *raftpb.Entry) error {
 	if c.Entry != nil {
 		c.Entry.Release()
 		c.Entry = nil
@@ -75,43 +75,43 @@ func (c *replicatedCmdBase) decode(e *raftpb.Entry) error {
 }
 
 // Index implements apply.Command.
-func (c *replicatedCmdBase) Index() uint64 {
+func (c *ReplicatedCmdBase) Index() uint64 {
 	return c.Entry.Index
 }
 
 // IsTrivial implements apply.Command.
-func (c *replicatedCmdBase) IsTrivial() bool {
+func (c *ReplicatedCmdBase) IsTrivial() bool {
 	return isTrivial(c.replicatedResult())
 }
 
 // IsLocal implements apply.Command.
-func (c *replicatedCmdBase) IsLocal() bool {
+func (c *ReplicatedCmdBase) IsLocal() bool {
 	return false
 }
 
 // Ctx implements apply.Command.
-func (c *replicatedCmdBase) Ctx() context.Context {
+func (c *ReplicatedCmdBase) Ctx() context.Context {
 	return context.Background()
 }
 
 // AckErrAndFinish implements apply.Command.
-func (c *replicatedCmdBase) AckErrAndFinish(context.Context, error) error {
+func (c *ReplicatedCmdBase) AckErrAndFinish(context.Context, error) error {
 	return nil
 }
 
 // AckOutcomeAndFinish implements apply.AppliedCommand.
-func (c *replicatedCmdBase) AckOutcomeAndFinish(context.Context) error { return nil }
+func (c *ReplicatedCmdBase) AckOutcomeAndFinish(context.Context) error { return nil }
 
 // Rejected implements apply.CheckedCommand.
-func (c *replicatedCmdBase) Rejected() bool { return c.forcedErr != nil }
+func (c *ReplicatedCmdBase) Rejected() bool { return c.ForcedErr != nil }
 
 // CanAckBeforeApplication implements apply.CheckedCommand.
-func (c *replicatedCmdBase) CanAckBeforeApplication() bool { return false }
+func (c *ReplicatedCmdBase) CanAckBeforeApplication() bool { return false }
 
 // AckSuccess implements apply.CheckedCommand.
-func (c *replicatedCmdBase) AckSuccess(context.Context) error { return nil }
+func (c *ReplicatedCmdBase) AckSuccess(context.Context) error { return nil }
 
-func (c *replicatedCmdBase) replicatedResult() *kvserverpb.ReplicatedEvalResult {
+func (c *ReplicatedCmdBase) replicatedResult() *kvserverpb.ReplicatedEvalResult {
 	return &c.Entry.Cmd.ReplicatedEvalResult
 }
 
@@ -124,7 +124,7 @@ func (c *replicatedCmdBase) replicatedResult() *kvserverpb.ReplicatedEvalResult 
 // batch's view of ReplicaState. Then the batch is committed, the side-effects
 // are applied and the local result is processed.
 type replicatedCmd struct {
-	replicatedCmdBase
+	ReplicatedCmdBase
 
 	// proposal is populated on the proposing Replica only and comes from the
 	// Replica's proposal map.

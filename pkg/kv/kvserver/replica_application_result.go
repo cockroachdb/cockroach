@@ -123,23 +123,23 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
 			Req:                  cmd.proposal.Request,
-			ForcedError:          cmd.forcedErr,
+			ForcedError:          cmd.ForcedErr,
 		})
-		if cmd.proposalRetry == 0 {
-			cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
+		if cmd.Rejection == 0 {
+			cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
 		}
 	}
 	if pErr == nil {
-		pErr = cmd.forcedErr
+		pErr = cmd.ForcedErr
 	}
 
-	if cmd.proposalRetry != kvserverbase.ProposalRejectionPermanent && pErr == nil {
+	if cmd.Rejection != kvserverbase.ProposalRejectionPermanent && pErr == nil {
 		log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", cmd.proposal)
 	}
 	if pErr != nil {
 		// A forced error was set (i.e. we did not apply the proposal,
 		// for instance due to its log position).
-		switch cmd.proposalRetry {
+		switch cmd.Rejection {
 		case kvserverbase.ProposalRejectionPermanent:
 			cmd.response.Err = pErr
 		case kvserverbase.ProposalRejectionIllegalLeaseIndex:
