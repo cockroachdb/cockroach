@@ -107,6 +107,10 @@ func (uc *uncommittedZoneConfigs) upsert(id descpb.ID, zc *zonepb.ZoneConfig) er
 	if err := val.SetProto(zc); err != nil {
 		return err
 	}
-	uc.uncommitted[id] = zone.NewZoneConfigWithRawBytes(zc, val.TagAndDataBytes())
+	rawBytes, err := val.GetBytes()
+	if err != nil {
+		return err
+	}
+	uc.uncommitted[id] = zone.NewZoneConfigWithRawBytes(zc, rawBytes)
 	return nil
 }

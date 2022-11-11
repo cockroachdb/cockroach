@@ -59,9 +59,9 @@ const (
 	// ConstraintCommentType comment on a constraint.
 	ConstraintCommentType CommentType = 5
 
-	// MaxCommentTypeValue is the max possible integer of CommentType type. Update
+	// maxCommentTypeValue is the max possible integer of CommentType type. Update
 	// this whenever a new comment type is added.
-	MaxCommentTypeValue = ConstraintCommentType
+	maxCommentTypeValue = ConstraintCommentType
 )
 
 // AllCommentTypes is a slice of all valid schema comment types.
@@ -75,7 +75,7 @@ var AllCommentTypes = []CommentType{
 }
 
 func init() {
-	if len(AllCommentTypes) != int(MaxCommentTypeValue+1) {
+	if len(AllCommentTypes) != int(maxCommentTypeValue+1) {
 		panic("AllCommentTypes should contains all comment types.")
 	}
 }

@@ -190,7 +190,6 @@ func (sc *StoredCatalog) ensureComment(ctx context.Context, c nstree.Catalog) er
 	})
 }
 
-// markZoneConfigInfoSeen see storedZoneConfigs.markSeen
 func (sc *StoredCatalog) markZoneConfigInfoSeen(id descpb.ID) {
 	sc.zoneConfigs.markSeen(id)
 }
@@ -227,12 +226,11 @@ func (sc *StoredCatalog) GetCachedByID(id descpb.ID) catalog.Descriptor {
 	return nil
 }
 
-// GetCachedComment checks if comments of an object is cached and return the
-// comment if there is a comment exists for the key.
-// 1. False is returned for "cached" if the object is never seen by this cache.
-// 2. comment may not exist for a (objID, subID, cmtType) tuple even an object
-// has been seen, in this case, "cached" will be true, and "hasCmt" will be
-// false.
+// GetCachedComment returns the comment corresponding to the key and information
+// regarding the object's status in the cache. If the object is cached, the
+// returned cached boolean will be true, and the other return values will either
+// have the corresponding comment, or report that it does not exist. If the
+// object is not cached, the other return values will be zero.
 func (sc *StoredCatalog) GetCachedComment(
 	key catalogkeys.CommentKey,
 ) (cmt string, hasCmt bool, cached bool) {
@@ -245,11 +243,11 @@ func (sc *StoredCatalog) GetCachedComment(
 	return "", false, true
 }
 
-// GetCachedZoneConfig checks if zone config of an object is cached and returns
-// the zone config if so.
-// 1. False is returned for "cached" if the object is never seen by this cache.
-// 2. zone config record may not exist for a seen object. True for "cached" and
-// False for "hasZoneConfig" will be return in that case.
+// GetCachedZoneConfig returns the zone config corresponding to the object ID
+// and information regarding the object's status in the cache. If the object is
+// cached, the returned cached boolean will be true, and the returned zone
+// config will either be nil if a config does not exist or non-nil if it exists.
+// If the object is not cached, the returned zone config will be always nil.
 func (sc *StoredCatalog) GetCachedZoneConfig(id descpb.ID) (zc catalog.ZoneConfig, cached bool) {
 	return sc.zoneConfigs.get(id)
 }
@@ -439,10 +437,10 @@ func (sc *StoredCatalog) LookupDescriptorID(
 	return descpb.InvalidID, nil
 }
 
-// EnsureFromStorageByIDs actually reads a batch of descriptors from storage
-// and adds them to the cache. It assumes (without checking) that they are not
+// EnsureFromStorageByIDs actually reads a batch of descriptors from storage and
+// adds them to the cache. It assumes (without checking) that they are not
 // already present in the cache. It also caches descriptor metadata (e.g.
-// comment) which is read together with from a same kv batch.
+// comment and zone config) which is read together within a same kv batch.
 func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	ctx context.Context,
 	txn *kv.Txn,
@@ -457,13 +455,34 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 		return err
 	}
 
-	ids.ForEach(func(id descpb.ID) {
-		sc.markZoneConfigInfoSeen(id)
-	})
 	if err := sc.ensureAll(ctx, c); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+// EnsureZoneConfigFromStorage makes sure that zone config information is loaded
+// into storage layer cache. It's ok to load zone configs without descriptors,
+// and it's ok that loading descriptors can overwrite existing loaded zone
+// configs.
+func (sc *StoredCatalog) EnsureZoneConfigFromStorage(
+	ctx context.Context, txn *kv.Txn, ids catalog.DescriptorIDSet,
+) error {
+	if ids.Empty() {
+		return nil
+	}
+
+	c, err := sc.GetZoneConfigs(ctx, txn, ids)
+	if err != nil {
+		return err
+	}
+	ids.ForEach(func(id descpb.ID) {
+		sc.markZoneConfigInfoSeen(id)
+	})
+	if err := sc.ensureZoneConfig(ctx, c); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -637,12 +656,12 @@ func makeStoredZoneConfigs() storedZoneConfigs {
 	}
 }
 
-// upsert needs to be called an id has been marked as seen with markSeen,
-// otherwise the upsert would be a no-op. It's possible that a table is dropped,
-// its zone config stays in system.zones before it's gc'ed. In this case, we
-// should just ignore the zone config since we won't see the descriptor anyway.
-// Maybe it's fine to put the zone config in cache anyway, but it's good to keep
-// data sane.
+// upsert needs to be called after an id has been marked as seen with
+// storedZoneConfigs.markSeen, otherwise the upsert would be a no-op. It's
+// possible that a table is dropped, but its zone config stays in system.zones
+// before it's gc'ed. In this case, we should just ignore the zone config since
+// we won't see the descriptor anyway. Maybe it's fine to put the zone config in
+// cache anyway, but it's good to keep data sane.
 func (szc *storedZoneConfigs) upsert(id descpb.ID, zc catalog.ZoneConfig) {
 	if szc.seenIDs.Contains(id) {
 		szc.zcs[id] = zc

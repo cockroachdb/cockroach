@@ -2853,7 +2853,7 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return RemoveIndexZoneConfigs(ctx, txn, execCfg, descriptors, tableDesc, []uint32{uint32(idx.GetID())})
+	return RemoveIndexZoneConfigs(ctx, txn, execCfg, traceKV, descriptors, tableDesc, []uint32{uint32(idx.GetID())})
 }
 
 // We note the time at the start of the merge in order to limit the set of

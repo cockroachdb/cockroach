@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -524,20 +523,6 @@ func (noopMetadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID 
 // DeleteScheduleID implements scexec.DescriptorMetadataUpdater
 func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
 	return nil
-}
-
-// DeleteZoneConfig implements scexec.DescriptorMetadataUpdater
-func (noopMetadataUpdater) DeleteZoneConfig(
-	ctx context.Context, id descpb.ID,
-) (numAffectedRows int, err error) {
-	return 0, nil
-}
-
-// UpsertZoneConfig implements scexec.DescriptorMetadataUpdater
-func (noopMetadataUpdater) UpsertZoneConfig(
-	ctx context.Context, id descpb.ID, zone *zonepb.ZoneConfig,
-) (numAffectedRows int, err error) {
-	return 0, nil
 }
 
 var _ scexec.Backfiller = noopBackfiller{}

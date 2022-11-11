@@ -659,6 +659,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					oldPartitioning,
 					n.tableDesc.GetPrimaryIndex().GetPartitioning(),
 					params.extendedEvalCtx.ExecCfg,
+					params.extendedEvalCtx.Tracing.KVTracingEnabled(),
 				); err != nil {
 					return err
 				}
