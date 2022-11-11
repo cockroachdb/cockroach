@@ -68,7 +68,7 @@ NOTICE: ttl_range_concurrency is no longer configurable.
 
 subtest end
 
-subtest todo_add_subtests
+subtest create_table_crdb_internal_expiration_incorrect_explicit_default
 
 statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
 CREATE TABLE tbl (
@@ -78,6 +78,10 @@ CREATE TABLE tbl (
   FAMILY (id, text)
 ) WITH (ttl_expire_after = '10 minutes')
 
+subtest end
+
+subtest create_table_crdb_internal_expiration_incorrect_explicit_on_update
+
 statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
@@ -86,6 +90,124 @@ CREATE TABLE tbl (
   FAMILY (id, text)
 ) WITH (ttl_expire_after = '10 minutes')
 
+subtest end
+
+subtest crdb_internal_functions
+
+statement ok
+CREATE TABLE crdb_internal_functions_tbl (
+  id INT PRIMARY KEY,
+  text TEXT,
+  FAMILY (id, text)
+) WITH (ttl_expire_after = '10 minutes')
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE crdb_internal_functions_tbl]
+----
+CREATE TABLE public.crdb_internal_functions_tbl (
+  id INT8 NOT NULL,
+  text STRING NULL,
+  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
+  CONSTRAINT crdb_internal_functions_tbl_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
+
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
+statement ok
+SELECT crdb_internal.repair_ttl_table_scheduled_job('crdb_internal_functions_tbl'::regclass::oid)
+
+statement ok
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
+let $crdb_internal_functions_tbl_oid
+SELECT 'crdb_internal_functions_tbl'::regclass::oid
+
+user testuser
+
+statement error insufficient privilege
+SELECT crdb_internal.repair_ttl_table_scheduled_job($crdb_internal_functions_tbl_oid)
+
+statement error insufficient privilege
+SELECT crdb_internal.validate_ttl_scheduled_jobs()
+
+user root
+
+subtest end
+
+subtest ttl_expire_after_required
+
+statement ok
+CREATE TABLE ttl_expire_after_required() WITH (ttl_expire_after='10 minutes')
+
+statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
+ALTER TABLE ttl_expire_after_required RESET (ttl_expire_after)
+
+subtest end
+
+subtest ttl_expiration_expression_required
+
+statement ok
+CREATE TABLE ttl_expiration_expression_required(expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression='expire_at')
+
+statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
+ALTER TABLE ttl_expiration_expression_required RESET (ttl_expiration_expression)
+
+subtest end
+
+subtest alter_table_crdb_internal_expiration_incorrect_explicit_default
+
+statement ok
+CREATE TABLE alter_table_crdb_internal_expiration_incorrect_explicit_default() WITH (ttl_expire_after='10 minutes')
+
+statement error cannot alter column crdb_internal_expiration while ttl_expire_after is set
+ALTER TABLE alter_table_crdb_internal_expiration_incorrect_explicit_default ALTER COLUMN crdb_internal_expiration SET DEFAULT current_timestamp()
+
+subtest end
+
+subtest alter_table_crdb_internal_expiration_incorrect_explicit_on_update
+
+statement ok
+CREATE TABLE alter_table_crdb_internal_expiration_incorrect_explicit_on_update() WITH (ttl_expire_after='10 minutes')
+
+statement error cannot alter column crdb_internal_expiration while ttl_expire_after is set
+ALTER TABLE alter_table_crdb_internal_expiration_incorrect_explicit_on_update ALTER COLUMN crdb_internal_expiration SET ON UPDATE current_timestamp()
+
+subtest end
+
+subtest drop_column_crdb_internal_expiration
+
+statement ok
+CREATE TABLE drop_column_crdb_internal_expiration() WITH (ttl_expire_after='10 minutes')
+
+statement error cannot drop column crdb_internal_expiration while ttl_expire_after is set
+ALTER TABLE drop_column_crdb_internal_expiration DROP COLUMN crdb_internal_expiration
+
+subtest end
+
+subtest alter_column_crdb_internal_expiration_set_not_null
+
+statement ok
+CREATE TABLE alter_column_crdb_internal_expiration() WITH (ttl_expire_after='10 minutes')
+
+statement error cannot alter column crdb_internal_expiration while ttl_expire_after is set
+ALTER TABLE alter_column_crdb_internal_expiration ALTER COLUMN crdb_internal_expiration SET NOT NULL
+
+subtest end
+
+subtest alter_column_crdb_internal_expiration_rename
+
+statement ok
+CREATE TABLE alter_column_crdb_internal_expiration_rename() WITH (ttl_expire_after='10 minutes')
+
+statement error cannot rename column crdb_internal_expiration while ttl_expire_after is set
+ALTER TABLE alter_column_crdb_internal_expiration_rename RENAME COLUMN crdb_internal_expiration TO crdb_internal_expiration_2
+
+subtest end
+
+subtest todo_add_subtests
+
 statement ok
 CREATE TABLE tbl (
   id INT PRIMARY KEY,
@@ -94,63 +216,21 @@ CREATE TABLE tbl (
 ) WITH (ttl_expire_after = '10 minutes')
 
 query T
-SELECT create_statement FROM [SHOW CREATE TABLE tbl]
-----
-CREATE TABLE public.tbl (
-  id INT8 NOT NULL,
-  text STRING NULL,
-  crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
-  CONSTRAINT tbl_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_text_crdb_internal_expiration (id, text, crdb_internal_expiration)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')
-
-statement ok
-SELECT crdb_internal.validate_ttl_scheduled_jobs()
-
-statement ok
-SELECT crdb_internal.repair_ttl_table_scheduled_job('tbl'::regclass::oid)
-
-statement ok
-SELECT crdb_internal.validate_ttl_scheduled_jobs()
-
-let $tbl_oid
-SELECT 'tbl'::regclass::oid
-
-user testuser
-
-statement error insufficient privilege
-SELECT crdb_internal.repair_ttl_table_scheduled_job($tbl_oid)
-
-statement error insufficient privilege
-SELECT crdb_internal.validate_ttl_scheduled_jobs()
-
-user root
-
-statement error "ttl_expire_after" and/or "ttl_expiration_expression" must be set
-ALTER TABLE tbl RESET (ttl_expire_after)
-
-statement error expected DEFAULT expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
-ALTER TABLE tbl ALTER COLUMN crdb_internal_expiration SET DEFAULT current_timestamp()
-
-statement error expected ON UPDATE expression of crdb_internal_expiration to be current_timestamp\(\):::TIMESTAMPTZ \+ '00:10:00':::INTERVAL
-ALTER TABLE tbl ALTER COLUMN crdb_internal_expiration SET ON UPDATE current_timestamp()
-
-statement error cannot drop column crdb_internal_expiration while row-level TTL is active
-ALTER TABLE tbl DROP COLUMN crdb_internal_expiration
-
-query T
 SELECT reloptions FROM pg_class WHERE relname = 'tbl'
 ----
 {ttl='on',ttl_expire_after='00:10:00':::INTERVAL,ttl_job_cron='@hourly'}
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label = 'row-level-ttl-$table_id'
 ----
 1
 
 let $schedule_id
-SELECT id FROM [SHOW SCHEDULES] WHERE label LIKE 'row-level-ttl-%'
+SELECT id FROM [SHOW SCHEDULES] WHERE label = 'row-level-ttl-$table_id'
 
 statement error cannot drop a row level TTL schedule\nHINT: use ALTER TABLE test\.public\.tbl RESET \(ttl\) instead
 DROP SCHEDULE $schedule_id
@@ -209,9 +289,12 @@ CREATE TABLE public.tbl (
 statement ok
 SELECT crdb_internal.validate_ttl_scheduled_jobs()
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
@@ -226,9 +309,12 @@ CREATE TABLE tbl (
   FAMILY (id, text)
 ) WITH (ttl_expire_after = '10 minutes')
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label = 'row-level-ttl-$table_id'
 ----
 1
 
@@ -237,7 +323,7 @@ DROP TABLE tbl
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
@@ -249,9 +335,15 @@ statement ok
 CREATE TABLE drop_me.tbl () WITH (ttl_expire_after = '10 minutes'::interval);
 CREATE TABLE drop_me.tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+let $table_id2
+SELECT oid FROM pg_class WHERE relname = 'tbl2'
+
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label IN ('row-level-ttl-$table_id', 'row-level-ttl-$table_id2')
 ----
 2
 
@@ -260,7 +352,7 @@ DROP SCHEMA drop_me CASCADE
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
@@ -275,9 +367,15 @@ statement ok
 CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes'::interval);
 CREATE TABLE tbl2 () WITH (ttl_expire_after = '10 minutes'::interval)
 
+let $table_id
+SELECT oid FROM pg_class WHERE relname = 'tbl'
+
+let $table_id2
+SELECT oid FROM pg_class WHERE relname = 'tbl2'
+
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label IN ('row-level-ttl-$table_id', 'row-level-ttl-$table_id2')
 ----
 2
 
@@ -287,7 +385,7 @@ DROP DATABASE drop_me CASCADE
 
 query I
 SELECT count(1) FROM [SHOW SCHEDULES]
-WHERE label LIKE 'row-level-ttl-%'
+WHERE label = 'row-level-ttl-$table_id'
 ----
 0
 
