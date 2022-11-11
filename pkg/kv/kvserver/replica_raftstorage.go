@@ -665,13 +665,10 @@ func logAppend(
 		}
 	}
 
-	newState := raftLogState{
-		lastIndex: entries[len(entries)-1].Index,
-		lastTerm:  entries[len(entries)-1].Term,
-	}
+	newLastIndex := entries[len(entries)-1].Index
 	// Delete any previously appended log entries which never committed.
 	if prev.lastIndex > 0 {
-		for i := newState.lastIndex + 1; i <= prev.lastIndex; i++ {
+		for i := newLastIndex + 1; i <= prev.lastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
 			_, err := storage.MVCCDelete(ctx, rw, &diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
@@ -681,8 +678,11 @@ func logAppend(
 			}
 		}
 	}
-	newState.byteSize = prev.byteSize + diff.SysBytes
-	return newState, nil
+	return raftLogState{
+		lastIndex: newLastIndex,
+		lastTerm:  entries[len(entries)-1].Term,
+		byteSize:  prev.byteSize + diff.SysBytes,
+	}, nil
 }
 
 // updateRangeInfo is called whenever a range is updated by ApplySnapshot
