@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -32,6 +33,13 @@ func (r *replicationStreamManagerImpl) StartReplicationStream(
 	ctx context.Context, tenantID uint64,
 ) (streampb.StreamID, error) {
 	return startReplicationStreamJob(ctx, r.evalCtx, r.txn, tenantID)
+}
+
+// StartReplicationStreamByName implements streaming.ReplicationStreamManager interface.
+func (r *replicationStreamManagerImpl) StartReplicationStreamByName(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (streampb.StreamID, error) {
+	return startReplicationStreamJobByName(ctx, r.evalCtx, r.txn, tenantName)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.

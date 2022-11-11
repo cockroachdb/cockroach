@@ -185,18 +185,45 @@ func CreateTenantRecord(
 	)
 }
 
-// GetTenantRecord retrieves a tenant in system.tenants.
-func GetTenantRecord(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64,
+// GetTenantRecordByName retrieves a tenant with the provided name from
+// system.tenants.
+func GetTenantRecordByName(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenantName roachpb.TenantName,
 ) (*descpb.TenantInfo, error) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+		return nil, errors.Newf("tenant names not supported until upgrade to %s or higher is completed",
+			clusterversion.V23_1TenantNames.String())
+	}
 	row, err := execCfg.InternalExecutor.QueryRowEx(
 		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
-		`SELECT info FROM system.tenants WHERE id = $1`, tenID,
+		`SELECT info FROM system.tenants WHERE name = $1`, tenantName,
 	)
 	if err != nil {
 		return nil, err
 	} else if row == nil {
-		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant \"%d\" does not exist", tenID)
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant %q does not exist", tenantName)
+	}
+
+	info := &descpb.TenantInfo{}
+	infoBytes := []byte(tree.MustBeDBytes(row[0]))
+	if err := protoutil.Unmarshal(infoBytes, info); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+// GetTenantRecordByID retrieves a tenant in system.tenants.
+func GetTenantRecordByID(
+	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID roachpb.TenantID,
+) (*descpb.TenantInfo, error) {
+	row, err := execCfg.InternalExecutor.QueryRowEx(
+		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		`SELECT info FROM system.tenants WHERE id = $1`, tenID.ToUint64(),
+	)
+	if err != nil {
+		return nil, err
+	} else if row == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedObject, "tenant \"%d\" does not exist", tenID.ToUint64())
 	}
 
 	info := &descpb.TenantInfo{}
@@ -405,7 +432,7 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	}
 
 	// Retrieve the tenant's info.
-	info, err := GetTenantRecord(ctx, execCfg, txn, tenID)
+	info, err := GetTenantRecordByID(ctx, execCfg, txn, roachpb.MakeTenantID(tenID))
 	if err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
@@ -456,7 +483,7 @@ func (p *planner) DestroyTenant(ctx context.Context, tenID uint64, synchronous b
 	}
 
 	// Retrieve the tenant's info.
-	info, err := GetTenantRecord(ctx, p.execCfg, p.txn, tenID)
+	info, err := GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MakeTenantID(tenID))
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
@@ -608,7 +635,7 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	var info *descpb.TenantInfo
 	if txnErr := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		info, err = GetTenantRecord(ctx, p.execCfg, p.txn, tenID)
+		info, err = GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MakeTenantID(tenID))
 		return err
 	}); txnErr != nil {
 		return errors.Wrapf(txnErr, "retrieving tenant %d", tenID)

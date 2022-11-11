@@ -241,14 +241,15 @@ func TestReplicationStreamInitialization(t *testing.T) {
 
 	h, cleanup := streamingtest.NewReplicationHelper(t, serverArgs)
 	defer cleanup()
-	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	testTenantName := roachpb.TenantName("test-tenant")
+	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
 	// Makes the stream time out really soon
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '10ms'")
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '1ms'")
 	t.Run("failed-after-timeout", func(t *testing.T) {
-		rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", srcTenant.ID.ToUint64())
+		rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 		streamID := rows[0][0]
 
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
@@ -259,7 +260,7 @@ func TestReplicationStreamInitialization(t *testing.T) {
 	// Make sure the stream does not time out within the test timeout
 	h.SysSQL.Exec(t, "SET CLUSTER SETTING stream_replication.job_liveness_timeout = '500s'")
 	t.Run("continuously-running-within-timeout", func(t *testing.T) {
-		rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", srcTenant.ID.ToUint64())
+		rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 		streamID := rows[0][0]
 
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %s", streamID),
@@ -329,7 +330,8 @@ func TestStreamPartition(t *testing.T) {
 			DisableDefaultTestTenant: true,
 		})
 	defer cleanup()
-	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	testTenantName := roachpb.TenantName("test-tenant")
+	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
 	srcTenant.SQL.Exec(t, `
@@ -342,7 +344,7 @@ USE d;
 `)
 
 	ctx := context.Background()
-	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", srcTenant.ID.ToUint64())
+	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 	streamID := rows[0][0]
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
@@ -474,7 +476,8 @@ func TestStreamAddSSTable(t *testing.T) {
 		DisableDefaultTestTenant: true,
 	})
 	defer cleanup()
-	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	testTenantName := roachpb.TenantName("test-tenant")
+	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
 	srcTenant.SQL.Exec(t, `
@@ -485,7 +488,7 @@ USE d;
 `)
 
 	ctx := context.Background()
-	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", srcTenant.ID.ToUint64())
+	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 	streamID := rows[0][0]
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
@@ -561,7 +564,8 @@ func TestCompleteStreamReplication(t *testing.T) {
 		})
 	defer cleanup()
 	srcTenantID := serverutils.TestTenantID()
-	_, cleanupTenant := h.CreateTenant(t, srcTenantID)
+	testTenantName := roachpb.TenantName("test-tenant")
+	_, cleanupTenant := h.CreateTenant(t, srcTenantID, testTenantName)
 	defer cleanupTenant()
 
 	// Make the producer job times out fast and fastly tracks ingestion cutover signal.
@@ -571,7 +575,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 
 	var timedOutStreamID int
 	row := h.SysSQL.QueryRow(t,
-		"SELECT crdb_internal.start_replication_stream($1)", srcTenantID.ToUint64())
+		"SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 	row.Scan(&timedOutStreamID)
 	jobutils.WaitForJobToFail(t, h.SysSQL, jobspb.JobID(timedOutStreamID))
 
@@ -585,7 +589,7 @@ func TestCompleteStreamReplication(t *testing.T) {
 		// Create a new replication stream and complete it.
 		var streamID int
 		row := h.SysSQL.QueryRow(t,
-			"SELECT crdb_internal.start_replication_stream($1)", srcTenantID.ToUint64())
+			"SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 		row.Scan(&streamID)
 		jobutils.WaitForJobToRun(t, h.SysSQL, jobspb.JobID(streamID))
 		h.SysSQL.Exec(t, "SELECT crdb_internal.complete_replication_stream($1, $2)",
@@ -644,7 +648,8 @@ func TestStreamDeleteRange(t *testing.T) {
 		DisableDefaultTestTenant: true,
 	})
 	defer cleanup()
-	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	testTenantName := roachpb.TenantName("test-tenant")
+	srcTenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
 	srcTenant.SQL.Exec(t, `
@@ -659,7 +664,7 @@ USE d;
 `)
 
 	ctx := context.Background()
-	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1)", srcTenant.ID.ToUint64())
+	rows := h.SysSQL.QueryStr(t, "SELECT crdb_internal.start_replication_stream($1::STRING)", testTenantName)
 	streamID := rows[0][0]
 
 	const streamPartitionQuery = `SELECT * FROM crdb_internal.stream_partition($1, $2)`
