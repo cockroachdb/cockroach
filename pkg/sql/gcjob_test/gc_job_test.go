@@ -344,7 +344,7 @@ func TestGCResumer(t *testing.T) {
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
+		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MakeTenantID(tenID))
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -372,7 +372,7 @@ func TestGCResumer(t *testing.T) {
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID)
+		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MakeTenantID(tenID))
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -500,7 +500,7 @@ func TestGCTenant(t *testing.T) {
 
 		require.NoError(t, gcClosure(dropTenID, progress))
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
-		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, dropTenID)
+		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MakeTenantID(dropTenID))
 		require.EqualError(t, err, `tenant "11" does not exist`)
 		require.NoError(t, gcClosure(dropTenID, progress))
 

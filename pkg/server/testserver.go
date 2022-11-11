@@ -778,22 +778,41 @@ func (ts *TestServer) StartTenant(
 		if rowCount == 0 {
 			// Tenant doesn't exist. Create it.
 			if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
+				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)",
+				params.TenantID.ToUint64(), params.TenantName,
 			); err != nil {
+				return nil, err
+			}
+		} else if params.TenantName != "" {
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, "rename-test-tenant", nil,
+				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID, params.TenantName)
+			if err != nil {
 				return nil, err
 			}
 		}
 	} else if !params.SkipTenantCheck {
-		rowCount, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
+		row, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
 			ctx, "testserver-check-tenant-active", nil,
-			"SELECT 1 FROM system.tenants WHERE id=$1 AND active=true",
-			params.TenantID.ToUint64(),
+			"SELECT name FROM system.tenants WHERE id=$1 AND active=true",
+			params.TenantID.ToUint64(), string(params.TenantName),
 		)
 		if err != nil {
 			return nil, err
 		}
-		if rowCount == 0 {
+		if row == nil {
 			return nil, errors.New("not found")
+		}
+		// Check that the name passed in via params matches the name persisted in
+		// the system.tenants table.
+		if row[0] != tree.DNull {
+			actualName := (*string)(row[0].(*tree.DString))
+			if *actualName != string(params.TenantName) {
+				return nil, errors.Newf("name mismatch; tenant %d has name %q, but params specifies name %q",
+					params.TenantID.ToUint64(), *actualName, string(params.TenantName))
+			}
+		} else if params.TenantName != "" {
+			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %q",
+				params.TenantID.ToUint64(), string(params.TenantName))
 		}
 	}
 
