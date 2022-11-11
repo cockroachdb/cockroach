@@ -37,13 +37,15 @@ func (r ReplicatedEvalResult) IsZero() bool {
 	return r == ReplicatedEvalResult{}
 }
 
-// IsTrivial determines whether the side-effects of a ReplicatedEvalResult are
-// "trivial". A result is fundamentally considered "trivial" if it does not have
-// side effects which rely on the written state of the replica exactly matching
-// the in-memory state of the replica at the corresponding log position.
-// Non-trivial commands must be applied in their own batch so that after
-// the batch is applied the replica's written and in-memory state correspond
-// to that log index.
+// IsTrivial implements apply.Command.
+//
+// Trivial commands can be combined in an apply.Batch for efficiency. We only
+// allow this for commands that don't have any side effects except a few updates
+// that are part of all commands (MVCCStats, WriteTimestamp, etc), as other side
+// effects may not be correctly propagated between commands in the same batch.
+//
+// User writes are generally trivial, so nontrivial commands are the exception,
+// notable examples being configuration changes, splits, merges, etc.
 //
 // At the time of writing it is possible that the current conditions are too
 // strict but they are certainly sufficient.

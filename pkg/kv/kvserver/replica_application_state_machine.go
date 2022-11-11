@@ -98,7 +98,7 @@ func (r *Replica) shouldApplyCommand(
 	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.ForcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
-			ReplicatedEvalResult: *cmd.replicatedResult(),
+			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
 			ForcedError:          cmd.ForcedErr,
@@ -322,7 +322,7 @@ func (b *replicaAppBatch) Stage(
 func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *replicatedCmd) {
 	// If the command was using the deprecated version of the MVCCStats proto,
 	// migrate it to the new version and clear out the field.
-	res := cmd.replicatedResult()
+	res := cmd.ReplicatedResult()
 	if deprecatedDelta := res.DeprecatedDelta; deprecatedDelta != nil {
 		if res.Delta != (enginepb.MVCCStatsDelta{}) {
 			log.Fatalf(ctx, "stats delta not empty but deprecated delta provided: %+v", cmd)
@@ -380,7 +380,7 @@ func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
-	res := cmd.replicatedResult()
+	res := cmd.ReplicatedResult()
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
 	// has already been emitted and checkpointed via a rangefeed. Callers are
@@ -672,7 +672,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 		b.closedTimestampSetter.record(cmd, b.state.Lease)
 	}
 
-	res := cmd.replicatedResult()
+	res := cmd.ReplicatedResult()
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats delta
 	// upgrades. Thanks to commutativity, the spanlatch manager does not have to
@@ -960,9 +960,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	//
 	// Note that this must happen after committing (the engine.Batch), but
 	// before notifying a potentially waiting client.
-	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult())
+	clearTrivialReplicatedEvalResultFields(cmd.ReplicatedResult())
 	if !cmd.IsTrivial() {
-		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, cmd.replicatedResult())
+		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, cmd.ReplicatedResult())
 		if isRemoved {
 			// The proposal must not have been local, because we don't allow a
 			// proposing replica to remove itself from the Range.
@@ -980,7 +980,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.RUnlock()
 			sm.stats.stateAssertions++
 		}
-	} else if res := cmd.replicatedResult(); !res.IsZero() {
+	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
