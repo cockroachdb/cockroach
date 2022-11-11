@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/repl/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -928,7 +929,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
 	prevLastIndex := state.lastIndex
-	if state, err = r.storeCommittedEntries(ctx, state, rd, &stats); err != nil {
+	if state, err = r.storeCommittedEntries(ctx, state, logstore.MakeReady(rd), &stats); err != nil {
 		const expl = "while blah"
 		return stats, expl, err
 	}
@@ -1082,12 +1083,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // storeCommittedEntries persists new raft-committed Entries to the log storage.
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
-//
-// TODO(pavelkalinnikov): raft.Ready combines multiple roles. For a stricter
-// separation between log and state storage, introduce a log-specific Ready,
-// consisting of committed Entries, HardState, and MustSync.
 func (r *Replica) storeCommittedEntries(
-	ctx context.Context, state raftLogState, rd raft.Ready, stats *handleRaftReadyStats,
+	ctx context.Context, state raftLogState, rd logstore.Ready, stats *handleRaftReadyStats,
 ) (raftLogState, error) {
 	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
 	// Use a more efficient write-only batch because we don't need to do any
