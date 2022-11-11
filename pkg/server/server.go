@@ -1734,6 +1734,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// If enabled, start reporting diagnostics.
+	if s.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut() {
+		s.startDiagnostics(workersCtx)
+	}
+
 	// Enable the Obs Server.
 	s.eventsServer.SetResourceInfo(state.clusterID, int32(state.nodeID), build.BinaryVersion())
 
@@ -1842,10 +1847,8 @@ func (s *Server) LogicalClusterID() uuid.UUID {
 	return s.sqlServer.LogicalClusterID()
 }
 
-// StartDiagnostics starts periodic diagnostics reporting and update checking.
-// NOTE: This is not called in PreStart so that it's disabled by default for
-// testing.
-func (s *Server) StartDiagnostics(ctx context.Context) {
+// startDiagnostics starts periodic diagnostics reporting and update checking.
+func (s *Server) startDiagnostics(ctx context.Context) {
 	s.updates.PeriodicallyCheckForUpdates(ctx, s.stopper)
 	s.sqlServer.StartDiagnostics(ctx)
 }

@@ -476,14 +476,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			}
 		}
 
-		// Start up the update check loop.
-		// We don't do this in (*server.Server).Start() because we don't want this
-		// overhead and possible interference in tests.
-		if !c.demoCtx.DisableTelemetry {
-			c.infoLog(ctx, "starting telemetry")
-			c.firstServer.StartDiagnostics(ctx)
-		}
-
 		return nil
 	}(phaseCtx); err != nil {
 		return err
@@ -532,6 +524,8 @@ func (c *transientCluster) createAndAddNode(
 	if idx == 0 {
 		// The first node also auto-inits the cluster.
 		args.NoAutoInitializeCluster = false
+		// The first node also runs diagnostics (unless disabled by cluster.TelemetryOptOut).
+		args.StartDiagnosticsReporting = true
 	}
 
 	serverKnobs := args.Knobs.Server.(*server.TestingKnobs)
