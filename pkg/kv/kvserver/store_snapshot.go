@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
@@ -1303,7 +1304,7 @@ var snapshotSSTWriteSyncRate = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.snapshot_sst.sync_size",
 	"threshold after which snapshot SST writes must fsync",
-	bulkIOWriteBurst,
+	bulk.BulkIOWriteBurst,
 	settings.PositiveInt,
 )
 
