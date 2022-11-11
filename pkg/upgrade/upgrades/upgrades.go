@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/errors"
 )
@@ -36,9 +35,7 @@ func NoPrecondition(context.Context, clusterversion.ClusterVersion, upgrade.Tena
 }
 
 // NoTenantUpgradeFunc is a TenantUpgradeFunc that doesn't do anything.
-func NoTenantUpgradeFunc(
-	context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps, *jobs.Job,
-) error {
+func NoTenantUpgradeFunc(context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps) error {
 	return nil
 }
 

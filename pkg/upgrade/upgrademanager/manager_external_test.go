@@ -85,7 +85,7 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewTenantUpgrade("test", cv, upgrades.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
+							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							select {
@@ -232,7 +232,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewSystemUpgrade("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps, _ *jobs.Job,
+							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
 						) error {
 							return d.DB.Migrate(ctx, desc.StartKey, desc.EndKey, cv.Version)
 						}), true
@@ -347,7 +347,7 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					},
 					RegistryOverride: func(cv clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
-							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps, _ *jobs.Job,
+							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
 						) error {
 							if atomic.AddInt32(&active, 1) != 1 {
 								t.Error("unexpected concurrency")
@@ -432,7 +432,7 @@ func TestPauseMigration(t *testing.T) {
 							return nil, false
 						}
 						return upgrade.NewTenantUpgrade("test", cv, upgrades.NoPrecondition, func(
-							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
+							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 						) error {
 							canResume := make(chan error)
 							ch <- migrationEvent{
@@ -530,7 +530,7 @@ func TestPrecondition(t *testing.T) {
 	migrationErr.Store(true)
 	cf := func(run *int64, err *atomic.Value) upgrade.TenantUpgradeFunc {
 		return func(
-			context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps, *jobs.Job,
+			context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps,
 		) error {
 			atomic.AddInt64(run, 1)
 			if err.Load().(bool) {
@@ -559,7 +559,7 @@ func TestPrecondition(t *testing.T) {
 						upgrade.PreconditionFunc(func(
 							ctx context.Context, cv clusterversion.ClusterVersion, td upgrade.TenantDeps,
 						) error {
-							return cf(&preconditionRun, &preconditionErr)(ctx, cv, td, nil)
+							return cf(&preconditionRun, &preconditionErr)(ctx, cv, td)
 						}),
 						cf(&migrationRun, &migrationErr),
 					), true

@@ -32,7 +32,7 @@ import (
 // waitForDelRangeInGCJob ensures that any running GC jobs have adopted the new
 // DeleteRange protocol.
 func waitForDelRangeInGCJob(
-	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 ) error {
 	for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
 		if !storage.CanUseMVCCRangeTombstones(ctx, deps.Settings) {

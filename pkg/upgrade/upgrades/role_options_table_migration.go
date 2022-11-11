@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -39,7 +38,7 @@ ALTER TABLE system.role_options ALTER COLUMN "user_id" SET NOT NULL
 `
 
 func alterSystemRoleOptionsAddUserIDColumnWithIndex(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{
@@ -64,7 +63,7 @@ func alterSystemRoleOptionsAddUserIDColumnWithIndex(
 }
 
 func backfillSystemRoleOptionsIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	row, err := d.InternalExecutor.QueryRowEx(ctx, `get-num-null-user-ids`, nil, sessiondata.NodeUserSessionDataOverride,
 		`SELECT count(1) FROM system.role_options WHERE user_id IS NULL`)
@@ -98,7 +97,7 @@ UPDATE system.role_options
 }
 
 func setSystemRoleOptionsUserIDColumnNotNull(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	op := operation{
 		name:       "alter-system-role-options-user-id-column-not-null",
