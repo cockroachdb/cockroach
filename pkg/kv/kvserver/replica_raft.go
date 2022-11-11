@@ -941,7 +941,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		settings:    r.store.cfg.Settings,
 		metrics:     r.store.metrics,
 	}
-	if state, err = s.storeEntries(ctx, state, rd, &stats); err != nil {
+	if state, err = s.storeEntries(ctx, state, logstore.MakeReady(rd), &stats); err != nil {
 		return stats, errors.Wrap(err, "while storing log entries")
 	}
 
@@ -1105,12 +1105,8 @@ type logStore struct {
 // storeEntries persists newly appended Raft log Entries to the log storage.
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
-//
-// TODO(pavelkalinnikov): raft.Ready combines multiple roles. For a stricter
-// separation between log and state storage, introduce a log-specific Ready,
-// consisting of committed Entries, HardState, and MustSync.
 func (s *logStore) storeEntries(
-	ctx context.Context, state raftLogState, rd raft.Ready, stats *handleRaftReadyStats,
+	ctx context.Context, state raftLogState, rd logstore.Ready, stats *handleRaftReadyStats,
 ) (raftLogState, error) {
 	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
 	// Use a more efficient write-only batch because we don't need to do any
