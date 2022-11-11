@@ -112,6 +112,7 @@ func setServerContextDefaults() {
 	serverCfg.HeapProfileDirName = ""
 	serverCfg.CPUProfileDirName = ""
 	serverCfg.InflightTraceDirName = ""
+	serverCfg.StartDiagnosticsReporting = false // overridden in flags.go.
 
 	serverCfg.AutoInitializeCluster = false
 	serverCfg.ReadyFn = nil
@@ -617,7 +618,6 @@ func setDemoContextDefaults() {
 	demoCtx.RunWorkload = false
 	demoCtx.Localities = nil
 	demoCtx.GeoPartitionedReplicas = false
-	demoCtx.DisableTelemetry = false
 	demoCtx.DefaultKeySize = defaultKeySize
 	demoCtx.DefaultCALifetime = defaultCALifetime
 	demoCtx.DefaultCertLifetime = defaultCertLifetime

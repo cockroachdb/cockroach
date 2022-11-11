@@ -266,11 +266,6 @@ func (s *Server) startInMemoryTenantServerInternal(
 		return stopper, tenantServer, err
 	}
 
-	// Start up the diagnostics reporting loop.
-	if !cluster.TelemetryOptOut() {
-		tenantServer.StartDiagnostics(startCtx)
-	}
-
 	// Show the tenant details in logs.
 	// TODO(knz): Remove this once we can use a single listener.
 	if err := reportTenantInfo(startCtx, baseCfg, sqlCfg); err != nil {
