@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "base.go",
         "bulk_adder.go",
+        "forced_error.go",
         "knobs.go",
         "raftversion.go",
         "stores.go",
