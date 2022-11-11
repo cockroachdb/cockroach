@@ -621,8 +621,9 @@ func (ds *ServerImpl) SetupFlow(
 	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
 	defer rpcSpan.Finish()
 
+	rpcCtx := ctx
 	// Note: the passed context will be canceled when this RPC completes, so we
-	// can't associate it with the flow.
+	// can't associate it with the flow since it outlives the RPC.
 	ctx = ds.AnnotateCtx(context.Background())
 	if err := func() error {
 		// Reserve some memory for this remote flow which is a poor man's
@@ -637,7 +638,18 @@ func (ds *ServerImpl) SetupFlow(
 			ctx, rpcSpan, ds.memMonitor, &reserved, req, nil, /* rowSyncFlowConsumer */
 			nil /* batchSyncFlowConsumer */, LocalState{},
 		)
+		// Check whether the RPC context has been canceled indicating that we
+		// actually don't need to run this flow. This can happen when the
+		// context is canceled after Dial() but before issuing SetupFlow RPC in
+		// runnerRequest.run().
+		if err == nil {
+			err = rpcCtx.Err()
+		}
 		if err != nil {
+			// Make sure to clean up the flow if it was created.
+			if f != nil {
+				f.Cleanup(ctx)
+			}
 			return err
 		}
 		return ds.remoteFlowRunner.RunFlow(ctx, f)
