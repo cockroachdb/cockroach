@@ -382,7 +382,7 @@ func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
 	err := b.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
 		tables, sequences, views, err = mem.Metadata().AllDataSourceNames(
-			func(ds cat.DataSource) (cat.DataSourceName, error) {
+			ctx, b.plan.catalog, func(ds cat.DataSource) (cat.DataSourceName, error) {
 				return b.plan.catalog.fullyQualifiedNameWithTxn(ctx, ds, txn)
 			},
 		)
