@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadLogFormat(t *testing.T) {
@@ -33,4 +34,11 @@ func TestReadLogFormat(t *testing.T) {
 			// unreachable
 			return ""
 		})
+}
+
+func TestNewEntryDecoder_EmptyFile(t *testing.T) {
+	in := strings.NewReader("")
+	decoder, err := NewEntryDecoder(in, SelectEditMode(true /* redact */, true /*keepRedactable*/))
+	require.Nil(t, decoder)
+	require.ErrorContains(t, err, "cannot read format from empty log file")
 }
