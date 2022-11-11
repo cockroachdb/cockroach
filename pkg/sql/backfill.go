@@ -17,15 +17,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -43,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -53,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -1482,17 +1478,14 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateForwardIndexes(
 				ctx,
-				sc.job.ID(),
-				sc.execCfg.Codec,
-				sc.db,
+				sc.job,
 				tableDesc,
 				forwardIndexes,
 				runHistoricalTxn,
 				true,  /* withFirstMutationPubic */
 				false, /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
-				sc.execCfg.ProtectedTimestampProvider,
-				sc.execCfg.SystemConfig,
+				sc.execCfg.ProtectedTimestampManager,
 			)
 		})
 	}
@@ -1500,17 +1493,15 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 		grp.GoCtx(func(ctx context.Context) error {
 			return ValidateInvertedIndexes(
 				ctx,
-				sc.job.ID(),
 				sc.execCfg.Codec,
-				sc.db,
+				sc.job,
 				tableDesc,
 				invertedIndexes,
 				runHistoricalTxn,
 				true,  /* withFirstMutationPublic */
 				false, /* gatherAllInvalid */
 				sessiondata.InternalExecutorOverride{},
-				sc.execCfg.ProtectedTimestampProvider,
-				sc.execCfg.SystemConfig,
+				sc.execCfg.ProtectedTimestampManager,
 			)
 		})
 	}
@@ -1566,71 +1557,6 @@ func ValidateCheckConstraint(
 	})
 }
 
-// indexValidationProtectTimeStampGCPct wait a percentage of the GC time before
-// creating a protected timestamp record.
-const indexValidationProtectTimeStampGCPct = 80
-
-// unprotectTableForHistoricalTxnFn callback to remove a protected timestamp
-// record from a table.
-type unprotectTableForHistoricalTxnFn func(ctx context.Context) error
-
-// protectTableForHistoricalTxn adds a protected timestamp record for a historical
-// transaction for a specific table, once a certain percentage of the GC time has
-// elapsed.
-func protectTableForHistoricalTxn(
-	ctx context.Context,
-	db *kv.DB,
-	codec keys.SQLCodec,
-	jobID jobspb.JobID,
-	protectedTSProvider protectedts.Provider,
-	systemConfig config.SystemConfigProvider,
-	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
-	tableDesc catalog.TableDescriptor,
-	protectedTSInstallCancel chan struct{},
-) (unprotectTableForHistoricalTxnFn, error) {
-	// If we are starting up the system config can be nil, we are okay letting
-	// the job restart, due to the GC interval and lack of protected timestamp.
-	if systemConfig.GetSystemConfig() == nil {
-		return nil, nil
-	}
-	// Determine what the GC interval is on the table, which will help us
-	// figure out when to apply a protected timestamp, as a percentage of this
-	// time.
-	zoneCfg, err := systemConfig.GetSystemConfig().GetZoneConfigForObject(codec, config.ObjectID(tableDesc.GetID()))
-	if err != nil {
-		return nil, err
-	}
-	waitBeforeProtectedTS := ((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second) *
-		indexValidationProtectTimeStampGCPct) / 100
-
-	select {
-	case <-time.After(waitBeforeProtectedTS):
-		// If we are not running a historical query, nothing to do here.
-		if runHistoricalTxn.ReadAsOf().IsEmpty() {
-			return nil, nil
-		}
-		protectedtsID := uuid.MakeV4()
-		target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
-		rec := jobsprotectedts.MakeRecord(protectedtsID,
-			int64(jobID), runHistoricalTxn.ReadAsOf(), nil, jobsprotectedts.Jobs, target)
-		err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			return protectedTSProvider.Protect(ctx, txn, rec)
-		})
-		if err != nil {
-			return nil, err
-		}
-		return func(ctx context.Context) error {
-			return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				return protectedTSProvider.Release(ctx, txn, protectedtsID)
-			})
-		}, nil
-	case <-protectedTSInstallCancel:
-		return nil, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
 // ValidateInvertedIndexes checks that the indexes have entries for
 // all the items of data in rows.
 //
@@ -1640,50 +1566,30 @@ func protectTableForHistoricalTxn(
 // at the historical fixed timestamp for checks.
 func ValidateInvertedIndexes(
 	ctx context.Context,
-	jobID jobspb.JobID,
 	codec keys.SQLCodec,
-	db *kv.DB,
+	job *jobs.Job,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
-	protectedTSProvider protectedts.Provider,
-	systemConfig config.SystemConfigProvider,
+	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
 	grp := ctxgroup.WithContext(ctx)
-	protectedTSInstallGrp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
-	protectedTSInstallCancel := make(chan struct{})
 
 	expectedCount := make([]int64, len(indexes))
 	countReady := make([]chan struct{}, len(indexes))
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	var removeProtectedTS unprotectTableForHistoricalTxnFn
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job.ID(), tableDesc, runHistoricalTxn.ReadAsOf())
 	defer func() {
-		close(protectedTSInstallCancel)
-		err = errors.CombineErrors(err, protectedTSInstallGrp.Wait())
-		if removeProtectedTS != nil {
-			err = errors.CombineErrors(err, removeProtectedTS(ctx))
+		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
+			err = errors.CombineErrors(err, unprotectErr)
 		}
 	}()
-
-	protectedTSInstallGrp.GoCtx(func(ctx context.Context) error {
-		var err error
-		removeProtectedTS, err = protectTableForHistoricalTxn(ctx,
-			db,
-			codec,
-			jobID,
-			protectedTSProvider,
-			systemConfig,
-			runHistoricalTxn,
-			tableDesc,
-			protectedTSInstallCancel)
-		return err
-	})
 
 	for i, idx := range indexes {
 		// Shadow i and idx to prevent the values from changing within each
@@ -1864,23 +1770,18 @@ func countExpectedRowsForInvertedIndex(
 // change after a backfill.
 func ValidateForwardIndexes(
 	ctx context.Context,
-	jobID jobspb.JobID,
-	codec keys.SQLCodec,
-	db *kv.DB,
+	job *jobs.Job,
 	tableDesc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	withFirstMutationPublic bool,
 	gatherAllInvalid bool,
 	execOverride sessiondata.InternalExecutorOverride,
-	protectedTSProvider protectedts.Provider,
-	systemConfig config.SystemConfigProvider,
+	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
 	grp := ctxgroup.WithContext(ctx)
-	protectedTSInstallGrp := ctxgroup.WithContext(ctx)
 
 	invalid := make(chan descpb.IndexID, len(indexes))
-	protectedTSInstallCancel := make(chan struct{})
 	var tableRowCount int64
 	partialIndexExpectedCounts := make(map[descpb.IndexID]int64, len(indexes))
 
@@ -1889,28 +1790,12 @@ func ValidateForwardIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	var removeProtectedTS func(ctx context.Context) error
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job.ID(), tableDesc, runHistoricalTxn.ReadAsOf())
 	defer func() {
-		close(protectedTSInstallCancel)
-		err = errors.CombineErrors(err, protectedTSInstallGrp.Wait())
-		if removeProtectedTS != nil {
-			err = errors.CombineErrors(err, removeProtectedTS(ctx))
+		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
+			err = errors.CombineErrors(err, unprotectErr)
 		}
 	}()
-
-	protectedTSInstallGrp.GoCtx(func(ctx context.Context) error {
-		var err error
-		removeProtectedTS, err = protectTableForHistoricalTxn(ctx,
-			db,
-			codec,
-			jobID,
-			protectedTSProvider,
-			systemConfig,
-			runHistoricalTxn,
-			tableDesc,
-			protectedTSInstallCancel)
-		return err
-	})
 
 	// Compute the size of each index.
 	for _, idx := range indexes {

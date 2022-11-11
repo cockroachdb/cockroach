@@ -811,7 +811,11 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 	ctx context.Context, err error, evalCtx *extendedEvalContext,
 ) error {
-
+	// Clean up any protected timestamps as a last resort, in case the job
+	// execution never did itself.
+	if err := sc.execCfg.ProtectedTimestampManager.Unprotect(ctx, sc.job.ID()); err != nil {
+		log.Warningf(ctx, "unexpected error cleaning up protected timestamp %v", err)
+	}
 	// Ensure that this is a table descriptor and that the mutation is first in
 	// line prior to reverting.
 	{

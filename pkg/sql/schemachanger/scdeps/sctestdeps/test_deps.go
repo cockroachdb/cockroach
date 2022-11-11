@@ -914,6 +914,14 @@ func (s *TestState) SchemaChangerJobID() jobspb.JobID {
 	return 1
 }
 
+// CurrentJob implements the scexec.TransactionalJobRegistry
+// interface.
+func (s *TestState) CurrentJob() *jobs.Job {
+	// Not implemented and only used for validation, which will never
+	// use this object.
+	return nil
+}
+
 // TestingKnobs exposes the testing knobs.
 func (s *TestState) TestingKnobs() *scexec.TestingKnobs {
 	return s.testingKnobs
@@ -940,7 +948,7 @@ func (s *TestState) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) (err 
 // ValidateForwardIndexes implements the validator interface.
 func (s *TestState) ValidateForwardIndexes(
 	_ context.Context,
-	_ jobspb.JobID,
+	_ *jobs.Job,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	_ sessiondata.InternalExecutorOverride,
@@ -956,7 +964,7 @@ func (s *TestState) ValidateForwardIndexes(
 // ValidateInvertedIndexes implements the validator interface.
 func (s *TestState) ValidateInvertedIndexes(
 	_ context.Context,
-	_ jobspb.JobID,
+	_ *jobs.Job,
 	tbl catalog.TableDescriptor,
 	indexes []catalog.Index,
 	_ sessiondata.InternalExecutorOverride,

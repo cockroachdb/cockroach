@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
@@ -1038,13 +1039,19 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	jobRegistry.SetInternalExecutorFactory(ieFactory)
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexMerger = sql.NewIndexBackfillerMergePlanner(execCfg)
+	execCfg.ProtectedTimestampManager = jobsprotectedts.NewManager(
+		execCfg.DB,
+		execCfg.Codec,
+		execCfg.ProtectedTimestampProvider,
+		execCfg.SystemConfig,
+		execCfg.JobRegistry,
+	)
 	execCfg.Validator = scdeps.NewValidator(
 		execCfg.DB,
 		execCfg.Codec,
 		execCfg.Settings,
 		ieFactory,
-		execCfg.ProtectedTimestampProvider,
-		execCfg.SystemConfig,
+		execCfg.ProtectedTimestampManager,
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.ValidateCheckConstraint,
