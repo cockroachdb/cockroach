@@ -156,11 +156,12 @@ scans.
 
 The change to the existing logic will come when writing the new statistic in the
 database and updating the stats cache. When inserting the new statistic into
-`system.table_statistics`, we will need to explicitly mark it as partial. This
-will require adding a new boolean column to `system.table_statistics` called
-`partial`. When updating the stats cache, we will need to combine the most
-recent full statistic for the given table with all subsequent partial statistics
-(details on this below).
+`system.table_statistics`, we will need to explicitly mark it as partial and 
+indicate its domain. This will require adding a new column to `system.table_statistics` 
+called `partialPredicate` which will contain a predicate for a partial statistic, and 
+`NULL` for a full table statistic. When updating the stats cache, we will need to 
+combine the most recent full statistic for the given table with all subsequent partial 
+statistics (details on this below).
 
 How exactly to combine the full and partial stats depends on whether or not a
 histogram exists. Currently, all single column stats include a histogram, while
