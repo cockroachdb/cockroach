@@ -12,7 +12,9 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -42,6 +44,15 @@ import (
 // onDemandServer represents a server that can be started on demand.
 type onDemandServer interface {
 	stop(context.Context)
+
+	// getHTTPHandlerFn retrieves the function that can serve HTTP
+	// requests for this server.
+	getHTTPHandlerFn() http.HandlerFunc
+
+	// testingGetSQLAddr retrieves the address of the SQL listener.
+	// Used until the following issue is resolved:
+	// https://github.com/cockroachdb/cockroach/issues/84585
+	testingGetSQLAddr() string
 }
 
 type serverEntry struct {
@@ -172,6 +183,64 @@ func (c *serverController) getServers() (res []onDemandServer) {
 	return res
 }
 
+// TenantSelectHeader is the HTTP header used to select a particular tenant.
+const TenantSelectHeader = `X-Cockroach-Tenant`
+
+// TenantSelectCookieName is the name of the HTTP cookie used to select a particular tenant,
+// if the custom header is not specified.
+const TenantSelectCookieName = `tenant`
+
+// httpMux redirects incoming HTTP requests to the server selected by
+// the special HTTP request header.
+// If no tenant is specified, the default tenant is used.
+func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tenantName := getTenantNameFromHTTPRequest(r)
+	s, err := c.getOrCreateServer(ctx, tenantName)
+	if err != nil {
+		log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, "cannot find tenant")
+		return
+	}
+
+	s.getHTTPHandlerFn()(w, r)
+}
+
+func getTenantNameFromHTTPRequest(r *http.Request) string {
+	// Highest priority is manual override on the URL query parameters.
+	const tenantNameParamInQueryURL = "tenant_name"
+	if tenantName := r.URL.Query().Get(tenantNameParamInQueryURL); tenantName != "" {
+		return tenantName
+	}
+
+	// If not in parameters, try an explicit header.
+	if tenantName := r.Header.Get(TenantSelectHeader); tenantName != "" {
+		return tenantName
+	}
+
+	// No parameter, no explicit header. Is there a cookie?
+	if c, _ := r.Cookie(TenantSelectCookieName); c != nil && c.Value != "" {
+		return c.Value
+	}
+
+	// No luck so far.
+	//
+	// TODO(knz): Make the default tenant route for HTTP configurable.
+	// See: https://github.com/cockroachdb/cockroach/issues/91741
+	return catconstants.SystemTenantName
+}
+
+// TestingGetSQLAddrForTenant extracts the SQL address for the target tenant.
+// Used in tests until https://github.com/cockroachdb/cockroach/issues/84585 is resolved.
+func (s *Server) TestingGetSQLAddrForTenant(ctx context.Context, tenant string) string {
+	ts, err := s.serverController.getOrCreateServer(ctx, tenant)
+	if err != nil {
+		panic(err)
+	}
+	return ts.testingGetSQLAddr()
+}
+
 type errInvalidTenantMarker struct{}
 
 func (errInvalidTenantMarker) Error() string { return "invalid tenant" }
@@ -243,8 +312,15 @@ func (t *tenantServerWrapper) stop(ctx context.Context) {
 	t.deregister()
 }
 
-// systemServerWrapper implements the onDemandServer interface for
-// / Server.
+func (t *tenantServerWrapper) getHTTPHandlerFn() http.HandlerFunc {
+	return t.server.http.baseHandler
+}
+
+func (t *tenantServerWrapper) testingGetSQLAddr() string {
+	return t.server.sqlServer.cfg.SQLAddr
+}
+
+// systemServerWrapper implements the onDemandServer interface for Server.
 //
 // (We can imagine a future where the SQL service for the system
 // tenant is served using the same code path as any other secondary
@@ -261,6 +337,14 @@ var _ onDemandServer = (*systemServerWrapper)(nil)
 
 func (s *systemServerWrapper) stop(ctx context.Context) {
 	// No-op: the SQL service for the system tenant never shuts down.
+}
+
+func (t *systemServerWrapper) getHTTPHandlerFn() http.HandlerFunc {
+	return t.server.http.baseHandler
+}
+
+func (t *systemServerWrapper) testingGetSQLAddr() string {
+	return t.server.cfg.SQLAddr
 }
 
 // startInMemoryTenantServerInternal starts an in-memory server for
@@ -395,20 +479,23 @@ func makeInMemoryTenantServerConfig(
 	// TODO(knz): use a single network interface for all tenant servers.
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
 	portOffset := kvServerCfg.Config.SecondaryTenantPortOffset
-	var err1, err2, err3, err4, err5, err6 error
+	var err1, err2, err3, err4 error
 	baseCfg.Addr, err1 = rederivePort(index, kvServerCfg.Config.Addr, "", portOffset)
 	baseCfg.AdvertiseAddr, err2 = rederivePort(index, kvServerCfg.Config.AdvertiseAddr, baseCfg.Addr, portOffset)
-	baseCfg.HTTPAddr, err3 = rederivePort(index, kvServerCfg.Config.HTTPAddr, "", portOffset)
-	baseCfg.HTTPAdvertiseAddr, err4 = rederivePort(index, kvServerCfg.Config.HTTPAdvertiseAddr, baseCfg.HTTPAddr, portOffset)
-	baseCfg.SQLAddr, err5 = rederivePort(index, kvServerCfg.Config.SQLAddr, "", portOffset)
-	baseCfg.SQLAdvertiseAddr, err6 = rederivePort(index, kvServerCfg.Config.SQLAdvertiseAddr, baseCfg.SQLAddr, portOffset)
+	baseCfg.SQLAddr, err3 = rederivePort(index, kvServerCfg.Config.SQLAddr, "", portOffset)
+	baseCfg.SQLAdvertiseAddr, err4 = rederivePort(index, kvServerCfg.Config.SQLAdvertiseAddr, baseCfg.SQLAddr, portOffset)
 	if err := errors.CombineErrors(err1,
 		errors.CombineErrors(err2,
-			errors.CombineErrors(err3,
-				errors.CombineErrors(err4,
-					errors.CombineErrors(err5, err6))))); err != nil {
+			errors.CombineErrors(err3, err4))); err != nil {
 		return baseCfg, sqlCfg, err
 	}
+
+	// The parent server will route HTTP requests to us.
+	baseCfg.DisableHTTPListener = true
+	// Nevertheless, we like to know our own HTTP address.
+	baseCfg.HTTPAddr = kvServerCfg.Config.HTTPAddr
+	baseCfg.HTTPAdvertiseAddr = kvServerCfg.Config.HTTPAdvertiseAddr
+
 	// Define the unix socket intelligently.
 	// See: https://github.com/cockroachdb/cockroach/issues/84585
 	baseCfg.SocketFile = ""
