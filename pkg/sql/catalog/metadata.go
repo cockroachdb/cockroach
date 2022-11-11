@@ -10,7 +10,10 @@
 
 package catalog
 
-import "github.com/cockroachdb/cockroach/pkg/config/zonepb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+)
 
 // ZoneConfigWithRawBytes wraps a zone config together with its expected
 // raw bytes. For cached modified zone configs, the raw bytes should be the
@@ -18,6 +21,7 @@ import "github.com/cockroachdb/cockroach/pkg/config/zonepb"
 // be the raw value read from kv when it's first read from storage.
 type ZoneConfigWithRawBytes struct {
 	zc *zonepb.ZoneConfig
+	// This only contains raw data bytes.
 	rb []byte
 }
 
@@ -40,4 +44,18 @@ func (zc *ZoneConfigWithRawBytes) ZoneConfig() *zonepb.ZoneConfig {
 // RawBytes returns the raw bytes.
 func (zc *ZoneConfigWithRawBytes) RawBytes() []byte {
 	return zc.rb
+}
+
+// Clone returns a ZoneConfigWithRawBytes with a deep copy of ZoneConfig. It's
+// safe to not clone the raw bytes because the cput would fail if raw bytes
+// differs from the original bytes.
+func (zc *ZoneConfigWithRawBytes) Clone() *ZoneConfigWithRawBytes {
+	if zc == nil {
+		return nil
+	}
+	clone := protoutil.Clone(zc.zc).(*zonepb.ZoneConfig)
+	return &ZoneConfigWithRawBytes{
+		zc: clone,
+		rb: zc.rb,
+	}
 }

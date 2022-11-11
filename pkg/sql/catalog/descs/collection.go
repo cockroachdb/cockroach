@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -364,20 +363,28 @@ func (tc *Collection) DeleteTableComments(
 // WriteZoneConfigToBatch adds the new zoneconfig to uncommitted layer and
 // writes to the kv batch.
 func (tc *Collection) WriteZoneConfigToBatch(
-	ctx context.Context, kvTrace bool, b *kv.Batch, descID descpb.ID, zc *zonepb.ZoneConfig,
+	ctx context.Context,
+	kvTrace bool,
+	b *kv.Batch,
+	descID descpb.ID,
+	zc *catalog.ZoneConfigWithRawBytes,
 ) error {
-	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable)
+	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable, 0 /* SkippedColumnFamilyIDs*/)
 	var val roachpb.Value
-	if err := val.SetProto(zc); err != nil {
+	if err := val.SetProto(zc.ZoneConfig()); err != nil {
+		return err
+	}
+	valBytes, err := val.GetBytes()
+	if err != nil {
 		return err
 	}
 	values := []tree.Datum{
 		tree.NewDInt(tree.DInt(descID)),
-		tree.NewDBytes(tree.DBytes(val.TagAndDataBytes())),
+		tree.NewDBytes(tree.DBytes(valBytes)),
 	}
 
 	var expValues []tree.Datum
-	if zc := tc.GetZoneConfigWithRawByte(descID); zc != nil {
+	if zc.RawBytes() != nil {
 		expValues = []tree.Datum{
 			tree.NewDInt(tree.DInt(descID)),
 			tree.NewDBytes(tree.DBytes(zc.RawBytes())),
@@ -388,13 +395,18 @@ func (tc *Collection) WriteZoneConfigToBatch(
 		return err
 	}
 
-	return tc.AddUncommittedZoneConfig(descID, zc)
+	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
+		return tc.AddUncommittedZoneConfig(descID, zc.ZoneConfig())
+	}
+	return nil
 }
 
-// DeleteZoneConfig deletes zone config of the table.
+// DeleteZoneConfig deletes zone config of the table. It also returns a boolean
+// indicating whether it actually deleted a zone config.
 func (tc *Collection) DeleteZoneConfig(
 	ctx context.Context, kvTrace bool, b *kv.Batch, descID descpb.ID,
 ) error {
+	// Check if it's actually deleting something.
 	zcWriter := bootstrap.MakeKVWriter(tc.codec(), systemschema.ZonesTable)
 	values := []tree.Datum{
 		tree.NewDInt(tree.DInt(descID)),
@@ -404,7 +416,9 @@ func (tc *Collection) DeleteZoneConfig(
 		return err
 	}
 
-	tc.MarkUncommittedZoneConfigDeleted(descID)
+	if descID != keys.RootNamespaceID && !keys.IsPseudoTableID(uint32(descID)) {
+		tc.MarkUncommittedZoneConfigDeleted(descID)
+	}
 	return nil
 }
 

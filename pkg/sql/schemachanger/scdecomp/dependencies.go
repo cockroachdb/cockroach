@@ -11,7 +11,9 @@
 package scdecomp
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -48,7 +50,7 @@ type CommentGetter interface {
 // from storage.
 type ZoneConfigGetter interface {
 	// GetZoneConfig reads the raw zone config from storage.
-	GetZoneConfig(id descpb.ID) *zonepb.ZoneConfig
+	GetZoneConfig(ctx context.Context, id descpb.ID) (*catalog.ZoneConfigWithRawBytes, error)
 }
 
 // ElementVisitor is the type of the visitor callback function used by

@@ -1028,6 +1028,7 @@ func createImportingDescriptors(
 								txn,
 								p.ExecCfg(),
 								descsCol,
+								p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 							); err != nil {
 								return err
 							}
@@ -1176,6 +1177,7 @@ func createImportingDescriptors(
 							ctx,
 							txn,
 							p.ExecCfg(),
+							p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
 							descsCol,
 							regionConfig,
 							mutTable,

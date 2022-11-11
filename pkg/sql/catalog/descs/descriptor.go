@@ -88,6 +88,8 @@ func (tc *Collection) GetComment(
 	if cmt, hasCmt, cached := tc.stored.GetCachedComment(descID, subID, cmtType); cached {
 		return cmt, hasCmt
 	}
+	// TODO(chengxiong): we need to ensure descritpor if it's not in either cache
+	// and it's not a pseudo descriptor.
 	return "", false
 }
 
@@ -98,27 +100,59 @@ func (tc *Collection) AddUncommittedComment(
 	tc.uncommittedComments.upsert(descID, subID, cmtType, cmt)
 }
 
-// GetZoneConfig fetches zone config from uncommitted cache if it exists,
-// otherwise the cached storage version.
-func (tc *Collection) GetZoneConfig(descID descpb.ID) *zonepb.ZoneConfig {
-	zc := tc.GetZoneConfigWithRawByte(descID)
-	if zc != nil {
-		return zc.ZoneConfig()
+// GetZoneConfigWithRawByte is similar to GetZoneConfigsWithRawByte but only
+// fetches for one id.
+func (tc *Collection) GetZoneConfigWithRawByte(
+	ctx context.Context, txn *kv.Txn, descID descpb.ID,
+) (*catalog.ZoneConfigWithRawBytes, error) {
+	ret, err := tc.GetZoneConfigsWithRawByte(ctx, txn, descID)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return ret[descID], nil
 }
 
-// GetZoneConfigWithRawByte fetches zone config together with its raw bytes from
-// uncommitted cache if it exists, otherwise the cached storage version is
-// returned.
-func (tc *Collection) GetZoneConfigWithRawByte(descID descpb.ID) *catalog.ZoneConfigWithRawBytes {
-	if zc, cached := tc.uncommittedZoneConfigs.getUncommitted(descID); cached {
-		return zc
+// GetZoneConfigsWithRawByte first tries to get zone config from uncommitted and
+// stored layer cache. Zone configs are ensured from storage if there are ids not
+// seen in caches.
+func (tc *Collection) GetZoneConfigsWithRawByte(
+	ctx context.Context, txn *kv.Txn, descIDs ...descpb.ID,
+) (map[descpb.ID]*catalog.ZoneConfigWithRawBytes, error) {
+	ret := make(map[descpb.ID]*catalog.ZoneConfigWithRawBytes)
+	var idsForStorageRead catalog.DescriptorIDSet
+	for _, id := range descIDs {
+		if zc, cached := tc.uncommittedZoneConfigs.getUncommitted(id); cached {
+			ret[id] = zc.Clone()
+			continue
+		}
+		if zc, cached := tc.stored.GetCachedZoneConfig(id); cached {
+			ret[id] = zc.Clone()
+			continue
+		}
+		idsForStorageRead.Add(id)
 	}
-	if zc, cached := tc.stored.GetCachedZoneConfig(descID); cached {
-		return zc
+
+	// If zone config is not seen in cache, it's a good chance that the id doesn't
+	// have a corresponding descriptor so the zone config wasn't loaded with the
+	// descriptor. Or a descriptor is not resolved for schema change purpose yet.
+	if err := tc.stored.EnsureZoneConfigFromStorage(ctx, txn, idsForStorageRead); err != nil {
+		return nil, err
 	}
-	return nil
+
+	var remainingIDs catalog.DescriptorIDSet
+	idsForStorageRead.ForEach(func(id descpb.ID) {
+		if zc, cached := tc.stored.GetCachedZoneConfig(id); cached {
+			ret[id] = zc.Clone()
+			return
+		}
+		remainingIDs.Add(id)
+	})
+
+	if !remainingIDs.Empty() {
+		// This should never happen since we tried hard to load zone configs from storage.
+		return nil, errors.Errorf("Failed to fetch zone config for IDs: %v", idsForStorageRead.Ordered())
+	}
+	return ret, nil
 }
 
 // AddUncommittedZoneConfig adds a zone config to the uncommitted cache.

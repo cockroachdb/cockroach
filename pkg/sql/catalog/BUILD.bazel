@@ -42,6 +42,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/hlc",
         "//pkg/util/iterutil",
+        "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
