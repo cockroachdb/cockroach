@@ -1435,7 +1435,7 @@ func TestClusterAPI(t *testing.T) {
 			// Override server license check.
 			if enterpriseOn {
 				old := base.CheckEnterpriseEnabled
-				base.CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, _, _ string) error {
+				base.CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, _ string) error {
 					return nil
 				}
 				defer func() { base.CheckEnterpriseEnabled = old }()
