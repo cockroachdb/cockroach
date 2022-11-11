@@ -703,9 +703,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var rd raft.Ready
 	r.mu.Lock()
 	state := raftLogState{ // used for append below
-		lastIndex:   r.mu.lastIndex,
-		lastTerm:    r.mu.lastTerm,
-		raftLogSize: r.mu.raftLogSize,
+		lastIndex: r.mu.lastIndex,
+		lastTerm:  r.mu.lastTerm,
+		byteSize:  r.mu.raftLogSize,
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
@@ -810,9 +810,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// the local variables we're tracking here.
 			r.mu.RLock()
 			state = raftLogState{
-				lastIndex:   r.mu.lastIndex,
-				lastTerm:    r.mu.lastTerm,
-				raftLogSize: r.mu.raftLogSize,
+				lastIndex: r.mu.lastIndex,
+				lastTerm:  r.mu.lastTerm,
+				byteSize:  r.mu.raftLogSize,
 			}
 			r.mu.RUnlock()
 
@@ -942,7 +942,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "during sideloading"
 			return stats, expl, errors.Wrap(err, expl)
 		}
-		state.raftLogSize += sideLoadedEntriesSize
+		state.byteSize += sideLoadedEntriesSize
 		if state, err = logAppend(
 			ctx, r.raftMu.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
@@ -1014,10 +1014,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "while purging sideloaded storage"
 			return stats, expl, err
 		}
-		state.raftLogSize -= purgedSize
-		if state.raftLogSize < 0 {
+		state.byteSize -= purgedSize
+		if state.byteSize < 0 {
 			// Might have gone negative if node was recently restarted.
-			state.raftLogSize = 0
+			state.byteSize = 0
 		}
 	}
 
@@ -1027,7 +1027,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// TODO(pavelkalinnikov): put raftLogState to r.mu directly instead of fields.
 	r.mu.lastIndex = state.lastIndex
 	r.mu.lastTerm = state.lastTerm
-	r.mu.raftLogSize = state.raftLogSize
+	r.mu.raftLogSize = state.byteSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
