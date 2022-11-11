@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package logstore
 
 import (
 	"context"
@@ -23,7 +23,7 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-var errSideloadedFileNotFound = errors.New("sideloaded file not found")
+var ErrSideloadedFileNotFound = errors.New("sideloaded file not found")
 
 // SideloadStorage is the interface used for Raft SSTable sideloading.
 // Implementations do not need to be thread safe.
@@ -34,13 +34,13 @@ type SideloadStorage interface {
 	// Writes the given contents to the file specified by the given index and
 	// term. Overwrites the file if it already exists.
 	Put(_ context.Context, index, term uint64, contents []byte) error
-	// Load the file at the given index and term. Return errSideloadedFileNotFound when no
+	// Load the file at the given index and term. Return ErrSideloadedFileNotFound when no
 	// such file is present.
 	Get(_ context.Context, index, term uint64) ([]byte, error)
 	// Purge removes the file at the given index and term. It may also
 	// remove any leftover files at the same index and earlier terms, but
 	// is not required to do so. When no file at the given index and term
-	// exists, returns errSideloadedFileNotFound.
+	// exists, returns ErrSideloadedFileNotFound.
 	//
 	// Returns the total size of the purged payloads.
 	Purge(_ context.Context, index, term uint64) (int64, error)
@@ -59,7 +59,7 @@ type SideloadStorage interface {
 	Filename(_ context.Context, index, term uint64) (string, error)
 }
 
-// maybeSideloadEntries optimizes handling for AddSST requests. AddSST are
+// MaybeSideloadEntries optimizes handling for AddSST requests. AddSST are
 // typically >> 1mb in size, and this makes them a poor fit for writing into the
 // raft log (which is backed by an LSM) directly. Furthermore, we want to
 // optimize by ingesting the SST directly into the LSM. We do this by writing
@@ -72,7 +72,7 @@ type SideloadStorage interface {
 //
 // The provided slice is not modified, though the returned slice may be backed
 // in parts or entirely by the same memory.
-func maybeSideloadEntries(
+func MaybeSideloadEntries(
 	ctx context.Context, entriesToAppend []raftpb.Entry, sideloaded SideloadStorage,
 ) (
 	_ []raftpb.Entry,
@@ -84,7 +84,7 @@ func maybeSideloadEntries(
 
 	cow := false
 	for i := range entriesToAppend {
-		if !sniffSideloadedRaftCommand(entriesToAppend[i].Data) {
+		if !SniffSideloadedRaftCommand(entriesToAppend[i].Data) {
 			otherEntriesSize += int64(len(entriesToAppend[i].Data))
 			continue
 		}
@@ -139,25 +139,25 @@ func maybeSideloadEntries(
 	return entriesToAppend, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
 }
 
-func sniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
+func SniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
 	return len(data) > 0 && data[0] == byte(kvserverbase.RaftVersionSideloaded)
 }
 
-// maybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
+// MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
 // command encoding version indicates a sideloaded entry, it uses the entryCache
 // or SideloadStorage to inline the payload, returning a new entry (which must
 // be treated as immutable by the caller) or nil (if inlining does not apply)
 //
 // If a payload is missing, returns an error whose Cause() is
-// errSideloadedFileNotFound.
-func maybeInlineSideloadedRaftCommand(
+// ErrSideloadedFileNotFound.
+func MaybeInlineSideloadedRaftCommand(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
 	ent raftpb.Entry,
 	sideloaded SideloadStorage,
 	entryCache *raftentry.Cache,
 ) (*raftpb.Entry, error) {
-	if !sniffSideloadedRaftCommand(ent.Data) {
+	if !SniffSideloadedRaftCommand(ent.Data) {
 		return nil, nil
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
@@ -215,12 +215,12 @@ func maybeInlineSideloadedRaftCommand(
 	return &ent, nil
 }
 
-// assertSideloadedRaftCommandInlined asserts that if the provided entry is a
+// AssertSideloadedRaftCommandInlined asserts that if the provided entry is a
 // sideloaded entry, then its payload has already been inlined. Doing so
 // requires unmarshalling the raft command, so this assertion should be kept out
 // of performance critical paths.
-func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
-	if !sniffSideloadedRaftCommand(ent.Data) {
+func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) {
+	if !SniffSideloadedRaftCommand(ent.Data) {
 		return
 	}
 
@@ -236,16 +236,16 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	}
 }
 
-// maybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
+// MaybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
 // and returns the total number of bytes removed. Nonexistent entries are
 // silently skipped over.
-func maybePurgeSideloaded(
+func MaybePurgeSideloaded(
 	ctx context.Context, ss SideloadStorage, firstIndex, lastIndex uint64, term uint64,
 ) (int64, error) {
 	var totalSize int64
 	for i := firstIndex; i <= lastIndex; i++ {
 		size, err := ss.Purge(ctx, i, term)
-		if err != nil && !errors.Is(err, errSideloadedFileNotFound) {
+		if err != nil && !errors.Is(err, ErrSideloadedFileNotFound) {
 			return totalSize, err
 		}
 		totalSize += size

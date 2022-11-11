@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -958,7 +959,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		firstPurge := rd.Entries[0].Index // first new entry written
 		purgeTerm := rd.Entries[0].Term - 1
 		lastPurge := prevLastIndex // old end of the log, include in deletion
-		purgedSize, err := maybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
+		purgedSize, err := logstore.MaybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
 		if err != nil {
 			const expl = "while purging sideloaded storage"
 			return stats, expl, err
@@ -1100,7 +1101,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // TODO(pavelkalinnikov): move to its own package.
 type logStore struct {
 	engine      storage.Engine
-	sideload    SideloadStorage
+	sideload    logstore.SideloadStorage
 	stateLoader stateloader.StateLoader
 	settings    *cluster.Settings
 	metrics     *StoreMetrics
@@ -1126,7 +1127,7 @@ func (s *logStore) storeEntries(
 		stats.tAppendBegin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := maybeSideloadEntries(ctx, rd.Entries, s.sideload)
+		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := logstore.MaybeSideloadEntries(ctx, rd.Entries, s.sideload)
 		if err != nil {
 			const expl = "during sideloading"
 			return raftLogState{}, errors.Wrap(err, expl)
@@ -1551,7 +1552,7 @@ func (r *Replica) sendRaftMessagesRaftMuLocked(
 				prevIndex := message.Index  // index of entry preceding the append
 				for j := range message.Entries {
 					ent := &message.Entries[j]
-					assertSideloadedRaftCommandInlined(ctx, ent)
+					logstore.AssertSideloadedRaftCommandInlined(ctx, ent)
 
 					if prevIndex+1 != ent.Index {
 						log.Fatalf(ctx,
@@ -2333,7 +2334,10 @@ func handleTruncatedStateBelowRaftPreApply(
 //
 // The sideloaded storage may be nil, in which case it is treated as empty.
 func ComputeRaftLogSize(
-	ctx context.Context, rangeID roachpb.RangeID, reader storage.Reader, sideloaded SideloadStorage,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	reader storage.Reader,
+	sideloaded logstore.SideloadStorage,
 ) (int64, error) {
 	prefix := keys.RaftLogPrefix(rangeID)
 	prefixEnd := prefix.PrefixEnd()
