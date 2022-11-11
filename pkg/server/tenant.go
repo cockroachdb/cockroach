@@ -570,9 +570,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.runtime,         /* runtimeStatsSampler */
 		gwMux,             /* handleRequestsUnauthenticated */
 		s.debug,           /* handleDebugUnauthenticated */
-		// TODO(knz): the apiV2 server should be enabled for secondary tenants.
-		// See: https://github.com/cockroachdb/cockroach/issues/80789
-		nil, /* apiServer */
+		newAPIV2Server(workersCtx, &apiV2ServerOpts{
+			sqlServer: s.sqlServer,
+			tenantID:  s.sqlCfg.TenantID,
+			db:        s.db,
+		}), /* apiServer */
 	); err != nil {
 		return err
 	}
