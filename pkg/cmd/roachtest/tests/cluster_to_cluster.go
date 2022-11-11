@@ -73,7 +73,7 @@ func registerClusterToCluster(r registry.Registry) {
 			destClusterSettings(t, destSQL)
 
 			srcTenantID, destTenantID := 10, 20
-			srcSQL.Exec(t, `SELECT crdb_internal.create_tenant($1)`, srcTenantID)
+			srcSQL.Exec(t, `SELECT crdb_internal.create_tenant($1::int)`, srcTenantID)
 			pgURL, cleanup, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, dstCluster, srcClusterSetting.PGUrlCertsDir, addr[0])
 			defer cleanup()
 			require.NoError(t, err)
