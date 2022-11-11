@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -1417,7 +1418,7 @@ func SendEmptySnapshot(
 		engSnapshot,
 		desc.RangeID,
 		raftentry.NewCache(1), // cache is not used
-		func(func(SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
+		func(func(logstore.SideloadStorage) error) error { return nil }, // this is used for sstables, not needed here as there are no logs
 		desc.StartKey,
 	)
 	if err != nil {
