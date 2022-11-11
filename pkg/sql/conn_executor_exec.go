@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -44,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -1033,8 +1035,12 @@ func (ex *connExecutor) createJobs(ctx context.Context) error {
 	for _, record := range ex.extraTxnState.schemaChangeJobRecords {
 		records = append(records, record)
 	}
-	jobIDs, err := ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.Txn(), records)
-	if err != nil {
+	var jobIDs []jobspb.JobID
+	var err error
+	if err := ex.planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+		jobIDs, err = ex.server.cfg.JobRegistry.CreateJobsWithTxn(ctx, ex.planner.Txn(), ie, records)
+		return err
+	}); err != nil {
 		return err
 	}
 	ex.planner.extendedEvalCtx.Jobs.add(jobIDs...)

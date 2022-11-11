@@ -1033,6 +1033,9 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot create conn executor to commit txn")
 	}
+	// TODO(janexing): is this correct?
+	ex.planner.txn = ie.extraTxnState.txn
+
 	defer ex.close(ctx, externalTxnClose)
 	return ex.commitSQLTransactionInternal(ctx)
 }
@@ -1060,7 +1063,7 @@ func (ie *InternalExecutor) checkIfStmtIsAllowed(stmt tree.Statement, txn *kv.Tx
 // deprecated.
 func (ie *InternalExecutor) checkIfTxnIsConsistent(txn *kv.Txn) error {
 	if txn == nil && ie.extraTxnState != nil {
-		return errors.New("the current internal executor was contructed with" +
+		return errors.New("the current internal executor was contructed with " +
 			"a txn. To use an internal executor without a txn, call " +
 			"sqlutil.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()")
 	}
