@@ -13,7 +13,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -89,7 +88,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -1122,20 +1120,10 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return err
 	}
 
-	// connManager tracks incoming connections accepted via listeners
-	// and automatically closes them when the stopper indicates a
-	// shutdown.
-	// This handles both:
-	// - HTTP connections for the admin UI with an optional TLS handshake over HTTP.
-	// - SQL client connections with a TLS handshake over TCP.
-	// (gRPC connections are handled separately via s.grpc and perform
-	// their TLS handshake on their own)
-	connManager := netutil.MakeServer(workersCtx, s.stopper, uiTLSConfig, http.HandlerFunc(s.http.baseHandler))
-
 	// Start the admin UI server. This opens the HTTP listen socket,
 	// optionally sets up TLS, and dispatches the server worker for the
 	// web UI.
-	if err := s.http.start(ctx, workersCtx, connManager, uiTLSConfig, s.stopper); err != nil {
+	if err := s.http.start(ctx, workersCtx, uiTLSConfig, s.stopper); err != nil {
 		return err
 	}
 
@@ -1710,7 +1698,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
-		connManager,
 		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
@@ -1786,7 +1773,6 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 	if err := s.sqlServer.startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.connManager,
 		s.sqlServer.pgL,
 		&s.cfg.SocketFile,
 	); err != nil {
