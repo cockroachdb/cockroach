@@ -702,9 +702,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
-	lastIndex := r.mu.lastIndex // used for append below
-	lastTerm := r.mu.lastTerm
-	raftLogSize := r.mu.raftLogSize
+	state := raftLogState{ // used for append below
+		lastIndex:   r.mu.lastIndex,
+		lastTerm:    r.mu.lastTerm,
+		raftLogSize: r.mu.raftLogSize,
+	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
 	err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
@@ -807,9 +809,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// applySnapshot, but we also want to make sure we reflect these changes in
 			// the local variables we're tracking here.
 			r.mu.RLock()
-			lastIndex = r.mu.lastIndex
-			lastTerm = r.mu.lastTerm
-			raftLogSize = r.mu.raftLogSize
+			state = raftLogState{
+				lastIndex:   r.mu.lastIndex,
+				lastTerm:    r.mu.lastTerm,
+				raftLogSize: r.mu.raftLogSize,
+			}
 			r.mu.RUnlock()
 
 			// We refresh pending commands after applying a snapshot because this
@@ -861,7 +865,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, getNonDeterministicFailureExplanation(err), err
 	}
 	if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
-		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, lastIndex); err != nil {
+		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, state.lastIndex); err != nil {
 			return stats, getNonDeterministicFailureExplanation(err), err
 		}
 	}
@@ -928,7 +932,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	batch := r.store.Engine().NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
-	prevLastIndex := lastIndex
+	prevLastIndex := state.lastIndex
 	if len(rd.Entries) > 0 {
 		stats.tAppendBegin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
@@ -938,9 +942,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "during sideloading"
 			return stats, expl, errors.Wrap(err, expl)
 		}
-		raftLogSize += sideLoadedEntriesSize
-		if lastIndex, lastTerm, raftLogSize, err = logAppend(
-			ctx, r.raftMu.stateLoader.RaftLogPrefix(), batch, lastIndex, lastTerm, raftLogSize, thinEntries,
+		state.raftLogSize += sideLoadedEntriesSize
+		if state, err = logAppend(
+			ctx, r.raftMu.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return stats, expl, errors.Wrap(err, expl)
@@ -1010,19 +1014,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "while purging sideloaded storage"
 			return stats, expl, err
 		}
-		raftLogSize -= purgedSize
-		if raftLogSize < 0 {
+		state.raftLogSize -= purgedSize
+		if state.raftLogSize < 0 {
 			// Might have gone negative if node was recently restarted.
-			raftLogSize = 0
+			state.raftLogSize = 0
 		}
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
 	// leader ID.
 	r.mu.Lock()
-	r.mu.lastIndex = lastIndex
-	r.mu.lastTerm = lastTerm
-	r.mu.raftLogSize = raftLogSize
+	// TODO(pavelkalinnikov): put raftLogState to r.mu directly instead of fields.
+	r.mu.lastIndex = state.lastIndex
+	r.mu.lastTerm = state.lastTerm
+	r.mu.raftLogSize = state.raftLogSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
