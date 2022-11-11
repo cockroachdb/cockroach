@@ -96,6 +96,7 @@ type Registry struct {
 	stopper   *stop.Stopper
 	db        *kv.DB
 	ex        sqlutil.InternalExecutor
+	ief       sqlutil.InternalExecutorFactory
 	clock     *hlc.Clock
 	clusterID *base.ClusterIDContainer
 	nodeID    *base.SQLIDContainer
@@ -187,6 +188,7 @@ func MakeRegistry(
 	clock *hlc.Clock,
 	db *kv.DB,
 	ex sqlutil.InternalExecutor,
+	ief sqlutil.InternalExecutorFactory,
 	clusterID *base.ClusterIDContainer,
 	nodeID *base.SQLIDContainer,
 	sqlInstance sqlliveness.Instance,
@@ -204,6 +206,7 @@ func MakeRegistry(
 		clock:                   clock,
 		db:                      db,
 		ex:                      ex,
+		ief:                     ief,
 		clusterID:               clusterID,
 		nodeID:                  nodeID,
 		sqlInstance:             sqlInstance,
@@ -327,7 +330,7 @@ func (r *Registry) makeProgress(record *Record) jobspb.Progress {
 // one job to create, otherwise the function returns an error. The function
 // returns the IDs of the jobs created.
 func (r *Registry) CreateJobsWithTxn(
-	ctx context.Context, txn *kv.Txn, records []*Record,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, records []*Record,
 ) ([]jobspb.JobID, error) {
 	created := make([]jobspb.JobID, 0, len(records))
 	for toCreate := records; len(toCreate) > 0; {
@@ -336,7 +339,7 @@ func (r *Registry) CreateJobsWithTxn(
 		if batchSize > maxBatchSize {
 			batchSize = maxBatchSize
 		}
-		createdInBatch, err := r.createJobsInBatchWithTxn(ctx, txn, toCreate[:batchSize])
+		createdInBatch, err := r.createJobsInBatchWithTxn(ctx, txn, ie, toCreate[:batchSize])
 		if err != nil {
 			return nil, err
 		}
@@ -349,7 +352,7 @@ func (r *Registry) CreateJobsWithTxn(
 // createJobsInBatchWithTxn creates a batch of jobs from given records in a
 // transaction.
 func (r *Registry) createJobsInBatchWithTxn(
-	ctx context.Context, txn *kv.Txn, records []*Record,
+	ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor, records []*Record,
 ) ([]jobspb.JobID, error) {
 	s, err := r.sqlInstance.Session(ctx)
 	if err != nil {
@@ -364,11 +367,13 @@ func (r *Registry) createJobsInBatchWithTxn(
 	if err != nil {
 		return nil, err
 	}
-	if _, err = r.ex.Exec(
-		ctx, "job-rows-batch-insert", txn, stmt, args...,
-	); err != nil {
+	_, err = ie.ExecEx(
+		ctx, "job-rows-batch-insert", txn, sessiondata.InternalExecutorOverride{User: username.RootUserName()}, stmt, args...,
+	)
+	if err != nil {
 		return nil, err
 	}
+
 	return jobIDs, nil
 }
 
@@ -378,8 +383,8 @@ func (r *Registry) batchJobInsertStmt(
 	ctx context.Context, sessionID sqlliveness.SessionID, records []*Record, modifiedMicros int64,
 ) (string, []interface{}, []jobspb.JobID, error) {
 	instanceID := r.ID()
-	const numColumns = 6
-	columns := [numColumns]string{`id`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`}
+	const numColumns = 7
+	columns := [numColumns]string{`id`, `created`, `status`, `payload`, `progress`, `claim_session_id`, `claim_instance_id`}
 	marshalPanic := func(m protoutil.Message) []byte {
 		data, err := protoutil.Marshal(m)
 		if err != nil {
@@ -387,8 +392,15 @@ func (r *Registry) batchJobInsertStmt(
 		}
 		return data
 	}
+
+	created, err := tree.MakeDTimestamp(timeutil.FromUnixMicros(modifiedMicros), time.Microsecond)
+	if err != nil {
+		return "", nil, nil, errors.NewAssertionErrorWithWrappedErrf(err, "failed to make timestamp for creation of job")
+	}
+
 	valueFns := map[string]func(*Record) interface{}{
 		`id`:                func(rec *Record) interface{} { return rec.JobID },
+		`created`:           func(rec *Record) interface{} { return created },
 		`status`:            func(rec *Record) interface{} { return StatusRunning },
 		`claim_session_id`:  func(rec *Record) interface{} { return sessionID.UnsafeBytes() },
 		`claim_instance_id`: func(rec *Record) interface{} { return instanceID },
