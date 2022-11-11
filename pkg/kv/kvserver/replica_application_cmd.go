@@ -81,7 +81,7 @@ func (c *ReplicatedCmdBase) Index() uint64 {
 
 // IsTrivial implements apply.Command.
 func (c *ReplicatedCmdBase) IsTrivial() bool {
-	return isTrivial(c.replicatedResult())
+	return c.replicatedResult().IsTrivial()
 }
 
 // IsLocal implements apply.Command.
