@@ -84,6 +84,7 @@ func NewExecutorDependencies(
 			eventLogger:        eventLogger,
 			statsRefresher:     statsRefresher,
 			schemaChangerJobID: schemaChangerJobID,
+			schemaChangerJob:   nil,
 			kvTrace:            kvTrace,
 			settings:           settings,
 		},
@@ -112,6 +113,7 @@ type txnDeps struct {
 	eventLogger         scexec.EventLogger
 	deletedDescriptors  catalog.DescriptorIDSet
 	schemaChangerJobID  jobspb.JobID
+	schemaChangerJob    *jobs.Job
 	kvTrace             bool
 	settings            *cluster.Settings
 }
@@ -294,6 +296,10 @@ func (d *txnDeps) SchemaChangerJobID() jobspb.JobID {
 		d.schemaChangerJobID = d.jobRegistry.MakeJobID()
 	}
 	return d.schemaChangerJobID
+}
+
+func (d *txnDeps) CurrentJob() *jobs.Job {
+	return d.schemaChangerJob
 }
 
 // CreateJob implements the scexec.TransactionalJobRegistry interface.

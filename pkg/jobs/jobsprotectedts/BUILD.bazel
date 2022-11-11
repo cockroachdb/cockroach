@@ -3,18 +3,27 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "jobsprotectedts",
-    srcs = ["jobs_protected_ts.go"],
+    srcs = [
+        "jobs_protected_ts.go",
+        "jobs_protected_ts_manager.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/config",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptreconcile",
         "//pkg/roachpb",
         "//pkg/scheduledjobs",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/sqlutil",
+        "//pkg/util/ctxgroup",
         "//pkg/util/hlc",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
