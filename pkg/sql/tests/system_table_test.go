@@ -180,13 +180,13 @@ func TestSystemTableLiterals(t *testing.T) {
 	s := tc.Servers[0]
 
 	testcases := make(map[string]testcase)
-	for schema, desc := range systemschema.SystemTableDescriptors {
-		if _, alreadyExists := testcases[desc.GetName()]; alreadyExists {
-			t.Fatalf("system table %q already exists", desc.GetName())
+	for _, table := range systemschema.MakeSystemTables() {
+		if _, alreadyExists := testcases[table.GetName()]; alreadyExists {
+			t.Fatalf("system table %q already exists", table.GetName())
 		}
-		testcases[desc.GetName()] = testcase{
-			schema: schema,
-			pkg:    desc,
+		testcases[table.GetName()] = testcase{
+			schema: table.Schema,
+			pkg:    table,
 		}
 	}
 

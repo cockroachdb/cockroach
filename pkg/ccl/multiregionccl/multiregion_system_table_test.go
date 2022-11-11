@@ -62,6 +62,25 @@ func createSqllivenessTable(
 	return tableID
 }
 
+func TestMrSystemDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
+
+	_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3, base.TestingKnobs{})
+	defer cleanup()
+
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	t.Run("Sqlliveness", func(t *testing.T) {
+		row := tDB.QueryRow(t, `SELECT crdb_region, session_uuid, expiration FROM system.sqlliveness LIMIT 1`)
+		var sessionUUID string
+		var crdbRegion string
+		var rawExpiration apd.Decimal
+		row.Scan(&crdbRegion, &sessionUUID, &rawExpiration)
+	})
+}
+
 func TestRbrSqllivenessTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
