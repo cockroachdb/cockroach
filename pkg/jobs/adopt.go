@@ -72,19 +72,21 @@ func (r *Registry) maybeDumpTrace(
 	// could have been canceled at this point.
 	dumpCtx, _ := r.makeCtx()
 
+	ieNotBoundToTxn := r.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+
 	// If the job has failed, and the dump mode is set to anything
 	// except noDump, then we should dump the trace.
 	// The string comparison is unfortunate but is used to differentiate a job
 	// that has failed from a job that has been canceled.
 	if jobErr != nil && !HasErrJobCanceled(jobErr) && resumerCtx.Err() == nil {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
 		return
 	}
 
 	// If the dump mode is set to `dumpOnStop` then we should dump the
 	// trace when the job is any of paused, canceled, succeeded or failed state.
 	if dumpMode == int64(dumpOnStop) {
-		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, r.ex)
+		r.td.Dump(dumpCtx, strconv.Itoa(int(jobID)), traceID, ieNotBoundToTxn)
 	}
 }
 

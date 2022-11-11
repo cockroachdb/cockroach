@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // CreateDeclarativeSchemaChangeJobs is called during the last phase of a
@@ -31,7 +32,11 @@ import (
 // It should only be called for backups which do not restore the jobs table
 // directly.
 func CreateDeclarativeSchemaChangeJobs(
-	ctx context.Context, registry *jobs.Registry, txn *kv.Txn, allMut nstree.Catalog,
+	ctx context.Context,
+	registry *jobs.Registry,
+	txn *kv.Txn,
+	ie sqlutil.InternalExecutor,
+	allMut nstree.Catalog,
 ) error {
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
 	_ = allMut.ForEachDescriptorEntry(func(d catalog.Descriptor) error {
@@ -71,6 +76,6 @@ func CreateDeclarativeSchemaChangeJobs(
 			runningStatus,
 		))
 	}
-	_, err := registry.CreateJobsWithTxn(ctx, txn, records)
+	_, err := registry.CreateJobsWithTxn(ctx, txn, ie, records)
 	return err
 }
