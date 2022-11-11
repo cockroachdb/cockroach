@@ -963,7 +963,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "while purging sideloaded storage"
 			return stats, expl, err
 		}
-		if state.byteSize -= purgedSize; state.byteSize < 0 {
+		state.byteSize -= purgedSize
+		if state.byteSize < 0 {
 			// Might have gone negative if node was recently restarted.
 			state.byteSize = 0
 		}
