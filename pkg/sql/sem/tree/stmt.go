@@ -734,6 +734,15 @@ func (*CreateExternalConnection) StatementType() StatementType { return TypeDDL 
 func (*CreateExternalConnection) StatementTag() string { return "CREATE EXTERNAL CONNECTION" }
 
 // StatementReturnType implements the Statement interface.
+func (*CreateTenant) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*CreateTenant) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateTenant) StatementTag() string { return "CREATE TENANT" }
+
+// StatementReturnType implements the Statement interface.
 func (*DropExternalConnection) StatementReturnType() StatementReturnType { return Ack }
 
 // StatementType implements the Statement interface.
@@ -2061,6 +2070,7 @@ func (n *CreateFunction) String() string                      { return AsString(
 func (n *CreateIndex) String() string                         { return AsString(n) }
 func (n *CreateRole) String() string                          { return AsString(n) }
 func (n *CreateTable) String() string                         { return AsString(n) }
+func (n *CreateTenant) String() string                        { return AsString(n) }
 func (n *CreateSchema) String() string                        { return AsString(n) }
 func (n *CreateSequence) String() string                      { return AsString(n) }
 func (n *CreateStats) String() string                         { return AsString(n) }

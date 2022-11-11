@@ -30,6 +30,11 @@ func TestRangeStatsInit(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	tc.Start(ctx, t, stopper)
+
+	// Lock the replica's Raft goroutine. We do this to avoid interference from
+	// any other moving parts on the Replica, whatever they may be.
+	tc.repl.raftMu.Lock()
+	defer tc.repl.raftMu.Unlock()
 	ms := enginepb.MVCCStats{
 		LiveBytes:       1,
 		KeyBytes:        2,

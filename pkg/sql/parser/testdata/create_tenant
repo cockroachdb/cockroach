@@ -1,0 +1,15 @@
+parse
+CREATE TENANT bar
+----
+CREATE TENANT bar
+CREATE TENANT bar -- fully parenthesized
+CREATE TENANT bar -- literals removed
+CREATE TENANT _ -- identifiers removed
+
+parse
+CREATE TENANT "bar-with-hyphen"
+----
+CREATE TENANT "bar-with-hyphen"
+CREATE TENANT "bar-with-hyphen" -- fully parenthesized
+CREATE TENANT "bar-with-hyphen" -- literals removed
+CREATE TENANT _ -- identifiers removed
