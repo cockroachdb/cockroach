@@ -13,6 +13,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -34,29 +35,17 @@ import (
 //
 // These allow Replica to interface with the storage/apply package.
 
-// replicatedCmd stores the state required to apply a single raft entry to a
-// replica. The state is accumulated in stages which occur in apply.Task. From
-// a high level, the command is decoded from a committed raft entry, then if it
-// was proposed locally the proposal is populated from the replica's proposals
-// map, then the command is staged into a replicaAppBatch by writing its update
-// to the batch's engine.Batch and applying its "trivial" side-effects to the
-// batch's view of ReplicaState. Then the batch is committed, the side-effects
-// are applied and the local result is processed.
-type replicatedCmd struct {
+// replicatedCmdBase is the part of a replicatedCmd relevant for stand-alone log
+// application, i.e. without having a surrounding *Replica present. In that
+// case, it is assumed that only one replica is processed at a given time[^1], no
+// in-memory state is kept, and no clients are waiting for responses to the
+// commands. This obviates the need for concurrency control, in-memory state
+// updates, reproposals, etc.
+//
+// [^1]: at least when the current command includes a split or a merge, i.e.
+// changes replica boundaries.
+type replicatedCmdBase struct {
 	*raftlog.Entry
-
-	// proposal is populated on the proposing Replica only and comes from the
-	// Replica's proposal map.
-	proposal *ProposalData
-
-	// ctx is a non-cancelable context used to apply the command.
-	ctx context.Context
-	// sp is the tracing span corresponding to ctx. It is closed in
-	// finishTracingSpan. This span "follows from" the proposer's span (even
-	// when the proposer is remote; we marshall tracing info through the
-	// proposal).
-	sp *tracing.Span
-
 	// The following fields are set in shouldApplyCommand when we validate that
 	// a command applies given the current lease and GC threshold. The process
 	// of setting these fields is what transforms an apply.Command into an
@@ -64,20 +53,14 @@ type replicatedCmd struct {
 	leaseIndex    uint64
 	forcedErr     *roachpb.Error
 	proposalRetry kvserverbase.ProposalRejectionType
-	// splitMergeUnlock is acquired for splits and merges when they are staged
-	// in the application batch and called after the command's side effects
-	// are applied.
-	splitMergeUnlock func()
-
-	// The following fields are set after the data has been written to the
-	// storage engine in prepareLocalResult. The process of setting these fields
-	// is what transforms an apply.CheckedCommand into an apply.AppliedCommand.
-	localResult *result.LocalResult
-	response    proposalResult
 }
 
+var _ apply.Command = (*replicatedCmdBase)(nil)
+var _ apply.CheckedCommand = (*replicatedCmdBase)(nil)
+var _ apply.AppliedCommand = (*replicatedCmdBase)(nil)
+
 // decode populates the receiver from the provided entry.
-func (c *replicatedCmd) decode(e *raftpb.Entry) error {
+func (c *replicatedCmdBase) decode(e *raftpb.Entry) error {
 	if c.Entry != nil {
 		c.Entry.Release()
 		c.Entry = nil
@@ -91,31 +74,93 @@ func (c *replicatedCmd) decode(e *raftpb.Entry) error {
 	return nil
 }
 
-// Index implements the apply.Command interface.
-func (c *replicatedCmd) Index() uint64 {
+// Index implements apply.Command.
+func (c *replicatedCmdBase) Index() uint64 {
 	return c.Entry.Index
 }
 
-// IsTrivial implements the apply.Command interface.
-func (c *replicatedCmd) IsTrivial() bool {
+// IsTrivial implements apply.Command.
+func (c *replicatedCmdBase) IsTrivial() bool {
 	return isTrivial(c.replicatedResult())
 }
 
-func (c *replicatedCmd) replicatedResult() *kvserverpb.ReplicatedEvalResult {
+// IsLocal implements apply.Command.
+func (c *replicatedCmdBase) IsLocal() bool {
+	return false
+}
+
+// Ctx implements apply.Command.
+func (c *replicatedCmdBase) Ctx() context.Context {
+	return context.Background()
+}
+
+// AckErrAndFinish implements apply.Command.
+func (c *replicatedCmdBase) AckErrAndFinish(context.Context, error) error {
+	return nil
+}
+
+// AckOutcomeAndFinish implements apply.AppliedCommand.
+func (c *replicatedCmdBase) AckOutcomeAndFinish(context.Context) error { return nil }
+
+// Rejected implements apply.CheckedCommand.
+func (c *replicatedCmdBase) Rejected() bool { return c.forcedErr != nil }
+
+// CanAckBeforeApplication implements apply.CheckedCommand.
+func (c *replicatedCmdBase) CanAckBeforeApplication() bool { return false }
+
+// AckSuccess implements apply.CheckedCommand.
+func (c *replicatedCmdBase) AckSuccess(context.Context) error { return nil }
+
+func (c *replicatedCmdBase) replicatedResult() *kvserverpb.ReplicatedEvalResult {
 	return &c.Entry.Cmd.ReplicatedEvalResult
 }
 
-// IsLocal implements the apply.Command interface.
+// replicatedCmd stores the state required to apply a single raft entry to a
+// replica. The state is accumulated in stages which occur in apply.Task. From
+// a high level, the command is decoded from a committed raft entry, then if it
+// was proposed locally the proposal is populated from the replica's proposals
+// map, then the command is staged into a replicaAppBatch by writing its update
+// to the batch's engine.Batch and applying its "trivial" side-effects to the
+// batch's view of ReplicaState. Then the batch is committed, the side-effects
+// are applied and the local result is processed.
+type replicatedCmd struct {
+	replicatedCmdBase
+
+	// proposal is populated on the proposing Replica only and comes from the
+	// Replica's proposal map.
+	proposal *ProposalData
+
+	// ctx is a non-cancelable context used to apply the command.
+	ctx context.Context
+	// sp is the tracing span corresponding to ctx. It is closed in
+	// finishTracingSpan. This span "follows from" the proposer's span (even
+	// when the proposer is remote; we marshall tracing info through the
+	// proposal).
+	sp *tracing.Span
+
+	// splitMergeUnlock is acquired for splits and merges when they are staged
+	// in the application batch and called after the command's side effects
+	// are applied.
+	splitMergeUnlock func()
+
+	// The following fields are set after the data has been written to the
+	// storage engine in prepareLocalResult. The process of setting these fields
+	// is what transforms an apply.CheckedCommand into an apply.AppliedCommand.
+	localResult *result.LocalResult
+	response    proposalResult
+}
+
+// IsLocal implements apply.Command.
 func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
 }
 
-// Ctx implements the apply.Command interface.
+// Ctx implements apply.Command.
 func (c *replicatedCmd) Ctx() context.Context {
 	return c.ctx
 }
 
-// AckErrAndFinish implements the apply.Command interface.
+// AckErrAndFinish implements apply.Command.
 func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	if c.IsLocal() {
 		c.response.Err = roachpb.NewError(roachpb.NewAmbiguousResultError(err))
@@ -136,12 +181,7 @@ func (c *replicatedCmd) getStoreWriteByteSizes() (writeBytes int64, ingestedByte
 	return writeBytes, ingestedBytes
 }
 
-// Rejected implements the apply.CheckedCommand interface.
-func (c *replicatedCmd) Rejected() bool {
-	return c.forcedErr != nil
-}
-
-// CanAckBeforeApplication implements the apply.CheckedCommand interface.
+// CanAckBeforeApplication implements apply.CheckedCommand.
 func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	// CanAckBeforeApplication determines whether the request type is compatible
 	// with acknowledgement of success before it has been applied. For now, this
@@ -164,7 +204,7 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	return true
 }
 
-// AckSuccess implements the apply.CheckedCommand interface.
+// AckSuccess implements apply.CheckedCommand.
 func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	if !c.IsLocal() {
 		return nil
@@ -185,7 +225,7 @@ func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	return nil
 }
 
-// AckOutcomeAndFinish implements the apply.AppliedCommand interface.
+// AckOutcomeAndFinish implements the apply.AppliedCommand.
 func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
