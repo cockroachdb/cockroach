@@ -91,12 +91,6 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 	false,
 )
 
-const (
-	// MaxCommandSizeFloor is the minimum allowed value for the
-	// kv.raft.command.max_size cluster setting.
-	MaxCommandSizeFloor = 4 << 20 // 4MB
-)
-
 // MaxCommandSize wraps "kv.raft.command.max_size".
 var MaxCommandSize = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
@@ -104,8 +98,8 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 	"maximum size of a raft command",
 	kvserverbase.MaxCommandSizeDefault,
 	func(size int64) error {
-		if size < MaxCommandSizeFloor {
-			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
+		if size < kvserverbase.MaxCommandSizeFloor {
+			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(kvserverbase.MaxCommandSizeFloor))
 		}
 		return nil
 	},

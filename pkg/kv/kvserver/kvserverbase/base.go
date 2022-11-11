@@ -215,6 +215,12 @@ var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 	},
 )
 
-// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
-// cluster setting.
-const MaxCommandSizeDefault = 64 << 20
+const (
+	// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
+	// cluster setting.
+	MaxCommandSizeDefault = 64 << 20 // 64 MB
+
+	// MaxCommandSizeFloor is the minimum allowed value for the
+	// kv.raft.command.max_size cluster setting.
+	MaxCommandSizeFloor = 4 << 20 // 4 MB
+)
