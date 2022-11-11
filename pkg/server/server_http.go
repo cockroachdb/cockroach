@@ -200,10 +200,7 @@ func makeAdminAuthzCheckHandler(
 // start starts the network listener for the HTTP interface
 // and also starts accepting incoming HTTP connections.
 func (s *httpServer) start(
-	ctx, workersCtx context.Context,
-	connManager netutil.Server,
-	uiTLSConfig *tls.Config,
-	stopper *stop.Stopper,
+	ctx, workersCtx context.Context, uiTLSConfig *tls.Config, stopper *stop.Stopper,
 ) error {
 	httpLn, err := ListenAndUpdateAddrs(ctx, &s.cfg.HTTPAddr, &s.cfg.HTTPAdvertiseAddr, "http")
 	if err != nil {
@@ -254,7 +251,7 @@ func (s *httpServer) start(
 			})
 			mux.Handle(healthPath, http.HandlerFunc(s.baseHandler))
 
-			plainRedirectServer := netutil.MakeServer(workersCtx, stopper, uiTLSConfig, mux)
+			plainRedirectServer := netutil.MakeHTTPServer(workersCtx, stopper, nil /* tlsConfig */, mux)
 
 			netutil.FatalIfUnexpected(plainRedirectServer.Serve(clearL))
 		}); err != nil {
@@ -263,6 +260,10 @@ func (s *httpServer) start(
 
 		httpLn = tls.NewListener(tlsL, uiTLSConfig)
 	}
+
+	// The connManager is responsible for tearing down the net.Conn
+	// objects when the stopper tells us to shut down.
+	connManager := netutil.MakeHTTPServer(workersCtx, stopper, uiTLSConfig, http.HandlerFunc(s.baseHandler))
 
 	// Serve the HTTP endpoint. This will be the original httpLn
 	// listening on --http-addr without TLS if uiTLSConfig was
