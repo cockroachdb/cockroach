@@ -221,7 +221,7 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(
 		// The tracker wants us to forward the request timestamp, but we can't
 		// do that without re-evaluating, so give up. The error returned here
 		// will go to back to DistSender, so send something it can digest.
-		err := newNotLeaseHolderError(
+		err := roachpb.NewNotLeaseHolderError(
 			*r.mu.state.Lease,
 			r.store.StoreID(),
 			r.mu.state.Desc,

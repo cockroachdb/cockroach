@@ -1349,3 +1349,53 @@ func (e *InsufficientSpaceError) Error() string {
 	return fmt.Sprintf("store %d has insufficient remaining capacity to %s (remaining: %s / %.1f%%, min required: %.1f%%)",
 		e.StoreID, e.Op, humanizeutil.IBytes(e.Available), float64(e.Available)/float64(e.Capacity)*100, e.Required*100)
 }
+
+// NewNotLeaseHolderError returns a NotLeaseHolderError initialized with the
+// replica for the holder (if any) of the given lease.
+//
+// Note that this error can be generated on the Raft processing goroutine, so
+// its output should be completely determined by its parameters.
+func NewNotLeaseHolderError(
+	l Lease, proposerStoreID StoreID, rangeDesc *RangeDescriptor, msg string,
+) *NotLeaseHolderError {
+	err := &NotLeaseHolderError{
+		RangeID:   rangeDesc.RangeID,
+		RangeDesc: *rangeDesc,
+		CustomMsg: msg,
+	}
+	if proposerStoreID != 0 {
+		err.Replica, _ = rangeDesc.GetReplicaDescriptor(proposerStoreID)
+	}
+	if !l.Empty() {
+		// Normally, we return the lease-holding Replica here. However, in the
+		// case in which a leader removes itself, we want the followers to
+		// avoid handing out a misleading clue (which in itself shouldn't be
+		// overly disruptive as the lease would expire and then this method
+		// shouldn't be called for it any more, but at the very least it
+		// could catch tests in a loop, presumably due to manual clocks).
+		_, stillMember := rangeDesc.GetReplicaDescriptor(l.Replica.StoreID)
+		if stillMember {
+			err.Lease = new(Lease)
+			*err.Lease = l
+			// TODO(arul): We only need to return this for the 22.1 <-> 22.2 mixed
+			// version state, as v22.1 use this field to log NLHE messages. We can
+			// get rid of this, and the field, in v23.1.
+			err.DeprecatedLeaseHolder = &err.Lease.Replica
+		}
+	}
+	return err
+}
+
+// NewNotLeaseHolderErrorWithSpeculativeLease returns a NotLeaseHolderError
+// initialized with a speculative lease pointing to the supplied replica.
+// A NotLeaseHolderError may be constructed with a speculative lease if the
+// current lease is not known, but the error is being created by guessing who
+// the leaseholder may be.
+func NewNotLeaseHolderErrorWithSpeculativeLease(
+	leaseHolder ReplicaDescriptor, proposerStoreID StoreID, rangeDesc *RangeDescriptor, msg string,
+) *NotLeaseHolderError {
+	speculativeLease := Lease{
+		Replica: leaseHolder,
+	}
+	return NewNotLeaseHolderError(speculativeLease, proposerStoreID, rangeDesc, msg)
+}
