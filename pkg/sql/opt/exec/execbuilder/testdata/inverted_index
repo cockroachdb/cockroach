@@ -130,6 +130,65 @@ INSERT INTO e VALUES(3, ARRAY[NULL])
 CPut /Table/107/1/3/0 -> /TUPLE/
 InitPut /Table/107/2/NULL/3/0 -> /BYTES/
 
+# Make sure that we're emitting the right plan for array index scans even if
+# a column is both forward and inverted indexed.
+
+query T
+EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: e@e_pkey
+│
+└── • scan
+      missing stats
+      table: e@bidx
+      spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
+----
+distribution: local
+vectorized: true
+·
+• filter
+│ filter: b = ARRAY[8]
+│
+└── • scan
+      missing stats
+      table: e@e_pkey
+      spans: FULL SCAN
+
+statement ok
+CREATE INDEX ON e(b)
+
+query T
+EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
+----
+distribution: local
+vectorized: true
+·
+• index join
+│ table: e@e_pkey
+│
+└── • scan
+      missing stats
+      table: e@bidx
+      spans: 1 span
+
+query T
+EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: e@e_b_idx
+  spans: [/ARRAY[8] - /ARRAY[8]]
+
 # Test that array inverted indexes work okay with decimals (a type with
 # composite encoding). Also, make sure that the composite encoding is
 # de-duplicated - 1.0 and 1.00 should just have one entry.
@@ -1314,16 +1373,11 @@ EXPLAIN (VERBOSE) SELECT * from e where b IS NULL
 distribution: local
 vectorized: true
 ·
-• filter
-│ columns: (a, b)
-│ estimated row count: 10 (missing stats)
-│ filter: b IS NULL
-│
-└── • scan
-      columns: (a, b)
-      estimated row count: 1,000 (missing stats)
-      table: e@e_pkey
-      spans: FULL SCAN
+• scan
+  columns: (a, b)
+  estimated row count: 10 (missing stats)
+  table: e@e_b_idx
+  spans: /NULL-/!NULL
 
 # This should use a zigzag join.
 query T
