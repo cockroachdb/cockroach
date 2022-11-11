@@ -109,8 +109,8 @@ var requireConstFmt = map[string]bool{
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Fatalf":   true,
 	"(*github.com/cockroachdb/cockroach/pkg/kv/kvserver.raftLogger).Panicf":   true,
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver.makeNonDeterministicFailure":     true,
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver.wrapWithNonDeterministicFailure": true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase.NewNonDeterministicFailureErrorf":  true,
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase.NonDeterministicFailureErrorWrapf": true,
 
 	"(go.etcd.io/etcd/raft/v3.Logger).Debugf":   true,
 	"(go.etcd.io/etcd/raft/v3.Logger).Infof":    true,
