@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
@@ -124,7 +125,7 @@ func entries(
 	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	sideloaded SideloadStorage,
+	sideloaded logstore.SideloadStorage,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -160,10 +161,10 @@ func entries(
 		}
 		expectedIndex++
 
-		if sniffSideloadedRaftCommand(ent.Data) {
+		if logstore.SniffSideloadedRaftCommand(ent.Data) {
 			canCache = canCache && sideloaded != nil
 			if sideloaded != nil {
-				newEnt, err := maybeInlineSideloadedRaftCommand(
+				newEnt, err := logstore.MaybeInlineSideloadedRaftCommand(
 					ctx, rangeID, ent, sideloaded, eCache,
 				)
 				if err != nil {
@@ -486,7 +487,7 @@ func (r *Replica) GetSnapshot(
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	withSideloaded := func(fn func(SideloadStorage) error) error {
+	withSideloaded := func(fn func(logstore.SideloadStorage) error) error {
 		r.raftMu.Lock()
 		defer r.raftMu.Unlock()
 		return fn(r.raftMu.sideloaded)
@@ -521,7 +522,7 @@ type OutgoingSnapshot struct {
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
 	// sideloaded storage in the meantime.
-	WithSideloaded func(func(SideloadStorage) error) error
+	WithSideloaded func(func(logstore.SideloadStorage) error) error
 	RaftEntryCache *raftentry.Cache
 	snapType       kvserverpb.SnapshotRequest_Type
 	onClose        func()
@@ -579,7 +580,7 @@ func snapshot(
 	snap storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	withSideloaded func(func(SideloadStorage) error) error,
+	withSideloaded func(func(logstore.SideloadStorage) error) error,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor
