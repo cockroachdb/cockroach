@@ -129,41 +129,41 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 
 // shouldApplyCommand determines whether or not a command should be applied to
 // the replicated state machine after it has been committed to the Raft log. It
-// then sets the provided command's leaseIndex, proposalRetry, and forcedErr
+// then sets the provided command's LeaseIndex, Rejection, and ForcedErr
 // fields and returns whether command should be applied or rejected.
 func (r *Replica) shouldApplyCommand(
 	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
 ) bool {
-	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = kvserverbase.CheckForcedErr(
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
 		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), replicaState,
 	)
 	// Consider testing-only filters.
-	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.forcedErr != nil || filter != nil {
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.ForcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
 			ReplicatedEvalResult: *cmd.replicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
-			ForcedError:          cmd.forcedErr,
+			ForcedError:          cmd.ForcedErr,
 		}
-		if cmd.forcedErr == nil {
+		if cmd.ForcedErr == nil {
 			if cmd.IsLocal() {
 				args.Req = cmd.proposal.Request
 			}
 			newPropRetry, newForcedErr := filter(args)
-			cmd.forcedErr = newForcedErr
-			if cmd.proposalRetry == 0 {
-				cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
+			cmd.ForcedErr = newForcedErr
+			if cmd.Rejection == 0 {
+				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
 			}
 		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
 			newPropRetry, newForcedErr := filter(args)
-			cmd.forcedErr = newForcedErr
-			if cmd.proposalRetry == 0 {
-				cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
+			cmd.ForcedErr = newForcedErr
+			if cmd.Rejection == 0 {
+				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
 			}
 		}
 	}
-	return cmd.forcedErr == nil
+	return cmd.ForcedErr == nil
 }
 
 // NewBatch implements the apply.StateMachine interface.
@@ -276,7 +276,7 @@ func (b *replicaAppBatch) Stage(
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
 	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
+		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
 
 		// Apply an empty command.
 		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
@@ -707,7 +707,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	b.state.RaftAppliedIndex = cmd.Index()
 	b.state.RaftAppliedIndexTerm = cmd.Term
 
-	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
+	if leaseAppliedIndex := cmd.LeaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
@@ -934,7 +934,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
-			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
+			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
 			logTail)
 	}
@@ -957,7 +957,7 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 	cmd := cmdI.(*replicatedCmd)
 
 	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
-	mb.state.LeaseAppliedIndex = cmd.leaseIndex
+	mb.state.LeaseAppliedIndex = cmd.LeaseIndex
 	return cmd, nil
 }
 
@@ -1270,7 +1270,7 @@ type closedTimestampSetterInfo struct {
 // timestamp.
 func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Lease) {
 	*s = closedTimestampSetterInfo{}
-	s.leaseIdx = ctpb.LAI(cmd.leaseIndex)
+	s.leaseIdx = ctpb.LAI(cmd.LeaseIndex)
 	s.lease = lease
 	if !cmd.IsLocal() {
 		return
