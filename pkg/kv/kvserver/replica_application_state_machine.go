@@ -153,13 +153,13 @@ func (r *Replica) shouldApplyCommand(
 			newPropRetry, newForcedErr := filter(args)
 			cmd.forcedErr = newForcedErr
 			if cmd.proposalRetry == 0 {
-				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+				cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
 			}
 		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
 			newPropRetry, newForcedErr := filter(args)
 			cmd.forcedErr = newForcedErr
 			if cmd.proposalRetry == 0 {
-				cmd.proposalRetry = proposalReevaluationReason(newPropRetry)
+				cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
 			}
 		}
 	}
@@ -201,13 +201,13 @@ func checkForcedErr(
 	raftCmd *kvserverpb.RaftCommand,
 	isLocal bool,
 	replicaState *kvserverpb.ReplicaState,
-) (uint64, proposalReevaluationReason, *roachpb.Error) {
+) (uint64, kvserverbase.ProposalRejectionType, *roachpb.Error) {
 	if raftCmd.ReplicatedEvalResult.IsProbe {
 		// A Probe is handled by forcing an error during application (which
 		// avoids a separate "success" code path for this type of request)
 		// that we can special case as indicating success of the probe above
 		// raft.
-		return 0, proposalNoReevaluation, noopOnProbeCommandErr
+		return 0, kvserverbase.ProposalRejectionPermanent, noopOnProbeCommandErr
 	}
 	leaseIndex := replicaState.LeaseAppliedIndex
 	isLeaseRequest := raftCmd.ReplicatedEvalResult.IsLeaseRequest
@@ -221,7 +221,7 @@ func checkForcedErr(
 		// Nothing to do here except making sure that the corresponding batch
 		// (which is bogus) doesn't get executed (for it is empty and so
 		// properties like key range are undefined).
-		return leaseIndex, proposalNoReevaluation, noopOnEmptyRaftCommandErr
+		return leaseIndex, kvserverbase.ProposalRejectionPermanent, noopOnEmptyRaftCommandErr
 	}
 
 	// Verify the lease matches the proposer's expectation. We rely on
@@ -294,7 +294,7 @@ func checkForcedErr(
 			// For lease requests we return a special error that
 			// redirectOnOrAcquireLease() understands. Note that these
 			// requests don't go through the DistSender.
-			return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, kvserverbase.ProposalRejectionPermanent, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *replicaState.Lease,
 				Requested: requestedLease,
 				Message:   "proposed under invalid lease",
@@ -308,7 +308,7 @@ func checkForcedErr(
 			fmt.Sprintf(
 				"stale proposal: command was proposed under lease #%d but is being applied "+
 					"under lease: %s", raftCmd.ProposerLeaseSequence, replicaState.Lease))
-		return leaseIndex, proposalNoReevaluation, roachpb.NewError(nlhe)
+		return leaseIndex, kvserverbase.ProposalRejectionPermanent, roachpb.NewError(nlhe)
 	}
 
 	if isLeaseRequest {
@@ -320,7 +320,7 @@ func checkForcedErr(
 		// However, leases get special vetting to make sure we don't give one to a replica that was
 		// since removed (see #15385 and a comment in redirectOnOrAcquireLease).
 		if _, ok := replicaState.Desc.GetReplicaDescriptor(requestedLease.Replica.StoreID); !ok {
-			return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.LeaseRejectedError{
+			return leaseIndex, kvserverbase.ProposalRejectionPermanent, roachpb.NewError(&roachpb.LeaseRejectedError{
 				Existing:  *replicaState.Lease,
 				Requested: requestedLease,
 				Message:   "replica not part of range",
@@ -342,14 +342,14 @@ func checkForcedErr(
 		// The command is trying to apply at a past log position. That's
 		// unfortunate and hopefully rare; the client on the proposer will try
 		// again. Note that in this situation, the leaseIndex does not advance.
-		retry := proposalNoReevaluation
+		retry := kvserverbase.ProposalRejectionPermanent
 		if isLocal {
 			log.VEventf(
 				ctx, 1,
 				"retry proposal %x: applied at lease index %d, required < %d",
 				idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
-			retry = proposalIllegalLeaseIndex
+			retry = kvserverbase.ProposalRejectionIllegalLeaseIndex
 		}
 		return leaseIndex, retry, roachpb.NewErrorf(
 			"command observed at lease index %d, but required < %d", leaseIndex, raftCmd.MaxLeaseIndex,
@@ -367,12 +367,12 @@ func checkForcedErr(
 	// the GC threshold has advanced since then?
 	wts := raftCmd.ReplicatedEvalResult.WriteTimestamp
 	if !wts.IsEmpty() && wts.LessEq(*replicaState.GCThreshold) {
-		return leaseIndex, proposalNoReevaluation, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
+		return leaseIndex, kvserverbase.ProposalRejectionPermanent, roachpb.NewError(&roachpb.BatchTimestampBeforeGCError{
 			Timestamp: wts,
 			Threshold: *replicaState.GCThreshold,
 		})
 	}
-	return leaseIndex, proposalNoReevaluation, nil
+	return leaseIndex, kvserverbase.ProposalRejectionPermanent, nil
 }
 
 // NewBatch implements the apply.StateMachine interface.

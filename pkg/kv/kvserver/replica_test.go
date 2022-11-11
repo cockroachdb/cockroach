@@ -13360,7 +13360,7 @@ func TestProposalNotAcknowledgedOrReproposedAfterApplication(t *testing.T) {
 			// ensure that it does not reuse the original proposal's context for that
 			// reproposal by ensuring that no event is recorded after the original
 			// proposal has been finished.
-			return int(proposalIllegalLeaseIndex),
+			return int(kvserverbase.ProposalRejectionIllegalLeaseIndex),
 				roachpb.NewErrorf("forced error that can be reproposed at a higher index")
 		},
 	}
