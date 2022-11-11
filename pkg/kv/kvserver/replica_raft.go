@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -928,7 +929,22 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
 	prevLastIndex := state.lastIndex
-	if state, err = r.storeLogEntries(ctx, state, rd, &stats); err != nil {
+
+	// TODO(pavelkalinnikov): find a way to move it to storeEntries.
+	if !raft.IsEmptyHardState(rd.HardState) {
+		if !r.IsInitialized() && rd.HardState.Commit != 0 {
+			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
+		}
+	}
+	// TODO(pavelkalinnikov): construct and store this in Replica.
+	s := logStore{
+		engine:      r.store.engine,
+		sideload:    r.raftMu.sideloaded,
+		stateLoader: r.raftMu.stateLoader,
+		settings:    r.store.cfg.Settings,
+		metrics:     r.store.metrics,
+	}
+	if state, err = s.storeEntries(ctx, state, rd, &stats); err != nil {
 		const expl = "while storing log entries"
 		return stats, expl, err
 	}
@@ -1078,34 +1094,45 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	return stats, "", nil
 }
 
-// storeLogEntries persists newly appended raft Entries to the log storage.
+// logStore is a stub of a separated Raft log storage.
+//
+// TODO(pavelkalinnikov): move to its own package.
+type logStore struct {
+	engine      storage.Engine
+	sideload    SideloadStorage
+	stateLoader stateloader.StateLoader
+	settings    *cluster.Settings
+	metrics     *StoreMetrics
+}
+
+// storeEntries persists newly appended Raft log Entries to the log storage.
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
 //
 // TODO(pavelkalinnikov): raft.Ready combines multiple roles. For a stricter
 // separation between log and state storage, introduce a log-specific Ready,
 // consisting of committed Entries, HardState, and MustSync.
-func (r *Replica) storeLogEntries(
+func (s *logStore) storeEntries(
 	ctx context.Context, state raftLogState, rd raft.Ready, stats *handleRaftReadyStats,
 ) (raftLogState, error) {
 	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
-	batch := r.store.Engine().NewUnindexedBatch(false /* writeOnly */)
+	batch := s.engine.NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
 	if len(rd.Entries) > 0 {
 		stats.tAppendBegin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
-		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := maybeSideloadEntries(ctx, rd.Entries, r.raftMu.sideloaded)
+		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := maybeSideloadEntries(ctx, rd.Entries, s.sideload)
 		if err != nil {
 			const expl = "during sideloading"
 			return raftLogState{}, errors.Wrap(err, expl)
 		}
 		state.byteSize += sideLoadedEntriesSize
 		if state, err = logAppend(
-			ctx, r.raftMu.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
+			ctx, s.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			const expl = "during append"
 			return raftLogState{}, errors.Wrap(err, expl)
@@ -1118,9 +1145,6 @@ func (r *Replica) storeLogEntries(
 	}
 
 	if !raft.IsEmptyHardState(rd.HardState) {
-		if !r.IsInitialized() && rd.HardState.Commit != 0 {
-			log.Fatalf(ctx, "setting non-zero HardState.Commit on uninitialized replica %s. HS=%+v", r, rd.HardState)
-		}
 		// NB: Note that without additional safeguards, it's incorrect to write
 		// the HardState before appending rd.Entries. When catching up, a follower
 		// will receive Entries that are immediately Committed in the same
@@ -1129,7 +1153,7 @@ func (r *Replica) storeLogEntries(
 		//
 		// We have both in the same batch, so there's no problem. If that ever
 		// changes, we must write and sync the Entries before the HardState.
-		if err := r.raftMu.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
+		if err := s.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
 			const expl = "during setHardState"
 			return raftLogState{}, errors.Wrap(err, expl)
 		}
@@ -1149,7 +1173,7 @@ func (r *Replica) storeLogEntries(
 	// infer the that entries are persisted on the node that sends a snapshot.
 	stats.tPebbleCommitBegin = timeutil.Now()
 	stats.pebbleBatchBytes = int64(batch.Len())
-	sync := rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)
+	sync := rd.MustSync && !disableSyncRaftLog.Get(&s.settings.SV)
 	if err := batch.Commit(sync); err != nil {
 		const expl = "while committing batch"
 		return raftLogState{}, errors.Wrap(err, expl)
@@ -1157,7 +1181,7 @@ func (r *Replica) storeLogEntries(
 	stats.sync = sync
 	stats.tPebbleCommitEnd = timeutil.Now()
 	if rd.MustSync {
-		r.store.metrics.RaftLogCommitLatency.RecordValue(
+		s.metrics.RaftLogCommitLatency.RecordValue(
 			stats.tPebbleCommitEnd.Sub(stats.tPebbleCommitBegin).Nanoseconds())
 	}
 	return state, nil
