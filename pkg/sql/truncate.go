@@ -215,9 +215,17 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	}
 
 	// Create new ID's for all of the indexes in the table.
-	version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-	if err := tableDesc.AllocateIDs(ctx, version); err != nil {
-		return err
+	{
+		version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
+		// Temporarily empty the mutation jobs slice otherwise the descriptor
+		// validation performed by AllocateIDs will fail: the Mutations slice
+		// has been emptied but MutationJobs only gets emptied later on.
+		mutationJobs := tableDesc.MutationJobs
+		tableDesc.MutationJobs = nil
+		if err := tableDesc.AllocateIDs(ctx, version); err != nil {
+			return err
+		}
+		tableDesc.MutationJobs = mutationJobs
 	}
 
 	// Construct a mapping from old index ID's to new index ID's.
