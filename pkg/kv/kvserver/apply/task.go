@@ -70,6 +70,9 @@ type Batch interface {
 	Stage(context.Context, Command) (CheckedCommand, error)
 	// ApplyToStateMachine applies the persistent state transitions staged
 	// in the Batch to the StateMachine, atomically.
+	//
+	// Command application can not resume in the event of an error, that is,
+	// the surrounding StateMachine must be considered defunct.
 	ApplyToStateMachine(context.Context) error
 	// Close closes the batch and releases any resources that it holds.
 	Close()

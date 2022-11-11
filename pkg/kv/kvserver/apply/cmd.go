@@ -18,7 +18,11 @@ import "context"
 type Command interface {
 	// Index is the log index of the corresponding raft entry.
 	Index() uint64
-	// IsTrivial returns whether the command can apply in a batch.
+	// IsTrivial returns whether the command can apply in a batch with other
+	// "trivial" commands. This is the case if the log entry represented by the
+	// Command is a simple write, as is the case for all user-issued mutations.
+	//
+	// Nontrivial commands (splits, etc) will be applied in their own apply.Batch.
 	IsTrivial() bool
 	// IsLocal returns whether the command was locally proposed. Command
 	// that were locally proposed typically have a client waiting on a

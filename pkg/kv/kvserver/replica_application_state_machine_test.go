@@ -89,8 +89,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		defer b.Close()
 
 		// Stage a command with the ChangeReplicas trigger.
-		cmd := &replicatedCmd{ctx: ctx}
-		cmd.Entry = &raftlog.Entry{
+		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
 				Index: r.mu.state.RaftAppliedIndex + 1,
 				Type:  raftpb.EntryConfChange,
@@ -106,6 +105,10 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 				},
 			},
 			ConfChangeV1: &confChange,
+		}
+		cmd := &replicatedCmd{
+			ReplicatedCmd: raftlog.ReplicatedCmd{Entry: ent},
+			ctx:           ctx,
 		}
 
 		checkedCmd, err := b.Stage(cmd.ctx, cmd)
@@ -182,8 +185,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		}
 		// Stage a command that truncates one raft log entry which we pretend has a
 		// byte size of 1.
-		cmd := &replicatedCmd{ctx: ctx}
-		cmd.Entry = &raftlog.Entry{
+		ent := &raftlog.Entry{
 			Entry: raftpb.Entry{
 				Index: raftAppliedIndex + 1,
 				Type:  raftpb.EntryNormal,
@@ -203,6 +205,10 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 					WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
 				},
 			},
+		}
+		cmd := &replicatedCmd{
+			ctx:           ctx,
+			ReplicatedCmd: raftlog.ReplicatedCmd{Entry: ent},
 		}
 
 		checkedCmd, err := b.Stage(cmd.ctx, cmd)
@@ -291,8 +297,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			defer b.Close()
 			// Stage a command that truncates one raft log entry which we pretend has a
 			// byte size of 1.
-			cmd := &replicatedCmd{ctx: ctx}
-			cmd.Entry = &raftlog.Entry{
+			ent := &raftlog.Entry{
 				Entry: raftpb.Entry{
 					Index: raftAppliedIndex + 1,
 					Type:  raftpb.EntryNormal,
@@ -312,6 +317,10 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 						WriteTimestamp:         r.mu.state.GCThreshold.Add(1, 0),
 					},
 				},
+			}
+			cmd := &replicatedCmd{
+				ctx:           ctx,
+				ReplicatedCmd: raftlog.ReplicatedCmd{Entry: ent},
 			}
 
 			checkedCmd, err := b.Stage(cmd.ctx, cmd)

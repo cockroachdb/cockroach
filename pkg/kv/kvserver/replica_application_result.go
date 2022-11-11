@@ -79,7 +79,7 @@ func (r *Replica) prepareLocalResult(ctx context.Context, cmd *replicatedCmd) {
 		var newPropRetry int
 		newPropRetry, pErr = filter(kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
-			ReplicatedEvalResult: *cmd.replicatedResult(),
+			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
 			Req:                  cmd.proposal.Request,
