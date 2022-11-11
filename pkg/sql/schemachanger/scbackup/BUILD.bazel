@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
+        "//pkg/sql/sqlutil",
     ],
 )
 

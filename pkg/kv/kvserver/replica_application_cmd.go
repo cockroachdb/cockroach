@@ -65,7 +65,7 @@ type replicatedCmd struct {
 	// apply.CheckedCommand.
 	leaseIndex    uint64
 	forcedErr     *roachpb.Error
-	proposalRetry proposalReevaluationReason
+	proposalRetry kvserverbase.ProposalRejectionType
 	// splitMergeUnlock is acquired for splits and merges when they are staged
 	// in the application batch and called after the command's side effects
 	// are applied.

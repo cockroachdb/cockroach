@@ -539,6 +539,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.clock,
 			cfg.db,
 			cfg.circularInternalExecutor,
+			cfg.internalExecutorFactory,
 			cfg.rpcContext.LogicalClusterID,
 			cfg.nodeIDContainer,
 			cfg.sqlLivenessProvider,

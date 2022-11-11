@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "base.go",
         "bulk_adder.go",
+        "forced_error.go",
         "knobs.go",
         "raftversion.go",
         "stores.go",
@@ -20,6 +21,7 @@ go_library(
         "//pkg/settings",
         "//pkg/util/errorutil",
         "//pkg/util/hlc",
+        "//pkg/util/log",
         "//pkg/util/quotapool",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",

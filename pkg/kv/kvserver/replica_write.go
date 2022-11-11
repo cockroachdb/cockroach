@@ -277,7 +277,7 @@ func (r *Replica) executeWriteBatch(
 				propResult.Err = roachpb.NewError(applicationErr)
 			}
 			if propResult.Err != nil && ba.IsSingleProbeRequest() && errors.Is(
-				propResult.Err.GoError(), noopOnProbeCommandErr.GoError(),
+				propResult.Err.GoError(), kvserverbase.NoopOnProbeCommandErr.GoError(),
 			) {
 				// During command application, a Probe will fail due to the
 				// mismatched lease (noop writes skip lease checks and so also don't
