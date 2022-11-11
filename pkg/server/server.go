@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -535,7 +536,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 				if !serverrangefeed.RangefeedBudgetsEnabled.Get(&st.SV) {
 					return 0
 				}
-				if raftCmdLimit := kvserver.MaxCommandSize.Get(&st.SV); raftCmdLimit > limit {
+				if raftCmdLimit := kvserverbase.MaxCommandSize.Get(&st.SV); raftCmdLimit > limit {
 					return raftCmdLimit
 				}
 				return limit
