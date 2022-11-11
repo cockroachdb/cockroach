@@ -121,15 +121,6 @@ var StrictGCEnforcement = settings.RegisterBoolSetting(
 	true,
 )
 
-type proposalReevaluationReason int
-
-const (
-	proposalNoReevaluation proposalReevaluationReason = iota
-	// proposalIllegalLeaseIndex indicates the proposal failed to apply at
-	// a Lease index it was not legal for. The command should be re-evaluated.
-	proposalIllegalLeaseIndex
-)
-
 type atomicDescString struct {
 	strPtr unsafe.Pointer
 }
