@@ -70,6 +70,10 @@ func NewEntryDecoderWithFormat(
 		var err error
 		read, format, err = ReadFormatFromLogFile(in)
 		if err != nil {
+			if err == io.EOF {
+				return nil, errors.Wrap(err,
+					"received EOF when trying to read the format from log file. Is the file empty?")
+			}
 			return nil, err
 		}
 		in = io.MultiReader(read, in)
