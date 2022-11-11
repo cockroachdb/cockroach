@@ -1123,7 +1123,8 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// Start the admin UI server. This opens the HTTP listen socket,
 	// optionally sets up TLS, and dispatches the server worker for the
 	// web UI.
-	if err := s.http.start(ctx, workersCtx, uiTLSConfig, s.stopper); err != nil {
+	if err := startHTTPService(ctx,
+		workersCtx, &s.cfg.BaseConfig, uiTLSConfig, s.stopper, s.serverController.httpMux); err != nil {
 		return err
 	}
 
