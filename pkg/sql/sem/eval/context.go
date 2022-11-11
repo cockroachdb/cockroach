@@ -701,11 +701,18 @@ type StreamManagerFactory interface {
 // ReplicationStreamManager represents a collection of APIs that streaming replication supports
 // on the production side.
 type ReplicationStreamManager interface {
-	// StartReplicationStream starts a stream replication job for the specified tenant on the producer side.
+	// StartReplicationStream starts a stream replication job for the specified
+	// tenant on the producer side.
+	//
+	// TODO(adityamaru): Remove this method in a follow up.
 	StartReplicationStream(
 		ctx context.Context,
 		tenantID uint64,
 	) (streampb.StreamID, error)
+
+	// StartReplicationStreamByName starts a stream replication job for the
+	// specified tenant on the producer side.
+	StartReplicationStreamByName(ctx context.Context, tenantName roachpb.TenantName) (streampb.StreamID, error)
 
 	// HeartbeatReplicationStream sends a heartbeat to the replication stream producer, indicating
 	// consumer has consumed until the given 'frontier' timestamp. This updates the producer job

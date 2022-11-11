@@ -779,8 +779,15 @@ func (ts *TestServer) StartTenant(
 		if rowCount == 0 {
 			// Tenant doesn't exist. Create it.
 			if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
+				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)",
+				params.TenantID.ToUint64(), params.TenantName,
 			); err != nil {
+				return nil, err
+			}
+		} else if params.TenantName != "" {
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, "rename-test-tenant", nil,
+				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID, params.TenantName)
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -795,6 +802,13 @@ func (ts *TestServer) StartTenant(
 		}
 		if rowCount == 0 {
 			return nil, errors.New("not found")
+		}
+		if params.TenantName != "" {
+			_, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(ctx, "rename-test-tenant", nil,
+				`SELECT crdb_internal.rename_tenant($1, $2)`, params.TenantID, params.TenantName)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
