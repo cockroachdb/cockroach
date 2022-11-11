@@ -1355,21 +1355,17 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a IS NULL
 ----
-no index recommendations
+creation: CREATE INDEX ON t4 (a) STORING (k, f);
 --
 optimal plan:
 project
  ├── columns: k:1 f:3
- ├── cost: 1125.07
- └── select
+ ├── cost: 25.0400002
+ └── scan t4@_hyp_1
       ├── columns: k:1 f:3 a:5
-      ├── cost: 1124.95
-      ├── fd: ()-->(5)
-      ├── scan t4
-      │    ├── columns: k:1 f:3 a:5
-      │    └── cost: 1114.92
-      └── filters
-           └── a:5 IS NULL [outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
+      ├── constraint: /5/6: [/NULL - /NULL]
+      ├── cost: 24.9200002
+      └── fd: ()-->(5)
 
 index-candidates
 SELECT k, f FROM t4 WHERE a @> ARRAY[1]
@@ -1377,26 +1373,30 @@ SELECT k, f FROM t4 WHERE a @> ARRAY[1]
 t4:
  (a)
 
+# This test generates no index recommendations because the index recommended
+# doesn't yet support recommending inverted indexes on types that are also
+# forward indexable, such as trigrams and arrays.
+# See #91777.
+
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1]
 ----
-creation: CREATE INVERTED INDEX ON t4 (a);
+no index recommendations
 --
 optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 805.048889
- └── index-join t4
+ ├── cost: 1126.07
+ └── select
       ├── columns: k:1 f:3 a:5!null
       ├── immutable
-      ├── cost: 803.928889
-      └── scan t4@_hyp_1
-           ├── columns: rowid:6!null
-           ├── inverted constraint: /9/6
-           │    └── spans: ["\x89", "\x89"]
-           ├── cost: 128.464444
-           └── key: (6)
+      ├── cost: 1124.95
+      ├── scan t4
+      │    ├── columns: k:1 f:3 a:5
+      │    └── cost: 1114.92
+      └── filters
+           └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 index-candidates
 SELECT k, f FROM t4 WHERE a = ARRAY[1]
@@ -1407,21 +1407,17 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE a = ARRAY[1]
 ----
-no index recommendations
+creation: CREATE INDEX ON t4 (a) STORING (k, f);
 --
 optimal plan:
 project
  ├── columns: k:1 f:3
- ├── cost: 1125.07
- └── select
+ ├── cost: 25.0400001
+ └── scan t4@_hyp_1
       ├── columns: k:1 f:3 a:5!null
-      ├── cost: 1124.95
-      ├── fd: ()-->(5)
-      ├── scan t4
-      │    ├── columns: k:1 f:3 a:5
-      │    └── cost: 1114.92
-      └── filters
-           └── a:5 = ARRAY[1] [outer=(5), constraints=(/5: [/ARRAY[1] - /ARRAY[1]]; tight), fd=()-->(5)]
+      ├── constraint: /5/6: [/ARRAY[1] - /ARRAY[1]]
+      ├── cost: 24.9200001
+      └── fd: ()-->(5)
 
 index-candidates
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
@@ -1429,30 +1425,29 @@ SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
 t4:
  (a)
  (i)
- (i, a)
 
 index-recommendations
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND i = 1
 ----
-creation: CREATE INVERTED INDEX ON t4 (i, a);
+creation: CREATE INDEX ON t4 (i) STORING (k, f, a);
 --
 optimal plan:
 project
  ├── columns: k:1 f:3
  ├── immutable
- ├── cost: 21.9920001
- └── index-join t4
+ ├── cost: 25.1810001
+ └── select
       ├── columns: k:1 i:2!null f:3 a:5!null
       ├── immutable
-      ├── cost: 21.9610001
+      ├── cost: 25.1500001
       ├── fd: ()-->(2)
-      └── scan t4@_hyp_3
-           ├── columns: rowid:6!null
-           ├── constraint: /2: [/1 - /1]
-           ├── inverted constraint: /10/6
-           │    └── spans: ["\x89", "\x89"]
-           ├── cost: 15.1755556
-           └── key: (6)
+      ├── scan t4@_hyp_2
+      │    ├── columns: k:1 i:2!null f:3 a:5
+      │    ├── constraint: /2/6: [/1 - /1]
+      │    ├── cost: 25.0200001
+      │    └── fd: ()-->(2)
+      └── filters
+           └── a:5 @> ARRAY[1] [outer=(5), immutable, constraints=(/5: (/NULL - ])]
 
 index-candidates
 SELECT k, f FROM t4 WHERE a @> ARRAY[1] AND f > 3
@@ -1475,7 +1470,7 @@ project
       ├── columns: k:1 f:3!null a:5!null
       ├── immutable
       ├── cost: 380.716667
-      ├── scan t4@_hyp_1
+      ├── scan t4@_hyp_2
       │    ├── columns: k:1 f:3!null a:5
       │    ├── constraint: /3/6: [/3.0000000000000004 - ]
       │    └── cost: 377.353333

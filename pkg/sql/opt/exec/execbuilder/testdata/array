@@ -1,8 +1,7 @@
 # LogicTest: local
 
-# Add x to PRIMARY KEY once #50659 is fixed.
 statement ok
-CREATE TABLE t (x INT[])
+CREATE TABLE t (x INT[] PRIMARY KEY)
 
 # Test some scans of constrained spans on arrays.
 
@@ -12,13 +11,10 @@ EXPLAIN SELECT x FROM t WHERE x = ARRAY[1,4,6]
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: x = ARRAY[1,4,6]
-│
-└── • scan
-      missing stats
-      table: t@t_pkey
-      spans: FULL SCAN
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,4,6] - /ARRAY[1,4,6]]
 
 query T
 EXPLAIN SELECT x FROM t WHERE x < ARRAY[1, 4, 3]
@@ -26,13 +22,10 @@ EXPLAIN SELECT x FROM t WHERE x < ARRAY[1, 4, 3]
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: x < ARRAY[1,4,3]
-│
-└── • scan
-      missing stats
-      table: t@t_pkey
-      spans: FULL SCAN
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [ - /ARRAY[1,4,3])
 
 query T
 EXPLAIN SELECT x FROM t WHERE x > ARRAY [1, NULL]
@@ -40,13 +33,10 @@ EXPLAIN SELECT x FROM t WHERE x > ARRAY [1, NULL]
 distribution: local
 vectorized: true
 ·
-• filter
-│ filter: x > ARRAY[1,NULL]
-│
-└── • scan
-      missing stats
-      table: t@t_pkey
-      spans: FULL SCAN
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,NULL,NULL] - ]
 
 query T
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
@@ -54,16 +44,10 @@ EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +x
-│
-└── • filter
-    │ filter: (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
-    │
-    └── • scan
-          missing stats
-          table: t@t_pkey
-          spans: FULL SCAN
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,3,NULL] - /ARRAY[1,4,10])
 
 query T
 EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x DESC
@@ -71,23 +55,18 @@ EXPLAIN SELECT x FROM t WHERE x > ARRAY[1, 3] AND x < ARRAY[1, 4, 10] ORDER BY x
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: -x
-│
-└── • filter
-    │ filter: (x > ARRAY[1,3]) AND (x < ARRAY[1,4,10])
-    │
-    └── • scan
-          missing stats
-          table: t@t_pkey
-          spans: FULL SCAN
+• revscan
+  missing stats
+  table: t@t_pkey
+  spans: [/ARRAY[1,3,NULL] - /ARRAY[1,4,10])
 
 statement ok
 DROP TABLE t
 
-# Add multicolumn INDEX i (x, y, z) once #50659 is fixed.
+# Multicolumn index, including arrays.
+
 statement ok
-CREATE TABLE t (x INT, y INT[], z INT)
+CREATE TABLE t (x INT, y INT[], z INT, INDEX i (x, y, z))
 
 query T
 EXPLAIN SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
@@ -95,13 +74,7 @@ EXPLAIN SELECT x, y, z FROM t WHERE x = 2 AND y < ARRAY[10] ORDER BY y
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +y
-│
-└── • filter
-    │ filter: (x = 2) AND (y < ARRAY[10])
-    │
-    └── • scan
-          missing stats
-          table: t@t_pkey
-          spans: FULL SCAN
+• scan
+  missing stats
+  table: t@i
+  spans: (/2/NULL - /2/ARRAY[10])
