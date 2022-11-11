@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -365,8 +364,7 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		org := sql.ClusterOrganization.Get(&st.SV)
-		if err := utilccl.CheckEnterpriseEnabled(st, cluster, org, "OIDC"); err != nil {
+		if err := utilccl.CheckEnterpriseEnabled(st, cluster, "OIDC"); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

@@ -627,7 +627,7 @@ func makeAlterBackupScheduleSpec(
 	}
 
 	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
+		p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
 		"BACKUP INTO LATEST")
 	spec.isEnterpriseUser = enterpriseCheckErr == nil
 
