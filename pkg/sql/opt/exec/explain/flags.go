@@ -30,12 +30,12 @@ type Flags struct {
 	// debug tool.
 	OnlyShape bool
 
-	// Redaction control (for testing purposes).
+	// Redaction control. This is used both for testing purposes (to make EXPLAIN
+	// output deterministic) and for redaction of PII.
 	Redact RedactFlags
 }
 
-// RedactFlags control the redacting of various field values. They are used to
-// guarantee deterministic results for testing purposes.
+// RedactFlags control the redacting of various field values.
 type RedactFlags uint8
 
 const (
@@ -52,6 +52,8 @@ const (
 	// other, even without changes to the configuration or data distribution (e.g.
 	// timings).
 	RedactVolatile
+
+	RedactPII
 )
 
 const (
@@ -78,6 +80,9 @@ func MakeFlags(options *tree.ExplainOptions) Flags {
 		f.HideValues = true
 		f.OnlyShape = true
 		f.Redact = RedactAll
+	}
+	if options.Flags[tree.ExplainFlagRedact] {
+		f.Redact = RedactPII
 	}
 	return f
 }

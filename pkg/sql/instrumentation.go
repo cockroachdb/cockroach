@@ -398,13 +398,18 @@ func (ih *instrumentationHelper) Finish(
 		if ih.stmtDiagnosticsRecorder.IsConditionSatisfied(ih.diagRequest, execLatency) {
 			placeholders := p.extendedEvalCtx.Placeholders
 			ob := ih.emitExplainAnalyzePlanToOutputBuilder(
-				explain.Flags{Verbose: true, ShowTypes: true},
+				explain.Flags{
+					Verbose:   true,
+					ShowTypes: true,
+					Redact:    ih.explainFlags.Redact & explain.RedactPII,
+				},
 				phaseTimes,
 				queryLevelStats,
 			)
 			warnings = ob.GetWarnings()
 			bundle = buildStatementBundle(
 				ctx, cfg.DB, ie.(*InternalExecutor), &p.curPlan, ob.BuildString(), trace, placeholders,
+				ih.explainFlags.Redact,
 			)
 			bundle.insert(ctx, ih.fingerprint, ast, cfg.StmtDiagnosticsRecorder, ih.diagRequestID, ih.diagRequest)
 			telemetry.Inc(sqltelemetry.StatementDiagnosticsCollectedCounter)

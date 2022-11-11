@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -128,19 +129,21 @@ func buildStatementBundle(
 	planString string,
 	trace tracingpb.Recording,
 	placeholders *tree.PlaceholderInfo,
+	flags explain.RedactFlags,
 ) diagnosticsBundle {
 	if plan == nil {
 		return diagnosticsBundle{collectionErr: errors.AssertionFailedf("execution terminated early")}
 	}
+
 	b := makeStmtBundleBuilder(db, ie, plan, trace, placeholders)
 
-	b.addStatement()
-	b.addOptPlans(ctx)
+	b.addStatement(flags)
+	b.addOptPlans(ctx, flags)
 	b.addExecPlan(planString)
 	b.addDistSQLDiagrams()
 	b.addExplainVec()
-	b.addTrace()
-	b.addEnv(ctx)
+	b.addTrace(flags)
+	b.addEnv(ctx, flags)
 
 	buf, err := b.finalize()
 	if err != nil {
@@ -205,14 +208,7 @@ func makeStmtBundleBuilder(
 }
 
 // addStatement adds the pretty-printed statement as file statement.txt.
-func (b *stmtBundleBuilder) addStatement() {
-	cfg := tree.DefaultPrettyCfg()
-	cfg.UseTabs = false
-	cfg.LineWidth = 100
-	cfg.TabWidth = 2
-	cfg.Simplify = true
-	cfg.Align = tree.PrettyNoAlign
-	cfg.JSONFmt = true
+func (b *stmtBundleBuilder) addStatement(flags explain.RedactFlags) {
 	var output string
 	// If we hit an early error, stmt or stmt.AST might not be initialized yet.
 	switch {
@@ -221,10 +217,22 @@ func (b *stmtBundleBuilder) addStatement() {
 	case b.plan.stmt.AST == nil:
 		output = "-- No AST."
 	default:
-		output = cfg.Pretty(b.plan.stmt.AST)
+		if flags.Has(explain.RedactPII) {
+			fmtFlags := tree.FmtHideConstants
+			output = tree.AsStringWithFlags(b.plan.stmt.AST, fmtFlags)
+		} else {
+			cfg := tree.DefaultPrettyCfg()
+			cfg.UseTabs = false
+			cfg.LineWidth = 100
+			cfg.TabWidth = 2
+			cfg.Simplify = true
+			cfg.Align = tree.PrettyNoAlign
+			cfg.JSONFmt = true
+			output = cfg.Pretty(b.plan.stmt.AST)
+		}
 	}
 
-	if b.placeholders != nil && len(b.placeholders.Values) != 0 {
+	if b.placeholders != nil && len(b.placeholders.Values) != 0 && !flags.Has(explain.RedactPII) {
 		var buf bytes.Buffer
 		buf.WriteString(output)
 		buf.WriteString("\n\n-- Arguments:\n")
@@ -239,7 +247,7 @@ func (b *stmtBundleBuilder) addStatement() {
 
 // addOptPlans adds the EXPLAIN (OPT) variants as files opt.txt, opt-v.txt,
 // opt-vv.txt.
-func (b *stmtBundleBuilder) addOptPlans(ctx context.Context) {
+func (b *stmtBundleBuilder) addOptPlans(ctx context.Context, flags explain.RedactFlags) {
 	if b.plan.mem == nil || b.plan.mem.RootExpr() == nil {
 		// No optimizer plans; an error must have occurred during planning.
 		b.z.AddFile("opt.txt", "no plan")
@@ -314,7 +322,7 @@ func (b *stmtBundleBuilder) addExplainVec() {
 // addTrace adds three files to the bundle: two are a json representation of the
 // trace (the default and the jaeger formats), the third one is a human-readable
 // representation.
-func (b *stmtBundleBuilder) addTrace() {
+func (b *stmtBundleBuilder) addTrace(flags explain.RedactFlags) {
 	traceJSONStr, err := tracing.TraceToJSON(b.trace)
 	if err != nil {
 		b.z.AddFile("trace.json", err.Error())
@@ -322,14 +330,20 @@ func (b *stmtBundleBuilder) addTrace() {
 		b.z.AddFile("trace.json", traceJSONStr)
 	}
 
-	cfg := tree.DefaultPrettyCfg()
-	cfg.UseTabs = false
-	cfg.LineWidth = 100
-	cfg.TabWidth = 2
-	cfg.Simplify = true
-	cfg.Align = tree.PrettyNoAlign
-	cfg.JSONFmt = true
-	stmt := cfg.Pretty(b.plan.stmt.AST)
+	var stmt string
+	if flags.Has(explain.RedactPII) {
+		fmtFlags := tree.FmtHideConstants
+		stmt = tree.AsStringWithFlags(b.plan.stmt.AST, fmtFlags)
+	} else {
+		cfg := tree.DefaultPrettyCfg()
+		cfg.UseTabs = false
+		cfg.LineWidth = 100
+		cfg.TabWidth = 2
+		cfg.Simplify = true
+		cfg.Align = tree.PrettyNoAlign
+		cfg.JSONFmt = true
+		stmt = cfg.Pretty(b.plan.stmt.AST)
+	}
 
 	// The JSON is not very human-readable, so we include another format too.
 	b.z.AddFile("trace.txt", fmt.Sprintf("%s\n\n\n\n%s", stmt, b.trace.String()))
@@ -348,7 +362,7 @@ The UI can then be accessed at http://localhost:16686/search`, stmt)
 	}
 }
 
-func (b *stmtBundleBuilder) addEnv(ctx context.Context) {
+func (b *stmtBundleBuilder) addEnv(ctx context.Context, flags explain.RedactFlags) {
 	c := makeStmtEnvCollector(ctx, b.ie)
 
 	var buf bytes.Buffer

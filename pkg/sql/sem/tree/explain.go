@@ -116,6 +116,7 @@ const (
 	ExplainFlagMemo
 	ExplainFlagShape
 	ExplainFlagViz
+	ExplainFlagRedact
 	numExplainFlags = iota
 )
 
@@ -128,6 +129,7 @@ var explainFlagStrings = [...]string{
 	ExplainFlagMemo:    "MEMO",
 	ExplainFlagShape:   "SHAPE",
 	ExplainFlagViz:     "VIZ",
+	ExplainFlagRedact:  "REDACT",
 }
 
 var explainFlagStringMap = func() map[string]ExplainFlag {
@@ -258,6 +260,12 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 		}
 		if analyze {
 			return nil, pgerror.Newf(pgcode.Syntax, "the JSON flag cannot be used with ANALYZE")
+		}
+	}
+
+	if opts.Flags[ExplainFlagRedact] {
+		if !analyze || opts.Mode != ExplainDebug {
+			return nil, pgerror.Newf(pgcode.Syntax, "the REDACT flag can only be used with EXPLAIN ANALYZE (DEBUG)")
 		}
 	}
 
