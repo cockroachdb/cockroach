@@ -155,11 +155,9 @@ func runDebugZip(_ *cobra.Command, args []string) (retErr error) {
 
 	zr := zipCtx.newZipReporter("cluster")
 	// Interpret the deprecated `--redact-logs` the same as the new `--redact` flag.
+	// We later print a deprecation warning at the end of the zip operation for visibility.
 	if zipCtx.redactLogs {
 		zipCtx.redact = true
-		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
-			" flag has been deprecated in favor of the --" + cliflags.ZipRedact.Name + " flag. " +
-			"Interpreting as --" + cliflags.ZipRedact.Name + " and continuing.")
 	}
 
 	s := zr.start("establishing RPC connection to %s", serverCfg.AdvertiseAddr)
@@ -293,6 +291,13 @@ find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep per_second | sort
 find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep per_second | sort -rhk3 | head -n 20`)); err != nil {
 			return err
 		}
+	}
+
+	// TODO(obs-infra): remove deprecation warning once process completed in v23.2.
+	if zipCtx.redactLogs {
+		zr.info("WARNING: The --" + cliflags.ZipRedactLogs.Name +
+			" flag has been deprecated in favor of the --" + cliflags.ZipRedact.Name + " flag. " +
+			"The flag has been interpreted as --" + cliflags.ZipRedact.Name + " instead.")
 	}
 
 	return nil
