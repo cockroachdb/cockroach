@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "logstore",
     srcs = [
+        "logstore.go",
         "sideload.go",
         "sideload_disk.go",
     ],
@@ -21,6 +22,7 @@ go_library(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
+        "@io_etcd_go_etcd_raft_v3//:raft",
         "@io_etcd_go_etcd_raft_v3//raftpb",
         "@org_golang_x_time//rate",
     ],
