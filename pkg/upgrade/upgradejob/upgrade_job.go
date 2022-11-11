@@ -86,7 +86,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	}
 	switch m := m.(type) {
 	case *upgrade.SystemUpgrade:
-		err = m.Run(ctx, cv, mc.SystemDeps(), r.j)
+		err = m.Run(ctx, cv, mc.SystemDeps())
 	case *upgrade.TenantUpgrade:
 		tenantDeps := upgrade.TenantDeps{
 			DB:                      execCtx.ExecCfg().DB,
@@ -122,7 +122,7 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			return sr, cleanup, nil
 		}
 
-		err = m.Run(ctx, cv, tenantDeps, r.j)
+		err = m.Run(ctx, cv, tenantDeps)
 	default:
 		return errors.AssertionFailedf("unknown migration type %T", m)
 	}

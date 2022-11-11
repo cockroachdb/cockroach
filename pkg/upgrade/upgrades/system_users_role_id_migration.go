@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -52,7 +51,7 @@ CREATE UNIQUE INDEX users_user_id_idx ON system.users ("user_id" ASC)
 `
 
 func alterSystemUsersAddUserIDColumnWithIndex(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{
@@ -77,7 +76,7 @@ func alterSystemUsersAddUserIDColumnWithIndex(
 }
 
 func backfillSystemUsersIDColumn(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	var upsertRootStmt = `
 			       UPSERT INTO system.users (username, "isRole", "user_id") VALUES ($1, false, $2)
@@ -151,7 +150,7 @@ UPDATE system.users
 }
 
 func setUserIDNotNull(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	op := operation{
 		name:           "alter-system-users-user-id-column-not-null",

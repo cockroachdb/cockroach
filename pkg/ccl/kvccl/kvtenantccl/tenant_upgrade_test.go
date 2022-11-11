@@ -263,7 +263,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 							},
 								upgrades.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
+									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
 									return nil
 								}), true
@@ -273,7 +273,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 							},
 								upgrades.NoPrecondition,
 								func(
-									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
+									ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 								) error {
 									tenantStopperChannel <- struct{}{}
 									return nil
