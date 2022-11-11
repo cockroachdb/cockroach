@@ -519,7 +519,7 @@ func addSSTablePreApply(
 			log.Fatalf(ctx, "while removing existing file during ingestion of %s: %+v", ingestPath, err)
 		}
 	}
-	if err := writeFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
+	if err := kvserverbase.WriteFileSyncing(ctx, ingestPath, sst.Data, eng, 0600, st, limiter); err != nil {
 		log.Fatalf(ctx, "while ingesting %s: %+v", ingestPath, err)
 	}
 	if err := eng.IngestExternalFiles(ctx, []string{ingestPath}); err != nil {
