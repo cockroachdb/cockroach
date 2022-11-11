@@ -135,8 +135,6 @@ func checkDemoConfiguration(
 		return nil, errors.Newf("--%s cannot be used with --%s", cliflags.Global.Name, cliflags.DemoNodeLocality.Name)
 	}
 
-	demoCtx.DisableTelemetry = cluster.TelemetryOptOut()
-
 	// Whether or not we enable enterprise feature is a combination of:
 	//
 	// - whether the user wants them (they can disable enterprise
@@ -284,7 +282,7 @@ func runDemoInternal(
 
 		// Only print details about the telemetry configuration if the
 		// user has control over it.
-		if demoCtx.DisableTelemetry {
+		if cluster.TelemetryOptOut() {
 			cliCtx.PrintlnUnlessEmbedded("#\n# Telemetry disabled by configuration.")
 		} else {
 			cliCtx.PrintlnUnlessEmbedded("#\n" +

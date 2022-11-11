@@ -1143,6 +1143,9 @@ func extraServerFlagInit(cmd *cobra.Command) error {
 	}
 	serverCfg.LocalityAddresses = localityAdvertiseHosts
 
+	// Ensure that diagnostic reporting is enabled for server startup commands.
+	serverCfg.StartDiagnosticsReporting = true
+
 	return nil
 }
 

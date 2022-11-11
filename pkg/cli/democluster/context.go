@@ -35,9 +35,6 @@ type Context struct {
 	// CacheSize is the size of the storage cache for each KV server.
 	CacheSize int64
 
-	// DisableTelemetry requests that telemetry be disabled.
-	DisableTelemetry bool
-
 	// NoExampleDatabase prevents the auto-creation of a demo database
 	// from a workload.
 	NoExampleDatabase bool
