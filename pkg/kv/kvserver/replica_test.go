@@ -824,7 +824,7 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 		},
 	}
 	tc.repl.mu.Lock()
-	_, _, pErr := checkForcedErr(
+	_, _, pErr := kvserverbase.CheckForcedErr(
 		ctx, makeIDKey(), &raftCmd, false, /* isLocal */
 		&tc.repl.mu.state,
 	)
