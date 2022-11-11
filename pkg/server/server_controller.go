@@ -255,6 +255,8 @@ func (s *Server) startInMemoryTenantServerInternal(
 
 	// Start a goroutine that watches for shutdown requests issued by
 	// the server itself.
+	// Note: we can't use stopper.RunAsyncTask() here because otherwise
+	// the call to stopper.Stop() inside the goroutine would deadlock.
 	go func() {
 		select {
 		case req := <-tenantServer.ShutdownRequested():
@@ -268,11 +270,6 @@ func (s *Server) startInMemoryTenantServerInternal(
 
 	if err := tenantServer.Start(startCtx); err != nil {
 		return stopper, tenantServer, err
-	}
-
-	// Start up the diagnostics reporting loop.
-	if !cluster.TelemetryOptOut() {
-		tenantServer.StartDiagnostics(startCtx)
 	}
 
 	// Show the tenant details in logs.

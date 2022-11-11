@@ -325,11 +325,6 @@ type serverStartupInterface interface {
 	// before the first client is accepted.
 	PreStart(ctx context.Context) error
 
-	// StartDiagnostics starts periodic diagnostics reporting and update checking.
-	// NOTE: This is not called in PreStart so that it's disabled by default for
-	// testing.
-	StartDiagnostics(ctx context.Context)
-
 	// AcceptClients starts listening for incoming SQL clients over the network.
 	AcceptClients(ctx context.Context) error
 
@@ -699,13 +694,6 @@ func createAndStartServerAsync(
 			// be called by the shutdown goroutine, which in turn will cause
 			// all these startup steps to fail. So we do not need to look at
 			// the "shutdown status" in serverStatusMu any more.
-
-			// Start up the diagnostics reporting and update check loops.
-			// We don't do this in (*server.Server).Start() because we don't
-			// want this overhead and possible interference in tests.
-			if !cluster.TelemetryOptOut() {
-				s.StartDiagnostics(ctx)
-			}
 
 			// Run one-off cluster initialization.
 			if err := s.RunInitialSQL(ctx, startSingleNode, "" /* adminUser */, "" /* adminPassword */); err != nil {

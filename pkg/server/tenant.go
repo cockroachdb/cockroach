@@ -589,6 +589,11 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// If enabled, start reporting diagnostics.
+	if s.sqlServer.cfg.StartDiagnosticsReporting && !cluster.TelemetryOptOut() {
+		s.startDiagnostics(workersCtx)
+	}
+
 	// Enable the Obs Server.
 	// There is more logic here than in (*Server).PreStart() because
 	// we care about the SQL instance ID too.
@@ -685,9 +690,9 @@ func (s *SQLServerWrapper) LogicalClusterID() uuid.UUID {
 	return s.sqlServer.LogicalClusterID()
 }
 
-// StartDiagnostics begins the diagnostic loop of this tenant server.
+// startDiagnostics begins the diagnostic loop of this tenant server.
 // Used in cli/mt_start_sql.go.
-func (s *SQLServerWrapper) StartDiagnostics(ctx context.Context) {
+func (s *SQLServerWrapper) startDiagnostics(ctx context.Context) {
 	s.sqlServer.StartDiagnostics(ctx)
 }
 
