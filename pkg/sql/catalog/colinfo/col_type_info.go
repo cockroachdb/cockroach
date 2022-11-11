@@ -130,7 +130,7 @@ func ColumnTypeIsIndexable(t *types.T) bool {
 // using an inverted index.
 func ColumnTypeIsInvertedIndexable(t *types.T) bool {
 	switch t.Family() {
-	case types.StringFamily:
+	case types.ArrayFamily, types.StringFamily:
 		return true
 	}
 	return ColumnTypeIsOnlyInvertedIndexable(t)
@@ -144,7 +144,6 @@ func ColumnTypeIsOnlyInvertedIndexable(t *types.T) bool {
 	}
 	switch t.Family() {
 	case types.JsonFamily:
-	case types.ArrayFamily:
 	case types.GeographyFamily:
 	case types.GeometryFamily:
 	default:
