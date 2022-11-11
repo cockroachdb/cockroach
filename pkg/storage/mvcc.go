@@ -5784,7 +5784,7 @@ func MVCCExportFingerprint(
 	defer span.Finish()
 
 	hasher := fnv.New64()
-	fingerprintWriter := makeFingerprintWriter(ctx, hasher, cs, dest)
+	fingerprintWriter := makeFingerprintWriter(ctx, hasher, cs, dest, opts.FingerprintOptions)
 	defer fingerprintWriter.Close()
 
 	summary, resumeKey, err := mvccExportToWriter(ctx, reader, opts, &fingerprintWriter)
@@ -6249,6 +6249,19 @@ type MVCCExportOptions struct {
 	// resources. Export queries limiter in its iteration loop to break out once
 	// resources are exhausted.
 	ResourceLimiter ResourceLimiter
+	// FingerprintOptions controls how fingerprints are generated
+	// when using MVCCExportFingerprint.
+	FingerprintOptions MVCCExportFingerprintOptions
+}
+
+type MVCCExportFingerprintOptions struct {
+	// If StripTenantPrefix is true, keys that appear to be
+	// tenant-prefixed have the tenant-prefix removed before
+	// hashing.
+	StripTenantPrefix bool
+	// If StripValueChecksum is true, checksums are removed from
+	// the value before hashing.
+	StripValueChecksum bool
 }
 
 // MVCCIsSpanEmptyOptions configures the MVCCIsSpanEmpty function.
