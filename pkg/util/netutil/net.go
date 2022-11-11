@@ -62,42 +62,31 @@ func ListenAndServeGRPC(
 
 var httpLogger = log.NewStdLogger(severity.ERROR, "net/http")
 
-// Server is a thin wrapper around http.Server. See MakeServer for more detail.
-type Server struct {
+// HTTPServer is a thin wrapper around http.Server. See MakeHTTPServer for more detail.
+type HTTPServer struct {
 	*http.Server
 }
 
-// MakeServer constructs a Server that tracks active connections,
+// MakeHTTPServer constructs a http.Server that tracks active connections,
 // closing them when signaled by stopper.
-//
-// It can serve two different purposes simultaneously:
-//
-// - to serve as actual HTTP server, using the .Serve(net.Listener) method.
-// - to serve as plain TCP server, using the .ServeWith(...) method.
-//
-// The latter is used e.g. to accept SQL client connections.
-//
-// When the HTTP facility is not used, the Go HTTP server object is
-// still used internally to maintain/register the connections via the
-// ConnState() method, for convenience.
-func MakeServer(
+func MakeHTTPServer(
 	ctx context.Context, stopper *stop.Stopper, tlsConfig *tls.Config, handler http.Handler,
-) Server {
+) HTTPServer {
 	var mu syncutil.Mutex
 	activeConns := make(map[net.Conn]struct{})
-	server := Server{
+	server := HTTPServer{
 		Server: &http.Server{
 			Handler:   handler,
 			TLSConfig: tlsConfig,
 			ConnState: func(conn net.Conn, state http.ConnState) {
 				mu.Lock()
+				defer mu.Unlock()
 				switch state {
 				case http.StateNew:
 					activeConns[conn] = struct{}{}
 				case http.StateClosed:
 					delete(activeConns, conn)
 				}
-				mu.Unlock()
 			},
 			ErrorLog: httpLogger,
 		},
@@ -113,10 +102,10 @@ func MakeServer(
 		<-stopper.ShouldQuiesce()
 
 		mu.Lock()
+		defer mu.Unlock()
 		for conn := range activeConns {
 			conn.Close()
 		}
-		mu.Unlock()
 	}
 	if err := stopper.RunAsyncTask(ctx, "http2-wait-quiesce", waitQuiesce); err != nil {
 		waitQuiesce(ctx)
@@ -125,12 +114,51 @@ func MakeServer(
 	return server
 }
 
+// MakeTCPServer constructs a connection server that tracks active connections,
+// closing them when signaled by stopper.
+func MakeTCPServer(ctx context.Context, stopper *stop.Stopper) *TCPServer {
+	server := &TCPServer{
+		stopper:     stopper,
+		activeConns: make(map[net.Conn]struct{}),
+	}
+
+	waitQuiesce := func(context.Context) {
+		<-stopper.ShouldQuiesce()
+
+		server.mu.Lock()
+		defer server.mu.Unlock()
+		for conn := range server.activeConns {
+			conn.Close()
+		}
+	}
+	if err := stopper.RunAsyncTask(ctx, "tcp-wait-quiesce", waitQuiesce); err != nil {
+		waitQuiesce(ctx)
+	}
+	return server
+}
+
+// TCPServer is wrapper around a map of active connections.
+type TCPServer struct {
+	mu          syncutil.Mutex
+	stopper     *stop.Stopper
+	activeConns map[net.Conn]struct{}
+}
+
+func (s *TCPServer) addConn(n net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.activeConns[n] = struct{}{}
+}
+
+func (s *TCPServer) rmConn(n net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.activeConns, n)
+}
+
 // ServeWith accepts connections on ln and serves them using serveConn.
-func (s *Server) ServeWith(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	l net.Listener,
-	serveConn func(context.Context, net.Conn),
+func (s *TCPServer) ServeWith(
+	ctx context.Context, l net.Listener, serveConn func(context.Context, net.Conn),
 ) error {
 	// Inspired by net/http.(*Server).Serve
 	var tempDelay time.Duration // how long to sleep on accept failure
@@ -154,11 +182,9 @@ func (s *Server) ServeWith(
 			return e
 		}
 		tempDelay = 0
-		err := stopper.RunAsyncTask(ctx, "pgwire-serve", func(ctx context.Context) {
-			// NB: ConnState is used to manage the list of active connections that
-			// need draining; see MakeServer().
-			s.Server.ConnState(rw, http.StateNew) // before Serve can return
-			defer s.Server.ConnState(rw, http.StateClosed)
+		err := s.stopper.RunAsyncTask(ctx, "tcp-serve", func(ctx context.Context) {
+			s.addConn(rw)
+			defer s.rmConn(rw)
 			serveConn(ctx, rw)
 		})
 		if err != nil {
