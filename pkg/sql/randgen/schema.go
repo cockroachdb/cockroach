@@ -496,10 +496,14 @@ func randIndexTableDefFromCols(
 	// index, after which we stop adding columns to the prefix.
 	var prefix tree.NameList
 	var stopPrefix bool
+	partitioningNotSupported := false
 
 	def.Columns = make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
 		semType := tree.MustBeStaticallyKnownType(cols[i].Type)
+		if semType.Family() == types.ArrayFamily {
+			partitioningNotSupported = true
+		}
 		elem := tree.IndexElem{
 			Column:    cols[i].Name,
 			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
@@ -565,7 +569,7 @@ func randIndexTableDefFromCols(
 	// not support partitioning.
 	// TODO(harding): Allow partitioning the primary index. This will require
 	// massaging the syntax.
-	if !isMultiRegion && !isPrimaryIndex && len(prefix) > 0 && rng.Intn(10) == 0 {
+	if !isMultiRegion && !isPrimaryIndex && !partitioningNotSupported && len(prefix) > 0 && rng.Intn(10) == 0 {
 		def.PartitionByIndex = &tree.PartitionByIndex{PartitionBy: &tree.PartitionBy{}}
 		prefixLen := 1 + rng.Intn(len(prefix))
 		def.PartitionByIndex.Fields = prefix[:prefixLen]
