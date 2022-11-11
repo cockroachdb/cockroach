@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
@@ -41,7 +40,7 @@ CREATE INDEX completed_idx ON system.statement_diagnostics_requests (completed, 
 // system.statement_diagnostics_requests table to support probabilistic bundle
 // collection.
 func sampledStmtDiagReqsMigration(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	for _, op := range []operation{
 		{

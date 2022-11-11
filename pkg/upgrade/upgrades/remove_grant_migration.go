@@ -14,13 +14,12 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 // removeGrantMigration removes the GRANT privilege bit if it is present
 func removeGrantMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return runPostDeserializationChangesOnAllDescriptors(ctx, d)
 }

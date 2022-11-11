@@ -14,14 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
 
 // systemPrivilegesTableMigration creates the system.privileges table.
 func systemPrivilegesTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return createSystemTable(
 		ctx, d.DB, d.Settings, d.Codec, systemschema.SystemPrivilegeTable,

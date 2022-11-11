@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -122,7 +121,7 @@ type SystemUpgrade struct {
 
 // SystemUpgradeFunc is used to perform kv-level upgrades. It should only be
 // run from the system tenant.
-type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps, *jobs.Job) error
+type SystemUpgradeFunc func(context.Context, clusterversion.ClusterVersion, SystemDeps) error
 
 // NewSystemUpgrade constructs a SystemUpgrade.
 func NewSystemUpgrade(
@@ -139,8 +138,8 @@ func NewSystemUpgrade(
 
 // Run kickstarts the actual upgrade process for system-level upgrades.
 func (m *SystemUpgrade) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps, job *jobs.Job,
+	ctx context.Context, cv clusterversion.ClusterVersion, d SystemDeps,
 ) error {
 	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", cv), nil)
-	return m.fn(ctx, cv, d, job)
+	return m.fn(ctx, cv, d)
 }
