@@ -13,13 +13,11 @@ package upgrades
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,7 +59,7 @@ func alterSystemUsersAddUserIDColumnWithIndex(
 			name:           "add-system-users-user-id-column",
 			schemaList:     []string{"user_id"},
 			query:          addUserIDColumn,
-			schemaExistsFn: hasColumn,
+			schemaExistsFn: columnExists,
 		},
 		{
 			name:           "alter-system-users-add-index",
@@ -156,19 +154,10 @@ func setUserIDNotNull(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
 ) error {
 	op := operation{
-		name:       "alter-system-users-user-id-column-not-null",
-		schemaList: []string{"user_id"},
-		query:      updateUserIDColumnSetNotNull,
-		schemaExistsFn: func(storedTable, _ catalog.TableDescriptor, colName string) (bool, error) {
-			storedCol, err := storedTable.FindColumnWithName(tree.Name(colName))
-			if err != nil {
-				if strings.Contains(err.Error(), "does not exist") {
-					return false, nil
-				}
-				return false, err
-			}
-			return !storedCol.IsNullable(), nil
-		},
+		name:           "alter-system-users-user-id-column-not-null",
+		schemaList:     []string{"user_id"},
+		query:          updateUserIDColumnSetNotNull,
+		schemaExistsFn: columnExistsAndIsNotNull,
 	}
 	return migrateTable(ctx, cs, d, op, keys.UsersTableID, systemschema.UsersTable)
 }
