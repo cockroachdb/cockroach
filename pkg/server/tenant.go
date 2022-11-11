@@ -325,17 +325,21 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// Start a context for the asynchronous network workers.
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	// Load the TLS configuration for the HTTP server.
-	uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
-	if err != nil {
-		return err
-	}
+	// If DisableOwnHTTPListener is set, we are relying on the HTTP request
+	// routing performed by the server controller.
+	if !s.sqlServer.cfg.DisableOwnHTTPListener {
+		// Load the TLS configuration for the HTTP server.
+		uiTLSConfig, err := s.rpcContext.GetUIServerTLSConfig()
+		if err != nil {
+			return err
+		}
 
-	// Start the admin UI server. This opens the HTTP listen socket,
-	// optionally sets up TLS, and dispatches the server worker for the
-	// web UI.
-	if err := s.http.start(ctx, workersCtx, uiTLSConfig, s.stopper); err != nil {
-		return err
+		// Start the admin UI server. This opens the HTTP listen socket,
+		// optionally sets up TLS, and dispatches the server worker for the
+		// web UI.
+		if err := startHTTPService(ctx, workersCtx, s.sqlServer.cfg, uiTLSConfig, s.stopper, s.http.baseHandler); err != nil {
+			return err
+		}
 	}
 
 	// Initialize the external storage builders configuration params now that the
