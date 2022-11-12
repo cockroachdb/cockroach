@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -99,7 +98,10 @@ type runnerResult struct {
 	err    error
 }
 
-func (req runnerRequest) run() {
+// run executes the request. An error, if encountered, is both sent on the
+// result channel and returned.
+func (req runnerRequest) run() error {
+	defer physicalplan.ReleaseFlowSpec(&req.flowReq.Flow)
 	res := runnerResult{nodeID: req.sqlInstanceID}
 
 	conn, err := req.podNodeDialer.Dial(req.ctx, roachpb.NodeID(req.sqlInstanceID), rpc.DefaultClass)
@@ -108,9 +110,6 @@ func (req runnerRequest) run() {
 	} else {
 		client := execinfrapb.NewDistSQLClient(conn)
 		// TODO(radu): do we want a timeout here?
-		if sp := tracing.SpanFromContext(req.ctx); sp != nil && !sp.IsNoop() {
-			req.flowReq.TraceInfo = sp.Meta().ToProto()
-		}
 		resp, err := client.SetupFlow(req.ctx, req.flowReq)
 		if err != nil {
 			res.err = err
@@ -119,6 +118,7 @@ func (req runnerRequest) run() {
 		}
 	}
 	req.resultChan <- res
+	return res.err
 }
 
 type runnerCoordinator struct {
@@ -145,7 +145,7 @@ func (c *runnerCoordinator) init(ctx context.Context, stopper *stop.Stopper, sv 
 		for {
 			select {
 			case req := <-c.runnerChan:
-				req.run()
+				_ = req.run()
 			case <-stopWorkerChan:
 				return
 			}
@@ -272,6 +272,10 @@ type deadFlowsOnNode struct {
 // cancelFlowsCoordinator is responsible for batching up the requests to cancel
 // remote flows initiated on the behalf of the current node when the local flows
 // errored out.
+//
+// This mechanism is used in addition to the cancellation that occurs when the
+// gRPC streams are closed between nodes, which happens when the query errors
+// out. This mechanism works on the best-effort basis.
 type cancelFlowsCoordinator struct {
 	mu struct {
 		syncutil.Mutex
@@ -356,27 +360,35 @@ func (c *cancelFlowsCoordinator) addFlowsToCancel(
 }
 
 // setupFlows sets up all the flows specified in flows using the provided state.
-// It will first attempt to set up all remote flows using the dsp workers if
-// available or sequentially if not, and then finally set up the gateway flow,
-// whose output is the DistSQLReceiver provided. This flow is then returned to
-// be run.
+// It will first attempt to set up the gateway flow (whose output is the
+// DistSQLReceiver provided) and - if successful - will proceed to setting up
+// the remote flows using the dsp workers if available or sequentially if not.
+//
+// The gateway flow is returned to be Run(). It is the caller's responsibility
+// to clean up that flow if a non-nil value is returned.
+//
+// The method doesn't wait for the setup of remote flows (if any) to return and,
+// instead, optimistically proceeds once the corresponding SetupFlow RPCs are
+// issued. A separate goroutine is spun up to listen for the RPCs to come back,
+// and if the setup of a remote flow fails, then that goroutine updates the
+// DistSQLReceiver with the error and cancels the gateway flow.
 func (dsp *DistSQLPlanner) setupFlows(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
+	planCtx *PlanningCtx,
 	leafInputState *roachpb.LeafTxnInputState,
 	flows map[base.SQLInstanceID]*execinfrapb.FlowSpec,
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
-	collectStats bool,
 	statementSQL string,
-) (context.Context, flowinfra.Flow, execopnode.OpChains, error) {
+) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
 	_, ok := flows[thisNodeID]
 	if !ok {
-		return nil, nil, nil, errors.AssertionFailedf("missing gateway flow")
+		return nil, nil, errors.AssertionFailedf("missing gateway flow")
 	}
 	if localState.IsLocal && len(flows) != 1 {
-		return nil, nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
+		return nil, nil, errors.AssertionFailedf("IsLocal set but there's multiple flows")
 	}
 
 	const setupFlowRequestStmtMaxLength = 500
@@ -388,80 +400,178 @@ func (dsp *DistSQLPlanner) setupFlows(
 		Version:           execinfra.Version,
 		EvalContext:       execinfrapb.MakeEvalContext(&evalCtx.Context),
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
-		CollectStats:      collectStats,
+		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
 	}
 
+	var isVectorized bool
 	if vectorizeMode := evalCtx.SessionData().VectorizeMode; vectorizeMode != sessiondatapb.VectorizeOff {
 		// Now we determine whether the vectorized engine supports the flow
 		// specs.
+		isVectorized = true
 		for _, spec := range flows {
 			if err := colflow.IsSupported(vectorizeMode, spec); err != nil {
 				log.VEventf(ctx, 2, "failed to vectorize: %s", err)
 				if vectorizeMode == sessiondatapb.VectorizeExperimentalAlways {
-					return nil, nil, nil, err
+					return nil, nil, err
 				}
 				// Vectorization is not supported for this flow, so we override
 				// the setting.
 				setupReq.EvalContext.SessionData.VectorizeMode = sessiondatapb.VectorizeOff
+				isVectorized = false
 				break
 			}
 		}
 	}
-
-	// Start all the flows except the flow on this node (there is always a flow
-	// on this node).
-	var resultChan chan runnerResult
-	if len(flows) > 1 {
-		resultChan = make(chan runnerResult, len(flows)-1)
-		for nodeID, flowSpec := range flows {
-			if nodeID == thisNodeID {
-				// Skip this node.
-				continue
-			}
-			req := setupReq
-			req.Flow = *flowSpec
-			runReq := runnerRequest{
-				ctx:           ctx,
-				podNodeDialer: dsp.podNodeDialer,
-				flowReq:       &req,
-				sqlInstanceID: nodeID,
-				resultChan:    resultChan,
-			}
-
-			// Send out a request to the workers; if no worker is available, run
-			// directly.
-			select {
-			case dsp.runnerCoordinator.runnerChan <- runReq:
-			default:
-				runReq.run()
-			}
-		}
+	if planCtx.planner != nil && isVectorized {
+		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
 	}
 
-	// Now set up the flow on this node.
+	// First, set up the flow on this node.
 	setupReq.Flow = *flows[thisNodeID]
 	var batchReceiver execinfra.BatchReceiver
-	if recv.batchWriter != nil {
+	if recv.resultWriterMu.batch != nil {
 		// Use the DistSQLReceiver as an execinfra.BatchReceiver only if the
 		// former has the corresponding writer set.
 		batchReceiver = recv
 	}
-	ctx, flow, opChains, firstErr := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
-
-	// Now wait for all the flows to be scheduled on remote nodes. Note that we
-	// are not waiting for the flows themselves to complete.
-	for i := 0; i < len(flows)-1; i++ {
-		res := <-resultChan
-		if firstErr == nil {
-			firstErr = res.err
-		}
-		// TODO(radu): accumulate the flows that we failed to set up and move them
-		// into the local flow.
+	origCtx := ctx
+	ctx, flow, opChains, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Planner.Mon(), &setupReq, recv, batchReceiver, localState)
+	if err == nil && planCtx.saveFlows != nil {
+		err = planCtx.saveFlows(flows, opChains)
 	}
-	// Note that we need to return the local flow even if firstErr is non-nil so
-	// that the local flow is properly cleaned up.
-	return ctx, flow, opChains, firstErr
+	if len(flows) == 1 || err != nil {
+		// If there are no remote flows, or we fail to set up the local flow, we
+		// can just short-circuit.
+		//
+		// Note that we need to return the local flow even if err is non-nil so
+		// that the local flow is properly cleaned up.
+		return ctx, flow, err
+	}
+
+	// Start all the remote flows.
+	//
+	// usedWorker indicates whether we used at least one DistSQL worker
+	// goroutine to issue the SetupFlow RPC.
+	var usedWorker bool
+	if sp := tracing.SpanFromContext(origCtx); sp != nil && !sp.IsNoop() {
+		setupReq.TraceInfo = sp.Meta().ToProto()
+	}
+	resultChan := make(chan runnerResult, len(flows)-1)
+	// We use a separate context for the runnerRequests so that - in case they
+	// are issued concurrently and some RPCs are actually run after the current
+	// goroutine performs Flow.Cleanup() on the local flow - DistSQL workers
+	// don't attempt to reuse already finished tracing span from the local flow
+	// context. For the same reason we can't use origCtx (parent of the local
+	// flow context).
+	//
+	// In particular, consider the following scenario:
+	// - a runnerRequest is handled by the DistSQL worker;
+	// - in runnerRequest.run() the worker dials the remote node and issues the
+	//   SetupFlow RPC. However, the client-side goroutine of that RPC is not
+	//   yet scheduled on the local node;
+	// - the local flow runs to completion canceling the context and finishing
+	//   the tracing span;
+	// - now the client-side goroutine of the RPC is scheduled, and it attempts
+	//   to use the span from the context, but it has already been finished.
+	//
+	// We still want to be able to cancel the RPCs when either the local flow
+	// finishes or the local node is quiescing, so we derive a separate context
+	// with the cancellation ability.
+	runnerCtx, cancelRunnerCtx := dsp.stopper.WithCancelOnQuiesce(context.Background())
+	for nodeID, flowSpec := range flows {
+		if nodeID == thisNodeID {
+			// Skip this node.
+			continue
+		}
+		req := setupReq
+		req.Flow = *flowSpec
+		runReq := runnerRequest{
+			ctx:           runnerCtx,
+			podNodeDialer: dsp.podNodeDialer,
+			flowReq:       &req,
+			sqlInstanceID: nodeID,
+			resultChan:    resultChan,
+		}
+
+		// Send out a request to the workers; if no worker is available, run
+		// directly.
+		select {
+		case dsp.runnerCoordinator.runnerChan <- runReq:
+			usedWorker = true
+		default:
+			// We can just use the "parent" context since we're executing the
+			// request in a blocking fashion in the current goroutine. This
+			// allows for the cancellation of the "parent" context be noticed
+			// sooner.
+			runReq.ctx = origCtx
+			if err = runReq.run(); err != nil {
+				return ctx, flow, err
+			}
+		}
+	}
+
+	if !usedWorker {
+		// We executed all SetupFlow RPCs in the current goroutine, and all RPCs
+		// succeeded.
+		return ctx, flow, nil
+	}
+
+	// Some of the SetupFlow RPCs were executed concurrently, and at the moment
+	// it's not clear whether the setup of the remote flows is successful, but
+	// in order to not introduce an execution stall, we will proceed to run the
+	// local flow assuming that all RPCs are successful. However, in case the
+	// setup of a remote flow fails, we want to eagerly cancel all the flows,
+	// and we do so in a separate goroutine.
+	//
+	// We need to synchronize the new goroutine with flow.Cleanup() being called
+	// for two reasons:
+	// - flow.Cleanup() is the last thing before DistSQLPlanner.Run returns at
+	// which point the rowResultWriter is no longer protected by the mutex of
+	// the DistSQLReceiver
+	// - flow.Cancel can only be called before flow.Cleanup.
+	cleanupCalledMu := struct {
+		syncutil.Mutex
+		called bool
+	}{}
+	flow.AddOnCleanup(func() {
+		cleanupCalledMu.Lock()
+		defer cleanupCalledMu.Unlock()
+		cleanupCalledMu.called = true
+		// Cancel any outstanding RPCs while holding the lock to protect from
+		// the context canceled error (the result of the RPC) being set on the
+		// DistSQLReceiver by the listener goroutine below.
+		cancelRunnerCtx()
+	})
+	_ = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
+		for i := 0; i < len(flows)-1; i++ {
+			res := <-resultChan
+			if res.err != nil {
+				// The setup of at least one remote flow failed.
+				cleanupCalledMu.Lock()
+				defer cleanupCalledMu.Unlock()
+				if cleanupCalledMu.called {
+					// We no longer care about the error nor do we need to
+					// cancel the flow.
+					return
+				}
+				// First, we update the DistSQL receiver with the error to be
+				// returned to the client eventually.
+				//
+				// In order to not protect DistSQLReceiver.status with a mutex,
+				// we do not update the status here and, instead, rely on the
+				// DistSQLReceiver detecting the error the next time a meta is
+				// pushed into it.
+				recv.setErrorWithoutStatusUpdate(res.err)
+				// Now explicitly cancel the local flow.
+				flow.Cancel()
+				// resultChan is buffered, so we can just ignore the remaining
+				// results of the RPCs.
+				return
+			}
+		}
+	})
+	return ctx, flow, nil
 }
 
 const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
@@ -492,15 +602,15 @@ func (dsp *DistSQLPlanner) Run(
 	finishedSetupFn func(),
 ) {
 	flows := plan.GenerateFlowSpecs()
-	defer func() {
-		for _, flowSpec := range flows {
-			physicalplan.ReleaseFlowSpec(flowSpec)
-		}
-	}()
-	if _, ok := flows[dsp.gatewaySQLInstanceID]; !ok {
+	gatewayFlowSpec, ok := flows[dsp.gatewaySQLInstanceID]
+	if !ok {
 		recv.SetError(errors.Errorf("expected to find gateway flow"))
 		return
 	}
+	// Specs of the remote flows are released after performing the corresponding
+	// SetupFlow RPCs. This is needed in case the local flow is canceled before
+	// the SetupFlow RPCs are issued (which might happen in parallel).
+	defer physicalplan.ReleaseFlowSpec(gatewayFlowSpec)
 
 	var (
 		localState     distsql.LocalState
@@ -617,20 +727,10 @@ func (dsp *DistSQLPlanner) Run(
 		localState.IsLocal = true
 	} else {
 		defer func() {
-			if recv.resultWriter.Err() != nil {
+			if recv.getError() != nil {
 				// The execution of this query encountered some error, so we
-				// will eagerly cancel all scheduled flows on the remote nodes
-				// (if they haven't been started yet) because they are now dead.
-				// TODO(yuzefovich): consider whether augmenting
-				// ConnectInboundStream to keep track of the streams that
-				// initiated FlowStream RPC is worth it - the flows containing
-				// such streams must have been started, so there is no point in
-				// trying to cancel them this way. This will allow us to reduce
-				// the size of the CancelDeadFlows request and speed up the
-				// lookup on the remote node whether a particular dead flow
-				// should be canceled. However, this improves the unhappy case,
-				// but it'll slowdown the happy case - by introducing additional
-				// tracking.
+				// will eagerly cancel all flows running on the remote nodes
+				// because they are now dead.
 				dsp.cancelFlowsCoordinator.addFlowsToCancel(flows)
 			}
 		}()
@@ -644,8 +744,8 @@ func (dsp *DistSQLPlanner) Run(
 	if planCtx.planner != nil {
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
-	ctx, flow, opChains, err := dsp.setupFlows(
-		ctx, evalCtx, leafInputState, flows, recv, localState, planCtx.collectExecStats, statementSQL,
+	ctx, flow, err := dsp.setupFlows(
+		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
 	)
 	// Make sure that the local flow is always cleaned up if it was created.
 	if flow != nil {
@@ -660,17 +760,6 @@ func (dsp *DistSQLPlanner) Run(
 
 	if finishedSetupFn != nil {
 		finishedSetupFn()
-	}
-
-	if planCtx.planner != nil && flow.IsVectorized() {
-		planCtx.planner.curPlan.flags.Set(planFlagVectorized)
-	}
-
-	if planCtx.saveFlows != nil {
-		if err := planCtx.saveFlows(flows, opChains); err != nil {
-			recv.SetError(err)
-			return
-		}
 	}
 
 	// Check that flows that were forced to be planned locally and didn't need
@@ -698,11 +787,15 @@ func (dsp *DistSQLPlanner) Run(
 type DistSQLReceiver struct {
 	ctx context.Context
 
-	// These two interfaces refer to the same object, but batchWriter might be
-	// unset (resultWriter is always set). These are used to send the results
-	// to.
-	resultWriter rowResultWriter
-	batchWriter  batchResultWriter
+	resultWriterMu struct {
+		// Mutex only protects SetError() and Err() methods of the
+		// rowResultWriter.
+		syncutil.Mutex
+		// These two interfaces refer to the same object, but batch might be
+		// unset (row is always set). These are used to send the results to.
+		row   rowResultWriter
+		batch batchResultWriter
+	}
 
 	stmtType tree.StatementReturnType
 
@@ -975,8 +1068,6 @@ func MakeDistSQLReceiver(
 	*r = DistSQLReceiver{
 		ctx:                consumeCtx,
 		cleanup:            cleanup,
-		resultWriter:       resultWriter,
-		batchWriter:        batchWriter,
 		rangeCache:         rangeCache,
 		txn:                txn,
 		clockUpdater:       clockUpdater,
@@ -985,6 +1076,8 @@ func MakeDistSQLReceiver(
 		tracing:            tracing,
 		contentionRegistry: contentionRegistry,
 	}
+	r.resultWriterMu.row = resultWriter
+	r.resultWriterMu.batch = batchWriter
 	return r
 }
 
@@ -1013,13 +1106,50 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 	return ret
 }
 
-// SetError provides a convenient way for a client to pass in an error, thus
-// pretending that a query execution error happened. The error is passed along
-// to the resultWriter.
+// getError returns the error stored in the rowResultWriter (if any).
+func (r *DistSQLReceiver) getError() error {
+	r.resultWriterMu.Lock()
+	defer r.resultWriterMu.Unlock()
+	return r.resultWriterMu.row.Err()
+}
+
+// setErrorWithoutStatusUpdate sets the error in the rowResultWriter but does
+// **not** update the status of the DistSQLReceiver. The status will be updated
+// the next time a meta is pushed into the receiver (by the goroutine that is
+// pushing).
 //
-// The status of DistSQLReceiver is updated accordingly.
-func (r *DistSQLReceiver) SetError(err error) {
-	r.resultWriter.SetError(err)
+// NOTE: consider using SetError() instead.
+func (r *DistSQLReceiver) setErrorWithoutStatusUpdate(err error) {
+	r.resultWriterMu.Lock()
+	defer r.resultWriterMu.Unlock()
+	// Check if the error we just received should take precedence over a
+	// previous error (if any).
+	if roachpb.ErrPriority(err) > roachpb.ErrPriority(r.resultWriterMu.row.Err()) {
+		if r.txn != nil {
+			if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(err, &retryErr) {
+				// Update the txn in response to remote errors. In the
+				// non-DistSQL world, the TxnCoordSender handles "unhandled"
+				// retryable errors, but this one is coming from a distributed
+				// SQL node, which has left the handling up to the root
+				// transaction.
+				err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
+				// Update the clock with information from the error. On
+				// non-DistSQL code paths, the DistSender does this.
+				// TODO(andrei): We don't propagate clock signals on success
+				// cases through DistSQL; we should. We also don't propagate
+				// them through non-retryable errors; we also should.
+				if r.clockUpdater != nil {
+					r.clockUpdater.Update(retryErr.PErr.Now)
+				}
+			}
+		}
+		r.resultWriterMu.row.SetError(err)
+	}
+}
+
+// updateStatusAfterError updates the status of the DistSQLReceiver after it
+// has received an error.
+func (r *DistSQLReceiver) updateStatusAfterError(err error) {
 	// If we encountered an error, we will transition to draining unless we were
 	// canceled.
 	if r.ctx.Err() != nil {
@@ -1031,10 +1161,27 @@ func (r *DistSQLReceiver) SetError(err error) {
 	}
 }
 
+// SetError provides a convenient way for a client to pass in an error, thus
+// pretending that a query execution error happened. The error is passed along
+// to the resultWriter.
+//
+// The status of DistSQLReceiver is updated accordingly.
+func (r *DistSQLReceiver) SetError(err error) {
+	r.setErrorWithoutStatusUpdate(err)
+	r.updateStatusAfterError(err)
+}
+
 // pushMeta takes in non-empty metadata object and pushes it to the result
 // writer. Possibly updated status is returned.
 func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra.ConsumerStatus {
-	if metaWriter, ok := r.resultWriter.(MetadataResultWriter); ok {
+	// Check whether an error has been set by another goroutine without updating
+	// the status.
+	if r.status == execinfra.NeedMoreRows {
+		if previousErr := r.getError(); previousErr != nil {
+			r.updateStatusAfterError(previousErr)
+		}
+	}
+	if metaWriter, ok := r.resultWriterMu.row.(MetadataResultWriter); ok {
 		metaWriter.AddMeta(r.ctx, meta)
 	}
 	if meta.LeafTxnFinalState != nil {
@@ -1050,28 +1197,7 @@ func (r *DistSQLReceiver) pushMeta(meta *execinfrapb.ProducerMetadata) execinfra
 		}
 	}
 	if meta.Err != nil {
-		// Check if the error we just received should take precedence over a
-		// previous error (if any).
-		if roachpb.ErrPriority(meta.Err) > roachpb.ErrPriority(r.resultWriter.Err()) {
-			if r.txn != nil {
-				if retryErr := (*roachpb.UnhandledRetryableError)(nil); errors.As(meta.Err, &retryErr) {
-					// Update the txn in response to remote errors. In the non-DistSQL
-					// world, the TxnCoordSender handles "unhandled" retryable errors,
-					// but this one is coming from a distributed SQL node, which has
-					// left the handling up to the root transaction.
-					meta.Err = r.txn.UpdateStateOnRemoteRetryableErr(r.ctx, &retryErr.PErr)
-					// Update the clock with information from the error. On non-DistSQL
-					// code paths, the DistSender does this.
-					// TODO(andrei): We don't propagate clock signals on success cases
-					// through DistSQL; we should. We also don't propagate them through
-					// non-retryable errors; we also should.
-					if r.clockUpdater != nil {
-						r.clockUpdater.Update(retryErr.PErr.Now)
-					}
-				}
-			}
-			r.SetError(meta.Err)
-		}
+		r.SetError(meta.Err)
 	}
 	if len(meta.Ranges) > 0 {
 		r.rangeCache.Insert(r.ctx, meta.Ranges...)
@@ -1166,7 +1292,7 @@ func (r *DistSQLReceiver) Push(
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
-	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
+	if r.ctx.Err() != nil && r.getError() == nil {
 		r.SetError(r.ctx.Err())
 	}
 	if r.status != execinfra.NeedMoreRows {
@@ -1178,7 +1304,7 @@ func (r *DistSQLReceiver) Push(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(r.ctx, n)
+		r.resultWriterMu.row.IncrementRowsAffected(r.ctx, n)
 		return r.status
 	}
 
@@ -1207,7 +1333,7 @@ func (r *DistSQLReceiver) Push(
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
-	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
+	if commErr := r.resultWriterMu.row.AddRow(r.ctx, r.row); commErr != nil {
 		r.handleCommErr(commErr)
 	}
 	return r.status
@@ -1220,7 +1346,7 @@ func (r *DistSQLReceiver) PushBatch(
 	if meta != nil {
 		return r.pushMeta(meta)
 	}
-	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
+	if r.ctx.Err() != nil && r.getError() == nil {
 		r.SetError(r.ctx.Err())
 	}
 	if r.status != execinfra.NeedMoreRows {
@@ -1236,7 +1362,7 @@ func (r *DistSQLReceiver) PushBatch(
 		// We only need the row count. planNodeToRowSource is set up to handle
 		// ensuring that the last stage in the pipeline will return a single-column
 		// row with the row count in it, so just grab that and exit.
-		r.resultWriter.IncrementRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
+		r.resultWriterMu.row.IncrementRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
 		return r.status
 	}
 
@@ -1251,7 +1377,7 @@ func (r *DistSQLReceiver) PushBatch(
 		panic("unsupported exists mode for PushBatch")
 	}
 	r.tracing.TraceExecBatchResult(r.ctx, batch)
-	if commErr := r.batchWriter.AddBatch(r.ctx, batch); commErr != nil {
+	if commErr := r.resultWriterMu.batch.AddBatch(r.ctx, batch); commErr != nil {
 		r.handleCommErr(commErr)
 	}
 	return r.status
@@ -1305,7 +1431,7 @@ func (dsp *DistSQLPlanner) PlanAndRunAll(
 	dsp.PlanAndRun(
 		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.main, recv,
 	)
-	if recv.commErr != nil || recv.resultWriter.Err() != nil {
+	if recv.commErr != nil || recv.getError() != nil {
 		return recv.commErr
 	}
 
@@ -1425,7 +1551,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 
 	// TODO(yuzefovich): consider implementing batch receiving result writer.
 	subqueryRowReceiver := NewRowResultWriter(&rows)
-	subqueryRecv.resultWriter = subqueryRowReceiver
+	subqueryRecv.resultWriterMu.row = subqueryRowReceiver
 	subqueryPlans[planIdx].started = true
 	dsp.Run(ctx, subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
 	if err := subqueryRowReceiver.Err(); err != nil {
@@ -1746,8 +1872,8 @@ func (dsp *DistSQLPlanner) planAndRunPostquery(
 	// TODO(yuzefovich): at the moment, errOnlyResultWriter is sufficient here,
 	// but it may not be the case when we support cascades through the optimizer.
 	postqueryResultWriter := &errOnlyResultWriter{}
-	postqueryRecv.resultWriter = postqueryResultWriter
-	postqueryRecv.batchWriter = postqueryResultWriter
+	postqueryRecv.resultWriterMu.row = postqueryResultWriter
+	postqueryRecv.resultWriterMu.batch = postqueryResultWriter
 	dsp.Run(ctx, postqueryPlanCtx, planner.txn, postqueryPhysPlan, postqueryRecv, evalCtx, nil /* finishedSetupFn */)
-	return postqueryRecv.resultWriter.Err()
+	return postqueryRecv.getError()
 }

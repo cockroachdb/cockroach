@@ -582,3 +582,109 @@ func TestDistSQLRunnerCoordinator(t *testing.T) {
 	// Now bump it up to 100.
 	checkNumRunners(100)
 }
+
+// TestSetupFlowRPCError verifies that the distributed query plan errors out and
+// cleans up all flows if the SetupFlow RPC fails for one of the remote nodes.
+// It also checks that the expected error is returned.
+func TestSetupFlowRPCError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start a 3 node cluster where we can inject an error for SetupFlow RPC on
+	// the server side for the queries in question.
+	const numNodes = 3
+	ctx := context.Background()
+	getError := func(nodeID base.SQLInstanceID) error {
+		return errors.Newf("injected error on n%d", nodeID)
+	}
+	// We use different queries to simplify handling the node ID on which the
+	// error should be injected (i.e. we avoid the need for synchronization in
+	// the test). In particular, the difficulty comes from the fact that some of
+	// the SetupFlow RPCs might not be issued at all while others are served
+	// after the corresponding flow on the gateway has exited.
+	queries := []string{
+		"SELECT k FROM test.foo",
+		"SELECT v FROM test.foo",
+		"SELECT * FROM test.foo",
+	}
+	stmtToNodeIDForError := map[string]base.SQLInstanceID{
+		queries[0]: 2, // error on n2
+		queries[1]: 3, // error on n3
+		queries[2]: 0, // no error
+	}
+	tc := serverutils.StartNewTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				DistSQL: &execinfra.TestingKnobs{
+					SetupFlowCb: func(nodeID base.SQLInstanceID, req *execinfrapb.SetupFlowRequest) error {
+						nodeIDForError, ok := stmtToNodeIDForError[req.StatementSQL]
+						if !ok || nodeIDForError != nodeID {
+							return nil
+						}
+						return getError(nodeID)
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Create a table with 30 rows, split them into 3 ranges with each node
+	// having one.
+	db := tc.ServerConn(0)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlutils.CreateTable(
+		t, db, "foo",
+		"k INT PRIMARY KEY, v INT",
+		30,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(2)),
+	)
+	sqlDB.Exec(t, "ALTER TABLE test.foo SPLIT AT VALUES (10), (20)")
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 0), (ARRAY[%d], 10), (ARRAY[%d], 20)",
+			tc.Server(0).GetFirstStoreID(),
+			tc.Server(1).GetFirstStoreID(),
+			tc.Server(2).GetFirstStoreID(),
+		),
+	)
+
+	// assertNoRemoteFlows verifies that the remote flows exit "soon".
+	//
+	// Note that in practice this happens very quickly, but in an edge case it
+	// could take 10s (sql.distsql.flow_stream_timeout). That edge case occurs
+	// when the server-side goroutine of the SetupFlow RPC is scheduled after
+	// - the gateway flow exits with an error
+	// - the CancelDeadFlows RPC for the remote flow in question completes.
+	// With such setup the FlowStream RPC of the outbox will time out after 10s.
+	assertNoRemoteFlows := func() {
+		testutils.SucceedsSoon(t, func() error {
+			for i, remoteNode := range []*distsql.ServerImpl{
+				tc.Server(1).DistSQLServer().(*distsql.ServerImpl),
+				tc.Server(2).DistSQLServer().(*distsql.ServerImpl),
+			} {
+				if n := remoteNode.NumRemoteRunningFlows(); n != 0 {
+					return errors.Newf("%d remote flows still running on n%d", n, i+2)
+				}
+			}
+			return nil
+		})
+	}
+
+	// Run query twice while injecting an error on the remote nodes.
+	for i := 0; i < 2; i++ {
+		query := queries[i]
+		nodeID := stmtToNodeIDForError[query]
+		t.Logf("running %q with error being injected on n%d", query, nodeID)
+		_, err := db.ExecContext(ctx, query)
+		require.True(t, strings.Contains(err.Error(), getError(nodeID).Error()))
+		assertNoRemoteFlows()
+	}
+
+	// Sanity check that the query doesn't error out without error injection.
+	t.Logf("running %q with no error injection", queries[2])
+	_, err := db.ExecContext(ctx, queries[2])
+	require.NoError(t, err)
+	assertNoRemoteFlows()
+}
