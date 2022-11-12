@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft/v3"
@@ -26,7 +25,6 @@ import (
 
 type splitDelayHelperI interface {
 	RaftStatus(context.Context) (roachpb.RangeID, *raft.Status)
-	ProposeEmptyCommand(ctx context.Context)
 	MaxTicks() int
 	TickDuration() time.Duration
 	Sleep(context.Context, time.Duration)
@@ -56,20 +54,6 @@ func (sdh *splitDelayHelper) Sleep(ctx context.Context, dur time.Duration) {
 	case <-ctx.Done():
 	case <-time.After(dur):
 	}
-}
-
-func (sdh *splitDelayHelper) ProposeEmptyCommand(ctx context.Context) {
-	r := (*Replica)(sdh)
-	r.raftMu.Lock()
-	_ = r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
-		// NB: intentionally ignore the error (which can be ErrProposalDropped
-		// when there's an SST inflight).
-		data := kvserverbase.EncodeRaftCommand(kvserverbase.RaftVersionStandard, makeIDKey(), nil)
-		_ = rawNode.Propose(data)
-		// NB: we need to unquiesce as the group might be quiesced.
-		return true /* unquiesceAndWakeLeader */, nil
-	})
-	r.raftMu.Unlock()
 }
 
 func (sdh *splitDelayHelper) MaxTicks() int {
@@ -177,17 +161,6 @@ func maybeDelaySplitToAvoidSnapshot(ctx context.Context, sdh splitDelayHelperI) 
 					if slept < tickDur {
 						// We don't want to delay splits for a follower who hasn't responded within a tick.
 						problems = append(problems, fmt.Sprintf("r%d/%d inactive", rangeID, replicaID))
-						if i == 1 {
-							// Propose an empty command which works around a Raft bug that can
-							// leave a follower in ProgressStateProbe even though it has caught
-							// up.
-							//
-							// We have long picked up a fix[1] for the bug, but there might be similar
-							// issues we're not aware of and this doesn't hurt, so leave it in for now.
-							//
-							// [1]: https://github.com/etcd-io/etcd/commit/bfaae1ba462c91aaf149a285b8d2369807044f71
-							sdh.ProposeEmptyCommand(ctx)
-						}
 					}
 					continue
 				}
