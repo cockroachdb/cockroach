@@ -646,10 +646,13 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 	}
 
 	toConsume := totalReqsMemUsage
+	// Track separately the memory usage of the truncation helper so that we
+	// could correctly release it in case we're low on memory budget.
+	var truncationHelperMemUsage, truncationHelperToConsume int64
 	if !allRequestsAreWithinSingleRange {
-		accountedFor := s.truncationHelperAccountedFor
-		s.truncationHelperAccountedFor = s.truncationHelper.MemUsage()
-		toConsume += s.truncationHelperAccountedFor - accountedFor
+		truncationHelperMemUsage = s.truncationHelper.MemUsage()
+		truncationHelperToConsume = truncationHelperMemUsage - s.truncationHelperAccountedFor
+		toConsume += truncationHelperToConsume
 	}
 	if newNumRangesPerScanRequestMemoryUsage != 0 && newNumRangesPerScanRequestMemoryUsage != s.numRangesPerScanRequestAccountedFor {
 		toConsume += newNumRangesPerScanRequestMemoryUsage - s.numRangesPerScanRequestAccountedFor
@@ -674,11 +677,16 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			s.truncationHelper = nil
 			s.budget.release(ctx, s.truncationHelperAccountedFor)
 			s.truncationHelperAccountedFor = 0
+			toConsume -= truncationHelperToConsume
 		}
 		s.results.clearOverhead(ctx)
 		if err = s.budget.consume(ctx, toConsume, allowDebt); err != nil {
 			return err
 		}
+	} else if !allRequestsAreWithinSingleRange {
+		// The consumption was approved, so we're keeping the reference to the
+		// truncation helper.
+		s.truncationHelperAccountedFor = truncationHelperMemUsage
 	}
 
 	// Memory reservation was approved, so the requests are good to go.
