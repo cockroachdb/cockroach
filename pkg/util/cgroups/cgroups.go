@@ -102,18 +102,25 @@ func getCgroupMemInactiveFileUsage(root string) (usage int64, warnings string, e
 		return 0, "no cgroup memory controller detected", nil
 	}
 
-	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
+	mounts, versions, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
 	if err != nil {
 		return 0, "", err
 	}
-
-	switch ver {
-	case 1:
-		usage, warnings, err = detectMemInactiveFileUsageInV1(filepath.Join(root, mount))
-	case 2:
-		usage, warnings, err = detectMemInactiveFileUsageInV2(filepath.Join(root, mount, path))
-	default:
-		usage, err = 0, fmt.Errorf("detected unknown cgroup version index: %d", ver)
+	// assert len(mounts) == len(versions)
+	if len(versions) == 2 {
+		// Look up against V2 first. Fall back to V1.
+		usage, warnings, err = detectMemInactiveFileUsageInV2(filepath.Join(root, mounts[1], path))
+		if err != nil {
+			usage, warnings, err = detectMemInactiveFileUsageInV1(filepath.Join(root, mounts[0]))
+		}
+	} else {
+		// assert len(versions) == 1
+		switch versions[0] {
+		case 1:
+			usage, warnings, err = detectMemInactiveFileUsageInV1(filepath.Join(root, mounts[0]))
+		case 2:
+			usage, warnings, err = detectMemInactiveFileUsageInV2(filepath.Join(root, mounts[0], path))
+		}
 	}
 
 	return usage, warnings, err
@@ -143,18 +150,25 @@ func getCgroupMemUsage(root string) (usage int64, warnings string, err error) {
 		return 0, "no cgroup memory controller detected", nil
 	}
 
-	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
+	mounts, versions, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
 	if err != nil {
 		return 0, "", err
 	}
-
-	switch ver {
-	case 1:
-		usage, warnings, err = detectMemUsageInV1(filepath.Join(root, mount))
-	case 2:
-		usage, warnings, err = detectMemUsageInV2(filepath.Join(root, mount, path))
-	default:
-		usage, err = 0, fmt.Errorf("detected unknown cgroup version index: %d", ver)
+	// assert len(mounts) == len(versions)
+	if len(versions) == 2 {
+		// Look up against V2 first. Fall back to V1.
+		usage, warnings, err = detectMemUsageInV2(filepath.Join(root, mounts[1], path))
+		if err != nil {
+			usage, warnings, err = detectMemUsageInV1(filepath.Join(root, mounts[0]))
+		}
+	} else {
+		// assert len(versions) == 1
+		switch versions[0] {
+		case 1:
+			usage, warnings, err = detectMemUsageInV1(filepath.Join(root, mounts[0]))
+		case 2:
+			usage, warnings, err = detectMemUsageInV2(filepath.Join(root, mounts[0], path))
+		}
 	}
 
 	return usage, warnings, err
@@ -184,18 +198,25 @@ func getCgroupMemLimit(root string) (limit int64, warnings string, err error) {
 		return 0, "no cgroup memory controller detected", nil
 	}
 
-	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
+	mounts, versions, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "memory")
 	if err != nil {
 		return 0, "", err
 	}
-
-	switch ver {
-	case 1:
-		limit, warnings, err = detectMemLimitInV1(filepath.Join(root, mount))
-	case 2:
-		limit, warnings, err = detectMemLimitInV2(filepath.Join(root, mount, path))
-	default:
-		limit, err = 0, fmt.Errorf("detected unknown cgroup version index: %d", ver)
+	// assert len(mounts) == len(versions)
+	if len(versions) == 2 {
+		// Look up against V2 first. Fall back to V1.
+		limit, warnings, err = detectMemLimitInV2(filepath.Join(root, mounts[1], path))
+		if err != nil {
+			limit, warnings, err = detectMemLimitInV1(filepath.Join(root, mounts[0]))
+		}
+	} else {
+		// assert len(versions) == 1
+		switch versions[0] {
+		case 1:
+			limit, warnings, err = detectMemLimitInV1(filepath.Join(root, mounts[0]))
+		case 2:
+			limit, warnings, err = detectMemLimitInV2(filepath.Join(root, mounts[0], path))
+		}
 	}
 
 	return limit, warnings, err
@@ -464,16 +485,27 @@ func detectCntrlPath(cgroupFilePath string, controller string) (string, error) {
 	return unifiedPathIfFound, nil
 }
 
-// Reads /proc/[pid]/mountinfo for cgoup or cgroup2 mount which defines the used version.
+// Reads /proc/[pid]/mountinfo for cgroup or cgroup2 mount which defines the used version.
+// Returns found mountpoints, versions or error.
+//
+// NOTE: per https://github.com/cockroachdb/cockroach/issues/59236, _both_ versions of cgroups may be enabled.
+//
+//	Thus, if both are detected, we return version1 and version2 mountpoints so that downstream checks both.
+//	If only one version was found, first output param. has the mountpoint; second has the version.
+//	Otherwise, first two output params are empty and an error is returned.
+//
 // See http://man7.org/linux/man-pages/man5/proc.5.html for `mountinfo` format.
-func getCgroupDetails(mountinfoPath string, cRoot string, controller string) (string, int, error) {
+func getCgroupDetails(mountinfoPath string, cRoot string, controller string) ([]string, []int, error) {
 	info, err := os.Open(mountinfoPath)
 	if err != nil {
-		return "", 0, errors.Wrapf(err, "failed to read mounts info from file: %s", log.SafeManaged(mountinfoPath))
+		return []string{}, []int{}, errors.Wrapf(err, "failed to read mounts info from file: %s", log.SafeManaged(mountinfoPath))
 	}
 	defer func() {
 		_ = info.Close()
 	}()
+
+	var foundVer1, foundVer2 = false, false
+	var mountPointVer1, mountPointVer2 string
 
 	scanner := bufio.NewScanner(info)
 	for scanner.Scan() {
@@ -486,7 +518,9 @@ func getCgroupDetails(mountinfoPath string, cRoot string, controller string) (st
 		if ok {
 			mountPoint := string(fields[4])
 			if ver == 2 {
-				return mountPoint, ver, nil
+				foundVer2 = true
+				mountPointVer2 = mountPoint
+				continue
 			}
 			// It is possible that the controller mount and the cgroup path are not the same (both are relative to the NS root).
 			// So start with the mount and construct the relative path of the cgroup.
@@ -503,13 +537,24 @@ func getCgroupDetails(mountinfoPath string, cRoot string, controller string) (st
 				// the best action is to ignore the line and hope that the rest of the lines
 				// will allow us to extract a valid path.
 				if relPath, err := filepath.Rel(nsRelativePath, cRoot); err == nil {
-					return filepath.Join(mountPoint, relPath), ver, nil
+					mountPointVer1 = filepath.Join(mountPoint, relPath)
+					foundVer1 = true
 				}
 			}
 		}
 	}
 
-	return "", 0, fmt.Errorf("failed to detect cgroup root mount and version")
+	if foundVer1 && foundVer2 {
+		return []string{mountPointVer1, mountPointVer2}, []int{1, 2}, nil
+	}
+	if foundVer1 {
+		return []string{mountPointVer1}, []int{1}, nil
+	}
+	if foundVer2 {
+		return []string{mountPointVer2}, []int{2}, nil
+	}
+
+	return []string{}, []int{}, fmt.Errorf("failed to detect cgroup root mount and version")
 }
 
 // Return version of cgroup mount for memory controller if found
@@ -590,34 +635,52 @@ func getCgroupCPU(root string) (CPUUsage, error) {
 		return CPUUsage{}, errors.New("no cpu controller detected")
 	}
 
-	mount, ver, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "cpu,cpuacct")
+	mounts, versions, err := getCgroupDetails(filepath.Join(root, "/proc/self/mountinfo"), path, "cpu,cpuacct")
 	if err != nil {
 		return CPUUsage{}, err
 	}
 
 	var res CPUUsage
 
-	switch ver {
-	case 1:
-		res.Period, res.Quota, err = detectCPUQuotaInV1(filepath.Join(root, mount))
+	// assert len(mounts) == len(versions)
+	if len(versions) == 2 {
+		// Look up against V2 first. Fall back to V1.
+		res.Period, res.Quota, err = detectCPUQuotaInV2(filepath.Join(root, mounts[1], path))
+		if err != nil {
+			res.Period, res.Quota, err = detectCPUQuotaInV1(filepath.Join(root, mounts[0]))
+		}
 		if err != nil {
 			return res, err
 		}
-		res.Stime, res.Utime, err = detectCPUUsageInV1(filepath.Join(root, mount))
+		res.Stime, res.Utime, err = detectCPUUsageInV2(filepath.Join(root, mounts[1], path))
+		if err != nil {
+			res.Stime, res.Utime, err = detectCPUUsageInV1(filepath.Join(root, mounts[0]))
+		}
 		if err != nil {
 			return res, err
 		}
-	case 2:
-		res.Period, res.Quota, err = detectCPUQuotaInV2(filepath.Join(root, mount, path))
-		if err != nil {
-			return res, err
+	} else {
+		// assert len(versions) == 1
+		switch versions[0] {
+		case 1:
+			res.Period, res.Quota, err = detectCPUQuotaInV1(filepath.Join(root, mounts[0]))
+			if err != nil {
+				return res, err
+			}
+			res.Stime, res.Utime, err = detectCPUUsageInV1(filepath.Join(root, mounts[0]))
+			if err != nil {
+				return res, err
+			}
+		case 2:
+			res.Period, res.Quota, err = detectCPUQuotaInV2(filepath.Join(root, mounts[0], path))
+			if err != nil {
+				return res, err
+			}
+			res.Stime, res.Utime, err = detectCPUUsageInV2(filepath.Join(root, mounts[0], path))
+			if err != nil {
+				return res, err
+			}
 		}
-		res.Stime, res.Utime, err = detectCPUUsageInV2(filepath.Join(root, mount, path))
-		if err != nil {
-			return res, err
-		}
-	default:
-		return CPUUsage{}, fmt.Errorf("detected unknown cgroup version index: %d", ver)
 	}
 
 	return res, nil
