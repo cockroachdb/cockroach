@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
@@ -348,11 +349,6 @@ func (f *vectorizedFlow) GetPath(ctx context.Context) string {
 	return f.tempStorage.path
 }
 
-// IsVectorized is part of the flowinfra.Flow interface.
-func (f *vectorizedFlow) IsVectorized() bool {
-	return true
-}
-
 // ConcurrentTxnUse is part of the flowinfra.Flow interface. It is conservative
 // in that it returns that there is concurrent txn use as soon as any operator
 // concurrency is detected. This should be inconsequential for local flows that
@@ -369,6 +365,18 @@ func (f *vectorizedFlow) Release() {
 	f.countingSemaphore.ReleaseToPool()
 	*f = vectorizedFlow{}
 	vectorizedFlowPool.Put(f)
+}
+
+const (
+	vectorizedFlowOverhead        = int64(unsafe.Sizeof(vectorizedFlow{}))
+	vectorizedFlowCreatorOverhead = int64(unsafe.Sizeof(vectorizedFlowCreator{}))
+	fdCountingSemaphoreOverhead   = int64(unsafe.Sizeof(fdCountingSemaphore{}))
+)
+
+// MemUsage is part of the flowinfra.Flow interface.
+func (f *vectorizedFlow) MemUsage() int64 {
+	return f.FlowBase.MemUsage() + vectorizedFlowOverhead +
+		vectorizedFlowCreatorOverhead + fdCountingSemaphoreOverhead
 }
 
 // Cleanup is part of the flowinfra.Flow interface.

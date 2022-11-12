@@ -414,7 +414,7 @@ func (ds *ServerImpl) setupFlow(
 		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
-	if f.IsVectorized() {
+	if isVectorized {
 		telemetry.Inc(sqltelemetry.VecExecCounter)
 	}
 
@@ -566,14 +566,10 @@ func (ds *ServerImpl) SetupLocalSyncFlow(
 	batchOutput execinfra.BatchReceiver,
 	localState LocalState,
 ) (context.Context, flowinfra.Flow, execopnode.OpChains, error) {
-	ctx, f, opChains, err := ds.setupFlow(
+	return ds.setupFlow(
 		ctx, tracing.SpanFromContext(ctx), parentMonitor, &mon.BoundAccount{}, /* reserved */
 		req, output, batchOutput, localState,
 	)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return ctx, f, opChains, err
 }
 
 // setupSpanForIncomingRPC creates a span for a SetupFlow RPC. The caller must
@@ -618,11 +614,17 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
+	if cb := ds.TestingKnobs.SetupFlowCb; cb != nil {
+		if err := cb(ds.ServerConfig.NodeID.SQLInstanceID(), req); err != nil {
+			return &execinfrapb.SimpleResponse{Error: execinfrapb.NewError(ctx, err)}, nil
+		}
+	}
 	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
 	defer rpcSpan.Finish()
 
+	rpcCtx := ctx
 	// Note: the passed context will be canceled when this RPC completes, so we
-	// can't associate it with the flow.
+	// can't associate it with the flow since it outlives the RPC.
 	ctx = ds.AnnotateCtx(context.Background())
 	if err := func() error {
 		// Reserve some memory for this remote flow which is a poor man's
@@ -637,7 +639,18 @@ func (ds *ServerImpl) SetupFlow(
 			ctx, rpcSpan, ds.memMonitor, &reserved, req, nil, /* rowSyncFlowConsumer */
 			nil /* batchSyncFlowConsumer */, LocalState{},
 		)
+		// Check whether the RPC context has been canceled indicating that we
+		// actually don't need to run this flow. This can happen when the
+		// context is canceled after Dial() but before issuing SetupFlow RPC in
+		// runnerRequest.run().
+		if err == nil {
+			err = rpcCtx.Err()
+		}
 		if err != nil {
+			// Make sure to clean up the flow if it was created.
+			if f != nil {
+				f.Cleanup(ctx)
+			}
 			return err
 		}
 		return ds.remoteFlowRunner.RunFlow(ctx, f)
@@ -652,10 +665,10 @@ func (ds *ServerImpl) SetupFlow(
 
 // CancelDeadFlows is part of the execinfrapb.DistSQLServer interface.
 func (ds *ServerImpl) CancelDeadFlows(
-	_ context.Context, req *execinfrapb.CancelDeadFlowsRequest,
+	ctx context.Context, req *execinfrapb.CancelDeadFlowsRequest,
 ) (*execinfrapb.SimpleResponse, error) {
-	// This function is a noop on this node because it doesn't queue any of the
-	// remote flows, so there are no dead flows to cancel.
+	ctx = ds.AnnotateCtx(ctx)
+	ds.remoteFlowRunner.CancelDeadFlows(ctx, req)
 	return &execinfrapb.SimpleResponse{}, nil
 }
 

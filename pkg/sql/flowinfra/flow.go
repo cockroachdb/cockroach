@@ -13,6 +13,7 @@ package flowinfra
 import (
 	"context"
 	"sync"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -114,9 +115,6 @@ type Flow interface {
 	// query.
 	IsLocal() bool
 
-	// IsVectorized returns whether this flow will run with vectorized execution.
-	IsVectorized() bool
-
 	// StatementSQL is the SQL statement for which this flow is executing. It is
 	// populated on a best effort basis (only available for user-issued queries
 	// that are also not like BulkIO/CDC related).
@@ -130,6 +128,21 @@ type Flow interface {
 
 	// GetID returns the flow ID.
 	GetID() execinfrapb.FlowID
+
+	// MemUsage returns the estimated memory footprint of this Flow object. Note
+	// that this ignores all the memory usage of the components that are created
+	// on behalf of this Flow.
+	MemUsage() int64
+
+	// Cancel cancels the flow by canceling its context. Safe to be called from
+	// any goroutine but **cannot** be called after (or concurrently with)
+	// Cleanup.
+	Cancel()
+
+	// AddOnCleanup adds a callback to be executed at the very end of Cleanup.
+	// Callbacks are put on the stack meaning that AddOnCleanup is called
+	// multiple times, then the "later" callbacks are executed first.
+	AddOnCleanup(fn func())
 
 	// Cleanup must be called whenever the flow is done (meaning it either
 	// completes gracefully after all processors and mailboxes exited or an
@@ -433,11 +446,6 @@ func (f *FlowBase) IsLocal() bool {
 	return f.Local
 }
 
-// IsVectorized returns whether this flow will run with vectorized execution.
-func (f *FlowBase) IsVectorized() bool {
-	panic("IsVectorized should not be called on FlowBase")
-}
-
 // Start is part of the Flow interface.
 func (f *FlowBase) Start(ctx context.Context) error {
 	return f.StartInternal(ctx, f.processors)
@@ -496,6 +504,31 @@ func (f *FlowBase) Wait() {
 	}
 	if panicVal != nil {
 		panic(panicVal)
+	}
+}
+
+const flowBaseOverhead = int64(unsafe.Sizeof(FlowBase{}))
+
+// MemUsage is part of the Flow interface.
+func (f *FlowBase) MemUsage() int64 {
+	return flowBaseOverhead + int64(len(f.statementSQL))
+}
+
+// Cancel is part of the Flow interface.
+func (f *FlowBase) Cancel() {
+	f.ctxCancel()
+}
+
+// AddOnCleanup is part of the Flow interface.
+func (f *FlowBase) AddOnCleanup(fn func()) {
+	if f.onFlowCleanup != nil {
+		oldOnFlowCleanup := f.onFlowCleanup
+		f.onFlowCleanup = func() {
+			fn()
+			oldOnFlowCleanup()
+		}
+	} else {
+		f.onFlowCleanup = fn
 	}
 }
 
