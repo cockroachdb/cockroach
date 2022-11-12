@@ -16,8 +16,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -341,52 +341,21 @@ func decodeWriteBatch(writeBatch *kvserverpb.WriteBatch) (string, error) {
 }
 
 func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
-	var ent raftpb.Entry
-	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
+	e, err := raftlog.NewEntryFromRawValue(kv.Value)
+	if err != nil {
 		return "", err
 	}
+	defer e.Release()
 
-	var cmd kvserverpb.RaftCommand
-	switch ent.Type {
-	case raftpb.EntryNormal:
-		if len(ent.Data) == 0 {
-			return fmt.Sprintf("%s: EMPTY\n", &ent), nil
-		}
-		_, cmdData := kvserverbase.DecodeRaftCommand(ent.Data)
-		if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
-			return "", err
-		}
-	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
-		var c raftpb.ConfChangeI
-		if ent.Type == raftpb.EntryConfChange {
-			var cc raftpb.ConfChange
-			if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
-				return "", err
-			}
-			c = cc
-		} else {
-			var cc raftpb.ConfChangeV2
-			if err := protoutil.Unmarshal(ent.Data, &cc); err != nil {
-				return "", err
-			}
-			c = cc
-		}
-
-		var ctx kvserverpb.ConfChangeContext
-		if err := protoutil.Unmarshal(c.AsV2().Context, &ctx); err != nil {
-			return "", err
-		}
-		if err := protoutil.Unmarshal(ctx.Payload, &cmd); err != nil {
-			return "", err
-		}
-	default:
-		return "", fmt.Errorf("unknown log entry type: %s", &ent)
+	if len(e.Data) == 0 {
+		return fmt.Sprintf("%s: EMPTY\n", &e.Entry), nil
 	}
-	ent.Data = nil
+	e.Data = nil
+	cmd := e.Cmd
 
 	var leaseStr string
 	if l := cmd.DeprecatedProposerLease; l != nil {
-		leaseStr = l.String() // use full lease, if available
+		leaseStr = l.String() // use the full lease, if available
 	} else {
 		leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
 	}
@@ -397,7 +366,7 @@ func tryRaftLogEntry(kv storage.MVCCKeyValue) (string, error) {
 	}
 	cmd.WriteBatch = nil
 
-	return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s", &ent, leaseStr, &cmd, wbStr), nil
+	return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s", &e.Entry, leaseStr, &cmd, wbStr), nil
 }
 
 func tryTxn(kv storage.MVCCKeyValue) (string, error) {
