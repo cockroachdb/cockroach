@@ -202,6 +202,11 @@ type hbpPartitionInfo struct {
 // a disk-backed sorter used in the fallback strategies.
 type DiskBackedSorterConstructor func(input colexecop.Operator, inputTypes []*types.T, orderingCols []execinfrapb.Ordering_Column, maxNumberPartitions int) colexecop.Operator
 
+// maxFDsForSingleOperator determines the maximum number of file descriptors
+// that a single operator can use. In turn, this limits the maximum number of
+// partitions.
+const maxFDsForSingleOperator = 16
+
 // newHashBasedPartitioner returns a disk-backed operator that utilizes
 // partitioning by hash approach to divide up the input set into separate
 // partitions which are then processed using the "main" in-memory operator if
@@ -298,6 +303,9 @@ func calculateMaxNumberActivePartitions(
 	// support the caches of this number of partitions.
 	// TODO(yuzefovich): this number should be tuned.
 	maxNumberActivePartitions := args.FDSemaphore.GetLimit() / 16
+	if maxNumberActivePartitions > maxFDsForSingleOperator {
+		maxNumberActivePartitions = maxFDsForSingleOperator
+	}
 	memoryLimit := execinfra.GetWorkMemLimit(flowCtx)
 	if args.DiskQueueCfg.BufferSizeBytes > 0 {
 		diskQueuesTotalMemLimit := int(float64(memoryLimit) * hbpDiskQueuesMemFraction)
