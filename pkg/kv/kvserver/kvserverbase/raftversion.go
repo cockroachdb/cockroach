@@ -77,12 +77,3 @@ func DecodeRaftCommand(data []byte) (CmdIDKey, []byte) {
 	}
 	return CmdIDKey(data[1 : 1+RaftCommandIDLen]), data[1+RaftCommandIDLen:]
 }
-
-// EncodeTestRaftCommand encodes provided command as raft command by adding
-// appropriate prefix to the data. It is only used for testing to create test
-// raft log entries. No correctness guarantees are provided.
-//
-// See: #75729
-func EncodeTestRaftCommand(command []byte, commandID CmdIDKey) []byte {
-	return EncodeRaftCommand(RaftVersionStandard, commandID, command)
-}

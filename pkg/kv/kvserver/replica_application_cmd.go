@@ -16,11 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -44,8 +43,7 @@ import (
 // batch's view of ReplicaState. Then the batch is committed, the side-effects
 // are applied and the local result is processed.
 type replicatedCmd struct {
-	ent              *raftpb.Entry // the raft.Entry being applied
-	decodedRaftEntry               // decoded from ent
+	*raftlog.Entry
 
 	// proposal is populated on the proposing Replica only and comes from the
 	// Replica's proposal map.
@@ -78,33 +76,33 @@ type replicatedCmd struct {
 	response    proposalResult
 }
 
-// decodedRaftEntry represents the deserialized content of a raftpb.Entry.
-type decodedRaftEntry struct {
-	idKey      kvserverbase.CmdIDKey
-	raftCmd    kvserverpb.RaftCommand
-	confChange *decodedConfChange // only non-nil for config changes
-}
+// decode populates the receiver from the provided entry.
+func (c *replicatedCmd) decode(e *raftpb.Entry) error {
+	if c.Entry != nil {
+		c.Entry.Release()
+		c.Entry = nil
+	}
 
-// decodedConfChange represents the fields of a config change raft command.
-type decodedConfChange struct {
-	raftpb.ConfChangeI
-	kvserverpb.ConfChangeContext
-}
-
-// decode decodes the entry e into the replicatedCmd.
-func (c *replicatedCmd) decode(ctx context.Context, e *raftpb.Entry) error {
-	c.ent = e
-	return c.decodedRaftEntry.decode(ctx, e)
+	var err error
+	c.Entry, err = raftlog.NewEntry(*e)
+	if err != nil {
+		return wrapWithNonDeterministicFailure(err, "while decoding raft entry")
+	}
+	return nil
 }
 
 // Index implements the apply.Command interface.
 func (c *replicatedCmd) Index() uint64 {
-	return c.ent.Index
+	return c.Entry.Index
 }
 
 // IsTrivial implements the apply.Command interface.
 func (c *replicatedCmd) IsTrivial() bool {
 	return isTrivial(c.replicatedResult())
+}
+
+func (c *replicatedCmd) replicatedResult() *kvserverpb.ReplicatedEvalResult {
+	return &c.Entry.Cmd.ReplicatedEvalResult
 }
 
 // IsLocal implements the apply.Command interface.
@@ -129,11 +127,11 @@ func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 // writeBytes is the size of the WriteBatch if any, and ingestedBytes is the
 // size of the sstable to ingest, if any.
 func (c *replicatedCmd) getStoreWriteByteSizes() (writeBytes int64, ingestedBytes int64) {
-	if c.raftCmd.WriteBatch != nil {
-		writeBytes = int64(len(c.raftCmd.WriteBatch.Data))
+	if c.Cmd.WriteBatch != nil {
+		writeBytes = int64(len(c.Cmd.WriteBatch.Data))
 	}
-	if c.raftCmd.ReplicatedEvalResult.AddSSTable != nil {
-		ingestedBytes = int64(len(c.raftCmd.ReplicatedEvalResult.AddSSTable.Data))
+	if c.Cmd.ReplicatedEvalResult.AddSSTable != nil {
+		ingestedBytes = int64(len(c.Cmd.ReplicatedEvalResult.AddSSTable.Data))
 	}
 	return writeBytes, ingestedBytes
 }
@@ -208,71 +206,4 @@ func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
 func (c *replicatedCmd) finishTracingSpan() {
 	c.sp.Finish()
 	c.ctx, c.sp = nil, nil
-}
-
-// decode decodes the entry e into the decodedRaftEntry.
-func (d *decodedRaftEntry) decode(ctx context.Context, e *raftpb.Entry) error {
-	*d = decodedRaftEntry{}
-	// etcd raft sometimes inserts nil commands, ours are never nil.
-	// This case is handled upstream of this call.
-	if len(e.Data) == 0 {
-		return nil
-	}
-	switch e.Type {
-	case raftpb.EntryNormal:
-		return d.decodeNormalEntry(e)
-	case raftpb.EntryConfChange, raftpb.EntryConfChangeV2:
-		return d.decodeConfChangeEntry(e)
-	default:
-		log.Fatalf(ctx, "unexpected Raft entry: %v", e)
-		return nil // unreachable
-	}
-}
-
-func (d *decodedRaftEntry) decodeNormalEntry(e *raftpb.Entry) error {
-	var encodedCommand []byte
-	d.idKey, encodedCommand = kvserverbase.DecodeRaftCommand(e.Data)
-	// An empty command is used to unquiesce a range and wake the
-	// leader. Clear commandID so it's ignored for processing.
-	if len(encodedCommand) == 0 {
-		d.idKey = ""
-	} else if err := protoutil.Unmarshal(encodedCommand, &d.raftCmd); err != nil {
-		return wrapWithNonDeterministicFailure(err, "while unmarshaling entry")
-	}
-	return nil
-}
-
-func (d *decodedRaftEntry) decodeConfChangeEntry(e *raftpb.Entry) error {
-	d.confChange = &decodedConfChange{}
-
-	switch e.Type {
-	case raftpb.EntryConfChange:
-		var cc raftpb.ConfChange
-		if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
-			return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChange")
-		}
-		d.confChange.ConfChangeI = cc
-	case raftpb.EntryConfChangeV2:
-		var cc raftpb.ConfChangeV2
-		if err := protoutil.Unmarshal(e.Data, &cc); err != nil {
-			return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeV2")
-		}
-		d.confChange.ConfChangeI = cc
-	default:
-		const msg = "unknown entry type"
-		err := errors.New(msg)
-		return wrapWithNonDeterministicFailure(err, msg)
-	}
-	if err := protoutil.Unmarshal(d.confChange.AsV2().Context, &d.confChange.ConfChangeContext); err != nil {
-		return wrapWithNonDeterministicFailure(err, "while unmarshaling ConfChangeContext")
-	}
-	if err := protoutil.Unmarshal(d.confChange.Payload, &d.raftCmd); err != nil {
-		return wrapWithNonDeterministicFailure(err, "while unmarshaling RaftCommand")
-	}
-	d.idKey = kvserverbase.CmdIDKey(d.confChange.CommandID)
-	return nil
-}
-
-func (d *decodedRaftEntry) replicatedResult() *kvserverpb.ReplicatedEvalResult {
-	return &d.raftCmd.ReplicatedEvalResult
 }

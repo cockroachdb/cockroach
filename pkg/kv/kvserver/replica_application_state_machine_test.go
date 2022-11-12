@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -90,13 +91,13 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		// Stage a command with the ChangeReplicas trigger.
 		cmd := &replicatedCmd{
 			ctx: ctx,
-			ent: &raftpb.Entry{
-				Index: r.mu.state.RaftAppliedIndex + 1,
-				Type:  raftpb.EntryConfChange,
-			},
-			decodedRaftEntry: decodedRaftEntry{
-				idKey: makeIDKey(),
-				raftCmd: kvserverpb.RaftCommand{
+			Entry: &raftlog.Entry{
+				Entry: raftpb.Entry{
+					Index: r.mu.state.RaftAppliedIndex + 1,
+					Type:  raftpb.EntryConfChange,
+				},
+				ID: makeIDKey(),
+				Cmd: kvserverpb.RaftCommand{
 					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
 					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
@@ -105,17 +106,15 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 						WriteTimestamp: r.mu.state.GCThreshold.Add(1, 0),
 					},
 				},
-				confChange: &decodedConfChange{
-					ConfChangeI: confChange,
-				},
+				ConfChangeV1: &confChange,
 			},
 		}
 
 		checkedCmd, err := b.Stage(cmd.ctx, cmd)
 		require.NoError(t, err)
 		require.Equal(t, !add, b.changeRemovesReplica)
-		require.Equal(t, b.state.RaftAppliedIndex, cmd.ent.Index)
-		require.Equal(t, b.state.LeaseAppliedIndex, cmd.raftCmd.MaxLeaseIndex)
+		require.Equal(t, b.state.RaftAppliedIndex, cmd.Index())
+		require.Equal(t, b.state.LeaseAppliedIndex, cmd.Cmd.MaxLeaseIndex)
 
 		// Check the replica's destroy status.
 		reason, _ := r.IsDestroyed()
@@ -187,13 +186,13 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		// byte size of 1.
 		cmd := &replicatedCmd{
 			ctx: ctx,
-			ent: &raftpb.Entry{
-				Index: raftAppliedIndex + 1,
-				Type:  raftpb.EntryNormal,
-			},
-			decodedRaftEntry: decodedRaftEntry{
-				idKey: makeIDKey(),
-				raftCmd: kvserverpb.RaftCommand{
+			Entry: &raftlog.Entry{
+				Entry: raftpb.Entry{
+					Index: raftAppliedIndex + 1,
+					Type:  raftpb.EntryNormal,
+				},
+				ID: makeIDKey(),
+				Cmd: kvserverpb.RaftCommand{
 					ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 					MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
 					ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
@@ -298,13 +297,13 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			// byte size of 1.
 			cmd := &replicatedCmd{
 				ctx: ctx,
-				ent: &raftpb.Entry{
-					Index: raftAppliedIndex + 1,
-					Type:  raftpb.EntryNormal,
-				},
-				decodedRaftEntry: decodedRaftEntry{
-					idKey: makeIDKey(),
-					raftCmd: kvserverpb.RaftCommand{
+				Entry: &raftlog.Entry{
+					Entry: raftpb.Entry{
+						Index: raftAppliedIndex + 1,
+						Type:  raftpb.EntryNormal,
+					},
+					ID: makeIDKey(),
+					Cmd: kvserverpb.RaftCommand{
 						ProposerLeaseSequence: r.mu.state.Lease.Sequence,
 						MaxLeaseIndex:         r.mu.state.LeaseAppliedIndex + 1,
 						ReplicatedEvalResult: kvserverpb.ReplicatedEvalResult{
