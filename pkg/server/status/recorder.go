@@ -628,6 +628,13 @@ func GetTotalMemoryWithoutLogging() (int64, string, error) {
 			fmt.Sprintf("available memory from cgroups is unsupported, using system memory %s instead: %v",
 				humanizeutil.IBytes(totalMem), err))
 	}
+	// Let's special case unlimited memory from cgroups to get a more accurate error message.
+	// When memory limit isn't set, cgroups returns 2^63-1 rounded to page size multiple (i.e., 4096).
+	if cgAvlMem == 0x7FFFFFFFFFFFF000 {
+		return checkTotal(totalMem,
+			fmt.Sprintf("available memory from cgroups (%s) is unlimited ('systemd' without MemoryMax?), using system memory %s instead: %s",
+				humanize.IBytes(uint64(cgAvlMem)), humanizeutil.IBytes(totalMem), warning))
+	}
 	if cgAvlMem == 0 || (totalMem > 0 && cgAvlMem > totalMem) {
 		return checkTotal(totalMem,
 			fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead: %s",
