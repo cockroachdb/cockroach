@@ -62,7 +62,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"upgrade sequences to be referenced by ID",
-		toCV(clusterversion.V22_2UpgradeSequenceToBeReferencedByID),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		upgradeSequenceToBeReferencedByID,
 	),
