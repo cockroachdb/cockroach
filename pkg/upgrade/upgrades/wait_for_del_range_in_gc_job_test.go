@@ -34,7 +34,7 @@ func TestWaitForDelRangeInGCJob(t *testing.T) {
 
 	var (
 		v0 = clusterversion.ByKey(clusterversion.V22_2UseDelRangeInGCJob - 1)
-		v1 = clusterversion.ByKey(clusterversion.V22_2WaitedForDelRangeInGCJob)
+		v1 = clusterversion.ByKey(clusterversion.TODOAlwaysTrue)
 	)
 
 	ctx := context.Background()

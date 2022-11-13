@@ -144,7 +144,7 @@ var upgrades = []upgrade.Upgrade{
 		setSystemRoleOptionsUserIDColumnNotNull,
 	),
 	upgrade.NewTenantUpgrade("ensure all GC jobs send DeleteRange requests",
-		toCV(clusterversion.V22_2WaitedForDelRangeInGCJob),
+		toCV(clusterversion.TODOAlwaysTrue),
 		checkForPausedGCJobs,
 		waitForDelRangeInGCJob,
 	),
