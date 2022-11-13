@@ -42,10 +42,10 @@ func (c *dropExternalConnectionNode) startExec(params runParams) error {
 }
 
 func (p *planner) dropExternalConnection(params runParams, n *tree.DropExternalConnection) error {
-	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2SystemExternalConnectionsTable) {
+	if !p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODOAlwaysTrue) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
 			"External Connections are not supported until upgrade to version %v is finalized",
-			clusterversion.ByKey(clusterversion.V22_2SystemExternalConnectionsTable))
+			clusterversion.ByKey(clusterversion.TODOAlwaysTrue))
 	}
 
 	// TODO(adityamaru): Add some metrics to track DROP EXTERNAL CONNECTION
