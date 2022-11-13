@@ -175,15 +175,6 @@ const (
 	// version that recombines all user keys that may be split across multiple
 	// files into a single table.
 	V22_2PebbleFormatSplitUserKeysMarkedCompacted
-	// V22_2EnsurePebbleFormatVersionRangeKeys is the first step of a two-part
-	// migration that bumps Pebble's format major version to a version that
-	// supports range keys.
-	V22_2EnsurePebbleFormatVersionRangeKeys
-	// V22_2EnablePebbleFormatVersionRangeKeys is the second of a two-part migration
-	// and is used as the feature gate for use of range keys. Any node at this
-	// version is guaranteed to reside in a cluster where all nodes support range
-	// keys at the Pebble layer.
-	V22_2EnablePebbleFormatVersionRangeKeys
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -263,14 +254,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2PebbleFormatSplitUserKeysMarkedCompacted,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 6},
-	},
-	{
-		Key:     V22_2EnsurePebbleFormatVersionRangeKeys,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 8},
-	},
-	{
-		Key:     V22_2EnablePebbleFormatVersionRangeKeys,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 10},
 	},
 	{
 		Key:     V22_2,
