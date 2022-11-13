@@ -1515,7 +1515,7 @@ func TestLeaseTransfersUseExpirationLeasesAndBumpToEpochBasedOnes(t *testing.T) 
 // process.
 //
 // TODO(irfansharif): Delete this in 23.1 (or whenever we get rid of the
-// clusterversion.EnableLeaseUpgrade).
+// clusterversion.TODOAlwaysTrue).
 func TestLeaseUpgradeVersionGate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1523,7 +1523,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettingsWithVersions(
 		clusterversion.TestingBinaryVersion,
-		clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade-1),
+		clusterversion.ByKey(clusterversion.TODOAlwaysTrue-1),
 		false, /* initializeVersion */
 	)
 	tci := serverutils.StartNewTestCluster(t, 2, base.TestClusterArgs{
@@ -1533,7 +1533,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade - 1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOAlwaysTrue - 1),
 				},
 			},
 		},
@@ -1550,7 +1550,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 
 	// Transfer the lease from n1 to n2. It should be transferred as an
 	// epoch-based one since we've not upgraded past
-	// clusterversion.EnableLeaseUpgrade yet.
+	// clusterversion.TODOAlwaysTrue yet.
 	tc.TransferRangeLeaseOrFatal(t, desc, n2Target)
 	testutils.SucceedsSoon(t, func() error {
 		li, _, err := tc.FindRangeLeaseEx(ctx, desc, nil)
@@ -1564,7 +1564,7 @@ func TestLeaseUpgradeVersionGate(t *testing.T) {
 
 	// Enable the version gate.
 	_, err := tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2EnableLeaseUpgrade).String())
+		clusterversion.ByKey(clusterversion.TODOAlwaysTrue).String())
 	require.NoError(t, err)
 
 	// Transfer the lease back from n2 to n1. It should be transferred as an
