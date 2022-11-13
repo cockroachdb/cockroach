@@ -273,9 +273,6 @@ const (
 	// schema changes to complete. After this point, no non-MVCC
 	// AddSSTable calls will be used outside of tenant streaming.
 	V22_2NoNonMVCCAddSSTable
-	// V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
-	// enabled, replicas will populate GC hint and update them when necessary.
-	V22_2GCHintInReplicaState
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -467,10 +464,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2NoNonMVCCAddSSTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 62},
-	},
-	{
-		Key:     V22_2GCHintInReplicaState,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
 	},
 	{
 		Key:     V22_2,

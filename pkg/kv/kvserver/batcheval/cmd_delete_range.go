@@ -137,7 +137,7 @@ func DeleteRange(
 				return nil
 			}
 			canUseGCHint := cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx,
-				clusterversion.V22_2GCHintInReplicaState)
+				clusterversion.TODOAlwaysTrue)
 			if updated, err := sl.SetGCHint(ctx, readWriter, cArgs.Stats, hint, canUseGCHint); err != nil || !updated {
 				return err
 			}
