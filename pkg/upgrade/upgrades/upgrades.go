@@ -56,7 +56,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"remove grant privilege from users",
-		toCV(clusterversion.V22_2RemoveGrantPrivilege),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		removeGrantMigration,
 	),
