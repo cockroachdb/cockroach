@@ -35,8 +35,8 @@ import (
 func (n *changeNonDescriptorBackedPrivilegesNode) ReadingOwnWrites() {}
 
 func (n *changeNonDescriptorBackedPrivilegesNode) startExec(params runParams) error {
-	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V22_2SystemPrivilegesTable) {
-		return errors.Newf("system cluster privileges are not supported until upgrade to version %s is finalized", clusterversion.V22_2SystemPrivilegesTable.String())
+	if !params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.TODOAlwaysTrue) {
+		return errors.Newf("system cluster privileges are not supported until upgrade to version %s is finalized", clusterversion.TODOAlwaysTrue.String())
 	}
 	if err := params.p.preChangePrivilegesValidation(params.ctx, n.grantees, n.withGrantOption, n.isGrant); err != nil {
 		return err
