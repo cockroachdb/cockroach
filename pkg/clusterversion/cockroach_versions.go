@@ -280,9 +280,6 @@ const (
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
 	V22_2UpdateInvalidColumnIDsInSequenceBackReferences
-	// V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
-	// leaseholder nodes.
-	V22_2TTLDistSQL
 	// V22_2PrioritizeSnapshots adds prioritization to sender snapshots. When this
 	// version is enabled, the receiver will look at the priority of snapshots
 	// using the fields added in 22.2.
@@ -503,10 +500,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
-	},
-	{
-		Key:     V22_2TTLDistSQL,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
 	},
 	{
 		Key:     V22_2PrioritizeSnapshots,
