@@ -118,9 +118,10 @@ func distStreamIngest(
 	// The first stage contains a single processor running on the gateway.
 	// This is responsible for sending the cutover signal to the stream ingestion processors.
 	cutoverProcessor := &cutoverProcessor{
-		settings: planCtx.ExtendedEvalCtx.Settings,
-		registry: planCtx.ExtendedEvalCtx.ExecCfg.JobRegistry,
-		jobID:    jobID,
+		settings:     planCtx.ExtendedEvalCtx.Settings,
+		registry:     planCtx.ExtendedEvalCtx.ExecCfg.JobRegistry,
+		jobID:        jobID,
+		testingKnobs: execCfg.StreamingTestingKnobs,
 	}
 	cutoverProcessorIdx := p.AddLocalProcessor(cutoverProcessor)
 	stageID := p.NewStage(false /* containsRemoteProcessor */, false /* allowPartialDistribution */)
@@ -135,7 +136,7 @@ func distStreamIngest(
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
 				RowSourceIdx: uint32(cutoverProcessorIdx),
 				NumInputs:    0,
-				Name:         "stream-ingestion-cutover-monitor",
+				Name:         "stream-ingestion-cutover-processor",
 			}},
 			Post: execinfrapb.PostProcessSpec{},
 			Output: []execinfrapb.OutputRouterSpec{{

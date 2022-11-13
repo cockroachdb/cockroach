@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -34,9 +35,10 @@ import (
 type cutoverProcessor struct {
 	execinfra.ProcessorBase
 
-	settings *cluster.Settings
-	registry *jobs.Registry
-	jobID    jobspb.JobID
+	settings     *cluster.Settings
+	registry     *jobs.Registry
+	jobID        jobspb.JobID
+	testingKnobs *sql.StreamingTestingKnobs
 
 	doneCh        chan struct{}
 	cutoverTimeCh chan hlc.Timestamp
@@ -189,6 +191,12 @@ func (cm *cutoverProcessor) getPollError() error {
 }
 
 func (cm *cutoverProcessor) loadCutoverTime(ctx context.Context) (hlc.Timestamp, error) {
+	if cm.testingKnobs != nil && cm.testingKnobs.BeforePollCutoverTime != nil {
+		if err := cm.testingKnobs.BeforePollCutoverTime(); err != nil {
+			return hlc.Timestamp{}, err
+		}
+	}
+
 	j, err := cm.registry.LoadJob(ctx, cm.jobID)
 	if err != nil {
 		return hlc.Timestamp{}, err
