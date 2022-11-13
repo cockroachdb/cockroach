@@ -72,7 +72,7 @@ func noopFunc() {}
 
 // AddNotifyee should be called prior to the first reading of the system config.
 // The returned channel will also receive a notification if the cluster version
-// UseDelRangeInGCJob is activated.
+// TODOAlwaysTrue is activated.
 //
 // TODO(lucy,ajwerner): Currently we're calling refreshTables on every zone
 // config update to any table. We should really be only updating a cached
@@ -147,7 +147,7 @@ func (n *Notifier) run(_ context.Context) {
 	systemConfigUpdateCh, _ := n.provider.RegisterSystemConfigChannel()
 	var haveNotified syncutil.AtomicBool
 	versionSettingChanged := make(chan struct{}, 1)
-	versionBeingWaited := clusterversion.ByKey(clusterversion.V22_2UseDelRangeInGCJob)
+	versionBeingWaited := clusterversion.ByKey(clusterversion.TODOAlwaysTrue)
 	n.settings.Version.SetOnChange(func(ctx context.Context, newVersion clusterversion.ClusterVersion) {
 		if !haveNotified.Get() &&
 			versionBeingWaited.LessEq(newVersion.Version) &&
