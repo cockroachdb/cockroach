@@ -15,15 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -103,7 +102,7 @@ func getStreamIngestionStats(
 	if err != nil {
 		return nil, err
 	}
-	streamStatus, err := client.Heartbeat(ctx, streaming.StreamID(details.StreamID), hlc.MaxTimestamp)
+	streamStatus, err := client.Heartbeat(ctx, streampb.StreamID(details.StreamID), hlc.MaxTimestamp)
 	if err != nil {
 		stats.ProducerError = err.Error()
 	} else {
@@ -148,7 +147,7 @@ func connectToActiveClient(
 func waitUntilProducerActive(
 	ctx context.Context,
 	client streamclient.Client,
-	streamID streaming.StreamID,
+	streamID streampb.StreamID,
 	heartbeatTimestamp hlc.Timestamp,
 	ingestionJobID jobspb.JobID,
 ) error {
@@ -222,7 +221,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		return err
 	}
 	ingestWithClient := func() error {
-		streamID := streaming.StreamID(details.StreamID)
+		streamID := streampb.StreamID(details.StreamID)
 		updateRunningStatus(ctx, ingestionJob, fmt.Sprintf("connecting to the producer job %d "+
 			"and creating a stream replication plan", streamID))
 		if err := waitUntilProducerActive(ctx, client, streamID, startTime, ingestionJob.ID()); err != nil {
@@ -473,7 +472,7 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 func (s *streamIngestionResumer) cancelProducerJob(
 	ctx context.Context, details jobspb.StreamIngestionDetails,
 ) {
-	streamID := streaming.StreamID(details.StreamID)
+	streamID := streampb.StreamID(details.StreamID)
 	addr := streamingccl.StreamAddress(details.StreamAddress)
 	client, err := streamclient.NewStreamClient(ctx, addr)
 	if err != nil {

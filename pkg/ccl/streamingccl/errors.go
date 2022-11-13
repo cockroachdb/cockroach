@@ -11,19 +11,18 @@ package streamingccl
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 )
 
 // StreamStatusErr is an error that encapsulate a replication stream's inactive status.
 type StreamStatusErr struct {
-	StreamID     streaming.StreamID
+	StreamID     streampb.StreamID
 	StreamStatus streampb.StreamReplicationStatus_StreamStatus
 }
 
 // NewStreamStatusErr creates a new StreamStatusErr.
 func NewStreamStatusErr(
-	streamID streaming.StreamID, streamStatus streampb.StreamReplicationStatus_StreamStatus,
+	streamID streampb.StreamID, streamStatus streampb.StreamReplicationStatus_StreamStatus,
 ) StreamStatusErr {
 	return StreamStatusErr{
 		StreamID:     streamID,

@@ -7,7 +7,6 @@ pkg/base/node_id.go | `*SQLIDContainer`
 pkg/base/node_id.go | `*StoreIDContainer`
 pkg/ccl/backupccl/backuppb/backup.go | `sz`
 pkg/ccl/backupccl/backuppb/backup.go | `timing`
-pkg/ccl/streamingccl/streampb/streamid.go | `StreamID`
 pkg/cli/exit/exit.go | `Code`
 pkg/jobs/jobspb/wrap.go | `Type`
 pkg/kv/bulk/bulk_metrics.go | `sz`
@@ -18,6 +17,7 @@ pkg/kv/kvserver/concurrency/lock/locking.go | `Durability`
 pkg/kv/kvserver/concurrency/lock/locking.go | `Strength`
 pkg/kv/kvserver/concurrency/lock/locking.go | `WaitPolicy`
 pkg/kv/kvserver/kvserverpb/raft.go | `SnapshotRequest_Type`
+pkg/repstream/streampb/streamid.go | `StreamID`
 pkg/roachpb/data.go | `LeaseSequence`
 pkg/roachpb/data.go | `ReplicaChangeType`
 pkg/roachpb/data.go | `TransactionStatus`

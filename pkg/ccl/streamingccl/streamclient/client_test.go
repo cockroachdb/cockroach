@@ -16,10 +16,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -40,12 +39,12 @@ func (sc testStreamClient) Dial(ctx context.Context) error {
 // Create implements the Client interface.
 func (sc testStreamClient) Create(
 	ctx context.Context, target roachpb.TenantID,
-) (streaming.StreamID, error) {
-	return streaming.StreamID(1), nil
+) (streampb.StreamID, error) {
+	return streampb.StreamID(1), nil
 }
 
 // Plan implements the Client interface.
-func (sc testStreamClient) Plan(ctx context.Context, ID streaming.StreamID) (Topology, error) {
+func (sc testStreamClient) Plan(ctx context.Context, ID streampb.StreamID) (Topology, error) {
 	return Topology{
 		{SrcAddr: "test://host1"},
 		{SrcAddr: "test://host2"},
@@ -54,7 +53,7 @@ func (sc testStreamClient) Plan(ctx context.Context, ID streaming.StreamID) (Top
 
 // Heartbeat implements the Client interface.
 func (sc testStreamClient) Heartbeat(
-	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
+	ctx context.Context, ID streampb.StreamID, _ hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	return streampb.StreamReplicationStatus{}, nil
 }
@@ -66,7 +65,7 @@ func (sc testStreamClient) Close(ctx context.Context) error {
 
 // Subscribe implements the Client interface.
 func (sc testStreamClient) Subscribe(
-	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+	ctx context.Context, stream streampb.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (Subscription, error) {
 	sampleKV := roachpb.KeyValue{
 		Key: []byte("key_1"),
@@ -93,7 +92,7 @@ func (sc testStreamClient) Subscribe(
 
 // Complete implements the streamclient.Client interface.
 func (sc testStreamClient) Complete(
-	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
 	return nil
 }
