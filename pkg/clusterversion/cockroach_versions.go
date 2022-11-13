@@ -189,8 +189,6 @@ const (
 	V22_2TrigramInvertedIndexes
 	// V22_2RemoveGrantPrivilege is the last step to migrate from the GRANT privilege to WITH GRANT OPTION.
 	V22_2RemoveGrantPrivilege
-	// V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
-	V22_2MVCCRangeTombstones
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -286,10 +284,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2RemoveGrantPrivilege,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 14},
-	},
-	{
-		Key:     V22_2MVCCRangeTombstones,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
 	},
 	{
 		Key:     V22_2,
