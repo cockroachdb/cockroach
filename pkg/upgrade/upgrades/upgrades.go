@@ -68,7 +68,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"update system.statement_diagnostics_requests to support sampling probabilities",
-		toCV(clusterversion.V22_2SampledStmtDiagReqs),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		sampledStmtDiagReqsMigration,
 	),
