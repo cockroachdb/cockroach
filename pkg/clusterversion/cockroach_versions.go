@@ -300,10 +300,6 @@ const (
 	// V22_2SupportAssumeRoleAuth is the version where assume role authorization is
 	// supported in cloud storage and KMS.
 	V22_2SupportAssumeRoleAuth
-	// V22_2FixUserfileRelatedDescriptorCorruption adds a migration which uses
-	// heuristics to identify invalid table descriptors for userfile-related
-	// descriptors.
-	V22_2FixUserfileRelatedDescriptorCorruption
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -519,10 +515,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SupportAssumeRoleAuth,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 74},
-	},
-	{
-		Key:     V22_2FixUserfileRelatedDescriptorCorruption,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 76},
 	},
 	{
 		Key:     V22_2,
