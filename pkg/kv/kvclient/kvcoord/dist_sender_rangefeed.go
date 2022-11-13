@@ -187,7 +187,7 @@ func (ds *DistSender) RangeFeedSpans(
 	g := ctxgroup.WithContext(ctx)
 
 	var eventProducer rangeFeedEventProducerFactory
-	if ds.st.Version.IsActive(ctx, clusterversion.V22_2RangefeedUseOneStreamPerNode) &&
+	if ds.st.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) &&
 		enableMuxRangeFeed && cfg.useMuxRangeFeed {
 		m := newRangefeedMuxer(g)
 		eventProducer = m.startMuxRangeFeed
