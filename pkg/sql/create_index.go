@@ -397,10 +397,10 @@ func populateInvertedIndexDescriptor(
 		// we're going to inverted index.
 		switch invCol.OpClass {
 		case "gin_trgm_ops", "gist_trgm_ops":
-			if !cs.Version.IsActive(ctx, clusterversion.V22_2TrigramInvertedIndexes) {
+			if !cs.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 				return pgerror.Newf(pgcode.FeatureNotSupported,
 					"version %v must be finalized to create trigram inverted indexes",
-					clusterversion.ByKey(clusterversion.V22_2TrigramInvertedIndexes))
+					clusterversion.ByKey(clusterversion.TODOAlwaysTrue))
 			}
 		case "":
 			return errors.WithHint(
