@@ -160,7 +160,7 @@ var upgrades = []upgrade.Upgrade{
 		updateInvalidColumnIDsInSequenceBackReferences,
 	),
 	upgrade.NewTenantUpgrade("fix corrupt user-file related table descriptors",
-		toCV(clusterversion.V22_2FixUserfileRelatedDescriptorCorruption),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		fixInvalidObjectsThatLookLikeBadUserfileConstraint,
 	),
