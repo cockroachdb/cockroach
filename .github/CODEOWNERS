@@ -346,7 +346,7 @@
 /pkg/settings/               @cockroachdb/unowned
 /pkg/spanconfig/             @cockroachdb/kv-prs
 /pkg/startupmigrations/      @cockroachdb/unowned @cockroachdb/sql-schema
-/pkg/streaming/              @cockroachdb/disaster-recovery
+/pkg/repstream/              @cockroachdb/disaster-recovery
 /pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries
 /pkg/testutils/sqlutils/     @cockroachdb/sql-queries

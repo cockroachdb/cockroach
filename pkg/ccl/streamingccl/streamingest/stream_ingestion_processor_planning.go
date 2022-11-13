@@ -16,12 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/logtags"
 )
@@ -33,7 +33,7 @@ func distStreamIngestionPlanSpecs(
 	initialHighWater hlc.Timestamp,
 	checkpoint jobspb.StreamIngestionCheckpoint,
 	jobID jobspb.JobID,
-	streamID streaming.StreamID,
+	streamID streampb.StreamID,
 	oldTenantID roachpb.TenantID,
 	newTenantID roachpb.TenantID,
 ) ([]*execinfrapb.StreamIngestionDataSpec, *execinfrapb.StreamIngestionFrontierSpec, error) {

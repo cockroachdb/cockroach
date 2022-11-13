@@ -12,9 +12,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -48,7 +47,7 @@ type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenantID roachpb.TenantID) (streaming.StreamID, error)
+	Create(ctx context.Context, tenantID roachpb.TenantID) (streampb.StreamID, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
@@ -63,13 +62,13 @@ type Client interface {
 	// TODO(dt): ts -> checkpointToken.
 	Heartbeat(
 		ctx context.Context,
-		streamID streaming.StreamID,
+		streamID streampb.StreamID,
 		consumed hlc.Timestamp,
 	) (streampb.StreamReplicationStatus, error)
 
 	// Plan returns a Topology for this stream.
 	// TODO(dt): separate target argument from address argument.
-	Plan(ctx context.Context, streamID streaming.StreamID) (Topology, error)
+	Plan(ctx context.Context, streamID streampb.StreamID) (Topology, error)
 
 	// Subscribe opens and returns a subscription for the specified partition from
 	// the specified remote address. This is used by each consumer processor to
@@ -77,7 +76,7 @@ type Client interface {
 	// TODO(dt): ts -> checkpointToken.
 	Subscribe(
 		ctx context.Context,
-		streamID streaming.StreamID,
+		streamID streampb.StreamID,
 		spec SubscriptionToken,
 		checkpoint hlc.Timestamp,
 	) (Subscription, error)
@@ -86,7 +85,7 @@ type Client interface {
 	Close(ctx context.Context) error
 
 	// Complete completes a replication stream consumption.
-	Complete(ctx context.Context, streamID streaming.StreamID, successfulIngestion bool) error
+	Complete(ctx context.Context, streamID streampb.StreamID, successfulIngestion bool) error
 }
 
 // Topology is a configuration of stream partitions. These are particular to a

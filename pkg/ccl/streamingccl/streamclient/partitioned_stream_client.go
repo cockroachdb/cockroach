@@ -14,9 +14,8 @@ import (
 	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -65,13 +64,13 @@ var _ Client = &partitionedStreamClient{}
 // Create implements Client interface.
 func (p *partitionedStreamClient) Create(
 	ctx context.Context, tenantID roachpb.TenantID,
-) (streaming.StreamID, error) {
+) (streampb.StreamID, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
 	defer sp.Finish()
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	var streamID streaming.StreamID
+	var streamID streampb.StreamID
 	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantID.ToUint64())
 	err := row.Scan(&streamID)
 	if err != nil {
@@ -92,7 +91,7 @@ func (p *partitionedStreamClient) Dial(ctx context.Context) error {
 
 // Heartbeat implements Client interface.
 func (p *partitionedStreamClient) Heartbeat(
-	ctx context.Context, streamID streaming.StreamID, consumed hlc.Timestamp,
+	ctx context.Context, streamID streampb.StreamID, consumed hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Heartbeat")
 	defer sp.Finish()
@@ -126,7 +125,7 @@ func (p *partitionedStreamClient) postgresURL(servingAddr string) (url.URL, erro
 
 // Plan implements Client interface.
 func (p *partitionedStreamClient) Plan(
-	ctx context.Context, streamID streaming.StreamID,
+	ctx context.Context, streamID streampb.StreamID,
 ) (Topology, error) {
 	var spec streampb.ReplicationStreamSpec
 	{
@@ -184,7 +183,7 @@ func (p *partitionedStreamClient) Close(ctx context.Context) error {
 
 // Subscribe implements Client interface.
 func (p *partitionedStreamClient) Subscribe(
-	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+	ctx context.Context, stream streampb.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (Subscription, error) {
 	_, sp := tracing.ChildSpan(ctx, "streamclient.Client.Subscribe")
 	defer sp.Finish()
@@ -215,7 +214,7 @@ func (p *partitionedStreamClient) Subscribe(
 
 // Complete implements the streamclient.Client interface.
 func (p *partitionedStreamClient) Complete(
-	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Complete")
 	defer sp.Finish()
@@ -239,7 +238,7 @@ type partitionedStreamSubscription struct {
 
 	streamEvent *streampb.StreamEvent
 	specBytes   []byte
-	streamID    streaming.StreamID
+	streamID    streampb.StreamID
 }
 
 var _ Subscription = (*partitionedStreamSubscription)(nil)
