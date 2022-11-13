@@ -264,9 +264,6 @@ const (
 	// and then waits for the data to be removed automatically before removing
 	// the descriptor and zone configurations.
 	V22_2UseDelRangeInGCJob
-	// V22_2WaitedForDelRangeInGCJob corresponds to the migration which waits for
-	// the GC jobs to adopt the use of DelRange with tombstones.
-	V22_2WaitedForDelRangeInGCJob
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -446,10 +443,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2UseDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 56},
-	},
-	{
-		Key:     V22_2WaitedForDelRangeInGCJob,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
 	},
 	{
 		Key:     V22_2,
