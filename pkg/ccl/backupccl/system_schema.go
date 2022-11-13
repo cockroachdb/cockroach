@@ -248,7 +248,7 @@ func roleOptionsRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AddSystemUserIDColumn) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		return defaultSystemTableRestoreFunc(
 			ctx, execCfg, txn, systemTableName, tempTableName,
 		)
@@ -357,7 +357,7 @@ func roleIDSeqRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AddSystemUserIDColumn) {
+	if execCfg.Settings.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		datums, err := execCfg.InternalExecutor.QueryRowEx(
 			ctx, "role-id-seq-custom-restore", txn,
 			sessiondata.NodeUserSessionDataOverride,
