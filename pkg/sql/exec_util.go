@@ -1642,6 +1642,10 @@ type StreamingTestingKnobs struct {
 	// OverrideReplicationTTLSeconds will override the default value of the
 	// `ReplicationTTLSeconds` field on the StreamIngestion job details.
 	OverrideReplicationTTLSeconds int
+
+	// BeforePollCutoverTime runs before the cutover time
+	// processor polls the job table for the cutover time.
+	BeforePollCutoverTime func() error
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
