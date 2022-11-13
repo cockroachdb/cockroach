@@ -68,7 +68,7 @@ func checkPrivilegesForSetting(ctx context.Context, p *planner, name string, act
 	// First check system privileges.
 	hasModify := false
 	hasView := false
-	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+	if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		if err := p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING); err == nil {
 			hasModify = true
 			hasView = true
