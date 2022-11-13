@@ -74,7 +74,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"add the system.privileges table",
-		toCV(clusterversion.V22_2SystemPrivilegesTable),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		systemPrivilegesTableMigration,
 	),

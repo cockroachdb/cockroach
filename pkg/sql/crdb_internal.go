@@ -1679,7 +1679,7 @@ CREATE TABLE crdb_internal.cluster_settings (
 		if !hasAdmin {
 			hasModify := false
 			hasView := false
-			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+			if p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 				hasModify = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.MODIFYCLUSTERSETTING) == nil
 				hasView = p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.VIEWCLUSTERSETTING) == nil
 			}

@@ -39,7 +39,7 @@ func (e *ExternalConnectionPrivilege) GetPath() string {
 func (e *ExternalConnectionPrivilege) GetPrivilegeDescriptor(
 	ctx context.Context, planner eval.Planner,
 ) (*catpb.PrivilegeDescriptor, error) {
-	if planner.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
+	if planner.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		return planner.SynthesizePrivilegeDescriptor(ctx, e.GetPath(),
 			e.GetObjectType())
 	}
