@@ -229,9 +229,6 @@ const (
 	// V22_2SchemaChangeSupportsCreateFunction adds support of CREATE FUNCTION
 	// statement.
 	V22_2SchemaChangeSupportsCreateFunction
-	// V22_2DeleteRequestReturnKey is the version where the DeleteRequest began
-	// populating the FoundKey value in the response.
-	V22_2DeleteRequestReturnKey
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -383,10 +380,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SchemaChangeSupportsCreateFunction,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 44},
-	},
-	{
-		Key:     V22_2DeleteRequestReturnKey,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 46},
 	},
 	{
 		Key:     V22_2,
