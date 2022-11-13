@@ -97,7 +97,7 @@ var upgrades = []upgrade.Upgrade{
 		alterSystemStatementStatisticsAddIndexRecommendations,
 	),
 	upgrade.NewTenantUpgrade("add system.role_id_sequence",
-		toCV(clusterversion.V22_2RoleIDSequence),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		roleIDSequenceMigration,
 	),
