@@ -307,19 +307,28 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
 }
 
+var defaultIngestionRetryOptions = retry.Options{
+	InitialBackoff: 3 * time.Second,
+	Multiplier:     2,
+	MaxBackoff:     1 * time.Minute,
+	MaxRetries:     60,
+}
+var ingestionRetryOptions = defaultIngestionRetryOptions
+
+func TestingSetRetryOptions(ro retry.Options) func() {
+	ingestionRetryOptions = ro
+	return func() {
+		ingestionRetryOptions = defaultIngestionRetryOptions
+	}
+}
+
 func ingestWithRetries(
 	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
 ) error {
-	ro := retry.Options{
-		InitialBackoff: 3 * time.Second,
-		Multiplier:     2,
-		MaxBackoff:     1 * time.Minute,
-		MaxRetries:     60,
-	}
 
 	var err error
 	retryCount := 0
-	for r := retry.Start(ro); r.Next(); {
+	for r := retry.Start(ingestionRetryOptions); r.Next(); {
 		err = ingest(ctx, execCtx, ingestionJob)
 		if err == nil {
 			break

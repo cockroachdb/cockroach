@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -576,6 +577,67 @@ func TestTenantStreamingPauseOnPermanentJobError(t *testing.T) {
 	// Confirm this new run resumed from the empty checkpoint.
 	require.True(t,
 		streamIngestionStats(t, c.destSysSQL, ingestionJobID).IngestionProgress.StartTime.IsEmpty())
+}
+
+func TestTenantStreamingJobPollErrorsRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	failureCount := 0
+	args.testingKnobs = &sql.StreamingTestingKnobs{
+		BeforePollCutoverTime: func() error {
+			if failureCount < 5 {
+				failureCount++
+				return errors.New("test failure")
+			}
+			failureCount = 0
+			return nil
+		},
+	}
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	producerJobID, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+	c.waitUntilHighWatermark(c.srcSysServer.Clock().Now(), jobspb.JobID(ingestionJobID))
+
+	c.srcTenantSQL.Exec(t, "INSERT INTO d.t2 VALUES (3);")
+
+	c.cutover(producerJobID, ingestionJobID, c.srcSysServer.Clock().Now().GoTime())
+	jobutils.WaitForJobToSucceed(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+
+	cleanupTenant := c.createDestTenantSQL(ctx)
+	defer func() {
+		require.NoError(t, cleanupTenant())
+	}()
+
+	c.compareResult("SELECT * FROM d.t1")
+	c.compareResult("SELECT * FROM d.t2")
+}
+
+func TestTenantStreamingJobPollErrorPausesEventually(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	args.testingKnobs = &sql.StreamingTestingKnobs{
+		BeforePollCutoverTime: func() error {
+			return errors.New("test failure")
+		},
+	}
+	resetRetries := TestingSetRetryOptions(retry.Options{
+		InitialBackoff: time.Millisecond,
+		MaxRetries:     1,
+	})
+	defer resetRetries()
+	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	_, ingestionJobID := c.startStreamReplication()
+	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 }
 
 func TestTenantStreamingCheckpoint(t *testing.T) {

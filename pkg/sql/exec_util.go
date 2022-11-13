@@ -1625,6 +1625,10 @@ type StreamingTestingKnobs struct {
 	// BeforeIngestionStart allows blocking the stream ingestion job
 	// before a stream ingestion happens.
 	BeforeIngestionStart func(ctx context.Context) error
+
+	// BeforePollCutoverTime runs before the cutover time
+	// processor polls the job table for the cutover time.
+	BeforePollCutoverTime func() error
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
