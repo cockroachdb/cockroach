@@ -82,8 +82,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/backupccl",
-        "//pkg/ccl/changefeedccl",
-        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
