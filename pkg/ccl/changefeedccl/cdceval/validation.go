@@ -54,10 +54,10 @@ func NormalizeAndValidateSelectForTarget(
 	}()
 	execCtx.SemaCtx()
 	execCfg := execCtx.ExecCfg()
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2EnablePredicateProjectionChangefeed) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		return n, target, errors.Newf(
 			`filters and projections not supported until upgrade to version %s or higher is finalized`,
-			clusterversion.V22_2EnablePredicateProjectionChangefeed.String())
+			clusterversion.TODOAlwaysTrue.String())
 	}
 
 	// This really shouldn't happen as it's enforced by sql.y.
