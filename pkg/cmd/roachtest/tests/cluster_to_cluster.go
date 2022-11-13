@@ -268,13 +268,15 @@ func copyPGCertsAndMakeURL(
 
 	dir := "."
 	if c.IsLocal() {
-		dir = local.VMDir(c.Name(), destNode[0])
+		dir = filepath.Join(local.VMDir(c.Name(), destNode[0]), "src-cluster-certs")
+	} else {
+		dir = "./src-cluster-certs/certs"
 	}
 	options := pgURL.Query()
 	options.Set("sslmode", "verify-full")
-	options.Set("sslrootcert", filepath.Join(dir, "src-cluster-certs", "ca.crt"))
-	options.Set("sslcert", filepath.Join(dir, "src-cluster-certs", "client.root.crt"))
-	options.Set("sslkey", filepath.Join(dir, "src-cluster-certs", "client.root.key"))
+	options.Set("sslrootcert", filepath.Join(dir, "ca.crt"))
+	options.Set("sslcert", filepath.Join(dir, "client.root.crt"))
+	options.Set("sslkey", filepath.Join(dir, "client.root.key"))
 	pgURL.RawQuery = options.Encode()
 	return pgURL.String(), cleanup, err
 }
