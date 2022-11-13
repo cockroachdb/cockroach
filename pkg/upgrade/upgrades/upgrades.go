@@ -150,7 +150,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"wait for all in-flight schema changes",
-		toCV(clusterversion.V22_2NoNonMVCCAddSSTable),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		waitForAllSchemaChanges,
 	),
