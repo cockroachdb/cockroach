@@ -138,7 +138,7 @@ func runTestRoleIDMigration(t *testing.T, numUsers int) {
 		}()
 	}
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,
-		clusterversion.ByKey(clusterversion.V22_2AddSystemUserIDColumn).String())
+		clusterversion.ByKey(clusterversion.TODOAlwaysTrue).String())
 	require.NoError(t, err)
 
 	_, err = tc.Conns[0].ExecContext(ctx, `SET CLUSTER SETTING version = $1`,

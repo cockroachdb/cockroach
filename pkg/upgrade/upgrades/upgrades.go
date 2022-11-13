@@ -108,7 +108,7 @@ var upgrades = []upgrade.Upgrade{
 	// off point where we know which users need to be backfilled and no
 	// more users can be created without ids.
 	upgrade.NewTenantUpgrade("alter system.users to include user_id column",
-		toCV(clusterversion.V22_2AddSystemUserIDColumn),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		alterSystemUsersAddUserIDColumnWithIndex,
 	),
