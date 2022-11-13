@@ -64,7 +64,7 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	format := sstable.TableFormatPebblev1 // Block properties.
-	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
+	if cs.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		format = sstable.TableFormatPebblev2 // Range keys.
 	}
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
@@ -79,7 +79,7 @@ func MakeBackupSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writer)
 	// table features available. Upgrade to an appropriate version only if the
 	// cluster supports it.
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, sstable.TableFormatPebblev1)
-	if cs.Version.IsActive(ctx, clusterversion.V22_2EnablePebbleFormatVersionRangeKeys) {
+	if cs.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		opts.TableFormat = sstable.TableFormatPebblev2 // Range keys.
 	}
 	// Don't need BlockPropertyCollectors for backups.
