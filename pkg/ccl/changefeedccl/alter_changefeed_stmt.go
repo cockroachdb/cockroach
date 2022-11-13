@@ -42,6 +42,22 @@ func init() {
 
 const telemetryPath = `changefeed.alter`
 
+type telemetryAggregator struct {
+	txn *kv.Txn
+}
+
+func (a *telemetryAggregator) Count(path string) {
+	a.txn.AddCommitTrigger(func(context.Context) {
+		telemetry.Count(path)
+	})
+}
+
+func (a *telemetryAggregator) CountBucketed(path string, value int64) {
+	a.txn.AddCommitTrigger(func(context.Context) {
+		telemetry.CountBucketed(path, value)
+	})
+}
+
 func alterChangefeedTypeCheck(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (matched bool, header colinfo.ResultColumns, _ error) {
@@ -116,8 +132,11 @@ func alterChangefeedPlanHook(
 			return err
 		}
 		exprEval := p.ExprEvaluator("ALTER CHANGEFEED")
+		telemetryAgg := &telemetryAggregator{
+			txn: p.Txn(),
+		}
 		newOptions, newSinkURI, err := generateNewOpts(
-			ctx, exprEval, alterChangefeedStmt.Cmds, prevOpts, prevDetails.SinkURI,
+			ctx, exprEval, alterChangefeedStmt.Cmds, prevOpts, prevDetails.SinkURI, telemetryAgg,
 		)
 		if err != nil {
 			return err
@@ -128,6 +147,7 @@ func alterChangefeedPlanHook(
 			alterChangefeedStmt.Cmds,
 			newOptions.AsMap(), // TODO: Remove .AsMap()
 			prevDetails, job.Progress(),
+			telemetryAgg,
 		)
 		if err != nil {
 			return err
@@ -200,8 +220,7 @@ func alterChangefeedPlanHook(
 		if err != nil {
 			return err
 		}
-
-		telemetry.Count(telemetryPath)
+		telemetryAgg.Count(telemetryPath)
 
 		select {
 		case <-ctx.Done():
@@ -253,6 +272,7 @@ func generateNewOpts(
 	alterCmds tree.AlterChangefeedCmds,
 	prevOpts map[string]string,
 	prevSinkURI string,
+	telemetryAgg *telemetryAggregator,
 ) (changefeedbase.StatementOptions, string, error) {
 	sinkURI := prevSinkURI
 	newOptions := prevOpts
@@ -298,7 +318,7 @@ func generateNewOpts(
 					newOptions[key] = value
 				}
 			}
-			telemetry.CountBucketed(telemetryPath+`.set_options`, int64(len(opts)))
+			telemetryAgg.CountBucketed(telemetryPath+`.set_options`, int64(len(opts)))
 		case *tree.AlterChangefeedUnsetOptions:
 			optKeys := v.Options.ToStrings()
 			for _, key := range optKeys {
@@ -313,7 +333,7 @@ func generateNewOpts(
 				}
 				delete(newOptions, key)
 			}
-			telemetry.CountBucketed(telemetryPath+`.unset_options`, int64(len(optKeys)))
+			telemetryAgg.CountBucketed(telemetryPath+`.unset_options`, int64(len(optKeys)))
 		}
 	}
 
@@ -328,6 +348,7 @@ func generateNewTargets(
 	opts map[string]string,
 	prevDetails jobspb.ChangefeedDetails,
 	prevProgress jobspb.Progress,
+	telemetryAgg *telemetryAggregator,
 ) (
 	tree.ChangefeedTargets,
 	*jobspb.Progress,
@@ -522,7 +543,7 @@ func generateNewTargets(
 			if err != nil {
 				return nil, nil, hlc.Timestamp{}, nil, err
 			}
-			telemetry.CountBucketed(telemetryPath+`.added_targets`, int64(len(v.Targets)))
+			telemetryAgg.CountBucketed(telemetryPath+`.added_targets`, int64(len(v.Targets)))
 		case *tree.AlterChangefeedDropTarget:
 			for _, target := range v.Targets {
 				desc, found, err := getTargetDesc(ctx, p, descResolver, target.TableName)
@@ -548,7 +569,7 @@ func generateNewTargets(
 				}
 				delete(newTargets, k)
 			}
-			telemetry.CountBucketed(telemetryPath+`.dropped_targets`, int64(len(v.Targets)))
+			telemetryAgg.CountBucketed(telemetryPath+`.dropped_targets`, int64(len(v.Targets)))
 		}
 	}
 

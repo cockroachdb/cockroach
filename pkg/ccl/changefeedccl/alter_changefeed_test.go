@@ -440,6 +440,53 @@ func TestAlterChangefeedTelemetry(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+func TestAlterChangefeedTelemetryTxnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE baz (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO baz VALUES (1)`)
+
+		// Reset the counts.
+		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR foo, bar WITH diff`)
+		defer closeFeed(t, testFeed)
+		feed := testFeed.(cdctest.EnterpriseTestFeed)
+		require.NoError(t, feed.Pause())
+
+		// Here we issue the alter stmt, rollback the txn, and
+		// issue it again.
+		alterStmt := fmt.Sprintf("ALTER CHANGEFEED %d DROP bar, foo ADD baz UNSET diff SET resolved, format=json", feed.JobID())
+		tx, err := s.DB.Begin()
+		require.NoError(t, err)
+		_, err = tx.Exec("SAVEPOINT a")
+		require.NoError(t, err)
+		_, err = tx.Exec(alterStmt)
+		require.NoError(t, err)
+		_, err = tx.Exec("ROLLBACK TO a")
+		require.NoError(t, err)
+		_, err = tx.Exec(alterStmt)
+		require.NoError(t, err)
+		require.NoError(t, tx.Commit())
+
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
+		require.Equal(t, int32(1), counts[`changefeed.alter`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.dropped_targets.2`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.added_targets.1`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.set_options.2`])
+		require.Equal(t, int32(1), counts[`changefeed.alter.unset_options.1`])
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 // The purpose of this test is to ensure that the ALTER CHANGEFEED statement
 // does not accidentally redact secret keys in the changefeed details
 func TestAlterChangefeedPersistSinkURI(t *testing.T) {
