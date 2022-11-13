@@ -170,7 +170,7 @@ func usersRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2RoleOptionsTableHasIDColumn) {
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) {
 		return defaultSystemTableRestoreFunc(
 			ctx, execCfg, txn, systemTableName, tempTableName,
 		)

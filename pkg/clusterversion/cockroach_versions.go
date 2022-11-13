@@ -244,16 +244,6 @@ const (
 	//  Cockroach (likely 23.1), a blocking migration will be run to
 	//  rewrite-compact on any remaining marked tables.
 	V22_2PebbleFormatPrePebblev1Marked
-	// V22_2RoleOptionsTableHasIDColumn is the version where the role options table
-	// has ids.
-	V22_2RoleOptionsTableHasIDColumn
-	// V22_2RoleOptionsIDColumnIsBackfilled is the version where ids in the role options
-	// table are backfilled.
-	V22_2RoleOptionsIDColumnIsBackfilled
-	// V22_2SetRoleOptionsUserIDColumnNotNull is the version where the role
-	// options table id column cannot be null. This is the final step
-	// of the system.role_options table migration.
-	V22_2SetRoleOptionsUserIDColumnNotNull
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -413,18 +403,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2PebbleFormatPrePebblev1Marked,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 48},
-	},
-	{
-		Key:     V22_2RoleOptionsTableHasIDColumn,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 50},
-	},
-	{
-		Key:     V22_2RoleOptionsIDColumnIsBackfilled,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 52},
-	},
-	{
-		Key:     V22_2SetRoleOptionsUserIDColumnNotNull,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 54},
 	},
 	{
 		Key:     V22_2,
