@@ -124,7 +124,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"add default SQL schema telemetry schedule",
-		toCV(clusterversion.V22_2SQLSchemaTelemetryScheduledJobs),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		ensureSQLSchemaTelemetrySchedule,
 	),
