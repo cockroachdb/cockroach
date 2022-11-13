@@ -277,10 +277,6 @@ const (
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
 	V22_2UpdateInvalidColumnIDsInSequenceBackReferences
-	// V22_2PrioritizeSnapshots adds prioritization to sender snapshots. When this
-	// version is enabled, the receiver will look at the priority of snapshots
-	// using the fields added in 22.2.
-	V22_2PrioritizeSnapshots
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -476,10 +472,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
-	},
-	{
-		Key:     V22_2PrioritizeSnapshots,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 70},
 	},
 	{
 		Key:     V22_2,

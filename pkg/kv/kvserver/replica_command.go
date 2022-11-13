@@ -2689,7 +2689,7 @@ func (r *Replica) sendSnapshot(
 	//  them or the setting is disabled. TODO(baptist): Remove the version flag in
 	//  v23.1. Consider removing the cluster setting once we have verified this
 	//  works as expected in all cases.
-	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V22_2PrioritizeSnapshots) ||
+	if !r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.TODOAlwaysTrue) ||
 		!snapshotPrioritizationEnabled.Get(&r.store.ClusterSettings().SV) {
 		senderQueueName = 0
 		senderQueuePriority = 0
