@@ -226,9 +226,6 @@ const (
 	V22_2SystemUsersIDColumnIsBackfilled
 	// V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
 	V22_2SetSystemUsersUserIDColumnNotNull
-	// V22_2SQLSchemaTelemetryScheduledJobs adds an automatic schedule for SQL schema
-	// telemetry logging jobs.
-	V22_2SQLSchemaTelemetryScheduledJobs
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -376,10 +373,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SetSystemUsersUserIDColumnNotNull,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
-	},
-	{
-		Key:     V22_2SQLSchemaTelemetryScheduledJobs,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 42},
 	},
 	{
 		Key:     V22_2,
