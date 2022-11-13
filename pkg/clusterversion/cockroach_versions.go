@@ -267,8 +267,6 @@ const (
 	// V22_2WaitedForDelRangeInGCJob corresponds to the migration which waits for
 	// the GC jobs to adopt the use of DelRange with tombstones.
 	V22_2WaitedForDelRangeInGCJob
-	// V22_2RangefeedUseOneStreamPerNode changes rangefeed implementation to use 1 RPC stream per node.
-	V22_2RangefeedUseOneStreamPerNode
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -452,10 +450,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2WaitedForDelRangeInGCJob,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 58},
-	},
-	{
-		Key:     V22_2RangefeedUseOneStreamPerNode,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 60},
 	},
 	{
 		Key:     V22_2,
