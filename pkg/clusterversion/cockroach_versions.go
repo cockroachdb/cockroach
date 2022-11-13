@@ -205,9 +205,6 @@ const (
 	V22_2AddSSTableTombstones
 	// V22_2SystemPrivilegesTable adds system.privileges table.
 	V22_2SystemPrivilegesTable
-	// V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
-	// predicates and projections.
-	V22_2EnablePredicateProjectionChangefeed
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -323,10 +320,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SystemPrivilegesTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 24},
-	},
-	{
-		Key:     V22_2EnablePredicateProjectionChangefeed,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 26},
 	},
 	{
 		Key:     V22_2,
