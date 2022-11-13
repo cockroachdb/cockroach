@@ -1214,7 +1214,7 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	trigramIsNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.ByKey(clusterversion.V22_2TrigramInvertedIndexes))
+		clusterversion.ByKey(clusterversion.TODOAlwaysTrue))
 	if err != nil {
 		return nil, err
 	}
