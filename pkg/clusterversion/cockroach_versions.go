@@ -213,9 +213,6 @@ const (
 	V22_2AlterSystemSQLInstancesAddLocality
 	// V22_2SystemExternalConnectionsTable adds system.external_connections table.
 	V22_2SystemExternalConnectionsTable
-	// V22_2AlterSystemStatementStatisticsAddIndexRecommendations adds an
-	// index_recommendations column to the system.statement_statistics table.
-	V22_2AlterSystemStatementStatisticsAddIndexRecommendations
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -343,10 +340,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SystemExternalConnectionsTable,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 30},
-	},
-	{
-		Key:     V22_2AlterSystemStatementStatisticsAddIndexRecommendations,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 32},
 	},
 	{
 		Key:     V22_2,
