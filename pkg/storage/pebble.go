@@ -1811,7 +1811,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 		if formatVers < pebble.FormatPrePebblev1Marked {
 			formatVers = pebble.FormatPrePebblev1Marked
 		}
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2EnsurePebbleFormatVersionRangeKeys)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODOAlwaysTrue)):
 		if formatVers < pebble.FormatRangeKeys {
 			formatVers = pebble.FormatRangeKeys
 		}
