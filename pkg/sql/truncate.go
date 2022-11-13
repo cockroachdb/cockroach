@@ -253,7 +253,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 	record := CreateGCJobRecord(
 		jobDesc, p.User(), details,
 		!p.execCfg.Settings.Version.IsActive(
-			ctx, clusterversion.V22_2UseDelRangeInGCJob,
+			ctx, clusterversion.TODOAlwaysTrue,
 		),
 	)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
