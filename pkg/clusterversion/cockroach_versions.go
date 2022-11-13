@@ -221,11 +221,6 @@ const (
 	// V22_2AddSystemUserIDColumn is the version where the system.users table has
 	// a user_id column for writes only.
 	V22_2AddSystemUserIDColumn
-	// V22_2SystemUsersIDColumnIsBackfilled is the version where all users in the system.users table
-	// have ids.
-	V22_2SystemUsersIDColumnIsBackfilled
-	// V22_2SetSystemUsersUserIDColumnNotNull sets the user_id column in system.users to not null.
-	V22_2SetSystemUsersUserIDColumnNotNull
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -365,14 +360,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2AddSystemUserIDColumn,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 36},
-	},
-	{
-		Key:     V22_2SystemUsersIDColumnIsBackfilled,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 38},
-	},
-	{
-		Key:     V22_2SetSystemUsersUserIDColumnNotNull,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 40},
 	},
 	{
 		Key:     V22_2,
