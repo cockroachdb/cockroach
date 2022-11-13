@@ -196,10 +196,6 @@ const (
 	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
 	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
 	V22_2UpgradeSequenceToBeReferencedByID
-	// V22_2SampledStmtDiagReqs enables installing statement diagnostic requests that
-	// probabilistically collects stmt bundles, controlled by the user provided
-	// sampling rate.
-	V22_2SampledStmtDiagReqs
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -303,10 +299,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2UpgradeSequenceToBeReferencedByID,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
-	},
-	{
-		Key:     V22_2SampledStmtDiagReqs,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
 	},
 	{
 		Key:     V22_2,
