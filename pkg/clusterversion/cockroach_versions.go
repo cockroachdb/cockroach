@@ -161,9 +161,6 @@ type Key int
 const (
 	invalidVersionKey Key = iota - 1 // want first named one to start at zero
 
-	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
-	V22_1
-
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
 
@@ -196,7 +193,7 @@ func (k Key) String() string {
 // TODOAlwaysTrue22_1 is a placeholder for any version gate/check that previously
 // referenced a < 22.1 version. References to TODOAlwaysTrue22_1 denotes that
 // conditional version gate/check logic is now safe to remove.
-const TODOAlwaysTrue22_1 = V22_1
+const TODOAlwaysTrue22_1 = TODOAlwaysTrue
 
 // TODOAlwaysTrue is a placeholder for any version gate/check that previously
 // referenced a < 22.2 version. References to TODOAlwaysTrue denotes that
@@ -225,11 +222,6 @@ const TODOAlwaysTrue = V22_2
 // large number to every major if building from master, so as to ensure that
 // master builds cannot be upgraded to release-branch builds.
 var rawVersionsSingleton = keyedVersions{
-	{
-		Key:     V22_1,
-		Version: roachpb.Version{Major: 22, Minor: 1},
-	},
-
 	// v22.2 versions. Internal versions must be even.
 	{
 		Key:     V22_2,
@@ -325,7 +317,7 @@ var (
 	// version than binaryMinSupportedVersion, then the binary will exit with
 	// an error. This typically trails the current release by one (see top-level
 	// comment).
-	binaryMinSupportedVersion = ByKey(V22_1)
+	binaryMinSupportedVersion = ByKey(TODOAlwaysTrue)
 
 	// binaryVersion is the version of this binary.
 	//

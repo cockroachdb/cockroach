@@ -32,7 +32,7 @@ func TestIsAtLeastVersionBuiltin(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
-					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.V22_1),
+					BinaryVersionOverride:          clusterversion.ByKey(clusterversion.TODOAlwaysTrue),
 				},
 			},
 		},
