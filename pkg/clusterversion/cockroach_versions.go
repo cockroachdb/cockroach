@@ -200,9 +200,6 @@ const (
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
 	V22_2SampledStmtDiagReqs
-	// V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
-	// Previously, SSTs containing these could error.
-	V22_2AddSSTableTombstones
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -310,10 +307,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
-	},
-	{
-		Key:     V22_2AddSSTableTombstones,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 	{
 		Key:     V22_2,
