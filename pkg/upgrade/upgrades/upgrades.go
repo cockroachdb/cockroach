@@ -86,7 +86,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"add the system.external_connections table",
-		toCV(clusterversion.V22_2SystemExternalConnectionsTable),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		systemExternalConnectionsTableMigration,
 	),
