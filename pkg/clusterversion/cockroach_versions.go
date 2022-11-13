@@ -200,9 +200,6 @@ const (
 	// probabilistically collects stmt bundles, controlled by the user provided
 	// sampling rate.
 	V22_2SampledStmtDiagReqs
-	// V22_2AddSSTableTombstones allows writing MVCC point tombstones via AddSSTable.
-	// Previously, SSTs containing these could error.
-	V22_2AddSSTableTombstones
 	// V22_2SystemPrivilegesTable adds system.privileges table.
 	V22_2SystemPrivilegesTable
 	// V22_2EnablePredicateProjectionChangefeed indicates that changefeeds support
@@ -408,10 +405,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2SampledStmtDiagReqs,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 20},
-	},
-	{
-		Key:     V22_2AddSSTableTombstones,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 22},
 	},
 	{
 		Key:     V22_2SystemPrivilegesTable,
