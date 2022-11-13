@@ -1807,7 +1807,7 @@ func (p *Pebble) SetMinVersion(version roachpb.Version) error {
 	formatVers := pebble.FormatMostCompatible
 	// Cases are ordered from newer to older versions.
 	switch {
-	case !version.Less(clusterversion.ByKey(clusterversion.V22_2PebbleFormatPrePebblev1Marked)):
+	case !version.Less(clusterversion.ByKey(clusterversion.TODOAlwaysTrue)):
 		if formatVers < pebble.FormatPrePebblev1Marked {
 			formatVers = pebble.FormatPrePebblev1Marked
 		}
