@@ -339,6 +339,11 @@ func (k Key) String() string {
 // conditional version gate/check logic is now safe to remove.
 const TODOAlwaysTrue22_1 = V22_1
 
+// TODOAlwaysTrue is a placeholder for any version gate/check that previously
+// referenced a < 22.2 version. References to TODOAlwaysTrue denotes that
+// conditional version gate/check logic is now safe to remove.
+const TODOAlwaysTrue = V22_2
+
 // rawVersionsSingleton lists all historical versions here in chronological
 // order, with comments describing what backwards-incompatible features were
 // introduced.
