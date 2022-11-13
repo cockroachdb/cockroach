@@ -280,9 +280,6 @@ const (
 	// ids in sequences' back references and attempts a best-effort-based matching
 	// to update those column IDs.
 	V22_2UpdateInvalidColumnIDsInSequenceBackReferences
-	// V22_2TTLDistSQL uses DistSQL to distribute TTL SELECT/DELETE statements to
-	// leaseholder nodes.
-	V22_2TTLDistSQL
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -482,10 +479,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
-	},
-	{
-		Key:     V22_2TTLDistSQL,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 68},
 	},
 	{
 		Key:     V22_2,
