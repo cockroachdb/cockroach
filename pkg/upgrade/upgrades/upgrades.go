@@ -80,7 +80,7 @@ var upgrades = []upgrade.Upgrade{
 	),
 	upgrade.NewTenantUpgrade(
 		"add column locality to table system.sql_instances",
-		toCV(clusterversion.V22_2AlterSystemSQLInstancesAddLocality),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		alterSystemSQLInstancesAddLocality,
 	),
