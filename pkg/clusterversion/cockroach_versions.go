@@ -191,11 +191,6 @@ const (
 	V22_2RemoveGrantPrivilege
 	// V22_2MVCCRangeTombstones enables the use of MVCC range tombstones.
 	V22_2MVCCRangeTombstones
-	// V22_2UpgradeSequenceToBeReferencedByID ensures that sequences are referenced
-	// by IDs rather than by their names. For example, a column's DEFAULT (or
-	// ON UPDATE) expression can be defined to be 'nextval('s')'; we want to be
-	// able to refer to sequence 's' by its ID, since 's' might be later renamed.
-	V22_2UpgradeSequenceToBeReferencedByID
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -295,10 +290,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2MVCCRangeTombstones,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 16},
-	},
-	{
-		Key:     V22_2UpgradeSequenceToBeReferencedByID,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 18},
 	},
 	{
 		Key:     V22_2,
