@@ -11,13 +11,10 @@ package streamingest
 import (
 	"context"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -79,48 +76,24 @@ func TestTenantStreaming(t *testing.T) {
 	// sourceSQL refers to the tenant generating the data.
 	sourceSQL := sqlutils.MakeSQLRunner(tenantConn)
 
-	// Make changefeeds run faster.
-	resetFreq := changefeedbase.TestingSetDefaultMinCheckpointFrequency(50 * time.Millisecond)
-	defer resetFreq()
 	// Set required cluster settings.
 	sourceDBRunner := sqlutils.MakeSQLRunner(sourceDB)
-	sourceDBRunner.ExecMultiple(t, strings.Split(`
-SET CLUSTER SETTING kv.rangefeed.enabled = true;
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s';
-SET CLUSTER SETTING changefeed.experimental_poll_interval = '10ms';
-SET CLUSTER SETTING stream_replication.min_checkpoint_frequency = '1s';
-SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms';
-`,
-		";")...)
+	sourceDBRunner.ExecMultiple(t, configureClusterSettings(defaultSrcClusterSetting)...)
 
 	// Start the destination server.
-	hDest, cleanupDest := streamingtest.NewReplicationHelper(t,
-		// Test fails when run from within the test tenant. More investigation
-		// is required. Tracked with #76378.
-		// TODO(ajstorm): This may be the right course of action here as the
-		//  replication is now being run inside a tenant.
-		base.TestServerArgs{DisableDefaultTestTenant: true})
+	hDest, cleanupDest := streamingtest.NewReplicationHelper(t, args)
 	defer cleanupDest()
 	// destSQL refers to the system tenant as that's the one that's running the
 	// job.
 	destSQL := hDest.SysSQL
-	destSQL.ExecMultiple(t, strings.Split(`
-SET CLUSTER SETTING stream_replication.consumer_heartbeat_frequency = '100ms';
-SET CLUSTER SETTING bulkio.stream_ingestion.minimum_flush_interval = '500ms';
-SET CLUSTER SETTING bulkio.stream_ingestion.cutover_signal_poll_interval = '100ms';
-SET CLUSTER SETTING stream_replication.job_checkpoint_frequency = '100ms';
-SET enable_experimental_stream_replication = true;
-`,
-		";")...)
+	destSQL.ExecMultiple(t, configureClusterSettings(defaultDestClusterSetting)...)
+	destSQL.Exec(t, `SET enable_experimental_stream_replication = true`)
 
 	// Sink to read data from.
 	pgURL, cleanupSink := sqlutils.PGUrl(t, source.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
 	var ingestionJobID, streamProducerJobID int64
-	var startTime string
-	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
-
 	destSQL.QueryRow(t,
 		`CREATE TENANT "destination-tenant" FROM REPLICATION OF "source-tenant" ON $1 `,
 		pgURL.String(),

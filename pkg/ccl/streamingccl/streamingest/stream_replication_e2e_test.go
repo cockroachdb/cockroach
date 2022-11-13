@@ -134,8 +134,14 @@ func (c *tenantStreamingClusters) compareResult(query string) {
 func (c *tenantStreamingClusters) waitUntilHighWatermark(
 	highWatermark hlc.Timestamp, ingestionJobID jobspb.JobID,
 ) {
-	testutils.SucceedsSoon(c.t, func() error {
-		progress := jobutils.GetJobProgress(c.t, c.destSysSQL, ingestionJobID)
+	waitUntilHighWatermark(c.t, c.destSysSQL, highWatermark, ingestionJobID)
+}
+
+func waitUntilHighWatermark(
+	t *testing.T, sql *sqlutils.SQLRunner, highWatermark hlc.Timestamp, ingestionJobID jobspb.JobID,
+) {
+	testutils.SucceedsSoon(t, func() error {
+		progress := jobutils.GetJobProgress(t, sql, ingestionJobID)
 		if progress.GetHighWater() == nil {
 			return errors.Newf("stream ingestion has not recorded any progress yet, waiting to advance pos %s",
 				highWatermark.String())
