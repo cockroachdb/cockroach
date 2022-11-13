@@ -155,7 +155,7 @@ var upgrades = []upgrade.Upgrade{
 		waitForAllSchemaChanges,
 	),
 	upgrade.NewTenantUpgrade("update invalid column IDs in sequence back references",
-		toCV(clusterversion.V22_2UpdateInvalidColumnIDsInSequenceBackReferences),
+		toCV(clusterversion.TODOAlwaysTrue),
 		NoPrecondition,
 		updateInvalidColumnIDsInSequenceBackReferences,
 	),

@@ -273,10 +273,6 @@ const (
 	// V22_2GCHintInReplicaState adds GC hint to replica state. When this version is
 	// enabled, replicas will populate GC hint and update them when necessary.
 	V22_2GCHintInReplicaState
-	// V22_2UpdateInvalidColumnIDsInSequenceBackReferences looks for invalid column
-	// ids in sequences' back references and attempts a best-effort-based matching
-	// to update those column IDs.
-	V22_2UpdateInvalidColumnIDsInSequenceBackReferences
 
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
@@ -468,10 +464,6 @@ var rawVersionsSingleton = keyedVersions{
 	{
 		Key:     V22_2GCHintInReplicaState,
 		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 64},
-	},
-	{
-		Key:     V22_2UpdateInvalidColumnIDsInSequenceBackReferences,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 66},
 	},
 	{
 		Key:     V22_2,
