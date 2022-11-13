@@ -164,11 +164,6 @@ const (
 	// V22_1 is CockroachDB v22.1. It's used for all v22.1.x patch releases.
 	V22_1
 
-	// v22.2 versions.
-	//
-	// V22_2Start demarcates work towards CockroachDB v22.2.
-	V22_2Start
-
 	// V22_2 is CockroachDB v22.2. It's used for all v22.2.x patch releases.
 	V22_2
 
@@ -236,10 +231,6 @@ var rawVersionsSingleton = keyedVersions{
 	},
 
 	// v22.2 versions. Internal versions must be even.
-	{
-		Key:     V22_2Start,
-		Version: roachpb.Version{Major: 22, Minor: 1, Internal: 2},
-	},
 	{
 		Key:     V22_2,
 		Version: roachpb.Version{Major: 22, Minor: 2, Internal: 0},
