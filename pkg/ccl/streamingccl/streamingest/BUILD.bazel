@@ -81,8 +81,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl/backupccl",
-        "//pkg/ccl/changefeedccl",
-        "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/storageccl",
         "//pkg/ccl/streamingccl",
