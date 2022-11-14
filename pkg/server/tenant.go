@@ -572,7 +572,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.debug,           /* handleDebugUnauthenticated */
 		newAPIV2Server(workersCtx, &apiV2ServerOpts{
 			sqlServer: s.sqlServer,
-			tenantID:  s.sqlCfg.TenantID,
 			db:        s.db,
 		}), /* apiServer */
 	); err != nil {
