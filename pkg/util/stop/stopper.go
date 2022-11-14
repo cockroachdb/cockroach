@@ -539,23 +539,40 @@ func (s *Stopper) Stop(ctx context.Context) {
 
 	defer func() {
 		if r := recover(); r != nil {
+			// This branch runs for both the following cases:
+			//
+			// - when a panic originates _under_ the Stop() call,
+			//   i.e. through the remaining body of Stop() below or inside
+			//   Quiesce(); or
+			//
+			// - after an _above_ panic has been handled and re-thrown by
+			//   the recover() call below.
+			//
+			// In both cases, it may either "eat" the panic if an `onPanic`
+			// handler has been set, or re-throw it.
 			s.handlePanic(ctx, r)
 		}
 		unregister(s)
 		close(s.stopped)
 	}()
 
-	// Don't bother doing stuff cleanly if we're panicking, that would likely
-	// block. Instead, best effort only. This cleans up the stack traces,
-	// avoids stalls and helps some tests in `./cli` finish cleanly (where
-	// panics happen on purpose).
+	// The following recover() runs when a panic is encountered _above_
+	// the Stop() call, by its caller, when Stop() is called via `defer`.
+	// Contrast with the use of recover() above.
 	if r := recover(); r != nil {
+		// In this case, we do not use the full Quiesce/Close logic
+		// synchronously, which would likely block. Instead, we initiate the
+		// quiesce and closes asynchronously. This hopefully causes a number
+		// of routines to still terminate, which simplifies subsequent
+		// goroutine dumps. It may also avoids stalls and helps some tests
+		// in `./cli` finish cleanly (where panics happen on purpose).
 		go s.Quiesce(ctx)
 		s.mu.Lock()
 		for _, c := range s.mu.closers {
 			go c.Close()
 		}
 		s.mu.Unlock()
+		// Re-throw, which will proceed to execute the defer above.
 		panic(r)
 	}
 
