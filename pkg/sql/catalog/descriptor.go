@@ -632,8 +632,22 @@ type TableDescriptor interface {
 	// It's only non-nil if IsView is true.
 	GetDependsOnTypes() []descpb.ID
 
+	// AllConstraints returns all constraints from this table.
+	// A constraint is considered
+	// - active if its validity is VALIDATED;
+	// - inactive if its validity is VALIDATING or UNVALIDATED;
+	// - dropping if its validity is DROPPING;
+	AllConstraints() []Constraint
+	// AllActiveAndInactiveConstraints returns all active and inactive constraints from table.
+	AllActiveAndInactiveConstraints() []Constraint
+	// AllActiveConstraints returns all active constraints from table.
+	AllActiveConstraints() []Constraint
+
 	// GetConstraintInfoWithLookup returns a summary of all constraints on the
 	// table using the provided function to fetch a TableDescriptor from an ID.
+	// TODO (xiang): The following two legacy methods (`GetConstraintInfoWithLookup`
+	// and `GetConstraintInfo`) should be replaced with the methods above that
+	// retrieve constraints from the table and expose a `Constraint` interface.
 	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
 	// GetConstraintInfo returns a summary of all constraints on the table.
 	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)

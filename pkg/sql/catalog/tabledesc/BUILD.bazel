@@ -6,6 +6,7 @@ go_library(
     name = "tabledesc",
     srcs = [
         "column.go",
+        "constraint.go",
         "index.go",
         "mutation.go",
         "safe_format.go",

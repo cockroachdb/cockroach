@@ -27,13 +27,18 @@ import (
 )
 
 var _ catalog.Index = (*index)(nil)
+var _ catalog.Constraint = (*index)(nil)
 
 // index implements the catalog.Index interface by wrapping the protobuf index
 // descriptor along with some metadata from its parent table descriptor.
+//
+// index also implements the catalog.Constraint interface for index-backed-constraints
+// (i.e. PRIMARY KEY or UNIQUE).
 type index struct {
 	maybeMutation
-	desc    *descpb.IndexDescriptor
-	ordinal int
+	desc                 *descpb.IndexDescriptor
+	ordinal              int
+	validityIfConstraint descpb.ConstraintValidity // validity of this index-backed-constraint if is.
 }
 
 // IndexDesc returns the underlying protobuf descriptor.
@@ -418,6 +423,79 @@ func (w index) CreatedAt() time.Time {
 // of the index it is a temporary index for.
 func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
+}
+
+// ConstraintToUpdateDesc implements catalog.Constraint interface.
+func (w index) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
+	return nil
+}
+
+// IsCheck implements catalog.Constraint interface.
+func (w index) IsCheck() bool {
+	return false
+}
+
+// IsForeignKey implements catalog.Constraint interface.
+func (w index) IsForeignKey() bool {
+	return false
+}
+
+// IsNotNull implements catalog.Constraint interface.
+func (w index) IsNotNull() bool {
+	return false
+}
+
+// IsUniqueWithoutIndex implements catalog.Constraint interface.
+func (w index) IsUniqueWithoutIndex() bool {
+	return false
+}
+
+// IsPrimaryKey implements catalog.Constraint interface.
+// The reason we didn't implement this function with
+// `return w.Primary()` is because it's possible this
+// PRIMARY KEY constraint is on the mutation slice.
+func (w index) IsPrimaryKey() bool {
+	return w.GetEncodingType() == descpb.PrimaryIndexEncoding
+}
+
+// IsUniqueConstraint implements catalog.Constraint interface.
+func (w index) IsUniqueConstraint() bool {
+	return w.GetEncodingType() == descpb.SecondaryIndexEncoding && w.IndexDesc().Unique
+}
+
+// Check implements catalog.Constraint interface.
+func (w index) Check() descpb.TableDescriptor_CheckConstraint {
+	return descpb.TableDescriptor_CheckConstraint{}
+}
+
+// ForeignKey implements catalog.Constraint interface.
+func (w index) ForeignKey() descpb.ForeignKeyConstraint {
+	return descpb.ForeignKeyConstraint{}
+}
+
+// NotNullColumnID implements catalog.Constraint interface.
+func (w index) NotNullColumnID() descpb.ColumnID {
+	return 0
+}
+
+// UniqueWithoutIndex implements catalog.Constraint interface.
+func (w index) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
+	return descpb.UniqueWithoutIndexConstraint{}
+}
+
+// PrimaryKey implements catalog.Constraint interface.
+func (w index) PrimaryKey() catalog.Index {
+	return w
+}
+
+// Unique implements catalog.Constraint interface.
+func (w index) Unique() catalog.Index {
+	return w
+}
+
+// GetConstraintValidity implements catalog.Constraint interface.
+func (w index) GetConstraintValidity() descpb.ConstraintValidity {
+	return w.validityIfConstraint
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.
