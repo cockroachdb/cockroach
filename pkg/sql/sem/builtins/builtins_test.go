@@ -121,16 +121,30 @@ CREATE TABLE t (
 	// Enforce 3 bits worth of range splits in the high order to collect range
 	// statistics after row insertions.
 	tdb.Exec(t, fmt.Sprintf(`
-ALTER TABLE t SPLIT AT SELECT i<<(60) FROM generate_series(1, 7) as t(i);
 INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
 `, numberOfRows))
 
 	// Derive range statistics.
 	var keyCounts pq.Int64Array
-	tdb.QueryRow(t, "SELECT "+
-		"array_agg((crdb_internal.range_stats(start_key)->>'key_count')::int) AS rows "+
-		"FROM crdb_internal.ranges_no_leases WHERE table_id"+
-		"='t'::regclass;").Scan(&keyCounts)
+
+	tdb.QueryRow(t, `
+  WITH boundaries AS (
+                     SELECT i << (60) AS p FROM ROWS FROM (generate_series(0, 7)) AS t (i)
+                     UNION ALL SELECT ((1 << 62) - 1) << 1
+                  ),
+       groups AS (
+                SELECT *
+                  FROM (SELECT p AS low, lead(p) OVER () AS high FROM boundaries)
+                 WHERE high IS NOT NULL
+              ),
+       counts AS (
+                  SELECT count(i) AS c
+                    FROM t, groups
+                   WHERE low <= i AND high > i
+                GROUP BY (low, high)
+              )
+SELECT array_agg(c)
+  FROM counts;`).Scan(&keyCounts)
 
 	t.Log("Key counts in each split range")
 	for i, keyCount := range keyCounts {
