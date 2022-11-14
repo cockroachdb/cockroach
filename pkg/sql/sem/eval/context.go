@@ -15,7 +15,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -420,13 +420,24 @@ func NewTestingEvalContext(st *cluster.Settings) *Context {
 }
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
+//
+// Note: Stop is intended to gracefully handle panics. For this to work
+// properly, either:
+// - use `defer evalctx.Stop()`, i.e. have `Stop` be called by `defer` directly;
+// - or, use `recover()` explicitly and call `EmergencyStop()` under the conditional.
 func (ec *Context) Stop(c context.Context) {
 	if r := recover(); r != nil {
-		ec.TestingMon.EmergencyStop(c)
+		ec.EmergencyStop(c)
 		panic(r)
 	} else {
 		ec.TestingMon.Stop(c)
 	}
+}
+
+// EmergencyStop should be called in the recover() branch of a context
+// shutdown when `defer evalCtx.Stop()` is not possible/desirable.
+func (ec *Context) EmergencyStop(c context.Context) {
+	ec.TestingMon.EmergencyStop(c)
 }
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
