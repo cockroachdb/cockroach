@@ -574,7 +574,8 @@ func (et *EvictionToken) evictAndReplaceLocked(ctx context.Context, newDescs ...
 // the cache, and then querying the two-level lookup table of range descriptors
 // which cockroach maintains. The function should be provided with an
 // EvictionToken if one was acquired from this function on a previous lookup. If
-// not, a nil EvictionToken can be provided.
+// not, a zero-valued EvictionToken can be provided. Note that if a non-zero
+// EvictionToken is provided, it must contain the key being queried.
 //
 // This method first looks up the specified key in the first level of
 // range metadata, which returns the location of the key within the
@@ -718,6 +719,17 @@ func (rc *RangeCache) tryLookup(
 		prevDesc = evictToken.Desc()
 	}
 	requestKey := makeLookupRequestKey(key, prevDesc, useReverseScan)
+
+	// Enforce that the causality token actually applies to the key we're
+	// looking up.
+	if evictToken.Valid() && (useReverseScan && !evictToken.desc.ContainsKeyInverted(key)) ||
+		(!useReverseScan && !evictToken.desc.ContainsKey(key)) {
+		return EvictionToken{}, errors.AssertionFailedf(
+			"invalid eviction token for lookup %v (reverse=%v) does not contain %v",
+			evictToken.desc.RSpan(), useReverseScan, key,
+		)
+	}
+
 	// Fork a context with a new span before reqCtx is captured by the DoChan
 	// closure below; the parent span might get finished by the time the closure
 	// starts. In the "leader" case, the closure will take ownership of the new
