@@ -99,6 +99,9 @@ func TestMapToUniqueUnorderedID(t *testing.T) {
 func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
+
+	skip.WithIssue(t, 91858) // flaky test
+
 	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
 		"assumes large N")
 	params := base.TestServerArgs{}
