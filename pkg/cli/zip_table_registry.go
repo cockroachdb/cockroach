@@ -196,6 +196,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"distributed",
 			"phase",
 			"full_scan",
+			"query_redacted",
 		},
 	},
 	"crdb_internal.cluster_sessions": {
@@ -215,6 +216,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"max_alloc_bytes",
 			"status",
 			"session_end",
+			"active_queries_redacted",
+			"last_active_query_redacted",
 		},
 	},
 	"crdb_internal.cluster_settings": {
@@ -646,6 +649,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"distributed",
 			"phase",
 			"full_scan",
+			"query_redacted",
 		},
 	},
 	"crdb_internal.node_runtime_info": {
@@ -673,6 +677,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"max_alloc_bytes",
 			"status",
 			"session_end",
+			"active_queries_redacted",
+			"last_active_query_redacted",
 		},
 	},
 	"crdb_internal.node_statement_statistics": {
