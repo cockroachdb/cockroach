@@ -165,9 +165,8 @@ func (m *visitor) MakePublicCheckConstraintValidated(
 	if err != nil {
 		return err
 	}
-	for i, ck := range tbl.Checks {
+	for _, ck := range tbl.Checks {
 		if ck.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
 			ck.Validity = descpb.ConstraintValidity_Dropping
 			return enqueueDropCheckConstraintMutation(tbl, ck)
 		}
