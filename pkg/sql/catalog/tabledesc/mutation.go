@@ -99,6 +99,11 @@ func (c constraint) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
 	return c.desc
 }
 
+// IndexDesc implements catalog.Constraint interface.
+func (c constraint) IndexDesc() *descpb.IndexDescriptor {
+	return nil
+}
+
 // GetName returns the name of this constraint update mutation.
 func (c constraint) GetName() string {
 	return c.desc.Name

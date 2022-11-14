@@ -400,8 +400,13 @@ type Column interface {
 type Constraint interface {
 	TableElementMaybeMutation
 
-	// ConstraintToUpdateDesc returns the underlying protobuf descriptor.
+	// ConstraintToUpdateDesc returns the underlying protobuf descriptor
+	// for non-index-backed-constraints (CHECK, FK, or UNIQUE_WITHOUT_INDEX).
 	ConstraintToUpdateDesc() *descpb.ConstraintToUpdate
+
+	// IndexDesc returns the underlying protobuf descriptor for
+	// index-backed-constraints (PRIMARY KEY or UNIQUE).
+	IndexDesc() *descpb.IndexDescriptor
 
 	// GetName returns the name of this constraint update mutation.
 	GetName() string
