@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/kvclientutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1079,6 +1080,9 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 // using the clock local to the distributed sender.
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	skip.WithIssue(t, 91856) // flaky test
+
 	defer log.Scope(t).Close(t)
 
 	for _, rc := range []roachpb.ReadConsistencyType{

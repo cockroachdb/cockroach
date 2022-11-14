@@ -1663,7 +1663,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 			admin:            s.admin,
 			status:           s.status,
 			promRuleExporter: s.promRuleExporter,
-			tenantID:         roachpb.SystemTenantID,
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
