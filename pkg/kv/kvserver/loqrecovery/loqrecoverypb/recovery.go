@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/keysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	_ "github.com/cockroachdb/cockroach/pkg/util/uuid" // needed for recovery.proto
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 )
