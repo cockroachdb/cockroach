@@ -46,10 +46,6 @@ func runMultiTenantTPCH(ctx context.Context, t test.Test, c cluster.Cluster) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := conn.Exec("USE tpch;"); err != nil {
-			t.Fatal(err)
-		}
-		createStatsFromTables(t, conn, tpchTables)
 		for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
 			cmd := fmt.Sprintf("./workload run tpch %s --secure "+
 				"--concurrency=1 --db=tpch --max-ops=%d --queries=%d",
