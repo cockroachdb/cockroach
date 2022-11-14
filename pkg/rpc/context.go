@@ -102,7 +102,7 @@ var (
 )
 
 // GRPC Dialer connection timeout.
-var minConnectionTimeout = 5 * time.Second
+var minConnectionTimeout = base.NetworkTimeout
 
 // errDialRejected is returned from client interceptors when the server's
 // stopper is quiescing. The error is constructed to return true in

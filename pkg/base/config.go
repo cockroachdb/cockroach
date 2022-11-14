@@ -47,9 +47,6 @@ const (
 	defaultSQLAddr  = ":" + DefaultPort
 	defaultHTTPAddr = ":" + DefaultHTTPPort
 
-	// NetworkTimeout is the timeout used for network operations.
-	NetworkTimeout = 3 * time.Second
-
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = 200 * time.Millisecond
 
@@ -65,10 +62,6 @@ const (
 	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
 	// each heartbeat.
 	defaultRaftHeartbeatIntervalTicks = 5
-
-	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatIntervalAndHalfTimeout
-	// used by the rpc context.
-	defaultRPCHeartbeatInterval = 3 * time.Second
 
 	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
@@ -118,6 +111,32 @@ func DefaultHistogramWindowInterval() time.Duration {
 }
 
 var (
+	// NetworkTimeout is the timeout used for network operations.
+	//
+	// The maximum RTT between cloud regions is roughly 350ms both in GCP
+	// (asia-south2 to southamerica-west1) and AWS (af-south-1 to sa-east-1). It
+	// can occasionally be up to 500ms, but 400ms is a reasonable upper bound
+	// under nominal conditions.
+	// https://datastudio.google.com/reporting/fc733b10-9744-4a72-a502-92290f608571/page/70YCB
+	// https://www.cloudping.co/grid/p_99/timeframe/1W
+	//
+	// Linux has an RTT-dependant retransmission timeout (RTO) which we can
+	// approximate as 1.5x RTT (smoothed RTT + 4x RTT variance), with a lower
+	// bound of 200ms, so the worst-case RTO is 750ms. A round trip can thus
+	// take 1.25s if a single packet is lost (750ms retransmit + 500ms RTT).
+	//
+	// Initial connection attempts can take 3 RTTs (TCP + TLS). On a high-latency
+	// link with 500ms RTT, a single lost packet will thus cause the connection to
+	// fail (1.5s + 750ms > 2s), but it will succeed under nominal high latencies
+	// of 400ms RTT (1.2s + 600ms < 2s). Failed connections will also be retried.
+	NetworkTimeout = envutil.EnvOrDefaultDuration("COCKROACH_NETWORK_TIMEOUT", 2*time.Second)
+
+	// defaultRPCHeartbeatInterval is the default value of
+	// RPCHeartbeatIntervalAndHalfTimeout used by the RPC context. The heartbeat
+	// timeout is twice this value, and we want that to be equivalent to
+	// NetworkTimeout to quickly detect peer unavailability.
+	defaultRPCHeartbeatInterval = NetworkTimeout / 2
+
 	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
 	// invocations that must pass between elections.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
