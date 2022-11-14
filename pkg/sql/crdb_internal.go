@@ -1866,7 +1866,8 @@ CREATE TABLE crdb_internal.%s (
   phase            STRING,         -- the current execution phase
   full_scan        BOOL,           -- whether the query contains a full table or index scan
   plan_gist        STRING,         -- Compressed logical plan.
-  database         STRING          -- the database the statement was executed on
+  database         STRING,         -- the database the statement was executed on
+  query_redacted   STRING          -- the SQL code of the query with redacted constants (used in debug zip)
 )`
 
 func (p *planner) makeSessionsRequest(
@@ -2018,6 +2019,7 @@ func populateQueriesTable(
 				isFullScanDatum,
 				planGistDatum,
 				tree.NewDString(query.Database),
+				tree.NewDString(query.SqlNoConstants),
 			); err != nil {
 				return err
 			}
@@ -2044,6 +2046,7 @@ func populateQueriesTable(
 				tree.DNull,                             // full_scan
 				tree.DNull,                             // plan_gist
 				tree.DNull,                             // database
+				tree.DNull,                             // query_redacted
 			); err != nil {
 				return err
 			}
@@ -2081,21 +2084,23 @@ func formatActiveQuery(query serverpb.ActiveQuery) string {
 
 const sessionsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
-  node_id            INT NOT NULL,   -- the node on which the query is running
-  session_id         STRING,         -- the ID of the session
-  user_name          STRING,         -- the user running the query
-  client_address     STRING,         -- the address of the client that issued the query
-  application_name   STRING,         -- the name of the application as per SET application_name
-  active_queries     STRING,         -- the currently running queries as SQL
-  last_active_query  STRING,         -- the query that finished last on this session as SQL
-  num_txns_executed  INT,            -- the number of transactions that were executed so far on this session
-  session_start      TIMESTAMP,      -- the time when the session was opened
-  active_query_start TIMESTAMP,      -- the time when the current active query in the session was started
-  kv_txn             STRING,         -- the ID of the current KV transaction
-  alloc_bytes        INT,            -- the number of bytes allocated by the session
-  max_alloc_bytes    INT,            -- the high water mark of bytes allocated by the session
-  status             STRING,         -- the status of the session (open, closed)
-  session_end        TIMESTAMP       -- the time when the session was closed
+  node_id                    INT NOT NULL,   -- the node on which the query is running
+  session_id                 STRING,         -- the ID of the session
+  user_name                  STRING,         -- the user running the query
+  client_address             STRING,         -- the address of the client that issued the query
+  application_name           STRING,         -- the name of the application as per SET application_name
+  active_queries             STRING,         -- the currently running queries as SQL
+  last_active_query          STRING,         -- the query that finished last on this session as SQL
+  num_txns_executed          INT,            -- the number of transactions that were executed so far on this session
+  session_start              TIMESTAMP,      -- the time when the session was opened
+  active_query_start         TIMESTAMP,      -- the time when the current active query in the session was started
+  kv_txn                     STRING,         -- the ID of the current KV transaction
+  alloc_bytes                INT,            -- the number of bytes allocated by the session
+  max_alloc_bytes            INT,            -- the high water mark of bytes allocated by the session
+  status                     STRING,         -- the status of the session (open, closed)
+  session_end                TIMESTAMP,      -- the time when the session was closed
+  active_queries_redacted    STRING,         -- queries but with redacted constants (used in debug zip)
+  last_active_query_redacted STRING          -- last active query but with redacted constants (used in debug zip)
 )
 `
 
@@ -2141,6 +2146,7 @@ func populateSessionsTable(
 	for _, session := range response.Sessions {
 		// Generate active_queries and active_query_start
 		var activeQueries bytes.Buffer
+		var activeQueriesRedacted bytes.Buffer
 		var activeQueryStart time.Time
 		var activeQueryStartDatum tree.Datum
 
@@ -2151,6 +2157,7 @@ func populateSessionsTable(
 			activeQueryStart = query.Start
 			sql := formatActiveQuery(query)
 			activeQueries.WriteString(sql)
+			activeQueriesRedacted.WriteString(query.SqlNoConstants)
 		}
 
 		var err error
@@ -2196,6 +2203,8 @@ func populateSessionsTable(
 			tree.NewDInt(tree.DInt(session.MaxAllocBytes)),
 			tree.NewDString(session.Status.String()),
 			endTSDatum,
+			tree.NewDString(activeQueriesRedacted.String()),
+			tree.NewDString(session.LastActiveQueryNoConstants),
 		); err != nil {
 			return err
 		}
@@ -2222,6 +2231,8 @@ func populateSessionsTable(
 				tree.DNull,                             // max_alloc_bytes
 				tree.DNull,                             // status
 				tree.DNull,                             // session end
+				tree.DNull,                             // active_queries_redacted
+				tree.DNull,                             // last_active_query_redacted
 			); err != nil {
 				return err
 			}
