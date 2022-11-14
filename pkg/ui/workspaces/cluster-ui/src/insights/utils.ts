@@ -8,178 +8,81 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { unset } from "src/util";
+import { limitStringArray, unset } from "src/util";
+import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
-  StatementInsights,
-  TransactionInsightEventDetailsResponse,
-  TransactionInsightEventDetailsState,
-  TransactionInsightEventsResponse,
-  TransactionInsightEventState,
-} from "src/api/insightsApi";
-import {
-  getInsightFromProblem,
+  ExecutionDetails,
+  FlattenedStmtInsightEvent,
+  getInsightFromCause,
   Insight,
   InsightExecEnum,
   InsightNameEnum,
   InsightRecommendation,
   InsightType,
-  InsightTypes,
+  MergedTxnInsightEvent,
   SchemaInsightEventFilters,
   StatementInsightEvent,
-  TransactionInsightEvent,
-  TransactionInsightEventDetails,
+  TxnContentionInsightDetails,
+  TxnContentionInsightEvent,
+  TxnInsightDetails,
+  TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
 
-export const getTransactionInsights = (
-  eventState: TransactionInsightEventState,
-): Insight[] => {
-  const insights: Insight[] = [];
-  if (eventState) {
-    InsightTypes.forEach(insight => {
-      if (
-        insight(eventState.execType, eventState.contentionThreshold).name ==
-        eventState.insightName
-      ) {
-        insights.push(
-          insight(
-            eventState.execType,
-            eventState.contentionThreshold,
-            eventState.contentionDuration.milliseconds(),
-          ),
-        );
-      }
-    });
-  }
-  return insights;
-};
-
-export const getTransactionInsightsFromDetails = (
-  eventState: TransactionInsightEventDetailsState,
-): Insight[] => {
-  const insights: Insight[] = [];
-  if (eventState) {
-    InsightTypes.forEach(insight => {
-      if (
-        insight(eventState.execType, eventState.contentionThreshold).name ==
-        eventState.insightName
-      ) {
-        insights.push(
-          insight(
-            eventState.execType,
-            eventState.contentionThreshold,
-            eventState.totalContentionTime,
-          ),
-        );
-      }
-    });
-  }
-  return insights;
-};
-
-export function getInsightsFromState(
-  insightEventsResponse: TransactionInsightEventsResponse,
-): TransactionInsightEvent[] {
-  const insightEvents: TransactionInsightEvent[] = [];
-  if (!insightEventsResponse || insightEventsResponse?.length < 0) {
-    return insightEvents;
-  }
-
-  insightEventsResponse.forEach(e => {
-    const insightsForEvent = getTransactionInsights(e);
-    if (insightsForEvent.length < 1) {
-      return;
-    } else {
-      insightEvents.push({
-        transactionID: e.transactionID,
-        fingerprintID: e.fingerprintID,
-        queries: e.queries,
-        insights: insightsForEvent,
-        startTime: e.startTime,
-        contentionDuration: e.contentionDuration,
-        application: e.application,
-        execType: InsightExecEnum.TRANSACTION,
-        contentionThreshold: e.contentionThreshold,
-      });
-    }
-  });
-
-  return insightEvents;
-}
-
-export function getTransactionInsightEventDetailsFromState(
-  insightEventDetailsResponse: TransactionInsightEventDetailsResponse,
-): TransactionInsightEventDetails {
-  let insightEventDetails: TransactionInsightEventDetails = null;
-  const insightsForEventDetails = getTransactionInsightsFromDetails(
-    insightEventDetailsResponse,
-  );
-  if (insightsForEventDetails.length > 0) {
-    const { insightName, ...resp } = insightEventDetailsResponse;
-    insightEventDetails = {
-      ...resp,
-      insights: insightsForEventDetails,
-    };
-  }
-  return insightEventDetails;
-}
-
 export const filterTransactionInsights = (
-  transactions: TransactionInsightEvent[] | null,
+  transactions: MergedTxnInsightEvent[] | null,
   filters: WorkloadInsightEventFilters,
   internalAppNamePrefix: string,
   search?: string,
-): TransactionInsightEvent[] => {
+): MergedTxnInsightEvent[] => {
   if (transactions == null) return [];
 
   let filteredTransactions = transactions;
 
-  const isInternal = (txn: TransactionInsightEvent) =>
-    txn.application.startsWith(internalAppNamePrefix);
+  const isInternal = (txn: { application?: string }) =>
+    txn?.application?.startsWith(internalAppNamePrefix);
   if (filters.app) {
-    filteredTransactions = filteredTransactions.filter(
-      (txn: TransactionInsightEvent) => {
-        const apps = filters.app.toString().split(",");
-        let showInternal = false;
-        if (apps.includes(internalAppNamePrefix)) {
-          showInternal = true;
-        }
-        if (apps.includes(unset)) {
-          apps.push("");
-        }
+    filteredTransactions = filteredTransactions.filter(txn => {
+      const apps = filters.app.toString().split(",");
+      let showInternal = false;
+      if (apps.includes(internalAppNamePrefix)) {
+        showInternal = true;
+      }
+      if (apps.includes(unset)) {
+        apps.push("");
+      }
 
-        return (
-          (showInternal && isInternal(txn)) || apps.includes(txn.application)
-        );
-      },
-    );
+      return (
+        (showInternal && isInternal(txn)) || apps.includes(txn.application)
+      );
+    });
   } else {
     filteredTransactions = filteredTransactions.filter(txn => !isInternal(txn));
   }
   if (search) {
     search = search.toLowerCase();
+
     filteredTransactions = filteredTransactions.filter(
       txn =>
-        !search ||
-        txn.transactionID.toLowerCase()?.includes(search) ||
-        txn.queries?.find(query => query.toLowerCase().includes(search)),
+        txn.transactionExecutionID.toLowerCase()?.includes(search) ||
+        limitStringArray(txn.queries, 300).toLowerCase().includes(search),
     );
   }
   return filteredTransactions;
 };
 
 export function getAppsFromTransactionInsights(
-  transactions: TransactionInsightEvent[] | null,
+  transactions: MergedTxnInsightEvent[] | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (transactions == null) return [];
 
   const uniqueAppNames = new Set(
     transactions.map(t => {
-      if (t.application.startsWith(internalAppNamePrefix)) {
+      if (t?.application.startsWith(internalAppNamePrefix)) {
         return internalAppNamePrefix;
       }
-      return t.application ? t.application : unset;
+      return t?.application ? t.application : unset;
     }),
   );
 
@@ -264,11 +167,11 @@ export function insightType(type: InsightType): string {
 }
 
 export const filterStatementInsights = (
-  statements: StatementInsights | null,
+  statements: FlattenedStmtInsights | null,
   filters: WorkloadInsightEventFilters,
   internalAppNamePrefix: string,
   search?: string,
-): StatementInsights => {
+): FlattenedStmtInsights => {
   if (statements == null) return [];
 
   let filteredStatements = statements;
@@ -277,7 +180,7 @@ export const filterStatementInsights = (
     appName.startsWith(internalAppNamePrefix);
   if (filters.app) {
     filteredStatements = filteredStatements.filter(
-      (stmt: StatementInsightEvent) => {
+      (stmt: FlattenedStmtInsightEvent) => {
         const apps = filters.app.toString().split(",");
         let showInternal = false;
         if (apps.includes(internalAppNamePrefix)) {
@@ -303,7 +206,7 @@ export const filterStatementInsights = (
     filteredStatements = filteredStatements.filter(
       stmt =>
         !search ||
-        stmt.statementID.toLowerCase()?.includes(search) ||
+        stmt.statementExecutionID.toLowerCase()?.includes(search) ||
         stmt.query?.toLowerCase().includes(search),
     );
   }
@@ -311,7 +214,7 @@ export const filterStatementInsights = (
 };
 
 export function getAppsFromStatementInsights(
-  statements: StatementInsights | null,
+  statements: FlattenedStmtInsights | null,
   internalAppNamePrefix: string,
 ): string[] {
   if (statements == null || statements?.length === 0) return [];
@@ -328,38 +231,262 @@ export function getAppsFromStatementInsights(
   return Array.from(uniqueAppNames).sort();
 }
 
-export function populateStatementInsightsFromProblemAndCauses(
-  statements: StatementInsightEvent[],
-): StatementInsightEvent[] {
-  if (!statements || statements?.length === 0) {
-    return [];
-  }
-  const stmts: StatementInsightEvent[] = [];
-  statements.forEach(statement => {
-    const stmt = Object.assign({}, statement);
-    // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
-    if (statement.problem === "SlowExecution") {
-      if (statement.causes?.length === 0) {
-        stmt.insights = [
-          getInsightFromProblem(
-            InsightNameEnum.slowExecution,
-            InsightExecEnum.STATEMENT,
-          ),
-        ];
-      } else {
-        stmt.insights = statement.causes?.map(x =>
-          getInsightFromProblem(x, InsightExecEnum.STATEMENT),
+/**
+ * getInsightsFromProblemsAndCauses returns a list of insight objects with
+ * labels and descriptions based on the problem, causes for the problem, and
+ * the execution type.
+ * @param problem the problem with the query e.g. SlowExecution, should be a InsightNameEnum
+ * @param causes an array of strings detailing the causes for the problem, if known
+ * @param execType execution type
+ * @returns list of insight objects
+ */
+export function getInsightsFromProblemsAndCauses(
+  problem: string,
+  causes: string[] | null,
+  execType: InsightExecEnum,
+): Insight[] {
+  // TODO(ericharmeling,todd): Replace these strings when using the insights protos.
+  const insights: Insight[] = [];
+
+  switch (problem) {
+    case "SlowExecution":
+      causes?.forEach(cause =>
+        insights.push(getInsightFromCause(cause, execType)),
+      );
+
+      if (insights.length === 0) {
+        insights.push(
+          getInsightFromCause(InsightNameEnum.slowExecution, execType),
         );
       }
-    } else if (statement.problem === "FailedExecution") {
-      stmt.insights = [
-        getInsightFromProblem(
-          InsightNameEnum.failedExecution,
-          InsightExecEnum.STATEMENT,
-        ),
-      ];
-    }
-    stmts.push(stmt);
+      break;
+
+    case "FailedExecution":
+      insights.push(
+        getInsightFromCause(InsightNameEnum.failedExecution, execType),
+      );
+      break;
+
+    default:
+  }
+
+  return insights;
+}
+
+/**
+ * flattenTxnInsightsToStmts flattens the txn insights array
+ * into its stmt insights. Only stmts with non-empty insights
+ * array will be included.
+ * @param txnInsights array of transaction insights
+ * @returns An array of FlattenedStmtInsightEvent where each elem
+ * includes stmt and txn info. Only includes stmts with non-empty
+ * insights array.
+ */
+export function flattenTxnInsightsToStmts(
+  txnInsights: TxnInsightEvent[],
+): FlattenedStmtInsightEvent[] {
+  if (!txnInsights?.length) return [];
+  const stmtInsights: FlattenedStmtInsightEvent[] = [];
+  txnInsights.forEach(txnInsight => {
+    const { statementInsights, ...txnInfo } = txnInsight;
+    statementInsights?.forEach(stmt => {
+      if (!stmt.insights?.length) return;
+      stmtInsights.push({ ...txnInfo, ...stmt, query: stmt.query });
+    });
   });
-  return stmts;
+  return stmtInsights;
+}
+
+/**
+ * mergeTxnContentionAndStmtInsights merges a list of txn insights
+ * aggregated from stmt insights, and a list of txn contention insights.
+ * If a txn exists in both lists, its information will be merged.
+ * @param txnInsightsFromStmts txn insights aggregated from stmts
+ * @param txnContentionInsights txn contention insights
+ * @returns list of merged txn insights
+ */
+export function mergeTxnContentionAndStmtInsights(
+  txnInsightsFromStmts: TxnInsightEvent[],
+  txnContentionInsights: TxnContentionInsightEvent[],
+): MergedTxnInsightEvent[] {
+  const eventByTxnFingerprint: Record<string, MergedTxnInsightEvent> = {};
+  txnContentionInsights?.forEach(txn => {
+    const formattedTxn = {
+      transactionExecutionID: txn.transactionID,
+      transactionFingerprintID: txn.transactionFingerprintID,
+      contention: txn.contentionDuration,
+      statementInsights: [] as StatementInsightEvent[],
+      insights: txn.insights,
+      queries: txn.queries,
+      startTime: txn.startTime,
+      application: txn.application,
+    };
+    eventByTxnFingerprint[txn.transactionFingerprintID] = formattedTxn;
+  });
+
+  txnInsightsFromStmts?.forEach(txn => {
+    const existingContentionEvent =
+      eventByTxnFingerprint[txn.transactionFingerprintID];
+    if (existingContentionEvent) {
+      if (
+        existingContentionEvent.transactionExecutionID !==
+        txn.transactionExecutionID
+      ) {
+        // Not the same execution - for now we opt to return the contention event.
+        // TODO (xinhaoz) return the txn that executed more recently once
+        // we have txn start and end in the insights table. For now let's
+        // take the entry from the contention registry.
+        return; // Continue
+      }
+      // Merge the two results.
+      eventByTxnFingerprint[txn.transactionFingerprintID] = {
+        ...txn,
+        contention: existingContentionEvent.contention,
+        startTime: existingContentionEvent.startTime,
+        insights: txn.insights.concat(existingContentionEvent.insights),
+      };
+      return; // Continue
+    }
+
+    // This is a new key.
+    eventByTxnFingerprint[txn.transactionFingerprintID] = txn;
+  });
+
+  return Object.values(eventByTxnFingerprint);
+}
+
+export function mergeTxnInsightDetails(
+  txnDetailsFromStmts: TxnInsightEvent | null,
+  txnContentionDetails: TxnContentionInsightDetails | null,
+): TxnInsightDetails {
+  if (!txnContentionDetails)
+    return txnDetailsFromStmts
+      ? { ...txnDetailsFromStmts, execType: InsightExecEnum.TRANSACTION }
+      : null;
+
+  // Merge info from txnDetailsFromStmts, if it exists.
+  return {
+    transactionExecutionID: txnContentionDetails.transactionExecutionID,
+    transactionFingerprintID: txnContentionDetails.transactionFingerprintID,
+    application:
+      txnContentionDetails.application ?? txnDetailsFromStmts?.application,
+    lastRetryReason: txnDetailsFromStmts?.lastRetryReason,
+    statementInsights: txnDetailsFromStmts?.statementInsights,
+    insights: txnContentionDetails.insights.concat(
+      txnDetailsFromStmts?.insights ?? [],
+    ),
+    queries: txnContentionDetails.queries,
+    startTime: txnContentionDetails.startTime,
+    blockingContentionDetails: txnContentionDetails.blockingContentionDetails,
+    contentionThreshold: txnContentionDetails.contentionThreshold,
+    totalContentionTimeMs: txnContentionDetails.totalContentionTimeMs,
+    execType: InsightExecEnum.TRANSACTION,
+  };
+}
+
+export function getRecommendationForExecInsight(
+  insight: Insight,
+  execDetails: ExecutionDetails | null,
+): InsightRecommendation {
+  switch (insight.name) {
+    case InsightNameEnum.highContention:
+      return {
+        type: InsightNameEnum.highContention,
+        execution: execDetails,
+        details: {
+          duration: execDetails.contentionTime,
+          description: insight.description,
+        },
+      };
+    case InsightNameEnum.failedExecution:
+      return {
+        type: InsightNameEnum.failedExecution,
+        execution: execDetails,
+      };
+    case InsightNameEnum.highRetryCount:
+      return {
+        type: InsightNameEnum.highRetryCount,
+        execution: execDetails,
+        details: {
+          description: insight.description,
+        },
+      };
+    case InsightNameEnum.planRegression:
+      return {
+        type: InsightNameEnum.planRegression,
+        execution: execDetails,
+        details: {
+          description: insight.description,
+        },
+      };
+    case InsightNameEnum.suboptimalPlan:
+      return {
+        type: InsightNameEnum.suboptimalPlan,
+        database: execDetails.databaseName,
+        execution: execDetails,
+        details: {
+          description: insight.description,
+        },
+      };
+    default:
+      return {
+        type: "Unknown",
+        execution: execDetails,
+        details: {
+          duration: execDetails.elapsedTimeMillis,
+          description: insight.description,
+        },
+      };
+  }
+}
+
+export function getStmtInsightRecommendations(
+  insightDetails: Partial<FlattenedStmtInsightEvent> | null,
+): InsightRecommendation[] {
+  if (!insightDetails) return [];
+
+  const execDetails: ExecutionDetails = {
+    statement: insightDetails.query,
+    fingerprintID: insightDetails.statementFingerprintID,
+    retries: insightDetails.retries,
+    indexRecommendations: insightDetails.indexRecommendations,
+    databaseName: insightDetails.databaseName,
+    elapsedTimeMillis: insightDetails.elapsedTimeMillis,
+  };
+
+  const recs: InsightRecommendation[] = insightDetails.insights?.map(insight =>
+    getRecommendationForExecInsight(insight, execDetails),
+  );
+
+  return recs;
+}
+
+export function getTxnInsightRecommendations(
+  insightDetails: TxnInsightDetails | null,
+): InsightRecommendation[] {
+  if (!insightDetails) return [];
+
+  const execDetails: ExecutionDetails = {
+    retries: insightDetails.retries,
+    databaseName: insightDetails.databaseName,
+    contentionTime: insightDetails.totalContentionTimeMs,
+  };
+  const recs: InsightRecommendation[] = [];
+
+  insightDetails.statementInsights?.forEach(stmt =>
+    getStmtInsightRecommendations({
+      ...stmt,
+      ...execDetails,
+    })?.forEach(rec => recs.push(rec)),
+  );
+
+  // This is necessary since txn contention insight currently is not
+  // surfaced from the  stmt level for txns.
+  if (recs.length === 0) {
+    insightDetails.insights?.forEach(insight =>
+      recs.push(getRecommendationForExecInsight(insight, execDetails)),
+    );
+  }
+
+  return recs;
 }

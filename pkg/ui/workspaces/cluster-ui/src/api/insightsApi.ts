@@ -21,64 +21,48 @@ import {
   BlockedContentionDetails,
   InsightExecEnum,
   InsightNameEnum,
-  StatementInsightEvent,
-  TransactionInsightEvent,
-  TransactionInsightEventDetails,
+  FlattenedStmtInsightEvent,
+  TxnContentionInsightEvent,
+  TxnContentionInsightDetails,
+  TxnInsightEvent,
+  getInsightsFromProblemsAndCauses,
+  getInsightFromCause,
 } from "src/insights";
 import moment from "moment";
+import { INTERNAL_APP_NAME_PREFIX } from "src/activeExecutions/activeStatementUtils";
 
-// Transaction insight events.
+// Transaction contention insight events.
 
-// There are three transaction contention event insight queries:
-// 1. A query that selects transaction contention events from crdb_internal.transaction_contention_events.
-// 2. A query that selects statement fingerprint IDS from crdb_internal.transaction_statistics, filtering on the
-// fingerprint IDs recorded in the contention events.
-// 3. A query that selects statement queries from crdb_internal.statement_statistics, filtering on the fingerprint IDs
-// recorded in the contention event rows.
-// After we get the results from these tables, we combine them on the frontend.
-
-// These types describe the final transaction contention event state, as it is stored in Redux.
-export type TransactionInsightEventState = Omit<
-  TransactionInsightEvent,
-  "insights"
-> & {
-  insightName: string;
-};
-export type TransactionInsightEventsResponse = TransactionInsightEventState[];
-
-export type TransactionContentionEventState = Omit<
-  TransactionInsightEventState,
-  "application" | "queries"
->;
-
-export type TransactionContentionEventsResponse =
-  TransactionContentionEventState[];
-
-// txnContentionQuery selects all relevant transaction contention events.
-const txnContentionQuery = `SELECT *
-                            FROM (SELECT waiting_txn_id,
-                                         encode(
-                                           waiting_txn_fingerprint_id, 'hex'
-                                           )                       AS waiting_txn_fingerprint_id,
-                                         collection_ts,
-                                         total_contention_duration AS contention_duration,
-                                         row_number()                 over (
-                 PARTITION BY waiting_txn_fingerprint_id
-                 ORDER BY
-                     collection_ts DESC
-                 ) AS rank, threshold
-                                  FROM (SELECT "sql.insights.latency_threshold" :: INTERVAL AS threshold
-                                        FROM
-                                          [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-                                       (SELECT waiting_txn_id,
-                                               waiting_txn_fingerprint_id,
-                                               max(collection_ts)       AS collection_ts,
-                                               sum(contention_duration) AS total_contention_duration
-                                        FROM crdb_internal.transaction_contention_events
-                                        WHERE encode(waiting_txn_fingerprint_id, 'hex') != '0000000000000000'
-                                        GROUP BY waiting_txn_id, waiting_txn_fingerprint_id)
-                                  WHERE total_contention_duration > threshold)
-                            WHERE rank = 1`;
+// txnContentionQuery selects all transaction contention events that are
+// above the insights latency threshold.
+const txnContentionQuery = `
+SELECT * FROM
+(
+  SELECT
+    waiting_txn_id,
+    encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
+    collection_ts,
+    total_contention_duration AS contention_duration,
+    row_number() OVER ( PARTITION BY waiting_txn_fingerprint_id ORDER BY collection_ts DESC ) AS rank,
+    threshold
+  FROM
+    (
+      SELECT "sql.insights.latency_threshold"::INTERVAL AS threshold
+      FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+    ),
+    (
+      SELECT
+        waiting_txn_id,
+        waiting_txn_fingerprint_id,
+        max(collection_ts) AS collection_ts,
+        sum(contention_duration) AS total_contention_duration
+      FROM crdb_internal.transaction_contention_events
+      WHERE encode(waiting_txn_fingerprint_id, 'hex') != '0000000000000000'
+      GROUP BY waiting_txn_id, waiting_txn_fingerprint_id
+    )
+  WHERE total_contention_duration > threshold
+)
+WHERE rank = 1`;
 
 type TransactionContentionResponseColumns = {
   waiting_txn_id: string;
@@ -88,74 +72,77 @@ type TransactionContentionResponseColumns = {
   threshold: string;
 };
 
-function transactionContentionResultsToEventState(
+type TxnContentionEvent = Omit<
+  TxnContentionInsightEvent,
+  "application" | "queries"
+>;
+
+function formatTxnContentionResults(
   response: SqlExecutionResponse<TransactionContentionResponseColumns>,
-): TransactionContentionEventsResponse {
-  if (!response.execution.txn_results[0].rows) {
-    // No transaction contention events.
+): TxnContentionEvent[] {
+  if (sqlResultsAreEmpty(response)) {
     return [];
   }
 
   return response.execution.txn_results[0].rows.map(row => ({
     transactionID: row.waiting_txn_id,
-    fingerprintID: row.waiting_txn_fingerprint_id,
+    transactionFingerprintID: row.waiting_txn_fingerprint_id,
     startTime: moment(row.collection_ts).utc(),
     contentionDuration: moment.duration(row.contention_duration),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
     insightName: InsightNameEnum.highContention,
     execType: InsightExecEnum.TRANSACTION,
+    insights: [
+      getInsightFromCause(
+        InsightNameEnum.highContention,
+        InsightExecEnum.TRANSACTION,
+      ),
+    ],
   }));
 }
 
-export type TxnStmtFingerprintEventState = Pick<
-  TransactionInsightEventState,
-  "application" | "fingerprintID"
-> & {
-  queryIDs: string[];
+export type TxnWithStmtFingerprints = {
+  application: string;
+  transactionFingerprintID: string;
+  queryIDs: string[]; // Statement fingerprint IDs.
 };
-
-export type TxnStmtFingerprintEventsResponse = TxnStmtFingerprintEventState[];
 
 type TxnStmtFingerprintsResponseColumns = {
   transaction_fingerprint_id: string;
-  query_ids: string[];
+  query_ids: string[]; // Statement Fingerprint IDs.
   app_name: string;
 };
 
 // txnStmtFingerprintsQuery selects all statement fingerprints for each recorded transaction fingerprint.
-const txnStmtFingerprintsQuery = (
-  txn_fingerprint_ids: string[] | string,
-) => `SELECT DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS transaction_fingerprint_id,
-                                          app_name,
-                                          ARRAY(
-                                            SELECT jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs')
-                                            ) AS query_ids
-      FROM crdb_internal.transaction_statistics
-      WHERE app_name != '${INTERNAL_SQL_API_APP}'
-        AND encode(fingerprint_id, 'hex') = ANY (string_to_array('${txn_fingerprint_ids}'
-        , ','))`;
+const txnStmtFingerprintsQuery = (txn_fingerprint_ids: string[]) => `
+SELECT
+  DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS transaction_fingerprint_id,
+  app_name,
+  ARRAY( SELECT jsonb_array_elements_text(metadata -> 'stmtFingerprintIDs' )) AS query_ids
+FROM crdb_internal.transaction_statistics
+WHERE app_name != '${INTERNAL_SQL_API_APP}'
+  AND encode(fingerprint_id, 'hex') = ANY ARRAY[ ${txn_fingerprint_ids
+    .map(id => `'${id}'`)
+    .join(",")} ]`;
 
-function txnStmtFingerprintsResultsToEventState(
+function formatTxnFingerprintsResults(
   response: SqlExecutionResponse<TxnStmtFingerprintsResponseColumns>,
-): TxnStmtFingerprintEventsResponse {
-  if (!response.execution.txn_results[0].rows) {
-    // No transaction fingerprint results.
+): TxnWithStmtFingerprints[] {
+  if (sqlResultsAreEmpty(response)) {
     return [];
   }
 
   return response.execution.txn_results[0].rows.map(row => ({
-    fingerprintID: row.transaction_fingerprint_id,
+    transactionFingerprintID: row.transaction_fingerprint_id,
     queryIDs: row.query_ids,
     application: row.app_name,
   }));
 }
 
-type FingerprintStmtsEventState = {
-  query: string;
-  stmtFingerprintID: string;
-};
-
-type FingerprintStmtsEventsResponse = FingerprintStmtsEventState[];
+type StmtFingerprintToQueryRecord = Map<
+  string, // Key = Stmt fingerprint ID
+  string // Value = query string
+>;
 
 type FingerprintStmtsResponseColumns = {
   statement_fingerprint_id: string;
@@ -163,124 +150,134 @@ type FingerprintStmtsResponseColumns = {
 };
 
 // fingerprintStmtsQuery selects all statement queries for each recorded statement fingerprint.
-const fingerprintStmtsQuery = (
-  stmt_fingerprint_ids: string[],
-) => `SELECT DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
-                                          prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
-      FROM crdb_internal.statement_statistics
-      WHERE encode(fingerprint_id, 'hex') = ANY (string_to_array('${stmt_fingerprint_ids}'
-        , ','))`;
+const fingerprintStmtsQuery = (stmt_fingerprint_ids: string[]): string => `
+SELECT
+  DISTINCT ON (fingerprint_id) encode(fingerprint_id, 'hex') AS statement_fingerprint_id,
+  prettify_statement(metadata ->> 'query', 108, 1, 1) AS query
+FROM crdb_internal.statement_statistics
+WHERE encode(fingerprint_id, 'hex') = ANY ARRAY[ ${stmt_fingerprint_ids
+  .map(id => `'${id}'`)
+  .join(",")} ]`;
 
-function fingerprintStmtsResultsToEventState(
+function createStmtFingerprintToQueryMap(
   response: SqlExecutionResponse<FingerprintStmtsResponseColumns>,
-): FingerprintStmtsEventsResponse {
-  if (!response.execution.txn_results[0].rows) {
+): StmtFingerprintToQueryRecord {
+  const idToQuery: Map<string, string> = new Map();
+  if (sqlResultsAreEmpty(response)) {
     // No statement fingerprint results.
+    return idToQuery;
+  }
+  response.execution.txn_results[0].rows.forEach(row => {
+    idToQuery.set(row.statement_fingerprint_id, row.query);
+  });
+
+  return idToQuery;
+}
+
+const makeInsightsSqlRequest = (queries: string[]): SqlExecutionRequest => ({
+  statements: queries.map(query => ({ sql: query })),
+  execute: true,
+  max_result_size: LARGE_RESULT_SIZE,
+  timeout: LONG_TIMEOUT,
+});
+
+/**
+ * getTxnInsightEvents is the API function that executes the queries to collect
+ * txn contention insights and the query strings of txns involved in the contention.
+ * @returns a list of txn contention insights
+ */
+export async function getTxnInsightEvents(): Promise<
+  TxnContentionInsightEvent[]
+> {
+  // Note that any errors encountered fetching these results are caught
+  // earlier in the call stack.
+
+  // Step 1: Get transaction contention events that are over the insights
+  // latency threshold.
+  const contentionResults =
+    await executeInternalSql<TransactionContentionResponseColumns>(
+      makeInsightsSqlRequest([txnContentionQuery]),
+    );
+  if (sqlResultsAreEmpty(contentionResults)) {
     return [];
   }
-  return response.execution.txn_results[0].rows.map(row => ({
-    stmtFingerprintID: row.statement_fingerprint_id,
-    query: row.query,
-  }));
-}
+  const contentionEvents = formatTxnContentionResults(contentionResults);
 
-// getTransactionInsightEventState is the API function that executes the queries and returns the results.
-export function getTransactionInsightEventState(): Promise<TransactionInsightEventsResponse> {
-  const txnContentionRequest: SqlExecutionRequest = {
-    statements: [
-      {
-        sql: `${txnContentionQuery}`,
-      },
-    ],
-    execute: true,
-    max_result_size: LARGE_RESULT_SIZE,
-    timeout: LONG_TIMEOUT,
-  };
-  return executeInternalSql<TransactionContentionResponseColumns>(
-    txnContentionRequest,
-  ).then(contentionResults => {
-    if (sqlResultsAreEmpty(contentionResults)) {
-      return;
-    }
-    const res = contentionResults.execution.txn_results[0].rows;
-    const txnFingerprintIDs = res.map(row => row.waiting_txn_fingerprint_id);
-    const txnFingerprintRequest: SqlExecutionRequest = {
-      statements: [
-        {
-          sql: `${txnStmtFingerprintsQuery(txnFingerprintIDs)}`,
-        },
-      ],
-      execute: true,
-      max_result_size: LARGE_RESULT_SIZE,
-      timeout: LONG_TIMEOUT,
-    };
-    return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
-      txnFingerprintRequest,
-    ).then(txnStmtFingerprintResults => {
-      if (sqlResultsAreEmpty(txnStmtFingerprintResults)) {
-        return;
-      }
-      const txnStmtRes =
-        txnStmtFingerprintResults.execution.txn_results[0].rows;
-      const stmtFingerprintIDs = txnStmtRes.map(row => row.query_ids);
-      const fingerprintStmtsRequest: SqlExecutionRequest = {
-        statements: [
-          {
-            sql: `${fingerprintStmtsQuery(
-              [].concat([], ...stmtFingerprintIDs),
-            )}`,
-          },
-        ],
-        execute: true,
-        max_result_size: LARGE_RESULT_SIZE,
-        timeout: LONG_TIMEOUT,
-      };
-      return executeInternalSql<FingerprintStmtsResponseColumns>(
-        fingerprintStmtsRequest,
-      ).then(fingerprintStmtResults => {
-        return combineTransactionInsightEventState(
-          transactionContentionResultsToEventState(contentionResults),
-          txnStmtFingerprintsResultsToEventState(txnStmtFingerprintResults),
-          fingerprintStmtsResultsToEventState(fingerprintStmtResults),
-        );
-      });
-    });
-  });
-}
+  // Step 2: Fetch the stmt fingerprints in the contended transactions.
+  const txnFingerprintIDs = new Set<string>(
+    contentionEvents.map(e => e.transactionFingerprintID),
+  );
 
-export function combineTransactionInsightEventState(
-  txnContentionState: TransactionContentionEventsResponse,
-  txnFingerprintState: TxnStmtFingerprintEventsResponse,
-  fingerprintStmtState: FingerprintStmtsEventsResponse,
-): TransactionInsightEventState[] {
-  let res: TransactionInsightEventState[];
-  if (txnContentionState && txnFingerprintState && fingerprintStmtState) {
-    const queries = txnFingerprintState.map(txnRow => ({
-      fingerprintID: txnRow.fingerprintID,
-      app_name: txnRow.application,
-      queries: txnRow.queryIDs.map(
-        stmtID =>
-          fingerprintStmtState.find(row => row.stmtFingerprintID === stmtID)
-            ?.query,
-      ),
-    }));
-    if (queries) {
-      res = txnContentionState.map(row => {
-        const qa = queries.find(
-          query => query.fingerprintID === row.fingerprintID,
-        );
-        if (qa) {
-          return {
-            ...row,
-            queries: qa.queries,
-            application: qa.app_name,
-            insightName: InsightNameEnum.highContention,
-            execType: InsightExecEnum.TRANSACTION,
-          };
-        }
-      });
-    }
+  const txnStmtFingerprintResults =
+    await executeInternalSql<TxnStmtFingerprintsResponseColumns>(
+      makeInsightsSqlRequest([
+        txnStmtFingerprintsQuery(Array.from(txnFingerprintIDs)),
+      ]),
+    );
+  if (sqlResultsAreEmpty(txnStmtFingerprintResults)) {
+    return [];
   }
+  const txnsWithStmtFingerprints = formatTxnFingerprintsResults(
+    txnStmtFingerprintResults,
+  );
+
+  // Step 3: Get all query strings for statement fingerprints.
+  const stmtFingerprintIDs = new Set<string>();
+  txnsWithStmtFingerprints.forEach(txn => {
+    txn.queryIDs.forEach(id => stmtFingerprintIDs.add(id));
+  });
+  const fingerprintStmtsRequest = makeInsightsSqlRequest([
+    fingerprintStmtsQuery(Array.from(stmtFingerprintIDs)),
+  ]);
+  const fingerprintStmtResults =
+    await executeInternalSql<FingerprintStmtsResponseColumns>(
+      fingerprintStmtsRequest,
+    );
+
+  return buildTxnContentionInsightEvents(
+    contentionEvents,
+    txnsWithStmtFingerprints,
+    createStmtFingerprintToQueryMap(fingerprintStmtResults),
+  );
+}
+
+function buildTxnContentionInsightEvents(
+  txnContentionState: TxnContentionEvent[],
+  txnFingerprintState: TxnWithStmtFingerprints[],
+  fingerprintToQuery: StmtFingerprintToQueryRecord,
+): TxnContentionInsightEvent[] {
+  if (
+    !txnContentionState.length ||
+    !txnFingerprintState.length ||
+    !fingerprintToQuery.size
+  ) {
+    return [];
+  }
+
+  const txnsWithStmtQueries = txnFingerprintState.map(txnRow => ({
+    fingerprintID: txnRow.transactionFingerprintID,
+    appName: txnRow.application,
+    queries: txnRow.queryIDs.map(stmtID => fingerprintToQuery.get(stmtID)),
+  }));
+
+  const res = txnContentionState
+    .map(txnContention => {
+      const txnQueries = txnsWithStmtQueries.find(
+        txn => txn.fingerprintID === txnContention.transactionFingerprintID,
+      );
+      if (!txnQueries) {
+        return null;
+      }
+      return {
+        ...txnContention,
+        queries: txnQueries.queries,
+        application: txnQueries.appName,
+        insightName: InsightNameEnum.highContention,
+        execType: InsightExecEnum.TRANSACTION,
+      };
+    })
+    .filter(txn => txn); // remove null entries
+
   return res;
 }
 
@@ -291,51 +288,38 @@ export function combineTransactionInsightEventState(
 // 2. Reuse the queries/types defined above to get the waiting and blocking queries.
 // After we get the results from these tables, we combine them on the frontend.
 
-// These types describe the final event state, as it is stored in Redux
-export type TransactionInsightEventDetailsState = Omit<
-  TransactionInsightEventDetails,
-  "insights"
-> & {
-  insightName: string;
-};
-export type TransactionInsightEventDetailsResponse =
-  TransactionInsightEventDetailsState;
-export type TransactionInsightEventDetailsRequest = { id: string };
+export type TxnContentionInsightDetailsRequest = { id: string };
 
 // Query 1 types, functions.
-export type TransactionContentionEventDetailsState = Omit<
-  TransactionInsightEventDetailsState,
+export type TransactionContentionEventDetails = Omit<
+  TxnContentionInsightDetails,
   "application" | "queries" | "blockingQueries"
 >;
 
-export type TransactionContentionEventDetailsResponse =
-  TransactionContentionEventDetailsState;
-
 // txnContentionDetailsQuery selects information about a specific transaction contention event.
-const txnContentionDetailsQuery = (id: string) => `SELECT collection_ts,
-                                                          blocking_txn_id,
-                                                          encode(
-                                                            blocking_txn_fingerprint_id, 'hex'
-                                                            ) AS blocking_txn_fingerprint_id,
-                                                          waiting_txn_id,
-                                                          encode(
-                                                            waiting_txn_fingerprint_id, 'hex'
-                                                            ) AS waiting_txn_fingerprint_id,
-                                                          contention_duration,
-                                                          crdb_internal.pretty_key(contending_key, 0) AS key,
-                                                          database_name,
-                                                          schema_name,
-                                                          table_name,
-                                                          index_name,
-                                                          threshold
-                                                   FROM (SELECT "sql.insights.latency_threshold" :: INTERVAL AS threshold
-                                                         FROM
-                                                           [SHOW CLUSTER SETTING sql.insights.latency_threshold]),
-                                                        crdb_internal.transaction_contention_events AS tce
-                                                          LEFT OUTER JOIN crdb_internal.ranges AS ranges
-                                                                          ON tce.contending_key BETWEEN ranges.start_key
-                                                                            AND ranges.end_key
-                                                   WHERE waiting_txn_id = '${id}'
+const txnContentionDetailsQuery = (id: string) => `
+SELECT
+  collection_ts,
+  blocking_txn_id,
+  encode( blocking_txn_fingerprint_id, 'hex' ) AS blocking_txn_fingerprint_id,
+  waiting_txn_id,
+  encode( waiting_txn_fingerprint_id, 'hex' ) AS waiting_txn_fingerprint_id,
+  contention_duration,
+  crdb_internal.pretty_key(contending_key, 0) AS key,
+  database_name,
+  schema_name,
+  table_name,
+  index_name,
+  threshold
+FROM
+  (
+    SELECT "sql.insights.latency_threshold"::INTERVAL AS threshold
+    FROM [SHOW CLUSTER SETTING sql.insights.latency_threshold]
+  ),
+  crdb_internal.transaction_contention_events AS tce
+  LEFT OUTER JOIN crdb_internal.ranges AS ranges
+    ON tce.contending_key BETWEEN ranges.start_key AND ranges.end_key
+  WHERE waiting_txn_id = '${id}'
 `;
 
 type TxnContentionDetailsResponseColumns = {
@@ -353,9 +337,14 @@ type TxnContentionDetailsResponseColumns = {
   key: string;
 };
 
-function transactionContentionDetailsResultsToEventState(
+type PartialTxnContentionDetails = Omit<
+  TxnContentionInsightDetails,
+  "application" | "queries"
+>;
+
+function formatTxnContentionDetailsResponse(
   response: SqlExecutionResponse<TxnContentionDetailsResponseColumns>,
-): TransactionContentionEventDetailsResponse {
+): PartialTxnContentionDetails {
   const resultsRows = response.execution.txn_results[0].rows;
   if (!resultsRows) {
     // No data.
@@ -374,7 +363,7 @@ function transactionContentionDetailsResultsToEventState(
     totalContentionTime += contentionTimeInMs;
     blockingContentionDetails[idx] = {
       blockingExecutionID: value.blocking_txn_id,
-      blockingFingerprintID: value.blocking_txn_fingerprint_id,
+      blockingTxnFingerprintID: value.blocking_txn_fingerprint_id,
       blockingQueries: null,
       collectionTimeStamp: moment(value.collection_ts).utc(),
       contentionTimeMs: contentionTimeInMs,
@@ -390,181 +379,128 @@ function transactionContentionDetailsResultsToEventState(
   });
 
   const row = resultsRows[0];
+  const contentionThreshold = moment.duration(row.threshold).asMilliseconds();
   return {
-    executionID: row.waiting_txn_id,
-    fingerprintID: row.waiting_txn_fingerprint_id,
+    transactionExecutionID: row.waiting_txn_id,
+    transactionFingerprintID: row.waiting_txn_fingerprint_id,
     startTime: moment(row.collection_ts).utc(),
-    totalContentionTime: totalContentionTime,
+    totalContentionTimeMs: totalContentionTime,
     blockingContentionDetails: blockingContentionDetails,
-    contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
+    contentionThreshold,
     insightName: InsightNameEnum.highContention,
     execType: InsightExecEnum.TRANSACTION,
+    insights: [
+      getInsightFromCause(
+        InsightNameEnum.highContention,
+        InsightExecEnum.TRANSACTION,
+        contentionThreshold,
+        totalContentionTime,
+      ),
+    ],
   };
 }
 
 // getTransactionInsightEventState is the API function that executes the queries and returns the results.
-export function getTransactionInsightEventDetailsState(
-  req: TransactionInsightEventDetailsRequest,
-): Promise<TransactionInsightEventDetailsResponse> {
-  const txnContentionDetailsRequest: SqlExecutionRequest = {
-    statements: [
-      {
-        sql: `${txnContentionDetailsQuery(req.id)}`,
-      },
-    ],
-    execute: true,
-    max_result_size: LARGE_RESULT_SIZE,
-    timeout: LONG_TIMEOUT,
-  };
-  return executeInternalSql<TxnContentionDetailsResponseColumns>(
-    txnContentionDetailsRequest,
-  ).then(contentionResults => {
-    if (sqlResultsAreEmpty(contentionResults)) {
+export async function getTransactionInsightEventDetailsState(
+  req: TxnContentionInsightDetailsRequest,
+): Promise<TxnContentionInsightDetails> {
+  // Note that any errors encountered fetching these results are caught
+  // earlier in the call stack.
+  //
+  // There are 3 api requests/queries in this process.
+  // 1. Get contention insight for the requested transaction.
+  // 2. Get the stmt fingerprints for ALL transactions involved in the contention.
+  // 3. Get the query strings for ALL statements involved in the transaction.
+
+  // Get contention results for requested transaction.
+  const contentionResults =
+    await executeInternalSql<TxnContentionDetailsResponseColumns>(
+      makeInsightsSqlRequest([txnContentionDetailsQuery(req.id)]),
+    );
+  if (sqlResultsAreEmpty(contentionResults)) {
+    return;
+  }
+  const contentionDetails =
+    formatTxnContentionDetailsResponse(contentionResults);
+
+  // Collect all txn fingerprints involved.
+  const txnFingerprintIDs: string[] = [];
+  contentionDetails.blockingContentionDetails.forEach(x =>
+    txnFingerprintIDs.push(x.blockingTxnFingerprintID),
+  );
+  // Add the waiting txn fingerprint ID.
+  txnFingerprintIDs.push(contentionDetails.transactionFingerprintID);
+
+  // Collect all stmt fingerprint ids involved.
+  const getStmtFingerprintsResponse =
+    await executeInternalSql<TxnStmtFingerprintsResponseColumns>(
+      makeInsightsSqlRequest([txnStmtFingerprintsQuery(txnFingerprintIDs)]),
+    );
+  const txnsWithStmtFingerprints = formatTxnFingerprintsResults(
+    getStmtFingerprintsResponse,
+  );
+
+  const stmtFingerprintIDs = new Set<string>();
+  txnsWithStmtFingerprints.forEach(txnFingerprint =>
+    txnFingerprint.queryIDs.forEach(id => stmtFingerprintIDs.add(id)),
+  );
+
+  const stmtQueriesResponse =
+    await executeInternalSql<FingerprintStmtsResponseColumns>(
+      makeInsightsSqlRequest([
+        fingerprintStmtsQuery(Array.from(stmtFingerprintIDs)),
+      ]),
+    );
+
+  return buildTxnContentionInsightDetails(
+    contentionDetails,
+    txnsWithStmtFingerprints,
+    createStmtFingerprintToQueryMap(stmtQueriesResponse),
+  );
+}
+
+function buildTxnContentionInsightDetails(
+  partialTxnContentionDetails: PartialTxnContentionDetails,
+  txnsWithStmtFingerprints: TxnWithStmtFingerprints[],
+  stmtFingerprintToQuery: StmtFingerprintToQueryRecord,
+): TxnContentionInsightDetails {
+  if (
+    !partialTxnContentionDetails &&
+    !txnsWithStmtFingerprints.length &&
+    !stmtFingerprintToQuery.size
+  ) {
+    return null;
+  }
+
+  partialTxnContentionDetails.blockingContentionDetails.forEach(blockedRow => {
+    const currBlockedFingerprintStmts = txnsWithStmtFingerprints.find(
+      txn =>
+        txn.transactionFingerprintID === blockedRow.blockingTxnFingerprintID,
+    );
+
+    if (!currBlockedFingerprintStmts) {
       return;
     }
-    const res = contentionResults.execution.txn_results[0].rows;
-    const waitingTxnFingerprintId = res[0].waiting_txn_fingerprint_id;
-    const waitingTxnFingerprintRequest: SqlExecutionRequest = {
-      statements: [
-        {
-          sql: `${txnStmtFingerprintsQuery(waitingTxnFingerprintId)}`,
-        },
-      ],
-      execute: true,
-      max_result_size: LARGE_RESULT_SIZE,
-      timeout: LONG_TIMEOUT,
-    };
-    return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
-      waitingTxnFingerprintRequest,
-    ).then(waitingTxnStmtFingerprintIDs => {
-      const waitingStmtFingerprintIDs =
-        waitingTxnStmtFingerprintIDs.execution.txn_results[0].rows[0].query_ids;
-      const waitingFingerprintStmtsRequest: SqlExecutionRequest = {
-        statements: [
-          {
-            sql: `${fingerprintStmtsQuery(waitingStmtFingerprintIDs)}`,
-          },
-        ],
-        execute: true,
-        max_result_size: LARGE_RESULT_SIZE,
-        timeout: LONG_TIMEOUT,
-      };
-      return executeInternalSql<FingerprintStmtsResponseColumns>(
-        waitingFingerprintStmtsRequest,
-      ).then(waitingTxnStmtQueries => {
-        let blockingTxnFingerprintId: string[] = [];
-        contentionResults.execution.txn_results.forEach(txnResult => {
-          blockingTxnFingerprintId = blockingTxnFingerprintId.concat(
-            txnResult.rows.map(x => x.blocking_txn_fingerprint_id),
-          );
-        });
 
-        const blockingTxnFingerprintRequest: SqlExecutionRequest = {
-          statements: [
-            {
-              sql: `${txnStmtFingerprintsQuery(blockingTxnFingerprintId)}`,
-            },
-          ],
-          execute: true,
-          max_result_size: LARGE_RESULT_SIZE,
-          timeout: LONG_TIMEOUT,
-        };
-        return executeInternalSql<TxnStmtFingerprintsResponseColumns>(
-          blockingTxnFingerprintRequest,
-        ).then(blockingTxnStmtFingerprintIDs => {
-          let blockingStmtFingerprintIDs: string[] = [];
-          blockingTxnStmtFingerprintIDs.execution.txn_results[0].rows.map(
-            row => {
-              if (row.query_ids && row.query_ids.length > 0) {
-                blockingStmtFingerprintIDs = blockingStmtFingerprintIDs.concat(
-                  row.query_ids,
-                );
-              }
-            },
-          );
-
-          const blockingFingerprintStmtsRequest: SqlExecutionRequest = {
-            statements: [
-              {
-                sql: `${fingerprintStmtsQuery(blockingStmtFingerprintIDs)}`,
-              },
-            ],
-            execute: true,
-            max_result_size: LARGE_RESULT_SIZE,
-            timeout: LONG_TIMEOUT,
-          };
-          return executeInternalSql<FingerprintStmtsResponseColumns>(
-            blockingFingerprintStmtsRequest,
-          ).then(blockingTxnStmtQueries => {
-            return combineTransactionInsightEventDetailsState(
-              transactionContentionDetailsResultsToEventState(
-                contentionResults,
-              ),
-              txnStmtFingerprintsResultsToEventState(
-                waitingTxnStmtFingerprintIDs,
-              ),
-              txnStmtFingerprintsResultsToEventState(
-                blockingTxnStmtFingerprintIDs,
-              ),
-              fingerprintStmtsResultsToEventState(waitingTxnStmtQueries),
-              fingerprintStmtsResultsToEventState(blockingTxnStmtQueries),
-            );
-          });
-        });
-      });
-    });
+    blockedRow.blockingQueries = currBlockedFingerprintStmts.queryIDs.map(
+      id => stmtFingerprintToQuery.get(id) ?? "",
+    );
   });
-}
 
-export function combineTransactionInsightEventDetailsState(
-  txnContentionDetailsState: TransactionContentionEventDetailsResponse,
-  waitingTxnFingerprintState: TxnStmtFingerprintEventsResponse,
-  blockingTxnFingerprintState: TxnStmtFingerprintEventsResponse,
-  waitingFingerprintStmtState: FingerprintStmtsEventsResponse,
-  blockingFingerprintStmtState: FingerprintStmtsEventsResponse,
-): TransactionInsightEventDetailsState {
-  let res: TransactionInsightEventDetailsState;
-  if (
-    txnContentionDetailsState &&
-    waitingTxnFingerprintState &&
-    blockingTxnFingerprintState &&
-    waitingFingerprintStmtState &&
-    blockingFingerprintStmtState
-  ) {
-    txnContentionDetailsState.blockingContentionDetails.forEach(blockedRow => {
-      const currBlockedFingerprintStmts = blockingTxnFingerprintState.filter(
-        x => x.fingerprintID === blockedRow.blockingFingerprintID,
-      );
-      if (
-        !currBlockedFingerprintStmts ||
-        currBlockedFingerprintStmts.length != 1
-      ) {
-        return;
-      }
+  const waitingTxn = txnsWithStmtFingerprints.find(
+    txn =>
+      txn.transactionFingerprintID ===
+      partialTxnContentionDetails.transactionFingerprintID,
+  );
 
-      blockedRow.blockingQueries = currBlockedFingerprintStmts[0].queryIDs.map(
-        id =>
-          blockingFingerprintStmtState.find(
-            stmt => stmt.stmtFingerprintID === id,
-          )?.query,
-      );
-    });
+  const res = {
+    ...partialTxnContentionDetails,
+    application: waitingTxn.application,
+    queries: waitingTxn.queryIDs.map(id => stmtFingerprintToQuery.get(id)),
+  };
 
-    res = {
-      ...txnContentionDetailsState,
-      application: waitingTxnFingerprintState[0].application,
-      queries: waitingTxnFingerprintState[0].queryIDs.map(
-        id =>
-          waitingFingerprintStmtState.find(
-            stmt => stmt.stmtFingerprintID === id,
-          )?.query,
-      ),
-    };
-  }
   return res;
 }
-
-// Statements
 
 type ExecutionInsightsResponseRow = {
   session_id: string;
@@ -593,47 +529,99 @@ type ExecutionInsightsResponseRow = {
   plan_gist: string;
 };
 
-export type StatementInsights = StatementInsightEvent[];
+export type FlattenedStmtInsights = FlattenedStmtInsightEvent[];
 
-function getStatementInsightsFromClusterExecutionInsightsResponse(
+// This function collects and groups rows of execution insights into
+// a list of transaction insights, which contain any statement insights
+// that were returned in the response.
+function organizeExecutionInsightsResponseIntoTxns(
   response: SqlExecutionResponse<ExecutionInsightsResponseRow>,
-): StatementInsights {
+): TxnInsightEvent[] {
   if (!response.execution.txn_results[0].rows) {
     // No data.
     return [];
   }
 
-  return response.execution.txn_results[0].rows.map(row => {
+  const txnByExecID = new Map<string, TxnInsightEvent>();
+
+  response.execution.txn_results[0].rows.forEach(row => {
+    let txnInsight: TxnInsightEvent = txnByExecID.get(row.txn_id);
+
+    if (!txnInsight) {
+      txnInsight = {
+        transactionExecutionID: row.txn_id,
+        transactionFingerprintID: row.txn_fingerprint_id,
+        implicitTxn: row.implicit_txn,
+        databaseName: row.database_name,
+        application: row.app_name,
+        username: row.user_name,
+        sessionID: row.session_id,
+        priority: row.priority,
+        retries: row.retries,
+        lastRetryReason: row.last_retry_reason,
+        statementInsights: [],
+        insights: [],
+        queries: [],
+      };
+      txnByExecID.set(row.txn_id, txnInsight);
+    }
+
     const start = moment.utc(row.start_time);
     const end = moment.utc(row.end_time);
-    return {
-      transactionID: row.txn_id,
-      transactionFingerprintID: row.txn_fingerprint_id,
-      implicitTxn: row.implicit_txn,
+    const stmtInsight = {
       query: row.query,
       startTime: start,
       endTime: end,
-      databaseName: row.database_name,
       elapsedTimeMillis: end.diff(start, "milliseconds"),
-      application: row.app_name,
-      username: row.user_name,
-      statementID: row.stmt_id,
+      statementExecutionID: row.stmt_id,
       statementFingerprintID: row.stmt_fingerprint_id,
-      sessionID: row.session_id,
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
       rowsWritten: row.rows_written,
-      priority: row.priority,
-      retries: row.retries,
-      lastRetryReason: row.last_retry_reason,
       timeSpentWaiting: row.contention ? moment.duration(row.contention) : null,
       causes: row.causes,
       problem: row.problem,
       indexRecommendations: row.index_recommendations,
-      insights: null,
+      insights: getInsightsFromProblemsAndCauses(
+        row.problem,
+        row.causes,
+        InsightExecEnum.STATEMENT,
+      ),
       planGist: row.plan_gist,
     };
+
+    txnInsight.queries.push(stmtInsight.query);
+    txnInsight.statementInsights.push(stmtInsight);
+
+    // Bubble up stmt insights to txn level.
+    txnInsight.insights = txnInsight.insights.concat(
+      getInsightsFromProblemsAndCauses(
+        row.problem,
+        row.causes,
+        InsightExecEnum.TRANSACTION,
+      ),
+    );
   });
+
+  txnByExecID.forEach(txn => {
+    // De-duplicate top-level txn insights.
+    const insightsSeen = new Set<string>();
+    txn.insights = txn.insights.reduce((insights, i) => {
+      if (insightsSeen.has(i.name)) return insights;
+      insightsSeen.add(i.name);
+      insights.push(i);
+      return insights;
+    }, []);
+
+    // Sort stmt insights for each txn by start time.
+    txn.statementInsights.sort((a, b) => {
+      if (a.startTime.isBefore(b.startTime)) return -1;
+      else if (a.startTime.isAfter(b.startTime)) return 1;
+      return 0;
+    });
+  });
+
+  return Array.from(txnByExecID.values());
 }
 
 type InsightQuery<ResponseColumnType, State> = {
@@ -642,53 +630,59 @@ type InsightQuery<ResponseColumnType, State> = {
   toState: (response: SqlExecutionResponse<ResponseColumnType>) => State;
 };
 
-const statementInsightsQuery: InsightQuery<
+const workloadInsightsQuery: InsightQuery<
   ExecutionInsightsResponseRow,
-  StatementInsights
+  TxnInsightEvent[]
 > = {
   name: InsightNameEnum.highContention,
   // We only surface the most recently observed problem for a given statement.
-  query: `SELECT *, prettify_statement(non_prettified_query, 108, 1, 1) AS query from (
+  // Note that we don't filter by problem != 'None', so that we can get all
+  // stmts in the problematic transaction.
+  query: `
+SELECT
+  session_id,
+  insights.txn_id as txn_id,
+  encode(txn_fingerprint_id, 'hex')  AS txn_fingerprint_id,
+  implicit_txn,
+  stmt_id,
+  encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
+  prettify_statement(query, 108, 1, 1) AS query,
+  start_time,
+  end_time,
+  full_scan,
+  app_name,
+  database_name,
+  user_name,
+  rows_read,
+  rows_written,
+  priority,
+  retries,
+  contention,
+  last_retry_reason,
+  index_recommendations,
+  problem,
+  causes,
+  plan_gist
+FROM
+  (
     SELECT
-      session_id,
-      txn_id,
-      encode(txn_fingerprint_id, 'hex')  AS txn_fingerprint_id,
-      implicit_txn,
-      stmt_id,
-      encode(stmt_fingerprint_id, 'hex') AS stmt_fingerprint_id,
-      query AS non_prettified_query,
-      start_time,
-      end_time,
-      full_scan,
-      app_name,
-      database_name,
-      user_name,
-      rows_read,
-      rows_written,
-      priority,
-      retries,
-      contention,
-      last_retry_reason,
-      index_recommendations,
-      problem,
-      causes,
-      plan_gist,
-      row_number()                          OVER (
-        PARTITION BY txn_fingerprint_id
-        ORDER BY end_time DESC
-      ) AS rank
+     txn_id,
+     row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time  ) as rank
     FROM crdb_internal.cluster_execution_insights
-    WHERE problem != 'None' AND app_name != '${INTERNAL_SQL_API_APP}'
-  ) WHERE rank = 1
-  `,
-  toState: getStatementInsightsFromClusterExecutionInsightsResponse,
+  ) as latestTxns
+JOIN crdb_internal.cluster_execution_insights AS insights
+ON latestTxns.txn_id = insights.txn_id
+WHERE latestTxns.rank = 1 AND app_name NOT LIKE '${INTERNAL_APP_NAME_PREFIX}%'
+ `,
+  toState: organizeExecutionInsightsResponseIntoTxns,
 };
 
-export function getStatementInsightsApi(): Promise<StatementInsights> {
+export type ExecutionInsights = TxnInsightEvent[];
+export function getClusterInsightsApi(): Promise<ExecutionInsights> {
   const request: SqlExecutionRequest = {
     statements: [
       {
-        sql: `${statementInsightsQuery.query}`,
+        sql: workloadInsightsQuery.query,
       },
     ],
     execute: true,
@@ -697,7 +691,7 @@ export function getStatementInsightsApi(): Promise<StatementInsights> {
   };
   return executeInternalSql<ExecutionInsightsResponseRow>(request).then(
     result => {
-      return statementInsightsQuery.toState(result);
+      return workloadInsightsQuery.toState(result);
     },
   );
 }

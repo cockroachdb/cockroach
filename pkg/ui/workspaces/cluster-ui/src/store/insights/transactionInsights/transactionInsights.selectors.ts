@@ -9,34 +9,21 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import {
-  adminUISelector,
-  localStorageSelector,
-} from "src/store/utils/selectors";
+import { AppState } from "src/store/reducers";
+import { selectTxnInsightsCombiner } from "src/selectors/insightsCommon.selectors";
+import { localStorageSelector } from "src/store/utils/selectors";
 
-const selectTransactionInsightsState = createSelector(
-  adminUISelector,
-  adminUiState => {
-    if (!adminUiState.transactionInsights) return null;
-    return adminUiState.transactionInsights;
-  },
-);
+const selectTransactionInsightsData = (state: AppState) =>
+  state.adminUI.transactionInsights.data;
 
 export const selectTransactionInsights = createSelector(
-  selectTransactionInsightsState,
-  txnInsightsState => {
-    if (!txnInsightsState) return [];
-    return txnInsightsState.data;
-  },
+  (state: AppState) => state.adminUI.executionInsights.data,
+  selectTransactionInsightsData,
+  selectTxnInsightsCombiner,
 );
 
-export const selectTransactionInsightsError = createSelector(
-  selectTransactionInsightsState,
-  txnInsightsState => {
-    if (!txnInsightsState) return null;
-    return txnInsightsState.lastError;
-  },
-);
+export const selectTransactionInsightsError = (state: AppState) =>
+  state.adminUI.transactionInsights?.lastError;
 
 export const selectSortSetting = createSelector(
   localStorageSelector,

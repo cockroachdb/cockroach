@@ -18,8 +18,8 @@ import "antd/lib/row/style";
 import { Button } from "src/button";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { getMatchParamByName } from "src/util/query";
-import { StatementInsightEvent } from "../types";
+import { getMatchParamByName, executionIdAttr } from "src/util";
+import { FlattenedStmtInsightEvent } from "../types";
 import { InsightsError } from "../insightsErrorComponent";
 import classNames from "classnames/bind";
 
@@ -39,7 +39,7 @@ enum TabKeysEnum {
   EXPLAIN = "explain",
 }
 export interface StatementInsightDetailsStateProps {
-  insightEventDetails: StatementInsightEvent;
+  insightEventDetails: FlattenedStmtInsightEvent;
   insightError: Error | null;
   isTenant?: boolean;
 }
@@ -98,7 +98,7 @@ export const StatementInsightDetails: React.FC<
     }
   };
 
-  const executionID = getMatchParamByName(match, "id");
+  const executionID = getMatchParamByName(match, executionIdAttr);
 
   useEffect(() => {
     if (insightEventDetails == null) {

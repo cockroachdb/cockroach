@@ -8,53 +8,54 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { combineReducers, createStore } from "redux";
 import { createAction, createReducer } from "@reduxjs/toolkit";
-import { LocalStorageState, reducer as localStorage } from "./localStorage";
-import {
-  StatementDiagnosticsState,
-  reducer as statementDiagnostics,
-} from "./statementDiagnostics";
-import { NodesState, reducer as nodes } from "./nodes";
-import { LivenessState, reducer as liveness } from "./liveness";
-import { SessionsState, reducer as sessions } from "./sessions";
-import {
-  TerminateQueryState,
-  reducer as terminateQuery,
-} from "./terminateQuery";
-import { UIConfigState, reducer as uiConfig } from "./uiConfig";
-import { DOMAIN_NAME } from "./utils";
-import { SQLStatsState, reducer as sqlStats } from "./sqlStats";
-import {
-  SQLDetailsStatsReducerState,
-  reducer as sqlDetailsStats,
-} from "./statementDetails";
-import {
-  IndexStatsReducerState,
-  reducer as indexStats,
-} from "./indexStats/indexStats.reducer";
-import { JobsState, reducer as jobs } from "./jobs";
-import { JobState, reducer as job } from "./jobDetails";
+import { combineReducers, createStore } from "redux";
+import { TxnInsightEvent } from "src/insights";
 import {
   ClusterLocksReqState,
   reducer as clusterLocks,
 } from "./clusterLocks/clusterLocks.reducer";
 import {
-  TransactionInsightsState,
-  reducer as transactionInsights,
-} from "./insights/transactionInsights";
+  IndexStatsReducerState,
+  reducer as indexStats,
+} from "./indexStats/indexStats.reducer";
 import {
-  StatementInsightsState,
-  reducer as statementInsights,
+  reducer as transactionInsightDetails,
+  TransactionInsightDetailsCachedState,
+} from "./insightDetails/transactionInsightDetails";
+import {
+  ExecutionInsightsState,
+  reducer as executionInsights,
 } from "./insights/statementInsights";
 import {
-  SchemaInsightsState,
-  reducer as schemaInsights,
-} from "./schemaInsights";
+  reducer as transactionInsights,
+  TransactionInsightsState,
+} from "./insights/transactionInsights";
+import { JobState, reducer as job } from "./jobDetails";
+import { JobsState, reducer as jobs } from "./jobs";
+import { LivenessState, reducer as liveness } from "./liveness";
+import { LocalStorageState, reducer as localStorage } from "./localStorage";
+import { NodesState, reducer as nodes } from "./nodes";
 import {
-  TransactionInsightDetailsState,
-  reducer as transactionInsightDetails,
-} from "./insightDetails/transactionInsightDetails";
+  reducer as schemaInsights,
+  SchemaInsightsState,
+} from "./schemaInsights";
+import { reducer as sessions, SessionsState } from "./sessions";
+import { reducer as sqlStats, SQLStatsState } from "./sqlStats";
+import {
+  reducer as sqlDetailsStats,
+  SQLDetailsStatsReducerState,
+} from "./statementDetails";
+import {
+  reducer as statementDiagnostics,
+  StatementDiagnosticsState,
+} from "./statementDiagnostics";
+import {
+  reducer as terminateQuery,
+  TerminateQueryState,
+} from "./terminateQuery";
+import { reducer as uiConfig, UIConfigState } from "./uiConfig";
+import { DOMAIN_NAME } from "./utils";
 
 export type AdminUiState = {
   statementDiagnostics: StatementDiagnosticsState;
@@ -71,8 +72,8 @@ export type AdminUiState = {
   job: JobState;
   clusterLocks: ClusterLocksReqState;
   transactionInsights: TransactionInsightsState;
-  transactionInsightDetails: TransactionInsightDetailsState;
-  statementInsights: StatementInsightsState;
+  transactionInsightDetails: TransactionInsightDetailsCachedState;
+  executionInsights: ExecutionInsightsState;
   schemaInsights: SchemaInsightsState;
 };
 
@@ -88,7 +89,7 @@ export const reducers = combineReducers<AdminUiState>({
   sessions,
   transactionInsights,
   transactionInsightDetails,
-  statementInsights,
+  executionInsights,
   terminateQuery,
   uiConfig,
   sqlStats,

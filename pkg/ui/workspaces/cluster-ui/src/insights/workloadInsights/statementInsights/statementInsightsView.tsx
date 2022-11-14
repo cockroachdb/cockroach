@@ -30,13 +30,12 @@ import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
-import { StatementInsights } from "src/api/insightsApi";
+import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
   filterStatementInsights,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
-  populateStatementInsightsFromProblemAndCauses,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
@@ -52,7 +51,7 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type StatementInsightsViewStateProps = {
-  statements: StatementInsights;
+  statements: FlattenedStmtInsights;
   statementsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
@@ -203,8 +202,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     search,
   );
 
-  const statementInsights =
-    populateStatementInsightsFromProblemAndCauses(filteredStatements);
   const tableColumns = defaultColumns
     .filter(c => !c.alwaysShow)
     .map(
@@ -253,21 +250,21 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
                 <TableStatistics
                   pagination={pagination}
                   search={search}
-                  totalCount={statementInsights?.length}
+                  totalCount={filteredStatements?.length}
                   arrayItemName="statement insights"
                   activeFilters={countActiveFilters}
                   onClearFilters={clearFilters}
                 />
               </div>
               <StatementInsightsTable
-                data={statementInsights}
+                data={filteredStatements}
                 sortSetting={sortSetting}
                 visibleColumns={visibleColumns}
                 onChangeSortSetting={onChangeSortSetting}
                 renderNoResult={
                   <EmptyInsightsTablePlaceholder
                     isEmptySearchResults={
-                      search?.length > 0 && statementInsights?.length === 0
+                      search?.length > 0 && filteredStatements?.length === 0
                     }
                   />
                 }
@@ -277,7 +274,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
             <Pagination
               pageSize={pagination.pageSize}
               current={pagination.current}
-              total={statementInsights?.length}
+              total={filteredStatements?.length}
               onChange={onChangePage}
             />
           </div>
