@@ -88,7 +88,6 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 			return base.CheckEnterpriseEnabled(
 				execCfg.Settings,
 				execCfg.NodeInfo.LogicalClusterID(),
-				execCfg.Organization(),
 				"global_reads",
 			)
 		},

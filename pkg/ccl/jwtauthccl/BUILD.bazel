@@ -15,7 +15,6 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
-        "//pkg/sql",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/identmap",
         "//pkg/util/log",

@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -186,8 +185,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 			"token issued with an audience of %s", parsedToken.Audience())
 	}
 
-	org := sql.ClusterOrganization.Get(&st.SV)
-	if err = utilccl.CheckEnterpriseEnabled(st, authenticator.clusterUUID, org, "JWT authentication"); err != nil {
+	if err = utilccl.CheckEnterpriseEnabled(st, authenticator.clusterUUID, "JWT authentication"); err != nil {
 		return err
 	}
 
