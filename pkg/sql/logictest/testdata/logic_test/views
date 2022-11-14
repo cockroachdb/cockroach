@@ -194,42 +194,42 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1                                   CREATE VIEW public.v1 (
-                                     a,
-                                     b
-) AS SELECT a, b FROM test.public.t
+v1  CREATE VIEW public.v1 (
+      a,
+      b
+    ) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2                                   CREATE VIEW public.v2 (
-                                     x,
-                                     y
-) AS SELECT a, b FROM test.public.t
+v2  CREATE VIEW public.v2 (
+      x,
+      y
+    ) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6                                    CREATE VIEW public.v6 (
-                                      x,
-                                      y
-) AS SELECT a, b FROM test.public.v1
+v6  CREATE VIEW public.v6 (
+      x,
+      y
+    ) AS SELECT a, b FROM test.public.v1
 
 query TT
 SHOW CREATE VIEW v7
 ----
-v7                                                            CREATE VIEW public.v7 (
-                                                              x,
-                                                              y
-) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
+v7  CREATE VIEW public.v7 (
+      x,
+      y
+    ) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.public.v1                       CREATE VIEW public.v1 (
-                                      x,
-                                      y
-) AS SELECT x, y FROM test.public.v2
+test2.public.v1  CREATE VIEW public.v1 (
+                   x,
+                   y
+                 ) AS SELECT x, y FROM test.public.v2
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -278,10 +278,10 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1                                   CREATE VIEW public.v1 (
-                                     a,
-                                     b
-) AS SELECT a, b FROM test.public.t
+v1  CREATE VIEW public.v1 (
+      a,
+      b
+    ) AS SELECT a, b FROM test.public.t
 
 user root
 
@@ -561,7 +561,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE w]
 ----
 CREATE VIEW public.w (
-                                                x
+  x
 ) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
 
 statement ok
@@ -571,7 +571,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE w2]
 ----
 CREATE VIEW public.w2 (
-                                                              x
+  x
 ) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
 
 statement ok
@@ -581,7 +581,7 @@ query T
 SELECT create_statement FROM [SHOW CREATE w3]
 ----
 CREATE VIEW public.w3 (
-                                                                x
+  x
 ) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)
 
 statement ok
@@ -1126,9 +1126,9 @@ ALTER TYPE view_typ RENAME TO view_typ_new
 query TT
 SHOW CREATE VIEW v10
 ----
-v10                                        CREATE VIEW public.v10 (
-                                           view_typ
-) AS SELECT 'a':::db2.public.view_typ_new
+v10  CREATE VIEW public.v10 (
+       view_typ
+     ) AS SELECT 'a':::db2.public.view_typ_new
 
 query T
 SELECT * FROM v10
@@ -1144,9 +1144,9 @@ ALTER TYPE view_typ_new RENAME TO view_typ
 query TT
 SHOW CREATE VIEW v11
 ----
-v11                                                                       CREATE VIEW public.v11 (
-                                                                          k
-) AS (SELECT 'a':::db2.public.view_typ < 'a':::db2.public.view_typ AS k)
+v11  CREATE VIEW public.v11 (
+       k
+     ) AS (SELECT 'a':::db2.public.view_typ < 'a':::db2.public.view_typ AS k)
 
 query B
 SELECT * FROM v11
@@ -1162,9 +1162,9 @@ ALTER TYPE view_typ RENAME TO view_type_new
 query TT
 SHOW CREATE VIEW v12
 ----
-v12                                                                CREATE VIEW public.v12 (
-                                                                   k
-) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k))
+v12  CREATE VIEW public.v12 (
+       k
+     ) AS (SELECT k FROM (SELECT 'a':::db2.public.view_type_new AS k))
 
 query T
 SELECT * FROM v12
@@ -1180,9 +1180,9 @@ ALTER TYPE view_type_new RENAME TO view_type
 query TT
 SHOW CREATE VIEW v13
 ----
-v13                                                                                    CREATE VIEW public.v13 (
-                                                                                       k
-) AS (SELECT 'a':::db2.public.view_type AS k UNION SELECT 'b':::db2.public.view_type)
+v13  CREATE VIEW public.v13 (
+       k
+     ) AS (SELECT 'a':::db2.public.view_type AS k UNION SELECT 'b':::db2.public.view_type)
 
 query T
 SELECT * FROM v13 ORDER BY k
@@ -1200,11 +1200,11 @@ query TT
 SHOW CREATE VIEW v14
 ----
 v14  CREATE VIEW public.v14 (
-     "array"
-) AS (
-     SELECT
-       ARRAY['a':::db2.public.view_type_new, 'b':::db2.public.view_type_new]:::db2.public.view_type_new[]
-  )
+       "array"
+     ) AS (
+         SELECT
+           ARRAY['a':::db2.public.view_type_new, 'b':::db2.public.view_type_new]:::db2.public.view_type_new[]
+       )
 
 query T
 SELECT * FROM v14
@@ -1221,11 +1221,11 @@ query TT
 SHOW CREATE VIEW v15
 ----
 v15  CREATE VIEW public.v15 (
-     view_type_new
-) AS (
-     SELECT
-       ARRAY['a':::db2.public.view_type, 'b':::db2.public.view_type][2:::INT8] AS view_type_new
-  )
+       view_type_new
+     ) AS (
+         SELECT
+           ARRAY['a':::db2.public.view_type, 'b':::db2.public.view_type][2:::INT8] AS view_type_new
+       )
 
 query T
 SELECT * FROM v15
@@ -1279,10 +1279,10 @@ CREATE MATERIALIZED VIEW li AS (SELECT 1 AS test_t1);
 query TT
 SHOW CREATE VIEW li
 ----
-li                          CREATE MATERIALIZED VIEW public.li (
-                                                    test_t1,
-                                                    rowid
-                        ) AS (SELECT 1 AS test_t1)
+li  CREATE MATERIALIZED VIEW public.li (
+      test_t1,
+      rowid
+    ) AS (SELECT 1 AS test_t1)
 
 statement ok
 CREATE TABLE test_view (a INT PRIMARY KEY, b INT)
