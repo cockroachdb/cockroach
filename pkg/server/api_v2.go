@@ -44,7 +44,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -82,7 +81,6 @@ type apiV2ServerOpts struct {
 	admin            *adminServer
 	status           *statusServer
 	promRuleExporter *metric.PrometheusRuleExporter
-	tenantID         roachpb.TenantID
 	sqlServer        *SQLServer
 	db               *kv.DB
 }
@@ -100,7 +98,6 @@ type apiV2Server struct {
 	status           *statusServer
 	promRuleExporter *metric.PrometheusRuleExporter
 	mux              *mux.Router
-	tenantID         roachpb.TenantID
 	sqlServer        *SQLServer
 	db               *kv.DB
 }
