@@ -49,7 +49,10 @@ import (
 func TestExternalSortMemoryAccounting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.WithIssue(t, 91850) // flaky test
 	skip.UnderStress(t, "the test is very memory-intensive and is likely to OOM under stress")
+
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
