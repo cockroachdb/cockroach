@@ -675,12 +675,32 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 	// Validate mutations and exit early if any of these are deeply corrupted.
 	{
+		var mutationIDs util.FastIntSet
 		mutationsHaveErrs := false
 		for _, m := range desc.Mutations {
+			mutationIDs.Add(int(m.MutationID))
 			if err := validateMutation(&m); err != nil {
 				vea.Report(err)
 				mutationsHaveErrs = true
 			}
+		}
+		// Check that job IDs are uniquely mapped to mutation IDs in the
+		// MutationJobs slice.
+		jobIDs := make(map[descpb.MutationID]catpb.JobID)
+		for _, mj := range desc.MutationJobs {
+			if !mutationIDs.Contains(int(mj.MutationID)) {
+				vea.Report(errors.AssertionFailedf("unknown mutation ID %d associated with job ID %d",
+					mj.MutationID, mj.JobID))
+				mutationsHaveErrs = true
+				continue
+			}
+			if jobID, found := jobIDs[mj.MutationID]; found {
+				vea.Report(errors.AssertionFailedf("two job IDs %d and %d mapped to the same mutation ID %d",
+					jobID, mj.JobID, mj.MutationID))
+				mutationsHaveErrs = true
+				continue
+			}
+			jobIDs[mj.MutationID] = mj.JobID
 		}
 		if mutationsHaveErrs {
 			return
