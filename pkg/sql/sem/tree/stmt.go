@@ -963,6 +963,15 @@ func (*DropSchema) StatementType() StatementType { return TypeDDL }
 func (*DropSchema) StatementTag() string { return "DROP SCHEMA" }
 
 // StatementReturnType implements the Statement interface.
+func (*DropTenant) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*DropTenant) StatementType() StatementType { return TypeDDL }
+
+// StatementTag implements the Statement interface.
+func (*DropTenant) StatementTag() string { return "DROP TENANT" }
+
+// StatementReturnType implements the Statement interface.
 func (*Execute) StatementReturnType() StatementReturnType { return Unknown }
 
 // StatementType implements the Statement interface.
@@ -2088,6 +2097,7 @@ func (n *DropTable) String() string                           { return AsString(
 func (n *DropType) String() string                            { return AsString(n) }
 func (n *DropView) String() string                            { return AsString(n) }
 func (n *DropRole) String() string                            { return AsString(n) }
+func (n *DropTenant) String() string                          { return AsString(n) }
 func (n *Execute) String() string                             { return AsString(n) }
 func (n *Explain) String() string                             { return AsString(n) }
 func (n *ExplainAnalyze) String() string                      { return AsString(n) }

@@ -1139,6 +1139,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> drop_view_stmt
 %type <tree.Statement> drop_sequence_stmt
 %type <tree.Statement> drop_func_stmt
+%type <tree.Statement> drop_tenant_stmt
 
 %type <tree.Statement> analyze_stmt
 %type <tree.Statement> explain_stmt
@@ -4909,6 +4910,7 @@ drop_stmt:
 | drop_role_stmt     // EXTEND WITH HELP: DROP ROLE
 | drop_schedule_stmt // EXTEND WITH HELP: DROP SCHEDULES
 | drop_external_connection_stmt // EXTEND WITH HELP: DROP EXTERNAL CONNECTION
+| drop_tenant_stmt              // EXTEND WITH HELP: DROP TENANT
 | drop_unsupported   {}
 | DROP error         // SHOW HELP: DROP
 
@@ -5054,6 +5056,26 @@ drop_type_stmt:
     }
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
+
+// %Help: DROP TENANT - remove a tenant
+// %Category: DDL
+// %Text: DROP TENANT [IF EXISTS] <name>
+drop_tenant_stmt:
+  DROP TENANT name
+  {
+    $$.val = &tree.DropTenant{
+      Name: tree.Name($3),
+      IfExists: false,
+    }
+  }
+| DROP TENANT IF EXISTS name
+  {
+    $$.val = &tree.DropTenant{
+      Name: tree.Name($5),
+      IfExists: true,
+    }
+  }
+| DROP TENANT error // SHOW HELP: DROP TENANT
 
 target_types:
   type_name_list

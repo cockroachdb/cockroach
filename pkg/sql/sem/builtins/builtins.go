@@ -4936,7 +4936,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				if err := evalCtx.Tenant.DestroyTenant(
+				if err := evalCtx.Tenant.DestroyTenantByID(
 					ctx, uint64(sTenID), false, /* synchronous */
 				); err != nil {
 					return nil, err
@@ -4958,7 +4958,7 @@ value if you rely on the HLC for accuracy.`,
 					return nil, err
 				}
 				synchronous := tree.MustBeDBool(args[1])
-				if err := evalCtx.Tenant.DestroyTenant(
+				if err := evalCtx.Tenant.DestroyTenantByID(
 					ctx, uint64(sTenID), bool(synchronous),
 				); err != nil {
 					return nil, err

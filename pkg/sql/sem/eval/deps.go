@@ -565,10 +565,15 @@ type TenantOperator interface {
 	// the tenant does not exist or the name is already taken.
 	RenameTenant(ctx context.Context, tenantID uint64, tenantName roachpb.TenantName) error
 
+	// DestroyTenantByID attempts to uninstall an existing tenant from the system.
+	// It returns an error if the tenant does not exist. If synchronous is true
+	// the gc job will not wait for a GC ttl.
+	DestroyTenantByID(ctx context.Context, tenantID uint64, synchronous bool) error
+
 	// DestroyTenant attempts to uninstall an existing tenant from the system.
 	// It returns an error if the tenant does not exist. If synchronous is true
 	// the gc job will not wait for a GC ttl.
-	DestroyTenant(ctx context.Context, tenantID uint64, synchronous bool) error
+	DestroyTenant(ctx context.Context, tenantName roachpb.TenantName, synchronous bool) error
 
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.

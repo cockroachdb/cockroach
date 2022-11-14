@@ -45,3 +45,54 @@ user testuser
 
 statement error only users with the admin role are allowed to create tenant
 CREATE TENANT "not-allowed"
+
+subtest drop_tenant
+user root
+
+statement error destroying tenant: tenant "dne" does not exist
+DROP TENANT dne
+
+statement ok
+DROP TENANT IF EXISTS dne
+
+statement ok
+CREATE TENANT four
+
+query IBTT colnames
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+FROM system.tenants WHERE name = 'four'
+ORDER BY id
+----
+id  active  name          crdb_internal.pb_to_json
+5   true    four         {"id": "5", "name": "four", "state": "ACTIVE"}
+
+statement ok
+DROP TENANT four
+
+query IBTT colnames
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+FROM system.tenants WHERE name = 'four'
+ORDER BY id
+----
+id  active  name          crdb_internal.pb_to_json
+5   false    four         {"id": "5", "name": "four", "state": "DROP"}
+
+statement ok
+CREATE TENANT "five-requiring-quotes"
+
+statement ok
+DROP TENANT "five-requiring-quotes"
+
+statement ok
+set default_transaction_read_only = on;
+
+statement error cannot execute DROP TENANT in a read-only transaction
+DROP TENANT four;
+
+statement ok
+set default_transaction_read_only = off;
+
+user testuser
+
+statement error only users with the admin role are allowed to destroy tenant
+DROP TENANT "not-allowed"

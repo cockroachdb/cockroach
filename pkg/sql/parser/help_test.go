@@ -213,6 +213,10 @@ func TestContextualHelp(t *testing.T) {
 
 		{`DROP SCHEMA ??`, `DROP SCHEMA`},
 
+		{`DROP TENANT ??`, `DROP TENANT`},
+		{`DROP TENANT IF ??`, `DROP TENANT`},
+		{`DROP TENANT IF EXISTS ??`, `DROP TENANT`},
+
 		{`EXPLAIN (??`, `EXPLAIN`},
 		{`EXPLAIN SELECT 1 ??`, `SELECT`},
 		{`EXPLAIN INSERT INTO xx (SELECT 1) ??`, `INSERT`},
