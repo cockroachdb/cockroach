@@ -100,8 +100,6 @@ func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	skip.WithIssue(t, 91858) // flaky test
-
 	skip.UnderRace(t, "the test is too slow and the goodness of fit test "+
 		"assumes large N")
 	params := base.TestServerArgs{}
@@ -121,24 +119,48 @@ CREATE TABLE t (
 
 	numberOfRows := 10000
 
-	// Enforce 3 bits worth of range splits in the high order to collect range
-	// statistics after row insertions.
+	// Insert rows.
 	tdb.Exec(t, fmt.Sprintf(`
-ALTER TABLE t SPLIT AT SELECT i<<(60) FROM generate_series(1, 7) as t(i);
 INSERT INTO t(j) SELECT * FROM generate_series(1, %d);
 `, numberOfRows))
 
-	// Derive range statistics.
+	// Build an equi-width histogram over the key range. The below query will
+	// generate the key bounds for each high-order bit pattern as defined by
+	// prefixBits. For example, if this were 3, we'd get the following groups:
+	//
+	//            low         |        high
+	//  ----------------------+----------------------
+	//                      0 | 2305843009213693952
+	//    2305843009213693952 | 4611686018427387904
+	//    4611686018427387904 | 6917529027641081856
+	//    6917529027641081856 | 9223372036854775807
+	//
+	const prefixBits = 4
 	var keyCounts pq.Int64Array
-	tdb.QueryRow(t, "SELECT "+
-		"array_agg((crdb_internal.range_stats(start_key)->>'key_count')::int) AS rows "+
-		"FROM crdb_internal.ranges_no_leases WHERE table_id"+
-		"='t'::regclass;").Scan(&keyCounts)
+	tdb.QueryRow(t, `
+  WITH boundaries AS (
+                     SELECT i << (64 - $1) AS p FROM ROWS FROM (generate_series(0, (1<<($1-1)) -1)) AS t (i)
+                     UNION ALL SELECT (((1 << 62) - 1) << 1)+1 -- int63 max value
+                  ),
+       groups AS (
+                SELECT *
+                  FROM (SELECT p AS low, lead(p) OVER () AS high FROM boundaries)
+                 WHERE high IS NOT NULL
+              ),
+       counts AS (
+                  SELECT count(i) AS c
+                    FROM t, groups
+                   WHERE low <= i AND high > i
+                GROUP BY (low, high)
+              )
+SELECT array_agg(c)
+  FROM counts;`, prefixBits).Scan(&keyCounts)
 
 	t.Log("Key counts in each split range")
 	for i, keyCount := range keyCounts {
 		t.Logf("range %d: %d\n", i, keyCount)
 	}
+	require.Len(t, keyCounts, 1<<(prefixBits-1))
 
 	// To check that the distribution over ranges is not uniform, we use a
 	// chi-square goodness of fit statistic. We'll set our null hypothesis as
