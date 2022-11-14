@@ -42,6 +42,7 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/testutils/skip",
         "//pkg/util/leaktest",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_redact//:redact",

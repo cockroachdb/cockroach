@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
 	"github.com/dustin/go-humanize"
@@ -29,6 +30,7 @@ func TestVersionsAreValid(t *testing.T) {
 // TestPreserveVersionsForMinBinaryVersion ensures that versions
 // at or above binaryMinSupportedVersion are not deleted.
 func TestPreserveVersionsForMinBinaryVersion(t *testing.T) {
+	skip.IgnoreLint(t, "suppress lint while removing 22.2 gates")
 	defer leaktest.AfterTest(t)()
 
 	prevVersion := keyedVersion{
