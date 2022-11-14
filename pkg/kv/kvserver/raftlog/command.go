@@ -54,7 +54,7 @@ func (c *ReplicatedCmdBase) Decode(e *raftpb.Entry) error {
 	var err error
 	c.Entry, err = NewEntry(*e)
 	if err != nil {
-		return kvserverbase.NonDeterministicFailureErrorWrapf(err, "while decoding raft entry")
+		return kvserverbase.NonDeterministicErrorWrapf(err, "while decoding raft entry")
 	}
 	return nil
 }

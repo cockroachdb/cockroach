@@ -18,53 +18,53 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// NonDeterministicFailureError is an error type that indicates that a state machine
+// NonDeterministicError is an error type that indicates that a state machine
 // transition failed due to an unexpected error. Failure to perform a state
 // transition is a form of non-determinism, so it can't be permitted for any
 // reason during the application phase of state machine replication. The only
 // acceptable recourse is to signal that the replica has become corrupted.
 //
-// All errors returned by replicaDecoder and replicaStateMachine will be instances
-// of this type.
-type NonDeterministicFailureError struct {
+// Many errors returned by `apply.Decoder` and apply.StateMachine implementations
+// will be instances of this type.
+type NonDeterministicError struct {
 	wrapped error
 	expl    redact.RedactableString
 }
 
-// NewNonDeterministicFailureErrorf creates a NonDeterministicFailureError.
-func NewNonDeterministicFailureErrorf(format string, args ...interface{}) error {
+// NonDeterministicErrorf creates a NonDeterministicError.
+func NonDeterministicErrorf(format string, args ...interface{}) error {
 	err := errors.AssertionFailedWithDepthf(1, format, args...)
-	return &NonDeterministicFailureError{
+	return &NonDeterministicError{
 		wrapped: err,
 		expl:    redact.Sprintf(format, args...),
 	}
 }
 
-// NonDeterministicFailureErrorWrapf wraps the provided error with a NonDeterministicFailureError.
-func NonDeterministicFailureErrorWrapf(err error, format string, args ...interface{}) error {
-	return &NonDeterministicFailureError{
+// NonDeterministicErrorWrapf wraps the provided error with a NonDeterministicError.
+func NonDeterministicErrorWrapf(err error, format string, args ...interface{}) error {
+	return &NonDeterministicError{
 		wrapped: errors.Wrapf(err, format, args...),
 		expl:    redact.Sprintf(format, args...),
 	}
 }
 
 // Error implements the error interface.
-func (e *NonDeterministicFailureError) Error() string {
+func (e *NonDeterministicError) Error() string {
 	return fmt.Sprintf("non-deterministic failure: %s", e.wrapped.Error())
 }
 
 // Cause implements the github.com/pkg/errors.causer interface.
-func (e *NonDeterministicFailureError) Cause() error { return e.wrapped }
+func (e *NonDeterministicError) Cause() error { return e.wrapped }
 
 // Unwrap implements the github.com/golang/xerrors.Wrapper interface, which is
 // planned to be moved to the stdlib in go 1.13.
-func (e *NonDeterministicFailureError) Unwrap() error { return e.wrapped }
+func (e *NonDeterministicError) Unwrap() error { return e.wrapped }
 
 // GetRedactedNonDeterministicFailureExplanation loads message from the first wrapped
-// NonDeterministicFailureError, if any. The returned message is *redacted*,
+// NonDeterministicError, if any. The returned message is *redacted*,
 // i.e. contains no sensitive information.
 func GetRedactedNonDeterministicFailureExplanation(err error) redact.RedactableString {
-	if nd := (*NonDeterministicFailureError)(nil); errors.As(err, &nd) {
+	if nd := (*NonDeterministicError)(nil); errors.As(err, &nd) {
 		return nd.expl.Redact()
 	}
 	return "???"

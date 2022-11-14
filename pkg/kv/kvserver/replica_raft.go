@@ -833,7 +833,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// If we didn't expect Raft to have a snapshot but it has one
 		// regardless, that is unexpected and indicates a programming
 		// error.
-		err := kvserverbase.NewNonDeterministicFailureErrorf(
+		err := kvserverbase.NonDeterministicErrorf(
 			"have inSnap=nil, but raft has a snapshot %s",
 			raft.DescribeSnapshot(rd.Snapshot),
 		)
