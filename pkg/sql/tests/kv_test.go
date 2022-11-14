@@ -34,7 +34,7 @@ type kvInterface interface {
 	Delete(rows, run int) error
 	Scan(rows, run int) error
 
-	prep(rows int) error
+	prep(rows, rowsDuringRun int) error
 	done()
 }
 
@@ -122,7 +122,7 @@ func (kv *kvNative) Scan(rows, run int) error {
 	return err
 }
 
-func (kv *kvNative) prep(rows int) error {
+func (kv *kvNative) prep(rows, rowsDuringRun int) error {
 	kv.epoch++
 	kv.prefix = fmt.Sprintf("%d/", kv.epoch)
 	if rows == 0 {
@@ -145,6 +145,7 @@ func (kv *kvNative) done() {
 // kvSQL is a SQL-based implementation of the KV interface.
 type kvSQL struct {
 	db     *gosql.DB
+	insert *gosql.Stmt
 	buf    bytes.Buffer
 	doneFn func()
 }
@@ -166,15 +167,12 @@ func newKVSQL(b *testing.B) kvInterface {
 
 func (kv *kvSQL) Insert(rows, run int) error {
 	firstRow := rows * run
-	defer kv.buf.Reset()
-	kv.buf.WriteString(`INSERT INTO bench.kv VALUES `)
+	args := make([]interface{}, 2*rows)
 	for i := 0; i < rows; i++ {
-		if i > 0 {
-			kv.buf.WriteString(", ")
-		}
-		fmt.Fprintf(&kv.buf, "('%08d', %d)", i+firstRow, i)
+		args[2*i] = i + firstRow
+		args[2*i+1] = val
 	}
-	_, err := kv.db.Exec(kv.buf.String())
+	_, err := kv.insert.Exec(args...)
 	return err
 }
 
@@ -242,31 +240,53 @@ func (kv *kvSQL) Scan(count, run int) error {
 	return nil
 }
 
-func (kv *kvSQL) prep(rows int) error {
+var val = func() []byte {
+	v := make([]byte, 1<<18)
+	rand.Read(v)
+	return v
+}()
+
+func (kv *kvSQL) prep(rows, rowsDuringRun int) error {
+	defer kv.buf.Reset()
 	if _, err := kv.db.Exec(`DROP TABLE IF EXISTS bench.kv`); err != nil {
 		return err
 	}
 	schema := `
 CREATE TABLE IF NOT EXISTS bench.kv (
   k STRING PRIMARY KEY,
-  v INT,
+  v BYTES,
   FAMILY (k, v)
 )
 `
 	if _, err := kv.db.Exec(schema); err != nil {
 		return err
 	}
+	{
+		kv.buf.Reset()
+		kv.buf.WriteString(`INSERT INTO bench.kv VALUES `)
+		for i := 0; i < rowsDuringRun; i++ {
+			if i > 0 {
+				kv.buf.WriteString(", ")
+			}
+			fmt.Fprintf(&kv.buf, "($%d, $%d)", 2*i+1, 2*i+2)
+		}
+		stmt, err := kv.db.Prepare(kv.buf.String())
+		if err != nil {
+			return err
+		}
+		kv.insert = stmt
+	}
 	if rows == 0 {
 		return nil
 	}
-	defer kv.buf.Reset()
+	kv.buf.Reset()
 	kv.buf.WriteString(`INSERT INTO bench.kv VALUES `)
 	numRowsInBatch := 0
 	for i := 0; i < rows; i++ {
 		if numRowsInBatch > 0 {
 			kv.buf.WriteString(", ")
 		}
-		fmt.Fprintf(&kv.buf, "('%08d', %d)", i, i)
+		fmt.Fprintf(&kv.buf, "('%08d', '%s')", i, val)
 		numRowsInBatch++
 		// Break initial inserts into batches of 1000 rows, since some tests can
 		// overflow the batch limits.
@@ -331,7 +351,7 @@ func BenchmarkKV(b *testing.B) {
 								b.Fatal("unexpected op")
 							}
 
-							if err := kv.prep(prepRows); err != nil {
+							if err := kv.prep(prepRows, rows); err != nil {
 								b.Fatal(err)
 							}
 							b.ResetTimer()
@@ -422,7 +442,7 @@ func BenchmarkKVAndStorageUsingSQL(b *testing.B) {
 			// more keys, resulting in more files in the engine, which makes it
 			// slower.
 			rowsToInit := b.N * rowsToUpdate
-			if err := kv.prep(rowsToInit); err != nil {
+			if err := kv.prep(rowsToInit, rowsToUpdate); err != nil {
 				b.Fatal(err)
 			}
 			b.ResetTimer()
