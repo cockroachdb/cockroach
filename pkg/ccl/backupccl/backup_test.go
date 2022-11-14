@@ -8722,6 +8722,76 @@ func TestRestorePauseOnError(t *testing.T) {
 	}
 }
 
+// Test to verify that BACKUP jobs self pause on error when given the
+// DEBUG_PAUSE_ON = 'error' option.
+func TestBackupPauseOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer jobs.TestingSetProgressThresholds()()
+
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
+		ExternalIODir: "testdata",
+		Knobs:         base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}}
+	tc, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, 1,
+		InitManualReplication, params)
+	defer cleanupFn()
+
+	var forceFailure bool
+	for i := range tc.Servers {
+		jobRegistry := tc.Servers[i].JobRegistry()
+		if tc.StartedDefaultTestTenant() {
+			jobRegistry = tc.Servers[i].TestTenants()[0].JobRegistry()
+		}
+
+		jobRegistry.(*jobs.Registry).TestingResumerCreationKnobs = map[jobspb.Type]func(raw jobs.Resumer) jobs.Resumer{
+			jobspb.TypeBackup: func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*backupResumer)
+				r.testingKnobs.onDoResume = func(_ context.Context) error {
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			},
+		}
+	}
+
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	sqlDB.Exec(t, `CREATE TABLE r1.foo (id INT)`)
+
+	backupQuery := `BACKUP DATABASE r1 TO 'nodelocal://0/testbackup' WITH debug_pause_on = 'error'`
+	findJobQuery := `SELECT job_id FROM [SHOW JOBS] WHERE description LIKE '%BACKUP DATABASE%' ORDER BY created DESC`
+
+	// Verify that a BACKUP job will self pause on an error, but can be resumed
+	// after the source of error is fixed.
+	{
+		var jobID int64
+		forceFailure = true
+		sqlDB.QueryRow(t, backupQuery)
+		sqlDB.QueryRow(t, findJobQuery).Scan(&jobID)
+		require.NoError(t, waitForStatus(t, sqlDB, jobID, jobs.StatusPaused))
+
+		forceFailure = false
+		sqlDB.Exec(t, "RESUME JOB $1", jobID)
+		require.NoError(t, waitForStatus(t, sqlDB, jobID, jobs.StatusSucceeded))
+	}
+
+	// Verify that a BACKUP job will self pause on an error and can be canceled.
+	{
+		var jobID int64
+		forceFailure = true
+		sqlDB.QueryRow(t, backupQuery)
+		sqlDB.QueryRow(t, findJobQuery).Scan(&jobID)
+		require.NoError(t, waitForStatus(t, sqlDB, jobID, jobs.StatusPaused))
+
+		sqlDB.Exec(t, "CANCEL JOB $1", jobID)
+		require.NoError(t, waitForStatus(t, sqlDB, jobID, jobs.StatusCanceled))
+
+	}
+}
+
 // TestDroppedDescriptorRevisionAndSystemDBIDClash is a regression test for a
 // discrepancy in the descriptor resolution logic during restore planning and
 // execution.

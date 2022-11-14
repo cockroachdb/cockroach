@@ -762,6 +762,22 @@ BACKUP TABLE foo TO '_' WITH revision_history = $1, detached -- literals removed
 BACKUP TABLE _ TO 'bar' WITH revision_history = $1, detached -- identifiers removed
 
 parse
+BACKUP TABLE foo TO 'bar' WITH debug_pause_on = $1, detached
+----
+BACKUP TABLE foo TO 'bar' WITH detached, debug_pause_on = $1 -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH detached, debug_pause_on = ($1) -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH detached, debug_pause_on = $1 -- literals removed
+BACKUP TABLE _ TO 'bar' WITH detached, debug_pause_on = $1 -- identifiers removed
+
+parse
+BACKUP TABLE foo TO 'bar' WITH debug_pause_on = 'error', detached
+----
+BACKUP TABLE foo TO 'bar' WITH detached, debug_pause_on = 'error' -- normalized!
+BACKUP TABLE (foo) TO ('bar') WITH detached, debug_pause_on = ('error') -- fully parenthesized
+BACKUP TABLE foo TO '_' WITH detached, debug_pause_on = '_' -- literals removed
+BACKUP TABLE _ TO 'bar' WITH detached, debug_pause_on = 'error' -- identifiers removed
+
+parse
 RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached
 ----
 RESTORE TABLE foo FROM 'bar' WITH skip_missing_foreign_keys, skip_missing_sequences, detached

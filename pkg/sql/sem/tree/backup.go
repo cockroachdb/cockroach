@@ -42,6 +42,7 @@ const (
 type BackupOptions struct {
 	CaptureRevisionHistory Expr
 	EncryptionPassphrase   Expr
+	DebugPauseOn           Expr
 	Detached               *DBool
 	EncryptionKMSURI       StringOrPlaceholderOptList
 	IncrementalStorage     StringOrPlaceholderOptList
@@ -288,6 +289,12 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("incremental_location = ")
 		ctx.FormatNode(&o.IncrementalStorage)
 	}
+
+	if o.DebugPauseOn != nil {
+		maybeAddSep()
+		ctx.WriteString("debug_pause_on = ")
+		ctx.FormatNode(o.DebugPauseOn)
+	}
 }
 
 // CombineWith merges other backup options into this backup options struct.
@@ -327,6 +334,12 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("incremental_location option specified multiple times")
 	}
 
+	if o.DebugPauseOn == nil {
+		o.DebugPauseOn = other.DebugPauseOn
+	} else if other.DebugPauseOn != nil {
+		return errors.New("debug_pause_on specified multiple times")
+	}
+
 	return nil
 }
 
@@ -336,6 +349,7 @@ func (o BackupOptions) IsDefault() bool {
 	return o.CaptureRevisionHistory == options.CaptureRevisionHistory &&
 		o.Detached == options.Detached && cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
+		o.DebugPauseOn == options.DebugPauseOn &&
 		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage)
 }
 

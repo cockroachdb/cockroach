@@ -26,6 +26,7 @@ go_library(
         "restore_span_covering.go",
         "schedule_exec.go",
         "schedule_pts_chaining.go",
+        "shared_options.go",
         "show.go",
         "split_and_scatter_processor.go",
         "system_schema.go",

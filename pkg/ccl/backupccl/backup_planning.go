@@ -66,6 +66,7 @@ const (
 	backupOptDebugMetadataSST = "debug_dump_metadata_sst"
 	backupOptEncDir           = "encryption_info_dir"
 	backupOptCheckFiles       = "check_files"
+
 	// backupPartitionDescriptorPrefix is the file name prefix for serialized
 	// BackupPartitionDescriptor protos.
 	backupPartitionDescriptorPrefix = "BACKUP_PART"
@@ -643,6 +644,19 @@ func backupPlanHook(
 				" aware URIs as the full backup destination")
 		}
 
+		var debugPauseOn string
+		if backupStmt.Options.DebugPauseOn != nil {
+			var err error
+			debugPauseOn, err = exprEval.String(ctx, backupStmt.Options.DebugPauseOn)
+			if err != nil {
+				return err
+			}
+
+			if err := validateDebugPauseOn(debugPauseOn); err != nil {
+				return err
+			}
+		}
+
 		var asOfInterval int64
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
@@ -712,6 +726,7 @@ func backupPlanHook(
 			AsOfInterval:        asOfInterval,
 			Detached:            detached,
 			ApplicationName:     p.SessionData().ApplicationName,
+			DebugPauseOn:        debugPauseOn,
 		}
 		if backupStmt.CreatedByInfo != nil && backupStmt.CreatedByInfo.Name == jobs.CreatedByScheduledJobs {
 			initialDetails.ScheduleID = backupStmt.CreatedByInfo.ID

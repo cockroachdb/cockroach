@@ -74,17 +74,12 @@ const (
 	restoreOptSkipMissingSequenceOwners = "skip_missing_sequence_owners"
 	restoreOptSkipMissingViews          = "skip_missing_views"
 	restoreOptSkipLocalitiesCheck       = "skip_localities_check"
-	restoreOptDebugPauseOn              = "debug_pause_on"
 	restoreOptAsTenant                  = "tenant"
 
 	// The temporary database system tables will be restored into for full
 	// cluster backups.
 	restoreTempSystemDB = "crdb_temp_system"
 )
-
-var allowedDebugPauseOnValues = map[string]struct{}{
-	"error": {},
-}
 
 // featureRestoreEnabled is used to enable and disable the RESTORE feature.
 var featureRestoreEnabled = settings.RegisterBoolSetting(
@@ -1681,8 +1676,8 @@ func doRestorePlan(
 			return err
 		}
 
-		if _, ok := allowedDebugPauseOnValues[debugPauseOn]; len(debugPauseOn) > 0 && !ok {
-			return errors.Newf("%s cannot be set with the value %s", restoreOptDebugPauseOn, debugPauseOn)
+		if err := validateDebugPauseOn(debugPauseOn); err != nil {
+			return err
 		}
 	}
 

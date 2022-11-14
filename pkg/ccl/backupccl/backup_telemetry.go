@@ -168,6 +168,7 @@ func createBackupRecoveryEvent(
 		AsOfInterval:            initialDetails.AsOfInterval,
 		Options:                 options,
 		ApplicationName:         initialDetails.ApplicationName,
+		DebugPauseOn:            initialDetails.DebugPauseOn,
 	}
 
 	event.DestinationAuthTypes = make([]string, 0, len(authTypes))

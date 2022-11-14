@@ -3161,7 +3161,7 @@ backup_options:
   }
 | REVISION_HISTORY '=' a_expr
   {
-		$$.val = &tree.BackupOptions{CaptureRevisionHistory: $3.expr()}
+    $$.val = &tree.BackupOptions{CaptureRevisionHistory: $3.expr()}
   }
 | DETACHED
   {
@@ -3169,7 +3169,7 @@ backup_options:
   }
 | DETACHED '=' TRUE
   {
-		$$.val = &tree.BackupOptions{Detached: tree.MakeDBool(true)}
+    $$.val = &tree.BackupOptions{Detached: tree.MakeDBool(true)}
   }
 | DETACHED '=' FALSE
   {
@@ -3181,9 +3181,12 @@ backup_options:
   }
 | INCREMENTAL_LOCATION '=' string_or_placeholder_opt_list
   {
-  $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
+    $$.val = &tree.BackupOptions{IncrementalStorage: $3.stringOrPlaceholderOptList()}
   }
-
+| DEBUG_PAUSE_ON '=' string_or_placeholder
+  {
+    $$.val = &tree.BackupOptions{DebugPauseOn: $3.expr()}
+  }
 
 // %Help: CREATE SCHEDULE FOR BACKUP - backup data periodically
 // %Category: CCL

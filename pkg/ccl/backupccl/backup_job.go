@@ -391,6 +391,7 @@ type backupResumer struct {
 	backupStats roachpb.RowCount
 
 	testingKnobs struct {
+		onDoResume                func(context.Context) error
 		ignoreProtectedTimestamps bool
 	}
 }
@@ -404,6 +405,19 @@ func (b *backupResumer) ForceRealSpan() bool {
 
 // Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
+	if err := b.doResume(ctx, execCtx); err != nil {
+		details := b.job.Details().(jobspb.BackupDetails)
+		return errorForDebugPauseOnValue(ctx, details.DebugPauseOn, err)
+	}
+	return nil
+}
+
+func (b *backupResumer) doResume(ctx context.Context, execCtx interface{}) error {
+	if b.testingKnobs.onDoResume != nil {
+		if err := b.testingKnobs.onDoResume(ctx); err != nil {
+			return err
+		}
+	}
 	// The span is finished by the registry executing the job.
 	details := b.job.Details().(jobspb.BackupDetails)
 	p := execCtx.(sql.JobExecContext)
@@ -667,15 +681,8 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			return errors.Wrap(reloadBackupErr, "could not reload backup manifest when retrying")
 		}
 	}
-
-	// We have exhausted retries, but we have not seen a "PermanentBulkJobError" so
-	// it is possible that this is a transient error that is taking longer than
-	// our configured retry to go away.
-	//
-	// Let's pause the job instead of failing it so that the user can decide
-	// whether to resume it or cancel it.
 	if err != nil {
-		return jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
+		return errors.Wrap(err, "exhausted retries")
 	}
 
 	var backupDetails jobspb.BackupDetails

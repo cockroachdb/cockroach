@@ -76,16 +76,16 @@ message StreamIngestionDetails {
   // StreamAddress locates the stream. It enables the client to find the
   // addresses of the stream's partitions.
   string stream_address = 1;
-  
+
   uint64 stream_id = 4 [(gogoproto.customname) = "StreamID"];
-  
+
   // Span is the keyspan into which this job will ingest KVs.
   //
   // The stream should emit all changes for a given span, and no changes outside
   // a span. Note that KVs received from the stream may need to be re-keyed into
   // this span.
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
-  
+
   reserved 5;
   roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
 
@@ -264,6 +264,10 @@ message BackupDetails {
   // ApplicationName is the application name in the session where the backup was
   // invoked.
   string application_name = 23;
+
+  // DebugPauseOn describes the events that the job should pause
+  // itself on for debugging purposes.
+  string debug_pause_on = 24;
 }
 
 message BackupProgress {
@@ -271,7 +275,7 @@ message BackupProgress {
 }
 
 // DescriptorRewrite specifies a remapping from one descriptor ID to another for
-// use in rewritting descriptors themselves or things that reference them such 
+// use in rewritting descriptors themselves or things that reference them such
 // as is done during RESTORE or IMPORT.
 message DescriptorRewrite {
   uint32 id = 1 [

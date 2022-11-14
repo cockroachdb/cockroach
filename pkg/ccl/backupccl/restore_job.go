@@ -1418,15 +1418,7 @@ func remapPublicSchemas(
 func (r *restoreResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if err := r.doResume(ctx, execCtx); err != nil {
 		details := r.job.Details().(jobspb.RestoreDetails)
-		if details.DebugPauseOn == "error" {
-			const errorFmt = "job failed with error (%v) but is being paused due to the %s=%s setting"
-			log.Warningf(ctx, errorFmt, err, restoreOptDebugPauseOn, details.DebugPauseOn)
-
-			return jobs.MarkPauseRequestError(errors.Wrapf(err,
-				"pausing job due to the %s=%s setting",
-				restoreOptDebugPauseOn, details.DebugPauseOn))
-		}
-		return err
+		return errorForDebugPauseOnValue(ctx, details.DebugPauseOn, err)
 	}
 
 	return nil
