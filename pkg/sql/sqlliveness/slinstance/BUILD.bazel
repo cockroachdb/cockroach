@@ -34,6 +34,7 @@ go_test(
         ":slinstance",
         "//pkg/clusterversion",
         "//pkg/settings/cluster",
+        "//pkg/sql/enum",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/util/hlc",

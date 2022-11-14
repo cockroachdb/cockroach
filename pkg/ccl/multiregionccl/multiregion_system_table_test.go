@@ -18,9 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -28,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -137,4 +143,92 @@ func TestRbrSqllivenessTable(t *testing.T) {
 
 		require.Equal(t, writeExpiration, readExpiration)
 	})
+}
+
+func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer envutil.TestSetEnv(t, "COCKROACH_MR_SYSTEM_DATABASE", "1")()
+
+	tc, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+		t, 3 /*numServers*/, base.TestingKnobs{},
+	)
+	defer cleanup()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	tenID := roachpb.MustMakeTenantID(10)
+	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+		TenantID: tenID,
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east1"},
+			},
+		},
+	})
+	defer tSQL.Close()
+	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
+
+	// Set cluster setting override on the host, and wait for it to propagate.
+	sqlDB.Exec(t, fmt.Sprintf("ALTER TENANT $1 SET CLUSTER SETTING %s = 'true'",
+		sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName), tenID.ToUint64())
+	testutils.SucceedsSoon(t, func() error {
+		var currentVal string
+		tenSQLDB.QueryRow(t, fmt.Sprintf("SHOW CLUSTER SETTING %s",
+			sql.SecondaryTenantsMultiRegionAbstractionsEnabledSettingName)).Scan(&currentVal)
+		if currentVal != "true" {
+			return errors.New("waiting for cluster setting to be set to true")
+		}
+		return nil
+	})
+
+	// Update system database with regions.
+	tenSQLDB.Exec(t, `SET descriptor_validation = read_only`)
+	tenSQLDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tenSQLDB.Exec(t, `SET descriptor_validation = on`)
+	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+
+	ten2, tSQL2 := serverutils.StartTenant(t, tc.Server(2), base.TestTenantArgs{
+		TenantID: tenID,
+		Existing: true,
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east3"},
+			},
+		},
+	})
+	defer tSQL2.Close()
+	tenSQLDB2 := sqlutils.MakeSQLRunner(tSQL2)
+
+	// The sqlliveness entry created by the first SQL server has enum.One as the
+	// region as the system database hasn't been updated when it first started.
+	var sessionID string
+	tenSQLDB2.QueryRow(t, `SELECT session_id FROM system.sql_instances WHERE id = $1`,
+		ten.SQLInstanceID()).Scan(&sessionID)
+	region, id, err := slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
+	require.NoError(t, err)
+	require.NotNil(t, id)
+	require.Equal(t, enum.One, region)
+
+	// Ensure that the sqlliveness entry created by the second SQL server has
+	// the right region and session UUID.
+	tenSQLDB2.QueryRow(t, `SELECT session_id FROM system.sql_instances WHERE id = $1`,
+		ten2.SQLInstanceID()).Scan(&sessionID)
+	region, id, err = slstorage.UnsafeDecodeSessionID(sqlliveness.SessionID(sessionID))
+	require.NoError(t, err)
+	require.NotNil(t, id)
+	require.NotEqual(t, enum.One, region)
+
+	rows := tenSQLDB2.Query(t, `SELECT crdb_region, session_uuid FROM system.sqlliveness`)
+	defer rows.Close()
+	livenessMap := map[string][]byte{}
+	for rows.Next() {
+		var region, sessionUUID string
+		require.NoError(t, rows.Scan(&region, &sessionUUID))
+		livenessMap[sessionUUID] = []byte(region)
+	}
+	require.NoError(t, rows.Err())
+	r, ok := livenessMap[string(id)]
+	require.True(t, ok)
+	require.Equal(t, r, region)
 }
