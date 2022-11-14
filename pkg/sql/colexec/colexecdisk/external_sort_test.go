@@ -130,12 +130,14 @@ func TestExternalSortMemoryAccounting(t *testing.T) {
 	// numInMemoryBufferedBatches (first merge = 2x, second merge = 3x, third
 	// merge 4x, etc, so we expect 2*numNewPartitions-1 partitions).
 	expMaxTotalPartitionsCreated := 2*numNewPartitions - 1
-	// Because of the fact that we are creating partitions slightly larger than
-	// memoryLimit in size and because of our "after the fact" memory
-	// accounting, we might create less partitions than maximum defined above
-	// (e.g., if numNewPartitions is 4, then we will create 3 partitions when
-	// batch size is 3).
-	expMinTotalPartitionsCreated := numNewPartitions - 1
+	// Since we are creating partitions slightly larger than memoryLimit in size
+	// and because of our "after the fact" memory accounting, we might create
+	// fewer partitions than the target (e.g., if numNewPartitions is 4, then we
+	// will create 3 partitions when batch size is 3). However, we might not
+	// even create numNewPartitions-1 in edge cases (due to how we grow
+	// coldata.Bytes.buffer when setting values), so we opt for a sanity check
+	// that at least two partitions were created that must always be true.
+	expMinTotalPartitionsCreated := 2
 	require.GreaterOrEqualf(t, numPartitionsCreated, expMinTotalPartitionsCreated,
 		"didn't create enough partitions: actual %d, min expected %d",
 		numPartitionsCreated, expMinTotalPartitionsCreated,
