@@ -103,8 +103,8 @@ func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 func ValidateDescriptors(
 	ctx context.Context, descriptors catalog.Descriptors, version roachpb.Version,
 ) (bool, string, error) {
-	descTable := make(doctor.DescriptorTable, len(descriptors))
-	namespaceTable := make(doctor.NamespaceTable, len(descriptors))
+	descTable := make(doctor.DescriptorTable, 0, len(descriptors))
+	namespaceTable := make(doctor.NamespaceTable, 0, len(descriptors))
 
 	for _, desc := range descriptors {
 		bytes, err := protoutil.Marshal(desc.DescriptorProto())

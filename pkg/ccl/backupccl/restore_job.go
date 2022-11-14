@@ -701,8 +701,8 @@ func validateRestoredDescriptors(ctx context.Context, execConfig *sql.ExecutorCo
 	if err != nil {
 		return err
 	}
-	targetDescs := make([]catalog.Descriptor, 0)
-	for _, desc := range allDescs {
+	// targetDescs := make([]catalog.Descriptor, 0)
+	/*for _, desc := range allDescs {
 		// While we could filter out descriptors that aren't targets of the restore,
 		// this would cause a spurious validation failure if the restoring
 		// descriptors have references to descriptors that already exist in the
@@ -714,8 +714,8 @@ func validateRestoredDescriptors(ctx context.Context, execConfig *sql.ExecutorCo
 			// when they're in the dropped stage.
 			continue
 		}
-	}
-	ok, invalidMsg, err := backuputils.ValidateDescriptors(ctx, targetDescs,
+	}*/
+	ok, invalidMsg, err := backuputils.ValidateDescriptors(ctx, allDescs,
 		execConfig.Settings.Version.BinaryVersion())
 	if err != nil {
 		return err
