@@ -275,9 +275,9 @@ var opWeights = []int{
 	renameView:              1,
 	setColumnDefault:        1,
 	setColumnNotNull:        1,
-	setColumnType:           0,  // Disabled and tracked with #66662.
-	survive:                 0,  // Disabled and tracked with #83831
-	insertRow:               10, // Temporarily reduced because of #80820
+	setColumnType:           0, // Disabled and tracked with #66662.
+	survive:                 0, // Disabled and tracked with #83831
+	insertRow:               0, // Disabled and tracked with #91863
 	selectStmt:              10,
 	validate:                2, // validate twice more often
 }
