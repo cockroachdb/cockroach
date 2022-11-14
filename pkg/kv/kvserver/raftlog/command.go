@@ -60,41 +60,64 @@ func (c *ReplicatedCmdBase) Decode(e *raftpb.Entry) error {
 	return nil
 }
 
-// Index implements apply.Command.
+// Index implements apply.Command. It returns the index of the log entry that
+// this Command applies.
 func (c *ReplicatedCmdBase) Index() uint64 {
 	return c.Entry.Index
 }
 
-// IsTrivial implements apply.Command.
+// IsTrivial implements apply.Command. Trivial commands may be batched in an
+// apply.Batch.
+//
+// See ReplicatedEvalResult.IsTrivial.
 func (c *ReplicatedCmdBase) IsTrivial() bool {
 	return c.ReplicatedResult().IsTrivial()
 }
 
 // IsLocal implements apply.Command.
+//
+// This base implementation returns false, since it doesn't keep track
+// of whether a client is waiting for this Command.
 func (c *ReplicatedCmdBase) IsLocal() bool {
 	return false
 }
 
-// Ctx implements apply.Command.
+// Ctx implements apply.Command. It returns context.Background().
 func (c *ReplicatedCmdBase) Ctx() context.Context {
 	return context.Background()
 }
 
 // AckErrAndFinish implements apply.Command.
+//
+// This base implementation is a no-op, since it doesn't keep track
+// of whether a client is waiting for this Command.
 func (c *ReplicatedCmdBase) AckErrAndFinish(context.Context, error) error {
 	return nil
 }
 
 // AckOutcomeAndFinish implements apply.AppliedCommand.
+//
+// This base implementation is a no-op, since it doesn't keep track
+// of whether a client is waiting for this Command.
 func (c *ReplicatedCmdBase) AckOutcomeAndFinish(context.Context) error { return nil }
 
 // Rejected implements apply.CheckedCommand.
+//
+// A command is rejected if it has a ForcedErr, i.e. if the state machines
+// (deterministically) apply the associated entry as a no-op. See
+// kvserverbase.CheckForcedErr.
 func (c *ReplicatedCmdBase) Rejected() bool { return c.ForcedErr != nil }
 
 // CanAckBeforeApplication implements apply.CheckedCommand.
+//
+// This base implementation return false, since it doesn't keep track
+// of whether a client is waiting for this Command.
 func (c *ReplicatedCmdBase) CanAckBeforeApplication() bool { return false }
 
 // AckSuccess implements apply.CheckedCommand.
+//
+// This base implementation return false, since it doesn't keep track
+// of whether a client is waiting for this Command.
 func (c *ReplicatedCmdBase) AckSuccess(context.Context) error { return nil }
 
 // ReplicatedResult is a shorthand for the contained *ReplicatedEvalResult.
