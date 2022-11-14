@@ -1101,6 +1101,23 @@ func (r *Registry) Unpause(ctx context.Context, txn *kv.Txn, id jobspb.JobID) er
 // Resumers are created through registered Constructor functions.
 type Resumer interface {
 	// Resume is called when a job is started or resumed. execCtx is a sql.JobExecCtx.
+	//
+	// The jobs infrastructure will react to the return value. If no error is
+	// returned, the job is marked as successful. If an error is returned, the
+	// handling depends on the type of the error and whether this job is
+	// cancelable or not:
+	// - if ctx has been canceled, the job record is not updated in any way. It
+	//   will be retried later.
+	// - a "pause request error" (see MarkPauseRequestError), the job moves to the
+	//   paused status.
+	// - retriable errors (see MarkAsRetryJobError) cause the job execution to be
+	//   retried; Resume() will eventually be called again (perhaps on a different
+	//   node).
+	// - if the job is cancelable, all other errors cause the job to go through
+	//   the reversion process.
+	// - if the job is non-cancelable, "permanent errors" (see
+	//   MarkAsPermanentJobError) cause the job to go through the reversion
+	//   process. Other errors are treated as retriable.
 	Resume(ctx context.Context, execCtx interface{}) error
 
 	// OnFailOrCancel is called when a job fails or is cancel-requested.
