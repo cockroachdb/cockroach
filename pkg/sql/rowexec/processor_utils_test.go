@@ -215,5 +215,10 @@ func (p *ProcessorTest) RunTestCases(
 }
 
 func (p ProcessorTest) Close(ctx context.Context) {
-	p.config.FlowCtx.EvalCtx.Stop(ctx)
+	if r := recover(); r != nil {
+		p.config.FlowCtx.EvalCtx.EmergencyStop(ctx)
+		panic(r)
+	} else {
+		p.config.FlowCtx.EvalCtx.Stop(ctx)
+	}
 }

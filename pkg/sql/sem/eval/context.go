@@ -420,13 +420,24 @@ func NewTestingEvalContext(st *cluster.Settings) *Context {
 }
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
+//
+// Note: Stop _must_ be called using `defer ...Stop()`. If it is called
+// indirectly via another function, e.g. `defer func() { ... Stop() }` the
+// panic recovery won't work. In that case, the caller is responsible
+// for catching panics and calling .EmergencyStop() explicitly.
 func (ec *Context) Stop(c context.Context) {
 	if r := recover(); r != nil {
-		ec.TestingMon.EmergencyStop(c)
+		ec.EmergencyStop(c)
 		panic(r)
 	} else {
 		ec.TestingMon.Stop(c)
 	}
+}
+
+// EmergencyStop should be called in the recover() branch of a context
+// shutdown when `defer ..Stop` is not possible/desirable.
+func (ec *Context) EmergencyStop(c context.Context) {
+	ec.TestingMon.EmergencyStop(c)
 }
 
 // FmtCtx creates a FmtCtx with the given options as well as the EvalContext's session data.
