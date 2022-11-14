@@ -474,14 +474,25 @@ func (dsp *DistSQLPlanner) setupFlows(
 	//   the tracing span;
 	// - now the client-side goroutine of the RPC is scheduled, and it attempts
 	//   to use the span from the context, but it has already been finished.
-	//
-	// We still want to be able to cancel the RPCs when either the local flow
-	// finishes or the local node is quiescing, so we derive a separate context
-	// with the cancellation ability.
-	runnerCtx, cancelRunnerCtx := dsp.stopper.WithCancelOnQuiesce(context.Background())
+	runnerCtx, cancelRunnerCtx := context.WithCancel(origCtx)
+	var runnerSpan *tracing.Span
+	// This span is necessary because it can outlive its parent.
+	runnerCtx, runnerSpan = tracing.ChildSpan(runnerCtx, "setup-flow-async" /* opName */)
+	runnerCleanup := func() {
+		cancelRunnerCtx()
+		runnerSpan.Finish()
+	}
+	// Make sure that we call runnerCleanup unless a new goroutine takes that
+	// responsibility.
+	var listenerGoroutineWillCleanup bool
+	defer func() {
+		if !listenerGoroutineWillCleanup {
+			runnerCleanup()
+		}
+	}()
 	for nodeID, flowSpec := range flows {
 		if nodeID == thisNodeID {
-			// Skip this node.
+			// Skip this node since we already handled the local flow above.
 			continue
 		}
 		req := setupReq
@@ -500,11 +511,9 @@ func (dsp *DistSQLPlanner) setupFlows(
 		case dsp.runnerCoordinator.runnerChan <- runReq:
 			usedWorker = true
 		default:
-			// We can just use the "parent" context since we're executing the
-			// request in a blocking fashion in the current goroutine. This
-			// allows for the cancellation of the "parent" context be noticed
-			// sooner.
-			runReq.ctx = origCtx
+			// Use the context of the local flow since we're executing this
+			// SetupFlow RPC synchronously.
+			runReq.ctx = ctx
 			if err = runReq.run(); err != nil {
 				return ctx, flow, err
 			}
@@ -543,17 +552,22 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// DistSQLReceiver by the listener goroutine below.
 		cancelRunnerCtx()
 	})
+	// Now the responsibility of calling runnerCleanup is passed on to the new
+	// goroutine.
+	listenerGoroutineWillCleanup = true
 	_ = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
+		defer runnerCleanup()
+		var seenError bool
 		for i := 0; i < len(flows)-1; i++ {
 			res := <-resultChan
-			if res.err != nil {
+			if res.err != nil && !seenError {
+				seenError = true
 				// The setup of at least one remote flow failed.
 				cleanupCalledMu.Lock()
-				defer cleanupCalledMu.Unlock()
-				if cleanupCalledMu.called {
-					// We no longer care about the error nor do we need to
-					// cancel the flow.
-					return
+				skipCancel := cleanupCalledMu.called
+				cleanupCalledMu.Unlock()
+				if skipCancel {
+					continue
 				}
 				// First, we update the DistSQL receiver with the error to be
 				// returned to the client eventually.
@@ -565,9 +579,6 @@ func (dsp *DistSQLPlanner) setupFlows(
 				recv.setErrorWithoutStatusUpdate(res.err)
 				// Now explicitly cancel the local flow.
 				flow.Cancel()
-				// resultChan is buffered, so we can just ignore the remaining
-				// results of the RPCs.
-				return
 			}
 		}
 	})
