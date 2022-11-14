@@ -232,7 +232,7 @@ SET tracing = off
 # we deduplicate the messages to make the test non-flaky.
 query T rowsort
 SELECT DISTINCT message FROM [SHOW TRACE FOR SESSION]
-WHERE message LIKE 'querying next range at %' OR
+WHERE message LIKE 'querying next range at /Table/%' OR
       message = '=== SPAN START: kv.DistSender: sending partial batch ==='
 ----
 querying next range at /Table/109/1/0/0

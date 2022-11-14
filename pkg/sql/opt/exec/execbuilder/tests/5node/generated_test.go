@@ -147,6 +147,13 @@ func TestExecBuild_distsql_join(
 	runExecBuildLogicTest(t, "distsql_join")
 }
 
+func TestExecBuild_distsql_locality(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "distsql_locality")
+}
+
 func TestExecBuild_distsql_merge_join(
 	t *testing.T,
 ) {

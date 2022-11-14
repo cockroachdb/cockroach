@@ -1,0 +1,89 @@
+# LogicTest: 5node
+
+#
+# Tests that verify DistSQL support and auto mode determination.
+# The cluster size or distsql mode aren't important for these tests.
+#
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT, FAMILY (k, v))
+
+# Split the ranges in the table.
+statement ok
+ALTER TABLE t SPLIT AT SELECT generate_series(1, 10)
+
+# Relocate ranges so that
+# - [1-2) and [2-3) are on node 1.
+# - [3-4) and [4-5) are on node 2.
+# - [5-6) and [6-7) are on node 3.
+# - [7-8) and [8-9) are on node 4.
+# - [9-10) and [10-11) are on node 5.
+
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i*2-1 FROM generate_series(1, 5) as g(i);
+ALTER TABLE t EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i*2 FROM generate_series(1, 5) as g(i);
+
+# Check range lease holders.
+query TI rowsort,retry
+SELECT start_pretty, lease_holder FROM crdb_internal.ranges WHERE start_pretty LIKE '%Table%/1/%'
+----
+/Table/106/1/1   1
+/Table/106/1/2   1
+/Table/106/1/3   2
+/Table/106/1/4   2
+/Table/106/1/5   3
+/Table/106/1/6   3
+/Table/106/1/7   4
+/Table/106/1/8   4
+/Table/106/1/9   5
+/Table/106/1/10  5
+
+# Populate the range cache.
+statement ok
+SELECT * FROM t
+
+# Planner involves leaseholders on nodes 1, 2, and 3.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k IN (1, 3, 5)
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - /1] [/3 - /3] [/5 - /5]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJykkUFL60AUhffvVwxn9fqYRzLJ6yarJzVioLY1KShIkJi5lNI0E2cmopT8d0myqC1VUl3euffMdzhnB_NcIEB4v5heRDP2-zJKlsntdMSScBpOluwPu4rnN8yyu-swDtmGtUeCM5-z8QgcpZI0y7ZkEDxAgMMDh4-Uo9IqJ2OUble77jCSrwhcjnVZ1bZ9TjlypQnBDnZtC0KAZfZUUEyZJO244JBks3XRfW__28dqQ2_gmKii3pYmYBvOXsCRVFk7OcJxkTYcqrZ7hLHZihCIhn9iY0-vS6UlaZIH5LQ5YXSm_qrK8Y8OT6O9A7QYnoA4OwF_cALecBve2TbG3yrihI2YTKVKQ4NydtuiSK6ob9WoWue00CrvMP0473TdgyRj-63oh6jsVp3Bj2Lxpfjfgdg9Fns_IftnidPm13sAAAD__80vOlg=
+
+
+# The table reader and execution is done on node 1, the leaseholder of the first
+# range touched by the scan.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k >= 1 LIMIT 10
+----
+distribution: local
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/1 - ]
+  limit: 10
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj09LxDAUxO9-isecVCLb4i0gKGvFQPePbUFBi8TmsZTtNjVJRVn63aXtQTwIHmcmmfm9I_x7A4nkaZveqDWd3qq8yB_SM8qTNFkWdE532WZFgR7vkyyhPb30UXTJVxRTqlaqoDiCQGsNr_WBPeQzYpQCnbMVe2_daB2nB8p8QkYCddv1YbRLgco6hjwi1KFhSBT6reGMtWG3GIsNB103U224Dq_dnr8gsLRNf2i9pL2gDwjknR7VIr6AQFof6jBilYOA7cPPmA96x5DxIP4PlLHvbOv5F8tfzdFQCrDZ8Xy0t72reOtsNc3McjP9mwzDPsxpPAvVztFQDiffAQAA__8sDIEa
+
+# The table reader should be on node 2, but the gateway is on node 1. The table
+# reader is not moved to the gateway.
+query T
+EXPLAIN (DISTSQL) SELECT * FROM t WHERE k = 4
+----
+distribution: full
+vectorized: true
+·
+• scan
+  missing stats
+  table: t@t_pkey
+  spans: [/4 - /4]
+·
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkFFLwzAUhd_9FeE8qUTajj0FBGVWLMxttgMFKRKbyxjtmpikopT-d2n74CY4fTzn3u_k3LRwbxUE4qfV_DpZsNObJFtnD_MzlsXzeLZm5-w2Xd4zzx7v4jRmJbtkU3DUWtFC7shBPCMCxwQ5h7G6IOe07e12WErUB0TIsa1N43s75yi0JYgWfusrgsBCX2gT9CmKvNxWw1rHoRv_DTkvNwQx6fhecHQ8eC1fK0pJKrJBeBAPf-VfTEmf4JjpqtnVTrCSs3dwZEb2KpgGIX6rER3U-OO-lJzRtaN_HRh2OQepDY1_6HRjC1pZXQzPjHI5cIOhyPlxOhlFUo-jvuA-HB2Fwx9w3p18BQAA___UtqyB

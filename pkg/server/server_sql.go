@@ -950,6 +950,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			cfg.podNodeDialer,
 			codec,
 			cfg.sqlInstanceReader,
+			cfg.nodesStatusServer,
 			cfg.clock,
 		),
 

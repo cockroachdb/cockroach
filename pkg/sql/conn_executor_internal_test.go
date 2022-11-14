@@ -11,6 +11,7 @@ package sql
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"math"
 	"testing"
 	"time"
@@ -284,6 +285,7 @@ func startConnExecutor(
 		context.Background(), "test", mon.MemoryResource,
 		nil /* curCount */, nil /* maxHist */, math.MaxInt64, st,
 	)
+	nodesStatusServer := serverpb.MakeOptionalNodesStatusServer(nil)
 	// This pool should never be Stop()ed because, if the test is failing, memory
 	// is not properly released.
 	cfg := &ExecutorConfig{
@@ -326,6 +328,7 @@ func startConnExecutor(
 			nil, /* podNodeDialer */
 			keys.SystemSQLCodec,
 			nil, /* sqlAddressResolver */
+			nodesStatusServer,
 			clock,
 		),
 		QueryCache:              querycache.New(0),

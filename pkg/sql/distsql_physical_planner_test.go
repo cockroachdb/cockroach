@@ -14,6 +14,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -651,6 +653,19 @@ func (it *testSpanResolverIterator) ReplicaInfo(
 	return roachpb.ReplicaDescriptor{NodeID: n.NodeID}, nil
 }
 
+type mockStatusServer struct {
+	Nodes []statuspb.NodeStatus
+}
+
+func (s *mockStatusServer) ListNodesInternal(
+	ctx context.Context, req *serverpb.NodesRequest,
+) (*serverpb.NodesResponse, error) {
+	resp := serverpb.NodesResponse{
+		Nodes: s.Nodes,
+	}
+	return &resp, nil
+}
+
 func TestPartitionSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -665,8 +680,9 @@ func TestPartitionSpans(t *testing.T) {
 		// the span is actually a point lookup.
 		spans [][2]string
 
-		// expected result: a map of node to list of spans.
-		partitions map[int][][2]string
+		// expected result: a map of node to list of spans. A -1 node ID means that
+		// the span may be mapped to any node except dead nodes.
+		partitions []map[int][][2]string
 	}{
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
@@ -674,10 +690,12 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
 
-			partitions: map[int][][2]string{
-				1: {{"A1", "B"}, {"C", "C1"}},
-				2: {{"B", "C"}},
-				3: {{"D1", "X"}},
+			partitions: []map[int][][2]string{
+				{
+					1: {{"A1", "B"}, {"C", "C1"}},
+					2: {{"B", "C"}},
+					3: {{"D1", "X"}},
+				},
 			},
 		},
 
@@ -688,10 +706,12 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
 
-			partitions: map[int][][2]string{
-				1: {{"A1", "B"}, {"C", "C1"}},
-				2: {{"B", "C"}},
-				3: {{"D1", "X"}},
+			partitions: []map[int][][2]string{
+				{
+					1: {{"A1", "B"}, {"C", "C1"}},
+					2: {{"B", "C"}},
+					3: {{"D1", "X"}},
+				},
 			},
 		},
 
@@ -702,9 +722,16 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
 
-			partitions: map[int][][2]string{
-				1: {{"A1", "C1"}},
-				3: {{"D1", "X"}},
+			partitions: []map[int][][2]string{
+				{
+					-1: {{"B", "C"}},
+					1:  {{"A1", "B"}, {"C", "C1"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					1: {{"A1", "C1"}},
+					3: {{"D1", "X"}},
+				},
 			},
 		},
 
@@ -715,9 +742,12 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
 
-			partitions: map[int][][2]string{
-				1: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
-				2: {{"B", "C"}},
+			partitions: []map[int][][2]string{
+				{
+					-1: {{"D1", "X"}},
+					1:  {{"A1", "B"}, {"C", "C1"}},
+					2:  {{"B", "C"}},
+				},
 			},
 		},
 
@@ -728,9 +758,26 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
 
-			partitions: map[int][][2]string{
-				2: {{"A1", "C1"}},
-				3: {{"D1", "X"}},
+			partitions: []map[int][][2]string{
+				{
+					-1: {{"A1", "B"}, {"C", "C1"}},
+					2:  {{"B", "C"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					-1: {{"C", "C1"}},
+					2:  {{"A1", "C"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					-1: {{"A1", "B"}},
+					2:  {{"B", "C1"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					2: {{"A1", "C1"}},
+					3: {{"D1", "X"}},
+				},
 			},
 		},
 
@@ -741,9 +788,26 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", "C1"}, {"D1", "X"}},
 
-			partitions: map[int][][2]string{
-				2: {{"B", "C"}},
-				3: {{"A1", "B"}, {"C", "C1"}, {"D1", "X"}},
+			partitions: []map[int][][2]string{
+				{
+					-1: {{"A1", "B"}, {"C", "C1"}},
+					2:  {{"B", "C"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					-1: {{"C", "C1"}},
+					2:  {{"A1", "C"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					-1: {{"A1", "B"}},
+					2:  {{"B", "C1"}},
+					3:  {{"D1", "X"}},
+				},
+				{
+					2: {{"A1", "C1"}},
+					3: {{"D1", "X"}},
+				},
 			},
 		},
 
@@ -754,9 +818,11 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A2", ""}, {"A1", ""}, {"B1", ""}},
 
-			partitions: map[int][][2]string{
-				1: {{"A2", ""}, {"A1", ""}},
-				2: {{"B1", ""}},
+			partitions: []map[int][][2]string{
+				{
+					1: {{"A2", ""}, {"A1", ""}},
+					2: {{"B1", ""}},
+				},
 			},
 		},
 
@@ -767,9 +833,11 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C2"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
 
-			partitions: map[int][][2]string{
-				1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
-				2: {{"C", "C2"}},
+			partitions: []map[int][][2]string{
+				{
+					1: {{"A1", ""}, {"A1", "A2"}, {"A2", ""}, {"A2", "C"}, {"B1", ""}, {"A3", "B3"}, {"B2", ""}},
+					2: {{"C", "C2"}},
+				},
 			},
 		},
 
@@ -781,8 +849,10 @@ func TestPartitionSpans(t *testing.T) {
 
 			spans: [][2]string{{"A", "B"}},
 
-			partitions: map[int][][2]string{
-				1: {{"A", "B"}},
+			partitions: []map[int][][2]string{
+				{
+					1: {{"A", "B"}},
+				},
 			},
 		},
 	}
@@ -792,6 +862,8 @@ func TestPartitionSpans(t *testing.T) {
 	testStopper := stop.NewStopper()
 	defer testStopper.Stop(context.Background())
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	// We also need a mock status server to get a list of all nodes.
+	ss := &mockStatusServer{}
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 10; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -812,9 +884,13 @@ func TestPartitionSpans(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-
+		node := statuspb.NodeStatus{
+			Desc: *desc,
+		}
+		ss.Nodes = append(ss.Nodes, node)
 		nodeDescs = append(nodeDescs, desc)
 	}
+	nss := serverpb.MakeOptionalNodesStatusServer(ss)
 
 	for testIdx, tc := range testCases {
 		t.Run(strconv.Itoa(testIdx), func(t *testing.T) {
@@ -848,7 +924,9 @@ func TestPartitionSpans(t *testing.T) {
 						return true
 					},
 				},
-				codec: keys.SystemSQLCodec,
+				codec:             keys.SystemSQLCodec,
+				nodeDescs:         mockGossip,
+				nodesStatusServer: nss,
 			}
 
 			ctx := context.Background()
@@ -868,7 +946,7 @@ func TestPartitionSpans(t *testing.T) {
 			resMap := make(map[int][][2]string)
 			for _, p := range partitions {
 				if _, ok := resMap[int(p.SQLInstanceID)]; ok {
-					t.Fatalf("node %d shows up in multiple partitions", p)
+					t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
 				}
 				var spans [][2]string
 				for _, s := range p.Spans {
@@ -877,8 +955,64 @@ func TestPartitionSpans(t *testing.T) {
 				resMap[int(p.SQLInstanceID)] = spans
 			}
 
-			if !reflect.DeepEqual(resMap, tc.partitions) {
-				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			// Some spans may be mapped to any node, so some spans may be folded
+			// together differently than the test case.
+
+			if _, ok := tc.partitions[0][-1]; !ok {
+				if !reflect.DeepEqual(resMap, tc.partitions[0]) {
+					t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+				}
+			} else {
+				// TODO: fixme
+				// Go through each test partition until we find a match.
+				hasMatching := true
+				for ip, p := range tc.partitions {
+					hasMatching = true
+					log.Infof(context.Background(), "Checking test partition %d", ip)
+					// Go through each instance in the result to compare its assigned
+					// spans to the test partition.
+					for i, res := range resMap {
+						for _, resSpan := range res {
+							log.Infof(context.Background(), "Checking res span %d: %s", i, resSpan)
+							// First, check against the test partition with the same instance ID.
+							found := false
+							if span, ok := p[i]; ok {
+								for _, s := range span {
+									if s == resSpan {
+										log.Infof(context.Background(), "Found span in instance partition[%d] %s", i, s)
+										found = true
+										break
+									}
+								}
+							}
+							// If the span isn't found, it could be a span that can be assigned
+							// to any instance.
+							if !found {
+								for _, s := range p[-1] {
+									if s == resSpan {
+										log.Infof(context.Background(), "Found span in any partition[%d] %s", i, s)
+										found = true
+										break
+									}
+								}
+							}
+							if !found {
+								log.Infof(context.Background(), "Did not find match for %d: %s", i, resSpan)
+								hasMatching = false
+								break
+							}
+						}
+						if !hasMatching {
+							break
+						}
+					}
+					if hasMatching {
+						break
+					}
+				}
+				if !hasMatching {
+					t.Errorf("expected one of partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+				}
 			}
 		})
 	}
@@ -987,6 +1121,8 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			testStopper := stop.NewStopper()
 			defer testStopper.Stop(context.Background())
 			mockGossip := gossip.NewTest(roachpb.NodeID(1), testStopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+			// We also need a mock status server to get a list of all nodes.
+			ss := &mockStatusServer{}
 			var nodeDescs []*roachpb.NodeDescriptor
 			for i := 1; i <= 2; i++ {
 				sqlInstanceID := base.SQLInstanceID(i)
@@ -1008,8 +1144,13 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 					}
 				}
 
+				node := statuspb.NodeStatus{
+					Desc: *desc,
+				}
+				ss.Nodes = append(ss.Nodes, node)
 				nodeDescs = append(nodeDescs, desc)
 			}
+			nss := serverpb.MakeOptionalNodesStatusServer(ss)
 			tsp := &testSpanResolver{
 				nodes:  nodeDescs,
 				ranges: ranges,
@@ -1033,7 +1174,9 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 						return true
 					},
 				},
-				codec: keys.SystemSQLCodec,
+				codec:             keys.SystemSQLCodec,
+				nodeDescs:         mockGossip,
+				nodesStatusServer: nss,
 			}
 
 			ctx := context.Background()
@@ -1048,7 +1191,7 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			resMap := make(map[base.SQLInstanceID][][2]string)
 			for _, p := range partitions {
 				if _, ok := resMap[p.SQLInstanceID]; ok {
-					t.Fatalf("node %d shows up in multiple partitions", p)
+					t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
 				}
 				var spans [][2]string
 				for _, s := range p.Spans {
@@ -1081,6 +1224,8 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry(), zonepb.DefaultZoneConfigRef())
+	// We also need a mock status server to get a list of all nodes.
+	ss := &mockStatusServer{}
 	var nodeDescs []*roachpb.NodeDescriptor
 	for i := 1; i <= 2; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
@@ -1107,9 +1252,13 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-
+		node := statuspb.NodeStatus{
+			Desc: *desc,
+		}
+		ss.Nodes = append(ss.Nodes, node)
 		nodeDescs = append(nodeDescs, desc)
 	}
+	nss := serverpb.MakeOptionalNodesStatusServer(ss)
 	tsp := &testSpanResolver{
 		nodes:  nodeDescs,
 		ranges: ranges,
@@ -1133,7 +1282,9 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				return true
 			},
 		},
-		codec: keys.SystemSQLCodec,
+		codec:             keys.SystemSQLCodec,
+		nodeDescs:         mockGossip,
+		nodesStatusServer: nss,
 	}
 
 	ctx := context.Background()
@@ -1148,7 +1299,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	resMap := make(map[base.SQLInstanceID][][2]string)
 	for _, p := range partitions {
 		if _, ok := resMap[p.SQLInstanceID]; ok {
-			t.Fatalf("node %d shows up in multiple partitions", p)
+			t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
 		}
 		var spans [][2]string
 		for _, s := range p.Spans {
