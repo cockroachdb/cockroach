@@ -123,6 +123,7 @@ FILES = [
     "drop_sequence_stmt",
     "drop_stmt",
     "drop_table",
+    "drop_tenant_stmt",
     "drop_type",
     "drop_view",
     "execute_stmt",

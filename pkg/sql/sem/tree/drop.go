@@ -234,3 +234,20 @@ func (node *DropExternalConnection) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.ConnectionLabel)
 	}
 }
+
+// DropTenant represents a DROP TENANT command.
+type DropTenant struct {
+	Name     Name
+	IfExists bool
+}
+
+var _ Statement = &DropTenant{}
+
+// Format implements the NodeFormatter interface.
+func (node *DropTenant) Format(ctx *FmtCtx) {
+	ctx.WriteString("DROP TENANT ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(&node.Name)
+}
