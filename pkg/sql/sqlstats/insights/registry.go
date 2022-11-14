@@ -66,7 +66,10 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 	if !r.enabled() {
 		return
 	}
-	statements := r.statements[sessionID]
+	statements, ok := r.statements[sessionID]
+	if !ok {
+		return
+	}
 	delete(r.statements, sessionID)
 	defer statements.release()
 

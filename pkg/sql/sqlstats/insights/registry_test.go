@@ -218,4 +218,10 @@ func TestRegistry(t *testing.T) {
 
 		require.Equal(t, expected, actual)
 	})
+
+	t.Run("txn with no stmts", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		registry := newRegistry(st, &latencyThresholdDetector{st: st}, newStore(st))
+		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, transaction) })
+	})
 }
