@@ -89,7 +89,7 @@ func registerTypeORM(r registry.Registry) {
 			c,
 			node,
 			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -`,
+			`sudo apt install ca-certificates && curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -`,
 		); err != nil {
 			t.Fatal(err)
 		}
