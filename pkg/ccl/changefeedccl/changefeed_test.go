@@ -2338,9 +2338,9 @@ func TestChangefeedSingleColumnFamily(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 
 		// Table with 2 column families.
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, FAMILY most (a,b), FAMILY rest (c))`)
-		sqlDB.Exec(t, `INSERT INTO foo values (0, 'dog', 'cat')`)
-		sqlDB.Exec(t, `INSERT INTO foo values (1, 'dollar', 'cent')`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, c STRING, d STRING, FAMILY most (a,b), FAMILY rest (c, d))`)
+		sqlDB.Exec(t, `INSERT INTO foo(a,b,c) values (0, 'dog', 'cat')`)
+		sqlDB.Exec(t, `INSERT INTO foo(a,b,c) values (1, 'dollar', 'cent')`)
 
 		sqlDB.ExpectErr(t, `nosuchfamily`, `CREATE CHANGEFEED FOR foo FAMILY nosuchfamily`)
 
@@ -2354,18 +2354,25 @@ func TestChangefeedSingleColumnFamily(t *testing.T) {
 		fooRest := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest`)
 		defer closeFeed(t, fooRest)
 		assertPayloads(t, fooRest, []string{
-			`foo.rest: [0]->{"after": {"c": "cat"}}`,
-			`foo.rest: [1]->{"after": {"c": "cent"}}`,
+			`foo.rest: [0]->{"after": {"c": "cat", "d": null}}`,
+			`foo.rest: [1]->{"after": {"c": "cent", "d": null}}`,
 		})
 
 		fooBoth := feed(t, f, `CREATE CHANGEFEED FOR foo FAMILY rest, foo FAMILY most`)
 		defer closeFeed(t, fooBoth)
 		assertPayloads(t, fooBoth, []string{
 			`foo.most: [0]->{"after": {"a": 0, "b": "dog"}}`,
-			`foo.rest: [0]->{"after": {"c": "cat"}}`,
+			`foo.rest: [0]->{"after": {"c": "cat", "d": null}}`,
 			`foo.most: [1]->{"after": {"a": 1, "b": "dollar"}}`,
-			`foo.rest: [1]->{"after": {"c": "cent"}}`,
+			`foo.rest: [1]->{"after": {"c": "cent", "d": null}}`,
 		})
+
+		sqlDB.Exec(t, `DELETE FROM foo WHERE a = 0`)
+		assertPayloads(t, fooBoth, []string{
+			`foo.most: [0]->{"after": null}`,
+			`foo.rest: [0]->{"after": null}`,
+		})
+
 	}
 	cdcTest(t, testFn)
 }

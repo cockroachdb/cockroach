@@ -862,10 +862,14 @@ func (rf *Fetcher) processKV(
 					}
 				}
 				if defaultColumnID == 0 {
-					return "", "", errors.Errorf("single entry value with no default column id")
+					if kv.Value.GetTag() == roachpb.ValueType_UNKNOWN {
+						// Tombstone for a secondary column family, nothing needs to be done.
+					} else {
+						return "", "", errors.Errorf("single entry value with no default column id")
+					}
+				} else {
+					prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, defaultColumnID, kv, prettyKey)
 				}
-
-				prettyKey, prettyValue, err = rf.processValueSingle(ctx, table, defaultColumnID, kv, prettyKey)
 			}
 		}
 		if err != nil {
