@@ -550,12 +550,7 @@ func (s *Stopper) Stop(ctx context.Context) {
 	// avoids stalls and helps some tests in `./cli` finish cleanly (where
 	// panics happen on purpose).
 	if r := recover(); r != nil {
-		go s.Quiesce(ctx)
-		s.mu.Lock()
-		for _, c := range s.mu.closers {
-			go c.Close()
-		}
-		s.mu.Unlock()
+		s.EmergencyStop(ctx)
 		panic(r)
 	}
 
@@ -566,6 +561,39 @@ func (s *Stopper) Stop(ctx context.Context) {
 	// any attempts to do so will be refused.
 	for _, c := range s.mu.closers {
 		c.Close()
+	}
+}
+
+// EmergencyStop should be called instead of Stop() when the Stop()
+// call is intended to be called under `defer`, but it cannot be
+// called _directly_ via `defer`, and the caller intends the call to
+// handle panics through the return path.  For example, when
+//
+//	defer stopper.Stop(ctx)
+//
+// is not directly possible, such as when the Stop call is inside a
+// closure like this:
+//
+//	defer func() {
+//	   ... stopper.Stop(ctx) ...
+//	}()
+//
+// The Stop call will not catch panics properly. In that case,
+// use:
+//
+//	defer func() {
+//	     if r := recover(); r != nil {
+//	        stopper.EmergencyStop(ctx)
+//	        panic(r)
+//	     }
+//	     stopper.Stop(ctx)
+//	}()
+func (s *Stopper) EmergencyStop(ctx context.Context) {
+	go s.Quiesce(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.mu.closers {
+		go c.Close()
 	}
 }
 

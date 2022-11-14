@@ -802,6 +802,10 @@ func TestingForceRandomizeDemoPorts() func() {
 
 func (c *transientCluster) Close(ctx context.Context) {
 	if c.stopper != nil {
+		if r := recover(); r != nil {
+			c.stopper.EmergencyStop(ctx)
+			panic(r)
+		}
 		c.stopper.Stop(ctx)
 	}
 	if c.demoDir != "" {
