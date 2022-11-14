@@ -9,28 +9,35 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { adminUISelector } from "src/store/utils/selectors";
+import { AppState } from "src/store/reducers";
+import { selectExecutionID } from "src/selectors/common";
+import { selectTxnInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
+import { TxnInsightEvent } from "src/insights";
 
-const selectTransactionInsightDetailsState = createSelector(
-  adminUISelector,
-  adminUiState => {
-    if (!adminUiState.transactionInsightDetails) return null;
-    return adminUiState.transactionInsightDetails;
+const selectTxnContentionInsightsDetails = createSelector(
+  (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
+  selectExecutionID,
+  (cachedTxnInsightDetails, execId) => {
+    return cachedTxnInsightDetails.get(execId);
+  },
+);
+
+const selectTxnInsightFromExecInsight = createSelector(
+  (state: AppState) => state.adminUI.executionInsights?.data,
+  selectExecutionID,
+  (execInsights, execID): TxnInsightEvent => {
+    return execInsights.find(txn => txn.transactionExecutionID === execID);
   },
 );
 
 export const selectTransactionInsightDetails = createSelector(
-  selectTransactionInsightDetailsState,
-  txnInsightDetailsState => {
-    if (!txnInsightDetailsState) return null;
-    return txnInsightDetailsState.data;
-  },
+  selectTxnInsightFromExecInsight,
+  selectTxnContentionInsightsDetails,
+  (txnInsights, txnContentionInsights) =>
+    selectTxnInsightDetailsCombiner(txnInsights, txnContentionInsights?.data),
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
-  selectTransactionInsightDetailsState,
-  txnInsightDetailsState => {
-    if (!txnInsightDetailsState) return null;
-    return txnInsightDetailsState.lastError;
-  },
+  selectTxnContentionInsightsDetails,
+  state => state?.lastError,
 );

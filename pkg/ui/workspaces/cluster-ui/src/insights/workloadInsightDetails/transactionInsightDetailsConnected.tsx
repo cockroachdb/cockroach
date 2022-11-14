@@ -23,16 +23,16 @@ import {
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
 import { Dispatch } from "redux";
-import { TransactionInsightEventDetailsRequest } from "src/api";
+import { TxnContentionInsightDetailsRequest } from "src/api";
 
 const mapStateToProps = (
   state: AppState,
-  _props: RouteComponentProps,
+  props: RouteComponentProps,
 ): TransactionInsightDetailsStateProps => {
-  const insightDetails = selectTransactionInsightDetails(state);
-  const insightError = selectTransactionInsightDetailsError(state);
+  const insightDetails = selectTransactionInsightDetails(state, props);
+  const insightError = selectTransactionInsightDetailsError(state, props);
   return {
-    insightEventDetails: insightDetails,
+    insightDetails: insightDetails,
     insightError: insightError,
   };
 };
@@ -41,7 +41,7 @@ const mapDispatchToProps = (
   dispatch: Dispatch,
 ): TransactionInsightDetailsDispatchProps => ({
   refreshTransactionInsightDetails: (
-    req: TransactionInsightEventDetailsRequest,
+    req: TxnContentionInsightDetailsRequest,
   ) => {
     dispatch(actions.refresh(req));
   },

@@ -39,14 +39,9 @@ import {
   selectFilters,
   selectSortSetting,
 } from "src/store/insights/transactionInsights";
-import { bindActionCreators, Dispatch } from "redux";
+import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
-import {
-  StatementInsightDetails,
-  StatementInsightDetailsDispatchProps,
-  StatementInsightDetailsStateProps,
-} from "../workloadInsightDetails";
 
 const transactionMapStateToProps = (
   state: AppState,
