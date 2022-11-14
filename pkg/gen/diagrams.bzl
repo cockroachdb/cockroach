@@ -122,6 +122,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:drop_schema.html",
   "//docs/generated/sql/bnf:drop_sequence.html",
   "//docs/generated/sql/bnf:drop_table.html",
+  "//docs/generated/sql/bnf:drop_tenant.html",
   "//docs/generated/sql/bnf:drop_type.html",
   "//docs/generated/sql/bnf:drop_view.html",
   "//docs/generated/sql/bnf:execute.html",
