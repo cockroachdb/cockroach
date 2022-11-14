@@ -55,7 +55,39 @@ const (
 
 	// defaultRangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the
 	// leader lease active duration should be of the raft election timeout.
-	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
+	//
+	// Timers for Raft leadership election and lease expiration run in parallel.
+	// Although not required, we would like to elect a leader before the lease
+	// expires, such that we don't have to wait for a Raft election when we're
+	// ready to acquire the lease.
+	//
+	// The relevant operations and default time intervals are (assuming RTTs
+	// ranging from 10ms to 400ms):
+	//
+	// Raft election:
+	// - Heartbeat offset (0-1 heartbeat interval)   [-1.00s - 0.00s]
+	// - Election timeout (random 1x-2x timeout)     [ 2.00s - 4.00s]
+	// - Election (3x RTT: prevote, vote, append)    [ 0.03s - 1.20s]
+	//
+	// Lease acquisition:
+	// - Heartbeat offset (0-1 heartbeat interval)   [-2.50s - 0.00s]
+	// - Lease expiration (constant)                 [ 5.00s        ]
+	// - Liveness epoch bump (2x RTT: CPut + append) [ 0.02s - 0.80s]
+	// - Lease acquisition (1x RTT: append)          [ 0.01s - 0.40s]
+	//
+	// From the above, we note that the worst-case Raft election latency
+	// (4.03s-5.20s) is always less than the corresponding lease expiration +
+	// epoch bump time (5.02s-5.80s) regardless of RTT, such that the upper bound
+	// on unavailability is always given by the lease expiration time + 3x RTT
+	// (5.03s to 6.20s).
+	//
+	// With negligible RTT, the average latency is 3.75s for lease acquisition
+	// (-2.5s / 2 + 5.0s) and 2.5s for Raft elections (-1.0s / 2 + (2.0s + 4.0s) /
+	// 2). However, the worst-case Raft election latency (4.0s) being greater than
+	// the best-case lease acquisition latency (2.5s) for a given RTT will skew
+	// the average upwards, so we can approximate the typical unavailability to be
+	// roughly 4.0s (the exact calculation is left as an exercise for the reader).
+	defaultRangeLeaseRaftElectionTimeoutMultiplier = 2.5
 
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
@@ -118,10 +150,29 @@ func DefaultHistogramWindowInterval() time.Duration {
 }
 
 var (
-	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
-	// invocations that must pass between elections.
+	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
+	// before holding an election. It is set low by default for faster failover,
+	// with the following reasoning:
+	//
+	// * The network round-trip time (RTT) is expected to be below 400ms
+	//   (worst-case GCP inter-region latency is ~350ms for asia-south2 to
+	//   southamerica-west1).
+	//
+	// * TCP prevents "dropped" heartbeats. Linux has an RTT-dependant
+	//   retransmission timeout (RTO) which we can approximate as 1.5x RTT
+	//   (smoothed RTT + 4x RTT variance), with a lower bound of 200ms. The
+	//   worst-case RTO is thus 600ms, with another 0.5x RTT (200ms) for
+	//   the retransmit to reach the peer, leaving 200ms to spare.
+	//
+	// * The actual election timeout per replica is multiplied by a random
+	//   factor of 1-2, so it's likely to be significantly larger than 2.0s
+	//   for a given follower (i.e. TCP connection).
+	//
+	// * Even if a spurious election timeout did fire, Raft pre-vote will
+	//   prevent spurious elections caused by a single unreliable TCP
+	//   connection.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 10)
 
 	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
 	// Range's Raft log can grow to before log truncations are triggered while at
@@ -305,8 +356,9 @@ type RaftConfig struct {
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
 
-	// RaftElectionTimeoutTicks is the number of raft ticks before the
-	// previous election expires. This value is inherited by individual stores
+	// RaftElectionTimeoutTicks is the minimum number of raft ticks before holding
+	// an election. The actual election timeout is randomized by each replica to
+	// between 1-2 election timeouts. This value is inherited by individual stores
 	// unless overridden.
 	RaftElectionTimeoutTicks int
 
@@ -428,7 +480,7 @@ func (cfg *RaftConfig) SetDefaults() {
 		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
 	}
 	if cfg.RaftDelaySplitToSuppressSnapshotTicks == 0 {
-		// The Raft Ticks interval defaults to 200ms, and an election is 15
+		// The Raft Ticks interval defaults to 200ms, and an election is 10
 		// ticks. Add a generous amount of ticks to make sure even a backed up
 		// Raft snapshot queue is going to make progress when a (not overly
 		// concurrent) amount of splits happens.
