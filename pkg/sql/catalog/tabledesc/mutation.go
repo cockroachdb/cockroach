@@ -146,6 +146,16 @@ func (c constraint) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
 	return c.desc.UniqueWithoutIndexConstraint
 }
 
+// PrimaryKey implement catalog.Constraint interface.
+func (c constraint) PrimaryKey() catalog.Index {
+	return nil
+}
+
+// Unique implement catalog.Constraint interface.
+func (c constraint) Unique() catalog.Index {
+	return nil
+}
+
 // GetConstraintID returns the ID for the constraint.
 func (c constraint) GetConstraintID() descpb.ConstraintID {
 	switch c.desc.ConstraintType {

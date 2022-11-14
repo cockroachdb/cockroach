@@ -432,6 +432,14 @@ type Constraint interface {
 	// there is one.
 	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
 
+	// PrimaryKey returns the index descriptor backing the PRIMARY KEY constraint,
+	// if there is one.
+	PrimaryKey() Index
+
+	// Unique returns the index descriptor backing the UNIQUE constraint,
+	// if there is one.
+	Unique() Index
+
 	// GetConstraintID returns the ID for the constraint.
 	GetConstraintID() descpb.ConstraintID
 }
