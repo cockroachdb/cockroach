@@ -238,15 +238,23 @@ func NewStopper(options ...Option) *Stopper {
 }
 
 // recover reports the current panic, if any, any panics again.
+//
+// Note: this function _must_ be called with `defer s.recover()`, otherwise
+// the panic recovery won't work. Call `.handlePanic()` if you need
+// more logic around the call.
 func (s *Stopper) recover(ctx context.Context) {
 	if r := recover(); r != nil {
-		if s.onPanic != nil {
-			s.onPanic(ctx, r)
-			return
-		}
-		logcrash.ReportPanicWithGlobalSettings(ctx, r, 1)
-		panic(r)
+		s.handlePanic(ctx, r)
 	}
+}
+
+func (s *Stopper) handlePanic(ctx context.Context, r interface{}) {
+	if s.onPanic != nil {
+		s.onPanic(ctx, r)
+		return
+	}
+	logcrash.ReportPanicWithGlobalSettings(ctx, r, 1)
+	panic(r)
 }
 
 func (s *Stopper) addTask(delta int32) (updated int32) {
@@ -530,7 +538,9 @@ func (s *Stopper) Stop(ctx context.Context) {
 	}
 
 	defer func() {
-		s.recover(ctx)
+		if r := recover(); r != nil {
+			s.handlePanic(ctx, r)
+		}
 		unregister(s)
 		close(s.stopped)
 	}()
