@@ -48,7 +48,14 @@ const (
 	defaultHTTPAddr = ":" + DefaultHTTPPort
 
 	// NetworkTimeout is the timeout used for network operations.
-	NetworkTimeout = 3 * time.Second
+	//
+	// The maximum RTT between GCP regions is roughly 350 ms (asia-south2 to
+	// southamerica-west1). Linux has an RTT-dependant retransmission timeout
+	// (RTO) which we can approximate as 1.5x RTT (smoothed RTT + 4x RTT
+	// variance), with a lower bound of 200ms, so the worst-case RTO is 600ms. 2s
+	// should therefore be sufficient under most normal conditions.
+	// https://datastudio.google.com/reporting/fc733b10-9744-4a72-a502-92290f608571/page/70YCB
+	NetworkTimeout = 2 * time.Second
 
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = 200 * time.Millisecond
@@ -66,9 +73,11 @@ const (
 	// each heartbeat.
 	defaultRaftHeartbeatIntervalTicks = 5
 
-	// defaultRPCHeartbeatInterval is the default value of RPCHeartbeatIntervalAndHalfTimeout
-	// used by the rpc context.
-	defaultRPCHeartbeatInterval = 3 * time.Second
+	// defaultRPCHeartbeatInterval is the default value of
+	// RPCHeartbeatIntervalAndHalfTimeout used by the RPC context. The heartbeat
+	// timeout is twice this value, and we want that to be equivalent to
+	// NetworkTimeout to quickly detect peer unavailability.
+	defaultRPCHeartbeatInterval = NetworkTimeout / 2
 
 	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
