@@ -74,15 +74,13 @@ func getGlobalReadsLead(clock *hlc.Clock) time.Duration {
 // reads is enabled, returning a detailed error if not. It is not suitable for
 // use in hot paths since a new error may be instantiated on each call.
 func checkEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) error {
-	org := sql.ClusterOrganization.Get(&st.SV)
-	return utilccl.CheckEnterpriseEnabled(st, logicalClusterID, org, "follower reads")
+	return utilccl.CheckEnterpriseEnabled(st, logicalClusterID, "follower reads")
 }
 
 // isEnterpriseEnabled is faster than checkEnterpriseEnabled, and suitable
 // for hot paths.
 func isEnterpriseEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) bool {
-	org := sql.ClusterOrganization.Get(&st.SV)
-	return utilccl.IsEnterpriseEnabled(st, logicalClusterID, org, "follower reads")
+	return utilccl.IsEnterpriseEnabled(st, logicalClusterID, "follower reads")
 }
 
 func checkFollowerReadsEnabled(logicalClusterID uuid.UUID, st *cluster.Settings) bool {

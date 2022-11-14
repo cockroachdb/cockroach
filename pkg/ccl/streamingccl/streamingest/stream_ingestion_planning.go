@@ -93,7 +93,7 @@ func ingestionPlanHook(
 		defer span.Finish()
 
 		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(), p.ExecCfg().Organization(),
+			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
 			"RESTORE FROM REPLICATION STREAM",
 		); err != nil {
 			return err

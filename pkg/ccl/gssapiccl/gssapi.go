@@ -107,7 +107,7 @@ func authGSS(
 		// their GSS configuration is correct. That is, the presence of this error
 		// message means they have a correctly functioning GSS/Kerberos setup,
 		// but now need to enable enterprise features.
-		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), execCfg.Organization(), "GSS authentication")
+		return utilccl.CheckEnterpriseEnabled(execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), "GSS authentication")
 	})
 	return behaviors, nil
 }

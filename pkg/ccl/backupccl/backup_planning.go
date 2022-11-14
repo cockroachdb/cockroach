@@ -485,7 +485,7 @@ func checkPrivilegesForBackup(
 
 func requireEnterprise(execCfg *sql.ExecutorConfig, feature string) error {
 	if err := utilccl.CheckEnterpriseEnabled(
-		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), execCfg.Organization(),
+		execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(),
 		fmt.Sprintf("BACKUP with %s", feature),
 	); err != nil {
 		return err
