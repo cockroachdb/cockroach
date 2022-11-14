@@ -161,11 +161,11 @@ query TT
 SHOW CREATE TABLE foo5
 ----
 foo5  CREATE TABLE public.foo5 (
-      a INT8 NULL,
-      b INT8 NOT NULL,
-      c INT8 NULL,
-      CONSTRAINT foo5_pkey PRIMARY KEY (b ASC)
-)
+        a INT8 NULL,
+        b INT8 NOT NULL,
+        c INT8 NULL,
+        CONSTRAINT foo5_pkey PRIMARY KEY (b ASC)
+      )
 
 statement ok
 CREATE TABLE foo6 (
@@ -178,11 +178,11 @@ query TT
 SHOW CREATE TABLE foo6
 ----
 foo6  CREATE TABLE public.foo6 (
-      a INT8 NOT NULL,
-      b INT8 NULL,
-      c INT8 NULL,
-      CONSTRAINT foo6_pkey PRIMARY KEY (a ASC)
-)
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NULL,
+        CONSTRAINT foo6_pkey PRIMARY KEY (a ASC)
+      )
 
 statement error generate insert row: null value in column "x" violates not-null constraint
 CREATE TABLE foo7 (x PRIMARY KEY) AS VALUES (1), (NULL);
@@ -194,10 +194,10 @@ query TT
 SHOW CREATE TABLE foo8
 ----
 foo8  CREATE TABLE public.foo8 (
-      item STRING NOT NULL,
-      qty INT8 NULL,
-      CONSTRAINT foo8_pkey PRIMARY KEY (item ASC)
-)
+        item STRING NOT NULL,
+        qty INT8 NULL,
+        CONSTRAINT foo8_pkey PRIMARY KEY (item ASC)
+      )
 
 # Allow CREATE TABLE AS to specify composite primary keys.
 statement ok
@@ -212,11 +212,11 @@ query TT
 SHOW CREATE TABLE foo9
 ----
 foo9  CREATE TABLE public.foo9 (
-      a INT8 NOT NULL,
-      b INT8 NULL,
-      c INT8 NOT NULL,
-      CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC)
-)
+        a INT8 NOT NULL,
+        b INT8 NULL,
+        c INT8 NOT NULL,
+        CONSTRAINT foo9_pkey PRIMARY KEY (a ASC, c ASC)
+      )
 
 statement ok
 CREATE TABLE foo10 (a, PRIMARY KEY (c, b, a), b, c, FAMILY "primary" (a, b, c)) AS SELECT * FROM foo9
@@ -225,11 +225,11 @@ query TT
 SHOW CREATE TABLE foo10
 ----
 foo10  CREATE TABLE public.foo10 (
-       a INT8 NOT NULL,
-       b INT8 NOT NULL,
-       c INT8 NOT NULL,
-       CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC)
-)
+         a INT8 NOT NULL,
+         b INT8 NOT NULL,
+         c INT8 NOT NULL,
+         CONSTRAINT foo10_pkey PRIMARY KEY (c ASC, b ASC, a ASC)
+       )
 
 statement ok
 CREATE TABLE foo11 (
@@ -243,11 +243,11 @@ query TT
 SHOW CREATE TABLE foo11
 ----
 foo11  CREATE TABLE public.foo11 (
-       x INT8 NOT NULL,
-       y INT8 NULL,
-       z INT8 NOT NULL,
-       CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC)
-)
+         x INT8 NOT NULL,
+         y INT8 NULL,
+         z INT8 NOT NULL,
+         CONSTRAINT foo11_pkey PRIMARY KEY (x ASC, z ASC)
+       )
 
 statement error pq: multiple primary keys for table "foo12" are not allowed
 CREATE TABLE foo12 (x PRIMARY KEY, y, PRIMARY KEY(y)) AS VALUES (1, 2), (3, 4);
@@ -269,14 +269,14 @@ query TT
 SHOW CREATE TABLE foo12
 ----
 foo12  CREATE TABLE public.foo12 (
-       a INT8 NOT NULL,
-       b INT8 NULL,
-       c INT8 NULL,
-       d INT8 NULL,
-       CONSTRAINT foo12_pkey PRIMARY KEY (a ASC),
-       FAMILY f1 (a, b, d),
-       FAMILY fam_1_c (c)
-)
+         a INT8 NOT NULL,
+         b INT8 NULL,
+         c INT8 NULL,
+         d INT8 NULL,
+         CONSTRAINT foo12_pkey PRIMARY KEY (a ASC),
+         FAMILY f1 (a, b, d),
+         FAMILY fam_1_c (c)
+       )
 
 # Test constraint style definition of column families.
 statement ok
@@ -286,14 +286,14 @@ query TT
 SHOW CREATE TABLE foo13
 ----
 foo13  CREATE TABLE public.foo13 (
-       a INT8 NOT NULL,
-       b INT8 NOT NULL,
-       c INT8 NULL,
-       d INT8 NULL,
-       CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
-       FAMILY pk (a, b),
-       FAMILY fam_1_c_d (c, d)
-)
+         a INT8 NOT NULL,
+         b INT8 NOT NULL,
+         c INT8 NULL,
+         d INT8 NULL,
+         CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
+         FAMILY pk (a, b),
+         FAMILY fam_1_c_d (c, d)
+       )
 
 # Test renaming columns still preserves the column families.
 statement ok
@@ -306,14 +306,14 @@ query TT
 SHOW CREATE TABLE foo13
 ----
 foo13  CREATE TABLE public.foo13 (
-       a INT8 NOT NULL,
-       b INT8 NOT NULL,
-       e INT8 NULL,
-       z INT8 NULL,
-       CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
-       FAMILY pk (a, b),
-       FAMILY fam_1_c_d (e, z)
-)
+         a INT8 NOT NULL,
+         b INT8 NOT NULL,
+         e INT8 NULL,
+         z INT8 NULL,
+         CONSTRAINT foo13_pkey PRIMARY KEY (a ASC, b ASC),
+         FAMILY pk (a, b),
+         FAMILY fam_1_c_d (e, z)
+       )
 
 # Regression test for #41004
 statement ok

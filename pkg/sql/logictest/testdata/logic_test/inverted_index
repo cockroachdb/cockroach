@@ -37,14 +37,14 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE public.c (
-   id INT8 NOT NULL,
-   foo JSONB NULL,
-   "bAr" JSONB NULL,
-   "qUuX" JSONB NULL,
-   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX "c_bAr_idx" ("bAr")
-)
+     id INT8 NOT NULL,
+     foo JSONB NULL,
+     "bAr" JSONB NULL,
+     "qUuX" JSONB NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX "c_bAr_idx" ("bAr")
+   )
 
 # Regression test for #42944: make sure that mixed-case columns can be
 # inverted indexed.
@@ -1112,13 +1112,13 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE public.c (
-   id INT8 NOT NULL,
-   foo INT8[] NULL,
-   bar STRING[] NULL,
-   CONSTRAINT c_pkey PRIMARY KEY (id ASC),
-   INVERTED INDEX c_foo_idx (foo),
-   INVERTED INDEX c_bar_idx (bar)
-)
+     id INT8 NOT NULL,
+     foo INT8[] NULL,
+     bar STRING[] NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX c_bar_idx (bar)
+   )
 
 query ITT
 SELECT * from c WHERE bar @> ARRAY['foo']

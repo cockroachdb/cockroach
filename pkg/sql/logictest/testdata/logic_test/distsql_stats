@@ -1629,4 +1629,3 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "row_count": 0
     }
 ]
-

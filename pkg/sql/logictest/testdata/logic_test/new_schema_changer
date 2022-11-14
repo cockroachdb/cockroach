@@ -1391,11 +1391,11 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE trewrite]
 ----
 CREATE TABLE public.trewrite (
-   k INT8 NOT NULL,
-   ts TIMESTAMPTZ NULL,
-   c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
-   CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
-   FAMILY fam_0_k_ts (k, ts, c)
+  k INT8 NOT NULL,
+  ts TIMESTAMPTZ NULL,
+  c STRING NULL AS (to_char(timezone('utc':::STRING, ts))) STORED,
+  CONSTRAINT trewrite_pkey PRIMARY KEY (k ASC),
+  FAMILY fam_0_k_ts (k, ts, c)
 )
 
 subtest create-index

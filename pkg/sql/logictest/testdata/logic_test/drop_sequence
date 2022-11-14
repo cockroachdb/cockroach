@@ -34,10 +34,10 @@ query TT
 SHOW CREATE TABLE t1
 ----
 t1  CREATE TABLE public.t1 (
-    i INT8 NOT NULL DEFAULT nextval('public.drop_test'::REGCLASS),
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-)
+      i INT8 NOT NULL DEFAULT nextval('public.drop_test'::REGCLASS),
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+    )
 
 query T
 SELECT pg_get_serial_sequence('t1', 'i')
@@ -54,10 +54,10 @@ query TT
 SHOW CREATE TABLE t1
 ----
 t1  CREATE TABLE public.t1 (
-    i INT8 NOT NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
-)
+      i INT8 NOT NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+    )
 
 query T
 SELECT pg_get_serial_sequence('t1', 'i')
@@ -93,12 +93,12 @@ query TT
 SHOW CREATE TABLE foo
 ----
 foo  CREATE TABLE public.foo (
-     i INT8 NOT NULL DEFAULT nextval('other_db.public.s'::REGCLASS),
-     j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
-     FAMILY fam_0_i_j_rowid (i, j, rowid)
-)
+       i INT8 NOT NULL DEFAULT nextval('other_db.public.s'::REGCLASS),
+       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
+       FAMILY fam_0_i_j_rowid (i, j, rowid)
+     )
 
 query TT
 SELECT pg_get_serial_sequence('foo', 'i'), pg_get_serial_sequence('foo', 'j')
@@ -115,12 +115,12 @@ query TT
 SHOW CREATE TABLE foo
 ----
 foo  CREATE TABLE public.foo (
-     i INT8 NOT NULL,
-     j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
-     FAMILY fam_0_i_j_rowid (i, j, rowid)
-)
+       i INT8 NOT NULL,
+       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC),
+       FAMILY fam_0_i_j_rowid (i, j, rowid)
+     )
 
 query TT
 SELECT pg_get_serial_sequence('foo', 'i'), pg_get_serial_sequence('foo', 'j')
@@ -152,12 +152,12 @@ query TT
 SHOW CREATE TABLE bar
 ----
 bar  CREATE TABLE public.bar (
-     i INT8 NOT NULL DEFAULT nextval('other_sc.s'::REGCLASS),
-     j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
-     FAMILY fam_0_i_j_rowid (i, j, rowid)
-)
+       i INT8 NOT NULL DEFAULT nextval('other_sc.s'::REGCLASS),
+       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
+       FAMILY fam_0_i_j_rowid (i, j, rowid)
+     )
 
 query TT
 SELECT pg_get_serial_sequence('bar', 'i'), pg_get_serial_sequence('bar', 'j')
@@ -174,12 +174,12 @@ query TT
 SHOW CREATE TABLE bar
 ----
 bar  CREATE TABLE public.bar (
-     i INT8 NOT NULL,
-     j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
-     FAMILY fam_0_i_j_rowid (i, j, rowid)
-)
+       i INT8 NOT NULL,
+       j INT8 NOT NULL DEFAULT nextval('public.s'::REGCLASS),
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT bar_pkey PRIMARY KEY (rowid ASC),
+       FAMILY fam_0_i_j_rowid (i, j, rowid)
+     )
 
 query TT
 SELECT pg_get_serial_sequence('bar', 'i'), pg_get_serial_sequence('bar', 'j')
@@ -218,10 +218,10 @@ query TT
 SHOW CREATE TABLE t3
 ----
 t3  CREATE TABLE public.t3 (
-    i INT8 NOT NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC)
-)
+      i INT8 NOT NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t3_pkey PRIMARY KEY (rowid ASC)
+    )
 
 query T
 SELECT pg_get_serial_sequence('t3', 'i')
@@ -252,10 +252,10 @@ query TT
 SHOW CREATE TABLE t4
 ----
 t4  CREATE TABLE public.t4 (
-    i INT8 NOT NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC)
-)
+      i INT8 NOT NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t4_pkey PRIMARY KEY (rowid ASC)
+    )
 
 query T
 SELECT pg_get_serial_sequence('t4', 'i')
@@ -297,10 +297,10 @@ query TT
 SHOW CREATE TABLE t6
 ----
 t6  CREATE TABLE public.t6 (
-    i INT8 NOT NULL,
-    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-    CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC)
-)
+      i INT8 NOT NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC)
+    )
 
 query T
 SELECT pg_get_serial_sequence('t6', 'i')

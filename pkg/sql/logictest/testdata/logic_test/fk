@@ -498,16 +498,16 @@ query TT
 SHOW CREATE TABLE delivery
 ----
 delivery  CREATE TABLE public.delivery (
-          ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
-          "order" INT8 NULL,
-          shipment INT8 NULL,
-          item STRING NULL,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT delivery_pkey PRIMARY KEY (rowid ASC),
-          CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
-          CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
-          INDEX delivery_item_idx (item ASC)
-)
+            ts TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
+            "order" INT8 NULL,
+            shipment INT8 NULL,
+            item STRING NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT delivery_pkey PRIMARY KEY (rowid ASC),
+            CONSTRAINT delivery_order_shipment_fkey FOREIGN KEY ("order", shipment) REFERENCES public.orders(id, shipment),
+            CONSTRAINT delivery_item_fkey FOREIGN KEY (item) REFERENCES public.products(upc),
+            INDEX delivery_item_idx (item ASC)
+          )
 
 statement ok
 INSERT INTO delivery ("order", shipment, item) VALUES
@@ -837,14 +837,14 @@ query TT
 SHOW CREATE TABLE refpairs
 ----
 refpairs  CREATE TABLE public.refpairs (
-          a INT8 NULL,
-          b STRING NULL,
-          c INT8 NULL,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
-          CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
-          INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
-)
+            a INT8 NULL,
+            b STRING NULL,
+            c INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT refpairs_pkey PRIMARY KEY (rowid ASC),
+            CONSTRAINT refpairs_a_b_fkey FOREIGN KEY (a, b) REFERENCES public.pairs(src, dest) ON UPDATE RESTRICT,
+            INDEX refpairs_a_b_c_idx (a ASC, b ASC, c ASC)
+          )
 
 statement error pgcode 23503 insert on table "refpairs" violates foreign key constraint "refpairs_a_b_fkey"\nDETAIL: Key \(a, b\)=\(100, 'two'\) is not present in table "pairs".
 INSERT INTO refpairs VALUES (100, 'two'), (200, 'two')
@@ -1054,14 +1054,14 @@ query TT
 SHOW CREATE TABLE refers
 ----
 refers  CREATE TABLE public.refers (
-        a INT8 NULL,
-        b INT8 NULL,
-        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT refers_pkey PRIMARY KEY (rowid ASC),
-        CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
-        INDEX another_idx (b ASC),
-        INDEX foo (a ASC)
-)
+          a INT8 NULL,
+          b INT8 NULL,
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT refers_pkey PRIMARY KEY (rowid ASC),
+          CONSTRAINT refers_a_fkey FOREIGN KEY (a) REFERENCES public.referee(id),
+          INDEX another_idx (b ASC),
+          INDEX foo (a ASC)
+        )
 
 statement ok
 DROP INDEX refers@another_idx
@@ -1137,10 +1137,10 @@ query TT
 SHOW CREATE TABLE pkref_b
 ----
 pkref_b  CREATE TABLE public.pkref_b (
-         b INT8 NOT NULL,
-         CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
-         CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
-)
+           b INT8 NOT NULL,
+           CONSTRAINT pkref_b_pkey PRIMARY KEY (b ASC),
+           CONSTRAINT pkref_b_b_fkey FOREIGN KEY (b) REFERENCES public.pkref_a(a) ON DELETE RESTRICT
+         )
 
 subtest 20042
 

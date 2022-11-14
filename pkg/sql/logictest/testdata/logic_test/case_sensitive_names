@@ -198,10 +198,10 @@ CREATE VIEW XV AS SELECT X, "Y" FROM foo
 query TT
 SHOW CREATE VIEW xv
 ----
-xv                                       CREATE VIEW public.xv (
-                                         x,
-                                         "Y"
-) AS SELECT x, "Y" FROM test.public.foo
+xv  CREATE VIEW public.xv (
+      x,
+      "Y"
+    ) AS SELECT x, "Y" FROM test.public.foo
 
 query error pgcode 42P01 relation "XV" does not exist
 SHOW CREATE VIEW "XV"
@@ -212,10 +212,10 @@ CREATE VIEW "YV" AS SELECT X, "Y" FROM foo
 query TT
 SHOW CREATE VIEW "YV"
 ----
-"YV"                                     CREATE VIEW public."YV" (
-                                         x,
-                                         "Y"
-) AS SELECT x, "Y" FROM test.public.foo
+"YV"  CREATE VIEW public."YV" (
+        x,
+        "Y"
+      ) AS SELECT x, "Y" FROM test.public.foo
 
 query error pgcode 42P01 relation "yv" does not exist
 SHOW CREATE VIEW YV
