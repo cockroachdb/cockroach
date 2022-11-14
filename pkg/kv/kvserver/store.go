@@ -267,7 +267,7 @@ func testStoreConfig(clock *hlc.Clock, version roachpb.Version) StoreConfig {
 	// Use shorter Raft tick settings in order to minimize start up and failover
 	// time in tests.
 	sc.RaftHeartbeatIntervalTicks = 1
-	sc.RaftElectionTimeoutTicks = 3
+	sc.RaftElectionTimeoutTicks = 2
 	sc.RaftTickInterval = 100 * time.Millisecond
 	sc.SetDefaults()
 	return sc
