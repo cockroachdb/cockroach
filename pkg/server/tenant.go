@@ -294,7 +294,6 @@ func startTenantInternal(
 		debugServer,     /* handleDebugUnauthenticated */
 		newAPIV2Server(background, &apiV2ServerOpts{
 			sqlServer: s,
-			tenantID:  sqlCfg.TenantID,
 			db:        args.db,
 		}), /* apiServer */
 	); err != nil {
