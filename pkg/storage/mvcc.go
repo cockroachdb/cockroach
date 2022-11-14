@@ -82,7 +82,7 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 // being written, but already written tombstones will remain until GCed. The
 // above note on jobs also applies in this case.
 var MVCCRangeTombstonesEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
+	settings.TenantReadOnly,
 	"storage.mvcc.range_tombstones.enabled",
 	"enables the use of MVCC range tombstones",
 	true)
