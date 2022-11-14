@@ -112,7 +112,11 @@ func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
 		FromHashShardedColumn: op.FromHashShardedColumn,
 		ConstraintID:          op.ConstraintID,
 	}
-	return enqueueAddCheckConstraintMutation(tbl, ck)
+	if err = enqueueAddCheckConstraintMutation(tbl, ck); err != nil {
+		return err
+	}
+	tbl.Mutations[len(tbl.Mutations)-1].State = descpb.DescriptorMutation_WRITE_ONLY
+	return nil
 }
 
 func (m *visitor) MakeValidatedCheckConstraintPublic(
@@ -165,9 +169,8 @@ func (m *visitor) MakePublicCheckConstraintValidated(
 	if err != nil {
 		return err
 	}
-	for i, ck := range tbl.Checks {
+	for _, ck := range tbl.Checks {
 		if ck.ConstraintID == op.ConstraintID {
-			tbl.Checks = append(tbl.Checks[:i], tbl.Checks[i+1:]...)
 			ck.Validity = descpb.ConstraintValidity_Dropping
 			return enqueueDropCheckConstraintMutation(tbl, ck)
 		}
