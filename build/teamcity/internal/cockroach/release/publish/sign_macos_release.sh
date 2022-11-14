@@ -47,7 +47,9 @@ mkdir -p artifacts
 cd artifacts
 
 for product in cockroach cockroach-sql; do
-  for platform in darwin-11.0-aarch64 darwin-10.9-amd64; do
+  # TODO: add Intel binaries too.
+  # for platform in darwin-11.0-aarch64 darwin-10.9-amd64; do
+  for platform in darwin-11.0-aarch64; do
     base=${product}-${VERSION}.${platform}
     unsigned_base=${product}-${VERSION}.${platform}.unsigned
     unsigned_file=${unsigned_base}.tgz
