@@ -2279,6 +2279,69 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
+		{`unknown mutation ID 123 associated with job ID 456`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{MutationID: 123, JobID: 456},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:   1,
+						Name: "bar",
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
+		{`two job IDs 12345 and 45678 mapped to the same mutation ID 1`,
+			descpb.TableDescriptor{
+				ID:            2,
+				ParentID:      1,
+				Name:          "foo",
+				FormatVersion: descpb.InterleavedFormatVersion,
+				MutationJobs: []descpb.TableDescriptor_MutationJob{
+					{MutationID: 1, JobID: 12345},
+					{MutationID: 1, JobID: 45678},
+				},
+				Mutations: []descpb.DescriptorMutation{
+					{
+						Descriptor_: &descpb.DescriptorMutation_Index{
+							Index: &descpb.IndexDescriptor{
+								ID:                  3,
+								Name:                "new_primary_key",
+								Unique:              true,
+								KeyColumnIDs:        []descpb.ColumnID{3},
+								KeyColumnNames:      []string{"c3"},
+								KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
+								Version:             descpb.LatestIndexDescriptorVersion,
+								EncodingType:        descpb.PrimaryIndexEncoding,
+								ConstraintID:        1,
+							},
+						},
+						Direction:  descpb.DescriptorMutation_ADD,
+						State:      descpb.DescriptorMutation_DELETE_ONLY,
+						MutationID: 1,
+					},
+				},
+				Columns: []descpb.ColumnDescriptor{
+					{
+						ID:   1,
+						Name: "bar",
+					},
+				},
+				Families: []descpb.ColumnFamilyDescriptor{
+					{ID: 0, Name: "primary", ColumnIDs: []descpb.ColumnID{1}, ColumnNames: []string{"bar"}},
+				},
+				NextColumnID: 2,
+				NextFamilyID: 1,
+			}},
 	}
 	for i, d := range testData {
 		t.Run(d.err, func(t *testing.T) {

@@ -506,6 +506,7 @@ func TestExamineDescriptors(t *testing.T) {
 				},
 			},
 			expected: `Examining 2 descriptors and 2 namespace entries...
+  ParentID  52, ParentSchemaID 29: relation "t" (51): unknown mutation ID 1 associated with job ID 123
   ParentID  52, ParentSchemaID 29: relation "t" (51): mutation job 123 has terminal status (canceled)
 `,
 		},
