@@ -197,7 +197,9 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	var err error
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
 		var rngInfo rangecache.EvictionToken
-		rngInfo, err = ri.ds.getRoutingInfo(ctx, ri.key, ri.token, ri.scanDir == Descending)
+		rngInfo, err = ri.ds.getRoutingInfo(
+			ctx, ri.key, rangecache.EvictionToken{}, ri.scanDir == Descending,
+		)
 
 		// getRoutingInfo may fail retryably if, for example, the first
 		// range isn't available via Gossip. Assume that all errors at
