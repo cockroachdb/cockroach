@@ -69,6 +69,7 @@ go_test(
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlliveness",
         "//pkg/sql/sqlliveness/slstorage",
         "//pkg/sql/sqltestutils",
         "//pkg/sql/tests",

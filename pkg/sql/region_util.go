@@ -1410,9 +1410,9 @@ var SynthesizeRegionConfigOptionUseCache SynthesizeRegionConfigOption = func(o *
 	o.useCache = true
 }
 
-// errNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
+// ErrNotMultiRegionDatabase is returned from SynthesizeRegionConfig when the
 // requested database is not a multi-region database.
-var errNotMultiRegionDatabase = errors.New(
+var ErrNotMultiRegionDatabase = errors.New(
 	"database is not a multi-region database",
 )
 
@@ -1435,60 +1435,41 @@ func SynthesizeRegionConfig(
 		opt(&o)
 	}
 
-	regionConfig := multiregion.RegionConfig{}
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidLeased:    !o.useCache,
-		Required:       true,
-		IncludeOffline: o.includeOffline,
-	})
-	if err != nil {
-		return multiregion.RegionConfig{}, err
-	}
-	if !dbDesc.IsMultiRegion() {
-		return multiregion.RegionConfig{}, errNotMultiRegionDatabase
-	}
-
-	regionEnumID, err := dbDesc.MultiRegionEnumID()
-	if err != nil {
-		return regionConfig, err
-	}
-
-	regionEnum, err := descsCol.GetImmutableTypeByID(
-		ctx,
-		txn,
-		regionEnumID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    !o.useCache,
-				IncludeOffline: o.includeOffline,
-			},
-		},
+	dbDesc, regionEnumDesc, err := getDBAndRegionEnumDescs(
+		ctx, txn, dbID, descsCol, o.useCache, o.includeOffline,
 	)
 	if err != nil {
 		return multiregion.RegionConfig{}, err
 	}
 
+	regionConfig := multiregion.RegionConfig{}
+
 	var regionNames catpb.RegionNames
 	if o.forValidation {
-		regionNames, err = regionEnum.RegionNamesForValidation()
+		regionNames, err = regionEnumDesc.RegionNamesForValidation()
 	} else {
-		regionNames, err = regionEnum.RegionNames()
+		regionNames, err = regionEnumDesc.RegionNames()
 	}
 	if err != nil {
 		return regionConfig, err
 	}
 
-	zoneCfgExtensions, err := regionEnum.ZoneConfigExtensions()
+	zoneCfgExtensions, err := regionEnumDesc.ZoneConfigExtensions()
 	if err != nil {
 		return regionConfig, err
 	}
 
-	transitioningRegionNames, err := regionEnum.TransitioningRegionNames()
+	transitioningRegionNames, err := regionEnumDesc.TransitioningRegionNames()
 	if err != nil {
 		return regionConfig, err
 	}
 
-	superRegions, err := regionEnum.SuperRegions()
+	superRegions, err := regionEnumDesc.SuperRegions()
+	if err != nil {
+		return regionConfig, err
+	}
+
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
 	if err != nil {
 		return regionConfig, err
 	}
@@ -1510,6 +1491,75 @@ func SynthesizeRegionConfig(
 	}
 
 	return regionConfig, nil
+}
+
+// GetRegionEnumRepresentations returns representations stored in the
+// multi-region enum type associated with dbID, and the primary region of it.
+// An ErrNotMultiRegionDatabase error will be returned if the database isn't
+// multi-region.
+func GetRegionEnumRepresentations(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, descsCol *descs.Collection,
+) (enumReps map[catpb.RegionName][]byte, primaryRegion catpb.RegionName, err error) {
+	dbDesc, regionEnumDesc, err := getDBAndRegionEnumDescs(
+		ctx, txn, dbID, descsCol, false /* useCache */, false /* includeOffline */)
+	if err != nil {
+		return nil, "", err
+	}
+
+	enumReps = make(map[catpb.RegionName][]byte)
+	for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
+		if regionEnumDesc.IsMemberReadOnly(ord) {
+			continue
+		}
+		enumReps[catpb.RegionName(
+			regionEnumDesc.GetMemberLogicalRepresentation(ord),
+		)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)
+	}
+	return enumReps, dbDesc.GetRegionConfig().PrimaryRegion, nil
+}
+
+// getDBAndRegionEnumDescs returns descriptors for both the database and
+// multi-region enum type. If the database isn't multi-region, an
+// ErrNotMultiRegionDatabase error will be returned.
+func getDBAndRegionEnumDescs(
+	ctx context.Context,
+	txn *kv.Txn,
+	dbID descpb.ID,
+	descsCol *descs.Collection,
+	useCache bool,
+	includeOffline bool,
+) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
+	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
+		AvoidLeased:    !useCache,
+		Required:       true,
+		IncludeOffline: includeOffline,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if !dbDesc.IsMultiRegion() {
+		return nil, nil, ErrNotMultiRegionDatabase
+	}
+	regionEnumID, err := dbDesc.MultiRegionEnumID()
+	if err != nil {
+		return nil, nil, err
+	}
+	regionEnumDesc, err = descsCol.GetImmutableTypeByID(
+		ctx,
+		txn,
+		regionEnumID,
+		tree.ObjectLookupFlags{
+			CommonLookupFlags: tree.CommonLookupFlags{
+				AvoidLeased:    !useCache,
+				Required:       true,
+				IncludeOffline: includeOffline,
+			},
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return dbDesc, regionEnumDesc, nil
 }
 
 // blockDiscardOfZoneConfigForMultiRegionObject determines if discarding the

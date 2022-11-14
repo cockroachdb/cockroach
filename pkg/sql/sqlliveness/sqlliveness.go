@@ -34,7 +34,7 @@ type SessionID string
 // Provider is a wrapper around the sqlliveness subsystem for external
 // consumption.
 type Provider interface {
-	Start(ctx context.Context)
+	Start(ctx context.Context, regionPhysicalRep []byte)
 	Metrics() metric.Struct
 	Liveness
 
