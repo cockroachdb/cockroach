@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/errors"
 )
 
 var _ catalog.TableElementMaybeMutation = maybeMutation{}
@@ -99,6 +100,11 @@ func (c constraint) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
 	return c.desc
 }
 
+// IndexDesc implements catalog.Constraint interface.
+func (c constraint) IndexDesc() *descpb.IndexDescriptor {
+	return nil
+}
+
 // GetName returns the name of this constraint update mutation.
 func (c constraint) GetName() string {
 	return c.desc.Name
@@ -146,6 +152,16 @@ func (c constraint) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
 	return c.desc.UniqueWithoutIndexConstraint
 }
 
+// PrimaryKey implement catalog.Constraint interface.
+func (c constraint) PrimaryKey() catalog.Index {
+	return nil
+}
+
+// Unique implement catalog.Constraint interface.
+func (c constraint) Unique() catalog.Index {
+	return nil
+}
+
 // GetConstraintID returns the ID for the constraint.
 func (c constraint) GetConstraintID() descpb.ConstraintID {
 	switch c.desc.ConstraintType {
@@ -159,6 +175,19 @@ func (c constraint) GetConstraintID() descpb.ConstraintID {
 		return c.UniqueWithoutIndex().ConstraintID
 	}
 	panic("unknown constraint type")
+}
+
+// GetConstraintValidity returns the ID for the constraint.
+func (c constraint) GetConstraintValidity() descpb.ConstraintValidity {
+	if c.IsCheck() || c.IsNotNull() {
+		return c.Check().Validity
+	} else if c.IsForeignKey() {
+		return c.ForeignKey().Validity
+	} else if c.IsUniqueWithoutIndex() {
+		return c.UniqueWithoutIndex().Validity
+	} else {
+		panic(errors.AssertionFailedf("unknown constraint type"))
+	}
 }
 
 // modifyRowLevelTTL implements the catalog.ModifyRowLevelTTL interface.
