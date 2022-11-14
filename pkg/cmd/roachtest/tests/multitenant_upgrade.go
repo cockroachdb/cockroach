@@ -87,7 +87,7 @@ func runMultiTenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster, 
 	// auto-update loop (at the time of writing 30s), plus some migrations may be
 	// genuinely long-running.
 	runner.SucceedsSoonDuration = 5 * time.Minute
-	runner.Exec(t, `SELECT crdb_internal.create_tenant($1)`, tenant11ID)
+	runner.Exec(t, `SELECT crdb_internal.create_tenant($1::INT)`, tenant11ID)
 
 	var initialVersion string
 	runner.QueryRow(t, "SHOW CLUSTER SETTING version").Scan(&initialVersion)

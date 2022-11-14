@@ -81,7 +81,7 @@ func runMultiTenantDistSQL(
 	}
 
 	storConn := c.Conn(ctx, t.L(), 1)
-	_, err := storConn.Exec(`SELECT crdb_internal.create_tenant($1)`, tenantID)
+	_, err := storConn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
 	require.NoError(t, err)
 
 	instances := make([]*tenantNode, 0, numInstances)
