@@ -121,6 +121,7 @@ type Instance struct {
 	// sessionEvents gets notified of some session state changes.
 	sessionEvents SessionEventListener
 	storage       Writer
+	currentRegion []byte
 	ttl           func() time.Duration
 	hb            func() time.Duration
 	testKnobs     sqlliveness.TestingKnobs
@@ -197,7 +198,11 @@ func (l *Instance) clearSessionLocked(ctx context.Context) (createNewSession boo
 // createSession tries until it can create a new session and returns an error
 // only if the heart beat loop should exit.
 func (l *Instance) createSession(ctx context.Context) (*session, error) {
-	id, err := slstorage.MakeSessionID(enum.One, uuid.MakeV4())
+	region := enum.One
+	if l.currentRegion != nil {
+		region = l.currentRegion
+	}
+	id, err := slstorage.MakeSessionID(region, uuid.MakeV4())
 	if err != nil {
 		return nil, err
 	}
@@ -396,9 +401,9 @@ func NewSQLInstance(
 }
 
 // Start runs the hearbeat loop.
-func (l *Instance) Start(ctx context.Context) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (l *Instance) Start(ctx context.Context, regionPhysicalRep []byte) {
+	l.currentRegion = regionPhysicalRep
+
 	log.Infof(ctx, "starting SQL liveness instance")
 	// Detach from ctx's cancelation.
 	taskCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))

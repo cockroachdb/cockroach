@@ -71,7 +71,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/consistencychecker"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
@@ -1256,28 +1255,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}, nil
 }
 
-// Checks if tenant exists. This function does a very superficial check to see if the system db
-// has been bootstrapped for the tenant. This is not a complete check and is only sufficient
-// to be used in the dev environment.
-func checkTenantExists(ctx context.Context, codec keys.SQLCodec, db *kv.DB) error {
-	if codec.ForSystemTenant() {
-		return errors.AssertionFailedf("asked to check for tenant but system codec specified")
-	}
-
-	key := catalogkeys.MakeDatabaseNameKey(codec, systemschema.SystemDatabaseName)
-	result, err := db.Get(ctx, key)
-	if err != nil {
-		return err
-	}
-	if result.Value == nil || result.ValueInt() != keys.SystemDatabaseID {
-		return errors.New("system DB uninitialized, check if tenant is non existent")
-	}
-	// Tenant has been confirmed to be bootstrapped successfully
-	// as the system database, which is a part of the bootstrap data for
-	// a tenant keyspace, exists in the namespace table.
-	return nil
-}
-
 func (s *SQLServer) setInstanceID(
 	ctx context.Context, instanceID base.SQLInstanceID, sessionID sqlliveness.SessionID,
 ) error {
@@ -1297,7 +1274,6 @@ func (s *SQLServer) preStart(
 	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
-
 	// If necessary, start the tenant proxy first, to ensure all other
 	// components can properly route to KV nodes. The Start method will block
 	// until a connection is established to the cluster and its ID has been
@@ -1306,17 +1282,19 @@ func (s *SQLServer) preStart(
 		if err := s.tenantConnect.Start(ctx); err != nil {
 			return err
 		}
-		// Confirm tenant exists prior to initialization. This is a sanity
-		// check for the dev environment to ensure that a tenant has been
-		// successfully created before attempting to initialize a SQL
-		// server for it.
-		if err := checkTenantExists(ctx, s.execCfg.Codec, s.execCfg.DB); err != nil {
-			return err
-		}
+	}
+
+	// Load the multi-region enum by reading the system database's descriptor.
+	// This also serves as a simple check to see if a tenant exist (i.e. by
+	// checking whether the system db has been bootstrapped).
+	regionPhysicalRep, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
+		ctx, s.internalExecutorFactory, s.execCfg.DB, keys.SystemDatabaseID, s.distSQLServer.Locality)
+	if err != nil && !errors.Is(err, sql.ErrNotMultiRegionDatabase) {
+		return err
 	}
 
 	// Start the sql liveness subsystem. We'll need it to get a session.
-	s.sqlLivenessProvider.Start(ctx)
+	s.sqlLivenessProvider.Start(ctx, regionPhysicalRep)
 
 	_, isMixedSQLAndKVNode := s.sqlIDContainer.OptionalNodeID()
 	isTenant := !isMixedSQLAndKVNode

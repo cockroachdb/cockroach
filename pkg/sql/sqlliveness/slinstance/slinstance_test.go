@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
@@ -45,17 +46,22 @@ func TestSQLInstance(t *testing.T) {
 
 	fakeStorage := slstorage.NewFakeStorage()
 	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
-	sqlInstance.Start(ctx)
+	sqlInstance.Start(ctx, nil)
 
 	// Add one more instance to introduce concurrent access to storage.
 	dummy := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
-	dummy.Start(ctx)
+	dummy.Start(ctx, nil)
 
 	s1, err := sqlInstance.Session(ctx)
 	require.NoError(t, err)
 	a, err := fakeStorage.IsAlive(ctx, s1.ID())
 	require.NoError(t, err)
 	require.True(t, a)
+
+	region, id, err := slstorage.UnsafeDecodeSessionID(s1.ID())
+	require.NoError(t, err)
+	require.Equal(t, enum.One, region)
+	require.NotNil(t, id)
 
 	s2, err := sqlInstance.Session(ctx)
 	require.NoError(t, err)
@@ -90,4 +96,35 @@ func TestSQLInstance(t *testing.T) {
 	stopper.Stop(ctx)
 	_, err = sqlInstance.Session(ctx)
 	require.Error(t, err)
+}
+
+func TestSQLInstanceWithRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx, stopper := context.Background(), stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(timeutil.NewManualTime(timeutil.Unix(0, 42)), time.Nanosecond /* maxOffset */)
+	settings := cluster.MakeTestingClusterSettingsWithVersions(
+		clusterversion.TestingBinaryVersion,
+		clusterversion.TestingBinaryMinSupportedVersion,
+		true /* initializeVersion */)
+	slinstance.DefaultTTL.Override(ctx, &settings.SV, 20*time.Millisecond)
+	slinstance.DefaultHeartBeat.Override(ctx, &settings.SV, 10*time.Millisecond)
+
+	fakeStorage := slstorage.NewFakeStorage()
+	sqlInstance := slinstance.NewSQLInstance(stopper, clock, fakeStorage, settings, nil, nil)
+	sqlInstance.Start(ctx, []byte{42})
+
+	s1, err := sqlInstance.Session(ctx)
+	require.NoError(t, err)
+	a, err := fakeStorage.IsAlive(ctx, s1.ID())
+	require.NoError(t, err)
+	require.True(t, a)
+
+	region, id, err := slstorage.UnsafeDecodeSessionID(s1.ID())
+	require.NoError(t, err)
+	require.Equal(t, []byte{42}, region)
+	require.NotNil(t, id)
 }
