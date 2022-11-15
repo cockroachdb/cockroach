@@ -84,14 +84,14 @@ func validateCorpusFile(
 	// Detect validation failures in standard output first, and dump those out.
 	failureRegex := regexp.MustCompile(`failed to validate.*`)
 	if matches := failureRegex.FindAllString(details.Stdout, -1); len(matches) > 0 {
-		t.Fatalf("Validation of corpus has failed (exit status %s): \n%s",
+		t.Fatalf("Validation of corpus has failed (exit status %d): \n%s",
 			details.RemoteExitStatus,
 			strings.Join(matches, "\n"))
 	}
 
 	// If no error is logged dump out both stdout and std error.
-	if details.RemoteExitStatus != "0" {
-		t.Fatalf("Validation command failed with exist status %s, output:\n %s\n%s\n",
+	if details.RemoteExitStatus != 0 {
+		t.Fatalf("Validation command failed with exit status %d, output:\n %s\n%s\n",
 			details.RemoteExitStatus,
 			details.Stdout,
 			details.Stderr,

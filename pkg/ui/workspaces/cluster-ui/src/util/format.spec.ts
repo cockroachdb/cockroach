@@ -15,6 +15,7 @@ import {
   BytesFitScale,
   byteUnits,
   HexStringToInt64String,
+  FixFingerprintHexValue,
 } from "./format";
 
 describe("Format utils", () => {
@@ -57,6 +58,20 @@ describe("Format utils", () => {
       expect(HexStringToInt64String("fb9111f22f2213b7")).toBe(
         "18127289707013477303",
       );
+    });
+  });
+
+  describe("FixFingerprintHexValue", () => {
+    it("add leading 0 to hex values", () => {
+      expect(FixFingerprintHexValue(undefined)).toBe("");
+      expect(FixFingerprintHexValue(null)).toBe("");
+      expect(FixFingerprintHexValue("fb9111f22f2213b7")).toBe(
+        "fb9111f22f2213b7",
+      );
+      expect(FixFingerprintHexValue("b9111f22f2213b7")).toBe(
+        "0b9111f22f2213b7",
+      );
+      expect(FixFingerprintHexValue("9111f22f2213b7")).toBe("009111f22f2213b7");
     });
   });
 });
