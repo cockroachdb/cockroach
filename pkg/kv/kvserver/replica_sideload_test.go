@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -132,18 +131,6 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	// SST is definitely truncated now, so recomputing the Raft log keys should match up with
 	// the tracked size.
 	verifyLogSizeInSync(t, tc.repl)
-}
-
-func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine) {
-	dir, cleanup := testutils.TempDir(t)
-	eng, err := storage.Open(
-		ctx,
-		storage.Filesystem(dir),
-		storage.CacheSize(1<<20 /* 1 MiB */))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return cleanup, eng
 }
 
 // This test verifies that sideloaded proposals are

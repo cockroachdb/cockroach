@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
+
 package kvserver
 
 import (
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -323,4 +325,16 @@ func TestMultiSSTWriterInitSST(t *testing.T) {
 	for i := range fileNames {
 		require.Equal(t, actualSSTs[i], expectedSSTs[i])
 	}
+}
+
+func newOnDiskEngine(ctx context.Context, t *testing.T) (func(), storage.Engine) {
+	dir, cleanup := testutils.TempDir(t)
+	eng, err := storage.Open(
+		ctx,
+		storage.Filesystem(dir),
+		storage.CacheSize(1<<20 /* 1 MiB */))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cleanup, eng
 }

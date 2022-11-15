@@ -10,7 +10,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/kv/bulk",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/raftentry",
