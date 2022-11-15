@@ -125,6 +125,7 @@ type QueryLevelStats struct {
 	NetworkMessages       int64
 	ContentionTime        time.Duration
 	ContentionEvents      []roachpb.ContentionEvent
+	RUEstimate            int64
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -159,6 +160,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
+	s.RUEstimate += other.RUEstimate
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a

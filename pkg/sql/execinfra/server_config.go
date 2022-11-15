@@ -191,6 +191,9 @@ type ServerConfig struct {
 	// external services (such as external storage)
 	ExternalIORecorder multitenant.TenantSideExternalIORecorder
 
+	// TenantCostController is used to measure and record RU consumption.
+	TenantCostController multitenant.TenantSideCostController
+
 	// RangeStatsFetcher is used to fetch range stats for keys.
 	RangeStatsFetcher eval.RangeStatsFetcher
 }

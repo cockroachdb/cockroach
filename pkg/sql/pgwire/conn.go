@@ -1406,6 +1406,63 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 	return nil
 }
 
+// getRowNetworkEgress returns an estimate of the number of bytes that would be
+// sent over the network if the given row was written to the client. It does this
+// by encoding and buffering the row in text format, then measuring the buffer
+// size before clearing it.
+func getRowNetworkEgress(ctx context.Context, row tree.Datums, typs []*types.T) (egress int64) {
+	// Each row uses 5 bytes for the message type and length.
+	egress = 5
+
+	var conv sessiondatapb.DataConversionConfig
+	buf := newWriteBuffer(nil /* byteCount */)
+	for i := range row {
+		// Use the default values for the DataConversionConfig and location.
+		// We use the writeText variant here because this function will only ever
+		// be called in the context of EXPLAIN ANALYZE, which obfuscates the format
+		// the client will use when actually executing the query. This should still
+		// provide an accurate estimate, since most or all of the common data types
+		// take up the same amount of space between the text and binary formats.
+		buf.writeTextDatum(ctx, row[i], conv, nil /* sessionLoc */, typs[i])
+		egress += int64(buf.Len())
+		buf.reset()
+	}
+	return egress
+}
+
+// getBatchNetworkEgress returns an estimate of the number of bytes that would
+// be sent over the network if the given batch was written to the client.
+func getBatchNetworkEgress(ctx context.Context, batch coldata.Batch) (egress int64) {
+	// Each row uses 5 bytes for the message type and length.
+	egress = 5 * int64(batch.Length())
+
+	var vecs coldata.TypedVecs
+	var conv sessiondatapb.DataConversionConfig
+	buf := newWriteBuffer(nil /* byteCount */)
+	vecs.SetBatch(batch)
+	sel := batch.Selection()
+	for vecIdx := range vecs.Vecs {
+		for i := 0; i < batch.Length(); i++ {
+			rowIdx := i
+			if sel != nil {
+				rowIdx = sel[i]
+			}
+			// Use the default values for the DataConversionConfig and location.
+			// See the comment in getRowNetworkEgress for why the writeText variant
+			// is used here instead of writeBinary.
+			buf.writeTextColumnarElement(ctx, &vecs, vecIdx, rowIdx, conv, nil /* sessionLoc */)
+			egress += int64(buf.Len())
+			buf.reset()
+		}
+	}
+	return egress
+}
+
+func init() {
+	sql.GetRowNetworkEgress = getRowNetworkEgress
+	sql.GetBatchNetworkEgress = getBatchNetworkEgress
+}
+
 func (c *conn) bufferReadyForQuery(txnStatus byte) {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
 	c.msgBuilder.writeByte(txnStatus)
