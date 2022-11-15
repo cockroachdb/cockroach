@@ -576,22 +576,25 @@ type handleSnapshotStats struct {
 }
 
 type logAppendStats struct {
-	tAppendBegin, tAppendEnd time.Time
-	appendedRegularCount     int
-	appendedSideloadedCount  int
-	appendedSideloadedBytes  int64
-	appendedRegularBytes     int64
+	Begin time.Time
+	End   time.Time
 
-	tPebbleCommitBegin, tPebbleCommitEnd time.Time
-	pebbleBatchBytes                     int64
+	RegularEntries    int
+	RegularBytes      int64
+	SideloadedEntries int
+	SideloadedBytes   int64
 
-	sync bool
+	PebbleBegin time.Time
+	PebbleEnd   time.Time
+	PebbleBytes int64
+
+	Sync bool
 }
 
 type handleRaftReadyStats struct {
 	tBegin, tEnd time.Time
 
-	logAppendStats
+	append logAppendStats
 
 	tApplicationBegin, tApplicationEnd time.Time
 	apply                              applyCommittedEntriesStats
@@ -603,15 +606,15 @@ type handleRaftReadyStats struct {
 // SafeFormat implements redact.SafeFormatter
 func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	dTotal := s.tEnd.Sub(s.tBegin)
-	dAppend := s.tAppendEnd.Sub(s.tAppendBegin)
+	dAppend := s.append.End.Sub(s.append.Begin)
 	dApply := s.tApplicationEnd.Sub(s.tApplicationBegin)
-	dPebble := s.tPebbleCommitEnd.Sub(s.tPebbleCommitBegin)
+	dPebble := s.append.PebbleEnd.Sub(s.append.PebbleBegin)
 	dSnap := s.tSnapEnd.Sub(s.tSnapBegin)
 	dUnaccounted := dTotal - dSnap - dAppend - dApply - dPebble
 
 	{
 		var sync redact.SafeString
-		if s.sync {
+		if s.append.Sync {
 			sync = "-sync"
 		}
 		p.Printf("raft ready handling: %.2fs [append=%.2fs, apply=%.2fs, commit-batch%s=%.2fs",
@@ -623,17 +626,17 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf(", other=%.2fs]", dUnaccounted.Seconds())
 
 	p.Printf(", wrote %s",
-		humanizeutil.IBytes(s.pebbleBatchBytes),
+		humanizeutil.IBytes(s.append.PebbleBytes),
 	)
-	if s.sync {
+	if s.append.Sync {
 		p.SafeString(" sync")
 	}
 	p.SafeString(" [")
 
-	if b, n := s.appendedRegularBytes, s.appendedRegularCount; n > 0 || b > 0 {
+	if b, n := s.append.RegularBytes, s.append.RegularEntries; n > 0 || b > 0 {
 		p.Printf("append-ent=%s (%d), ", humanizeutil.IBytes(b), n)
 	}
-	if b, n := s.appendedSideloadedBytes, s.appendedSideloadedCount; n > 0 || b > 0 {
+	if b, n := s.append.SideloadedBytes, s.append.SideloadedEntries; n > 0 || b > 0 {
 		p.Printf("append-sst=%s (%d), ", humanizeutil.IBytes(b), n)
 	}
 	if b, n := s.apply.entriesProcessedBytes, s.apply.entriesProcessed; n > 0 || b > 0 {
@@ -951,7 +954,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		settings:    r.store.cfg.Settings,
 		metrics:     r.store.metrics,
 	}
-	if state, err = s.storeEntries(ctx, state, logstore.MakeReady(rd), &stats.logAppendStats); err != nil {
+	if state, err = s.storeEntries(ctx, state, logstore.MakeReady(rd), &stats.append); err != nil {
 		const expl = "while storing log entries"
 		return stats, expl, err
 	}
@@ -1126,7 +1129,7 @@ func (s *logStore) storeEntries(
 	defer batch.Close()
 
 	if len(rd.Entries) > 0 {
-		stats.tAppendBegin = timeutil.Now()
+		stats.Begin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
 		// last index.
 		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := logstore.MaybeSideloadEntries(ctx, rd.Entries, s.sideload)
@@ -1141,11 +1144,11 @@ func (s *logStore) storeEntries(
 			const expl = "during append"
 			return logstore.RaftState{}, errors.Wrap(err, expl)
 		}
-		stats.appendedRegularCount += len(thinEntries) - numSideloaded
-		stats.appendedRegularBytes += otherEntriesSize
-		stats.appendedSideloadedCount += numSideloaded
-		stats.appendedSideloadedBytes += sideLoadedEntriesSize
-		stats.tAppendEnd = timeutil.Now()
+		stats.RegularEntries += len(thinEntries) - numSideloaded
+		stats.RegularBytes += otherEntriesSize
+		stats.SideloadedEntries += numSideloaded
+		stats.SideloadedBytes += sideLoadedEntriesSize
+		stats.End = timeutil.Now()
 	}
 
 	if !raft.IsEmptyHardState(rd.HardState) {
@@ -1175,18 +1178,17 @@ func (s *logStore) storeEntries(
 	// uncommitted log entries, and even if they did include log entries that
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
-	stats.tPebbleCommitBegin = timeutil.Now()
-	stats.pebbleBatchBytes = int64(batch.Len())
+	stats.PebbleBegin = timeutil.Now()
+	stats.PebbleBytes = int64(batch.Len())
 	sync := rd.MustSync && !disableSyncRaftLog.Get(&s.settings.SV)
 	if err := batch.Commit(sync); err != nil {
 		const expl = "while committing batch"
 		return logstore.RaftState{}, errors.Wrap(err, expl)
 	}
-	stats.sync = sync
-	stats.tPebbleCommitEnd = timeutil.Now()
+	stats.Sync = sync
+	stats.PebbleEnd = timeutil.Now()
 	if rd.MustSync {
-		s.metrics.RaftLogCommitLatency.RecordValue(
-			stats.tPebbleCommitEnd.Sub(stats.tPebbleCommitBegin).Nanoseconds())
+		s.metrics.RaftLogCommitLatency.RecordValue(stats.PebbleEnd.Sub(stats.PebbleBegin).Nanoseconds())
 	}
 	return state, nil
 }
