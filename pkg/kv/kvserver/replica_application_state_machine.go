@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
@@ -58,48 +57,6 @@ type applyCommittedEntriesStats struct {
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 }
 
-// nonDeterministicFailure is an error type that indicates that a state machine
-// transition failed due to an unexpected error. Failure to perform a state
-// transition is a form of non-determinism, so it can't be permitted for any
-// reason during the application phase of state machine replication. The only
-// acceptable recourse is to signal that the replica has become corrupted.
-//
-// All errors returned by replicaDecoder and replicaStateMachine will be instances
-// of this type.
-type nonDeterministicFailure struct {
-	wrapped  error
-	safeExpl string
-}
-
-// The provided format string should be safe for reporting.
-func makeNonDeterministicFailure(format string, args ...interface{}) error {
-	err := errors.AssertionFailedWithDepthf(1, format, args...)
-	return &nonDeterministicFailure{
-		wrapped:  err,
-		safeExpl: err.Error(),
-	}
-}
-
-// The provided msg should be safe for reporting.
-func wrapWithNonDeterministicFailure(err error, format string, args ...interface{}) error {
-	return &nonDeterministicFailure{
-		wrapped:  errors.Wrapf(err, format, args...),
-		safeExpl: fmt.Sprintf(format, args...),
-	}
-}
-
-// Error implements the error interface.
-func (e *nonDeterministicFailure) Error() string {
-	return fmt.Sprintf("non-deterministic failure: %s", e.wrapped.Error())
-}
-
-// Cause implements the github.com/pkg/errors.causer interface.
-func (e *nonDeterministicFailure) Cause() error { return e.wrapped }
-
-// Unwrap implements the github.com/golang/xerrors.Wrapper interface, which is
-// planned to be moved to the stdlib in go 1.13.
-func (e *nonDeterministicFailure) Unwrap() error { return e.wrapped }
-
 // replicaStateMachine implements the apply.StateMachine interface.
 //
 // The structure coordinates state transitions within the Replica state machine
@@ -129,41 +86,41 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 
 // shouldApplyCommand determines whether or not a command should be applied to
 // the replicated state machine after it has been committed to the Raft log. It
-// then sets the provided command's leaseIndex, proposalRetry, and forcedErr
+// then sets the provided command's LeaseIndex, Rejection, and ForcedErr
 // fields and returns whether command should be applied or rejected.
 func (r *Replica) shouldApplyCommand(
 	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
 ) bool {
-	cmd.leaseIndex, cmd.proposalRetry, cmd.forcedErr = kvserverbase.CheckForcedErr(
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
 		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), replicaState,
 	)
 	// Consider testing-only filters.
-	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.forcedErr != nil || filter != nil {
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.ForcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
 			CmdID:                cmd.ID,
-			ReplicatedEvalResult: *cmd.replicatedResult(),
+			ReplicatedEvalResult: *cmd.ReplicatedResult(),
 			StoreID:              r.store.StoreID(),
 			RangeID:              r.RangeID,
-			ForcedError:          cmd.forcedErr,
+			ForcedError:          cmd.ForcedErr,
 		}
-		if cmd.forcedErr == nil {
+		if cmd.ForcedErr == nil {
 			if cmd.IsLocal() {
 				args.Req = cmd.proposal.Request
 			}
 			newPropRetry, newForcedErr := filter(args)
-			cmd.forcedErr = newForcedErr
-			if cmd.proposalRetry == 0 {
-				cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
+			cmd.ForcedErr = newForcedErr
+			if cmd.Rejection == 0 {
+				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
 			}
 		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
 			newPropRetry, newForcedErr := filter(args)
-			cmd.forcedErr = newForcedErr
-			if cmd.proposalRetry == 0 {
-				cmd.proposalRetry = kvserverbase.ProposalRejectionType(newPropRetry)
+			cmd.ForcedErr = newForcedErr
+			if cmd.Rejection == 0 {
+				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
 			}
 		}
 	}
-	return cmd.forcedErr == nil
+	return cmd.ForcedErr == nil
 }
 
 // NewBatch implements the apply.StateMachine interface.
@@ -259,12 +216,12 @@ func (b *replicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 	if cmd.Index() == 0 {
-		return nil, makeNonDeterministicFailure("processRaftCommand requires a non-zero index")
+		return nil, kvserverbase.NonDeterministicErrorf("processRaftCommand requires a non-zero index")
 	}
 	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return.
-		return nil, makeNonDeterministicFailure("applied index jumped from %d to %d", applied, idx)
+		return nil, kvserverbase.NonDeterministicErrorf("applied index jumped from %d to %d", applied, idx)
 	}
 	if log.V(4) {
 		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
@@ -276,7 +233,7 @@ func (b *replicaAppBatch) Stage(
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
 	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.forcedErr)
+		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
 
 		// Apply an empty command.
 		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
@@ -302,9 +259,9 @@ func (b *replicaAppBatch) Stage(
 	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
 		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
-			err = wrapWithNonDeterministicFailure(err, "unable to acquire split lock")
+			err = kvserverbase.NonDeterministicErrorWrapf(err, "unable to acquire split lock")
 		} else {
-			err = wrapWithNonDeterministicFailure(err, "unable to acquire merge lock")
+			err = kvserverbase.NonDeterministicErrorWrapf(err, "unable to acquire merge lock")
 		}
 		return nil, err
 	} else if splitMergeUnlock != nil {
@@ -365,7 +322,7 @@ func (b *replicaAppBatch) Stage(
 func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *replicatedCmd) {
 	// If the command was using the deprecated version of the MVCCStats proto,
 	// migrate it to the new version and clear out the field.
-	res := cmd.replicatedResult()
+	res := cmd.ReplicatedResult()
 	if deprecatedDelta := res.DeprecatedDelta; deprecatedDelta != nil {
 		if res.Delta != (enginepb.MVCCStatsDelta{}) {
 			log.Fatalf(ctx, "stats delta not empty but deprecated delta provided: %+v", cmd)
@@ -388,7 +345,7 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 		b.mutations += mutations
 	}
 	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
-		return wrapWithNonDeterministicFailure(err, "unable to apply WriteBatch")
+		return kvserverbase.NonDeterministicErrorWrapf(err, "unable to apply WriteBatch")
 	}
 	return nil
 }
@@ -423,7 +380,7 @@ func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
 func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
-	res := cmd.replicatedResult()
+	res := cmd.ReplicatedResult()
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
 	// has already been emitted and checkpointed via a rangefeed. Callers are
@@ -503,7 +460,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// An initialized replica is always contained in its descriptor.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to get replica for merge")
+			return kvserverbase.NonDeterministicErrorWrapf(err, "unable to get replica for merge")
 		}
 		// We should already have acquired the raftMu for the rhsRepl and now hold
 		// its unlock method in cmd.splitMergeUnlock.
@@ -530,7 +487,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		if err := rhsRepl.preDestroyRaftMuLocked(
 			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
 		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before merge")
+			return kvserverbase.NonDeterministicErrorWrapf(err, "unable to destroy replica before merge")
 		}
 
 		// Shut down rangefeed processors on either side of the merge.
@@ -603,7 +560,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
 				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
 			); err != nil {
-				return wrapWithNonDeterministicFailure(err, "unable to handle truncated state")
+				return kvserverbase.NonDeterministicErrorWrapf(err, "unable to handle truncated state")
 			}
 		} else {
 			b.r.store.raftTruncator.addPendingTruncation(
@@ -673,7 +630,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			false, /* clearRangeIDLocalOnly */
 			false, /* mustUseClearRange */
 		); err != nil {
-			return wrapWithNonDeterministicFailure(err, "unable to destroy replica before removal")
+			return kvserverbase.NonDeterministicErrorWrapf(err, "unable to destroy replica before removal")
 		}
 	}
 
@@ -707,7 +664,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	b.state.RaftAppliedIndex = cmd.Index()
 	b.state.RaftAppliedIndexTerm = cmd.Term
 
-	if leaseAppliedIndex := cmd.leaseIndex; leaseAppliedIndex != 0 {
+	if leaseAppliedIndex := cmd.LeaseIndex; leaseAppliedIndex != 0 {
 		b.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
@@ -715,7 +672,7 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 		b.closedTimestampSetter.record(cmd, b.state.Lease)
 	}
 
-	res := cmd.replicatedResult()
+	res := cmd.ReplicatedResult()
 
 	// Special-cased MVCC stats handling to exploit commutativity of stats delta
 	// upgrades. Thanks to commutativity, the spanlatch manager does not have to
@@ -757,7 +714,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// See handleChangeReplicasResult().
 	sync := b.changeRemovesReplica
 	if err := b.batch.Commit(sync); err != nil {
-		return wrapWithNonDeterministicFailure(err, "unable to commit Raft entry batch")
+		return kvserverbase.NonDeterministicErrorWrapf(err, "unable to commit Raft entry batch")
 	}
 	b.batch.Close()
 	b.batch = nil
@@ -883,7 +840,7 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 		} else {
 			req.SafeString("request unknown; not leaseholder")
 		}
-		return wrapWithNonDeterministicFailure(errors.AssertionFailedf(
+		return kvserverbase.NonDeterministicErrorWrapf(errors.AssertionFailedf(
 			"command writing below closed timestamp; cmd: %x, write ts: %s, "+
 				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n"+
 				"This assertion will fire again on restart; to ignore run with env var\n"+
@@ -934,7 +891,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
-			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.leaseIndex,
+			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
 			logTail)
 	}
@@ -957,7 +914,7 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 	cmd := cmdI.(*replicatedCmd)
 
 	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
-	mb.state.LeaseAppliedIndex = cmd.leaseIndex
+	mb.state.LeaseAppliedIndex = cmd.LeaseIndex
 	return cmd, nil
 }
 
@@ -1003,9 +960,9 @@ func (sm *replicaStateMachine) ApplySideEffects(
 	//
 	// Note that this must happen after committing (the engine.Batch), but
 	// before notifying a potentially waiting client.
-	clearTrivialReplicatedEvalResultFields(cmd.replicatedResult())
+	clearTrivialReplicatedEvalResultFields(cmd.ReplicatedResult())
 	if !cmd.IsTrivial() {
-		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, cmd.replicatedResult())
+		shouldAssert, isRemoved := sm.handleNonTrivialReplicatedEvalResult(ctx, cmd.ReplicatedResult())
 		if isRemoved {
 			// The proposal must not have been local, because we don't allow a
 			// proposing replica to remove itself from the Range.
@@ -1023,13 +980,13 @@ func (sm *replicaStateMachine) ApplySideEffects(
 			sm.r.mu.RUnlock()
 			sm.stats.stateAssertions++
 		}
-	} else if res := cmd.replicatedResult(); !res.IsZero() {
+	} else if res := cmd.ReplicatedResult(); !res.IsZero() {
 		log.Fatalf(ctx, "failed to handle all side-effects of ReplicatedEvalResult: %v", res)
 	}
 
 	// On ConfChange entries, inform the raft.RawNode.
 	if err := sm.maybeApplyConfChange(ctx, cmd); err != nil {
-		return nil, wrapWithNonDeterministicFailure(err, "unable to apply conf change")
+		return nil, kvserverbase.NonDeterministicErrorWrapf(err, "unable to apply conf change")
 	}
 
 	// Mark the command as applied and return it as an apply.AppliedCommand.
@@ -1270,7 +1227,7 @@ type closedTimestampSetterInfo struct {
 // timestamp.
 func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Lease) {
 	*s = closedTimestampSetterInfo{}
-	s.leaseIdx = ctpb.LAI(cmd.leaseIndex)
+	s.leaseIdx = ctpb.LAI(cmd.LeaseIndex)
 	s.lease = lease
 	if !cmd.IsLocal() {
 		return

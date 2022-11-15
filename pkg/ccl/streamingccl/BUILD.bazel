@@ -13,12 +13,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/streamingccl/streampb",
         "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/storage",
-        "//pkg/streaming",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
     ],

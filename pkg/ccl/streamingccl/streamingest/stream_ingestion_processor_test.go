@@ -21,11 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -63,7 +62,7 @@ var _ streamclient.Client = &mockStreamClient{}
 // Create implements the Client interface.
 func (m *mockStreamClient) Create(
 	ctx context.Context, target roachpb.TenantID,
-) (streaming.StreamID, error) {
+) (streampb.StreamID, error) {
 	panic("unimplemented")
 }
 
@@ -74,14 +73,14 @@ func (m *mockStreamClient) Dial(ctx context.Context) error {
 
 // Heartbeat implements the Client interface.
 func (m *mockStreamClient) Heartbeat(
-	ctx context.Context, ID streaming.StreamID, _ hlc.Timestamp,
+	ctx context.Context, ID streampb.StreamID, _ hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	panic("unimplemented")
 }
 
 // Plan implements the Client interface.
 func (m *mockStreamClient) Plan(
-	ctx context.Context, _ streaming.StreamID,
+	ctx context.Context, _ streampb.StreamID,
 ) (streamclient.Topology, error) {
 	panic("unimplemented mock method")
 }
@@ -108,7 +107,7 @@ func (m *mockSubscription) Err() error {
 // Subscribe implements the Client interface.
 func (m *mockStreamClient) Subscribe(
 	ctx context.Context,
-	stream streaming.StreamID,
+	stream streampb.StreamID,
 	token streamclient.SubscriptionToken,
 	startTime hlc.Timestamp,
 ) (streamclient.Subscription, error) {
@@ -144,7 +143,7 @@ func (m *mockStreamClient) Close(ctx context.Context) error {
 
 // Complete implements the streamclient.Client interface.
 func (m *mockStreamClient) Complete(
-	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
 	return nil
 }
@@ -157,7 +156,7 @@ var _ streamclient.Client = &errorStreamClient{}
 // ConsumePartition implements the streamclient.Client interface.
 func (m *errorStreamClient) Subscribe(
 	ctx context.Context,
-	stream streaming.StreamID,
+	stream streampb.StreamID,
 	spec streamclient.SubscriptionToken,
 	checkpoint hlc.Timestamp,
 ) (streamclient.Subscription, error) {
@@ -166,7 +165,7 @@ func (m *errorStreamClient) Subscribe(
 
 // Complete implements the streamclient.Client interface.
 func (m *errorStreamClient) Complete(
-	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
 	return nil
 }

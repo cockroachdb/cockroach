@@ -15,10 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -158,7 +157,7 @@ func (sf *streamIngestionFrontier) MustBeStreaming() bool {
 type heartbeatSender struct {
 	lastSent        time.Time
 	client          streamclient.Client
-	streamID        streaming.StreamID
+	streamID        streampb.StreamID
 	frontierUpdates chan hlc.Timestamp
 	frontier        hlc.Timestamp
 	flowCtx         *execinfra.FlowCtx
@@ -179,7 +178,7 @@ func newHeartbeatSender(
 	}
 	return &heartbeatSender{
 		client:          streamClient,
-		streamID:        streaming.StreamID(spec.StreamID),
+		streamID:        streampb.StreamID(spec.StreamID),
 		flowCtx:         flowCtx,
 		frontierUpdates: make(chan hlc.Timestamp),
 		cancel:          func() {},

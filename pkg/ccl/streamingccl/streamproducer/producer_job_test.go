@@ -15,17 +15,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -202,7 +201,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			var status streampb.StreamReplicationStatus
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				status, err = updateReplicationStreamProgress(
-					ctx, timeutil.Now(), ptp, registry, streaming.StreamID(jr.JobID),
+					ctx, timeutil.Now(), ptp, registry, streampb.StreamID(jr.JobID),
 					hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, txn)
 				return err
 			}))
@@ -238,7 +237,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 			expire := expirationTime(jr).Add(10 * time.Millisecond)
 			require.NoError(t, source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				streamStatus, err = updateReplicationStreamProgress(
-					ctx, expire, ptp, registry, streaming.StreamID(jr.JobID), updatedFrontier, txn)
+					ctx, expire, ptp, registry, streampb.StreamID(jr.JobID), updatedFrontier, txn)
 				return err
 			}))
 			require.Equal(t, streampb.StreamReplicationStatus_STREAM_ACTIVE, streamStatus.StreamStatus)
