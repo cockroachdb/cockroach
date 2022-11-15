@@ -1128,6 +1128,7 @@ func (a *Allocator) allocateTargetFromList(
 
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
 	targetStore roachpb.StoreID,
 	conf roachpb.SpanConfig,
 	candidates []roachpb.ReplicaDescriptor,
@@ -1150,8 +1151,8 @@ func (a Allocator) simulateRemoveTarget(
 	// Update statistics first
 	switch t := targetType; t {
 	case VoterTarget:
-		a.StorePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
-		defer a.StorePool.UpdateLocalStoreAfterRebalance(
+		storePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_VOTER)
+		defer storePool.UpdateLocalStoreAfterRebalance(
 			targetStore,
 			rangeUsageInfo,
 			roachpb.REMOVE_VOTER,
@@ -1159,21 +1160,21 @@ func (a Allocator) simulateRemoveTarget(
 		log.KvDistribution.VEventf(ctx, 3, "simulating which voter would be removed after adding s%d",
 			targetStore)
 
-		return a.RemoveTarget(
-			ctx, conf, storepool.MakeStoreList(candidateStores),
+		return a.removeTarget(
+			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
 			existingVoters, existingNonVoters, VoterTarget, options,
 		)
 	case NonVoterTarget:
-		a.StorePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
-		defer a.StorePool.UpdateLocalStoreAfterRebalance(
+		storePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
+		defer storePool.UpdateLocalStoreAfterRebalance(
 			targetStore,
 			rangeUsageInfo,
 			roachpb.REMOVE_NON_VOTER,
 		)
 		log.KvDistribution.VEventf(ctx, 3, "simulating which non-voter would be removed after adding s%d",
 			targetStore)
-		return a.RemoveTarget(
-			ctx, conf, storepool.MakeStoreList(candidateStores),
+		return a.removeTarget(
+			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
 			existingVoters, existingNonVoters, NonVoterTarget, options,
 		)
 	default:
@@ -1206,6 +1207,20 @@ func (a Allocator) RemoveTarget(
 	targetType TargetReplicaType,
 	options ScorerOptions,
 ) (roachpb.ReplicationTarget, string, error) {
+	return a.removeTarget(ctx, a.StorePool, conf, candidateStoreList, existingVoters,
+		existingNonVoters, targetType, options)
+}
+
+func (a Allocator) removeTarget(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	candidateStoreList storepool.StoreList,
+	existingVoters []roachpb.ReplicaDescriptor,
+	existingNonVoters []roachpb.ReplicaDescriptor,
+	targetType TargetReplicaType,
+	options ScorerOptions,
+) (roachpb.ReplicationTarget, string, error) {
 	if len(candidateStoreList.Stores) == 0 {
 		return roachpb.ReplicationTarget{}, "", errors.Errorf(
 			"must supply at least one" +
@@ -1214,9 +1229,9 @@ func (a Allocator) RemoveTarget(
 	}
 
 	existingReplicas := append(existingVoters, existingNonVoters...)
-	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor,
+	analyzedOverallConstraints := constraint.AnalyzeConstraints(ctx, storePool.GetStoreDescriptor,
 		existingReplicas, conf.NumReplicas, conf.Constraints)
-	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor,
+	analyzedVoterConstraints := constraint.AnalyzeConstraints(ctx, storePool.GetStoreDescriptor,
 		existingVoters, conf.GetNumVoters(), conf.VoterConstraints)
 
 	var constraintsChecker constraintsCheckFn
@@ -1240,7 +1255,7 @@ func (a Allocator) RemoveTarget(
 		ctx,
 		candidateStoreList,
 		constraintsChecker,
-		a.StorePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
+		storePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
 		options,
 	)
 
@@ -1276,15 +1291,34 @@ func (a Allocator) RemoveVoter(
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	options ScorerOptions,
 ) (roachpb.ReplicationTarget, string, error) {
+	return a.RemoveVoterWithStorePool(ctx, a.StorePool, conf, voterCandidates, existingVoters,
+		existingNonVoters, options)
+}
+
+// RemoveVoterWithStorePool returns a suitable replica to remove from the
+// provided replica set using the given storePool. It first attempts to randomly
+// select a target from the set of stores that have greater than the average
+// number of replicas. Failing that, it falls back to selecting a random target
+// from any of the existing voting replicas.
+func (a Allocator) RemoveVoterWithStorePool(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	voterCandidates []roachpb.ReplicaDescriptor,
+	existingVoters []roachpb.ReplicaDescriptor,
+	existingNonVoters []roachpb.ReplicaDescriptor,
+	options ScorerOptions,
+) (roachpb.ReplicationTarget, string, error) {
 	// Retrieve store descriptors for the provided candidates from the StorePool.
 	candidateStoreIDs := make(roachpb.StoreIDSlice, len(voterCandidates))
 	for i, exist := range voterCandidates {
 		candidateStoreIDs[i] = exist.StoreID
 	}
-	candidateStoreList, _, _ := a.StorePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
+	candidateStoreList, _, _ := storePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
 
-	return a.RemoveTarget(
+	return a.removeTarget(
 		ctx,
+		storePool,
 		conf,
 		candidateStoreList,
 		existingVoters,
@@ -1307,15 +1341,34 @@ func (a Allocator) RemoveNonVoter(
 	existingNonVoters []roachpb.ReplicaDescriptor,
 	options ScorerOptions,
 ) (roachpb.ReplicationTarget, string, error) {
+	return a.RemoveNonVoterWithStorePool(ctx, a.StorePool, conf, nonVoterCandidates, existingVoters,
+		existingNonVoters, options)
+}
+
+// RemoveNonVoterWithStorePool returns a suitable non-voting replica to remove
+// from the provided set using the given storePool. It first attempts to randomly
+// select a target from the set of stores that have greater than the average
+// number of replicas. Failing that, it falls back to selecting a random target
+// from any of the existing non-voting replicas.
+func (a Allocator) RemoveNonVoterWithStorePool(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	nonVoterCandidates []roachpb.ReplicaDescriptor,
+	existingVoters []roachpb.ReplicaDescriptor,
+	existingNonVoters []roachpb.ReplicaDescriptor,
+	options ScorerOptions,
+) (roachpb.ReplicationTarget, string, error) {
 	// Retrieve store descriptors for the provided candidates from the StorePool.
 	candidateStoreIDs := make(roachpb.StoreIDSlice, len(nonVoterCandidates))
 	for i, exist := range nonVoterCandidates {
 		candidateStoreIDs[i] = exist.StoreID
 	}
-	candidateStoreList, _, _ := a.StorePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
+	candidateStoreList, _, _ := storePool.GetStoreListFromIDs(candidateStoreIDs, storepool.StoreFilterNone)
 
-	return a.RemoveTarget(
+	return a.removeTarget(
 		ctx,
+		storePool,
 		conf,
 		candidateStoreList,
 		existingVoters,
@@ -1337,7 +1390,22 @@ func (a Allocator) RebalanceTarget(
 	targetType TargetReplicaType,
 	options ScorerOptions,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
-	sl, _, _ := a.StorePool.GetStoreList(filter)
+	return a.rebalanceTarget(ctx, a.StorePool, conf, raftStatus, existingVoters, existingNonVoters,
+		rangeUsageInfo, filter, targetType, options)
+}
+
+func (a Allocator) rebalanceTarget(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	raftStatus *raft.Status,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	rangeUsageInfo allocator.RangeUsageInfo,
+	filter storepool.StoreFilter,
+	targetType TargetReplicaType,
+	options ScorerOptions,
+) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
+	sl, _, _ := storePool.GetStoreList(filter)
 
 	// If we're considering a rebalance due to an `AdminScatterRequest`, we'd like
 	// to ensure that we're returning a random rebalance target to a new store
@@ -1349,9 +1417,9 @@ func (a Allocator) RebalanceTarget(
 
 	zero := roachpb.ReplicationTarget{}
 	analyzedOverallConstraints := constraint.AnalyzeConstraints(
-		ctx, a.StorePool.GetStoreDescriptor, existingReplicas, conf.NumReplicas, conf.Constraints)
+		ctx, storePool.GetStoreDescriptor, existingReplicas, conf.NumReplicas, conf.Constraints)
 	analyzedVoterConstraints := constraint.AnalyzeConstraints(
-		ctx, a.StorePool.GetStoreDescriptor, existingVoters, conf.GetNumVoters(), conf.VoterConstraints)
+		ctx, storePool.GetStoreDescriptor, existingVoters, conf.GetNumVoters(), conf.VoterConstraints)
 	var removalConstraintsChecker constraintsCheckFn
 	var rebalanceConstraintsChecker rebalanceConstraintsCheckFn
 	var replicaSetToRebalance, replicasWithExcludedStores []roachpb.ReplicaDescriptor
@@ -1391,8 +1459,8 @@ func (a Allocator) RebalanceTarget(
 		rebalanceConstraintsChecker,
 		replicaSetToRebalance,
 		replicasWithExcludedStores,
-		a.StorePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
-		a.StorePool.IsStoreReadyForRoutineReplicaTransfer,
+		storePool.GetLocalitiesByStore(replicaSetForDiversityCalc),
+		storePool.IsStoreReadyForRoutineReplicaTransfer,
 		options,
 		a.Metrics,
 	)
@@ -1442,6 +1510,7 @@ func (a Allocator) RebalanceTarget(
 		var err error
 		removeReplica, removeDetails, err = a.simulateRemoveTarget(
 			ctx,
+			storePool,
 			target.store.StoreID,
 			conf,
 			replicaCandidates,
@@ -1522,8 +1591,36 @@ func (a Allocator) RebalanceVoter(
 	filter storepool.StoreFilter,
 	options ScorerOptions,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
-	return a.RebalanceTarget(
+	return a.rebalanceTarget(
 		ctx,
+		a.StorePool,
+		conf,
+		raftStatus,
+		existingVoters,
+		existingNonVoters,
+		rangeUsageInfo,
+		filter,
+		VoterTarget,
+		options,
+	)
+}
+
+// RebalanceVoterWithStorePool returns a suitable store for a rebalance target
+// with required attributes using the given storePool.
+// See comment on Allocator.RebalanceVoter(..).
+func (a Allocator) RebalanceVoterWithStorePool(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	raftStatus *raft.Status,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	rangeUsageInfo allocator.RangeUsageInfo,
+	filter storepool.StoreFilter,
+	options ScorerOptions,
+) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
+	return a.rebalanceTarget(
+		ctx,
+		storePool,
 		conf,
 		raftStatus,
 		existingVoters,
@@ -1556,8 +1653,36 @@ func (a Allocator) RebalanceNonVoter(
 	filter storepool.StoreFilter,
 	options ScorerOptions,
 ) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
-	return a.RebalanceTarget(
+	return a.rebalanceTarget(
 		ctx,
+		a.StorePool,
+		conf,
+		raftStatus,
+		existingVoters,
+		existingNonVoters,
+		rangeUsageInfo,
+		filter,
+		NonVoterTarget,
+		options,
+	)
+}
+
+// RebalanceNonVoterWithStorePool returns a suitable pair of rebalance
+// candidates for a non-voting replica using the given storePool.
+// See comment on Allocator.RebalanceNonVoter(..).
+func (a Allocator) RebalanceNonVoterWithStorePool(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	conf roachpb.SpanConfig,
+	raftStatus *raft.Status,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+	rangeUsageInfo allocator.RangeUsageInfo,
+	filter storepool.StoreFilter,
+	options ScorerOptions,
+) (add, remove roachpb.ReplicationTarget, details string, ok bool) {
+	return a.rebalanceTarget(
+		ctx,
+		storePool,
 		conf,
 		raftStatus,
 		existingVoters,
