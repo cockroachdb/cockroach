@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import React, { useContext, useMemo } from "react";
+import React, { useContext, useMemo, useState } from "react";
 import { Col, Row } from "antd";
 import {
   InsightsSortedTable,
@@ -32,6 +32,10 @@ import {
 } from "../workloadInsights/util";
 import { TimeScale } from "../../timeScaleDropdown";
 import { getStmtInsightRecommendations } from "../utils";
+import { ContentionStatementDetailsTable } from "./insightDetailsTables";
+import { WaitTimeInsightsLabels } from "../../detailsPanels/waitTimeInsightsPanel";
+import { Heading } from "@cockroachlabs/ui-components";
+import { SortSetting } from "../../sortedtable";
 
 const cx = classNames.bind(insightsDetailsStyles);
 const tableCx = classNames.bind(insightTableStyles);
@@ -54,6 +58,39 @@ export const StatementInsightDetailsOverviewTab: React.FC<
 
   const insightDetails = insightEventDetails;
   const tableData = getStmtInsightRecommendations(insightDetails);
+
+  const [
+    insightsDetailsContentionSortSetting,
+    setDetailsContentionSortSetting,
+  ] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "duration",
+  });
+  let contentionTable: JSX.Element = null;
+  if (insightDetails.contentionEvents != null) {
+    contentionTable = (
+      <Row gutter={24} className={tableCx("margin-bottom")}>
+        <Col className="gutter-row">
+          <Heading type="h5">
+            {WaitTimeInsightsLabels.BLOCKED_TXNS_TABLE_TITLE(
+              insightDetails.statementExecutionID,
+              "statement",
+            )}
+          </Heading>
+          <ContentionStatementDetailsTable
+            data={insightDetails.contentionEvents}
+            sortSetting={insightsDetailsContentionSortSetting}
+            onChangeSortSetting={setDetailsContentionSortSetting}
+          />
+        </Col>
+      </Row>
+    );
+  }
+
+  const [insightsSortSetting, setInsightsSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "Insights",
+  });
 
   return (
     <section className={cx("section")}>
@@ -128,9 +165,15 @@ export const StatementInsightDetailsOverviewTab: React.FC<
       </Row>
       <Row gutter={24} className={tableCx("margin-bottom")}>
         <Col>
-          <InsightsSortedTable columns={insightsColumns} data={tableData} />
+          <InsightsSortedTable
+            sortSetting={insightsSortSetting}
+            onChangeSortSetting={setInsightsSortSetting}
+            columns={insightsColumns}
+            data={tableData}
+          />
         </Col>
       </Row>
+      {contentionTable}
     </section>
   );
 };

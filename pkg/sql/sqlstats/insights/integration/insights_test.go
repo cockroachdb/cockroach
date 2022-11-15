@@ -323,16 +323,14 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	testutils.SucceedsWithin(t, func() error {
 		rows, err := conn.QueryContext(ctx, `SELECT
 		query,
-		contention::FLOAT ,
-		contention_events->0->>'durationMs' AS durationMs,
-		t.schema_name,
-		t.database_name,
-		t.name,
-		ind.column_name,
+		contention::FLOAT,
+		contention_events->0->>'durationInMs' AS durationMs,
+		contention_events->0->>'schemaName',
+		contention_events->0->>'databaseName',
+		contention_events->0->>'tableName',
+		contention_events->0->>'indexName',
 		txn_contention.blocking_txn_fingerprint_id
 		FROM crdb_internal.cluster_execution_insights insight
-		left join crdb_internal.tables t on (contention_events->0->>'tableID')::int = t.table_id
-		left join crdb_internal.index_columns ind on (contention_events->0->>'indexID')::int = ind.column_id
 		left join crdb_internal.transaction_contention_events txn_contention on  (contention_events->0->>'blockingTxnID')::uuid = txn_contention.blocking_txn_id
 																		 where query like 'UPDATE t SET s =%'`)
 		if err != nil {
@@ -347,9 +345,9 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 			}
 
 			var totalContentionFromQuerySeconds, contentionFromEventMs float64
-			var queryText, schemaName, dbName, tableName, indexColumnName string
+			var queryText, schemaName, dbName, tableName, indexName string
 			var blockingTxnFingerprintID gosql.NullString
-			err = rows.Scan(&queryText, &totalContentionFromQuerySeconds, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexColumnName, &blockingTxnFingerprintID)
+			err = rows.Scan(&queryText, &totalContentionFromQuerySeconds, &contentionFromEventMs, &schemaName, &dbName, &tableName, &indexName, &blockingTxnFingerprintID)
 			if err != nil {
 				return err
 			}
@@ -373,11 +371,11 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 			}
 
 			if tableName != "t" {
-				return fmt.Errorf("table names do not match 'tableName', %s", tableName)
+				return fmt.Errorf("table names do not match 't', %s", tableName)
 			}
 
-			if indexColumnName != "id" {
-				return fmt.Errorf("index names do not match 'tableName', %s", indexColumnName)
+			if indexName != "t_pkey" {
+				return fmt.Errorf("index names do not match 't_pkey', %s", indexName)
 			}
 
 			if !blockingTxnFingerprintID.Valid {

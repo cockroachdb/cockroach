@@ -571,7 +571,7 @@ func (c *DummyTenantOperator) CreateTenantWithID(
 func (c *DummyTenantOperator) CreateTenant(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (roachpb.TenantID, error) {
-	return roachpb.MakeTenantID(0), errors.WithStack(errEvalTenant)
+	return roachpb.TenantID{}, errors.WithStack(errEvalTenant)
 }
 
 // RenameTenant is part of the tree.TenantOperator interface.
