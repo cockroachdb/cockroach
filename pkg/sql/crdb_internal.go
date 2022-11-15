@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -3491,6 +3491,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 )
 `,
 	generator: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, _ *stop.Stopper) (virtualTableGenerator, cleanupFunc, error) {
+		debug.PrintStack()
+
 		hasAdmin, err := p.HasAdminRole(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -3516,40 +3518,49 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if !hasPermission {
 			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
 		}
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
-			Key:    keys.MinKey,
-			EndKey: keys.MaxKey,
-		})
-		if err != nil {
-			return nil, nil, err
+
+		ri := kvcoord.MakeRangeIterator(p.execCfg.DistSender)
+		ri.Seek(ctx, roachpb.RKey(p.EvalContext().Codec.TenantPrefix()), kvcoord.Ascending)
+		if !ri.Valid() {
+			return nil, nil, ri.Error()
 		}
+		// // TODO!!!: Either truncate the span server side or refuse it outright and
+		// // expect the tenants to supply the correct span bounds.
+		// ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
+		// 	Key:    p.EvalContext().Codec.TenantPrefix(),
+		// 	EndKey: p.EvalContext().Codec.TenantPrefix().PrefixEnd(),
+		// })
+		// if err != nil {
+		// 	return nil, nil, err
+		// }
+
+		// resp, err := p.ExecCfg().NodeLocalityServer.NodeLocality(ctx, &serverpb.NodeLocalityRequest{})
+		// if err != nil {
+		// 	return nil, nil, err
+		// }
+		// nodeIDToLocality := resp.NodeLocalities
 
 		// Map node descriptors to localities
-		descriptors, err := getAllNodeDescriptors(p)
-		if err != nil {
-			return nil, nil, err
-		}
-		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
-		for _, desc := range descriptors {
-			nodeIDToLocality[desc.NodeID] = desc.Locality
-		}
+		// descriptors, err := getAllNodeDescriptors(p)
+		// if err != nil {
+		// 	return nil, nil, err
+		// }
+		// nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
+		// for _, desc := range descriptors {
+		// 	nodeIDToLocality[desc.NodeID] = desc.Locality
+		// }
 
-		var desc roachpb.RangeDescriptor
-
-		i := 0
+		var desc *roachpb.RangeDescriptor
 
 		return func() (tree.Datums, error) {
-			if i >= len(ranges) {
+			defer func() { fmt.Println("DEBUG!!! done for", desc.RangeID) }()
+			defer func() { fmt.Println("DEBUG!!! done for", desc.StartKey, desc.EndKey) }()
+			fmt.Println("DEBUG!!! iterating through ranges")
+			if !ri.Valid() {
 				return nil, nil
 			}
-
-			r := ranges[i]
-			i++
-
-			if err := r.ValueProto(&desc); err != nil {
-				return nil, err
-			}
-
+			defer ri.Next(ctx)
+			desc = ri.Desc()
 			votersAndNonVoters := append([]roachpb.ReplicaDescriptor(nil),
 				desc.Replicas().VoterAndNonVoterDescriptors()...)
 			var learnerReplicaStoreIDs []int
@@ -3586,8 +3597,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			}
 
 			replicaLocalityArr := tree.NewDArray(types.String)
-			for _, replica := range votersAndNonVoters {
-				replicaLocality := nodeIDToLocality[replica.NodeID].String()
+			for range votersAndNonVoters {
+				replicaLocality := ""
 				if err := replicaLocalityArr.Append(tree.NewDString(replicaLocality)); err != nil {
 					return nil, err
 				}

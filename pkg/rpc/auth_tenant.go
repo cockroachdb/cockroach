@@ -173,6 +173,7 @@ var reqMethodAllowlist = [...]bool{
 	roachpb.Refresh:        true,
 	roachpb.RefreshRange:   true,
 	roachpb.IsSpanEmpty:    true,
+	roachpb.LeaseInfo:      true,
 }
 
 func reqAllowed(r roachpb.Request) bool {

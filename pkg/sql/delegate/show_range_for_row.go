@@ -37,6 +37,7 @@ func (d *delegator) delegateShowRangeForRow(n *tree.ShowRangeForRow) (tree.State
 	idxSpanStart := hex.EncodeToString(span.Key)
 	idxSpanEnd := hex.EncodeToString(span.EndKey)
 
+	panic("DEBUG!!! delegateShowRangeForRow")
 	sqltelemetry.IncrementShowCounter(sqltelemetry.RangeForRow)
 
 	// Format the expressions into a string to be passed into the

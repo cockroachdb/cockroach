@@ -86,6 +86,7 @@ type unsplitAllRun struct {
 }
 
 func (n *unsplitAllNode) startExec(params runParams) error {
+	panic("DEBUG!!! unsplitAllNode.startExec() should not be called")
 	// Use the internal executor to retrieve the split keys.
 	statement := `
 		SELECT
