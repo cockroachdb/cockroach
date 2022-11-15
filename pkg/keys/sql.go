@@ -40,7 +40,7 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	if err != nil {
 		return nil, roachpb.TenantID{}, err
 	}
-	return rem, roachpb.MakeTenantID(tenID), nil
+	return rem, roachpb.MustMakeTenantID(tenID), nil
 }
 
 // DecodeTenantPrefixE determines the tenant ID from the key prefix, returning
@@ -58,7 +58,7 @@ func DecodeTenantPrefixE(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	if err != nil {
 		return nil, roachpb.TenantID{}, err
 	}
-	id, err := roachpb.MakeTenantIDNoPanic(tenID)
+	id, err := roachpb.MakeTenantID(tenID)
 	if err != nil {
 		return rem, roachpb.TenantID{}, err
 	}
@@ -258,7 +258,7 @@ func (d sqlDecoder) DecodeTenantMetadataID(key roachpb.Key) (roachpb.TenantID, e
 	if err != nil {
 		return roachpb.TenantID{}, err
 	}
-	return roachpb.MakeTenantID(id), nil
+	return roachpb.MustMakeTenantID(id), nil
 }
 
 // RewriteSpanToTenantPrefix updates the passed Span, potentially in-place, to

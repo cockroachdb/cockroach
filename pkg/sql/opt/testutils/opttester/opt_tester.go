@@ -2297,7 +2297,7 @@ func ruleFromString(str string) (opt.RuleName, error) {
 func (ot *OptTester) ExecBuild(f exec.Factory, mem *memo.Memo, expr opt.Expr) (exec.Plan, error) {
 	// For DDL we need a fresh root transaction that isn't system tenant.
 	if opt.IsDDLOp(expr) {
-		ot.evalCtx.Codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+		ot.evalCtx.Codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 		factory := kv.MockTxnSenderFactory{}
 		clock := hlc.NewClockWithSystemTimeSource(time.Nanosecond /* maxOffset */)
 		stopper := stop.NewStopper()

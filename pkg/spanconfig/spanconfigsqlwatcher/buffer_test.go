@@ -174,9 +174,9 @@ func TestBuffer(t *testing.T) {
 	// and interact as expected with descriptor SQLUpdates.
 	require.NoError(t, buffer.add(makePTSEvent(true, roachpb.TenantID{}, ts(16))))
 	require.NoError(t, buffer.add(
-		makePTSEvent(false, roachpb.MakeTenantID(1), ts(17))))
+		makePTSEvent(false, roachpb.MustMakeTenantID(1), ts(17))))
 	require.NoError(t, buffer.add(
-		makePTSEvent(false, roachpb.MakeTenantID(1), ts(18))))
+		makePTSEvent(false, roachpb.MustMakeTenantID(1), ts(18))))
 	require.NoError(t, buffer.add(makePTSEvent(true, roachpb.TenantID{}, ts(19))))
 
 	require.NoError(t, buffer.add(makeDescriptorEvent(2, ts(20))))
@@ -188,7 +188,7 @@ func TestBuffer(t *testing.T) {
 	expectedUpdates := makeDescriptorUpdates(1, 2)
 	expectedUpdates = append(expectedUpdates,
 		makePTSUpdates(
-			*ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(1)}),
+			*ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(1)}),
 			*ptpb.MakeClusterTarget())...,
 	)
 	require.Equal(t, expectedUpdates, updates)
@@ -323,9 +323,9 @@ func TestBufferedEventsSort(t *testing.T) {
 	evs = append(evs, makePTSEvent(true, roachpb.TenantID{}, ts(2)))
 
 	// Insert a few tenant updates that should sort before the cluster updates.
-	evs = append(evs, makePTSEvent(false, roachpb.MakeTenantID(2), ts(3)))
-	evs = append(evs, makePTSEvent(false, roachpb.MakeTenantID(1), ts(7)))
-	evs = append(evs, makePTSEvent(false, roachpb.MakeTenantID(2), ts(2)))
+	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(3)))
+	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(1), ts(7)))
+	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(2)))
 
 	// Insert a few more descriptor updates to interleave the updates.
 	evs = append(evs, makeDescriptorEvent(4, ts(12)))
@@ -344,9 +344,9 @@ func TestBufferedEventsSort(t *testing.T) {
 		makeDescriptorEvent(2, ts(6)),
 		makeDescriptorEvent(4, ts(12)),
 		makeDescriptorEvent(5, ts(11)),
-		makePTSEvent(false, roachpb.MakeTenantID(1), ts(7)),
-		makePTSEvent(false, roachpb.MakeTenantID(2), ts(2)),
-		makePTSEvent(false, roachpb.MakeTenantID(2), ts(3)),
+		makePTSEvent(false, roachpb.MustMakeTenantID(1), ts(7)),
+		makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(2)),
+		makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(3)),
 		makePTSEvent(true, roachpb.TenantID{}, ts(2)),
 		makePTSEvent(true, roachpb.TenantID{}, ts(3)),
 	}, evs)

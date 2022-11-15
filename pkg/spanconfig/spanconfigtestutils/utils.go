@@ -73,12 +73,12 @@ func parseSystemTarget(t testing.TB, systemTarget string) spanconfig.SystemTarge
 	sourceID, err := strconv.Atoi(matches[3])
 	require.NoError(t, err)
 	if matches[4] == "all-tenant-keyspace-targets-set" {
-		return spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(uint64(sourceID)))
+		return spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MustMakeTenantID(uint64(sourceID)))
 	}
 	targetID, err := strconv.Atoi(matches[6])
 	require.NoError(t, err)
 	target, err := spanconfig.MakeTenantKeyspaceTarget(
-		roachpb.MakeTenantID(uint64(sourceID)), roachpb.MakeTenantID(uint64(targetID)),
+		roachpb.MustMakeTenantID(uint64(sourceID)), roachpb.MustMakeTenantID(uint64(targetID)),
 	)
 	require.NoError(t, err)
 	return target
@@ -516,7 +516,7 @@ func ParseProtectionTarget(t testing.TB, input string) *ptpb.Target {
 		for _, tenID := range tenantIDs {
 			id, err := strconv.Atoi(tenID)
 			require.NoError(t, err)
-			ids = append(ids, roachpb.MakeTenantID(uint64(id)))
+			ids = append(ids, roachpb.MustMakeTenantID(uint64(id)))
 		}
 		return ptpb.MakeTenantsTarget(ids)
 	case strings.HasPrefix(target, schemaObjectPrefix):

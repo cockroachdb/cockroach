@@ -71,7 +71,7 @@ func TestKeyToDatums(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
-			tenantID := roachpb.MakeTenantID(tenantID)
+			tenantID := roachpb.MustMakeTenantID(tenantID)
 			codec := keys.MakeSQLCodec(tenantID)
 			keyBytes := tc.keyBytes
 			var alloc tree.DatumAlloc

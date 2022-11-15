@@ -265,7 +265,7 @@ func TestRebalancer_rebalanceLoop(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	tenantID := roachpb.MakeTenantID(30)
+	tenantID := roachpb.MustMakeTenantID(30)
 	drainingPod := &tenant.Pod{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:80", State: tenant.DRAINING}
 	require.True(t, directoryCache.upsertPod(drainingPod))
 	runningPods := []*tenant.Pod{
@@ -422,7 +422,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// been removed from the cache.
 			name: "no pods",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
-				tenant10 := roachpb.MakeTenantID(10)
+				tenant10 := roachpb.MustMakeTenantID(10)
 
 				// Use a random IP since tenant-10 doesn't have a pod, and it
 				// does not matter.
@@ -438,7 +438,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// there's nothing to transfer to.
 			name: "no running pods",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
-				tenant20 := roachpb.MakeTenantID(20)
+				tenant20 := roachpb.MustMakeTenantID(20)
 
 				handle := makeTestHandle()
 				sa := NewServerAssignment(tenant20, b.connTracker, handle, pods[0].Addr)
@@ -452,7 +452,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 			// because minDrainPeriod hasn't elapsed.
 			name: "draining/recently drained pod",
 			handlesFn: func(t *testing.T) []ConnectionHandle {
-				tenant30 := roachpb.MakeTenantID(30)
+				tenant30 := roachpb.MustMakeTenantID(30)
 
 				activeHandle := makeTestHandle()
 				sa := NewServerAssignment(tenant30, b.connTracker, activeHandle, recentlyDrainedPod.Addr)
@@ -505,7 +505,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 				for _, c := range conns {
 					handle := makeTestHandle()
 					sa := NewServerAssignment(
-						roachpb.MakeTenantID(c.TenantID),
+						roachpb.MustMakeTenantID(c.TenantID),
 						b.connTracker,
 						handle,
 						c.Addr,
@@ -518,8 +518,8 @@ func TestRebalancer_rebalance(t *testing.T) {
 				handles[len(handles)-2].(*testConnHandle).setIdle(true)
 
 				// Refresh partitions, and validate idle connections.
-				e30 := b.connTracker.getEntry(roachpb.MakeTenantID(30), false)
-				e40 := b.connTracker.getEntry(roachpb.MakeTenantID(40), false)
+				e30 := b.connTracker.getEntry(roachpb.MustMakeTenantID(30), false)
+				e40 := b.connTracker.getEntry(roachpb.MustMakeTenantID(40), false)
 				e30.refreshPartitions()
 				e40.refreshPartitions()
 				_, idleList30 := e30.listAssignments()
@@ -554,7 +554,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 				for _, c := range conns {
 					handle := makeTestHandle()
 					sa := NewServerAssignment(
-						roachpb.MakeTenantID(c.TenantID),
+						roachpb.MustMakeTenantID(c.TenantID),
 						b.connTracker,
 						handle,
 						c.Addr,
@@ -567,7 +567,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 				}
 
 				// Refresh partitions, and validate idle connection.
-				e60 := b.connTracker.getEntry(roachpb.MakeTenantID(60), false)
+				e60 := b.connTracker.getEntry(roachpb.MustMakeTenantID(60), false)
 				e60.refreshPartitions()
 				_, idleList60 := e60.listAssignments()
 				require.Len(t, idleList60, 30)
@@ -633,7 +633,7 @@ func TestRebalancer_rebalance(t *testing.T) {
 				for _, c := range conns {
 					handle := makeTestHandle()
 					sa := NewServerAssignment(
-						roachpb.MakeTenantID(c.TenantID),
+						roachpb.MustMakeTenantID(c.TenantID),
 						b.connTracker,
 						handle,
 						c.Addr,
@@ -647,8 +647,8 @@ func TestRebalancer_rebalance(t *testing.T) {
 				handles[len(handles)-3].(*testConnHandle).setIdle(true)
 
 				// Refresh partitions, and validate idle connections.
-				e40 := b.connTracker.getEntry(roachpb.MakeTenantID(40), false)
-				e60 := b.connTracker.getEntry(roachpb.MakeTenantID(60), false)
+				e40 := b.connTracker.getEntry(roachpb.MustMakeTenantID(40), false)
+				e60 := b.connTracker.getEntry(roachpb.MustMakeTenantID(60), false)
 				e40.refreshPartitions()
 				e60.refreshPartitions()
 				_, idleList40 := e40.listAssignments()
@@ -741,7 +741,7 @@ func TestBalancer_RebalanceTenant_WithRebalancingDisabled(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 	pods := []*tenant.Pod{
 		{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:80", State: tenant.DRAINING},
 		{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:81", State: tenant.RUNNING},
@@ -816,7 +816,7 @@ func TestBalancer_RebalanceTenant_WithDefaultDelay(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 	pods := []*tenant.Pod{
 		{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:80", State: tenant.DRAINING},
 		{TenantID: tenantID.ToUint64(), Addr: "127.0.0.30:81", State: tenant.RUNNING},
@@ -1380,7 +1380,7 @@ func (r *testDirectoryCache) upsertPod(pod *tenant.Pod) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	tenantID := roachpb.MakeTenantID(pod.TenantID)
+	tenantID := roachpb.MustMakeTenantID(pod.TenantID)
 	pods := r.mu.pods[tenantID]
 	for i, existing := range pods {
 		if existing.Addr == pod.Addr {

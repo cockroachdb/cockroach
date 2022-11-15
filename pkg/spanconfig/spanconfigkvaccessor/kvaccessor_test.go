@@ -113,7 +113,7 @@ func TestDataDriven(t *testing.T) {
 			case "kvaccessor-get-all-system-span-configs-that-apply":
 				var tenID uint64
 				d.ScanArgs(t, "tenant-id", &tenID)
-				spanConfigs, err := accessor.GetAllSystemSpanConfigsThatApply(ctx, roachpb.MakeTenantID(tenID))
+				spanConfigs, err := accessor.GetAllSystemSpanConfigsThatApply(ctx, roachpb.MustMakeTenantID(tenID))
 				if err != nil {
 					return fmt.Sprintf("err: %s", err.Error())
 				}

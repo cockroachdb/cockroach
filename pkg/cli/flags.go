@@ -971,7 +971,7 @@ func (w *tenantIDWrapper) Set(s string) error {
 	if tenID == 0 {
 		return errors.New("invalid tenant ID")
 	}
-	*w.tenID = roachpb.MakeTenantID(tenID)
+	*w.tenID = roachpb.MustMakeTenantID(tenID)
 	return nil
 }
 

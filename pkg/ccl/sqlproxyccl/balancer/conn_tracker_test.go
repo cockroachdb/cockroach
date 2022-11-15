@@ -37,7 +37,7 @@ func TestConnTracker(t *testing.T) {
 	tracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
 	require.NoError(t, err)
 
-	tenant20 := roachpb.MakeTenantID(20)
+	tenant20 := roachpb.MustMakeTenantID(20)
 	sa := &ServerAssignment{addr: "127.0.0.10:8090", owner: &testConnHandle{}}
 
 	// Run twice for idempotency.
@@ -58,9 +58,9 @@ func TestConnTracker(t *testing.T) {
 	require.Equal(t, tenant20, tenantIDs[0])
 
 	// Non-existent.
-	connsMap = tracker.GetConnsMap(roachpb.MakeTenantID(42))
+	connsMap = tracker.GetConnsMap(roachpb.MustMakeTenantID(42))
 	require.Empty(t, connsMap)
-	activeList, idleList = tracker.listAssignments(roachpb.MakeTenantID(42))
+	activeList, idleList = tracker.listAssignments(roachpb.MustMakeTenantID(42))
 	require.Empty(t, activeList)
 	require.Empty(t, idleList)
 
@@ -83,7 +83,7 @@ func TestConnTracker(t *testing.T) {
 	for i := 0; i < clients; i++ {
 		go func() {
 			defer wg.Done()
-			tenantID := roachpb.MakeTenantID(uint64(1 + rand.Intn(5)))
+			tenantID := roachpb.MustMakeTenantID(uint64(1 + rand.Intn(5)))
 			sa := &ServerAssignment{
 				addr:  fmt.Sprintf("127.0.0.10:%d", rand.Intn(5)),
 				owner: &testConnHandle{},
@@ -120,7 +120,7 @@ func TestConnTracker_GetConnsMap(t *testing.T) {
 	require.NoError(t, err)
 
 	makeConn := func(tenID int, addr string) (roachpb.TenantID, *ServerAssignment) {
-		return roachpb.MakeTenantID(uint64(tenID)), &ServerAssignment{
+		return roachpb.MustMakeTenantID(uint64(tenID)), &ServerAssignment{
 			addr:  addr,
 			owner: &testConnHandle{},
 		}
@@ -189,7 +189,7 @@ func TestConnTrackerPartitionsRefresh(t *testing.T) {
 	// Create three assignments: two for tenant-10, and one for tenant-20.
 	// Use a dummy address for all of them.
 	const addr = "127.0.0.10:1020"
-	tenant10, tenant20 := roachpb.MakeTenantID(10), roachpb.MakeTenantID(20)
+	tenant10, tenant20 := roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(20)
 	h1, h2, h3 := &testConnHandle{}, &testConnHandle{}, &testConnHandle{}
 	s1 := NewServerAssignment(tenant10, tracker, h1, addr)
 	defer s1.Close()

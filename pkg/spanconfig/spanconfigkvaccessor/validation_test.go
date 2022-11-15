@@ -30,7 +30,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 	)
 
 	makeTenantTarget := func(id uint64) spanconfig.Target {
-		target, err := spanconfig.MakeTenantKeyspaceTarget(roachpb.MakeTenantID(id), roachpb.MakeTenantID(id))
+		target, err := spanconfig.MakeTenantKeyspaceTarget(roachpb.MustMakeTenantID(id), roachpb.MustMakeTenantID(id))
 		require.NoError(t, err)
 		return spanconfig.MakeTargetFromSystemTarget(target)
 	}
@@ -194,7 +194,7 @@ func TestValidateUpdateArgs(t *testing.T) {
 			// tenant.
 			toDelete: []spanconfig.Target{
 				spanconfig.MakeTargetFromSystemTarget(
-					spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(10)),
+					spanconfig.MakeAllTenantKeyspaceTargetsSet(roachpb.MustMakeTenantID(10)),
 				),
 			},
 			expErr: "cannot use read only system target .* as an update argument",

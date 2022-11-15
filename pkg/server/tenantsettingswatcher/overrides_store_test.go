@@ -26,8 +26,8 @@ func TestOverridesStore(t *testing.T) {
 
 	var s overridesStore
 	s.Init()
-	t1 := roachpb.MakeTenantID(1)
-	t2 := roachpb.MakeTenantID(2)
+	t1 := roachpb.MustMakeTenantID(1)
+	t2 := roachpb.MustMakeTenantID(2)
 	st := func(name, val string) roachpb.TenantSetting {
 		return roachpb.TenantSetting{
 			Name: name,
@@ -82,7 +82,7 @@ func TestOverridesStore(t *testing.T) {
 	expect(o1, "a=aa c=cc d=dd")
 
 	// Set an override for a tenant that has no existing data.
-	t3 := roachpb.MakeTenantID(3)
+	t3 := roachpb.MustMakeTenantID(3)
 	s.SetTenantOverride(t3, st("x", "xx"))
 	o3 := s.GetTenantOverrides(t3)
 	expect(o3, "x=xx")

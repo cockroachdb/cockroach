@@ -723,7 +723,7 @@ func TestGetTenantWeights(t *testing.T) {
 	// another tenant, which will cause that tenant to have a weight of 1 in the
 	// relevant store(s).
 	const otherTenantID = 5
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(otherTenantID))
+	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(otherTenantID))
 	require.NoError(t, s.DB().AdminSplit(
 		ctx,
 		prefix,           /* splitKey */

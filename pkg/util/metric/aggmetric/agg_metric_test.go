@@ -69,8 +69,8 @@ func TestAggMetric(t *testing.T) {
 	}, base.DefaultHistogramWindowInterval(), metric.Count1KBuckets, "tenant_id")
 	r.AddMetric(h)
 
-	tenant2 := roachpb.MakeTenantID(2)
-	tenant3 := roachpb.MakeTenantID(3)
+	tenant2 := roachpb.MustMakeTenantID(2)
+	tenant3 := roachpb.MustMakeTenantID(3)
 	c2 := c.AddChild(tenant2.String())
 	c3 := c.AddChild(tenant3.String())
 	g2 := g.AddChild(tenant2.String())
@@ -139,7 +139,7 @@ func TestAggMetricBuilder(t *testing.T) {
 		base.DefaultHistogramWindowInterval(), metric.Count1KBuckets)
 
 	for i := 5; i < 10; i++ {
-		tenantLabel := roachpb.MakeTenantID(uint64(i)).String()
+		tenantLabel := roachpb.MustMakeTenantID(uint64(i)).String()
 		c.AddChild(tenantLabel)
 		g.AddChild(tenantLabel)
 		f.AddChild(tenantLabel)

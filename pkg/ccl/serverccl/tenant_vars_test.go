@@ -44,7 +44,7 @@ func TestTenantVars(t *testing.T) {
 	server := testCluster.Server(0 /* idx */)
 
 	tenant, _ := serverutils.StartTenant(t, server, base.TestTenantArgs{
-		TenantID: roachpb.MakeTenantID(10 /* id */),
+		TenantID: roachpb.MustMakeTenantID(10 /* id */),
 	})
 
 	startNowNanos := timeutil.Now().UnixNano()

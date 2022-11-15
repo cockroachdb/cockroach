@@ -42,7 +42,7 @@ func gcTenant(
 		)
 	}
 
-	info, err := sql.GetTenantRecordByID(ctx, execCfg, nil /* txn */, roachpb.MakeTenantID(tenID))
+	info, err := sql.GetTenantRecordByID(ctx, execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
 	if err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
 			// The tenant row is deleted only after its data is cleared so there is

@@ -128,11 +128,11 @@ func TestTenantUnauthenticatedAccess(t *testing.T) {
 
 	_, err := tc.Server(0).StartTenant(ctx,
 		base.TestTenantArgs{
-			TenantID: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+			TenantID: roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0]),
 			TestingKnobs: base.TestingKnobs{
 				TenantTestingKnobs: &sql.TenantTestingKnobs{
 					// Configure the SQL server to access the wrong tenant keyspace.
-					TenantIDCodecOverride: roachpb.MakeTenantID(security.EmbeddedTenantIDs()[1]),
+					TenantIDCodecOverride: roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[1]),
 				},
 			},
 		})

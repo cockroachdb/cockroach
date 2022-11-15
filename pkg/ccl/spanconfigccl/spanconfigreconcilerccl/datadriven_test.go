@@ -129,7 +129,7 @@ func TestDataDriven(t *testing.T) {
 
 				var id uint64
 				d.ScanArgs(t, "tenant", &id)
-				tenantID = roachpb.MakeTenantID(id)
+				tenantID = roachpb.MustMakeTenantID(id)
 			}
 
 			tenant, found := spanConfigTestCluster.LookupTenant(tenantID)

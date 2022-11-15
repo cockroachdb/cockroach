@@ -196,7 +196,7 @@ func (ts *testState) tokenBucketRequest(t *testing.T, d *datadriven.TestData) st
 		TargetRequestPeriod: period,
 	}
 	res := ts.tenantUsage.TokenBucketRequest(
-		context.Background(), roachpb.MakeTenantID(tenantID), &req,
+		context.Background(), roachpb.MustMakeTenantID(tenantID), &req,
 	)
 	if res.Error != (errors.EncodedError{}) {
 		return fmt.Sprintf("error: %v", errors.DecodeError(context.Background(), res.Error))
@@ -251,7 +251,7 @@ func (ts *testState) configure(t *testing.T, d *datadriven.TestData) string {
 			ctx,
 			txn,
 			ie,
-			roachpb.MakeTenantID(tenantID),
+			roachpb.MustMakeTenantID(tenantID),
 			args.AvailableRU,
 			args.RefillRate,
 			args.MaxBurstRU,
@@ -272,7 +272,7 @@ func (ts *testState) inspect(t *testing.T, d *datadriven.TestData) string {
 		context.Background(),
 		ts.s.InternalExecutor().(*sql.InternalExecutor),
 		nil, /* txn */
-		roachpb.MakeTenantID(tenantID),
+		roachpb.MustMakeTenantID(tenantID),
 		timeFormat,
 	)
 	if err != nil {
@@ -360,7 +360,7 @@ func TestInstanceCleanup(t *testing.T) {
 				req.NextLiveInstanceID = uint32(instances[0])
 			}
 			res := ts.tenantUsage.TokenBucketRequest(
-				context.Background(), roachpb.MakeTenantID(5), &req,
+				context.Background(), roachpb.MustMakeTenantID(5), &req,
 			)
 			if res.Error != (errors.EncodedError{}) {
 				t.Fatal(errors.DecodeError(context.Background(), res.Error))

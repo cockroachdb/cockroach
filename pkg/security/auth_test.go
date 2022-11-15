@@ -143,7 +143,7 @@ func TestGetCertificateUserScope(t *testing.T) {
 		} else {
 			require.Equal(t, 1, len(userScopes))
 			require.Equal(t, "foo", userScopes[0].Username)
-			require.Equal(t, roachpb.MakeTenantID(123), userScopes[0].TenantID)
+			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[0].TenantID)
 			require.False(t, userScopes[0].Global)
 		}
 	})
@@ -155,7 +155,7 @@ func TestGetCertificateUserScope(t *testing.T) {
 		} else {
 			require.Equal(t, 1, len(userScopes))
 			require.Equal(t, "foo", userScopes[0].Username)
-			require.Equal(t, roachpb.MakeTenantID(123), userScopes[0].TenantID)
+			require.Equal(t, roachpb.MustMakeTenantID(123), userScopes[0].TenantID)
 			require.False(t, userScopes[0].Global)
 		}
 	})
@@ -293,11 +293,11 @@ func TestAuthenticationHook(t *testing.T) {
 		// Secure mode, principal map.
 		{false, "foo,dns:bar", blahUser, "foo:blah", true, true, false, roachpb.SystemTenantID},
 		{false, "foo,dns:bar", blahUser, "bar:blah", true, true, false, roachpb.SystemTenantID},
-		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, true, false, roachpb.MakeTenantID(123)},
+		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123)},
 		{false, "foo,uri:crdb://tenant/123/user/foo", fooUser, "", true, false, false, roachpb.SystemTenantID},
-		{false, "foo", fooUser, "", true, true, false, roachpb.MakeTenantID(123)},
-		{false, "foo,uri:crdb://tenant/1/user/foo", fooUser, "", true, false, false, roachpb.MakeTenantID(123)},
-		{false, "foo,uri:crdb://tenant/123/user/foo", blahUser, "", true, false, false, roachpb.MakeTenantID(123)},
+		{false, "foo", fooUser, "", true, true, false, roachpb.MustMakeTenantID(123)},
+		{false, "foo,uri:crdb://tenant/1/user/foo", fooUser, "", true, false, false, roachpb.MustMakeTenantID(123)},
+		{false, "foo,uri:crdb://tenant/123/user/foo", blahUser, "", true, false, false, roachpb.MustMakeTenantID(123)},
 	}
 
 	ctx := context.Background()

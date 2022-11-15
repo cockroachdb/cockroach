@@ -13858,7 +13858,7 @@ func TestRangeInfoReturned(t *testing.T) {
 func tenantsWithMetrics(m *StoreMetrics) map[roachpb.TenantID]struct{} {
 	metricsTenants := map[roachpb.TenantID]struct{}{}
 	m.tenants.Range(func(tenID int64, _ unsafe.Pointer) bool {
-		metricsTenants[roachpb.MakeTenantID(uint64(tenID))] = struct{}{}
+		metricsTenants[roachpb.MustMakeTenantID(uint64(tenID))] = struct{}{}
 		return true // more
 	})
 	return metricsTenants
@@ -13910,7 +13910,7 @@ func TestStoreTenantMetricsAndRateLimiterRefcount(t *testing.T) {
 	)
 
 	// A range for tenant 123 appears via a split.
-	ten123 := roachpb.MakeTenantID(123)
+	ten123 := roachpb.MustMakeTenantID(123)
 	splitKey := keys.MustAddr(keys.MakeSQLCodec(ten123).TenantPrefix())
 	leftRepl := tc.store.LookupReplica(splitKey)
 	require.NotNil(t, leftRepl)

@@ -4776,7 +4776,7 @@ func TestTenantID(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(ctx)
 
-	tenant2 := roachpb.MakeTenantID(2)
+	tenant2 := roachpb.MustMakeTenantID(2)
 	tenant2Prefix := keys.MakeTenantPrefix(tenant2)
 	t.Run("(1) initial set", func(t *testing.T) {
 		// Ensure that a normal range has the system tenant.

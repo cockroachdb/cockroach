@@ -101,7 +101,7 @@ func (d *TestStaticDirectoryServer) ListPods(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	pods, ok := d.mu.tenants[roachpb.MakeTenantID(req.TenantID)]
+	pods, ok := d.mu.tenants[roachpb.MustMakeTenantID(req.TenantID)]
 	if !ok {
 		return &tenant.ListPodsResponse{}, nil
 	}
@@ -189,7 +189,7 @@ func (d *TestStaticDirectoryServer) EnsurePod(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	pods, ok := d.mu.tenants[roachpb.MakeTenantID(req.TenantID)]
+	pods, ok := d.mu.tenants[roachpb.MustMakeTenantID(req.TenantID)]
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "tenant does not exist")
 	}
@@ -209,7 +209,7 @@ func (d *TestStaticDirectoryServer) GetTenant(
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	tenantID := roachpb.MakeTenantID(req.TenantID)
+	tenantID := roachpb.MustMakeTenantID(req.TenantID)
 	if _, ok := d.mu.tenants[tenantID]; !ok {
 		return nil, status.Errorf(codes.NotFound, "tenant does not exist")
 	}
