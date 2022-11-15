@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
@@ -1842,6 +1843,40 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
+}
+
+// SQLStringForError returns a version of SQLString that will preserve safe
+// information during redaction. It is suitable for usage in error messages.
+func (t *T) SQLStringForError() redact.RedactableString {
+	if t.UserDefined() {
+		// Show the redacted SQLString output with an un-redacted prefix to indicate
+		// that the type is user defined (and possibly enum or record).
+		prefix := "TYPE"
+		switch t.Family() {
+		case EnumFamily:
+			prefix = "ENUM"
+		case TupleFamily:
+			prefix = "RECORD"
+		case ArrayFamily:
+			prefix = "ARRAY"
+		}
+		return redact.Sprintf("USER DEFINED %s: %s", redact.Safe(prefix), t.SQLString())
+	}
+	switch t.Family() {
+	case EnumFamily, TupleFamily, ArrayFamily:
+		// These types can be or can contain user-defined types, but the SQLString
+		// is safe when they are not user-defined. We filtered out the user-defined
+		// case above.
+		return redact.Sprint(redact.Safe(t.SQLString()))
+	case BoolFamily, IntFamily, FloatFamily, DecimalFamily, DateFamily, TimestampFamily,
+		IntervalFamily, StringFamily, BytesFamily, TimestampTZFamily, CollatedStringFamily, OidFamily,
+		UnknownFamily, UuidFamily, INetFamily, TimeFamily, JsonFamily, TimeTZFamily, BitFamily,
+		GeometryFamily, GeographyFamily, Box2DFamily, VoidFamily, AnyFamily:
+		// These types do not contain other types, and do not require redaction.
+		return redact.Sprint(redact.SafeString(t.SQLString()))
+	}
+	// Default to redaction for unhandled types.
+	return redact.Sprint(t.SQLString())
 }
 
 // Equivalent returns true if this type is "equivalent" to the given type.
