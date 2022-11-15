@@ -54,8 +54,8 @@ export function makeInsightDetailsColumns(
     {
       name: "query",
       title: insightsTableTitles.query(execType),
-      cell: (item: ContentionEvent) => QueriesCell(item.queries, 50),
-      sort: (item: ContentionEvent) => item.queries.length,
+      cell: (item: ContentionEvent) => QueriesCell(item?.queries, 50),
+      sort: (item: ContentionEvent) => item.queries?.length,
     },
     {
       name: "contentionStartTime",
