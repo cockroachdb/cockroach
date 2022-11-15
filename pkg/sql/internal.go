@@ -259,7 +259,6 @@ func (ie *InternalExecutor) initConnEx(
 
 	ex.executorType = executorTypeInternal
 	return ex, nil
-
 }
 
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
@@ -306,6 +305,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 			ex.extraTxnState.jobs = ie.extraTxnState.jobs
 			ex.extraTxnState.schemaChangerState = ie.extraTxnState.schemaChangerState
 			ex.extraTxnState.shouldResetSyntheticDescriptors = shouldResetSyntheticDescriptors
+			ex.planner.txn = ie.extraTxnState.txn
 			ex.initPlanner(ctx, &ex.planner)
 		}
 	}
@@ -1033,9 +1033,6 @@ func (ie *InternalExecutor) commitTxn(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "cannot create conn executor to commit txn")
 	}
-	// TODO(janexing): is this correct?
-	ex.planner.txn = ie.extraTxnState.txn
-
 	defer ex.close(ctx, externalTxnClose)
 	return ex.commitSQLTransactionInternal(ctx)
 }
