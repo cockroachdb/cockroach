@@ -27,6 +27,7 @@ stubComponentInModule(
 stubComponentInModule("src/views/statements/statementsPage", "default");
 stubComponentInModule("src/views/statements/statementDetails", "default");
 stubComponentInModule("src/views/transactions/transactionsPage", "default");
+stubComponentInModule("src/views/transactions/transactionDetails", "default");
 stubComponentInModule(
   "src/views/statements/recentStatementDetailsConnected",
   "default",
@@ -64,7 +65,6 @@ const LOADING_CLUSTER_STATUS = /Loading cluster status.*/;
 const NODE_LOG_HEADER = /Logs Node.*/;
 const JOBS_HEADER = "Jobs";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
-const TRANSACTION_DETAILS_HEADER = "Transaction Details";
 const ADVANCED_DEBUG_HEADER = "Advanced Debugging";
 const REDUX_DEBUG_HEADER = "Redux State";
 const CUSTOM_METRICS_CHART_HEADER = "Custom Chart";
@@ -423,7 +423,7 @@ describe("Routing to", () => {
   describe("'/transaction/:aggregated_ts/:txn_fingerprint_id' path", () => {
     test("routes to <TransactionDetails> component", () => {
       navigateToPath("/transaction/1637877600/4948941983164833719");
-      screen.getByText(TRANSACTION_DETAILS_HEADER, { selector: "h3" });
+      screen.getByTestId("transactionDetails");
     });
   });
 

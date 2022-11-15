@@ -128,11 +128,9 @@ function createStmtFingerprintToQueryMap(
   return idToQuery;
 }
 
-function getTxnContentionWhereClause(
-  clause: string,
-  filters?: TxnInsightDetailsRequest,
-): string {
-  let whereClause = clause;
+// txnContentionDetailsQuery selects information about a specific transaction contention event.
+function txnContentionDetailsQuery(filters: TxnContentionDetailsRequest) {
+  let whereClause = ` WHERE waiting_txn_id = '${filters.txnExecutionID}'`;
   if (filters?.start) {
     whereClause =
       whereClause + ` AND collection_ts >= '${filters.start.toISOString()}'`;
@@ -142,20 +140,6 @@ function getTxnContentionWhereClause(
       whereClause +
       ` AND (collection_ts + contention_duration) <= '${filters.end.toISOString()}'`;
   }
-  return whereClause;
-}
-
-export type TransactionContentionEventDetails = Omit<
-  TxnContentionInsightDetails,
-  "application" | "queries" | "blockingQueries"
->;
-
-// txnContentionDetailsQuery selects information about a specific transaction contention event.
-function txnContentionDetailsQuery(filters: TxnContentionDetailsRequest) {
-  const whereClause = getTxnContentionWhereClause(
-    ` WHERE waiting_txn_id = '${filters.txnExecutionID}'`,
-    filters,
-  );
   return `
 SELECT DISTINCT
   collection_ts,
@@ -262,7 +246,7 @@ function formatTxnContentionDetailsResponse(
 }
 
 export type TxnContentionDetailsRequest = {
-  txnExecutionID: string;
+  txnExecutionID?: string;
   start?: moment.Moment;
   end?: moment.Moment;
 };
@@ -415,6 +399,7 @@ type TxnInsightsResponseRow = {
 
 type TxnQueryFilters = {
   execID?: string;
+  fingerprintID?: string;
   start?: moment.Moment;
   end?: moment.Moment;
 };
@@ -466,15 +451,20 @@ AND txn_id != '00000000-0000-0000-0000-000000000000'`;
     whereClause += ` AND end_time <= '${filters.end.toISOString()}'`;
   }
 
+  if (filters?.fingerprintID) {
+    whereClause += ` AND encode(txn_fingerprint_id, 'hex') = '${filters.fingerprintID}'`;
+  }
+
   return `
-SELECT ${txnColumns} FROM (
-    SELECT
-      *,
-      row_number() OVER ( PARTITION BY txn_fingerprint_id ORDER BY end_time DESC ) as rank
-    FROM ${TXN_INSIGHTS_TABLE_NAME}
-    ${whereClause} 
-    
-) WHERE rank = 1;
+SELECT ${txnColumns} FROM
+  (
+    SELECT DISTINCT ON (txn_fingerprint_id, problems, causes)
+      *
+    FROM
+      ${TXN_INSIGHTS_TABLE_NAME}
+    ${whereClause}
+    ORDER BY txn_fingerprint_id, problems, causes, end_time DESC
+  )
 `;
 };
 
@@ -511,6 +501,7 @@ function formatTxnInsightsRow(row: TxnInsightsResponseRow): TxnInsightEvent {
 
 export type TxnInsightsRequest = {
   txnExecutionID?: string;
+  txnFingerprintID?: string;
   start?: moment.Moment;
   end?: moment.Moment;
 };
@@ -518,13 +509,13 @@ export type TxnInsightsRequest = {
 export function getTxnInsightsApi(
   req?: TxnInsightsRequest,
 ): Promise<TxnInsightEvent[]> {
-  const request = makeInsightsSqlRequest([
-    createTxnInsightsQuery({
-      execID: req?.txnExecutionID,
-      start: req?.start,
-      end: req?.end,
-    }),
-  ]);
+  const filters: TxnQueryFilters = {
+    start: req?.start,
+    end: req?.end,
+    execID: req?.txnExecutionID ? req.txnExecutionID : null,
+    fingerprintID: req?.txnFingerprintID ? req.txnFingerprintID : null,
+  };
+  const request = makeInsightsSqlRequest([createTxnInsightsQuery(filters)]);
   return executeInternalSql<TxnInsightsResponseRow>(request).then(result => {
     if (result.error) {
       throw new Error(

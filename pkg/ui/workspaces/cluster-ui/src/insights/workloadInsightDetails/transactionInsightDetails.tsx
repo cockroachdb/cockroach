@@ -75,7 +75,7 @@ export const TransactionInsightDetails: React.FC<
 
   useEffect(() => {
     const stmtsComplete =
-      stmts != null && stmts.length === txnDetails?.stmtExecutionIDs?.length;
+      stmts != null && stmts?.length === txnDetails?.stmtExecutionIDs?.length;
 
     const contentionComplete =
       contentionInfo != null ||
@@ -125,7 +125,7 @@ export const TransactionInsightDetails: React.FC<
           iconPosition="left"
           className={commonStyles("small-margin")}
         >
-          Insights
+          Previous page
         </Button>
         <h3
           className={commonStyles("base-heading", "no-margin-bottom")}
