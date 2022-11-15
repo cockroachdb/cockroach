@@ -256,6 +256,21 @@ export function HexStringToInt64String(s: string): string {
   return dec;
 }
 
+// CheckHexValue adds the leading 0 on strings with hex value that
+// have a length < 16.
+export function CheckHexValue(s: string): string {
+  if (s === undefined || s === null || s.length === 0) {
+    return "";
+  }
+  if (s?.length === 16) {
+    return s;
+  }
+  while (s.length < 16) {
+    s = `0${s}`;
+  }
+  return s;
+}
+
 // capitalize capitalizes a string.
 export function capitalize(str: string): string {
   if (!str) return str;

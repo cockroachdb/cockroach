@@ -15,6 +15,7 @@ import {
   BytesFitScale,
   byteUnits,
   HexStringToInt64String,
+  CheckHexValue,
 } from "./format";
 
 describe("Format utils", () => {
@@ -57,6 +58,16 @@ describe("Format utils", () => {
       expect(HexStringToInt64String("fb9111f22f2213b7")).toBe(
         "18127289707013477303",
       );
+    });
+  });
+
+  describe("CheckHexValue", () => {
+    it("add leading 0 to hex values", () => {
+      expect(CheckHexValue(undefined)).toBe("");
+      expect(CheckHexValue(null)).toBe("");
+      expect(CheckHexValue("fb9111f22f2213b7")).toBe("fb9111f22f2213b7");
+      expect(CheckHexValue("b9111f22f2213b7")).toBe("0b9111f22f2213b7");
+      expect(CheckHexValue("9111f22f2213b7")).toBe("009111f22f2213b7");
     });
   });
 });
