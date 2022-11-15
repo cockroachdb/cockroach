@@ -170,9 +170,6 @@ type TestServerInterface interface {
 	// SQLLivenessProvider returns the sqlliveness.Provider as an interface{}.
 	SQLLivenessProvider() interface{}
 
-	// StartupMigrationsManager returns the *startupmigrations.Manager as an interface{}.
-	StartupMigrationsManager() interface{}
-
 	// NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
 	// interface{}.
 	NodeLiveness() interface{}
