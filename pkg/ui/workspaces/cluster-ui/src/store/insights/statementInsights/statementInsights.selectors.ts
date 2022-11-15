@@ -12,8 +12,11 @@ import { createSelector } from "reselect";
 import { localStorageSelector } from "src/store/utils/selectors";
 import { AppState } from "src/store/reducers";
 
-import { selectStatementInsightDetailsCombiner } from "src/selectors/insightsCommon.selectors";
-import { selectID } from "src/selectors/common";
+import {
+  selectStatementInsightDetailsCombiner,
+  selectStatementInsightDetailsCombinerByFingerprint,
+} from "src/selectors/insightsCommon.selectors";
+import { selectStatementFingerprintID, selectID } from "src/selectors/common";
 import { InsightEnumToLabel, StmtInsightEvent } from "src/insights";
 
 export const selectStmtInsights = (state: AppState): StmtInsightEvent[] =>
@@ -49,3 +52,9 @@ export const selectColumns = createSelector(
 export const selectStmtInsightsLoading = (state: AppState): boolean =>
   state.adminUI.stmtInsights?.inFlight &&
   (!state.adminUI.stmtInsights?.valid || !state.adminUI.stmtInsights?.data);
+
+export const selectInsightsByFingerprint = createSelector(
+  selectStmtInsights,
+  selectStatementFingerprintID,
+  selectStatementInsightDetailsCombinerByFingerprint,
+);
