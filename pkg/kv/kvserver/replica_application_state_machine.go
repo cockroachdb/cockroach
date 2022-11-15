@@ -84,16 +84,11 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 	return sm
 }
 
-// shouldApplyCommand determines whether or not a command should be applied to
-// the replicated state machine after it has been committed to the Raft log. It
-// then sets the provided command's LeaseIndex, Rejection, and ForcedErr
-// fields and returns whether command should be applied or rejected.
-func (r *Replica) shouldApplyCommand(
+// runApplyTestingKnobs takes a command which has been populated with the return
+// values of CheckForcedError and allows testing knobs to change the outcome.
+func (r *Replica) runApplyTestingKnobs(
 	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
-) bool {
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
-		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), replicaState,
-	)
+) {
 	// Consider testing-only filters.
 	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.ForcedErr != nil || filter != nil {
 		args := kvserverbase.ApplyFilterArgs{
@@ -120,7 +115,6 @@ func (r *Replica) shouldApplyCommand(
 			}
 		}
 	}
-	return cmd.ForcedErr == nil
 }
 
 // NewEphemeralBatch implements the apply.StateMachine interface.
@@ -239,7 +233,11 @@ func (b *replicaAppBatch) Stage(
 	// machine or whether it should be rejected (and replaced by an empty command).
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
-	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
+		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &b.state,
+	)
+	b.r.runApplyTestingKnobs(ctx, cmd, &b.state)
+	if cmd.Rejected() {
 		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
 
 		// Apply an empty command.
@@ -319,8 +317,8 @@ func (b *replicaAppBatch) Stage(
 		b.emptyEntries++
 	}
 
-	// The command was checked by shouldApplyCommand, so it can be returned
-	// as an apply.CheckedCommand.
+	// The command was checked by CheckForcedErr, so it can be returned as an
+	// apply.CheckedCommand.
 	return cmd, nil
 }
 
@@ -920,7 +918,10 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 
-	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
+		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &mb.state,
+	)
+	mb.r.runApplyTestingKnobs(ctx, cmd, &mb.state)
 	mb.state.LeaseAppliedIndex = cmd.LeaseIndex
 	return cmd, nil
 }
