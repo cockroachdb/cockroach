@@ -14,6 +14,7 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import {
   refreshNodes,
   refreshStatements,
+  refreshTxnInsights,
   refreshUserSQLRoles,
 } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
@@ -32,6 +33,7 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
+import { selectTxnInsightsByFingerprint } from "src/views/insights/insightsSelectors";
 
 export const selectTransaction = createSelector(
   (state: AdminUIState) => state.cachedData.statements,
@@ -86,6 +88,7 @@ export default withRouter(
         ),
         isLoading: isLoading,
         lastUpdated: lastUpdated,
+        transactionInsights: selectTxnInsightsByFingerprint(state, props),
       };
     },
     {
@@ -93,6 +96,7 @@ export default withRouter(
       refreshNodes,
       refreshUserSQLRoles,
       onTimeScaleChange: setGlobalTimeScaleAction,
+      refreshTransactionInsights: refreshTxnInsights,
     },
   )(TransactionDetails),
 );

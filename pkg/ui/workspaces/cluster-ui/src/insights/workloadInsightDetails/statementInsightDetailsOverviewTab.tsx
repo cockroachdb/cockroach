@@ -56,7 +56,7 @@ export const StatementInsightDetailsOverviewTab: React.FC<
   const isCockroachCloud = useContext(CockroachCloudContext);
 
   const insightsColumns = useMemo(
-    () => makeInsightsColumns(isCockroachCloud, hasAdminRole),
+    () => makeInsightsColumns(isCockroachCloud, hasAdminRole, true),
     [isCockroachCloud, hasAdminRole],
   );
 
@@ -175,13 +175,14 @@ export const StatementInsightDetailsOverviewTab: React.FC<
           </SummaryCard>
         </Col>
       </Row>
-      <Row gutter={24} className={tableCx("margin-bottom")}>
-        <Col>
+      <Row gutter={24}>
+        <Col span={24}>
           <InsightsSortedTable
             sortSetting={insightsSortSetting}
             onChangeSortSetting={setInsightsSortSetting}
             columns={insightsColumns}
             data={tableData}
+            tableWrapperClassName={tableCx("sorted-table")}
           />
         </Col>
       </Row>

@@ -858,6 +858,7 @@ export const getStatementDetailsPropsFixture = (
   refreshNodes: noop,
   refreshNodesLiveness: noop,
   refreshUserSQLRoles: noop,
+  refreshStatementFingerprintInsights: noop,
   diagnosticsReports: [],
   dismissStatementDiagnosticsAlertMessage: noop,
   onTimeScaleChange: noop,

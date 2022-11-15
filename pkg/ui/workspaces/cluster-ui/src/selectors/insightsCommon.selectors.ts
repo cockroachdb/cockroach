@@ -26,10 +26,25 @@ export const selectStatementInsightDetailsCombiner = (
   if (!statementInsights || !executionID) {
     return null;
   }
-
   return statementInsights.find(
     insight => insight.statementExecutionID === executionID,
   );
+};
+
+export const selectStatementInsightDetailsCombinerByFingerprint = (
+  statementInsights: StmtInsightEvent[],
+  fingerprintID: string,
+): StmtInsightEvent[] | null => {
+  if (!statementInsights || statementInsights?.length < 1 || !fingerprintID) {
+    return null;
+  }
+  const insightEvents: StmtInsightEvent[] = [];
+  statementInsights.forEach(insight => {
+    if (insight.statementFingerprintID === fingerprintID) {
+      insightEvents.push(insight);
+    }
+  });
+  return insightEvents;
 };
 
 export const selectTxnInsightDetailsCombiner = (

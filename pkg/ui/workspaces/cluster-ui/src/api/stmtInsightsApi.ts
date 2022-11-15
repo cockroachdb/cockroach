@@ -30,6 +30,7 @@ export type StmtInsightsReq = {
   start?: moment.Moment;
   end?: moment.Moment;
   stmtExecutionID?: string;
+  stmtFingerprintId?: string;
 };
 
 type InsightsContentionResponseEvent = {
@@ -118,17 +119,22 @@ WHERE stmt_id = '${filters.stmtExecutionID}'`;
     whereClause =
       whereClause + ` AND end_time <= '${filters.end.toISOString()}'`;
   }
+  if (filters?.stmtFingerprintId) {
+    whereClause =
+      whereClause +
+      ` AND encode(stmt_fingerprint_id, 'hex') = '${filters.stmtFingerprintId}'`;
+  }
 
   return `
-SELECT ${stmtColumns} FROM (
-SELECT
-  *,
-  row_number() OVER ( PARTITION BY stmt_fingerprint_id ORDER BY end_time DESC ) as rank
-FROM
-  crdb_internal.cluster_execution_insights
-  ${whereClause}
-) WHERE rank = 1
- `;
+SELECT ${stmtColumns} FROM
+   (
+     SELECT DISTINCT ON (stmt_fingerprint_id, problem, causes)
+       *
+     FROM
+       crdb_internal.cluster_execution_insights
+         ${whereClause}
+     ORDER BY stmt_fingerprint_id, problem, causes, end_time DESC
+   )`;
 };
 
 export const stmtInsightsByTxnExecutionQuery = (id: string): string => `
