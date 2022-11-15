@@ -243,6 +243,9 @@ func NewExternalSorter(
 		// the external sorter.
 		// TODO(asubiotto): this number should be tuned.
 		maxNumberPartitions = fdSemaphore.GetLimit() / 16
+		if maxNumberPartitions > maxFDsForSingleOperator {
+			maxNumberPartitions = maxFDsForSingleOperator
+		}
 	}
 	if maxNumberPartitions < colexecop.ExternalSorterMinPartitions {
 		maxNumberPartitions = colexecop.ExternalSorterMinPartitions
