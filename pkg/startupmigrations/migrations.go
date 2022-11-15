@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/startupmigrations/leasemanager"
@@ -99,8 +98,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
-		name:             "create system.table_statistics table",
-		newDescriptorIDs: staticIDs(keys.TableStatisticsTableID),
+		name: "create system.table_statistics table",
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
@@ -109,8 +107,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
-		name:             "create system.locations table",
-		newDescriptorIDs: staticIDs(keys.LocationsTableID),
+		name: "create system.locations table",
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
@@ -118,8 +115,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v2.0. Baked into v2.1.
-		name:             "create system.role_members table",
-		newDescriptorIDs: staticIDs(keys.RoleMembersTableID),
+		name: "create system.role_members table",
 	},
 	{
 		// Introduced in v2.0. Permanent migration.
@@ -174,9 +170,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	{
 		// Introduced in v2.1.
 		// TODO(knz): bake this migration into v19.1.
-		name:             "create default databases",
-		workFn:           createDefaultDbs,
-		newDescriptorIDs: databaseIDs(catalogkeys.DefaultDatabaseName, catalogkeys.PgDatabaseName),
+		name:   "create default databases",
+		workFn: createDefaultDbs,
 	},
 	{
 		// Introduced in v2.1. Baked into 20.1.
@@ -255,8 +250,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 	{
 		// Introduced in v20.2. Baked into v21.1.
-		name:             "create new system.scheduled_jobs table",
-		newDescriptorIDs: staticIDs(keys.ScheduledJobsTableID),
+		name: "create new system.scheduled_jobs table",
 	},
 	{
 		// Introduced in v20.2. Baked into v21.1.
@@ -271,7 +265,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// ones in those ranges. Until these deprecated version keys are all deleted
 		// we tie this migration to the last 20.2 version key.
 		includedInBootstrap: roachpb.Version{Major: 20, Minor: 2},
-		newDescriptorIDs:    staticIDs(keys.TenantsTableID),
 	},
 	{
 		// Introduced in v20.2. Baked into v21.1.
@@ -286,28 +279,6 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v20.2.
 		name: "mark non-terminal schema change jobs with a pre-20.1 format version as failed",
 	},
-}
-
-func staticIDs(
-	ids ...descpb.ID,
-) func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
-	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) { return ids, nil }
-}
-
-func databaseIDs(
-	names ...string,
-) func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
-	return func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error) {
-		var ids []descpb.ID
-		for _, name := range names {
-			kv, err := db.Get(ctx, catalogkeys.MakeDatabaseNameKey(codec, name))
-			if err != nil {
-				return nil, err
-			}
-			ids = append(ids, descpb.ID(kv.ValueInt()))
-		}
-		return ids, nil
-	}
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -339,11 +310,6 @@ type migrationDescriptor struct {
 	// typically have to do with cluster settings, which is a cluster-wide
 	// concept.
 	clusterWide bool
-	// newDescriptorIDs is a function that returns the IDs of any additional
-	// descriptors that were added by this migration. This is needed to automate
-	// certain tests, which check the number of ranges/descriptors present on
-	// server bootup.
-	newDescriptorIDs func(ctx context.Context, db DB, codec keys.SQLCodec) ([]descpb.ID, error)
 }
 
 func init() {
