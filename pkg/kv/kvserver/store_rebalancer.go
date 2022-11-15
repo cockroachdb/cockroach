@@ -669,6 +669,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 		candidate := sr.allocator.TransferLeaseTarget(
 			ctx,
+			sr.allocator.StorePool,
 			conf,
 			candidates,
 			candidateReplica,
@@ -694,6 +695,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		filteredStoreList := rctx.allStoresList.ExcludeInvalid(conf.VoterConstraints)
 		if sr.allocator.FollowTheWorkloadPrefersLocal(
 			ctx,
+			sr.allocator.StorePool,
 			filteredStoreList,
 			rctx.LocalDesc,
 			candidate.StoreID,
@@ -864,6 +866,7 @@ func (sr *StoreRebalancer) chooseRangeToRebalance(
 		// misconfiguration.
 		validTargets := sr.allocator.ValidLeaseTargets(
 			ctx,
+			sr.allocator.StorePool,
 			rebalanceCtx.conf,
 			targetVoterRepls,
 			rebalanceCtx.candidateReplica,
@@ -935,6 +938,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 		// `AdminRelocateRange` so that these decisions show up in system.rangelog
 		add, remove, _, shouldRebalance := sr.allocator.RebalanceTarget(
 			ctx,
+			sr.allocator.StorePool,
 			rbCtx.conf,
 			rbCtx.candidateReplica.RaftStatus(),
 			finalVoterTargets,
@@ -999,6 +1003,7 @@ func (sr *StoreRebalancer) getRebalanceTargetsBasedOnQPS(
 	for i := 0; i < len(finalNonVoterTargets); i++ {
 		add, remove, _, shouldRebalance := sr.allocator.RebalanceTarget(
 			ctx,
+			sr.allocator.StorePool,
 			rbCtx.conf,
 			rbCtx.candidateReplica.RaftStatus(),
 			finalVoterTargets,
