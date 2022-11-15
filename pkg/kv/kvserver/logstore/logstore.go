@@ -13,6 +13,7 @@ package logstore
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -49,6 +50,23 @@ type RaftState struct {
 	LastIndex uint64
 	LastTerm  uint64
 	ByteSize  int64
+}
+
+// AppendStats describes a completed log storage append operation.
+type AppendStats struct {
+	Begin time.Time
+	End   time.Time
+
+	RegularEntries    int
+	RegularBytes      int64
+	SideloadedEntries int
+	SideloadedBytes   int64
+
+	PebbleBegin time.Time
+	PebbleEnd   time.Time
+	PebbleBytes int64
+
+	Sync bool
 }
 
 // LogAppend adds the given entries to the raft log. Takes the previous log
