@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
@@ -1904,6 +1905,24 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
+}
+
+var startRedactionMarker = string(redact.StartMarker())
+var endRedactionMarker = string(redact.EndMarker())
+
+// SQLStringForError returns a version of SQLString that will preserve safe
+// information during redaction. It is suitable for usage in error messages.
+func (t *T) SQLStringForError() redact.RedactableString {
+	if t.UserDefined() {
+		sqlStr := "UDT: " + startRedactionMarker + t.SQLString() + endRedactionMarker
+		return redact.RedactableString(sqlStr)
+	}
+	if t.Family() == EnumFamily {
+		sqlStr := "enum: " + startRedactionMarker + t.SQLString() + endRedactionMarker
+		return redact.RedactableString(sqlStr)
+	}
+	// Other types are safe to leave un-redacted.
+	return redact.RedactableString(t.SQLString())
 }
 
 // Equivalent returns true if this type is "equivalent" to the given type.
