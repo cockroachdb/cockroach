@@ -275,11 +275,11 @@ export function getInsightsFromProblemsAndCauses(
 
 /**
  * flattenTxnInsightsToStmts flattens the txn insights array
- * into its stmt insights. Only stmts with non-empty insights
- * array will be included.
+ * into its stmt insights, including the txn level ifnormation.
+ * Only stmts with non-empty insights array will be included.
  * @param txnInsights array of transaction insights
  * @returns An array of FlattenedStmtInsightEvent where each elem
- * includes stmt and txn info. Only includes stmts with non-empty
+ * includes stmt and txn info. All elements have a non-empty
  * insights array.
  */
 export function flattenTxnInsightsToStmts(
@@ -343,7 +343,9 @@ export function mergeTxnContentionAndStmtInsights(
         ...txn,
         contention: existingContentionEvent.contention,
         startTime: existingContentionEvent.startTime,
-        insights: txn.insights.concat(existingContentionEvent.insights),
+        insights: dedupInsights(
+          txn.insights.concat(existingContentionEvent.insights),
+        ),
       };
       return; // Continue
     }
@@ -371,9 +373,15 @@ export function mergeTxnInsightDetails(
     application:
       txnContentionDetails.application ?? txnDetailsFromStmts?.application,
     lastRetryReason: txnDetailsFromStmts?.lastRetryReason,
+    sessionID: txnDetailsFromStmts?.sessionID,
+    retries: txnDetailsFromStmts?.retries,
+    databaseName: txnDetailsFromStmts?.databaseName,
+    implicitTxn: txnDetailsFromStmts?.implicitTxn,
+    username: txnDetailsFromStmts?.username,
+    priority: txnDetailsFromStmts?.priority,
     statementInsights: txnDetailsFromStmts?.statementInsights,
-    insights: txnContentionDetails.insights.concat(
-      txnDetailsFromStmts?.insights ?? [],
+    insights: dedupInsights(
+      txnContentionDetails.insights.concat(txnDetailsFromStmts?.insights ?? []),
     ),
     queries: txnContentionDetails.queries,
     startTime: txnContentionDetails.startTime,
@@ -489,4 +497,15 @@ export function getTxnInsightRecommendations(
   }
 
   return recs;
+}
+
+export function dedupInsights(insights: Insight[]): Insight[] {
+  // De-duplicate top-level txn insights.
+  const insightsSeen = new Set<string>();
+  return insights.reduce((deduped, i) => {
+    if (insightsSeen.has(i.name)) return deduped;
+    insightsSeen.add(i.name);
+    deduped.push(i);
+    return deduped;
+  }, []);
 }

@@ -19,6 +19,7 @@ import {
 } from "./sqlApi";
 import {
   BlockedContentionDetails,
+  dedupInsights,
   FlattenedStmtInsightEvent,
   getInsightFromCause,
   getInsightsFromProblemsAndCauses,
@@ -564,10 +565,14 @@ function organizeExecutionInsightsResponseIntoTxns(
     return [];
   }
 
-  const txnByExecID = new Map<string, TxnInsightEvent>();
+  // Map of Transaction  exec and fingerprint id -> txn.
+  const txnByIDs = new Map<string, TxnInsightEvent>();
+  const getTxnKey = (row: ExecutionInsightsResponseRow) =>
+    row.txn_id.concat(row.txn_fingerprint_id);
 
   response.execution.txn_results[0].rows.forEach(row => {
-    let txnInsight: TxnInsightEvent = txnByExecID.get(row.txn_id);
+    const rowKey = getTxnKey(row);
+    let txnInsight: TxnInsightEvent = txnByIDs.get(rowKey);
 
     if (!txnInsight) {
       txnInsight = {
@@ -587,7 +592,7 @@ function organizeExecutionInsightsResponseIntoTxns(
         insights: [],
         queries: [],
       };
-      txnByExecID.set(row.txn_id, txnInsight);
+      txnByIDs.set(rowKey, txnInsight);
     }
 
     const start = moment.utc(row.start_time);
@@ -630,15 +635,9 @@ function organizeExecutionInsightsResponseIntoTxns(
     );
   });
 
-  txnByExecID.forEach(txn => {
+  txnByIDs.forEach(txn => {
     // De-duplicate top-level txn insights.
-    const insightsSeen = new Set<string>();
-    txn.insights = txn.insights.reduce((insights, i) => {
-      if (insightsSeen.has(i.name)) return insights;
-      insightsSeen.add(i.name);
-      insights.push(i);
-      return insights;
-    }, []);
+    txn.insights = dedupInsights(txn.insights);
 
     // Sort stmt insights for each txn by start time.
     txn.statementInsights.sort((a, b) => {
@@ -648,7 +647,7 @@ function organizeExecutionInsightsResponseIntoTxns(
     });
   });
 
-  return Array.from(txnByExecID.values());
+  return Array.from(txnByIDs.values());
 }
 
 type InsightQuery<ResponseColumnType, State> = {
