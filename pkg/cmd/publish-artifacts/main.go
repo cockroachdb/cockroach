@@ -29,15 +29,40 @@ const (
 )
 
 func main() {
-	var destBucket = flag.String("bucket", "cockroach", "override default bucket")
-	var gcsBucket = flag.String("gcs-bucket", "", "override default bucket")
+	var s3Bucket string
+	var gcsBucket string
+	flag.StringVar(&s3Bucket, "bucket", "", "S3 bucket")
+	flag.StringVar(&gcsBucket, "gcs-bucket", "", "GCS bucket")
 	flag.Parse()
 
-	if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
-		log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
+	if gcsBucket == "" {
+		log.Fatal("GCS bucket is not set")
 	}
-	if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
-		log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
+	if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
+		log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+	}
+	gcs, err := release.NewGCS(gcsBucket)
+	if err != nil {
+		log.Fatalf("Creating GCS session: %s", err)
+	}
+	var providers []release.ObjectPutGetter
+	providers = append(providers, gcs)
+
+	if s3Bucket != "" {
+		log.Printf("Using S3 bucket: %s", s3Bucket)
+		if _, ok := os.LookupEnv(awsAccessKeyIDKey); !ok {
+			log.Fatalf("AWS access key ID environment variable %s is not set", awsAccessKeyIDKey)
+		}
+		if _, ok := os.LookupEnv(awsSecretAccessKeyKey); !ok {
+			log.Fatalf("AWS secret access key environment variable %s is not set", awsSecretAccessKeyKey)
+		}
+		s3, err := release.NewS3("us-east-1", s3Bucket)
+		if err != nil {
+			log.Fatalf("Creating AWS S3 session: %s", err)
+		}
+		providers = append(providers, s3)
+	} else {
+		log.Println("Not using S3 bucket")
 	}
 
 	branch, ok := os.LookupEnv(teamcityBuildBranchKey)
@@ -62,24 +87,6 @@ func main() {
 		log.Fatalf("%s: out=%q err=%s", cmd.Args, out, err)
 	}
 	versionStr := string(bytes.TrimSpace(out))
-
-	var providers []release.ObjectPutGetter
-	s3, err := release.NewS3("us-east-1", *destBucket)
-	if err != nil {
-		log.Fatalf("Creating AWS S3 session: %s", err)
-	}
-	providers = append(providers, s3)
-
-	if *gcsBucket != "" {
-		if _, ok := os.LookupEnv("GOOGLE_APPLICATION_CREDENTIALS"); !ok {
-			log.Fatal("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
-		}
-		gcs, err := release.NewGCS(*gcsBucket)
-		if err != nil {
-			log.Fatalf("Creating GCS session: %s", err)
-		}
-		providers = append(providers, gcs)
-	}
 
 	run(providers, runFlags{
 		pkgDir: pkg,
