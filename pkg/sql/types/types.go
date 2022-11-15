@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
@@ -1921,6 +1922,19 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
+}
+
+// SQLStringForError returns a version of SQLString that will preserve safe
+// information during redaction. It is suitable for usage in error messages.
+func (t *T) SQLStringForError() redact.RedactableString {
+	if t.UserDefined() {
+		return redact.Sprintf("UDT: %s", t.SQLString())
+	}
+	if t.Family() == EnumFamily {
+		return redact.Sprintf("enum: %s", t.SQLString())
+	}
+	// Other types are safe to leave un-redacted.
+	return redact.Sprint(redact.SafeString(t.SQLString()))
 }
 
 // FormatTypeName is an injected dependency from tree to properly format a
