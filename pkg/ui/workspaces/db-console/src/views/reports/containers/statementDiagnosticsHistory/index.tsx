@@ -46,10 +46,10 @@ import {
   SortedTable,
   SortSetting,
   ColumnDescriptor,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import { cancelStatementDiagnosticsReportAction } from "src/redux/statements";
 import { trackCancelDiagnosticsBundleAction } from "src/redux/analyticsActions";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
 
 type StatementDiagnosticsHistoryViewProps = MapStateToProps &
   MapDispatchToProps;
@@ -99,7 +99,7 @@ class StatementDiagnosticsHistoryView extends React.Component<
       cell: record =>
         moment
           .utc(record.requested_at.seconds.toNumber() * 1000)
-          .format(DATE_FORMAT_24_UTC),
+          .format(util.DATE_FORMAT_24_UTC),
       sort: record => moment(record.requested_at.seconds.toNumber() * 1000),
     },
     {

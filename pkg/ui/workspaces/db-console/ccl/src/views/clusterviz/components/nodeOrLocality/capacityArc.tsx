@@ -14,7 +14,7 @@ import {
   LIGHT_TEXT_BLUE,
   MAIN_BLUE,
 } from "src/views/shared/colors";
-import { Bytes } from "src/util/format";
+import { util } from "@cockroachlabs/cluster-ui";
 import {
   NodeArcPercentageTooltip,
   NodeArcUsedCapacityTooltip,
@@ -34,6 +34,7 @@ interface CapacityArcProps {
 
 export class CapacityArc extends React.Component<CapacityArcProps> {
   render() {
+    const { Bytes } = util;
     // Compute used percentage.
     const usedCapacity = this.props.usedCapacity;
     const capacity = this.props.usableCapacity;
