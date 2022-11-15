@@ -36,6 +36,8 @@ type Team struct {
 	// CODEOWNERS, code reviews for the @cockroachdb/kv team). This map
 	// does not contain TeamName.
 	Aliases map[Alias]Purpose `yaml:"aliases"`
+	// GitHub label will be added to issues posted for this team.
+	Label string `yaml:"label"`
 	// TriageColumnID is the GitHub Column ID to assign issues to.
 	TriageColumnID int `yaml:"triage_column_id"`
 	// Email is the email address for this team.
