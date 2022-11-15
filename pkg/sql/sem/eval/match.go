@@ -252,7 +252,7 @@ func optimizedLikeFunc(
 					return strings.HasSuffix(s, suffix), nil
 				}, nil
 
-			case singleAnyStart || singleAnyEnd:
+			default:
 				return func(s string) (bool, error) {
 					if len(s) < 1 {
 						return false, nil
