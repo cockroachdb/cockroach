@@ -575,12 +575,7 @@ type handleSnapshotStats struct {
 	applied bool
 }
 
-type handleRaftReadyStats struct {
-	tBegin, tEnd time.Time
-
-	tApplicationBegin, tApplicationEnd time.Time
-	apply                              applyCommittedEntriesStats
-
+type logAppendStats struct {
 	tAppendBegin, tAppendEnd time.Time
 	appendedRegularCount     int
 	appendedSideloadedCount  int
@@ -590,9 +585,19 @@ type handleRaftReadyStats struct {
 	tPebbleCommitBegin, tPebbleCommitEnd time.Time
 	pebbleBatchBytes                     int64
 
+	sync bool
+}
+
+type handleRaftReadyStats struct {
+	tBegin, tEnd time.Time
+
+	logAppendStats
+
+	tApplicationBegin, tApplicationEnd time.Time
+	apply                              applyCommittedEntriesStats
+
 	tSnapBegin, tSnapEnd time.Time
 	snap                 handleSnapshotStats
-	sync                 bool
 }
 
 // SafeFormat implements redact.SafeFormatter
@@ -946,7 +951,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		settings:    r.store.cfg.Settings,
 		metrics:     r.store.metrics,
 	}
-	if state, err = s.storeEntries(ctx, state, logstore.MakeReady(rd), &stats); err != nil {
+	if state, err = s.storeEntries(ctx, state, logstore.MakeReady(rd), &stats.logAppendStats); err != nil {
 		const expl = "while storing log entries"
 		return stats, expl, err
 	}
@@ -1112,7 +1117,7 @@ type logStore struct {
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
 func (s *logStore) storeEntries(
-	ctx context.Context, state logstore.RaftState, rd logstore.Ready, stats *handleRaftReadyStats,
+	ctx context.Context, state logstore.RaftState, rd logstore.Ready, stats *logAppendStats,
 ) (logstore.RaftState, error) {
 	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
 	// Use a more efficient write-only batch because we don't need to do any
