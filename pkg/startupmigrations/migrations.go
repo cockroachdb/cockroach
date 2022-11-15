@@ -45,11 +45,6 @@ var (
 
 // MigrationManagerTestingKnobs contains testing knobs.
 type MigrationManagerTestingKnobs struct {
-	AfterJobMigration func()
-	// AlwaysRunJobMigration controls whether to always run the schema change job
-	// migration regardless of whether it has been marked as complete.
-	AlwaysRunJobMigration bool
-
 	// AfterEnsureMigrations is called after each call to EnsureMigrations.
 	AfterEnsureMigrations func()
 }
