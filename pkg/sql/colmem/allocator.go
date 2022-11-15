@@ -397,14 +397,14 @@ func (a *Allocator) MaybeAppendColumn(b coldata.Batch, t *types.T, colIdx int) {
 		// We have a vector with an unexpected type, so we panic.
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"trying to add a column of %s type at index %d but %s vector already present",
-			t, colIdx, presentType,
+			t.SQLStringForError(), colIdx, presentType.SQLStringForError(),
 		))
 	} else if colIdx > width {
 		// We have a batch of unexpected width which indicates an error in the
 		// planning stage.
 		colexecerror.InternalError(errors.AssertionFailedf(
 			"trying to add a column of %s type at index %d but batch has width %d",
-			t, colIdx, width,
+			t.SQLStringForError(), colIdx, width,
 		))
 	}
 	estimatedMemoryUsage := EstimateBatchSizeBytes([]*types.T{t}, desiredCapacity)
@@ -476,6 +476,7 @@ func (a *Allocator) Used() int64 {
 // - the allocator was created via NewLimitedAllocator with a non-nil unlimited
 //   memory account,
 // - the positive delta allocation is denied by the limited memory account,
+//
 // then the unlimited account is grown by delta. The memory error is still
 // thrown.
 func (a *Allocator) adjustMemoryUsage(delta int64, afterAllocation bool) {
@@ -588,7 +589,7 @@ func EstimateBatchSizeBytes(vecTypes []*types.T, batchLength int) int64 {
 			// Types that have a statically known size.
 			acc += GetFixedSizeTypeSize(t)
 		default:
-			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
+			colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t.SQLStringForError()))
 		}
 	}
 	// For byte arrays, we initially allocate a constant number of bytes for
@@ -629,7 +630,7 @@ func GetFixedSizeTypeSize(t *types.T) (size int64) {
 	case types.IntervalFamily:
 		size = memsize.Duration
 	default:
-		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t))
+		colexecerror.InternalError(errors.AssertionFailedf("unhandled type %s", t.SQLStringForError()))
 	}
 	return size
 }
