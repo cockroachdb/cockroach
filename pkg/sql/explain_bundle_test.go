@@ -182,6 +182,17 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			t.Fatalf("warning not found in %v", rows)
 		}
 	})
+
+	t.Run("foreign keys", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM child")
+		checkBundle(
+			t, fmt.Sprint(rows), "child", base, plans,
+			"stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
+			"distsql.html vec.txt vec-v.txt",
+		)
+	})
 }
 
 // checkBundle searches text strings for a bundle URL and then verifies that the
