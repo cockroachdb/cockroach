@@ -44,7 +44,7 @@ func TestCloser(t *testing.T) {
 	factory := tenantrate.NewLimiterFactory(&st.SV, &tenantrate.TestingKnobs{
 		TimeSource: timeSource,
 	})
-	tenant := roachpb.MakeTenantID(2)
+	tenant := roachpb.MustMakeTenantID(2)
 	closer := make(chan struct{})
 	ctx := context.Background()
 	limiter := factory.GetTenant(ctx, tenant, closer)
@@ -214,7 +214,7 @@ func (ts *testState) launch(t *testing.T, d *datadriven.TestData) string {
 	for _, cmd := range cmds {
 		var s launchState
 		s.id = cmd.ID
-		s.tenantID = roachpb.MakeTenantID(cmd.Tenant)
+		s.tenantID = roachpb.MustMakeTenantID(cmd.Tenant)
 		s.ctx, s.cancel = context.WithCancel(context.Background())
 		s.reserveCh = make(chan error, 1)
 		s.writeRequests = cmd.WriteRequests
@@ -320,7 +320,7 @@ func (ts *testState) recordRead(t *testing.T, d *datadriven.TestData) string {
 		d.Fatalf(t, "failed to unmarshal reads: %v", err)
 	}
 	for _, r := range reads {
-		tid := roachpb.MakeTenantID(r.Tenant)
+		tid := roachpb.MustMakeTenantID(r.Tenant)
 		lims := ts.tenants[tid]
 		if len(lims) == 0 {
 			d.Fatalf(t, "no outstanding limiters for %v", tid)
@@ -459,7 +459,7 @@ func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
 	ctx := context.Background()
 	tenantIDs := parseTenantIDs(t, d)
 	for i := range tenantIDs {
-		id := roachpb.MakeTenantID(tenantIDs[i])
+		id := roachpb.MustMakeTenantID(tenantIDs[i])
 		ts.tenants[id] = append(ts.tenants[id], ts.rl.GetTenant(ctx, id, nil /* closer */))
 	}
 	return ts.FormatTenants()
@@ -478,7 +478,7 @@ func (ts *testState) getTenants(t *testing.T, d *datadriven.TestData) string {
 func (ts *testState) releaseTenants(t *testing.T, d *datadriven.TestData) string {
 	tenantIDs := parseTenantIDs(t, d)
 	for i := range tenantIDs {
-		id := roachpb.MakeTenantID(tenantIDs[i])
+		id := roachpb.MustMakeTenantID(tenantIDs[i])
 		lims := ts.tenants[id]
 		if len(lims) == 0 {
 			d.Fatalf(t, "no outstanding limiters for %v", id)

@@ -128,10 +128,10 @@ func ingestionPlanHook(
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
 		// TODO(casper): make target to be tenant-only.
-		oldTenantID := roachpb.MakeTenantID(ingestionStmt.Targets.TenantID.ID)
+		oldTenantID := roachpb.MustMakeTenantID(ingestionStmt.Targets.TenantID.ID)
 		newTenantID := oldTenantID
 		if ingestionStmt.AsTenant.Specified {
-			newTenantID = roachpb.MakeTenantID(ingestionStmt.AsTenant.ID)
+			newTenantID = roachpb.MustMakeTenantID(ingestionStmt.AsTenant.ID)
 		}
 		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
 			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",

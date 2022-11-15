@@ -100,7 +100,7 @@ func TestTenantFromCert(t *testing.T) {
 		expErr      string
 		tenantScope uint64
 	}{
-		{ous: correctOU, commonName: "10", expTenID: roachpb.MakeTenantID(10)},
+		{ous: correctOU, commonName: "10", expTenID: roachpb.MustMakeTenantID(10)},
 		{ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
 		{ous: correctOU, commonName: roachpb.MaxTenantID.String(), expTenID: roachpb.MaxTenantID},
 		{ous: correctOU, commonName: roachpb.SystemTenantID.String() /* "system" */, expErr: `could not parse tenant ID from Common Name \(CN\)`},
@@ -123,7 +123,7 @@ func TestTenantFromCert(t *testing.T) {
 				},
 			}
 			if tc.tenantScope > 0 {
-				tenantSANs, err := security.MakeTenantURISANs(username.MakeSQLUsernameFromPreNormalizedString(tc.commonName), []roachpb.TenantID{roachpb.MakeTenantID(tc.tenantScope)})
+				tenantSANs, err := security.MakeTenantURISANs(username.MakeSQLUsernameFromPreNormalizedString(tc.commonName), []roachpb.TenantID{roachpb.MustMakeTenantID(tc.tenantScope)})
 				require.NoError(t, err)
 				cert.URIs = append(cert.URIs, tenantSANs...)
 			}
@@ -152,9 +152,9 @@ func TestTenantFromCert(t *testing.T) {
 
 func TestTenantAuthRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tenID := roachpb.MakeTenantID(10)
+	tenID := roachpb.MustMakeTenantID(10)
 	prefix := func(tenID uint64, key string) string {
-		tenPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+		tenPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
 		return string(append(tenPrefix, []byte(key)...))
 	}
 	makeSpan := func(key string, endKey ...string) roachpb.Span {
@@ -197,8 +197,8 @@ func TestTenantAuthRequest(t *testing.T) {
 		return roachpb.SpanConfigTarget{
 			Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 				SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-					SourceTenantID: roachpb.MakeTenantID(source),
-					Type:           roachpb.NewSpecificTenantKeyspaceTargetType(roachpb.MakeTenantID(target)),
+					SourceTenantID: roachpb.MustMakeTenantID(source),
+					Type:           roachpb.NewSpecificTenantKeyspaceTargetType(roachpb.MustMakeTenantID(target)),
 				},
 			},
 		}
@@ -541,7 +541,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(10),
+							SourceTenantID: roachpb.MustMakeTenantID(10),
 							Type:           roachpb.NewEntireKeyspaceTargetType(),
 						},
 					},
@@ -552,7 +552,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeGetSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(20),
+							SourceTenantID: roachpb.MustMakeTenantID(20),
 							Type:           roachpb.NewEntireKeyspaceTargetType(),
 						},
 					},
@@ -667,7 +667,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeUpdateSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(10),
+							SourceTenantID: roachpb.MustMakeTenantID(10),
 							Type:           roachpb.NewEntireKeyspaceTargetType(),
 						},
 					},
@@ -692,7 +692,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				req: makeUpdateSpanConfigsReq(roachpb.SpanConfigTarget{
 					Union: &roachpb.SpanConfigTarget_SystemSpanConfigTarget{
 						SystemSpanConfigTarget: &roachpb.SystemSpanConfigTarget{
-							SourceTenantID: roachpb.MakeTenantID(10),
+							SourceTenantID: roachpb.MustMakeTenantID(10),
 							Type:           roachpb.NewEntireKeyspaceTargetType(),
 						},
 					},
@@ -707,7 +707,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req: &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
-					TenantID: roachpb.MakeTenantID(20),
+					TenantID: roachpb.MustMakeTenantID(20),
 				},
 				expErr: "GetAllSystemSpanConfigsThatApply request for tenant 20 not permitted",
 			},
@@ -719,7 +719,7 @@ func TestTenantAuthRequest(t *testing.T) {
 			},
 			{
 				req: &roachpb.GetAllSystemSpanConfigsThatApplyRequest{
-					TenantID: roachpb.MakeTenantID(10),
+					TenantID: roachpb.MustMakeTenantID(10),
 				},
 				expErr: noError,
 			},

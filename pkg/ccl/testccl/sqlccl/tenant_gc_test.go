@@ -67,7 +67,7 @@ func TestGCTenantRemovesSpanConfigs(t *testing.T) {
 		return gcjob.TestingGCTenant(ctx, &execCfg, tenID, progress)
 	}
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 
 	tt, err := ts.StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
@@ -188,7 +188,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 	sqlDB.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
 	tsKVAccessor := ts.SpanConfigKVAccessor().(spanconfig.KVAccessor)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 
 	tt, ttSQLDBRaw := serverutils.StartTenant(
 		t, ts, base.TestTenantArgs{
@@ -352,7 +352,7 @@ func TestGCTableOrIndexWaitsForProtectedTimestamps(t *testing.T) {
 			// Lastly, we'll also add a PTS set by the host over a different
 			// secondary tenant's keyspace. This should have no bearing on our test.
 			hostOnTenant20, err := spanconfig.MakeTenantKeyspaceTarget(
-				roachpb.SystemTenantID, roachpb.MakeTenantID(20),
+				roachpb.SystemTenantID, roachpb.MustMakeTenantID(20),
 			)
 			require.NoError(t, err)
 			r3, err := spanconfig.MakeRecord(
@@ -532,7 +532,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			Progress: jobspb.SchemaChangeGCProgress{},
 		}
 
-		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(tenID)})
+		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenID)})
 		rec := mkRecordAndProtect(hlc.Timestamp{WallTime: int64(dropTime - 1)}, tenantTarget)
 		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
 		require.NoError(t, err)
@@ -545,7 +545,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			return nil
 		}))
 
-		checkTenantGCed(t, sj, roachpb.MakeTenantID(tenID))
+		checkTenantGCed(t, sj, roachpb.MustMakeTenantID(tenID))
 	})
 
 	t.Run("protect at and after drop time", func(t *testing.T) {
@@ -566,13 +566,13 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		clusterRec := mkRecordAndProtect(hlc.Timestamp{WallTime: int64(dropTime + 1)}, clusterTarget)
 
 		// Protect at drop time, so it should not block GC.
-		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(tenID)})
+		tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(tenID)})
 		tenantRec := mkRecordAndProtect(hlc.Timestamp{WallTime: int64(dropTime)}, tenantTarget)
 
 		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
 		require.NoError(t, err)
 
-		checkTenantGCed(t, sj, roachpb.MakeTenantID(tenID))
+		checkTenantGCed(t, sj, roachpb.MustMakeTenantID(tenID))
 
 		// Cleanup.
 		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -583,7 +583,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	})
 
 	t.Run("tenant set PTS records dont affect tenant GC", func(t *testing.T) {
-		tenID := roachpb.MakeTenantID(10)
+		tenID := roachpb.MustMakeTenantID(10)
 		sqlDB.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
 
 		ten, conn10 := serverutils.StartTenant(t, srv,
@@ -639,7 +639,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 				return nil
 			}))
 
-			checkTenantGCed(t, sj, roachpb.MakeTenantID(tenID))
+			checkTenantGCed(t, sj, roachpb.MustMakeTenantID(tenID))
 		})
 	})
 }

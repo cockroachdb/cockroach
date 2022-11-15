@@ -97,7 +97,7 @@ func TestDecodeSystemTargets(t *testing.T) {
 	for i, systemTarget := range []spanconfig.SystemTarget{
 		// Tenant targeting its keyspace.
 		spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-			t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10),
+			t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10),
 		),
 		// System tenant targeting its keyspace.
 		spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
@@ -105,7 +105,7 @@ func TestDecodeSystemTargets(t *testing.T) {
 		),
 		// System tenant targeting a secondary tenant's keyspace.
 		spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-			t, roachpb.SystemTenantID, roachpb.MakeTenantID(10),
+			t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10),
 		),
 		// System tenant targeting the entire keyspace.
 		spanconfig.MakeEntireKeyspaceTarget(),

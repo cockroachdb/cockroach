@@ -60,7 +60,7 @@ func GenerateCerts(ctx context.Context) func() {
 	// Root user.
 	// Scope root user to system tenant and tenant ID 5 which is what we use by default for acceptance
 	// tests.
-	userScopes := []roachpb.TenantID{roachpb.SystemTenantID, roachpb.MakeTenantID(5)}
+	userScopes := []roachpb.TenantID{roachpb.SystemTenantID, roachpb.MustMakeTenantID(5)}
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
 		keyLen, 48*time.Hour, false, username.RootUserName(), userScopes, true /* generate pk8 key */))

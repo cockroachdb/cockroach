@@ -61,7 +61,7 @@ func TestSettingWatcherOnTenant(t *testing.T) {
 		// value (which would cause a panic in test builds).
 		systemOnlySetting: {2 << 20, 4 << 20},
 	}
-	fakeTenant := roachpb.MakeTenantID(2)
+	fakeTenant := roachpb.MustMakeTenantID(2)
 	systemTable := keys.SystemSQLCodec.TablePrefix(keys.SettingsTableID)
 	fakeCodec := keys.MakeSQLCodec(fakeTenant)
 	fakeTenantPrefix := keys.MakeTenantPrefix(fakeTenant)
@@ -443,7 +443,7 @@ func TestStaleRowsDoNotCauseSettingsToRegress(t *testing.T) {
 	// Make a bogus tenant ID and codec we'll use to prefix the events
 	// we want to observe. Below, inject a testing knob to plumb the stream
 	// into the test logic to make injecting rangefeed events straightforward.
-	bogusTenantID := roachpb.MakeTenantID(42)
+	bogusTenantID := roachpb.MustMakeTenantID(42)
 	bogusCodec := keys.MakeSQLCodec(bogusTenantID)
 	settingsStart := bogusCodec.TablePrefix(keys.SettingsTableID)
 	interceptedStreamCh := make(chan roachpb.RangeFeedEventSink)

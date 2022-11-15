@@ -406,7 +406,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 
 		var reportFailureFnCount int
 		c := &connector{
-			TenantID: roachpb.MakeTenantID(42),
+			TenantID: roachpb.MustMakeTenantID(42),
 			DialTenantLatency: metric.NewHistogram(
 				metaDialTenantLatency, time.Millisecond, metric.NetworkLatencyBuckets,
 			),
@@ -486,7 +486,7 @@ func TestConnector_dialTenantCluster(t *testing.T) {
 			delete(mu.pods, addr)
 		}
 
-		tenantID := roachpb.MakeTenantID(42)
+		tenantID := roachpb.MustMakeTenantID(42)
 		directoryCache := &testTenantDirectoryCache{
 			lookupTenantPodsFn: func(
 				fnCtx context.Context, tenantID roachpb.TenantID, clusterName string,
@@ -576,7 +576,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 
 		c := &connector{
 			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
+			TenantID:    roachpb.MustMakeTenantID(10),
 			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
@@ -604,7 +604,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		var lookupTenantPodsFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
+			TenantID:    roachpb.MustMakeTenantID(10),
 			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
@@ -629,7 +629,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		var lookupTenantPodsFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
+			TenantID:    roachpb.MustMakeTenantID(10),
 			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
@@ -654,7 +654,7 @@ func TestConnector_lookupAddr(t *testing.T) {
 		var lookupTenantPodsFnCount int
 		c := &connector{
 			ClusterName: "my-foo",
-			TenantID:    roachpb.MakeTenantID(10),
+			TenantID:    roachpb.MustMakeTenantID(10),
 			Balancer:    balancer,
 		}
 		c.DirectoryCache = &testTenantDirectoryCache{
@@ -687,7 +687,7 @@ func TestConnector_dialSQLServer(t *testing.T) {
 	tracker, err := balancer.NewConnTracker(ctx, stopper, nil /* timeSource */)
 	require.NoError(t, err)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 
 	t.Run("with tlsConfig", func(t *testing.T) {
 		c := &connector{
@@ -863,7 +863,7 @@ func TestTenantTLSConfig(t *testing.T) {
 				InsecureSkipVerify: tc.skipVerify,
 			}
 
-			config, err := tlsConfigForTenant(roachpb.MakeTenantID(10), "some.dns.address:123", config)
+			config, err := tlsConfigForTenant(roachpb.MustMakeTenantID(10), "some.dns.address:123", config)
 			require.NoError(t, err)
 			require.Equal(t, config.ServerName, "some.dns.address")
 

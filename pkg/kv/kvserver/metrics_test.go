@@ -42,7 +42,7 @@ func TestTenantsStorageMetricsConcurrency(t *testing.T) {
 
 	var tenantIDs []roachpb.TenantID
 	for id := uint64(1); id <= tenants; id++ {
-		tenantIDs = append(tenantIDs, roachpb.MakeTenantID(id))
+		tenantIDs = append(tenantIDs, roachpb.MustMakeTenantID(id))
 	}
 	ctx := context.Background()
 	sm := newTenantsStorageMetrics()

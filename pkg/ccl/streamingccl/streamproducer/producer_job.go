@@ -29,7 +29,7 @@ import (
 )
 
 func makeTenantSpan(tenantID uint64) *roachpb.Span {
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID))
+	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID))
 	return &roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
 }
 

@@ -21,7 +21,7 @@ import (
 func TestKeyAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tenSysCodec := keys.SystemSQLCodec
-	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+	ten5Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 	testCases := []struct {
 		key roachpb.Key
 	}{

@@ -488,7 +488,7 @@ func TestGCTenant(t *testing.T) {
 		}
 
 		descKey := catalogkeys.MakeDescMetadataKey(
-			keys.MakeSQLCodec(roachpb.MakeTenantID(dropTenID)), keys.NamespaceTableID,
+			keys.MakeSQLCodec(roachpb.MustMakeTenantID(dropTenID)), keys.NamespaceTableID,
 		)
 		require.NoError(t, kvDB.Put(ctx, descKey, "foo"))
 

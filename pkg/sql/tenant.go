@@ -170,7 +170,7 @@ func CreateTenantRecord(
 	// Make it behave like usual system database ranges, for good measure.
 	tenantSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+	tenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
 	record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
 		Key:    tenantPrefix,
 		EndKey: tenantPrefix.Next(),
@@ -258,7 +258,7 @@ func (p *planner) CreateTenant(
 	if err := p.CreateTenantWithID(ctx, uint64(nextID), tenantName); err != nil {
 		return roachpb.TenantID{}, err
 	}
-	return roachpb.MakeTenantID(uint64(nextID)), nil
+	return roachpb.MustMakeTenantID(uint64(nextID)), nil
 }
 
 // CreateTenantWithID implements the tree.TenantOperator interface.
@@ -289,7 +289,7 @@ func (p *planner) CreateTenantWithID(
 	}
 
 	// Initialize the tenant's keyspace.
-	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID))
+	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	schema := bootstrap.MakeMetadataSchema(
 		codec,
 		initialTenantZoneConfig, /* defaultZoneConfig */
@@ -428,7 +428,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 
 	log.Infof(ctx, "clearing data for tenant %d", info.ID)
 
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(info.ID))
 	prefixEnd := prefix.PrefixEnd()
 
 	log.VEventf(ctx, 2, "ClearRange %s - %s", prefix, prefixEnd)
@@ -523,7 +523,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		}
 
 		// Clear out all span config records left over by the tenant.
-		tenID := roachpb.MakeTenantID(info.ID)
+		tenID := roachpb.MustMakeTenantID(info.ID)
 		tenantPrefix := keys.MakeTenantPrefix(tenID)
 		tenantSpan := roachpb.Span{
 			Key:    tenantPrefix,
@@ -650,7 +650,7 @@ func (p *planner) UpdateTenantResourceLimits(
 		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 	) error {
 		return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
-			ctx, p.Txn(), ie, roachpb.MakeTenantID(tenantID), availableRU, refillRate,
+			ctx, p.Txn(), ie, roachpb.MustMakeTenantID(tenantID), availableRU, refillRate,
 			maxBurstRU, asOf, asOfConsumedRequestUnits,
 		)
 	})

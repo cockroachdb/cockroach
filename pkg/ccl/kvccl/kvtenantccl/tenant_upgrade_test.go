@@ -92,7 +92,7 @@ func TestTenantUpgrade(t *testing.T) {
 		require.NoError(t, clusterversion.Initialize(ctx,
 			clusterversion.TestingBinaryMinSupportedVersion, &settings.SV))
 		tenantArgs := base.TestTenantArgs{
-			TenantID:     roachpb.MakeTenantID(id),
+			TenantID:     roachpb.MustMakeTenantID(id),
 			TestingKnobs: base.TestingKnobs{},
 			Settings:     settings,
 		}
@@ -135,7 +135,7 @@ func TestTenantUpgrade(t *testing.T) {
 		cleanup()
 		{
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
-				TenantID: roachpb.MakeTenantID(initialTenantID),
+				TenantID: roachpb.MustMakeTenantID(initialTenantID),
 			})
 			require.NoError(t, err)
 			initialTenant, cleanup = connectToTenant(t, tenantServer.SQLAddr())
@@ -159,7 +159,7 @@ func TestTenantUpgrade(t *testing.T) {
 		cleanup()
 		{
 			tenantServer, err := tc.Server(0).StartTenant(ctx, base.TestTenantArgs{
-				TenantID: roachpb.MakeTenantID(postUpgradeTenantID),
+				TenantID: roachpb.MustMakeTenantID(postUpgradeTenantID),
 			})
 			require.NoError(t, err)
 			postUpgradeTenant, cleanup = connectToTenant(t, tenantServer.SQLAddr())
@@ -248,7 +248,7 @@ func TestTenantUpgradeFailure(t *testing.T) {
 			v0, &settings.SV))
 		tenantArgs := base.TestTenantArgs{
 			Stopper:  v2onMigrationStopper,
-			TenantID: roachpb.MakeTenantID(id),
+			TenantID: roachpb.MustMakeTenantID(id),
 			TestingKnobs: base.TestingKnobs{
 				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 				UpgradeManager: &upgrade.TestingKnobs{

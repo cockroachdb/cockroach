@@ -554,7 +554,7 @@ func (handler *proxyHandler) startPodWatcher(ctx context.Context, podWatcher cha
 			// gets added (i.e. stamped), or a DRAINING pod transitions to a
 			// RUNNING pod.
 			if pod.State == tenant.RUNNING && pod.TenantID != 0 {
-				handler.balancer.RebalanceTenant(ctx, roachpb.MakeTenantID(pod.TenantID))
+				handler.balancer.RebalanceTenant(ctx, roachpb.MustMakeTenantID(pod.TenantID))
 			}
 		}
 	}
@@ -753,7 +753,7 @@ func parseClusterIdentifier(
 		return "", roachpb.MaxTenantID, err
 	}
 
-	return clusterName, roachpb.MakeTenantID(tenID), nil
+	return clusterName, roachpb.MustMakeTenantID(tenID), nil
 }
 
 // parseDatabaseParam parses the database parameter from the PG connection
