@@ -101,6 +101,7 @@ go_test(
         "eval_internal_test.go",
         "eval_test.go",
         "like_test.go",
+        "match_test.go",
         "parse_doid_test.go",
         "timeconv_test.go",
         "window_funcs_test.go",

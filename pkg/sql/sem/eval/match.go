@@ -176,6 +176,18 @@ func optimizedLikeFunc(
 				}
 				return len(s) == len(string(firstChar)), nil
 			}, nil
+		default:
+			// Patterns without a wildcard boil down to a direct string comparison
+			// (after checking for escapes).
+			if rune(pattern[0]) == escape {
+				return nil, pgerror.Newf(pgcode.InvalidEscapeSequence, `LIKE pattern must not end with escape character`)
+			}
+			return func(s string) (bool, error) {
+				if caseInsensitive {
+					s, pattern = strings.ToUpper(s), strings.ToUpper(pattern)
+				}
+				return s == pattern, nil
+			}, nil
 		}
 	default:
 		if !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
@@ -252,7 +264,11 @@ func optimizedLikeFunc(
 					return strings.HasSuffix(s, suffix), nil
 				}, nil
 
-			case singleAnyStart || singleAnyEnd:
+			default:
+				// This default case handles (singleAnyStart || singleAnyEnd) as well as
+				// the case with no wildcards at all (!singleAnyStart && !singleAnyEnd)
+				// which becomes a direct string comparison after accounting for
+				// escaping and case-sensitivity.
 				return func(s string) (bool, error) {
 					if len(s) < 1 {
 						return false, nil
