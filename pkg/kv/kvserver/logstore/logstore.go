@@ -36,3 +36,10 @@ type Ready struct {
 func MakeReady(from raft.Ready) Ready {
 	return Ready{HardState: from.HardState, Entries: from.Entries, MustSync: from.MustSync}
 }
+
+// RaftState stores information about the last entry and the size of the log.
+type RaftState struct {
+	LastIndex uint64
+	LastTerm  uint64
+	ByteSize  int64
+}
