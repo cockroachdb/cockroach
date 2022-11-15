@@ -620,13 +620,6 @@ func snapshot(
 	}, nil
 }
 
-// raftLogState stores information about the last entry and the size of the log.
-type raftLogState struct {
-	lastIndex uint64
-	lastTerm  uint64
-	byteSize  int64
-}
-
 // logAppend adds the given entries to the raft log. Takes the previous log
 // state, and returns the updated state. It's the caller's responsibility to
 // maintain exclusive access to the raft log for the duration of the method
@@ -639,9 +632,9 @@ func logAppend(
 	ctx context.Context,
 	raftLogPrefix roachpb.Key,
 	rw storage.ReadWriter,
-	prev raftLogState,
+	prev logstore.RaftState,
 	entries []raftpb.Entry,
-) (raftLogState, error) {
+) (logstore.RaftState, error) {
 	if len(entries) == 0 {
 		return prev, nil
 	}
@@ -652,37 +645,37 @@ func logAppend(
 		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, ent.Index)
 
 		if err := value.SetProto(ent); err != nil {
-			return raftLogState{}, err
+			return logstore.RaftState{}, err
 		}
 		value.InitChecksum(key)
 		var err error
-		if ent.Index > prev.lastIndex {
+		if ent.Index > prev.LastIndex {
 			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
 		} else {
 			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
 		}
 		if err != nil {
-			return raftLogState{}, err
+			return logstore.RaftState{}, err
 		}
 	}
 
 	newLastIndex := entries[len(entries)-1].Index
 	// Delete any previously appended log entries which never committed.
-	if prev.lastIndex > 0 {
-		for i := newLastIndex + 1; i <= prev.lastIndex; i++ {
+	if prev.LastIndex > 0 {
+		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
 			// Note that the caller is in charge of deleting any sideloaded payloads
 			// (which they must only do *after* the batch has committed).
 			_, err := storage.MVCCDelete(ctx, rw, &diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
 				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
 			if err != nil {
-				return raftLogState{}, err
+				return logstore.RaftState{}, err
 			}
 		}
 	}
-	return raftLogState{
-		lastIndex: newLastIndex,
-		lastTerm:  entries[len(entries)-1].Term,
-		byteSize:  prev.byteSize + diff.SysBytes,
+	return logstore.RaftState{
+		LastIndex: newLastIndex,
+		LastTerm:  entries[len(entries)-1].Term,
+		ByteSize:  prev.ByteSize + diff.SysBytes,
 	}, nil
 }
 

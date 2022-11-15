@@ -705,10 +705,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	var hasReady bool
 	var rd raft.Ready
 	r.mu.Lock()
-	state := raftLogState{ // used for append below
-		lastIndex: r.mu.lastIndex,
-		lastTerm:  r.mu.lastTerm,
-		byteSize:  r.mu.raftLogSize,
+	state := logstore.RaftState{ // used for append below
+		LastIndex: r.mu.lastIndex,
+		LastTerm:  r.mu.lastTerm,
+		ByteSize:  r.mu.raftLogSize,
 	}
 	leaderID := r.mu.leaderID
 	lastLeaderID := leaderID
@@ -812,10 +812,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// applySnapshot, but we also want to make sure we reflect these changes in
 			// the local variables we're tracking here.
 			r.mu.RLock()
-			state = raftLogState{
-				lastIndex: r.mu.lastIndex,
-				lastTerm:  r.mu.lastTerm,
-				byteSize:  r.mu.raftLogSize,
+			state = logstore.RaftState{
+				LastIndex: r.mu.lastIndex,
+				LastTerm:  r.mu.lastTerm,
+				ByteSize:  r.mu.raftLogSize,
 			}
 			r.mu.RUnlock()
 
@@ -868,7 +868,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 	}
 	if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
-		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, state.lastIndex); err != nil {
+		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, state.LastIndex); err != nil {
 			return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 		}
 	}
@@ -930,7 +930,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
-	prevLastIndex := state.lastIndex
+	prevLastIndex := state.LastIndex
 
 	// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 	if !raft.IsEmptyHardState(rd.HardState) {
@@ -965,20 +965,20 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			const expl = "while purging sideloaded storage"
 			return stats, expl, err
 		}
-		state.byteSize -= purgedSize
-		if state.byteSize < 0 {
+		state.ByteSize -= purgedSize
+		if state.ByteSize < 0 {
 			// Might have gone negative if node was recently restarted.
-			state.byteSize = 0
+			state.ByteSize = 0
 		}
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
 	// leader ID.
 	r.mu.Lock()
-	// TODO(pavelkalinnikov): put raftLogState to r.mu directly instead of fields.
-	r.mu.lastIndex = state.lastIndex
-	r.mu.lastTerm = state.lastTerm
-	r.mu.raftLogSize = state.byteSize
+	// TODO(pavelkalinnikov): put logstore.RaftState to r.mu directly.
+	r.mu.lastIndex = state.LastIndex
+	r.mu.lastTerm = state.LastTerm
+	r.mu.raftLogSize = state.ByteSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
@@ -1112,8 +1112,8 @@ type logStore struct {
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
 func (s *logStore) storeEntries(
-	ctx context.Context, state raftLogState, rd logstore.Ready, stats *handleRaftReadyStats,
-) (raftLogState, error) {
+	ctx context.Context, state logstore.RaftState, rd logstore.Ready, stats *handleRaftReadyStats,
+) (logstore.RaftState, error) {
 	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed on the underlying DB.
@@ -1127,14 +1127,14 @@ func (s *logStore) storeEntries(
 		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := logstore.MaybeSideloadEntries(ctx, rd.Entries, s.sideload)
 		if err != nil {
 			const expl = "during sideloading"
-			return raftLogState{}, errors.Wrap(err, expl)
+			return logstore.RaftState{}, errors.Wrap(err, expl)
 		}
-		state.byteSize += sideLoadedEntriesSize
+		state.ByteSize += sideLoadedEntriesSize
 		if state, err = logAppend(
 			ctx, s.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			const expl = "during append"
-			return raftLogState{}, errors.Wrap(err, expl)
+			return logstore.RaftState{}, errors.Wrap(err, expl)
 		}
 		stats.appendedRegularCount += len(thinEntries) - numSideloaded
 		stats.appendedRegularBytes += otherEntriesSize
@@ -1154,7 +1154,7 @@ func (s *logStore) storeEntries(
 		// changes, we must write and sync the Entries before the HardState.
 		if err := s.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
 			const expl = "during setHardState"
-			return raftLogState{}, errors.Wrap(err, expl)
+			return logstore.RaftState{}, errors.Wrap(err, expl)
 		}
 	}
 	// Synchronously commit the batch with the Raft log entries and Raft hard
@@ -1175,7 +1175,7 @@ func (s *logStore) storeEntries(
 	sync := rd.MustSync && !disableSyncRaftLog.Get(&s.settings.SV)
 	if err := batch.Commit(sync); err != nil {
 		const expl = "while committing batch"
-		return raftLogState{}, errors.Wrap(err, expl)
+		return logstore.RaftState{}, errors.Wrap(err, expl)
 	}
 	stats.sync = sync
 	stats.tPebbleCommitEnd = timeutil.Now()
