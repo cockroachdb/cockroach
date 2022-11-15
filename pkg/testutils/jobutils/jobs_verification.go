@@ -91,7 +91,7 @@ func WaitForJobToHaveNoLease(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.
 		if sessionID == nil && !instanceID.Valid {
 			return nil
 		}
-		return errors.Newf("job %d still has claim information")
+		return errors.Newf("job %d still has claim information", jobID)
 	}, 2*time.Minute)
 }
 
