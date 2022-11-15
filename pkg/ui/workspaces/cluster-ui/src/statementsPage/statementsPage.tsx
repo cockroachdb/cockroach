@@ -57,7 +57,7 @@ import {
 import { ISortedTablePagination } from "../sortedtable";
 import styles from "./statementsPage.module.scss";
 import { EmptyStatementsPlaceholder } from "./emptyStatementsPlaceholder";
-import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
+import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../columnsSelector/columnsSelector";

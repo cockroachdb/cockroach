@@ -149,7 +149,11 @@ export function makeStatementsColumns(
       name: "statements",
       title: statisticsTableTitles.statements(statType),
       className: cx("cl-table__col-query-text"),
-      cell: StatementTableCell.statements(search, selectedApps, onStatementClick),
+      cell: StatementTableCell.statements(
+        search,
+        selectedApps,
+        onStatementClick,
+      ),
       sort: stmt => stmt.label,
       alwaysShow: true,
     },
