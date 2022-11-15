@@ -30,7 +30,7 @@ import {
 } from "src/insights";
 import moment from "moment";
 import { INTERNAL_APP_NAME_PREFIX } from "src/activeExecutions/activeStatementUtils";
-import { CheckHexValue } from "../util";
+import { FixFingerprintHexValue } from "../util";
 
 // Transaction contention insight events.
 
@@ -87,7 +87,9 @@ function formatTxnContentionResults(
 
   return response.execution.txn_results[0].rows.map(row => ({
     transactionID: row.waiting_txn_id,
-    transactionFingerprintID: CheckHexValue(row.waiting_txn_fingerprint_id),
+    transactionFingerprintID: FixFingerprintHexValue(
+      row.waiting_txn_fingerprint_id,
+    ),
     startTime: moment(row.collection_ts).utc(),
     contentionDuration: moment.duration(row.contention_duration),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
@@ -134,7 +136,9 @@ function formatTxnFingerprintsResults(
   }
 
   return response.execution.txn_results[0].rows.map(row => ({
-    transactionFingerprintID: CheckHexValue(row.transaction_fingerprint_id),
+    transactionFingerprintID: FixFingerprintHexValue(
+      row.transaction_fingerprint_id,
+    ),
     queryIDs: row.query_ids,
     application: row.app_name,
   }));
@@ -169,7 +173,10 @@ function createStmtFingerprintToQueryMap(
     return idToQuery;
   }
   response.execution.txn_results[0].rows.forEach(row => {
-    idToQuery.set(CheckHexValue(row.statement_fingerprint_id), row.query);
+    idToQuery.set(
+      FixFingerprintHexValue(row.statement_fingerprint_id),
+      row.query,
+    );
   });
 
   return idToQuery;
@@ -364,7 +371,7 @@ function formatTxnContentionDetailsResponse(
     totalContentionTime += contentionTimeInMs;
     blockingContentionDetails[idx] = {
       blockingExecutionID: value.blocking_txn_id,
-      blockingTxnFingerprintID: CheckHexValue(
+      blockingTxnFingerprintID: FixFingerprintHexValue(
         value.blocking_txn_fingerprint_id,
       ),
       blockingQueries: null,
@@ -385,7 +392,9 @@ function formatTxnContentionDetailsResponse(
   const contentionThreshold = moment.duration(row.threshold).asMilliseconds();
   return {
     transactionExecutionID: row.waiting_txn_id,
-    transactionFingerprintID: CheckHexValue(row.waiting_txn_fingerprint_id),
+    transactionFingerprintID: FixFingerprintHexValue(
+      row.waiting_txn_fingerprint_id,
+    ),
     startTime: moment(row.collection_ts).utc(),
     totalContentionTimeMs: totalContentionTime,
     blockingContentionDetails: blockingContentionDetails,
@@ -551,7 +560,9 @@ function organizeExecutionInsightsResponseIntoTxns(
     if (!txnInsight) {
       txnInsight = {
         transactionExecutionID: row.txn_id,
-        transactionFingerprintID: CheckHexValue(row.txn_fingerprint_id),
+        transactionFingerprintID: FixFingerprintHexValue(
+          row.txn_fingerprint_id,
+        ),
         implicitTxn: row.implicit_txn,
         databaseName: row.database_name,
         application: row.app_name,
@@ -575,7 +586,7 @@ function organizeExecutionInsightsResponseIntoTxns(
       endTime: end,
       elapsedTimeMillis: end.diff(start, "milliseconds"),
       statementExecutionID: row.stmt_id,
-      statementFingerprintID: CheckHexValue(row.stmt_fingerprint_id),
+      statementFingerprintID: FixFingerprintHexValue(row.stmt_fingerprint_id),
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
       rowsWritten: row.rows_written,

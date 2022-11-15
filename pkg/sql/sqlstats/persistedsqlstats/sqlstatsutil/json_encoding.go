@@ -267,7 +267,9 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 //	  "properties": {
 //	    "stmtType":             { "type": "string" },
 //	    "query":                { "type": "string" },
+//	    "fingerprintID":        { "type": "string" },
 //	    "querySummary":         { "type": "string" },
+//	    "formattedQuery":       { "type": "string" },
 //	    "implicitTxn":          { "type": "boolean" },
 //	    "distSQLCount":         { "type": "number" },
 //	    "failedCount":          { "type": "number" },
@@ -275,6 +277,12 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 //	    "fullScanCount":        { "type": "number" },
 //	    "totalCount":           { "type": "number" },
 //	    "db":                   {
+//	   		"type": "array",
+//	   		"items": {
+//	   		  "type": "string"
+//	   		}
+//	  	},
+//	    "appNames":             {
 //	   		"type": "array",
 //	   		"items": {
 //	   		  "type": "string"

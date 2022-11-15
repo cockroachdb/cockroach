@@ -29,7 +29,7 @@ import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
 import {
-  CheckHexValue,
+  FixFingerprintHexValue,
   Count,
   FixLong,
   longToInt,
@@ -250,7 +250,9 @@ export function makeTransactionsColumns(
       name: "transactionFingerprintId",
       title: statisticsTableTitles.transactionFingerprintId(statType),
       cell: (item: TransactionInfo) =>
-        CheckHexValue(item.stats_data?.transaction_fingerprint_id.toString(16)),
+        FixFingerprintHexValue(
+          item.stats_data?.transaction_fingerprint_id.toString(16),
+        ),
       sort: (item: TransactionInfo) =>
         item.stats_data?.transaction_fingerprint_id.toString(16),
       showByDefault: false,

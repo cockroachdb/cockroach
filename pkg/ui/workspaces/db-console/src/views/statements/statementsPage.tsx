@@ -142,7 +142,7 @@ export const selectStatements = createSelector(
       if (!(key in statsByStatementKey)) {
         statsByStatementKey[key] = {
           statementFingerprintID: stmt.statement_fingerprint_id?.toString(),
-          statementFingerprintHexID: util.CheckHexValue(
+          statementFingerprintHexID: util.FixFingerprintHexValue(
             stmt.statement_fingerprint_id?.toString(16),
           ),
           statement: stmt.statement,
@@ -163,7 +163,7 @@ export const selectStatements = createSelector(
       const stmt = statsByStatementKey[key];
       return {
         aggregatedFingerprintID: stmt.statementFingerprintID,
-        aggregatedFingerprintHexID: util.CheckHexValue(
+        aggregatedFingerprintHexID: util.FixFingerprintHexValue(
           stmt.statementFingerprintHexID,
         ),
         label: stmt.statement,

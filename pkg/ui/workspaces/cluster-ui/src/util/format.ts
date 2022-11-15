@@ -256,14 +256,14 @@ export function HexStringToInt64String(s: string): string {
   return dec;
 }
 
-// CheckHexValue adds the leading 0 on strings with hex value that
-// have a length < 16.
-export function CheckHexValue(s: string): string {
+// FixFingerprintHexValue adds the leading 0 on strings with hex value that
+// have a length < 16. This can occur because it was returned like this from the DB
+// or because the hex value was generated using `.toString(16)` (which removes the
+// leading zeros).
+// The zeros need to be added back to match the value on our sql stats tables.
+export function FixFingerprintHexValue(s: string): string {
   if (s === undefined || s === null || s.length === 0) {
     return "";
-  }
-  if (s?.length === 16) {
-    return s;
   }
   while (s.length < 16) {
     s = `0${s}`;
