@@ -1299,37 +1299,31 @@ func NewTimestampedCheckpointFileName() string {
 }
 
 // FetchPreviousBackups takes a list of URIs of previous backups and returns
-// their manifest as well as the encryption options of the first backup in the
-// chain.
+// their manifests. The caller is expected to pass in the fully hydrated
+// encryptionParams required to read the manifests.
 func FetchPreviousBackups(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	user username.SQLUsername,
 	makeCloudStorage cloud.ExternalStorageFromURIFactory,
 	prevBackupURIs []string,
-	encryptionParams jobspb.BackupEncryptionOptions,
+	encryptionParams *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
+) ([]backuppb.BackupManifest, int64, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.FetchPreviousBackups")
 	defer sp.Finish()
 
 	if len(prevBackupURIs) == 0 {
-		return nil, nil, 0, nil
+		return nil, 0, nil
 	}
 
-	baseBackup := prevBackupURIs[0]
-	encryptionOptions, err := backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
-		encryptionParams, kmsEnv)
+	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage,
+		prevBackupURIs, encryptionParams, kmsEnv)
 	if err != nil {
-		return nil, nil, 0, err
-	}
-	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
-		encryptionOptions, kmsEnv)
-	if err != nil {
-		return nil, nil, 0, err
+		return nil, 0, err
 	}
 
-	return prevBackups, encryptionOptions, size, nil
+	return prevBackups, size, nil
 }
 
 // getBackupManifests fetches the backup manifest from a list of backup URIs.
