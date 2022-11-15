@@ -722,6 +722,10 @@ func initializeClusterSecret(ctx context.Context, r runner) error {
 }
 
 func populateVersionSetting(ctx context.Context, r runner) error {
+	if !r.codec.ForSystemTenant() {
+		log.Fatalf(ctx, "populateVersionSetting can only run for the system tenant")
+	}
+
 	var v roachpb.Version
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
@@ -752,22 +756,17 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 
-	// If this is the system tenant, add the host cluster version override for
-	// all tenants. This override is used by secondary tenants to observe the
-	// host cluster version number and ensure that secondary tenants don't
-	// upgrade to a version beyond the host cluster version. As mentioned above,
-	// don't retry on conflict.
-	if r.codec.ForSystemTenant() {
-		// Tenant ID 0 indicates that we're overriding the value for all
-		// tenants.
-		tenantID := tree.NewDInt(0)
-		if err := r.execAsRoot(
-			ctx,
-			"insert-setting",
-			fmt.Sprintf(`INSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES (%d, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, tenantID, b),
-		); err != nil {
-			return err
-		}
+	// Add the host cluster version override for all tenants. This override is
+	// used by secondary tenants to observe the host cluster version number and
+	// ensure that secondary tenants don't upgrade to a version beyond the host
+	// cluster version. As mentioned above, don't retry on conflict.
+	tenantID := tree.NewDInt(0) // Tenant ID 0 indicates that we're overriding the value for all tenants.
+	if err := r.execAsRoot(
+		ctx,
+		"insert-setting",
+		fmt.Sprintf(`INSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES (%d, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, tenantID, b),
+	); err != nil {
+		return err
 	}
 
 	// NB: We have to run with retry here due to the following "race" condition:
