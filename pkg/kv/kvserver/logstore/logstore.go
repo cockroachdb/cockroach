@@ -13,6 +13,7 @@ package logstore
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -108,4 +109,21 @@ func LogAppend(
 		LastTerm:  entries[len(entries)-1].Term,
 		ByteSize:  prev.ByteSize + diff.SysBytes,
 	}, nil
+}
+
+// AppendStats describes a completed log storage append operation.
+type AppendStats struct {
+	Begin time.Time
+	End   time.Time
+
+	RegularEntries    int
+	RegularBytes      int64
+	SideloadedEntries int
+	SideloadedBytes   int64
+
+	PebbleBegin time.Time
+	PebbleEnd   time.Time
+	PebbleBytes int64
+
+	Sync bool
 }
