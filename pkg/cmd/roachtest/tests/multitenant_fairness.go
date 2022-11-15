@@ -186,7 +186,7 @@ func runMultiTenantFairness(
 	tenants := make([]*tenantNode, numTenants)
 	for i := 0; i < numTenants; i++ {
 		node := i + 2
-		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1)`, tenantBaseID+i)
+		_, err := c.Conn(ctx, t.L(), 1).Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantBaseID+i)
 		require.NoError(t, err)
 		tenant := createTenantNode(ctx, t, c, c.Node(1), tenantBaseID+i, node, tenantHTTPPort(i), tenantSQLPort(i), createTenantOtherTenantIDs(tenantIDs))
 		defer tenant.stop(ctx, t, c)
