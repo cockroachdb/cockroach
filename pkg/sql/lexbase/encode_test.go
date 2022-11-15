@@ -123,3 +123,14 @@ func BenchmarkEncodeSQLString(b *testing.B) {
 		lexbase.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lexbase.EncBareStrings)
 	}
 }
+
+func BenchmarkEncodeNonASCIISQLString(b *testing.B) {
+	builder := strings.Builder{}
+	for r := rune(0); r < 10000; r++ {
+		builder.WriteRune(r)
+	}
+	str := builder.String()
+	for i := 0; i < b.N; i++ {
+		lexbase.EncodeSQLStringWithFlags(bytes.NewBuffer(nil), str, lexbase.EncBareStrings)
+	}
+}
