@@ -59,7 +59,7 @@ func (rq *replicateQueue) MaybeAdd(
 		return false
 	}
 
-	action, priority := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
+	action, priority := rq.allocator.ComputeAction(ctx, rq.allocator.StorePool, rng.SpanConfig(), rng.Descriptor())
 	if action == allocatorimpl.AllocatorNoop {
 		return false
 	}
@@ -98,7 +98,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			return
 		}
 
-		action, _ := rq.allocator.ComputeAction(ctx, rng.SpanConfig(), rng.Descriptor())
+		action, _ := rq.allocator.ComputeAction(ctx, rq.allocator.StorePool, rng.SpanConfig(), rng.Descriptor())
 
 		switch action {
 		case allocatorimpl.AllocatorConsiderRebalance:
@@ -125,6 +125,7 @@ func (rq *replicateQueue) considerRebalance(
 ) {
 	add, remove, _, ok := rq.allocator.RebalanceVoter(
 		ctx,
+		rq.allocator.StorePool,
 		rng.SpanConfig(),
 		nil, /* raftStatus */
 		rng.Descriptor().Replicas().VoterDescriptors(),
