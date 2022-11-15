@@ -659,7 +659,7 @@ func backupPlanHook(
 			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {
 				return err
 			}
-			encryptionParams.RawPassphrae = pw
+			encryptionParams.RawPassphrase = pw
 		case jobspb.EncryptionMode_KMS:
 			encryptionParams.RawKmsUris = kms
 			if err := requireEnterprise(p.ExecCfg(), "encryption"); err != nil {

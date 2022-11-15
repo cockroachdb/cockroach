@@ -51,7 +51,7 @@ message BackupEncryptionOptions {
   // encryption or decryption when mode == KMS.
   KMSInfo kms_info  = 3 [(gogoproto.customname) = "KMSInfo"];
 
-  string raw_passphrae = 4;
+  string raw_passphrase = 4;
   repeated string raw_kms_uris = 5;
 }
 
