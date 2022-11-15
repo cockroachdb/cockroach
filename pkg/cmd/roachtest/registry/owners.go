@@ -20,6 +20,7 @@ const (
 	OwnerDisasterRecovery Owner = `disaster-recovery`
 	OwnerCDC              Owner = `cdc`
 	OwnerKV               Owner = `kv`
+	OwnerReplication      Owner = `replication`
 	OwnerMultiRegion      Owner = `multiregion`
 	OwnerObsInf           Owner = `obs-inf-prs`
 	OwnerServer           Owner = `server`
