@@ -62,7 +62,7 @@ func registerLOQRecovery(r registry.Registry) {
 		testSpec := s
 		r.Add(registry.TestSpec{
 			Name:              s.String(),
-			Owner:             registry.OwnerKV,
+			Owner:             registry.OwnerReplication,
 			Tags:              []string{`default`},
 			Cluster:           spec,
 			NonReleaseBlocker: true,

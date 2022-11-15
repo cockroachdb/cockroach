@@ -25,7 +25,7 @@ import (
 func registerInconsistency(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:    "inconsistency",
-		Owner:   registry.OwnerKV,
+		Owner:   registry.OwnerReplication,
 		Cluster: r.MakeClusterSpec(3),
 		Run:     runInconsistency,
 	})
