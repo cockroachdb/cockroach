@@ -73,7 +73,7 @@ func registerNodeJSPostgres(r registry.Registry) {
 			c,
 			node,
 			"add nodesource repository",
-			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_12.x | sudo -E bash -`,
+			`sudo apt install ca-certificates && curl -sL https://deb.nodesource.com/setup_16.x | sudo -E bash -`,
 		)
 		require.NoError(t, err)
 
