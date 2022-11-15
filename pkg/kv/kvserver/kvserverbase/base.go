@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -215,6 +216,26 @@ var SplitByLoadMergeDelay = settings.RegisterDurationSetting(
 	},
 )
 
-// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
-// cluster setting.
-const MaxCommandSizeDefault = 64 << 20
+const (
+	// MaxCommandSizeDefault is the default for the kv.raft.command.max_size
+	// cluster setting.
+	MaxCommandSizeDefault = 64 << 20 // 64 MB
+
+	// MaxCommandSizeFloor is the minimum allowed value for the
+	// kv.raft.command.max_size cluster setting.
+	MaxCommandSizeFloor = 4 << 20 // 4 MB
+)
+
+// MaxCommandSize wraps "kv.raft.command.max_size".
+var MaxCommandSize = settings.RegisterByteSizeSetting(
+	settings.TenantWritable,
+	"kv.raft.command.max_size",
+	"maximum size of a raft command",
+	MaxCommandSizeDefault,
+	func(size int64) error {
+		if size < MaxCommandSizeFloor {
+			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
+		}
+		return nil
+	},
+)

@@ -253,7 +253,7 @@ func (r *Replica) evalAndPropose(
 	// commands can evaluate but then be blocked on quota, which has worse memory
 	// behavior.
 	quotaSize := uint64(proposal.command.Size())
-	if maxSize := uint64(MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
+	if maxSize := uint64(kvserverbase.MaxCommandSize.Get(&r.store.cfg.Settings.SV)); quotaSize > maxSize {
 		return nil, nil, "", nil, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)", quotaSize, maxSize,
 		))
