@@ -24,8 +24,8 @@ import {
   defaultFilters,
   util,
   TransactionsPageStateProps,
-  ActiveTransactionsViewDispatchProps,
-  ActiveTransactionsViewStateProps,
+  RecentTransactionsViewDispatchProps,
+  RecentTransactionsViewStateProps,
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
@@ -35,9 +35,9 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { LocalSetting } from "src/redux/localsettings";
 import { bindActionCreators } from "redux";
 import {
-  activeTransactionsPageActionCreators,
-  mapStateToActiveTransactionsPageProps,
-} from "./activeTransactionsSelectors";
+  recentTransactionsPageActionCreators,
+  mapStateToRecentTransactionsPageProps,
+} from "./recentTransactionsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
 
@@ -121,12 +121,12 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveTransactionsViewStateProps;
+  activePageProps: RecentTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: ActiveTransactionsViewDispatchProps;
+  activePageProps: RecentTransactionsViewDispatchProps;
 };
 
 const TransactionsPageConnected = withRouter(
@@ -151,7 +151,7 @@ const TransactionsPageConnected = withRouter(
         sortSetting: sortSettingLocalSetting.selector(state),
         statementsError: state.cachedData.statements.lastError,
       },
-      activePageProps: mapStateToActiveTransactionsPageProps(state),
+      activePageProps: mapStateToRecentTransactionsPageProps(state),
     }),
     dispatch => ({
       fingerprintsPageProps: bindActionCreators(
@@ -159,7 +159,7 @@ const TransactionsPageConnected = withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        activeTransactionsPageActionCreators,
+        recentTransactionsPageActionCreators,
         dispatch,
       ),
     }),

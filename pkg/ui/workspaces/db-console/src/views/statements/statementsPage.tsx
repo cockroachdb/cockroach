@@ -38,9 +38,9 @@ import {
   defaultFilters,
   util,
   StatementsPageRoot,
-  ActiveStatementsViewStateProps,
+  RecentStatementsViewStateProps,
   StatementsPageStateProps,
-  ActiveStatementsViewDispatchProps,
+  RecentStatementsViewDispatchProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
 } from "@cockroachlabs/cluster-ui";
@@ -59,9 +59,9 @@ import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { LocalSetting } from "src/redux/localsettings";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
 import {
-  activeStatementsViewActions,
-  mapStateToActiveStatementViewProps,
-} from "./activeStatementsSelectors";
+  recentStatementsViewActions,
+  mapStateToRecentStatementViewProps,
+} from "./recentStatementsSelectors";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectStatementsLastUpdated } from "src/selectors/executionFingerprintsSelectors";
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
@@ -352,12 +352,12 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps;
-  activePageProps: ActiveStatementsViewStateProps;
+  activePageProps: RecentStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: ActiveStatementsViewDispatchProps;
+  activePageProps: RecentStatementsViewDispatchProps;
 };
 
 export default withRouter(
@@ -385,7 +385,7 @@ export default withRouter(
         totalFingerprints: selectTotalFingerprints(state),
         hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
       },
-      activePageProps: mapStateToActiveStatementViewProps(state),
+      activePageProps: mapStateToRecentStatementViewProps(state),
     }),
     dispatch => ({
       fingerprintsPageProps: bindActionCreators(
@@ -393,7 +393,7 @@ export default withRouter(
         dispatch,
       ),
       activePageProps: bindActionCreators(
-        activeStatementsViewActions,
+        recentStatementsViewActions,
         dispatch,
       ),
     }),
