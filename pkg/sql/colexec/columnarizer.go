@@ -215,6 +215,9 @@ func (c *Columnarizer) GetStats() *execinfrapb.ComponentStats {
 		return &execinfrapb.ComponentStats{Component: componentID}
 	}
 	s := c.getWrappedExecStats()
+	if s == nil {
+		return &execinfrapb.ComponentStats{Component: componentID}
+	}
 	s.Component = componentID
 	return s
 }

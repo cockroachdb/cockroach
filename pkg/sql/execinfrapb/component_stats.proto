@@ -148,9 +148,10 @@ message ExecStats {
   optional util.optional.Duration exec_time = 1 [(gogoproto.nullable) = false];
   // Maximum memory allocated by the component.
   optional util.optional.Uint max_allocated_mem = 2 [(gogoproto.nullable) = false];
-
   // Maximum scratch disk allocated by the component.
   optional util.optional.Uint max_allocated_disk = 3 [(gogoproto.nullable) = false];
+  // Amount of RUs consumed while executing the component.
+  optional util.optional.Uint consumed_r_u = 4 [(gogoproto.nullable) = false];
 }
 
 // OutputStats contains statistics about the output (results) of a component.
@@ -166,4 +167,7 @@ message OutputStats {
 message FlowStats {
   optional util.optional.Uint max_mem_usage = 1 [(gogoproto.nullable) = false];
   optional util.optional.Uint max_disk_usage = 2 [(gogoproto.nullable) = false];
+  // Amount of RUs consumed due to CPU usage while executing the flow. Currently
+  // only used for remote flows.
+  optional util.optional.Uint consumed_r_u = 3 [(gogoproto.nullable) = false];
 }

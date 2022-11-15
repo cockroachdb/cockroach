@@ -92,6 +92,9 @@ type instrumentationHelper struct {
 	// statement.
 	collectExecStats bool
 
+	// isTenant is set when the query is being executed on behalf of a tenant.
+	isTenant bool
+
 	// discardRows is set if we want to discard any results rather than sending
 	// them back to the client. Used for testing/benchmarking. Note that the
 	// resulting schema or the plan are not affected.
@@ -248,6 +251,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
 	ih.evalCtx = p.EvalContext()
+	ih.isTenant = cfg.DistSQLSrv != nil && cfg.DistSQLSrv.TenantCostController != nil
 
 	switch ih.outputMode {
 	case explainAnalyzeDebugOutput:
@@ -542,6 +546,13 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		ob.AddMaxMemUsage(queryStats.MaxMemUsage)
 		ob.AddNetworkStats(queryStats.NetworkMessages, queryStats.NetworkBytesSent)
 		ob.AddMaxDiskUsage(queryStats.MaxDiskUsage)
+		if ih.isTenant && ih.outputMode != unmodifiedOutput && ih.vectorized {
+			// Only output RU estimate if this is a tenant running EXPLAIN ANALYZE.
+			// Additionally, RUs aren't correctly propagated in all cases for plans
+			// that aren't vectorized - for example, EXPORT statements. For now,
+			// only output RU estimates for vectorized plans.
+			ob.AddRUEstimate(queryStats.RUEstimate)
+		}
 	}
 
 	if len(ih.regions) > 0 {

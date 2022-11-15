@@ -864,10 +864,12 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
 	}
-	return &execinfrapb.ComponentStats{
+	ret := &execinfrapb.ComponentStats{
 		KV:     kvStats,
 		Output: z.OutputHelper.Stats(),
 	}
+	ret.Exec.ConsumedRU = optional.MakeUint(z.scanStats.ConsumedRU)
+	return ret
 }
 
 func (z *zigzagJoiner) getBytesRead() int64 {

@@ -253,6 +253,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ContentionTime:        7 * time.Second,
 		ContentionEvents:      []roachpb.ContentionEvent{aEvent},
 		MaxDiskUsage:          8,
+		RUEstimate:            9,
 	}
 	bEvent := roachpb.ContentionEvent{Duration: 14 * time.Second}
 	b := execstats.QueryLevelStats{
@@ -266,6 +267,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ContentionTime:        14 * time.Second,
 		ContentionEvents:      []roachpb.ContentionEvent{bEvent},
 		MaxDiskUsage:          15,
+		RUEstimate:            16,
 	}
 	expected := execstats.QueryLevelStats{
 		NetworkBytesSent:      9,
@@ -278,6 +280,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ContentionTime:        21 * time.Second,
 		ContentionEvents:      []roachpb.ContentionEvent{aEvent, bEvent},
 		MaxDiskUsage:          15,
+		RUEstimate:            25,
 	}
 
 	aCopy := a

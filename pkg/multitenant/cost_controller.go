@@ -32,6 +32,14 @@ type TenantSideCostController interface {
 		nextLiveInstanceIDFn NextLiveInstanceIDFn,
 	) error
 
+	// GetCPUMovingAvg returns an exponential moving average used for estimating
+	// the CPU usage (in CPU secs) per wall-clock second.
+	GetCPUMovingAvg() float64
+
+	// GetCostConfig returns the cost model config this TenantSideCostController
+	// is using.
+	GetCostConfig() *tenantcostmodel.Config
+
 	TenantSideKVInterceptor
 
 	TenantSideExternalIORecorder
