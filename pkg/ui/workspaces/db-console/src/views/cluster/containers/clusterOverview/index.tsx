@@ -17,7 +17,7 @@ import { createSelector } from "reselect";
 
 import { AdminUIState } from "src/redux/state";
 import { nodeSumsSelector } from "src/redux/nodes";
-import { Bytes as formatBytes } from "src/util/format";
+import { util } from "@cockroachlabs/cluster-ui";
 import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
@@ -47,6 +47,7 @@ interface CapacityUsageProps {
 const formatPercentage = d3.format("0.1%");
 
 function renderCapacityUsage(props: CapacityUsageProps) {
+  const { Bytes } = util;
   const { usedCapacity, usableCapacity } = props;
   const usedPercentage =
     usableCapacity !== 0 ? usedCapacity / usableCapacity : 0;
@@ -69,13 +70,13 @@ function renderCapacityUsage(props: CapacityUsageProps) {
       <UsedTooltip>Used</UsedTooltip>
     </div>,
     <div className="capacity-usage cluster-summary__metric storage-used">
-      {formatBytes(usedCapacity)}
+      {Bytes(usedCapacity)}
     </div>,
     <div className="capacity-usage cluster-summary__label storage-usable">
       <UsableTooltip>Usable</UsableTooltip>
     </div>,
     <div className="capacity-usage cluster-summary__metric storage-usable">
-      {formatBytes(usableCapacity)}
+      {Bytes(usableCapacity)}
     </div>,
   ];
 }

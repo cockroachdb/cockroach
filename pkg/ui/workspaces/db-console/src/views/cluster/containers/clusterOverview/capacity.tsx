@@ -10,7 +10,7 @@
 
 import d3 from "d3";
 
-import { ComputeByteScale } from "src/util/format";
+import { util } from "@cockroachlabs/cluster-ui";
 
 const LOW_DISK_SPACE_RATIO = 0.15;
 
@@ -47,7 +47,7 @@ function capacityChart() {
     // Compute the appropriate scale factor for a value slightly smaller than the
     // usable capacity, so that if the usable capacity is exactly 1 {MiB,GiB,etc}
     // we show the scale in the next-smaller unit.
-    const byteScale = ComputeByteScale(capacity.usable - 1);
+    const byteScale = util.ComputeByteScale(capacity.usable - 1);
 
     const scaled = {
       used: capacity.used / byteScale.value,
