@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -85,7 +86,7 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 			numEmptyEntries:       5,
 			numConfChangeEntries:  6,
 		},
-		append: logAppendStats{
+		append: logstore.AppendStats{
 			Begin:             ts(2),
 			End:               ts(3),
 			RegularEntries:    7,

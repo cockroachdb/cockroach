@@ -574,26 +574,10 @@ type handleSnapshotStats struct {
 	applied bool
 }
 
-type logAppendStats struct {
-	Begin time.Time
-	End   time.Time
-
-	RegularEntries    int
-	RegularBytes      int64
-	SideloadedEntries int
-	SideloadedBytes   int64
-
-	PebbleBegin time.Time
-	PebbleEnd   time.Time
-	PebbleBytes int64
-
-	Sync bool
-}
-
 type handleRaftReadyStats struct {
 	tBegin, tEnd time.Time
 
-	append logAppendStats
+	append logstore.AppendStats
 
 	tApplicationBegin, tApplicationEnd time.Time
 	apply                              applyCommittedEntriesStats
@@ -1114,7 +1098,7 @@ type logStore struct {
 // Accepts the state of the log before the operation, returns the state after.
 // Persists HardState atomically with, or strictly after Entries.
 func (s *logStore) storeEntries(
-	ctx context.Context, state logstore.RaftState, rd logstore.Ready, stats *logAppendStats,
+	ctx context.Context, state logstore.RaftState, rd logstore.Ready, stats *logstore.AppendStats,
 ) (logstore.RaftState, error) {
 	// TODO(pavelkalinnikov): Doesn't this comment contradict the code?
 	// Use a more efficient write-only batch because we don't need to do any
