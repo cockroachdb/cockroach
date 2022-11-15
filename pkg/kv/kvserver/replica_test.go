@@ -606,6 +606,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 // transfer might still apply.
 func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 91948, "flaky test")
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "transferSucceeds", func(t *testing.T, transferSucceeds bool) {
