@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -84,39 +85,6 @@ func (r *Replica) getStateMachine() *replicaStateMachine {
 	return sm
 }
 
-// runApplyTestingKnobs takes a command which has been populated with the return
-// values of CheckForcedError and allows testing knobs to change the outcome.
-func (r *Replica) runApplyTestingKnobs(
-	ctx context.Context, cmd *replicatedCmd, replicaState *kvserverpb.ReplicaState,
-) {
-	// Consider testing-only filters.
-	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; cmd.ForcedErr != nil || filter != nil {
-		args := kvserverbase.ApplyFilterArgs{
-			CmdID:                cmd.ID,
-			ReplicatedEvalResult: *cmd.ReplicatedResult(),
-			StoreID:              r.store.StoreID(),
-			RangeID:              r.RangeID,
-			ForcedError:          cmd.ForcedErr,
-		}
-		if cmd.ForcedErr == nil {
-			if cmd.IsLocal() {
-				args.Req = cmd.proposal.Request
-			}
-			newPropRetry, newForcedErr := filter(args)
-			cmd.ForcedErr = newForcedErr
-			if cmd.Rejection == 0 {
-				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
-			}
-		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
-			newPropRetry, newForcedErr := filter(args)
-			cmd.ForcedErr = newForcedErr
-			if cmd.Rejection == 0 {
-				cmd.Rejection = kvserverbase.ProposalRejectionType(newPropRetry)
-			}
-		}
-	}
-}
-
 // NewEphemeralBatch implements the apply.StateMachine interface.
 func (sm *replicaStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
 	r := sm.r
@@ -133,6 +101,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r := sm.r
 	b := &sm.batch
 	b.r = r
+	b.appHandler = b
 	b.sm = sm
 	b.batch = r.store.engine.NewBatch()
 	r.mu.RLock()
@@ -146,6 +115,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 }
 
 type appBatch struct {
+	appHandler
 	// batch accumulates writes implied by the raft entries in this batch.
 	batch storage.Batch
 	// state is this batch's view of the replica's state. It may be updated
@@ -155,6 +125,42 @@ type appBatch struct {
 	// be only one) removes this replica from the range. If this is the case,
 	// the command that does so effectively removes the replica.
 	changeRemovesReplica bool
+}
+
+// appBatchHandlerConcrete "implements" appHandler. It doesn't implement it
+// verbatim but instead uses the concrete inputs needed for each methods. The
+// true implementation of appHandler is appBatchHandler, which calls through to
+// appBatchHandlerConcrete.
+//
+// The benefit of this approach is avoiding extra type assertions when the
+// replicaAppBatch appHandler implementation wants to call through to a base
+// implementation.
+type appBatchHandlerConcrete appBatch
+
+func (h *appBatchHandlerConcrete) CheckForcedErr(
+	ctx context.Context,
+	idKey kvserverbase.CmdIDKey,
+	raftCmd *kvserverpb.RaftCommand,
+	isLocal bool,
+	state *kvserverpb.ReplicaState,
+) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error) {
+	return kvserverbase.CheckForcedErr(ctx, idKey, raftCmd, isLocal, state)
+}
+
+type appBatchHandler appBatch
+
+var _ appHandler = (*appBatchHandler)(nil)
+
+func (h *appBatchHandler) CheckForcedErr(
+	ctx context.Context, cmdI apply.Command,
+) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error) {
+	cmd := cmdI.(*raftlog.ReplicatedCmd)
+	const isLocal = false // standalone application is never local
+	return (*appBatchHandlerConcrete)(h).CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, &h.state)
+}
+
+type appHandler interface {
+	CheckForcedErr(context.Context, apply.Command) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error)
 }
 
 // replicaAppBatch implements the apply.Batch interface.
@@ -188,6 +194,74 @@ type replicaAppBatch struct {
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
+}
+
+// CheckForcedErr implements appHandler. It calls through to appBatch's
+// implementation, then optionally adjusts the results via testing hooks,
+// and if the command has no forced error,
+func (b *replicaAppBatch) CheckForcedErr(
+	ctx context.Context, cmdI apply.Command,
+) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error) {
+	cmd := cmdI.(*replicatedCmd)
+	// Call appBatch's implementation first.
+	leaseIndex, rejection, forcedErr := (*appBatchHandlerConcrete)(&b.appBatch).CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &b.state)
+	// Then, maybe override the result with testing knobs.
+	rejection, forcedErr = replicaApplyTestingFilters(ctx, b.r, cmd, rejection, forcedErr)
+
+	if forcedErr == nil {
+		// TODO(sep-raft-log): the assertions below also apply to standalone mode,
+		// so they should be decoupled from *Replica and made available on
+		// appBatchConcrete.
+		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd, leaseIndex); err != nil {
+			return 0, 0, roachpb.NewError(err)
+		}
+		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
+			return 0, 0, roachpb.NewError(err)
+		}
+	}
+
+	return leaseIndex, rejection, forcedErr
+}
+
+func replicaApplyTestingFilters(
+	ctx context.Context,
+	r *Replica,
+	cmd *replicatedCmd,
+	rejection kvserverbase.ProposalRejectionType,
+	forcedErr *roachpb.Error,
+) (newRejection kvserverbase.ProposalRejectionType, newForcedErr *roachpb.Error) {
+	// By default, output is input.
+	newRejection = rejection
+	newForcedErr = forcedErr
+
+	// Filters may change that.
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; forcedErr != nil || filter != nil {
+		args := kvserverbase.ApplyFilterArgs{
+			CmdID:                cmd.ID,
+			ReplicatedEvalResult: *cmd.ReplicatedResult(),
+			StoreID:              r.store.StoreID(),
+			RangeID:              r.RangeID,
+			ForcedError:          forcedErr,
+		}
+		if forcedErr == nil {
+			if cmd.IsLocal() {
+				args.Req = cmd.proposal.Request
+			}
+			var newRej int
+			newRej, newForcedErr = filter(args)
+			cmd.ForcedErr = newForcedErr
+			if rejection == 0 {
+				newRejection = kvserverbase.ProposalRejectionType(newRej)
+			}
+		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
+			var newRej int
+			newRej, newForcedErr = filter(args)
+			if rejection == 0 {
+				newRejection = kvserverbase.ProposalRejectionType(newRej)
+			}
+		}
+	}
+	return newRejection, newForcedErr
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -233,10 +307,7 @@ func (b *replicaAppBatch) Stage(
 	// machine or whether it should be rejected (and replaced by an empty command).
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
-		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &b.state,
-	)
-	b.r.runApplyTestingKnobs(ctx, cmd, &b.state)
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = b.appHandler.CheckForcedErr(ctx, cmd)
 	if cmd.Rejected() {
 		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
 
@@ -246,12 +317,6 @@ func (b *replicaAppBatch) Stage(
 		cmd.Cmd.LogicalOpLog = nil
 		cmd.Cmd.ClosedTimestamp = nil
 	} else {
-		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
-			return nil, err
-		}
-		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
-			return nil, err
-		}
 		log.Event(ctx, "applying command")
 	}
 
@@ -859,9 +924,10 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 }
 
 // Assert that the closed timestamp carried by the command is not below one from
-// previous commands.
+// previous commands. The `cmd` will not have its LeaseIndex set yet; it is passed
+// in separately.
 func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
-	ctx context.Context, cmd *replicatedCmd,
+	ctx context.Context, cmd *replicatedCmd, leaseIndex uint64,
 ) error {
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
@@ -896,7 +962,7 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
-			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
+			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, leaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
 			logTail)
 	}
@@ -918,10 +984,11 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = kvserverbase.CheckForcedErr(
+	leaseIndex, rejection, forcedErr := kvserverbase.CheckForcedErr(
 		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &mb.state,
 	)
-	mb.r.runApplyTestingKnobs(ctx, cmd, &mb.state)
+	rejection, forcedErr = replicaApplyTestingFilters(ctx, mb.r, cmd, rejection, forcedErr)
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = leaseIndex, rejection, forcedErr
 	mb.state.LeaseAppliedIndex = cmd.LeaseIndex
 	return cmd, nil
 }
