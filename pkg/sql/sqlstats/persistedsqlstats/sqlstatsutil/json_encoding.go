@@ -306,12 +306,14 @@ func BuildStmtDetailsMetadataJSON(
 //	  "type": "object",
 //	  [{
 //	    "blockingTxnID": { "type": "string" },
-//	    "durationMs":    { "type": "number" },
-//	    "indexID":       { "type": "number" },
-//	    "tableID":       { "type": "number" }
+//	    "durationInMs":  { "type": "number" },
+//	    "schemaName":    { "type": "string" },
+//	    "databaseName":  { "type": "string" },
+//	    "tableName":     { "type": "string" },
+//	    "indexName":     { "type": "string" }
 //	  }]
 //	}
-func BuildContentionEventsJSON(events []roachpb.ContentionEvent) (json.JSON, error) {
+func BuildContentionEventsJSON(events []ContentionEventWithNames) (json.JSON, error) {
 	return (*contentionEvents)(&events).encodeJSON()
 }
 

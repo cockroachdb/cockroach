@@ -13,7 +13,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/sql/sem/tree",
         "//pkg/util/encoding",

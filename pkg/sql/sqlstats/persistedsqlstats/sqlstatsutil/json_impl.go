@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -124,7 +123,20 @@ func (s *aggregatedMetadata) jsonFields() jsonFields {
 	}
 }
 
-type contentionEvents []roachpb.ContentionEvent
+// ContentionEventWithNames is used to serialize into
+// cluster_execution_insights as a JSON array. This type
+// has the names instead of ids to avoid doing joins to get
+// the user-friendly names.
+type ContentionEventWithNames struct {
+	BlockingTransactionID string
+	SchemaName            string
+	DatabaseName          string
+	TableName             string
+	IndexName             string
+	DurationInMs          float64
+}
+
+type contentionEvents []ContentionEventWithNames
 
 func (s *contentionEvents) encodeJSON() (json.JSON, error) {
 	builder := json.NewArrayBuilder(len(*s))
@@ -142,24 +154,16 @@ func (s *contentionEvents) encodeJSON() (json.JSON, error) {
 	return builder.Build(), nil
 }
 
-type contentionEvent roachpb.ContentionEvent
+type contentionEvent ContentionEventWithNames
 
 func (s *contentionEvent) jsonFields() jsonFields {
-	var tableID int64 = -1
-	var indexID int64 = -1
-	_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(s.Key)
-	if err == nil {
-		tableID = int64(rawTableID)
-		indexID = int64(rawIndexID)
-	}
-
-	dur := float64(s.Duration) / float64(time.Millisecond)
-	txnID := s.TxnMeta.ID.String()
 	return jsonFields{
-		{"blockingTxnID", (*jsonString)(&txnID)},
-		{"durationMs", (*jsonFloat)(&dur)},
-		{"tableID", (*jsonInt)(&tableID)},
-		{"indexID", (*jsonInt)(&indexID)},
+		{"blockingTxnID", (*jsonString)(&s.BlockingTransactionID)},
+		{"durationInMs", (*jsonFloat)(&s.DurationInMs)},
+		{"schemaName", (*jsonString)(&s.SchemaName)},
+		{"databaseName", (*jsonString)(&s.DatabaseName)},
+		{"tableName", (*jsonString)(&s.TableName)},
+		{"indexName", (*jsonString)(&s.IndexName)},
 	}
 }
 
