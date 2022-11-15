@@ -220,6 +220,7 @@ message AggregatedStatementMetadata {
   optional int64 full_scan_count = 10 [(gogoproto.nullable) = false];
   optional int64 vec_count = 11 [(gogoproto.nullable) = false];
   optional int64 total_count = 12 [(gogoproto.nullable) = false];
+  optional string fingerprint_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "FingerprintID"];
 }
 
 // CollectedStatementStatistics wraps collected timings and metadata for some
