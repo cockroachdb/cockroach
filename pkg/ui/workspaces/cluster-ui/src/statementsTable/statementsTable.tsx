@@ -43,7 +43,6 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { StatementTableCell } from "./statementsTableContent";
 import {
   statisticsTableTitles,
-  NodeNames,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
 
@@ -325,25 +324,6 @@ export function makeStatementsColumns(
     columns.push(diagnosticsColumn);
   }
   return columns;
-}
-
-export function makeNodesColumns(
-  statements: AggregateStatistics[],
-  nodeNames: NodeNames,
-  totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
-): ColumnDescriptor<AggregateStatistics>[] {
-  const original: ColumnDescriptor<AggregateStatistics>[] = [
-    {
-      name: "nodes",
-      title: null,
-      cell: StatementTableCell.nodeLink(nodeNames),
-    },
-  ];
-
-  return original.concat(
-    makeCommonColumns(statements, totalWorkload, nodeRegions, "statement"),
-  );
 }
 
 /**
