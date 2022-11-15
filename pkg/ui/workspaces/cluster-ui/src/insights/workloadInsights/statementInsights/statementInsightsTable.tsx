@@ -169,7 +169,7 @@ export function makeStatementInsightsColumns(
       showByDefault: false,
     },
     {
-      name: "transactionID",
+      name: "transactionExecutionID",
       title: insightsTableTitles.latestExecutionID(InsightExecEnum.TRANSACTION),
       cell: (item: StmtInsightEvent) => item.transactionExecutionID,
       sort: (item: StmtInsightEvent) => item.transactionExecutionID,

@@ -27,7 +27,11 @@ import {
 } from "../util";
 import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
-import { InsightRecommendation, insightType } from "../insights";
+import {
+  InsightExecEnum,
+  InsightRecommendation,
+  insightType,
+} from "../insights";
 
 const cx = classNames.bind(styles);
 
@@ -37,6 +41,7 @@ const insightColumnLabels = {
   insights: "Insights",
   details: "Details",
   query: "Statement",
+  latestExecution: "Latest Execution ID",
   actions: "",
 };
 export type InsightsTableColumnKeys = keyof typeof insightColumnLabels;
@@ -66,6 +71,19 @@ export const insightsTableTitles: InsightsTableTitleType = {
         content={"Details about the insight."}
       >
         {insightColumnLabels.details}
+      </Tooltip>
+    );
+  },
+  latestExecution: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={
+          "The latest execution of the statement fingerprint with an insight within the selected time period."
+        }
+      >
+        {insightColumnLabels.latestExecution}
       </Tooltip>
     );
   },
@@ -113,11 +131,11 @@ const StatementExecution = ({
 
 function descriptionCell(
   insightRec: InsightRecommendation,
-  disableStmtLink: boolean,
+  isExecution: boolean,
   isCockroachCloud: boolean,
 ): React.ReactElement {
   const stmtLink = isIndexRec(insightRec) ? (
-    <StatementExecution rec={insightRec} disableLink={disableStmtLink} />
+    <StatementExecution rec={insightRec} disableLink={!isExecution} />
   ) : null;
 
   const clusterSettingsLink = (
@@ -183,12 +201,17 @@ function descriptionCell(
     case "HighContention":
       return (
         <>
+          {isExecution && (
+            <div className={cx("description-item")}>
+              <span className={cx("label-bold")}>Time Spent Waiting: </span>{" "}
+              {Duration(insightRec.details.duration * 1e6)}
+            </div>
+          )}
+          {stmtLink}
           <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Time Spent Waiting: </span>{" "}
-            {Duration(insightRec.details.duration * 1e6)}
-          </div>
-          <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Description: </span>{" "}
+            {isExecution && (
+              <span className={cx("label-bold")}>Description: </span>
+            )}
             {insightRec.details.description} {clusterSettingsLink}
           </div>
         </>
@@ -249,12 +272,17 @@ function descriptionCell(
     case "Unknown":
       return (
         <>
+          {isExecution && (
+            <div className={cx("description-item")}>
+              <span className={cx("label-bold")}>Elapsed Time: </span>
+              {Duration(insightRec.details.duration * 1e6)}
+            </div>
+          )}
+          {stmtLink}
           <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Elapsed Time: </span>
-            {Duration(insightRec.details.duration * 1e6)}
-          </div>
-          <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Description: </span>{" "}
+            {isExecution && (
+              <span className={cx("label-bold")}>Description: </span>
+            )}
             {insightRec.details.description} {clusterSettingsLink}
           </div>
           <div className={cx("description-item")}>
@@ -269,6 +297,32 @@ function descriptionCell(
     default:
       return <>{insightRec.query}</>;
   }
+}
+
+function linkCell(insightRec: InsightRecommendation): React.ReactElement {
+  if (insightRec.execution.execType === InsightExecEnum.STATEMENT) {
+    return (
+      <>
+        <Link
+          to={`/insights/statement/${insightRec.execution.statementExecutionID}`}
+        >
+          {String(insightRec.execution.statementExecutionID)}
+        </Link>
+      </>
+    );
+  }
+  if (insightRec.execution.execType === InsightExecEnum.TRANSACTION) {
+    return (
+      <>
+        <Link
+          to={`/insights/transaction/${insightRec.execution.transactionExecutionID}`}
+        >
+          {String(insightRec.execution.transactionExecutionID)}
+        </Link>
+      </>
+    );
+  }
+  return <>No execution ID found</>;
 }
 
 function actionCell(
@@ -335,9 +389,9 @@ const isIndexRec = (rec: InsightRecommendation) => {
 export function makeInsightsColumns(
   isCockroachCloud: boolean,
   hasAdminRole: boolean,
-  disableStmtLink?: boolean,
+  isExecution?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
-  return [
+  const columns: ColumnDescriptor<InsightRecommendation>[] = [
     {
       name: "insights",
       title: insightsTableTitles.insights(),
@@ -348,7 +402,7 @@ export function makeInsightsColumns(
       name: "details",
       title: insightsTableTitles.details(),
       cell: (item: InsightRecommendation) =>
-        descriptionCell(item, disableStmtLink, isCockroachCloud),
+        descriptionCell(item, isExecution, isCockroachCloud),
       sort: (item: InsightRecommendation) => item.type,
     },
     {
@@ -358,4 +412,13 @@ export function makeInsightsColumns(
         actionCell(item, isCockroachCloud || !hasAdminRole),
     },
   ];
+  if (!isExecution) {
+    columns.push({
+      name: "latestExecution",
+      title: insightsTableTitles.latestExecution(),
+      cell: (item: InsightRecommendation) => linkCell(item),
+      sort: (item: InsightRecommendation) => item.type,
+    });
+  }
+  return columns;
 }

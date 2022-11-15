@@ -18,6 +18,7 @@ import {
   refreshStatementDiagnosticsRequests,
   refreshStatementDetails,
   refreshUserSQLRoles,
+  refreshStatementFingerprintInsights,
 } from "src/redux/apiReducers";
 import { RouteComponentProps } from "react-router";
 import { nodeRegionsByIDSelector } from "src/redux/nodes";
@@ -102,6 +103,15 @@ export const selectStatementDetails = createSelector(
   },
 );
 
+const selectStatementFingerprintInsights = createSelector(
+  (state: AdminUIState) => state.cachedData.statementFingerprintInsights,
+  (_state: AdminUIState, props: RouteComponentProps): string =>
+    getMatchParamByName(props.match, statementAttr),
+  (cachedFingerprintInsights, fingerprintID) => {
+    return cachedFingerprintInsights[fingerprintID]?.data;
+  },
+);
+
 const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
@@ -123,6 +133,10 @@ const mapStateToProps = (
     ),
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
     hasAdminRole: selectHasAdminRole(state),
+    statementFingerprintInsights: selectStatementFingerprintInsights(
+      state,
+      props,
+    ),
   };
 };
 
@@ -160,6 +174,8 @@ const mapDispatchToProps: StatementDetailsDispatchProps = {
   refreshNodes: refreshNodes,
   refreshNodesLiveness: refreshLiveness,
   refreshUserSQLRoles: refreshUserSQLRoles,
+  refreshStatementFingerprintInsights: (req: clusterUiApi.StmtInsightsReq) =>
+    refreshStatementFingerprintInsights(req),
 };
 
 export default withRouter(

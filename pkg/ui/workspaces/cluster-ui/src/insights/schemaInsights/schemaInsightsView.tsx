@@ -38,8 +38,10 @@ import { InsightsError } from "../insightsErrorComponent";
 import { Pagination } from "../../pagination";
 import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
 import { CockroachCloudContext } from "../../contexts";
+import insightTableStyles from "../../insightsTable/insightsTable.module.scss";
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
+const insightTableCx = classNames.bind(insightTableStyles);
 
 export type SchemaInsightsViewStateProps = {
   schemaInsights: InsightRecommendation[];
@@ -248,6 +250,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
                     }
                   />
                 }
+                tableWrapperClassName={insightTableCx("sorted-table")}
               />
             </section>
             <Pagination

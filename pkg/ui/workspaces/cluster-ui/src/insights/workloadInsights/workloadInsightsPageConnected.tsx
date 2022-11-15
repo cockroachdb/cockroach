@@ -133,7 +133,7 @@ const StatementDispatchProps = (
     dispatch(
       localStorageActions.update({
         key: "showColumns/StatementInsightsPage",
-        value: value.length === 0 ? " " : value.join(","),
+        value: value?.length === 0 ? " " : value.join(","),
       }),
     ),
   setTimeScale: (ts: TimeScale) => {

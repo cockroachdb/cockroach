@@ -16,6 +16,11 @@ import { Dispatch } from "redux";
 import { AppState, uiConfigActions } from "src/store";
 import { actions as nodesActions } from "../store/nodes";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
+import { TxnInsightsRequest } from "../api";
+import {
+  actions as transactionInsights,
+  selectTxnInsightsByFingerprint,
+} from "src/store/insights/transactionInsights";
 import {
   TransactionDetails,
   TransactionDetailsDispatchProps,
@@ -87,6 +92,7 @@ const mapStateToProps = (
     isLoading: isLoading,
     lastUpdated: lastUpdated,
     hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
+    transactionInsights: selectTxnInsightsByFingerprint(state, props),
   };
 };
 
@@ -103,6 +109,9 @@ const mapDispatchToProps = (
         ts: ts,
       }),
     );
+  },
+  refreshTransactionInsights: (req: TxnInsightsRequest) => {
+    dispatch(transactionInsights.refresh(req));
   },
 });
 
