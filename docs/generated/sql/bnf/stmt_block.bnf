@@ -292,6 +292,7 @@ show_stmt ::=
 	| show_sessions_stmt
 	| show_stats_stmt
 	| show_tables_stmt
+	| show_tenant_stmt
 	| show_trace_stmt
 	| show_transactions_stmt
 	| show_transfer_stmt
@@ -920,6 +921,9 @@ show_tables_stmt ::=
 	'SHOW' 'TABLES' 'FROM' name '.' name with_comment
 	| 'SHOW' 'TABLES' 'FROM' name with_comment
 	| 'SHOW' 'TABLES' with_comment
+
+show_tenant_stmt ::=
+	'SHOW' 'TENANT' name
 
 show_trace_stmt ::=
 	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'

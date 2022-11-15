@@ -195,7 +195,7 @@ func GetTenantRecordByName(
 			clusterversion.V23_1TenantNames.String())
 	}
 	row, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		ctx, "get-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`SELECT info FROM system.tenants WHERE name = $1`, tenantName,
 	)
 	if err != nil {
@@ -217,7 +217,7 @@ func GetTenantRecordByID(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID roachpb.TenantID,
 ) (*descpb.TenantInfo, error) {
 	row, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+		ctx, "get-tenant", txn, sessiondata.NodeUserSessionDataOverride,
 		`SELECT info FROM system.tenants WHERE id = $1`, tenID.ToUint64(),
 	)
 	if err != nil {
@@ -765,4 +765,15 @@ WHERE id = $1`, tenantID, tenantName); err != nil {
 	}
 
 	return nil
+}
+
+// GetTenantInfo implements the tree.TenantOperator interface.
+func (p *planner) GetTenantInfo(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (*descpb.TenantInfo, error) {
+	if err := p.RequireAdminRole(ctx, "get tenant"); err != nil {
+		return nil, err
+	}
+
+	return GetTenantRecordByName(ctx, p.execCfg, p.Txn(), tenantName)
 }

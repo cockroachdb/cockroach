@@ -254,6 +254,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowHistogram(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
+	case *tree.ShowTenant:
+		return p.ShowTenant(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowVar:
@@ -371,6 +373,7 @@ func init() {
 		&tree.ShowCreateExternalConnections{},
 		&tree.ShowHistogram{},
 		&tree.ShowTableStats{},
+		&tree.ShowTenant{},
 		&tree.ShowTraceForSession{},
 		&tree.ShowZoneConfig{},
 		&tree.ShowFingerprints{},

@@ -1794,3 +1794,11 @@ SHOW CREATE SECONDARY INDEXES FROM t
 SHOW CREATE SECONDARY INDEXES FROM t -- fully parenthesized
 SHOW CREATE SECONDARY INDEXES FROM t -- literals removed
 SHOW CREATE SECONDARY INDEXES FROM _ -- identifiers removed
+
+parse
+SHOW TENANT foo
+----
+SHOW TENANT foo
+SHOW TENANT foo -- fully parenthesized
+SHOW TENANT foo -- literals removed
+SHOW TENANT _ -- identifiers removed

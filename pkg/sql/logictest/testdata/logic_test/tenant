@@ -27,6 +27,39 @@ id  active  name        crdb_internal.pb_to_json
 3   true    two         {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE"}
 4   true    three       {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE"}
 
+query ITT colnames
+SHOW TENANT system
+----
+id  name    status
+1   system  ACTIVE
+
+query ITT colnames
+SHOW TENANT "tenant-one"
+----
+id  name          status
+2   tenant-one  ACTIVE
+
+query ITT colnames
+SHOW TENANT "two"
+----
+id  name  status
+3   two   ACTIVE
+
+query ITT colnames
+SHOW TENANT two
+----
+id  name  status
+3   two   ACTIVE
+
+query ITT colnames
+SHOW TENANT three
+----
+id  name   status
+4   three  ACTIVE
+
+statement error tenant "seven" does not exist
+SHOW TENANT seven
+
 # Test creating a tenant with the same name as an existing tenant, but a unique
 # ID.
 statement error tenant with name "three" already exists
@@ -75,6 +108,9 @@ FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
 id  active  name  crdb_internal.pb_to_json
+
+statement error tenant "four" does not exist
+SHOW TENANT four
 
 statement ok
 CREATE TENANT "five-requiring-quotes"
