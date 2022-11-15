@@ -124,7 +124,9 @@ func IsRetryableError(err error) bool {
 	// that we can't recover the structure and we have to rely on this
 	// unfortunate string comparison.
 	errStr := err.Error()
-	if strings.Contains(errStr, retryableErrorString) || strings.Contains(errStr, kvcoord.SendErrorString) {
+	if strings.Contains(errStr, retryableErrorString) ||
+		strings.Contains(errStr, kvcoord.SendErrorString) ||
+		strings.Contains(errStr, "draining") {
 		return true
 	}
 
