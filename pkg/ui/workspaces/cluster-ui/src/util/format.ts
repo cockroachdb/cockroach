@@ -103,13 +103,15 @@ export function Bytes(bytes: number): string {
  * Cast bytes to provided scale units
  */
 // tslint:disable-next-line: variable-name
-export const BytesFitScale = (scale: string) => (bytes: number): string => {
-  if (!bytes) {
-    return `0.00 ${scale}`;
-  }
-  const n = byteUnits.indexOf(scale);
-  return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
-};
+export const BytesFitScale =
+  (scale: string) =>
+  (bytes: number): string => {
+    if (!bytes) {
+      return `0.00 ${scale}`;
+    }
+    const n = byteUnits.indexOf(scale);
+    return `${(bytes / Math.pow(kibi, n)).toFixed(2)} ${scale}`;
+  };
 
 /**
  * Percentage creates a string representation of a fraction as a percentage.
@@ -202,4 +204,19 @@ export function Count(count: number): string {
   const unitVal = count / scale.value;
   const fractionDigits = Number.isInteger(unitVal) ? 0 : 1;
   return unitVal.toFixed(fractionDigits) + " " + scale.units;
+}
+
+// CheckHexValue adds the leading 0 on strings with hex value that
+// have a length < 16.
+export function CheckHexValue(s: string): string {
+  if (s === undefined || s === null || s.length === 0) {
+    return "";
+  }
+  if (s?.length === 16) {
+    return s;
+  }
+  while (s.length < 16) {
+    s = `0${s}`;
+  }
+  return s;
 }
