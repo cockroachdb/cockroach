@@ -41,7 +41,7 @@ func TestKeyEncoder(t *testing.T) {
 }
 
 func testKeyEncoder(t *testing.T) {
-	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(1337))
+	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(1337))
 	keyCodec := makeKeyCodec(codec, 42, 2)
 
 	t.Run("Prefix", func(t *testing.T) {
@@ -49,7 +49,7 @@ func testKeyEncoder(t *testing.T) {
 
 		rem, tenant, err := keys.DecodeTenantPrefix(prefix)
 		require.NoError(t, err)
-		require.Equal(t, tenant, roachpb.MakeTenantID(1337))
+		require.Equal(t, tenant, roachpb.MustMakeTenantID(1337))
 
 		rem, tableID, indexID, err := keys.DecodeTableIDIndexID(rem)
 		require.NoError(t, err)

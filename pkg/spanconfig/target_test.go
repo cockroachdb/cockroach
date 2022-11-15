@@ -29,11 +29,11 @@ func TestEncodeDecodeSystemTarget(t *testing.T) {
 
 	for _, testTarget := range []SystemTarget{
 		// Tenant targeting its logical cluster.
-		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
+		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10)),
 		// System tenant targeting its logical cluster.
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
 		// System tenant targeting a secondary tenant.
-		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
+		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)),
 		// System tenant targeting the entire keyspace.
 		MakeEntireKeyspaceTarget(),
 	} {
@@ -55,11 +55,11 @@ func TestTargetToFromProto(t *testing.T) {
 
 	for _, testSystemTarget := range []SystemTarget{
 		// Tenant targeting its logical cluster.
-		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
+		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10)),
 		// System tenant targeting its logical cluster.
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
 		// System tenant targeting a secondary tenant.
-		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
+		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)),
 		// System tenant targeting the entire keyspace.
 		MakeEntireKeyspaceTarget(),
 		// System tenant's read-only target to fetch all system span configurations
@@ -67,7 +67,7 @@ func TestTargetToFromProto(t *testing.T) {
 		MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID),
 		// A secondary tenant's read-only target to fetch all system span
 		// configurations it has set over secondary tenant keyspaces.
-		MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(10)),
+		MakeAllTenantKeyspaceTargetsSet(roachpb.MustMakeTenantID(10)),
 	} {
 		systemTarget, err := makeSystemTargetFromProto(testSystemTarget.toProto())
 		require.NoError(t, err)
@@ -86,7 +86,7 @@ func TestTargetToFromProto(t *testing.T) {
 func TestKeyspaceTargeted(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ten10 := roachpb.MakeTenantID(10)
+	ten10 := roachpb.MustMakeTenantID(10)
 
 	for _, tc := range []struct {
 		target  Target
@@ -176,8 +176,8 @@ func TestDecodeInvalidSpanAsSystemTarget(t *testing.T) {
 func TestSystemTargetValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	tenant10 := roachpb.MakeTenantID(10)
-	tenant20 := roachpb.MakeTenantID(20)
+	tenant10 := roachpb.MustMakeTenantID(10)
+	tenant20 := roachpb.MustMakeTenantID(20)
 	for _, tc := range []struct {
 		sourceTenantID roachpb.TenantID
 		targetTenantID roachpb.TenantID
@@ -308,22 +308,22 @@ func TestTargetSortingRandomized(t *testing.T) {
 	// Construct a set of sorted targets.
 	sortedTargets := Targets{
 		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.SystemTenantID)),
-		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.MakeTenantID(10))),
+		MakeTargetFromSystemTarget(MakeAllTenantKeyspaceTargetsSet(roachpb.MustMakeTenantID(10))),
 		MakeTargetFromSystemTarget(MakeEntireKeyspaceTarget()),
 		MakeTargetFromSystemTarget(
 			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID),
 		),
 		MakeTargetFromSystemTarget(
-			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)),
+			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)),
 		),
 		MakeTargetFromSystemTarget(
-			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(20)),
+			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(20)),
 		),
 		MakeTargetFromSystemTarget(
-			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(5), roachpb.MakeTenantID(5)),
+			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(5), roachpb.MustMakeTenantID(5)),
 		),
 		MakeTargetFromSystemTarget(
-			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)),
+			TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10)),
 		),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")}),
 		MakeTargetFromSpan(roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("d")}),
@@ -351,9 +351,9 @@ func TestSpanTargetsConstructedInSystemSpanConfigKeyspace(t *testing.T) {
 
 	for _, tc := range []roachpb.Span{
 		MakeEntireKeyspaceTarget().encode(),
-		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10)).encode(),
+		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10)).encode(),
 		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.SystemTenantID).encode(),
-		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MakeTenantID(10)).encode(),
+		TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10)).encode(),
 		{
 			// Extends into from the left
 			Key:    keys.TimeseriesKeyMax,

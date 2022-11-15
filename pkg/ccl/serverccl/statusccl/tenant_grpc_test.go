@@ -107,7 +107,7 @@ func TestTenantGRPCServices(t *testing.T) {
 	})
 
 	tenant3, connTenant3 := serverutils.StartTenant(t, server, base.TestTenantArgs{
-		TenantID:     roachpb.MakeTenantID(11),
+		TenantID:     roachpb.MustMakeTenantID(11),
 		TestingKnobs: testingKnobs,
 	})
 	defer connTenant3.Close()

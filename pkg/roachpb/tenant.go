@@ -26,25 +26,26 @@ import (
 // 2. the system tenant is created by default during cluster initialization.
 // 3. the system tenant is always present and can never be destroyed.
 // 4. the system tenant has the ability to create and destroy other tenants.
-var SystemTenantID = MakeTenantID(1)
+var SystemTenantID = MustMakeTenantID(1)
 
 // MinTenantID is the minimum ID of a (non-system) tenant in a multi-tenant
 // cluster.
-var MinTenantID = MakeTenantID(2)
+var MinTenantID = MustMakeTenantID(2)
 
 // MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
 // cluster.
-var MaxTenantID = MakeTenantID(math.MaxUint64)
+var MaxTenantID = MustMakeTenantID(math.MaxUint64)
 
-// MakeTenantID constructs a new TenantID from the provided uint64.
-func MakeTenantID(id uint64) TenantID {
+// MustMakeTenantID constructs a new TenantID from the provided uint64.
+// The function panics if an invalid tenant ID is given.
+func MustMakeTenantID(id uint64) TenantID {
 	assertValid(id)
 	return TenantID{id}
 }
 
-// MakeTenantIDNoPanic constructs a new TenantID from the provided uint64.
-// It returns an error rather than panicking on an invalid ID.
-func MakeTenantIDNoPanic(id uint64) (TenantID, error) {
+// MakeTenantID constructs a new TenantID from the provided uint64.
+// It returns an error on an invalid ID.
+func MakeTenantID(id uint64) (TenantID, error) {
 	if err := checkValid(id); err != nil {
 		return TenantID{}, err
 	}
@@ -124,7 +125,7 @@ func TenantIDFromString(tenantID string) (TenantID, error) {
 	if err != nil {
 		return TenantID{}, errors.Wrapf(err, "invalid tenant ID %s, tenant ID should be an unsigned int greater than 0", tenantID)
 	}
-	return MakeTenantID(tID), nil
+	return MustMakeTenantID(tID), nil
 }
 
 // TenantName is a unique name associated with a tenant in a multi-tenant

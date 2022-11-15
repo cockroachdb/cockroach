@@ -162,7 +162,7 @@ func TestJobsProtectedTimestamp(t *testing.T) {
 		WHERE name IN ('kv.closed_timestamp.target_duration', 'kv.protectedts.reconciliation.interval')`)
 
 	t.Run("secondary-tenant", func(t *testing.T) {
-		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 		defer conn10.Close()
 		ptp := ten10.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := ten10.ExecutorConfig().(sql.ExecutorConfig)
@@ -283,7 +283,7 @@ func TestSchedulesProtectedTimestamp(t *testing.T) {
 		WHERE name IN ('kv.closed_timestamp.target_duration', 'kv.protectedts.reconciliation.interval')`)
 
 	t.Run("secondary-tenant", func(t *testing.T) {
-		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+		ten10, conn10 := serverutils.StartTenant(t, s0, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 		defer conn10.Close()
 		ptp := ten10.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
 		execCfg := ten10.ExecutorConfig().(sql.ExecutorConfig)

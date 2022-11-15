@@ -158,7 +158,7 @@ func TestStreamReplicationProducerJob(t *testing.T) {
 	runJobWithProtectedTimestamp := func(ptsID uuid.UUID, ts hlc.Timestamp, jr jobs.Record) error {
 		return source.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			deprecatedTenantSpan := roachpb.Spans{*makeTenantSpan(30)}
-			tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MakeTenantID(30)})
+			tenantTarget := ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(30)})
 			if err := ptp.Protect(ctx, txn,
 				jobsprotectedts.MakeRecord(ptsID, int64(jr.JobID), ts,
 					deprecatedTenantSpan, jobsprotectedts.Jobs, tenantTarget)); err != nil {

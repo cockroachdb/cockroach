@@ -5383,7 +5383,7 @@ value if you rely on the HLC for accuracy.`,
 				if err != nil {
 					return nil, err
 				}
-				start := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(sTenID)))
+				start := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(sTenID)))
 				end := start.PrefixEnd()
 
 				result := tree.NewDArray(types.Bytes)

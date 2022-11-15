@@ -45,7 +45,7 @@ func TestNewWithAdditionalProvider(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20ms'`)
 	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '20ms'`)
-	fakeTenant := roachpb.MakeTenantID(10)
+	fakeTenant := roachpb.MustMakeTenantID(10)
 	codec := keys.MakeSQLCodec(fakeTenant)
 	fp := &fakeProvider{
 		ch: make(chan struct{}, 1),

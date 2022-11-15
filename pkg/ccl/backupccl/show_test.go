@@ -590,7 +590,7 @@ func TestShowBackupTenantView(t *testing.T) {
 
 	_ = security.EmbeddedTenantIDs()
 
-	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
 
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
@@ -629,7 +629,7 @@ func TestShowBackupTenants(t *testing.T) {
 	// NB: tenant certs for 10, 11, 20 are embedded. See:
 	_ = security.EmbeddedTenantIDs()
 
-	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
 	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)

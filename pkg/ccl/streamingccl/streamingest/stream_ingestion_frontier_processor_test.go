@@ -102,7 +102,7 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	const tenantID = 20
 	sampleKV := func() roachpb.KeyValue {
 		key, err := keys.RewriteKeyToTenantPrefix(roachpb.Key("key_1"),
-			keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID)))
+			keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID)))
 		require.NoError(t, err)
 		return roachpb.KeyValue{Key: key, Value: v}
 	}
@@ -235,8 +235,8 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 				}
 			}
 			spec.TenantRekey = execinfrapb.TenantRekey{
-				OldID: roachpb.MakeTenantID(tenantID),
-				NewID: roachpb.MakeTenantID(tenantID + 10),
+				OldID: roachpb.MustMakeTenantID(tenantID),
+				NewID: roachpb.MustMakeTenantID(tenantID + 10),
 			}
 			spec.StartTime = tc.frontierStartTime
 			spec.Checkpoint.ResolvedSpans = tc.jobCheckpoint

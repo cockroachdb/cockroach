@@ -53,7 +53,7 @@ func TestInitialKeys(t *testing.T) {
 			codec = keys.SystemSQLCodec
 			nonDescKeys = 14
 		} else {
-			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+			codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 			nonDescKeys = 4
 		}
 
@@ -127,7 +127,7 @@ func TestInitialKeysAndSplits(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				codec = keys.MakeSQLCodec(roachpb.MakeTenantID(id))
+				codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(id))
 			}
 
 			ms := bootstrap.MakeMetadataSchema(

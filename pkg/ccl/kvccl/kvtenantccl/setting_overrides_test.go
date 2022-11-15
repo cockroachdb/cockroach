@@ -40,7 +40,7 @@ func TestConnectorSettingOverrides(t *testing.T) {
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
 	s := rpc.NewServer(rpcContext)
 
-	tenantID := roachpb.MakeTenantID(5)
+	tenantID := roachpb.MustMakeTenantID(5)
 	gossipSubFn := func(req *roachpb.GossipSubscriptionRequest, stream roachpb.Internal_GossipSubscriptionServer) error {
 		return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 	}

@@ -143,7 +143,7 @@ func TestSafeFormatKey_Basic(t *testing.T) {
 }
 
 func TestSafeFormatKey_AppTenant(t *testing.T) {
-	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+	ten5Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 	testCases := []struct {
 		name string
 		key  roachpb.Key
@@ -208,7 +208,7 @@ func TestSafeFormatKey_AppTenant(t *testing.T) {
 
 func TestPrettyPrint(t *testing.T) {
 	tenSysCodec := keys.SystemSQLCodec
-	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+	ten5Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 	tm, _ := time.Parse(time.RFC3339Nano, "2016-03-30T13:40:35.053725008Z")
 	duration := duration.MakeDuration(1*time.Second.Nanoseconds(), 1, 1)
 	durationAsc, _ := encoding.EncodeDurationAscending(nil, duration)
@@ -549,7 +549,7 @@ func massagePrettyPrintedSpanForTest(span string, dirs []encoding.Direction) str
 
 func TestPrettyPrintRange(t *testing.T) {
 	tenSysCodec := keys.SystemSQLCodec
-	ten5Codec := keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+	ten5Codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 	key := makeKey([]byte("a"))
 	key2 := makeKey([]byte("z"))
 	tableKey := makeKey(tenSysCodec.TablePrefix(61), encoding.EncodeVarintAscending(nil, 4))
