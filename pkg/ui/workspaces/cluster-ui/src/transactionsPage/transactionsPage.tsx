@@ -29,6 +29,7 @@ import { TableStatistics } from "../tableStatistics";
 import { statisticsClasses } from "./transactionsPageClasses";
 import {
   aggregateAcrossNodeIDs,
+  generateRegion,
   generateRegionNode,
   getTrxAppFilterOptions,
   searchTransactionsData,
@@ -409,14 +410,14 @@ export class TransactionsPage extends React.Component<
 
     // If the cluster is a tenant cluster we don't show info
     // about nodes/regions.
-    const nodes = isTenant
-      ? []
-      : Object.keys(nodeRegions)
-          .map(n => Number(n))
-          .sort();
-    const regions = isTenant
-      ? []
-      : unique(nodes.map(node => nodeRegions[node.toString()])).sort();
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+
+    const regions = unique(
+      nodes.map(node => nodeRegions[node.toString()]),
+    ).sort();
+
     // We apply the search filters and app name filters prior to aggregating across Node IDs
     // in order to match what's done on the Statements Page.
     //
@@ -466,7 +467,7 @@ export class TransactionsPage extends React.Component<
               activeFilters={activeFilters}
               filters={filters}
               showRegions={regions.length > 1}
-              showNodes={nodes.length > 1}
+              showNodes={!isTenant && nodes.length > 1}
             />
           </PageConfigItem>
           <PageConfigItem className={commonStyles("separator")}>
@@ -495,9 +496,8 @@ export class TransactionsPage extends React.Component<
                   t => ({
                     stats_data: t.stats_data,
                     node_id: t.node_id,
-                    regionNodes: isTenant
-                      ? []
-                      : generateRegionNode(t, statements, nodeRegions),
+                    regions: generateRegion(t, statements, nodeRegions),
+                    regionNodes: generateRegionNode(t, statements, nodeRegions),
                   }),
                 );
               const { current, pageSize } = pagination;
@@ -513,6 +513,7 @@ export class TransactionsPage extends React.Component<
                 isTenant,
                 search,
               )
+                .filter(c => !(c.name === "regions" && regions.length < 2))
                 .filter(c => !(c.name === "regionNodes" && regions.length < 2))
                 .filter(c => !(isTenant && c.hideIfTenant));
 

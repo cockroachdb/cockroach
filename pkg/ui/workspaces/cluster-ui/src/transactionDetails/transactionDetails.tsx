@@ -319,11 +319,7 @@ export class TransactionDetails extends React.Component<
             const aggregatedStatements = aggregateStatements(
               statementsForTransaction,
             );
-            populateRegionNodeForStatements(
-              aggregatedStatements,
-              nodeRegions,
-              isTenant,
-            );
+            populateRegionNodeForStatements(aggregatedStatements, nodeRegions);
             const duration = (v: number) => Duration(v * 1e9);
 
             const transactionSampled =
