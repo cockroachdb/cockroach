@@ -821,6 +821,59 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	}
 }
 
+func TestAllocatorReplaceDecommissioningReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper, g, sp, a, _ := CreateTestAllocator(ctx, 1, false /* deterministic */)
+	defer stopper.Stop(ctx)
+	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
+
+	// Override liveness of n3 to decommissioning so the only available target is s4.
+	oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+		if nid == roachpb.NodeID(3) {
+			return livenesspb.NodeLivenessStatus_DECOMMISSIONING
+		}
+
+		return sp.NodeLivenessFn(nid, now, timeUntilStoreDead)
+	})
+
+	result, _, err := a.AllocateVoterWithStorePool(
+		ctx,
+		oSp,
+		roachpb.SpanConfig{
+			NumReplicas: 3,
+			Constraints: []roachpb.ConstraintsConjunction{
+				{
+					Constraints: []roachpb.Constraint{
+						{Value: "mem", Type: roachpb.Constraint_PROHIBITED},
+					},
+				},
+			},
+		},
+		[]roachpb.ReplicaDescriptor{
+			{
+				NodeID:    1,
+				StoreID:   1,
+				ReplicaID: 1,
+			},
+			{
+				NodeID:    2,
+				StoreID:   2,
+				ReplicaID: 2,
+			},
+		}, nil, /* existingNonVoters */
+		Decommissioning,
+	)
+	if err != nil {
+		t.Fatalf("Unable to perform allocation: %+v", err)
+	}
+	if !(result.StoreID == 4) {
+		t.Errorf("expected result to have store ID 4: %+v", result)
+	}
+}
+
 func TestAllocatorMultipleStoresPerNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6424,6 +6477,108 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	}
 }
 
+func TestAllocatorComputeActionWithStorePoolRemoveDead(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	conf := roachpb.SpanConfig{NumReplicas: 3}
+	threeReplDesc := roachpb.RangeDescriptor{
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{
+				StoreID:   1,
+				NodeID:    1,
+				ReplicaID: 1,
+			},
+			{
+				StoreID:   2,
+				NodeID:    2,
+				ReplicaID: 2,
+			},
+			{
+				StoreID:   3,
+				NodeID:    3,
+				ReplicaID: 3,
+			},
+		},
+	}
+	fourReplDesc := threeReplDesc
+	fourReplDesc.InternalReplicas = append(fourReplDesc.InternalReplicas, roachpb.ReplicaDescriptor{
+		StoreID:   4,
+		NodeID:    4,
+		ReplicaID: 4,
+	})
+
+	// Each test case should describe a repair situation which has a lower
+	// priority than the previous test case.
+	testCases := []struct {
+		desc           roachpb.RangeDescriptor
+		live           []roachpb.StoreID
+		dead           []roachpb.StoreID
+		expectedAction AllocatorAction
+	}{
+		// Needs three replicas, one is dead, and there's no replacement. Since
+		// there's no replacement we can't do anything, but an action is still
+		// emitted.
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 2},
+			dead:           []roachpb.StoreID{3},
+			expectedAction: AllocatorReplaceDeadVoter,
+		},
+		// Needs three replicas, one is dead, but there is a replacement.
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 2, 4},
+			dead:           []roachpb.StoreID{3},
+			expectedAction: AllocatorReplaceDeadVoter,
+		},
+		// Needs three replicas, two are dead (i.e. the range lacks a quorum).
+		{
+			desc:           threeReplDesc,
+			live:           []roachpb.StoreID{1, 4},
+			dead:           []roachpb.StoreID{2, 3},
+			expectedAction: AllocatorRangeUnavailable,
+		},
+		// Needs three replicas, has four, one is dead.
+		{
+			desc:           fourReplDesc,
+			live:           []roachpb.StoreID{1, 2, 4},
+			dead:           []roachpb.StoreID{3},
+			expectedAction: AllocatorRemoveDeadVoter,
+		},
+		// Needs three replicas, has four, two are dead (i.e. the range lacks a quorum).
+		{
+			desc:           fourReplDesc,
+			live:           []roachpb.StoreID{1, 4},
+			dead:           []roachpb.StoreID{2, 3},
+			expectedAction: AllocatorRangeUnavailable,
+		},
+	}
+
+	ctx := context.Background()
+	stopper, _, sp, a, _ := CreateTestAllocator(ctx, 10, false /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	for i, tcase := range testCases {
+		// Mark all dead nodes as alive, so we can override later.
+		all := append(tcase.live, tcase.dead...)
+		mockStorePool(sp, all, nil, nil, nil, nil, nil)
+		oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+			for _, deadStoreID := range tcase.dead {
+				if nid == roachpb.NodeID(deadStoreID) {
+					return livenesspb.NodeLivenessStatus_DEAD
+				}
+			}
+
+			return sp.NodeLivenessFn(nid, now, timeUntilStoreDead)
+		})
+		action, _ := a.ComputeActionWithStorePool(ctx, oSp, conf, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+		}
+	}
+}
+
 func TestAllocatorComputeActionSuspect(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -6770,6 +6925,303 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 	for i, tcase := range testCases {
 		mockStorePool(sp, tcase.live, nil, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
 		action, _ := a.ComputeAction(ctx, tcase.conf, &tcase.desc)
+		if tcase.expectedAction != action {
+			t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
+			continue
+		}
+	}
+}
+
+func TestAllocatorComputeActionWithStorePoolDecommission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		conf            roachpb.SpanConfig
+		desc            roachpb.RangeDescriptor
+		expectedAction  AllocatorAction
+		live            []roachpb.StoreID
+		dead            []roachpb.StoreID
+		decommissioning []roachpb.StoreID
+		decommissioned  []roachpb.StoreID
+	}{
+		// Has three replicas, but one is in decommissioning status. We can't
+		// replace it (nor add a new replica) since there isn't a live target,
+		// but that's still the action being emitted.
+		{
+			conf: roachpb.SpanConfig{NumReplicas: 3},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction:  AllocatorReplaceDecommissioningVoter,
+			live:            []roachpb.StoreID{1, 2},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Has three replicas, one is in decommissioning status, and one is on a
+		// dead node. Replacing the dead replica is more important.
+		{
+			conf: roachpb.SpanConfig{NumReplicas: 3},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction:  AllocatorReplaceDeadVoter,
+			live:            []roachpb.StoreID{1},
+			dead:            []roachpb.StoreID{2},
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Needs three replicas, has four, where one is decommissioning and one is
+		// dead.
+		{
+			conf: roachpb.SpanConfig{NumReplicas: 3},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDeadVoter,
+			live:            []roachpb.StoreID{1, 4},
+			dead:            []roachpb.StoreID{2},
+			decommissioning: []roachpb.StoreID{3},
+		},
+		// Needs three replicas, has four, where one is decommissioning and one is
+		// decommissioned.
+		{
+			conf: roachpb.SpanConfig{NumReplicas: 3},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDeadVoter,
+			live:            []roachpb.StoreID{1, 4},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{3},
+			decommissioned:  []roachpb.StoreID{2},
+		},
+		// Needs three replicas, has three, all decommissioning
+		{
+			conf: roachpb.SpanConfig{NumReplicas: 3},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+				},
+			},
+			expectedAction:  AllocatorReplaceDecommissioningVoter,
+			live:            nil,
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+		// Needs 3. Has 1 live, 3 decommissioning.
+		{
+			conf: roachpb.SpanConfig{NumReplicas: 3},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   2,
+						NodeID:    2,
+						ReplicaID: 2,
+					},
+					{
+						StoreID:   3,
+						NodeID:    3,
+						ReplicaID: 3,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDecommissioningVoter,
+			live:            []roachpb.StoreID{4},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			conf: roachpb.SpanConfig{
+				NumVoters:   1,
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.NON_VOTER,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.NON_VOTER,
+					},
+					{
+						StoreID:   7,
+						NodeID:    7,
+						ReplicaID: 7,
+						Type:      roachpb.NON_VOTER,
+					},
+				},
+			},
+			expectedAction:  AllocatorRemoveDecommissioningNonVoter,
+			live:            []roachpb.StoreID{1, 4, 6},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{7},
+		},
+		{
+			conf: roachpb.SpanConfig{
+				NumVoters:   1,
+				NumReplicas: 3,
+			},
+			desc: roachpb.RangeDescriptor{
+				InternalReplicas: []roachpb.ReplicaDescriptor{
+					{
+						StoreID:   1,
+						NodeID:    1,
+						ReplicaID: 1,
+					},
+					{
+						StoreID:   4,
+						NodeID:    4,
+						ReplicaID: 4,
+						Type:      roachpb.NON_VOTER,
+					},
+					{
+						StoreID:   6,
+						NodeID:    6,
+						ReplicaID: 6,
+						Type:      roachpb.NON_VOTER,
+					},
+				},
+			},
+			expectedAction:  AllocatorReplaceDecommissioningNonVoter,
+			live:            []roachpb.StoreID{1, 2, 3, 4, 6},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{4},
+		},
+	}
+
+	ctx := context.Background()
+	stopper, _, sp, a, _ := CreateTestAllocator(ctx, 10, false /* deterministic */)
+	defer stopper.Stop(ctx)
+
+	for i, tcase := range testCases {
+		// Mark all decommissioning and decommissioned nodes as alive, so we can override later.
+		all := append(tcase.live, tcase.decommissioning...)
+		all = append(all, tcase.decommissioned...)
+		overrideLivenessMap := make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus)
+		for _, sID := range tcase.decommissioned {
+			overrideLivenessMap[roachpb.NodeID(sID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONED
+		}
+		for _, sID := range tcase.decommissioning {
+			overrideLivenessMap[roachpb.NodeID(sID)] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
+		}
+		mockStorePool(sp, all, nil, tcase.dead, nil, nil, nil)
+		oSp := storepool.NewOverrideStorePool(sp, func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+			if liveness, ok := overrideLivenessMap[nid]; ok {
+				return liveness
+			}
+
+			return sp.NodeLivenessFn(nid, now, timeUntilStoreDead)
+		})
+		action, _ := a.ComputeActionWithStorePool(ctx, oSp, tcase.conf, &tcase.desc)
 		if tcase.expectedAction != action {
 			t.Errorf("Test case %d expected action %s, got action %s", i, tcase.expectedAction, action)
 			continue
