@@ -316,6 +316,7 @@ func newOrderedAggregator(
 		post,
 		output,
 		func() []execinfrapb.ProducerMetadata {
+			log.Infof(ctx, "aggregator's trailing meta callback is called")
 			ag.close()
 			return nil
 		},
@@ -376,7 +377,7 @@ func (ag *hashAggregator) close() {
 
 func (ag *orderedAggregator) close() {
 	if ag.InternalClose() {
-		log.VEventf(ag.Ctx, 2, "exiting aggregator")
+		log.Infof(ag.Ctx, "exiting aggregator")
 		if ag.bucket != nil {
 			ag.bucket.close(ag.Ctx)
 		}
@@ -474,6 +475,11 @@ func (ag *hashAggregator) accumulateRows() (
 	return aggEmittingRows, nil, nil
 }
 
+func (ag *orderedAggregator) MoveToDraining(err error) {
+	log.Infof(ag.Ctx, "aggregator is moving to draining with error: %v", err)
+	ag.ProcessorBase.MoveToDraining(err)
+}
+
 // accumulateRows continually reads rows from the input and accumulates them
 // into intermediary aggregate results. If it encounters metadata, the metadata
 // is immediately returned. Subsequent calls of this function will resume row
@@ -486,6 +492,7 @@ func (ag *orderedAggregator) accumulateRows() (
 	for {
 		row, meta := ag.input.Next()
 		if meta != nil {
+			log.Infof(ag.Ctx, "accumulation received a meta: %v", meta)
 			if meta.Err != nil {
 				ag.MoveToDraining(nil /* err */)
 				return aggStateUnknown, nil, meta
@@ -493,7 +500,7 @@ func (ag *orderedAggregator) accumulateRows() (
 			return aggAccumulating, nil, meta
 		}
 		if row == nil {
-			log.VEvent(ag.Ctx, 1, "accumulation complete")
+			log.Info(ag.Ctx, "accumulation complete")
 			ag.inputDone = true
 			break
 		}
@@ -553,6 +560,7 @@ func (ag *aggregatorBase) getAggResults(
 	}
 
 	if outRow := ag.ProcessRowHelper(ag.row); outRow != nil {
+		log.Infof(ag.Ctx, "aggregator returning a row: %s", outRow.String(ag.outputTypes))
 		return aggEmittingRows, outRow, nil
 	}
 	// We might have switched to draining, we might not have. In case we

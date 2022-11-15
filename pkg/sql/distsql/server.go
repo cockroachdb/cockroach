@@ -390,7 +390,7 @@ func (ds *ServerImpl) setupFlow(
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(
 		flowCtx, sp, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
-		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL,
+		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL, req.Diagram,
 	)
 	opt := flowinfra.FuseNormally
 	if !localState.MustUseLeafTxn() {
@@ -511,8 +511,12 @@ func newFlow(
 	isVectorized bool,
 	onFlowCleanup func(),
 	statementSQL string,
+	diagram string,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
+	base := flowinfra.NewFlowBase(
+		flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer,
+		localProcessors, onFlowCleanup, statementSQL, diagram,
+	)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}

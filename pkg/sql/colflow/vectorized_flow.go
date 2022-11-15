@@ -12,6 +12,7 @@ package colflow
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -384,18 +385,38 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	// TODO(yuzefovich): uncomment this once the assertion is no longer flaky.
-	//if buildutil.CrdbTestBuild && f.FlowBase.Started() && !f.FlowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
-	//	// Check that all closers have been closed. Note that we don't check
-	//	// this in case the flow was never started in the first place (it is ok
-	//	// to not check this since closers haven't allocated any resources in
-	//	// such a case). We also don't check when the panic injection is
-	//	// enabled since then Close() might be legitimately not called (if a
-	//	// panic is injected in Init() of the wrapped operator).
-	//	if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
-	//		colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
-	//	}
-	//}
+	if buildutil.CrdbTestBuild && f.FlowBase.Started() && !f.FlowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
+		// Check that all closers have been closed. Note that we don't check
+		// this in case the flow was never started in the first place (it is ok
+		// to not check this since closers haven't allocated any resources in
+		// such a case). We also don't check when the panic injection is
+		// enabled since then Close() might be legitimately not called (if a
+		// panic is injected in Init() of the wrapped operator).
+		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
+			var allClosersInfo string
+			for i, c := range f.creator.allClosers {
+				cb := f.creator.allCallbackClosers[i].(*callbackCloser)
+				numCallbackWrappers := 1
+				for {
+					unwrapped, ok := c.(*callbackCloser)
+					if !ok {
+						break
+					}
+					c = unwrapped.wrapped
+					numCallbackWrappers++
+				}
+				allClosersInfo += fmt.Sprintf(
+					"\ncloser %d (%p), closed? %t, numWrapped=%d: %T",
+					i, c, cb.closed, numCallbackWrappers, c,
+				)
+			}
+			colexecerror.InternalError(errors.AssertionFailedf(
+				"expected %d components to be closed, but found that only %d were\n"+
+					"statement: %s\n%s\ndiagram: %s",
+				f.testingInfo.numClosers, numClosed, f.StatementSQL(), allClosersInfo, f.Diagram(),
+			))
+		}
+	}
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
@@ -638,8 +659,10 @@ type vectorizedFlowCreator struct {
 	// numClosers and numClosed are used to assert during testing that the
 	// expected number of components are closed. The assertion only happens if
 	// the panic injection is not enabled.
-	numClosers int32
-	numClosed  int32
+	numClosers         int32
+	numClosed          int32
+	allClosers         colexecop.Closers
+	allCallbackClosers colexecop.Closers
 }
 
 var _ execreleasable.Releasable = &vectorizedFlowCreator{}
@@ -1122,12 +1145,15 @@ func (s *vectorizedFlowCreator) setupOutput(
 // calling the provided callback.
 type callbackCloser struct {
 	closeCb func(context.Context) error
+	closed  bool
+	wrapped colexecop.Closer
 }
 
 var _ colexecop.Closer = &callbackCloser{}
 
 // Close implements the Closer interface.
 func (c *callbackCloser) Close(ctx context.Context) error {
+	c.closed = true
 	return c.closeCb(ctx)
 }
 
@@ -1217,13 +1243,18 @@ func (s *vectorizedFlowCreator) setupFlow(
 				for i := range toCloseCopy {
 					func(idx int) {
 						closed := false
-						result.ToClose[idx] = &callbackCloser{closeCb: func(ctx context.Context) error {
-							if !closed {
-								closed = true
-								atomic.AddInt32(&s.numClosed, 1)
-							}
-							return toCloseCopy[idx].Close(ctx)
-						}}
+						result.ToClose[idx] = &callbackCloser{
+							closeCb: func(ctx context.Context) error {
+								if !closed {
+									closed = true
+									atomic.AddInt32(&s.numClosed, 1)
+								}
+								return toCloseCopy[idx].Close(ctx)
+							},
+							wrapped: toCloseCopy[idx],
+						}
+						s.allClosers = append(s.allClosers, toCloseCopy[idx])
+						s.allCallbackClosers = append(s.allCallbackClosers, result.ToClose[idx])
 					}(i)
 				}
 				s.numClosers += int32(len(result.ToClose))
