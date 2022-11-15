@@ -9,12 +9,12 @@
 // licenses/APL.txt.
 
 import {
-  ActiveTransactionFilters,
-  ActiveTransactionsViewDispatchProps,
+  RecentTransactionFilters,
+  RecentTransactionsViewDispatchProps,
   defaultFilters,
   SortSetting,
 } from "@cockroachlabs/cluster-ui";
-import { selectAppName, selectActiveTransactions } from "src/selectors";
+import { selectAppName, selectRecentTransactions } from "src/selectors";
 import { refreshLiveWorkload } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
@@ -32,7 +32,7 @@ const defaultActiveTxnFilters = { app: defaultFilters.app };
 
 const filtersLocalSetting = new LocalSetting<
   AdminUIState,
-  ActiveTransactionFilters
+  RecentTransactionFilters
 >(
   "filters/ActiveTransactionsPage",
   (state: AdminUIState) => state.localSettings,
@@ -45,9 +45,9 @@ const sortSettingLocalSetting = new LocalSetting<AdminUIState, SortSetting>(
   { ascending: false, columnTitle: "startTime" },
 );
 
-export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
+export const mapStateToRecentTransactionsPageProps = (state: AdminUIState) => ({
   selectedColumns: transactionsColumnsLocalSetting.selectorToArray(state),
-  transactions: selectActiveTransactions(state),
+  transactions: selectRecentTransactions(state),
   sessionsError: state.cachedData?.sessions.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
@@ -56,11 +56,11 @@ export const mapStateToActiveTransactionsPageProps = (state: AdminUIState) => ({
 
 // This object is just for convenience so we don't need to supply dispatch to
 // each action.
-export const activeTransactionsPageActionCreators: ActiveTransactionsViewDispatchProps =
+export const recentTransactionsPageActionCreators: RecentTransactionsViewDispatchProps =
   {
     onColumnsSelect: (columns: string[]) =>
       transactionsColumnsLocalSetting.set(columns.join(",")),
-    onFiltersChange: (filters: ActiveTransactionFilters) =>
+    onFiltersChange: (filters: RecentTransactionFilters) =>
       filtersLocalSetting.set(filters),
     onSortChange: (ss: SortSetting) => sortSettingLocalSetting.set(ss),
     refreshLiveWorkload,
