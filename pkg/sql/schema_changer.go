@@ -2120,7 +2120,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 }
 
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
-	ctx context.Context, desc *tabledesc.Mutable, constraint catalog.ConstraintToUpdate,
+	ctx context.Context, desc *tabledesc.Mutable, constraint catalog.Constraint,
 ) error {
 	if constraint.IsCheck() || constraint.IsNotNull() {
 		if constraint.Check().Validity == descpb.ConstraintValidity_Unvalidated {
@@ -2392,7 +2392,7 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeConstraintValidation is called just before starting the checks validation,
 	// after setting the job status to validating.
-	RunBeforeConstraintValidation func(constraints []catalog.ConstraintToUpdate) error
+	RunBeforeConstraintValidation func(constraints []catalog.Constraint) error
 
 	// RunBeforeMutationReversal runs at the beginning of maybeReverseMutations.
 	RunBeforeMutationReversal func(jobID jobspb.JobID) error

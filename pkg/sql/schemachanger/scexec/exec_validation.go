@@ -69,7 +69,7 @@ func executeValidateCheckConstraint(
 	if err != nil {
 		return err
 	}
-	if constraint.CheckConstraint == nil {
+	if !constraint.IsCheck() {
 		return errors.Newf("constraint ID %v does not identify a check constraint in table %v.",
 			op.ConstraintID, op.TableID)
 	}
@@ -82,7 +82,6 @@ func executeValidateCheckConstraint(
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
 	}
-	constraint.CheckConstraint.Validity = descpb.ConstraintValidity_Validated
 	return nil
 }
 

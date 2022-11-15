@@ -81,6 +81,10 @@ const customStyles = {
     position: "relative",
     boxShadow: "none",
   }),
+  menuList: (provided: any) => ({
+    ...provided,
+    maxHeight: "310px",
+  }),
   option: (provided: any, state: any) => ({
     ...provided,
     backgroundColor: "white",

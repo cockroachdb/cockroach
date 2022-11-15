@@ -314,26 +314,44 @@ func GetShardColumnName(colNames []string, buckets int32) string {
 	)
 }
 
+// getExistingOrNewConstraintCache should be the only place where the constraintCache
+// field in wrapper is ever read.
+func (desc *wrapper) getExistingOrNewConstraintCache() *constraintCache {
+	if desc.constraintCache != nil {
+		return desc.constraintCache
+	}
+	return newConstraintCache(desc.TableDesc(), desc.getExistingOrNewMutationCache())
+}
+
 // GetConstraintInfo implements the TableDescriptor interface.
 func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
 	return desc.collectConstraintInfo(nil)
 }
 
 // FindConstraintWithID implements the TableDescriptor interface.
-func (desc *wrapper) FindConstraintWithID(
-	id descpb.ConstraintID,
-) (*descpb.ConstraintDetail, error) {
-	constraintInfo, err := desc.GetConstraintInfo()
-	if err != nil {
-		return nil, err
-	}
-	for _, info := range constraintInfo {
-		if info.ConstraintID == id {
-			return &info, nil
+func (desc *wrapper) FindConstraintWithID(id descpb.ConstraintID) (catalog.Constraint, error) {
+	all := desc.AllConstraints()
+	for _, c := range all {
+		if c.GetConstraintID() == id {
+			return c, nil
 		}
 	}
-
 	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
+}
+
+// AllConstraints implements the catalog.TableDescriptor interface.
+func (desc *wrapper) AllConstraints() []catalog.Constraint {
+	return desc.getExistingOrNewConstraintCache().all
+}
+
+// AllActiveAndInactiveConstraints implements the catalog.TableDescriptor interface.
+func (desc *wrapper) AllActiveAndInactiveConstraints() []catalog.Constraint {
+	return desc.getExistingOrNewConstraintCache().allActiveAndInactive
+}
+
+// AllActiveConstraints implements the catalog.TableDescriptor interface.
+func (desc *wrapper) AllActiveConstraints() []catalog.Constraint {
+	return desc.getExistingOrNewConstraintCache().allActive
 }
 
 // GetConstraintInfoWithLookup implements the TableDescriptor interface.
