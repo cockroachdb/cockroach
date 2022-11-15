@@ -59,7 +59,11 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   const insightQueries =
     insightDetails?.queries?.join("") || "Insight not found.";
-  const insightsColumns = makeInsightsColumns(isCockroachCloud);
+  const insightsColumns = makeInsightsColumns(
+    isCockroachCloud,
+    insightDetails.queries?.length > 1,
+    true,
+  );
 
   const blockingExecutions: ContentionEvent[] =
     insightDetails?.blockingContentionDetails?.map(x => {
@@ -89,10 +93,11 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
   const insightRecs = getTxnInsightRecommendations(insightDetails);
 
   const rowsRead =
-    stmtInsights?.reduce((count, stmt) => (count += stmt.rowsRead), 0) ?? "N/A";
+    stmtInsights?.reduce((count, stmt) => (count += stmt.rowsRead), 0) ??
+    "no samples";
   const rowsWritten =
     stmtInsights?.reduce((count, stmt) => (count += stmt.rowsWritten), 0) ??
-    "N/A";
+    "no samples";
 
   return (
     <div>
@@ -111,21 +116,21 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                     label="Start Time"
                     value={
                       insightDetails.startTime?.format(DATE_FORMAT_24_UTC) ??
-                      "N/A"
+                      "no samples"
                     }
                   />
                   <SummaryCardItem label="Rows Read" value={rowsRead} />
                   <SummaryCardItem label="Rows Written" value={rowsWritten} />
                   <SummaryCardItem
                     label="Priority"
-                    value={insightDetails.priority ?? "N/A"}
+                    value={insightDetails.priority ?? "no samples"}
                   />
                   <SummaryCardItem
                     label="Full Scan"
                     value={
                       insightDetails.statementInsights
                         ?.some(stmt => stmt.isFullScan)
-                        ?.toString() ?? "N/A"
+                        ?.toString() ?? "no samples"
                     }
                   />
                 </SummaryCard>
@@ -134,15 +139,17 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
                 <SummaryCard>
                   <SummaryCardItem
                     label="Number of Retries"
-                    value={insightDetails.retries ?? "N/A"}
+                    value={insightDetails.retries ?? "no samples"}
                   />
-                  <SummaryCardItem
-                    label="Last Retry Reason"
-                    value={insightDetails.lastRetryReason ?? "N/A"}
-                  />
+                  {insightDetails.lastRetryReason && (
+                    <SummaryCardItem
+                      label="Last Retry Reason"
+                      value={insightDetails.lastRetryReason}
+                    />
+                  )}
                   <SummaryCardItem
                     label="Session ID"
-                    value={insightDetails.sessionID ?? "N/A"}
+                    value={insightDetails.sessionID ?? "no samples"}
                   />
                   <SummaryCardItem
                     label="Application"
