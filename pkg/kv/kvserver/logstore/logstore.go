@@ -12,6 +12,13 @@
 package logstore
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/etcd/raft/v3"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
@@ -42,4 +49,63 @@ type RaftState struct {
 	LastIndex uint64
 	LastTerm  uint64
 	ByteSize  int64
+}
+
+// LogAppend adds the given entries to the raft log. Takes the previous log
+// state, and returns the updated state. It's the caller's responsibility to
+// maintain exclusive access to the raft log for the duration of the method
+// call.
+//
+// LogAppend is intentionally oblivious to the existence of sideloaded
+// proposals. They are managed by the caller, including cleaning up obsolete
+// on-disk payloads in case the log tail is replaced.
+func LogAppend(
+	ctx context.Context,
+	raftLogPrefix roachpb.Key,
+	rw storage.ReadWriter,
+	prev RaftState,
+	entries []raftpb.Entry,
+) (RaftState, error) {
+	if len(entries) == 0 {
+		return prev, nil
+	}
+	var diff enginepb.MVCCStats
+	var value roachpb.Value
+	for i := range entries {
+		ent := &entries[i]
+		key := keys.RaftLogKeyFromPrefix(raftLogPrefix, ent.Index)
+
+		if err := value.SetProto(ent); err != nil {
+			return RaftState{}, err
+		}
+		value.InitChecksum(key)
+		var err error
+		if ent.Index > prev.LastIndex {
+			err = storage.MVCCBlindPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
+		} else {
+			err = storage.MVCCPut(ctx, rw, &diff, key, hlc.Timestamp{}, hlc.ClockTimestamp{}, value, nil /* txn */)
+		}
+		if err != nil {
+			return RaftState{}, err
+		}
+	}
+
+	newLastIndex := entries[len(entries)-1].Index
+	// Delete any previously appended log entries which never committed.
+	if prev.LastIndex > 0 {
+		for i := newLastIndex + 1; i <= prev.LastIndex; i++ {
+			// Note that the caller is in charge of deleting any sideloaded payloads
+			// (which they must only do *after* the batch has committed).
+			_, err := storage.MVCCDelete(ctx, rw, &diff, keys.RaftLogKeyFromPrefix(raftLogPrefix, i),
+				hlc.Timestamp{}, hlc.ClockTimestamp{}, nil)
+			if err != nil {
+				return RaftState{}, err
+			}
+		}
+	}
+	return RaftState{
+		LastIndex: newLastIndex,
+		LastTerm:  entries[len(entries)-1].Term,
+		ByteSize:  prev.ByteSize + diff.SysBytes,
+	}, nil
 }
