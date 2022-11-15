@@ -3681,3 +3681,40 @@ SELECT encode(decompress(compress('Hello World', 'snappy'), 'lz4'), 'escape');
 
 query error pq: compress\(\): only 'gzip', 'lz4', 'snappy', or 'zstd' compression codecs are supported
 SELECT compress('Hello World', 'infiniteCompressionCodec');
+
+subtest crdb_internal.anonymize_sql_constants
+query T
+SELECT crdb_internal.anonymize_sql_constants('select 1, 2, 3')
+----
+SELECT _, _, _
+
+# Passing a redacted sql stmt shouldn't have any effect.
+query T
+SELECT crdb_internal.anonymize_sql_constants('select _, _, _')
+----
+SELECT _, _, _
+
+query T
+SELECT crdb_internal.anonymize_sql_constants(ARRAY('select 1', NULL, 'select ''hello''', ''))
+----
+{"SELECT _",NULL,"SELECT '_'",""}
+
+query T
+SELECT crdb_internal.anonymize_sql_constants('SELECT ''yes'' IN (''no'', ''maybe'', ''yes'')')
+----
+SELECT '_' IN ('_', '_', __more1_10__)
+
+query T
+SELECT crdb_internal.anonymize_sql_constants('')
+----
+·
+
+query T
+SELECT crdb_internal.anonymize_sql_constants(NULL)
+----
+NULL
+
+query T
+SELECT crdb_internal.anonymize_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'
+----
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC))
