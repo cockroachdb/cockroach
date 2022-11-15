@@ -241,6 +241,7 @@ FILES = [
     "show_stats",
     "show_survival_goal_stmt",
     "show_tables",
+    "show_tenant_stmt",
     "show_trace",
     "show_transactions_stmt",
     "show_transfer_stmt",

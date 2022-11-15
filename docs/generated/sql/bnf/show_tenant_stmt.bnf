@@ -1,0 +1,2 @@
+show_tenant_stmt ::=
+	'SHOW' 'TENANT' name
