@@ -314,6 +314,35 @@ var testCases = []testCase{
 			}),
 		},
 	},
+	{
+		name: "Protect using synthetic timestamp",
+		ops: []op{
+			funcOp(func(ctx context.Context, t *testing.T, tCtx *testContext) {
+				rec := newRecord(tCtx, tCtx.tc.Server(0).Clock().Now().WithSynthetic(true), "", nil, tableTarget(42),
+					tableSpan(42))
+				err := tCtx.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+					return tCtx.pts.Protect(ctx, txn, &rec)
+				})
+				require.NoError(t, err)
+				// Synthetic should be reset when writing timestamps to make it
+				// compatible with underlying sql schema.
+				rec.Timestamp.Synthetic = false
+				tCtx.state.Records = append(tCtx.state.Records, rec)
+				tCtx.state.Version++
+				tCtx.state.NumRecords++
+				tCtx.state.NumSpans += uint64(len(rec.DeprecatedSpans))
+				var encoded []byte
+				if tCtx.runWithDeprecatedSpans {
+					encoded, err = protoutil.Marshal(&ptstorage.Spans{Spans: rec.DeprecatedSpans})
+					require.NoError(t, err)
+				} else {
+					encoded, err = protoutil.Marshal(&ptpb.Target{Union: rec.Target.GetUnion()})
+					require.NoError(t, err)
+				}
+				tCtx.state.TotalBytes += uint64(len(encoded))
+			}),
+		},
+	},
 }
 
 type testContext struct {
