@@ -581,6 +581,13 @@ func (c *DummyTenantOperator) RenameTenant(
 	return errors.WithStack(errEvalTenant)
 }
 
+// GetTenantInfo is part of the tree.TenantOperator interface.
+func (c *DummyTenantOperator) GetTenantInfo(
+	ctx context.Context, tenantName roachpb.TenantName,
+) (*descpb.TenantInfo, error) {
+	return nil, errors.WithStack(errEvalTenant)
+}
+
 // DestroyTenant is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) DestroyTenant(
 	ctx context.Context, tenantName roachpb.TenantName, synchronous bool,

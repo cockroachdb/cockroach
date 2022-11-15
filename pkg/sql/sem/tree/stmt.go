@@ -1780,6 +1780,15 @@ func (*ShowTables) StatementType() StatementType { return TypeDML }
 func (*ShowTables) StatementTag() string { return "SHOW TABLES" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowTenant) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowTenant) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowTenant) StatementTag() string { return "SHOW TENANT" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowFunctions) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2183,6 +2192,7 @@ func (n *ShowSurvivalGoal) String() string                    { return AsString(
 func (n *ShowSyntax) String() string                          { return AsString(n) }
 func (n *ShowTableStats) String() string                      { return AsString(n) }
 func (n *ShowTables) String() string                          { return AsString(n) }
+func (n *ShowTenant) String() string                          { return AsString(n) }
 func (n *ShowTypes) String() string                           { return AsString(n) }
 func (n *ShowTraceForSession) String() string                 { return AsString(n) }
 func (n *ShowTransactionStatus) String() string               { return AsString(n) }
