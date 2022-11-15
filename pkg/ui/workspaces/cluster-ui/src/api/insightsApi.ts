@@ -19,6 +19,7 @@ import {
 } from "./sqlApi";
 import {
   BlockedContentionDetails,
+  dedupInsights,
   FlattenedStmtInsightEvent,
   getInsightFromCause,
   getInsightsFromProblemsAndCauses,
@@ -617,13 +618,7 @@ function organizeExecutionInsightsResponseIntoTxns(
 
   txnByExecID.forEach(txn => {
     // De-duplicate top-level txn insights.
-    const insightsSeen = new Set<string>();
-    txn.insights = txn.insights.reduce((insights, i) => {
-      if (insightsSeen.has(i.name)) return insights;
-      insightsSeen.add(i.name);
-      insights.push(i);
-      return insights;
-    }, []);
+    txn.insights = dedupInsights(txn.insights);
 
     // Sort stmt insights for each txn by start time.
     txn.statementInsights.sort((a, b) => {

@@ -343,7 +343,9 @@ export function mergeTxnContentionAndStmtInsights(
         ...txn,
         contention: existingContentionEvent.contention,
         startTime: existingContentionEvent.startTime,
-        insights: txn.insights.concat(existingContentionEvent.insights),
+        insights: dedupInsights(
+          txn.insights.concat(existingContentionEvent.insights),
+        ),
       };
       return; // Continue
     }
@@ -489,4 +491,15 @@ export function getTxnInsightRecommendations(
   }
 
   return recs;
+}
+
+export function dedupInsights(insights: Insight[]): Insight[] {
+  // De-duplicate top-level txn insights.
+  const insightsSeen = new Set<string>();
+  return insights.reduce((deduped, i) => {
+    if (insightsSeen.has(i.name)) return deduped;
+    insightsSeen.add(i.name);
+    deduped.push(i);
+    return deduped;
+  }, []);
 }

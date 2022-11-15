@@ -59,7 +59,11 @@ export const TransactionInsightDetailsOverviewTab: React.FC<Props> = ({
 
   const insightQueries =
     insightDetails?.queries?.join("") || "Insight not found.";
-  const insightsColumns = makeInsightsColumns(isCockroachCloud);
+  const insightsColumns = makeInsightsColumns(
+    isCockroachCloud,
+    insightDetails.queries?.length > 1,
+    true,
+  );
 
   const blockingExecutions: ContentionEvent[] =
     insightDetails?.blockingContentionDetails?.map(x => {

@@ -26,7 +26,6 @@ import { Anchor } from "../anchor";
 import { Link } from "react-router-dom";
 import { performanceTuningRecipes } from "../util";
 import { InsightRecommendation, insightType } from "../insights";
-import { limitText } from "src/util";
 
 const cx = classNames.bind(styles);
 
@@ -45,7 +44,7 @@ type InsightsTableTitleType = {
 };
 
 export const insightsTableTitles: InsightsTableTitleType = {
-  query: () => <span>insightColumnLabels.query</span>,
+  query: () => <span>{insightColumnLabels.query}</span>,
   insights: () => {
     return (
       <Tooltip
@@ -79,7 +78,6 @@ function typeCell(value: string): React.ReactElement {
 
 function descriptionCell(
   insightRec: InsightRecommendation,
-  disableStmtLink?: boolean,
 ): React.ReactElement {
   const clusterSettingsLink = (
     <>
@@ -90,38 +88,12 @@ function descriptionCell(
       {"."}
     </>
   );
-  const summary = computeOrUseStmtSummary(
-    insightRec.execution?.statement,
-    insightRec.execution?.summary,
-  );
   switch (insightRec.type) {
     case "CreateIndex":
     case "ReplaceIndex":
     case "AlterIndex":
       return (
         <>
-          <div className={cx("description-item")}>
-            <span className={cx("label-bold")}>Statement Fingerprint: </span>{" "}
-            {disableStmtLink && (
-              <div className={cx("inline")}>
-                <Tooltip
-                  placement="bottom"
-                  content={insightRec.execution.statement}
-                >
-                  {summary}
-                </Tooltip>
-              </div>
-            )}
-            {!disableStmtLink && (
-              <StatementLink
-                statementFingerprintID={insightRec.execution.fingerprintID}
-                statement={insightRec.execution.statement}
-                statementSummary={insightRec.execution.summary}
-                implicitTxn={insightRec.execution.implicit}
-                className={"inline"}
-              />
-            )}
-          </div>
           <div className={cx("description-item")}>
             <span className={cx("label-bold")}>Recommendation: </span>{" "}
             {insightRec.query}
@@ -284,8 +256,50 @@ function actionCell(
   return <></>;
 }
 
+const isIndexRec = (rec: InsightRecommendation) => {
+  switch (rec.type) {
+    case "AlterIndex":
+    case "CreateIndex":
+    case "DropIndex":
+      return true;
+    default:
+      return false;
+  }
+};
+
+const StatementExecution = ({
+  rec,
+  disableLink,
+}: {
+  rec: InsightRecommendation;
+  disableLink: boolean;
+}) => (
+  <div className={cx("description-item")}>
+    <span className={cx("label-bold")}>Statement: </span>{" "}
+    {disableLink ? (
+      <div className={cx("inline")}>
+        <Tooltip placement="bottom" content={rec.execution.statement}>
+          {computeOrUseStmtSummary(
+            rec.execution?.statement,
+            rec.execution?.summary,
+          )}
+        </Tooltip>
+      </div>
+    ) : (
+      <StatementLink
+        statementFingerprintID={rec.execution.fingerprintID}
+        statement={rec.execution.statement}
+        statementSummary={rec.execution.summary}
+        implicitTxn={rec.execution.implicit}
+        className="inline"
+      />
+    )}
+  </div>
+);
+
 export function makeInsightsColumns(
   hideAction: boolean,
+  showQuery?: boolean,
   disableStmtLink?: boolean,
 ): ColumnDescriptor<InsightRecommendation>[] {
   return [
@@ -298,16 +312,15 @@ export function makeInsightsColumns(
     {
       name: "details",
       title: insightsTableTitles.details(),
-      cell: (item: InsightRecommendation) =>
-        descriptionCell(item, disableStmtLink),
+      cell: (item: InsightRecommendation) => (
+        <>
+          {(showQuery || isIndexRec(item)) && (
+            <StatementExecution rec={item} disableLink={disableStmtLink} />
+          )}
+          {descriptionCell(item)}
+        </>
+      ),
       sort: (item: InsightRecommendation) => item.type,
-    },
-    {
-      name: "query",
-      title: insightsTableTitles.query(),
-      cell: (item: InsightRecommendation) =>
-        limitText(item.execution?.statement, 100) ?? "N/A",
-      sort: (item: InsightRecommendation) => item.execution?.statement,
     },
     {
       name: "action",
