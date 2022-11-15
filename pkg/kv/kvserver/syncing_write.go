@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -80,7 +80,7 @@ func writeFileSyncing(
 	ctx context.Context,
 	filename string,
 	data []byte,
-	eng storage.Engine,
+	fs fs.FS,
 	perm os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,
@@ -92,7 +92,7 @@ func writeFileSyncing(
 		sync = false
 	}
 
-	f, err := eng.Create(filename)
+	f, err := fs.Create(filename)
 	if err != nil {
 		if strings.Contains(err.Error(), "No such file or directory") {
 			return os.ErrNotExist
