@@ -11,7 +11,6 @@
 import { unset } from "src/util";
 import {
   ExecutionDetails,
-  StmtInsightEvent,
   getInsightFromCause,
   Insight,
   InsightExecEnum,
@@ -19,6 +18,7 @@ import {
   InsightRecommendation,
   InsightType,
   SchemaInsightEventFilters,
+  StmtInsightEvent,
   TxnInsightDetails,
   TxnInsightEvent,
   WorkloadInsightEventFilters,
@@ -389,6 +389,9 @@ export function getStmtInsightRecommendations(
     databaseName: insightDetails.databaseName,
     elapsedTimeMillis: insightDetails.elapsedTimeMillis,
     contentionTimeMs: insightDetails.contentionTime?.asMilliseconds(),
+    statementExecutionID: insightDetails.statementExecutionID,
+    transactionExecutionID: insightDetails.transactionExecutionID,
+    execType: InsightExecEnum.STATEMENT,
   };
 
   const recs: InsightRecommendation[] = insightDetails.insights?.map(insight =>
@@ -404,15 +407,16 @@ export function getTxnInsightRecommendations(
   if (!insightDetails) return [];
 
   const execDetails: ExecutionDetails = {
+    transactionExecutionID: insightDetails.transactionExecutionID,
     retries: insightDetails.retries,
     contentionTimeMs: insightDetails.contentionTime.asMilliseconds(),
     elapsedTimeMillis: insightDetails.elapsedTimeMillis,
+    execType: InsightExecEnum.TRANSACTION,
   };
   const recs: InsightRecommendation[] = [];
 
   insightDetails?.insights?.forEach(insight =>
     recs.push(getRecommendationForExecInsight(insight, execDetails)),
   );
-
   return recs;
 }

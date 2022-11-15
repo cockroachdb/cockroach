@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { useContext, useMemo } from "react";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import classNames from "classnames/bind";
 import _ from "lodash";
@@ -61,21 +61,38 @@ import {
 } from "src/statementsTable/statementsTable";
 import { Transaction } from "src/transactionsTable";
 import Long from "long";
-import { StatementsRequest } from "../api";
+import {
+  InsightRecommendation,
+  StatementsRequest,
+  TxnInsightsRequest,
+} from "../api";
+import {
+  getTxnInsightRecommendations,
+  InsightType,
+  TxnInsightEvent,
+} from "../insights";
 import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
+  timeScaleRangeToObj,
   timeScaleToString,
   toRoundedDateRange,
 } from "../timeScaleDropdown";
 import moment from "moment";
 
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
+import insightTableStyles from "../insightsTable/insightsTable.module.scss";
+import {
+  InsightsSortedTable,
+  makeInsightsColumns,
+} from "../insightsTable/insightsTable";
+import { CockroachCloudContext } from "../contexts";
 const { containerClass } = tableClasses;
 const cx = classNames.bind(statementsStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
+const insightsTableCx = classNames.bind(insightTableStyles);
 
 type Statement =
   protos.cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
@@ -94,12 +111,15 @@ export interface TransactionDetailsStateProps {
   transactionFingerprintId: string;
   isLoading: boolean;
   lastUpdated: moment.Moment | null;
+  transactionInsights: TxnInsightEvent[];
+  hasAdminRole?: UIConfigState["hasAdminRole"];
 }
 
 export interface TransactionDetailsDispatchProps {
   refreshData: (req?: StatementsRequest) => void;
   refreshNodes: () => void;
   refreshUserSQLRoles: () => void;
+  refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
 }
 
@@ -213,6 +233,8 @@ export class TransactionDetails extends React.Component<
   }
 
   refreshData = (prevTransactionFingerprintId: string): void => {
+    const insightsReq = timeScaleRangeToObj(this.props.timeScale);
+    this.props.refreshTransactionInsights(insightsReq);
     const req = statementsRequestFromProps(this.props);
     this.props.refreshData(req);
     this.getTransactionStateInfo(prevTransactionFingerprintId);
@@ -354,7 +376,11 @@ export class TransactionDetails extends React.Component<
               );
             }
 
-            const { isTenant, hasViewActivityRedactedRole } = this.props;
+            const {
+              isTenant,
+              hasViewActivityRedactedRole,
+              transactionInsights,
+            } = this.props;
             const { sortSetting, pagination } = this.state;
 
             const aggregatedStatements = aggregateStatements(
@@ -425,6 +451,30 @@ export class TransactionDetails extends React.Component<
             ) : (
               unavailableTooltip
             );
+
+            const isCockroachCloud = useContext(CockroachCloudContext);
+            const insightsColumns = useMemo(
+              () =>
+                makeInsightsColumns(
+                  isCockroachCloud,
+                  this.props.hasAdminRole,
+                  false,
+                ),
+              [isCockroachCloud],
+            );
+            const tableData: InsightRecommendation[] = [];
+            if (transactionInsights) {
+              const tableDataTypes = new Set<InsightType>();
+              transactionInsights.forEach(transaction => {
+                const rec = getTxnInsightRecommendations(transaction);
+                rec.forEach(entry => {
+                  if (!tableDataTypes.has(entry.type)) {
+                    tableData.push(entry);
+                    tableDataTypes.add(entry.type);
+                  }
+                });
+              });
+            }
 
             return (
               <React.Fragment>
@@ -508,6 +558,31 @@ export class TransactionDetails extends React.Component<
                       </SummaryCard>
                     </Col>
                   </Row>
+                  {tableData?.length && (
+                    <>
+                      <p
+                        className={summaryCardStylesCx(
+                          "summary--card__divider--large",
+                        )}
+                      />
+                      <Row gutter={24}>
+                        <Col className="gutter-row" span={24}>
+                          <InsightsSortedTable
+                            columns={insightsColumns}
+                            data={tableData}
+                            tableWrapperClassName={insightsTableCx(
+                              "sorted-table",
+                            )}
+                          />
+                        </Col>
+                      </Row>
+                    </>
+                  )}
+                  <p
+                    className={summaryCardStylesCx(
+                      "summary--card__divider--large",
+                    )}
+                  />
                   <TableStatistics
                     pagination={pagination}
                     totalCount={aggregatedStatements.length}
