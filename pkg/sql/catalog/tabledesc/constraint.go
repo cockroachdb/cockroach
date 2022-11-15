@@ -152,7 +152,9 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 					mutationState:      mutationState(cstMutation),
 					mutationIsRollback: cstMutation.IsRollback(),
 				},
-				desc: cst.ConstraintToUpdateDesc(),
+			}
+			if cc, ok := cst.(*constraint); ok {
+				backingStruct.desc = cc.desc
 			}
 			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 		}

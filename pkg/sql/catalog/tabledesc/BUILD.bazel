@@ -71,6 +71,7 @@ go_test(
     name = "tabledesc_test",
     size = "small",
     srcs = [
+        "constraint_test.go",
         "helpers_test.go",
         "index_test.go",
         "main_test.go",
