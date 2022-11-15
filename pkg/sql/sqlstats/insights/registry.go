@@ -86,6 +86,9 @@ func (r *lockingRegistry) ObserveTransaction(sessionID clusterunique.ID, transac
 		return
 	}
 	statements := r.popSessionStatements(sessionID)
+	if statements == nil {
+		return
+	}
 	defer statements.release()
 
 	var slowStatements util.FastIntSet

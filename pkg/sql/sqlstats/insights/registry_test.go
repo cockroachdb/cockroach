@@ -233,6 +233,12 @@ func TestRegistry(t *testing.T) {
 		observeStatementExecution(r, 10, slow)
 		assertInsightStatementIDs(t, r, []uint64{10, 9})
 	})
+
+	t.Run("txn with no stmts", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettings()
+		registry := newRegistry(st, &latencyThresholdDetector{st: st})
+		require.NotPanics(t, func() { registry.ObserveTransaction(session.ID, transaction) })
+	})
 }
 
 func observeStatementExecution(registry *lockingRegistry, idBase uint64, latencyInSeconds float64) {
