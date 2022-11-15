@@ -808,15 +808,25 @@ func getBackupDetailAndManifest(
 	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
 	defer mem.Close(ctx)
 
-	prevBackups, encryptionOptions, memSize, err := backupinfo.FetchPreviousBackups(ctx, &mem, user,
-		makeCloudStorage, backupDestination.PrevBackupURIs, *initialDetails.EncryptionOptions, &kmsEnv)
+	var prevBackups []backuppb.BackupManifest
+	var baseEncryptionOptions *jobspb.BackupEncryptionOptions
+	if len(backupDestination.PrevBackupURIs) != 0 {
+		var err error
+		baseEncryptionOptions, err = backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage,
+			backupDestination.PrevBackupURIs[0], *initialDetails.EncryptionOptions, &kmsEnv)
+		if err != nil {
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		}
 
-	if err != nil {
-		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		var memSize int64
+		prevBackups, memSize, err = backupinfo.GetBackupManifests(ctx, &mem, user,
+			makeCloudStorage, backupDestination.PrevBackupURIs, baseEncryptionOptions, &kmsEnv)
+
+		if err != nil {
+			return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err
+		}
+		defer mem.Shrink(ctx, memSize)
 	}
-	defer func() {
-		mem.Shrink(ctx, memSize)
-	}()
 
 	if len(prevBackups) > 0 {
 		baseManifest := prevBackups[0]
@@ -889,7 +899,7 @@ func getBackupDetailAndManifest(
 		backupDestination.ChosenSubdir,
 		backupDestination.URIsByLocalityKV,
 		prevBackups,
-		encryptionOptions,
+		baseEncryptionOptions,
 		&kmsEnv)
 	if err != nil {
 		return jobspb.BackupDetails{}, backuppb.BackupManifest{}, err

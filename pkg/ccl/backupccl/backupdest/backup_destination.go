@@ -97,6 +97,8 @@ type ResolvedDestination struct {
 	URIsByLocalityKV map[string]string
 
 	// PrevBackupURIs is the list of full paths for previous backups in the chain.
+	// This includes the base backup at index 0, and any subsequent incremental
+	// backups. This field will not be populated when running a full backup.
 	PrevBackupURIs []string
 }
 
@@ -535,14 +537,14 @@ func ResolveBackupManifests(
 	}
 	ownedMemSize += memSize
 
-	var prev []string
+	var incrementalBackups []string
 	if len(incStores) > 0 {
-		prev, err = FindPriorBackups(ctx, incStores[0], includeManifest)
+		incrementalBackups, err = FindPriorBackups(ctx, incStores[0], includeManifest)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
 	}
-	numLayers := len(prev) + 1
+	numLayers := len(incrementalBackups) + 1
 
 	defaultURIs = make([]string, numLayers)
 	mainBackupManifests = make([]backuppb.BackupManifest, numLayers)
@@ -571,14 +573,14 @@ func ResolveBackupManifests(
 			}
 		}
 
-		// For each backup layer we construct the default URI. We don't load the
-		// manifests in this loop since we want to do that concurrently.
-		for i := range prev {
-			// prev[i] is the path to the manifest file itself for layer i -- the
+		// For each incremental backup layer we construct the default URI. We don't
+		// load the manifests in this loop since we want to do that concurrently.
+		for i := range incrementalBackups {
+			// incrementalBackups[i] is the path to the manifest file itself for layer i -- the
 			// dirname piece of that path is the subdirectory in each of the
 			// partitions in which we'll also expect to find a partition manifest.
 			// Recall full inc URI is <prefix>/<subdir>/<incSubDir>
-			incSubDir := path.Dir(prev[i])
+			incSubDir := path.Dir(incrementalBackups[i])
 			u := *baseURIs[0] // NB: makes a copy to avoid mutating the baseURI.
 			u.Path = backuputils.JoinURLPath(u.Path, incSubDir)
 			defaultURIs[i+1] = u.String()
@@ -586,28 +588,22 @@ func ResolveBackupManifests(
 
 		// Load the default backup manifests for each backup layer, this is done
 		// concurrently.
-		enc := jobspb.BackupEncryptionOptions{
-			Mode: jobspb.EncryptionMode_None,
-		}
-		if encryption != nil {
-			enc = *encryption
-		}
-		defaultManifestsForEachLayer, _, memSize, err := backupinfo.FetchPreviousBackups(ctx, mem, user,
-			mkStore, defaultURIs[1:], enc, kmsEnv)
+		defaultManifestsForEachLayer, memSize, err := backupinfo.GetBackupManifests(ctx, mem, user,
+			mkStore, defaultURIs, encryption, kmsEnv)
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
 		ownedMemSize += memSize
 
-		// Iterate over the layers one last time to memoize the loaded manifests and
-		// read the locality info.
+		// Iterate over the incremental backups one last time to memoize the loaded
+		// manifests and read the locality info.
 		//
 		// TODO(adityamaru): Parallelize the loading of the locality descriptors.
-		for i := range prev {
+		for i := range incrementalBackups {
 			// The manifest for incremental layer i slots in at i+1 since the full
 			// backup manifest occupies index 0 in `mainBackupManifests`.
-			mainBackupManifests[i+1] = defaultManifestsForEachLayer[i]
-			incSubDir := path.Dir(prev[i])
+			mainBackupManifests[i+1] = defaultManifestsForEachLayer[i+1]
+			incSubDir := path.Dir(incrementalBackups[i])
 			partitionURIs := make([]string, numPartitions)
 			for j := range baseURIs {
 				u := *baseURIs[j] // NB: makes a copy to avoid mutating the baseURI.
@@ -616,7 +612,7 @@ func ResolveBackupManifests(
 			}
 
 			localityInfo[i+1], err = backupinfo.GetLocalityInfo(ctx, incStores, partitionURIs,
-				defaultManifestsForEachLayer[i], encryption, kmsEnv, incSubDir)
+				defaultManifestsForEachLayer[i+1], encryption, kmsEnv, incSubDir)
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
