@@ -1191,7 +1191,7 @@ var regularBuiltins = map[string]builtinDefinition{
 					return nil, pgerror.New(pgcode.InvalidParameterValue,
 						"only 'hex', 'escape', and 'base64' formats are supported for decode()")
 				}
-				res, err := lex.DecodeRawBytesToByteArray(data, be)
+				res, err := lex.DecodeRawBytesToByteArray([]byte(data), be)
 				if err != nil {
 					return nil, err
 				}

@@ -373,7 +373,7 @@ func ParseDBool(s string) (*DBool, error) {
 // the beginning), and the escaped format, which supports "\\" and
 // octal escapes.
 func ParseDByte(s string) (*DBytes, error) {
-	res, err := lex.DecodeRawBytesToByteArrayAuto([]byte(s))
+	res, err := lex.DecodeRawBytesToByteArrayAuto(encoding.UnsafeConvertStringToBytes(s))
 	if err != nil {
 		return nil, MakeParseError(s, types.Bytes, err)
 	}

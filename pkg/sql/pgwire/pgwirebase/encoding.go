@@ -393,7 +393,7 @@ func DecodeDatum(
 			if err != nil {
 				return nil, tree.MakeParseError(string(b), typ, err)
 			}
-			return tree.NewDBytes(tree.DBytes(res)), nil
+			return tree.NewDBytes(tree.DBytes(unsafeBytesToString(res))), nil
 		case oid.T_timestamp:
 			d, _, err := tree.ParseDTimestamp(evalCtx, string(b), time.Microsecond)
 			if err != nil {
@@ -1103,3 +1103,9 @@ const (
 	// AF_NET + 1.
 	PGBinaryIPv6family byte = 3
 )
+
+// unsafeBytesToString constructs a string from a byte slice. It is
+// critical that the byte slice not be modified.
+func unsafeBytesToString(data []byte) string {
+	return *(*string)(unsafe.Pointer(&data))
+}

@@ -143,10 +143,12 @@ func EncodeByteArrayToRawBytes(data string, be BytesEncodeFormat, skipHexPrefix 
 // When using the Hex format, the caller is responsible for skipping the
 // "\x" prefix, if any. See DecodeRawBytesToByteArrayAuto() below for
 // an alternative.
-func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error) {
+func DecodeRawBytesToByteArray(data []byte, be BytesEncodeFormat) ([]byte, error) {
 	switch be {
 	case BytesEncodeHex:
-		return hex.DecodeString(data)
+		res := make([]byte, hex.DecodedLen(len(data)))
+		n, err := hex.Decode(res, data)
+		return res[:n], err
 
 	case BytesEncodeEscape:
 		// PostgreSQL does not allow all the escapes formats recognized by
@@ -188,7 +190,9 @@ func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error
 		return res, nil
 
 	case BytesEncodeBase64:
-		return base64.StdEncoding.DecodeString(data)
+		res := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+		n, err := base64.StdEncoding.Decode(res, data)
+		return res[:n], err
 
 	default:
 		return nil, errors.AssertionFailedf("unhandled format: %s", be)
@@ -200,9 +204,9 @@ func DecodeRawBytesToByteArray(data string, be BytesEncodeFormat) ([]byte, error
 // and escape.
 func DecodeRawBytesToByteArrayAuto(data []byte) ([]byte, error) {
 	if len(data) >= 2 && data[0] == '\\' && (data[1] == 'x' || data[1] == 'X') {
-		return DecodeRawBytesToByteArray(string(data[2:]), BytesEncodeHex)
+		return DecodeRawBytesToByteArray(data[2:], BytesEncodeHex)
 	}
-	return DecodeRawBytesToByteArray(string(data), BytesEncodeEscape)
+	return DecodeRawBytesToByteArray(data, BytesEncodeEscape)
 }
 
 func (f BytesEncodeFormat) String() string {
