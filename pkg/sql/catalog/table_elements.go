@@ -71,9 +71,9 @@ type Mutation interface {
 	// nil otherwise.
 	AsIndex() Index
 
-	// AsConstraint returns the corresponding ConstraintToUpdate if the mutation
+	// AsConstraint returns the corresponding Constraint if the mutation
 	// is on a constraint, nil otherwise.
-	AsConstraint() ConstraintToUpdate
+	AsConstraint() Constraint
 
 	// AsPrimaryKeySwap returns the corresponding PrimaryKeySwap if the mutation
 	// is a primary key swap, nil otherwise.
@@ -396,12 +396,17 @@ type Column interface {
 	GetGeneratedAsIdentitySequenceOption(defaultIntSize int32) (*descpb.TableDescriptor_SequenceOpts, error)
 }
 
-// ConstraintToUpdate is an interface around a constraint mutation.
-type ConstraintToUpdate interface {
+// Constraint is an interface around a constraint.
+type Constraint interface {
 	TableElementMaybeMutation
 
-	// ConstraintToUpdateDesc returns the underlying protobuf descriptor.
+	// ConstraintToUpdateDesc returns the underlying protobuf descriptor
+	// for non-index-backed-constraints (CHECK, FK, or UNIQUE_WITHOUT_INDEX).
 	ConstraintToUpdateDesc() *descpb.ConstraintToUpdate
+
+	// IndexDesc returns the underlying protobuf descriptor for
+	// index-backed-constraints (PRIMARY KEY or UNIQUE).
+	IndexDesc() *descpb.IndexDescriptor
 
 	// GetName returns the name of this constraint update mutation.
 	GetName() string
@@ -419,6 +424,12 @@ type ConstraintToUpdate interface {
 	// without index constraint.
 	IsUniqueWithoutIndex() bool
 
+	// IsPrimaryKey returns true iff this is an index-backed PRIMARY KEY constraint.
+	IsPrimaryKey() bool
+
+	// IsUniqueConstraint returns true iff this is an index-backed UNIQUE constraint.
+	IsUniqueConstraint() bool
+
 	// Check returns the underlying check constraint, if there is one.
 	Check() descpb.TableDescriptor_CheckConstraint
 
@@ -432,8 +443,19 @@ type ConstraintToUpdate interface {
 	// there is one.
 	UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint
 
+	// PrimaryKey returns the index descriptor backing the PRIMARY KEY constraint,
+	// if there is one.
+	PrimaryKey() Index
+
+	// Unique returns the index descriptor backing the UNIQUE constraint,
+	// if there is one.
+	Unique() Index
+
 	// GetConstraintID returns the ID for the constraint.
 	GetConstraintID() descpb.ConstraintID
+
+	// GetConstraintValidity returns the validity of this constraint.
+	GetConstraintValidity() descpb.ConstraintValidity
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.

@@ -236,9 +236,9 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 	var addedIndexes []descpb.IndexID
 	var temporaryIndexes []descpb.IndexID
 
-	var constraintsToDrop []catalog.ConstraintToUpdate
-	var constraintsToAddBeforeValidation []catalog.ConstraintToUpdate
-	var constraintsToValidate []catalog.ConstraintToUpdate
+	var constraintsToDrop []catalog.Constraint
+	var constraintsToAddBeforeValidation []catalog.Constraint
+	var constraintsToValidate []catalog.Constraint
 
 	var viewToRefresh catalog.MaterializedViewRefresh
 
@@ -405,7 +405,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 // validation and be added directly. A Check Constraint can skip validation if it's
 // created for a shard column internally.
 func shouldSkipConstraintValidation(
-	tableDesc catalog.TableDescriptor, c catalog.ConstraintToUpdate,
+	tableDesc catalog.TableDescriptor, c catalog.Constraint,
 ) (bool, error) {
 	if !c.IsCheck() {
 		return false, nil
@@ -434,11 +434,11 @@ func shouldSkipConstraintValidation(
 // the given constraint removed from it, and waits until the entire cluster is
 // on the new version of the table descriptor. It returns the new table descs.
 func (sc *SchemaChanger) dropConstraints(
-	ctx context.Context, constraints []catalog.ConstraintToUpdate,
+	ctx context.Context, constraints []catalog.Constraint,
 ) (map[descpb.ID]catalog.TableDescriptor, error) {
 	log.Infof(ctx, "dropping %d constraints", len(constraints))
 
-	fksByBackrefTable := make(map[descpb.ID][]catalog.ConstraintToUpdate)
+	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
 		if c.IsForeignKey() {
 			id := c.ForeignKey().ReferencedTableID
@@ -577,11 +577,11 @@ func (sc *SchemaChanger) dropConstraints(
 // given constraint added to it, and waits until the entire cluster is on
 // the new version of the table descriptor.
 func (sc *SchemaChanger) addConstraints(
-	ctx context.Context, constraints []catalog.ConstraintToUpdate,
+	ctx context.Context, constraints []catalog.Constraint,
 ) error {
 	log.Infof(ctx, "adding %d constraints", len(constraints))
 
-	fksByBackrefTable := make(map[descpb.ID][]catalog.ConstraintToUpdate)
+	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
 		if c.IsForeignKey() {
 			id := c.ForeignKey().ReferencedTableID
@@ -717,7 +717,7 @@ func (sc *SchemaChanger) addConstraints(
 // This operates over multiple goroutines concurrently and is thus not
 // able to reuse the original kv.Txn safely, so it makes its own.
 func (sc *SchemaChanger) validateConstraints(
-	ctx context.Context, constraints []catalog.ConstraintToUpdate,
+	ctx context.Context, constraints []catalog.Constraint,
 ) error {
 	if lease.TestingTableLeasesAreDisabled() {
 		return nil
@@ -1526,13 +1526,13 @@ func (e InvalidIndexesError) Error() string {
 func ValidateCheckConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
-	constraint *descpb.ConstraintDetail,
+	constraint catalog.Constraint,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-	if constraint.CheckConstraint == nil {
-		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetConstraintName())
+	if !constraint.IsCheck() {
+		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetName())
 	}
 
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
@@ -1551,7 +1551,7 @@ func ValidateCheckConstraint(
 		defer func() { descriptors.ReleaseAll(ctx) }()
 
 		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
-			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, constraint.CheckConstraint.Expr,
+			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, constraint.Check().Expr,
 				tableDesc.(*tabledesc.Mutable), ie)
 		})
 	})
@@ -2352,7 +2352,7 @@ func runSchemaChangesInTxn(
 	// in the world of transactional schema changes.
 
 	// Collect constraint mutations to process later.
-	var constraintAdditionMutations []catalog.ConstraintToUpdate
+	var constraintAdditionMutations []catalog.Constraint
 
 	// We use a range loop here as the processing of some mutations
 	// such as the primary key swap mutations result in queueing more
