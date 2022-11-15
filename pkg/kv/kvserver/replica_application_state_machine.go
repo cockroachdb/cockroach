@@ -151,6 +151,18 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	return b
 }
 
+type appBatch struct {
+	// batch accumulates writes implied by the raft entries in this batch.
+	batch storage.Batch
+	// state is this batch's view of the replica's state. It may be updated
+	// as commands are staged into this batch.
+	state kvserverpb.ReplicaState
+	// changeRemovesReplica tracks whether the command in the batch (there must
+	// be only one) removes this replica from the range. If this is the case,
+	// the command that does so effectively removes the replica.
+	changeRemovesReplica bool
+}
+
 // replicaAppBatch implements the apply.Batch interface.
 //
 // The structure accumulates state due to the application of raft commands.
@@ -159,15 +171,10 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 // to the current view of ReplicaState and staged in the batch. The batch is
 // committed to the state machine's storage engine atomically.
 type replicaAppBatch struct {
+	appBatch
 	r  *Replica
 	sm *replicaStateMachine
 
-	// batch accumulates writes implied by the raft entries in this batch.
-	batch storage.Batch
-	// state is this batch's view of the replica's state. It is copied from
-	// under the Replica.mu when the batch is initialized and is updated in
-	// stageTrivialReplicatedEvalResult.
-	state kvserverpb.ReplicaState
 	// closedTimestampSetter maintains historical information about the
 	// advancement of the closed timestamp.
 	closedTimestampSetter closedTimestampSetterInfo
@@ -176,9 +183,6 @@ type replicaAppBatch struct {
 	// replicaState other than Stats are overwritten completely rather than
 	// updated in-place.
 	stats enginepb.MVCCStats
-	// changeRemovesReplica tracks whether the command in the batch (there must
-	// be only one) removes this replica from the range.
-	changeRemovesReplica bool
 
 	// Statistics.
 	entries                 int
@@ -906,8 +910,8 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 // The batch performs the bare-minimum amount of work to be able to
 // determine whether a replicated command should be rejected or applied.
 type ephemeralReplicaAppBatch struct {
-	r     *Replica
 	state kvserverpb.ReplicaState
+	r     *Replica
 }
 
 // Stage implements the apply.Batch interface.
