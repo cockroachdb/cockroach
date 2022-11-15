@@ -1123,7 +1123,7 @@ func (s *logStore) storeEntries(
 			return logstore.RaftState{}, errors.Wrap(err, "during sideloading")
 		}
 		state.ByteSize += sideLoadedEntriesSize
-		if state, err = logAppend(
+		if state, err = logstore.LogAppend(
 			ctx, s.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			return logstore.RaftState{}, errors.Wrap(err, "during append")
