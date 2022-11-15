@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -40,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -89,26 +87,6 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 		"Setting to true risks data loss or data corruption on server crashes. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	false,
-)
-
-const (
-	// MaxCommandSizeFloor is the minimum allowed value for the
-	// kv.raft.command.max_size cluster setting.
-	MaxCommandSizeFloor = 4 << 20 // 4MB
-)
-
-// MaxCommandSize wraps "kv.raft.command.max_size".
-var MaxCommandSize = settings.RegisterByteSizeSetting(
-	settings.TenantWritable,
-	"kv.raft.command.max_size",
-	"maximum size of a raft command",
-	kvserverbase.MaxCommandSizeDefault,
-	func(size int64) error {
-		if size < MaxCommandSizeFloor {
-			return fmt.Errorf("max_size must be greater than %s", humanizeutil.IBytes(MaxCommandSizeFloor))
-		}
-		return nil
-	},
 )
 
 // StrictGCEnforcement controls whether requests are rejected based on the GC

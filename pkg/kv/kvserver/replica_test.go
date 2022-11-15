@@ -9576,10 +9576,10 @@ func TestCommandTooLarge(t *testing.T) {
 
 	st := tc.store.cfg.Settings
 	st.Manual.Store(true)
-	MaxCommandSize.Override(ctx, &st.SV, 1024)
+	kvserverbase.MaxCommandSize.Override(ctx, &st.SV, 1024)
 
 	args := putArgs(roachpb.Key("k"),
-		[]byte(strings.Repeat("a", int(MaxCommandSize.Get(&st.SV)))))
+		[]byte(strings.Repeat("a", int(kvserverbase.MaxCommandSize.Get(&st.SV)))))
 	if _, pErr := tc.SendWrapped(&args); !testutils.IsPError(pErr, "command is too large") {
 		t.Fatalf("did not get expected error: %v", pErr)
 	}
