@@ -26,6 +26,7 @@ go_library(
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//jsonpb",
         "@com_github_gogo_protobuf//proto",
         "@com_github_lib_pq//oid",
