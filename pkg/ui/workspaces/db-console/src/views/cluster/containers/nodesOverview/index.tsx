@@ -35,7 +35,6 @@ import {
   SortSetting,
   util,
 } from "@cockroachlabs/cluster-ui";
-import { DATE_FORMAT_24_UTC, Percentage } from "src/util/format";
 import { FixLong } from "src/util/fixLong";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { LocalityTier } from "src/redux/localities";
@@ -291,7 +290,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
         </NodelistCapacityUsageTooltip>
       ),
       render: (_text: string, record: NodeStatusRow) =>
-        Percentage(record.usedCapacity, record.availableCapacity),
+        util.Percentage(record.usedCapacity, record.availableCapacity),
       sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedCapacity / a.availableCapacity -
         b.usedCapacity / b.availableCapacity,
@@ -302,7 +301,7 @@ export class NodeList extends React.Component<LiveNodeListProps> {
       key: "memoryUse",
       title: <MemoryUseTooltip>Memory Use</MemoryUseTooltip>,
       render: (_text: string, record: NodeStatusRow) =>
-        Percentage(record.usedMemory, record.availableMemory),
+        util.Percentage(record.usedMemory, record.availableMemory),
       sorter: (a: NodeStatusRow, b: NodeStatusRow) =>
         a.usedMemory / a.availableMemory - b.usedMemory / b.availableMemory,
       className: "column--align-right",
@@ -442,7 +441,7 @@ class DecommissionedNodeList extends React.Component<DecommissionedNodeListProps
       key: "decommissionedSince",
       title: "decommissioned on",
       render: (_text: string, record: DecommissionedNodeStatusRow) =>
-        record.decommissionedDate.format(DATE_FORMAT_24_UTC),
+        record.decommissionedDate.format(util.DATE_FORMAT_24_UTC),
     },
     {
       key: "status",
