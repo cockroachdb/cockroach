@@ -256,6 +256,21 @@ export function HexStringToInt64String(s: string): string {
   return dec;
 }
 
+// FixFingerprintHexValue adds the leading 0 on strings with hex value that
+// have a length < 16. This can occur because it was returned like this from the DB
+// or because the hex value was generated using `.toString(16)` (which removes the
+// leading zeros).
+// The zeros need to be added back to match the value on our sql stats tables.
+export function FixFingerprintHexValue(s: string): string {
+  if (s === undefined || s === null || s.length === 0) {
+    return "";
+  }
+  while (s.length < 16) {
+    s = `0${s}`;
+  }
+  return s;
+}
+
 // capitalize capitalizes a string.
 export function capitalize(str: string): string {
   if (!str) return str;

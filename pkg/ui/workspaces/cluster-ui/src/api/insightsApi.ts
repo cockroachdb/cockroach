@@ -26,6 +26,7 @@ import {
   TransactionInsightEventDetails,
 } from "src/insights";
 import moment from "moment";
+import { FixFingerprintHexValue } from "../util";
 
 // Transaction insight events.
 
@@ -98,7 +99,7 @@ function transactionContentionResultsToEventState(
 
   return response.execution.txn_results[0].rows.map(row => ({
     transactionID: row.waiting_txn_id,
-    fingerprintID: row.waiting_txn_fingerprint_id,
+    fingerprintID: FixFingerprintHexValue(row.waiting_txn_fingerprint_id),
     startTime: moment(row.collection_ts).utc(),
     contentionDuration: moment.duration(row.contention_duration),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
@@ -144,7 +145,7 @@ function txnStmtFingerprintsResultsToEventState(
   }
 
   return response.execution.txn_results[0].rows.map(row => ({
-    fingerprintID: row.transaction_fingerprint_id,
+    fingerprintID: FixFingerprintHexValue(row.transaction_fingerprint_id),
     queryIDs: row.query_ids,
     application: row.app_name,
   }));
@@ -179,7 +180,7 @@ function fingerprintStmtsResultsToEventState(
     return [];
   }
   return response.execution.txn_results[0].rows.map(row => ({
-    stmtFingerprintID: row.statement_fingerprint_id,
+    stmtFingerprintID: FixFingerprintHexValue(row.statement_fingerprint_id),
     query: row.query,
   }));
 }
@@ -203,7 +204,9 @@ export function getTransactionInsightEventState(): Promise<TransactionInsightEve
       return;
     }
     const res = contentionResults.execution.txn_results[0].rows;
-    const txnFingerprintIDs = res.map(row => row.waiting_txn_fingerprint_id);
+    const txnFingerprintIDs = res.map(row =>
+      FixFingerprintHexValue(row.waiting_txn_fingerprint_id),
+    );
     const txnFingerprintRequest: SqlExecutionRequest = {
       statements: [
         {
@@ -374,7 +377,9 @@ function transactionContentionDetailsResultsToEventState(
     totalContentionTime += contentionTimeInMs;
     blockingContentionDetails[idx] = {
       blockingExecutionID: value.blocking_txn_id,
-      blockingFingerprintID: value.blocking_txn_fingerprint_id,
+      blockingFingerprintID: FixFingerprintHexValue(
+        value.blocking_txn_fingerprint_id,
+      ),
       blockingQueries: null,
       collectionTimeStamp: moment(value.collection_ts).utc(),
       contentionTimeMs: contentionTimeInMs,
@@ -392,7 +397,7 @@ function transactionContentionDetailsResultsToEventState(
   const row = resultsRows[0];
   return {
     executionID: row.waiting_txn_id,
-    fingerprintID: row.waiting_txn_fingerprint_id,
+    fingerprintID: FixFingerprintHexValue(row.waiting_txn_fingerprint_id),
     startTime: moment(row.collection_ts).utc(),
     totalContentionTime: totalContentionTime,
     blockingContentionDetails: blockingContentionDetails,
@@ -423,7 +428,9 @@ export function getTransactionInsightEventDetailsState(
       return;
     }
     const res = contentionResults.execution.txn_results[0].rows;
-    const waitingTxnFingerprintId = res[0].waiting_txn_fingerprint_id;
+    const waitingTxnFingerprintId = FixFingerprintHexValue(
+      res[0].waiting_txn_fingerprint_id,
+    );
     const waitingTxnFingerprintRequest: SqlExecutionRequest = {
       statements: [
         {
@@ -455,7 +462,9 @@ export function getTransactionInsightEventDetailsState(
         let blockingTxnFingerprintId: string[] = [];
         contentionResults.execution.txn_results.forEach(txnResult => {
           blockingTxnFingerprintId = blockingTxnFingerprintId.concat(
-            txnResult.rows.map(x => x.blocking_txn_fingerprint_id),
+            txnResult.rows.map(x =>
+              FixFingerprintHexValue(x.blocking_txn_fingerprint_id),
+            ),
           );
         });
 
@@ -608,7 +617,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
     const end = moment.utc(row.end_time);
     return {
       transactionID: row.txn_id,
-      transactionFingerprintID: row.txn_fingerprint_id,
+      transactionFingerprintID: FixFingerprintHexValue(row.txn_fingerprint_id),
       implicitTxn: row.implicit_txn,
       query: row.query,
       startTime: start,
@@ -618,7 +627,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       application: row.app_name,
       username: row.user_name,
       statementID: row.stmt_id,
-      statementFingerprintID: row.stmt_fingerprint_id,
+      statementFingerprintID: FixFingerprintHexValue(row.stmt_fingerprint_id),
       sessionID: row.session_id,
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
