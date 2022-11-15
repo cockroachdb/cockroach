@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.txt.
@@ -7,8 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-
-import { longToInt } from "./fixLong";
 
 export const kibi = 1024;
 export const byteUnits: string[] = [
@@ -23,7 +21,6 @@ export const byteUnits: string[] = [
   "YiB",
 ];
 export const durationUnits: string[] = ["ns", "µs", "ms", "s"];
-export const countUnits: string[] = ["", "k", "m", "b"];
 
 interface UnitValue {
   value: number;
@@ -39,7 +36,7 @@ export function ComputePrefixExponent(
   value: number,
   prefixMultiple: number,
   prefixList: string[],
-): number {
+) {
   // Compute the metric prefix that will be used to label the axis.
   let maxUnits = Math.abs(value);
   let prefixScale: number;
@@ -76,18 +73,6 @@ export function BytesToUnitValue(bytes: number): UnitValue {
 }
 
 /**
- * BytesWithPrecision is like Bytes, but accepts a precision parameter
- * indicating how many digits after the decimal point are desired.
- */
-export function BytesWithPrecision(bytes: number, precision: number): string {
-  const unitVal = BytesToUnitValue(bytes);
-  if (!unitVal.value) {
-    return "0 B";
-  }
-  return unitVal.value.toFixed(precision) + " " + unitVal.units;
-}
-
-/**
  * Bytes creates a string representation for a number of bytes. For
  * large numbers of bytes, the value will be converted into a large unit
  * (e.g. Kibibytes, Mebibytes).
@@ -100,10 +85,21 @@ export function Bytes(bytes: number): string {
 }
 
 /**
+ * BytesWithPrecision is like Bytes, but accepts a precision parameter
+ * indicating how many digits after the decimal point are desired.
+ */
+export function BytesWithPrecision(bytes: number, precision: number): string {
+  const unitVal = BytesToUnitValue(bytes);
+  if (!unitVal.value) {
+    return "0 B";
+  }
+  return unitVal.value.toFixed(precision) + " " + unitVal.units;
+}
+
+/**
  * Cast bytes to provided scale units
  */
-// tslint:disable-next-line: variable-name
-export const BytesFitScale = (scale: string) => (bytes: number): string => {
+export const BytesFitScale = (scale: string) => (bytes: number) => {
   if (!bytes) {
     return `0.00 ${scale}`;
   }
@@ -113,21 +109,12 @@ export const BytesFitScale = (scale: string) => (bytes: number): string => {
 
 /**
  * Percentage creates a string representation of a fraction as a percentage.
- * Accepts a precision parameter as optional indicating how many digits
- * after the decimal point are desired. (e.g. precision 2 returns 8.37 %)
  */
-export function Percentage(
-  numerator: number,
-  denominator: number,
-  precision?: number,
-): string {
+export function Percentage(numerator: number, denominator: number): string {
   if (denominator === 0) {
     return "--%";
   }
-  if (precision) {
-    return ((numerator / denominator) * 100).toFixed(precision) + " %";
-  }
-  return Math.floor((numerator / denominator) * 100).toString() + " %";
+  return Math.floor((numerator / denominator) * 100).toString() + "%";
 }
 
 /**
@@ -156,10 +143,7 @@ export function Duration(nanoseconds: number): string {
 /**
  * Cast nanoseconds to provided scale units
  */
-// tslint:disable-next-line: variable-name
-export const DurationFitScale = (scale: string) => (
-  nanoseconds: number,
-): string => {
+export const DurationFitScale = (scale: string) => (nanoseconds: number) => {
   if (!nanoseconds) {
     return `0.00 ${scale}`;
   }
@@ -168,53 +152,9 @@ export const DurationFitScale = (scale: string) => (
 };
 
 export const DATE_FORMAT = "MMM DD, YYYY [at] H:mm";
+
+/**
+ * Alternate 24 hour UTC format
+ */
 export const DATE_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm UTC";
 export const DATE_WITH_SECONDS_FORMAT_24_UTC = "MMM DD, YYYY [at] H:mm:ss UTC";
-
-export function RenderCount(yesCount: Long, totalCount: Long): string {
-  if (longToInt(yesCount) == 0) {
-    return "No";
-  }
-  if (longToInt(yesCount) == longToInt(totalCount)) {
-    return "Yes";
-  }
-  const noCount = longToInt(totalCount) - longToInt(yesCount);
-  return `${longToInt(yesCount)} Yes / ${noCount} No`;
-}
-
-/**
- * ComputeCountScale calculates an appropriate scale factor and unit to use
- * to display a given count value, without actually converting the value.
- */
-function ComputeCountScale(count: number): UnitValue {
-  const scale = ComputePrefixExponent(count, 1000, countUnits);
-  return {
-    value: Math.pow(1000, scale),
-    units: countUnits[scale],
-  };
-}
-
-/**
- * Count creates a string representation for a count.
- */
-export function Count(count: number): string {
-  const scale = ComputeCountScale(count);
-  const unitVal = count / scale.value;
-  const fractionDigits = Number.isInteger(unitVal) ? 0 : 1;
-  return unitVal.toFixed(fractionDigits) + " " + scale.units;
-}
-
-// FixFingerprintHexValue adds the leading 0 on strings with hex value that
-// have a length < 16. This can occur because it was returned like this from the DB
-// or because the hex value was generated using `.toString(16)` (which removes the
-// leading zeros).
-// The zeros need to be added back to match the value on our sql stats tables.
-export function FixFingerprintHexValue(s: string): string {
-  if (s === undefined || s === null || s.length === 0) {
-    return "";
-  }
-  while (s.length < 16) {
-    s = `0${s}`;
-  }
-  return s;
-}

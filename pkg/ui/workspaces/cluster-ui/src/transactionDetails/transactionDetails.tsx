@@ -39,6 +39,7 @@ import { SummaryCard } from "../summaryCard";
 import {
   Bytes,
   calculateTotalWorkload,
+  FixFingerprintHexValue,
   Duration,
   formatNumberForDisplay,
 } from "src/util";
@@ -366,6 +367,18 @@ export class TransactionDetails extends React.Component<
                             {formatNumberForDisplay(
                               transactionStats?.service_lat.mean,
                               duration,
+                            )}
+                          </Text>
+                        </div>
+                        <div
+                          className={summaryCardStylesCx("summary--card__item")}
+                        >
+                          <Heading type="h5">Fingerprint ID</Heading>
+                          <Text>
+                            {FixFingerprintHexValue(
+                              transaction?.stats_data.transaction_fingerprint_id.toString(
+                                16,
+                              ),
                             )}
                           </Text>
                         </div>
