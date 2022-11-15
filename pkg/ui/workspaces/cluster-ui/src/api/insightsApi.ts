@@ -26,6 +26,7 @@ import {
   TransactionInsightEventDetails,
 } from "src/insights";
 import moment from "moment";
+import { CheckHexValue } from "../util";
 
 // Transaction insight events.
 
@@ -98,7 +99,7 @@ function transactionContentionResultsToEventState(
 
   return response.execution.txn_results[0].rows.map(row => ({
     transactionID: row.waiting_txn_id,
-    fingerprintID: row.waiting_txn_fingerprint_id,
+    fingerprintID: CheckHexValue(row.waiting_txn_fingerprint_id),
     startTime: moment(row.collection_ts).utc(),
     contentionDuration: moment.duration(row.contention_duration),
     contentionThreshold: moment.duration(row.threshold).asMilliseconds(),
@@ -144,7 +145,7 @@ function txnStmtFingerprintsResultsToEventState(
   }
 
   return response.execution.txn_results[0].rows.map(row => ({
-    fingerprintID: row.transaction_fingerprint_id,
+    fingerprintID: CheckHexValue(row.transaction_fingerprint_id),
     queryIDs: row.query_ids,
     application: row.app_name,
   }));
@@ -374,7 +375,7 @@ function transactionContentionDetailsResultsToEventState(
     totalContentionTime += contentionTimeInMs;
     blockingContentionDetails[idx] = {
       blockingExecutionID: value.blocking_txn_id,
-      blockingFingerprintID: value.blocking_txn_fingerprint_id,
+      blockingFingerprintID: CheckHexValue(value.blocking_txn_fingerprint_id),
       blockingQueries: null,
       collectionTimeStamp: moment(value.collection_ts).utc(),
       contentionTimeMs: contentionTimeInMs,
@@ -392,7 +393,7 @@ function transactionContentionDetailsResultsToEventState(
   const row = resultsRows[0];
   return {
     executionID: row.waiting_txn_id,
-    fingerprintID: row.waiting_txn_fingerprint_id,
+    fingerprintID: CheckHexValue(row.waiting_txn_fingerprint_id),
     startTime: moment(row.collection_ts).utc(),
     totalContentionTime: totalContentionTime,
     blockingContentionDetails: blockingContentionDetails,
@@ -608,7 +609,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
     const end = moment.utc(row.end_time);
     return {
       transactionID: row.txn_id,
-      transactionFingerprintID: row.txn_fingerprint_id,
+      transactionFingerprintID: CheckHexValue(row.txn_fingerprint_id),
       implicitTxn: row.implicit_txn,
       query: row.query,
       startTime: start,
@@ -618,7 +619,7 @@ function getStatementInsightsFromClusterExecutionInsightsResponse(
       application: row.app_name,
       username: row.user_name,
       statementID: row.stmt_id,
-      statementFingerprintID: row.stmt_fingerprint_id,
+      statementFingerprintID: CheckHexValue(row.stmt_fingerprint_id),
       sessionID: row.session_id,
       isFullScan: row.full_scan,
       rowsRead: row.rows_read,
