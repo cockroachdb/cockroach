@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptprovider"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/obs"
 	"github.com/cockroachdb/cockroach/pkg/obsservice/obspb"
@@ -354,12 +355,8 @@ func startTenantInternal(
 	args.eventsServer.SetResourceInfo(clusterID, int32(instanceID), "unknown" /* version */)
 
 	externalUsageFn := func(ctx context.Context) multitenant.ExternalUsage {
-		userTimeMillis, sysTimeMillis, err := status.GetCPUTime(ctx)
-		if err != nil {
-			log.Ops.Errorf(ctx, "unable to get cpu usage: %v", err)
-		}
 		return multitenant.ExternalUsage{
-			CPUSecs:           float64(userTimeMillis+sysTimeMillis) * 1e-3,
+			CPUSecs:           multitenantcpu.GetCPUSeconds(ctx),
 			PGWireEgressBytes: s.pgServer.BytesOut(),
 		}
 	}
@@ -710,4 +707,12 @@ func (noopTenantSideCostController) OnExternalIOWait(
 func (noopTenantSideCostController) OnExternalIO(
 	ctx context.Context, usage multitenant.ExternalIOUsage,
 ) {
+}
+
+func (noopTenantSideCostController) GetCPUMovingAvg() float64 {
+	return 0
+}
+
+func (noopTenantSideCostController) GetCostConfig() *tenantcostmodel.Config {
+	return nil
 }
