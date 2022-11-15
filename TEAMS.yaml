@@ -39,6 +39,10 @@ cockroachdb/kv:
     cockroachdb/kv-triage: roachtest
     cockroachdb/kv-prs: other
   triage_column_id: 14242655
+cockroachdb/replication:
+  aliases:
+    cockroachdb/repl-prs: other
+  label: T-kv-replication
 cockroachdb/geospatial:
   triage_column_id: 9487269
 cockroachdb/dev-inf:
