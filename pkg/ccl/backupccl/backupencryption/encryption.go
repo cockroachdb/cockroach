@@ -237,7 +237,7 @@ func MakeNewEncryptionOptions(
 		encryptionInfo = &jobspb.EncryptionInfo{Salt: salt}
 		encryptionOptions = &jobspb.BackupEncryptionOptions{
 			Mode: jobspb.EncryptionMode_Passphrase,
-			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), salt),
+			Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrase), salt),
 		}
 	case jobspb.EncryptionMode_KMS:
 		// Generate a 32 byte/256-bit crypto-random number which will serve as
@@ -354,7 +354,7 @@ func WriteNewEncryptionInfoToBackup(
 	return cloud.WriteFile(ctx, dest, newEncryptionInfoFile, bytes.NewReader(buf))
 }
 
-// GetEncryptionFromBase retrieves the encryption options of a base backup. It
+// GetEncryptionFromBase retrieves the encryption options of the base backup. It
 // is expected that incremental backups use the same encryption options as the
 // base backups.
 func GetEncryptionFromBase(
@@ -381,7 +381,7 @@ func GetEncryptionFromBase(
 		case jobspb.EncryptionMode_Passphrase:
 			encryptionOptions = &jobspb.BackupEncryptionOptions{
 				Mode: jobspb.EncryptionMode_Passphrase,
-				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrae), opts[0].Salt),
+				Key:  storageccl.GenerateKey([]byte(encryptionParams.RawPassphrase), opts[0].Salt),
 			}
 		case jobspb.EncryptionMode_KMS:
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo

@@ -1291,43 +1291,11 @@ func NewTimestampedCheckpointFileName() string {
 	return fmt.Sprintf("%s-%s", BackupManifestCheckpointName, hex.EncodeToString(buffer))
 }
 
-// FetchPreviousBackups takes a list of URIs of previous backups and returns
-// their manifest as well as the encryption options of the first backup in the
-// chain.
-func FetchPreviousBackups(
-	ctx context.Context,
-	mem *mon.BoundAccount,
-	user username.SQLUsername,
-	makeCloudStorage cloud.ExternalStorageFromURIFactory,
-	prevBackupURIs []string,
-	encryptionParams jobspb.BackupEncryptionOptions,
-	kmsEnv cloud.KMSEnv,
-) ([]backuppb.BackupManifest, *jobspb.BackupEncryptionOptions, int64, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.FetchPreviousBackups")
-	defer sp.Finish()
-
-	if len(prevBackupURIs) == 0 {
-		return nil, nil, 0, nil
-	}
-
-	baseBackup := prevBackupURIs[0]
-	encryptionOptions, err := backupencryption.GetEncryptionFromBase(ctx, user, makeCloudStorage, baseBackup,
-		encryptionParams, kmsEnv)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	prevBackups, size, err := getBackupManifests(ctx, mem, user, makeCloudStorage, prevBackupURIs,
-		encryptionOptions, kmsEnv)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-
-	return prevBackups, encryptionOptions, size, nil
-}
-
-// getBackupManifests fetches the backup manifest from a list of backup URIs.
-// The manifests are loaded from External Storage in parallel.
-func getBackupManifests(
+// GetBackupManifests fetches the backup manifest from a list of backup URIs.
+// The caller is expected to pass in the fully hydrated encryptionParams
+// required to read the manifests. The manifests are loaded from External
+// Storage in parallel.
+func GetBackupManifests(
 	ctx context.Context,
 	mem *mon.BoundAccount,
 	user username.SQLUsername,
@@ -1336,6 +1304,9 @@ func getBackupManifests(
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) ([]backuppb.BackupManifest, int64, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.GetBackupManifests")
+	defer sp.Finish()
+
 	manifests := make([]backuppb.BackupManifest, len(backupURIs))
 	if len(backupURIs) == 0 {
 		return manifests, 0, nil
