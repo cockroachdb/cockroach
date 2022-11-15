@@ -61,6 +61,7 @@ interface TransactionsTable {
 }
 
 export interface TransactionInfo extends Transaction {
+  regions: string[];
   regionNodes: string[];
 }
 
@@ -228,16 +229,7 @@ export function makeTransactionsColumns(
       sort: (item: TransactionInfo) =>
         longToInt(Number(item.stats_data.stats.max_retries)),
     },
-    {
-      name: "regionNodes",
-      title: statisticsTableTitles.regionNodes(statType),
-      className: cx("statements-table__col-regions"),
-      cell: (item: TransactionInfo) => {
-        return longListWithTooltip(item.regionNodes.sort().join(", "), 50);
-      },
-      sort: (item: TransactionInfo) => item.regionNodes.sort().join(", "),
-      hideIfTenant: true,
-    },
+    makeRegionsColumn(isTenant),
     {
       name: "statementsCount",
       title: statisticsTableTitles.statementsCount(statType),
@@ -257,7 +249,33 @@ export function makeTransactionsColumns(
         item.stats_data?.transaction_fingerprint_id.toString(16),
       showByDefault: false,
     },
-  ].filter(c => !(isTenant && c.hideIfTenant));
+  ];
+}
+
+function makeRegionsColumn(
+  isTenant: boolean,
+): ColumnDescriptor<TransactionInfo> {
+  if (isTenant) {
+    return {
+      name: "regions",
+      title: statisticsTableTitles.regions("transaction"),
+      className: cx("statements-table__col-regions"),
+      cell: (item: TransactionInfo) => {
+        return longListWithTooltip(item.regions.sort().join(", "), 50);
+      },
+      sort: (item: TransactionInfo) => item.regions.sort().join(", "),
+    };
+  } else {
+    return {
+      name: "regionNodes",
+      title: statisticsTableTitles.regionNodes("transaction"),
+      className: cx("statements-table__col-regions"),
+      cell: (item: TransactionInfo) => {
+        return longListWithTooltip(item.regionNodes.sort().join(", "), 50);
+      },
+      sort: (item: TransactionInfo) => item.regionNodes.sort().join(", "),
+    };
+  }
 }
 
 export const TransactionsTable: React.FC<TransactionsTable> = props => {

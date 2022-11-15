@@ -62,8 +62,9 @@ const mapStateToProps = (state: AppState, props: RouteComponentProps) => {
     isLoading: isLoading,
     statementsError: lastError,
     timeScale: selectTimeScale(state),
+    // TODO(todd): Remove this unused property!
     nodeNames: selectIsTenant(state) ? {} : nodeDisplayNameByIDSelector(state),
-    nodeRegions: selectIsTenant(state) ? {} : nodeRegionsByIDSelector(state),
+    nodeRegions: nodeRegionsByIDSelector(state),
     diagnosticsReports:
       selectIsTenant(state) || selectHasViewActivityRedactedRole(state)
         ? []
