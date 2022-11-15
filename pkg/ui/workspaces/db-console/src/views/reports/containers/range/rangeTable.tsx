@@ -17,7 +17,6 @@ import * as protos from "src/js/protos";
 import { cockroach } from "src/js/protos";
 import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
-import { Bytes } from "src/util/format";
 import Lease from "src/views/reports/containers/range/lease";
 import Print from "src/views/reports/containers/range/print";
 import RangeInfo from "src/views/reports/containers/range/rangeInfo";
@@ -343,7 +342,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentMVCC(bytes: Long, count: Long): RangeTableCellContent {
-    const humanizedBytes = Bytes(bytes.toNumber());
+    const humanizedBytes = util.Bytes(bytes.toNumber());
     return {
       value: [`${humanizedBytes} / ${count.toString()} count`],
       title: [
@@ -358,7 +357,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     className: string = null,
     toolTip: string = null,
   ): RangeTableCellContent {
-    const humanized = Bytes(bytes.toNumber());
+    const humanized = util.Bytes(bytes.toNumber());
     if (_.isNull(className)) {
       return {
         value: [humanized],
