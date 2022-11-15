@@ -26,7 +26,6 @@ import { getDisplayName } from "src/redux/nodes";
 import { Loading, SortedTable, util } from "@cockroachlabs/cluster-ui";
 import { getMatchParamByName } from "src/util/query";
 import "./logs.styl";
-import { DATE_WITH_SECONDS_FORMAT_24_UTC } from "src/util/format";
 
 type LogEntries = protos.cockroach.util.log.IEntry;
 
@@ -58,7 +57,7 @@ export class Logs extends React.Component<LogProps & RouteComponentProps, {}> {
         cell: (logEntry: LogEntries) =>
           util
             .LongToMoment(logEntry.time)
-            .format(DATE_WITH_SECONDS_FORMAT_24_UTC),
+            .format(util.DATE_WITH_SECONDS_FORMAT_24_UTC),
       },
       {
         title: "Severity",

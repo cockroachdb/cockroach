@@ -17,7 +17,6 @@ import { RouteComponentProps, withRouter } from "react-router-dom";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
 import { AdminUIState } from "src/redux/state";
-import { DATE_FORMAT_24_UTC } from "src/util/format";
 import {
   Loading,
   ColumnDescriptor,
@@ -113,7 +112,7 @@ export class Settings extends React.Component<SettingsProps, SettingsState> {
         title: "Last Updated",
         cell: (setting: IterableSetting) =>
           setting.last_updated
-            ? setting.last_updated.format(DATE_FORMAT_24_UTC)
+            ? setting.last_updated.format(util.DATE_FORMAT_24_UTC)
             : "No overrides",
         sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
       },
