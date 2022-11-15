@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq/oid"
 )
@@ -1879,6 +1880,17 @@ func (t *T) SQLString() string {
 		return t.TypeMeta.Name.FQName()
 	}
 	return strings.ToUpper(t.Name())
+}
+
+// SafeSQLString returns a safe version of SQLString.
+func (t *T) SafeSQLString() redact.SafeString {
+	if t.Family() == EnumFamily {
+		return "enum"
+	}
+	if t.UserDefined() {
+		return "UDT"
+	}
+	return redact.SafeString(t.SQLString())
 }
 
 // Equivalent returns true if this type is "equivalent" to the given type.
