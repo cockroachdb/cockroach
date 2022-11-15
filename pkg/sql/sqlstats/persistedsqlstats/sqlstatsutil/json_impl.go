@@ -120,6 +120,7 @@ func (s *aggregatedMetadata) jsonFields() jsonFields {
 		{"stmtType", (*jsonString)(&s.StmtType)},
 		{"vecCount", (*jsonInt)(&s.VecCount)},
 		{"totalCount", (*jsonInt)(&s.TotalCount)},
+		{"fingerprintID", (*jsonString)(&s.FingerprintID)},
 	}
 }
 
