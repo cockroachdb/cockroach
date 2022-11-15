@@ -52,6 +52,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/execinfra",
         "//pkg/sql/sqlutil",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",

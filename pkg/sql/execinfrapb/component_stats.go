@@ -266,6 +266,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	if !result.Exec.MaxAllocatedDisk.HasValue() {
 		result.Exec.MaxAllocatedDisk = other.Exec.MaxAllocatedDisk
 	}
+	if !result.Exec.ConsumedRU.HasValue() {
+		result.Exec.ConsumedRU = other.Exec.ConsumedRU
+	}
 
 	// Output stats.
 	if !result.Output.NumBatches.HasValue() {
@@ -281,6 +284,9 @@ func (s *ComponentStats) Union(other *ComponentStats) *ComponentStats {
 	}
 	if !result.FlowStats.MaxDiskUsage.HasValue() {
 		result.FlowStats.MaxDiskUsage = other.FlowStats.MaxDiskUsage
+	}
+	if !result.FlowStats.ConsumedRU.HasValue() {
+		result.FlowStats.ConsumedRU = other.FlowStats.ConsumedRU
 	}
 
 	return &result
@@ -355,6 +361,7 @@ func (s *ComponentStats) MakeDeterministic() {
 	timeVal(&s.Exec.ExecTime)
 	resetUint(&s.Exec.MaxAllocatedMem)
 	resetUint(&s.Exec.MaxAllocatedDisk)
+	resetUint(&s.Exec.ConsumedRU)
 
 	// Output.
 	resetUint(&s.Output.NumBatches)

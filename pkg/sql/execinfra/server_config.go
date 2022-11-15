@@ -192,6 +192,9 @@ type ServerConfig struct {
 	// external services (such as external storage)
 	ExternalIORecorder multitenant.TenantSideExternalIORecorder
 
+	// TenantCostController is used to measure and record RU consumption.
+	TenantCostController multitenant.TenantSideCostController
+
 	// RangeStatsFetcher is used to fetch range stats for keys.
 	RangeStatsFetcher eval.RangeStatsFetcher
 
@@ -294,6 +297,10 @@ type TestingKnobs struct {
 	// IndexBackfillMergerTestingKnobs are the index backfill merger specific
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
+
+	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
+	// in ProcessorBase.StartInternal if the tracing is enabled.
+	ProcessorNoTracingSpan bool
 
 	// SetupFlowCb, when non-nil, is called by the execinfrapb.DistSQLServer
 	// when responding to SetupFlow RPCs, after the flow is set up but before it

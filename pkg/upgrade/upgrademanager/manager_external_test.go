@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -75,6 +76,10 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 				SQLExecutor: &sql.ExecutorTestingKnobs{
 					// See the TODO below for why we need this.
 					NoStatsCollectionWithVerboseTracing: true,
+				},
+				DistSQL: &execinfra.TestingKnobs{
+					// See the TODO below for why we need this.
+					ProcessorNoTracingSpan: true,
 				},
 				UpgradeManager: &upgrade.TestingKnobs{
 					ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
