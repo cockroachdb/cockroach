@@ -104,7 +104,6 @@ export function makeStatementsColumns(
   selectedApps: string[],
   // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
   statType: StatisticType,
   isTenant: boolean,
   hasViewActivityRedactedRole: boolean,

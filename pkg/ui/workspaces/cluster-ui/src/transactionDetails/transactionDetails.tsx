@@ -472,7 +472,6 @@ export class TransactionDetails extends React.Component<
                         aggregatedStatements,
                         [],
                         calculateTotalWorkload(aggregatedStatements),
-                        nodeRegions,
                         "transactionDetails",
                         isTenant,
                         hasViewActivityRedactedRole,

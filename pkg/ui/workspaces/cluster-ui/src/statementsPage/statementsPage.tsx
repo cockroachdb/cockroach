@@ -587,7 +587,6 @@ export class StatementsPage extends React.Component<
       statements,
       filters.app.split(","),
       totalWorkload,
-      nodeRegions,
       "statement",
       isTenant,
       hasViewActivityRedactedRole,
