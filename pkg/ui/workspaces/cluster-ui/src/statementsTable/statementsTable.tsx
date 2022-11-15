@@ -99,22 +99,6 @@ export function shortStatement(
   }
 }
 
-export function makeStatementFingerprintColumn(
-  statType: StatisticType,
-  selectedApps: string[],
-  search?: string,
-  onStatementClick?: (statement: string) => void,
-): ColumnDescriptor<AggregateStatistics> {
-  return {
-    name: "statements",
-    title: statisticsTableTitles.statements(statType),
-    className: cx("cl-table__col-query-text"),
-    cell: StatementTableCell.statements(search, selectedApps, onStatementClick),
-    sort: stmt => stmt.label,
-    alwaysShow: true,
-  };
-}
-
 export function makeStatementsColumns(
   statements: AggregateStatistics[],
   selectedApps: string[],
@@ -162,12 +146,14 @@ export function makeStatementsColumns(
   const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
   const columns: ColumnDescriptor<AggregateStatistics>[] = [
-    makeStatementFingerprintColumn(
-      statType,
-      selectedApps,
-      search,
-      onStatementClick,
-    ),
+    {
+      name: "statements",
+      title: statisticsTableTitles.statements(statType),
+      className: cx("cl-table__col-query-text"),
+      cell: StatementTableCell.statements(search, selectedApps, onStatementClick),
+      sort: stmt => stmt.label,
+      alwaysShow: true,
+    },
     {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
