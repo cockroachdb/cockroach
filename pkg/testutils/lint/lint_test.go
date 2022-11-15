@@ -1998,6 +1998,7 @@ func TestLint(t *testing.T) {
 
 		gcassertPaths := []string{
 			"../../col/coldata",
+			"../../keys",
 			"../../kv/kvclient/rangecache",
 			"../../sql/catalog/descs",
 			"../../sql/colcontainer",

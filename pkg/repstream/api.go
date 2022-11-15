@@ -8,19 +8,15 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package streaming
+package repstream
 
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/errors"
 )
-
-// StreamID is the ID of a replication stream.
-type StreamID = streampb.StreamID
 
 // GetReplicationStreamManagerHook is the hook to get access to the producer side replication APIs.
 // Used by builtin functions to trigger streaming replication.

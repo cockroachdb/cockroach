@@ -12,6 +12,7 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -832,11 +833,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// If we didn't expect Raft to have a snapshot but it has one
 		// regardless, that is unexpected and indicates a programming
 		// error.
-		err := makeNonDeterministicFailure(
+		err := kvserverbase.NonDeterministicErrorf(
 			"have inSnap=nil, but raft has a snapshot %s",
 			raft.DescribeSnapshot(rd.Snapshot),
 		)
-		return stats, getNonDeterministicFailureExplanation(err), err
+		return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 	}
 
 	// If the ready struct includes entries that have been committed, these
@@ -863,11 +864,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 	defer appTask.Close()
 	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
-		return stats, getNonDeterministicFailureExplanation(err), err
+		return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 	}
 	if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
 		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, state.lastIndex); err != nil {
-			return stats, getNonDeterministicFailureExplanation(err), err
+			return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 		}
 	}
 
@@ -1009,7 +1010,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			// will be processed by this Replica.
 			return stats, "", err
 		} else if err != nil {
-			return stats, getNonDeterministicFailureExplanation(err), err
+			return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 		}
 		if r.store.cfg.KVAdmissionController != nil &&
 			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
@@ -2388,13 +2389,6 @@ func shouldCampaignAfterConfChange(
 		return true
 	}
 	return false
-}
-
-func getNonDeterministicFailureExplanation(err error) string {
-	if nd := (*nonDeterministicFailure)(nil); errors.As(err, &nd) {
-		return nd.safeExpl
-	}
-	return "???"
 }
 
 // printRaftTail pretty-prints the tail of the log and returns it as a string,

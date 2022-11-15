@@ -1282,6 +1282,10 @@ func cmdPut(e *evalCtx) error {
 	key := e.getKey()
 	val := e.getVal()
 
+	if e.hasArg("init-checksum") {
+		val.InitChecksum(key)
+	}
+
 	resolve, resolveStatus := e.getResolve()
 
 	return e.withWriter("put", func(rw storage.ReadWriter) error {
@@ -1321,6 +1325,10 @@ func cmdExport(e *evalCtx) error {
 		EndTS:              e.getTs(nil),
 		ExportAllRevisions: e.hasArg("allRevisions"),
 		StopMidKey:         e.hasArg("stopMidKey"),
+		FingerprintOptions: storage.MVCCExportFingerprintOptions{
+			StripTenantPrefix:  e.hasArg("stripTenantPrefix"),
+			StripValueChecksum: e.hasArg("stripValueChecksum"),
+		},
 	}
 	if e.hasArg("maxIntents") {
 		e.scanArg("maxIntents", &opts.MaxIntents)
@@ -2192,21 +2200,31 @@ func (e *evalCtx) getKey() roachpb.Key {
 	e.t.Helper()
 	var keyS string
 	e.scanArg("k", &keyS)
-	return toKey(keyS)
+	return toKey(keyS, e.getTenantCodec())
 }
 
 func (e *evalCtx) getKeyRange() (sk, ek roachpb.Key) {
 	e.t.Helper()
 	var keyS string
 	e.scanArg("k", &keyS)
-	sk = toKey(keyS)
+	codec := e.getTenantCodec()
+	sk = toKey(keyS, codec)
 	ek = sk.Next()
 	if e.hasArg("end") {
 		var endKeyS string
 		e.scanArg("end", &endKeyS)
-		ek = toKey(endKeyS)
+		ek = toKey(endKeyS, codec)
 	}
 	return sk, ek
+}
+
+func (e *evalCtx) getTenantCodec() keys.SQLCodec {
+	if e.hasArg("tenant-prefix") {
+		var tenantID int
+		e.scanArg("tenant-prefix", &tenantID)
+		return keys.MakeSQLCodec(roachpb.TenantID{InternalValue: uint64(tenantID)})
+	}
+	return keys.SystemSQLCodec
 }
 
 func (e *evalCtx) newTxn(
@@ -2424,7 +2442,7 @@ func (e *evalCtx) metamorphicPeekBounds(
 	return rw, leftPeekBound, rightPeekBound
 }
 
-func toKey(s string) roachpb.Key {
+func toKey(s string, sqlCodec keys.SQLCodec) roachpb.Key {
 	if len(s) == 0 {
 		return roachpb.Key(s)
 	}
@@ -2456,7 +2474,7 @@ func toKey(s string) roachpb.Key {
 
 		var colMap catalog.TableColMap
 		colMap.Set(0, 0)
-		key := keys.SystemSQLCodec.IndexPrefix(1, 1)
+		key := sqlCodec.IndexPrefix(1, 1)
 		key, _, err = rowenc.EncodeColumns([]descpb.ColumnID{0}, nil /* directions */, colMap, []tree.Datum{tree.NewDString(pk)}, key)
 		if err != nil {
 			panic(err)

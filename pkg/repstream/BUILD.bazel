@@ -2,12 +2,11 @@ load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
-    name = "streaming",
+    name = "repstream",
     srcs = ["api.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/streaming",
+    importpath = "github.com/cockroachdb/cockroach/pkg/repstream",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/streamingccl/streampb",
         "//pkg/kv",
         "//pkg/sql/sem/eval",
         "@com_github_cockroachdb_errors//:errors",

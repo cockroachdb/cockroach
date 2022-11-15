@@ -19,13 +19,12 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer" // Ensure we can start replication stream.
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -98,7 +97,7 @@ INSERT INTO d.t2 VALUES (2);
 		require.NoError(t, client.Close(ctx))
 	}()
 	require.NoError(t, err)
-	expectStreamState := func(streamID streaming.StreamID, status jobs.Status) {
+	expectStreamState := func(streamID streampb.StreamID, status jobs.Status) {
 		h.SysSQL.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT status FROM system.jobs WHERE id = %d", streamID),
 			[][]string{{string(status)}})
 	}
@@ -212,7 +211,7 @@ INSERT INTO d.t2 VALUES (2);
 	})
 
 	// Testing client.Complete()
-	err = client.Complete(ctx, streaming.StreamID(999), true)
+	err = client.Complete(ctx, streampb.StreamID(999), true)
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job %d: not found in system.jobs table", 999)), err)
 
 	// Makes producer job exit quickly.

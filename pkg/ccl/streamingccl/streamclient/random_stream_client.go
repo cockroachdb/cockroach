@@ -17,9 +17,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/streaming"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -351,7 +350,7 @@ func (m *RandomStreamClient) Dial(ctx context.Context) error {
 }
 
 // Plan implements the Client interface.
-func (m *RandomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (Topology, error) {
+func (m *RandomStreamClient) Plan(ctx context.Context, id streampb.StreamID) (Topology, error) {
 	topology := make(Topology, 0, m.config.numPartitions)
 	log.Infof(ctx, "planning random stream for tenant %d", m.config.tenantID)
 
@@ -381,15 +380,15 @@ func (m *RandomStreamClient) Plan(ctx context.Context, id streaming.StreamID) (T
 // Create implements the Client interface.
 func (m *RandomStreamClient) Create(
 	ctx context.Context, target roachpb.TenantID,
-) (streaming.StreamID, error) {
+) (streampb.StreamID, error) {
 	log.Infof(ctx, "creating random stream for tenant %d", target.ToUint64())
 	m.config.tenantID = target
-	return streaming.StreamID(target.ToUint64()), nil
+	return streampb.StreamID(target.ToUint64()), nil
 }
 
 // Heartbeat implements the Client interface.
 func (m *RandomStreamClient) Heartbeat(
-	ctx context.Context, _ streaming.StreamID, ts hlc.Timestamp,
+	ctx context.Context, _ streampb.StreamID, ts hlc.Timestamp,
 ) (streampb.StreamReplicationStatus, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -457,7 +456,7 @@ func (m *RandomStreamClient) Close(ctx context.Context) error {
 
 // Subscribe implements the Client interface.
 func (m *RandomStreamClient) Subscribe(
-	ctx context.Context, stream streaming.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
+	ctx context.Context, stream streampb.StreamID, spec SubscriptionToken, checkpoint hlc.Timestamp,
 ) (Subscription, error) {
 	partitionURL, err := url.Parse(string(spec))
 	if err != nil {
@@ -531,7 +530,7 @@ func (m *RandomStreamClient) Subscribe(
 
 // Complete implements the streamclient.Client interface.
 func (m *RandomStreamClient) Complete(
-	ctx context.Context, streamID streaming.StreamID, successfulIngestion bool,
+	ctx context.Context, streamID streampb.StreamID, successfulIngestion bool,
 ) error {
 	return nil
 }

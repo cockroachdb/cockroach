@@ -210,6 +210,67 @@ func hasColumn(storedTable, expectedTable catalog.TableDescriptor, colName strin
 	return true, nil
 }
 
+// columnExists returns true if storedTable contains a column with the given
+// colName. Unlike hasColumn, it does not check that the column descriptor in
+// storedTable and expectedTable match.
+//
+// This weaker check should be used when a migration/multiple migrations
+// alter(s) the same column multiple times in order to ensure the migration(s)
+// remain(s) idempotent. Consider the following series of (sub)migrations:
+//  1. column C is first added to a table as nullable (NULL)
+//  2. column C is backfilled with non-NULL values
+//  3. column C is altered to be not nullable (NOT NULL)
+//
+// When we are deciding whether (sub)migration 1 should run, we can either
+// (a) compare it to the expected descriptor after the column has been added
+// but before it has been altered to be NOT NULL or (b) compare it to the
+// expected descriptor after the column has been altered to be NOT NULL.
+//
+// If we choose to do (a) and for some reason after (sub)migration 3 is
+// completed, we need to restart and run (sub)migration 1 again, hasColumn
+// would now return an error because the column exists and is NOT NULL but the
+// expected descriptor we have has it as NULL.
+//
+// If we choose to do (b) and for some reason after (sub)migration 1 is
+// completed but before (sub)migration 3 runs, we restart and try
+// (sub)migration 1 again, hasColumn would also now return an error because the
+// column exists and is NULL when the expected descriptor has it as NOT NULL.
+//
+// In either case, the cluster would enter an unrecoverable state where it will
+// repeatedly attempt to perform (sub)migration 1 and fail, preventing the
+// migration and any further migrations from running.
+func columnExists(
+	storedTable, expectedTable catalog.TableDescriptor, colName string,
+) (bool, error) {
+	_, err := storedTable.FindColumnWithName(tree.Name(colName))
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// columnExistsAndIsNotNull returns true if storedTable contains a non-nullable
+// (NOT NULL) column with the given colName. Like columnExists, it does not
+// check that the column descriptor in storedTable and expectedTable match and
+// it should be used when a migration/multiple migrations alter(s) the same
+// column multiple times. See the comment for columnExists for the reasoning
+// behind this.
+func columnExistsAndIsNotNull(
+	storedTable, expectedTable catalog.TableDescriptor, colName string,
+) (bool, error) {
+	storedCol, err := storedTable.FindColumnWithName(tree.Name(colName))
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") {
+			return false, nil
+		}
+		return false, err
+	}
+	return !storedCol.IsNullable(), nil
+}
+
 // hasIndex returns true if storedTable already has the given index, comparing
 // with expectedTable.
 // storedTable descriptor must be read from system storage as compared to reading

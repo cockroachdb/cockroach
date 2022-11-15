@@ -265,10 +265,10 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 		artifactsDir: "",
 	}
 	copt := clustersOpt{
-		typ:                       roachprodCluster,
-		user:                      "test_user",
-		cpuQuota:                  1000,
-		keepClustersOnTestFailure: false,
+		typ:       roachprodCluster,
+		user:      "test_user",
+		cpuQuota:  1000,
+		debugMode: NoDebug,
 	}
 	return &runnerTest{
 		stdout: &stdout,
@@ -337,10 +337,10 @@ func TestRunnerTestTimeout(t *testing.T) {
 		artifactsDir: "",
 	}
 	copt := clustersOpt{
-		typ:                       roachprodCluster,
-		user:                      "test_user",
-		cpuQuota:                  1000,
-		keepClustersOnTestFailure: false,
+		typ:       roachprodCluster,
+		user:      "test_user",
+		cpuQuota:  1000,
+		debugMode: NoDebug,
 	}
 	test := registry.TestSpec{
 		Name:    `timeout`,

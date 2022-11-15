@@ -14,13 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // replica_application_*.go files provide concrete implementations of
@@ -43,7 +40,7 @@ import (
 // batch's view of ReplicaState. Then the batch is committed, the side-effects
 // are applied and the local result is processed.
 type replicatedCmd struct {
-	*raftlog.Entry
+	raftlog.ReplicatedCmd
 
 	// proposal is populated on the proposing Replica only and comes from the
 	// Replica's proposal map.
@@ -57,13 +54,6 @@ type replicatedCmd struct {
 	// proposal).
 	sp *tracing.Span
 
-	// The following fields are set in shouldApplyCommand when we validate that
-	// a command applies given the current lease and GC threshold. The process
-	// of setting these fields is what transforms an apply.Command into an
-	// apply.CheckedCommand.
-	leaseIndex    uint64
-	forcedErr     *roachpb.Error
-	proposalRetry kvserverbase.ProposalRejectionType
 	// splitMergeUnlock is acquired for splits and merges when they are staged
 	// in the application batch and called after the command's side effects
 	// are applied.
@@ -76,46 +66,17 @@ type replicatedCmd struct {
 	response    proposalResult
 }
 
-// decode populates the receiver from the provided entry.
-func (c *replicatedCmd) decode(e *raftpb.Entry) error {
-	if c.Entry != nil {
-		c.Entry.Release()
-		c.Entry = nil
-	}
-
-	var err error
-	c.Entry, err = raftlog.NewEntry(*e)
-	if err != nil {
-		return wrapWithNonDeterministicFailure(err, "while decoding raft entry")
-	}
-	return nil
-}
-
-// Index implements the apply.Command interface.
-func (c *replicatedCmd) Index() uint64 {
-	return c.Entry.Index
-}
-
-// IsTrivial implements the apply.Command interface.
-func (c *replicatedCmd) IsTrivial() bool {
-	return isTrivial(c.replicatedResult())
-}
-
-func (c *replicatedCmd) replicatedResult() *kvserverpb.ReplicatedEvalResult {
-	return &c.Entry.Cmd.ReplicatedEvalResult
-}
-
-// IsLocal implements the apply.Command interface.
+// IsLocal implements apply.Command.
 func (c *replicatedCmd) IsLocal() bool {
 	return c.proposal != nil
 }
 
-// Ctx implements the apply.Command interface.
+// Ctx implements apply.Command.
 func (c *replicatedCmd) Ctx() context.Context {
 	return c.ctx
 }
 
-// AckErrAndFinish implements the apply.Command interface.
+// AckErrAndFinish implements apply.Command.
 func (c *replicatedCmd) AckErrAndFinish(ctx context.Context, err error) error {
 	if c.IsLocal() {
 		c.response.Err = roachpb.NewError(roachpb.NewAmbiguousResultError(err))
@@ -136,12 +97,7 @@ func (c *replicatedCmd) getStoreWriteByteSizes() (writeBytes int64, ingestedByte
 	return writeBytes, ingestedBytes
 }
 
-// Rejected implements the apply.CheckedCommand interface.
-func (c *replicatedCmd) Rejected() bool {
-	return c.forcedErr != nil
-}
-
-// CanAckBeforeApplication implements the apply.CheckedCommand interface.
+// CanAckBeforeApplication implements apply.CheckedCommand.
 func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	// CanAckBeforeApplication determines whether the request type is compatible
 	// with acknowledgement of success before it has been applied. For now, this
@@ -164,7 +120,7 @@ func (c *replicatedCmd) CanAckBeforeApplication() bool {
 	return true
 }
 
-// AckSuccess implements the apply.CheckedCommand interface.
+// AckSuccess implements apply.CheckedCommand.
 func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	if !c.IsLocal() {
 		return nil
@@ -185,7 +141,7 @@ func (c *replicatedCmd) AckSuccess(ctx context.Context) error {
 	return nil
 }
 
-// AckOutcomeAndFinish implements the apply.AppliedCommand interface.
+// AckOutcomeAndFinish implements the apply.AppliedCommand.
 func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 	if c.IsLocal() {
 		c.proposal.finishApplication(ctx, c.response)
@@ -198,7 +154,7 @@ func (c *replicatedCmd) AckOutcomeAndFinish(ctx context.Context) error {
 // command's proposal if it is local, it asserts that the proposal is not local.
 func (c *replicatedCmd) FinishNonLocal(ctx context.Context) {
 	if c.IsLocal() {
-		log.Fatalf(ctx, "proposal unexpectedly local: %v", c.replicatedResult())
+		log.Fatalf(ctx, "proposal unexpectedly local: %v", c.ReplicatedResult())
 	}
 	c.finishTracingSpan()
 }

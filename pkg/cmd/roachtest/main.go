@@ -84,7 +84,8 @@ func main() {
 	// ##teamcity[publishArtifacts] in Teamcity mode.
 	var literalArtifacts string
 	var httpPort int
-	var debugEnabled bool
+	var debugOnFailure bool
+	var debugAlways bool
 	var runSkipped bool
 	var skipInit bool
 	var clusterID string
@@ -92,6 +93,16 @@ func main() {
 	var versionsBinaryOverride map[string]string
 
 	cobra.EnableCommandSorting = false
+
+	debugModeFromOpts := func() debugMode {
+		if debugAlways {
+			return DebugKeepAlways
+		}
+		if debugOnFailure {
+			return DebugKeepOnFailure
+		}
+		return NoDebug
+	}
 
 	var rootCmd = &cobra.Command{
 		Use:   "roachtest [command] (flags)",
@@ -222,8 +233,8 @@ runner itself.
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
-				debugEnabled:           debugEnabled,
 				runSkipped:             runSkipped,
+				debugMode:              debugModeFromOpts(),
 				skipInit:               skipInit,
 				httpPort:               httpPort,
 				parallelism:            parallelism,
@@ -263,8 +274,8 @@ runner itself.
 				args:                   args,
 				count:                  count,
 				cpuQuota:               cpuQuota,
-				debugEnabled:           debugEnabled,
 				runSkipped:             runSkipped,
+				debugMode:              debugModeFromOpts(),
 				skipInit:               skipInit,
 				httpPort:               httpPort,
 				parallelism:            parallelism,
@@ -289,7 +300,9 @@ runner itself.
 		cmd.Flags().IntVar(
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
-			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
+			&debugOnFailure, "debug", "d", debugOnFailure, "don't wipe and destroy cluster if test fails")
+		cmd.Flags().BoolVar(
+			&debugAlways, "debug-always", debugAlways, "never wipe and destroy the cluster")
 		cmd.Flags().BoolVar(
 			&runSkipped, "run-skipped", runSkipped, "run skipped tests")
 		cmd.Flags().BoolVar(
@@ -360,7 +373,7 @@ type cliCfg struct {
 	args                   []string
 	count                  int
 	cpuQuota               int
-	debugEnabled           bool
+	debugMode              debugMode
 	runSkipped             bool
 	skipInit               bool
 	httpPort               int
@@ -404,12 +417,12 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 	}
 
 	opt := clustersOpt{
-		typ:                       clusterType,
-		clusterName:               clusterName,
-		user:                      getUser(cfg.user),
-		cpuQuota:                  cfg.cpuQuota,
-		keepClustersOnTestFailure: cfg.debugEnabled,
-		clusterID:                 cfg.clusterID,
+		typ:         clusterType,
+		clusterName: clusterName,
+		user:        getUser(cfg.user),
+		cpuQuota:    cfg.cpuQuota,
+		debugMode:   cfg.debugMode,
+		clusterID:   cfg.clusterID,
 	}
 	if err := runner.runHTTPServer(cfg.httpPort, os.Stdout, bindTo); err != nil {
 		return err
@@ -424,6 +437,10 @@ func runTests(register func(registry.Registry), cfg cliCfg) error {
 		// stdout/stderr.
 		cfg.parallelism = n * cfg.count
 	}
+	if opt.debugMode == DebugKeepAlways && n > 1 {
+		return errors.Newf("--debug-always is only allowed when running a single test")
+	}
+
 	runnerDir := filepath.Join(cfg.artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))

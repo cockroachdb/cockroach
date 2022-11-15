@@ -31,7 +31,6 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
-        "//pkg/ccl/streamingccl/streampb",
         "//pkg/clusterversion",
         "//pkg/config/zonepb",
         "//pkg/geo",
@@ -48,6 +47,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/password",
         "//pkg/security/username",

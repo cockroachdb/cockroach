@@ -23,13 +23,13 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // Ensure we can start tenant.
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streampb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
@@ -424,8 +424,8 @@ USE d;
 	t.Run("stream-batches-events", func(t *testing.T) {
 		srcTenant.SQL.Exec(t, `
 CREATE TABLE t3(
- i INT PRIMARY KEY, 
- a STRING, 
+ i INT PRIMARY KEY,
+ a STRING,
  b STRING,
  INDEX (a,b),   -- Just to have a bit more data in the table
  FAMILY fb (b)
