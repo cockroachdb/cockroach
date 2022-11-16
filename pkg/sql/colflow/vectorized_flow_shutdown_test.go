@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -57,16 +56,6 @@ var (
 	useBatchReceiver = testScenario{"BatchReceiver"}
 	testScenarios    = []testScenario{consumerDone, consumerClosed, useBatchReceiver}
 )
-
-type callbackCloser struct {
-	closeCb func(context.Context) error
-}
-
-var _ colexecop.Closer = callbackCloser{}
-
-func (c callbackCloser) Close(ctx context.Context) error {
-	return c.closeCb(ctx)
-}
 
 // TestVectorizedFlowShutdown tests that closing the FlowCoordinator correctly
 // closes all the infrastructure corresponding to the flow ending in that
@@ -245,12 +234,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 				flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 
-				// idToClosed keeps track of whether Close was called for a given id.
-				idToClosed := struct {
-					syncutil.Mutex
-					mapping map[int]bool
-				}{}
-				idToClosed.mapping = make(map[int]bool)
 				runOutboxInbox := func(
 					outboxCtx context.Context,
 					flowCtxCancel context.CancelFunc,
@@ -260,20 +243,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					id int,
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
-					idToClosed.Lock()
-					idToClosed.mapping[id] = false
-					idToClosed.Unlock()
 					outbox, err := colrpc.NewOutbox(
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
 						colexecargs.OpWithMetaInfo{
 							Root:            outboxInput,
 							MetadataSources: outboxMetadataSources,
-							ToClose: []colexecop.Closer{callbackCloser{closeCb: func(context.Context) error {
-								idToClosed.Lock()
-								idToClosed.mapping[id] = true
-								idToClosed.Unlock()
-								return nil
-							}}},
 						},
 						typs,
 						nil, /* getStats */
@@ -365,14 +339,9 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					input = synchronizer
 				}
 
-				closeCalled := false
 				inputInfo := colexecargs.OpWithMetaInfo{
 					Root:            input,
 					MetadataSources: colexecop.MetadataSources{inputMetadataSource},
-					ToClose: colexecop.Closers{callbackCloser{closeCb: func(context.Context) error {
-						closeCalled = true
-						return nil
-					}}},
 				}
 
 				// runFlowCoordinator creates a pair of a materializer and a
@@ -468,11 +437,6 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					}
 				}
 				wg.Wait()
-				// Ensure all the outboxes called Close.
-				for id, closed := range idToClosed.mapping {
-					require.True(t, closed, "outbox with ID %d did not call Close on closers", id)
-				}
-				require.True(t, closeCalled)
 			})
 		}
 	}
