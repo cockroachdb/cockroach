@@ -70,8 +70,16 @@ var errEnterpriseRequired = pgerror.New(pgcode.CCLValidLicenseRequired,
 // keeping the entries private.
 type licenseCacheKey string
 
-// TestingEnableEnterprise allows overriding the license check in tests.
-func TestingEnableEnterprise() func() {
+// TestingEnableEnterpriseTricky allows overriding the license check in tests.
+//
+// Prefer using ccl.TestingDisableEnterprise instead when that's possible
+// without introducing a dependency cycle. This one is called "tricky" because,
+// being in utilccl instead of ccl, by calling it there's no guarantee that all
+// the ccl/... packages were linked into the binary. CheckEnterpriseEnabled()
+// requires all of the CCL code to be linked in. In other words, generally
+// TestingEnableEnterpriseTricky is only useful if `ccl` was imported elsewhere
+// (commonly in a file in the foo_test package, perhaps main_test.go).
+func TestingEnableEnterpriseTricky() func() {
 	before := atomic.LoadInt32(&enterpriseStatus)
 	atomic.StoreInt32(&enterpriseStatus, enterpriseEnabled)
 	return func() {
@@ -186,6 +194,10 @@ func updateMetricWithLicenseTTL(
 	metric.Update(int64(sec))
 }
 
+// AllCCLCodeImported is set by the `ccl` pkg in an init(), thereby
+// demonstrating that we're in a binary that has all off the CCL code linked in.
+var AllCCLCodeImported = false
+
 func checkEnterpriseEnabledAt(
 	st *cluster.Settings, at time.Time, cluster uuid.UUID, feature string, withDetails bool,
 ) error {
@@ -197,7 +209,30 @@ func checkEnterpriseEnabledAt(
 		return err
 	}
 	org := sql.ClusterOrganization.Get(&st.SV)
-	return check(license, at, cluster, org, feature, withDetails)
+	if err := check(license, at, cluster, org, feature, withDetails); err != nil {
+		return err
+	}
+
+	// Make sure all CCL code was imported.
+	if !AllCCLCodeImported {
+		// In production, this shouldn't happen: a binary that has `utilccl` linked
+		// in will also have `ccl` linked in - which imports all the other ccl/...
+		// packages and sets AllCCLCodeImported. However, in tests, one can write a
+		// test that imports `utilccl`, without the broader `ccl`. In that case, we
+		// panic here, forcing the test to link `ccl` in the binary (for example,
+		// through importing `ccl` in the `foo_test` pkg, perhaps in
+		// `main_test.go`). Declaring that "enterprise is enabled" when some CCL
+		// functionality is not linked in would be very confusing - the server code
+		// can try to use CCL features that are not available.
+		//
+		// Since this function cannot be used if `ccl` was not imported, the
+		// function should arguably live in the `ccl` pkg. However, `ccl` imports
+		// everything, and this function must be used from different packages that,
+		// thus, cannot depend on `ccl`. AllCCLCodeImported is used to break the
+		// dependency cycle.
+		panic("not all ccl imported, but license checked")
+	}
+	return nil
 }
 
 // getLicense fetches the license from the given settings, using Settings.Cache

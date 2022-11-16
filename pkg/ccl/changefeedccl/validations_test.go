@@ -28,7 +28,7 @@ import (
 func TestCatchupScanOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
+	defer utilccl.TestingEnableEnterpriseTricky()()
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		t.Run("bank", func(t *testing.T) {

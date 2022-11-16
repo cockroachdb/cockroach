@@ -3551,7 +3551,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 func TestChangefeedRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
+	defer utilccl.TestingEnableEnterpriseTricky()()
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		knobs := s.TestingKnobs.
@@ -7506,7 +7506,7 @@ func TestSchemachangeDoesNotBreakSinklessFeed(t *testing.T) {
 func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
+	defer utilccl.TestingEnableEnterpriseTricky()()
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		changefeedbase.BatchReductionRetryEnabled.Override(

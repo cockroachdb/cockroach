@@ -68,7 +68,7 @@ func TestReplicationManagerRequiresAdminRole(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%s/ent=%t", tc.user, tc.isEnterprise), func(t *testing.T) {
 			if tc.isEnterprise {
-				defer utilccl.TestingEnableEnterprise()()
+				defer utilccl.TestingEnableEnterpriseTricky()()
 			} else {
 				defer utilccl.TestingDisableEnterprise()()
 			}
