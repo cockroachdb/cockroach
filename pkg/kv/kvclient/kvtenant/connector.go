@@ -63,6 +63,9 @@ type Connector interface {
 	// primitives.
 	serverpb.RegionsServer
 
+	// NodeLocalityServer provides access to a node's locality information.
+	serverpb.NodeLocalityServer
+
 	// TenantStatusServer is the subset of the serverpb.StatusInterface that is
 	// used by the SQL system to query for debug information, such as tenant-specific
 	// range reports.

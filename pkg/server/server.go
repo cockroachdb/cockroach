@@ -875,6 +875,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
 		regionsServer:            sStatus,
+		nodeLocalityServer:       sStatus,
 		tenantStatusServer:       sStatus,
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,

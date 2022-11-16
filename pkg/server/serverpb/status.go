@@ -11,7 +11,7 @@
 package serverpb
 
 import (
-	context "context"
+	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
@@ -73,6 +73,13 @@ type NodesStatusServer interface {
 // It is available for tenants.
 type RegionsServer interface {
 	Regions(context.Context, *RegionsRequest) (*RegionsResponse, error)
+}
+
+// NodeLocalityServer is the subset of serverpb.StatusInterface that is used by
+// the SQL system to query for the node locality of a given node ID.
+// It is available for tenants.
+type NodeLocalityServer interface {
+	NodeLocality(ctx context.Context, req *NodeLocalityRequest) (*NodeLocalityResponse, error)
 }
 
 // TenantStatusServer is the subset of the serverpb.StatusInterface that is
