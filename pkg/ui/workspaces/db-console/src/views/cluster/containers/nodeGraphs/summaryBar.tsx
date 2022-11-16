@@ -18,7 +18,6 @@ import {
   NodeSummaryStats,
   nodeSumsSelector,
 } from "src/redux/nodes";
-import { Bytes } from "src/util/format";
 import { util } from "@cockroachlabs/cluster-ui";
 
 import { EventBox } from "src/views/cluster/containers/events";
@@ -119,6 +118,7 @@ export interface ClusterSummaryProps {
 }
 
 export default function(props: ClusterSummaryProps) {
+  const { Bytes } = util;
   const nodeSums = useSelector(nodeSumsSelector);
   // Capacity math used in the summary status section.
   const { capacityUsed, capacityUsable } = nodeSums;

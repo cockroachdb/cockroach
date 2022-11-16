@@ -28,7 +28,14 @@ import {
 import { statisticsTableTitles } from "../statsTableUtil/statsTableUtil";
 import { tableClasses } from "./transactionsTableClasses";
 import { transactionLink } from "./transactionsCells";
-import { Count, FixLong, longToInt, TimestampToString, unset } from "src/util";
+import {
+  FixFingerprintHexValue,
+  Count,
+  FixLong,
+  longToInt,
+  TimestampToString,
+  unset,
+} from "src/util";
 import { SortSetting } from "../sortedtable";
 import {
   getStatementsByFingerprintId,
@@ -240,7 +247,9 @@ export function makeTransactionsColumns(
       name: "transactionFingerprintId",
       title: statisticsTableTitles.transactionFingerprintId(statType),
       cell: (item: TransactionInfo) =>
-        item.stats_data?.transaction_fingerprint_id.toString(16),
+        FixFingerprintHexValue(
+          item.stats_data?.transaction_fingerprint_id.toString(16),
+        ),
       sort: (item: TransactionInfo) =>
         item.stats_data?.transaction_fingerprint_id.toString(16),
       showByDefault: false,

@@ -30,6 +30,7 @@ import {
   queryByName,
   appAttr,
   appNamesAttr,
+  FixFingerprintHexValue,
   RenderCount,
   TimestampToMoment,
   DATE_FORMAT_24_UTC,
@@ -515,6 +516,7 @@ export class StatementDetails extends React.Component<
     const {
       app_names,
       databases,
+      fingerprint_id,
       failed_count,
       full_scan_count,
       vec_count,
@@ -664,6 +666,10 @@ export class StatementDetails extends React.Component<
                       ", ",
                     )}
                   </Text>
+                </div>
+                <div className={summaryCardStylesCx("summary--card__item")}>
+                  <Text>Fingerprint ID</Text>
+                  {FixFingerprintHexValue(fingerprint_id)}
                 </div>
               </SummaryCard>
             </Col>

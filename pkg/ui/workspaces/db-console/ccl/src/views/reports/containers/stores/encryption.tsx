@@ -14,7 +14,7 @@ import moment from "moment";
 import * as protos from "src/js/protos";
 import * as protosccl from "@cockroachlabs/crdb-protobuf-client-ccl";
 import { EncryptionStatusProps } from "oss/src/views/reports/containers/stores/encryption";
-import { Bytes } from "src/util/format";
+import { util } from "@cockroachlabs/cluster-ui";
 import { FixLong } from "src/util/fixLong";
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
@@ -108,6 +108,7 @@ export default class EncryptionStatus {
   }
 
   renderFileStats(stats: protos.cockroach.server.serverpb.IStoreDetails) {
+    const { Bytes } = util;
     const totalFiles = FixLong(stats.total_files);
     const totalBytes = FixLong(stats.total_bytes);
     if (totalFiles.eq(0) && totalBytes.eq(0)) {

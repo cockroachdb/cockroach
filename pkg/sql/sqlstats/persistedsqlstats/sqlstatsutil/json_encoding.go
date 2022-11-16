@@ -258,6 +258,7 @@ func BuildTxnStatisticsJSON(statistics *roachpb.CollectedTransactionStatistics) 
 //     "properties": {
 //       "stmtType":             { "type": "string" },
 //       "query":                { "type": "string" },
+//       "fingerprintID":        { "type": "string" },
 //       "querySummary":         { "type": "string" },
 //       "implicitTxn":          { "type": "boolean" },
 //       "distSQLCount":         { "type": "number" },

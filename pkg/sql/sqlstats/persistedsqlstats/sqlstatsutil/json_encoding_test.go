@@ -383,7 +383,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "fullScanCount": {{.Int64}},
   "totalCount": {{.Int64}},
   "db": [{{joinStrings .StringArray}}],
-  "appNames": [{{joinStrings .StringArray}}]
+  "appNames": [{{joinStrings .StringArray}}],
+  "fingerprintID": "{{.String}}"
 }
 		 `
 		expectedAggregatedMetadataStr := fillTemplate(t, expectedAggregatedMetadataStrTemplate, data)

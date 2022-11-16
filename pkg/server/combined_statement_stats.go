@@ -476,7 +476,7 @@ func getStatementDetailsQueryClausesAndArgs(
 	return whereClause, args, nil
 }
 
-// getTotalStatementDetails return all the statistics for the selectec statement combined.
+// getTotalStatementDetails return all the statistics for the selected statement combined.
 func getTotalStatementDetails(
 	ctx context.Context, ie *sql.InternalExecutor, whereClause string, args []interface{},
 ) (serverpb.StatementDetailsResponse_CollectedStatementSummary, error) {
@@ -486,13 +486,15 @@ func getTotalStatementDetails(
 				aggregation_interval,
 				array_agg(app_name) as app_names,
 				crdb_internal.merge_statement_stats(array_agg(statistics)) AS statistics,
-				max(sampled_plan) as sampled_plan
+				max(sampled_plan) as sampled_plan,
+				encode(fingerprint_id, 'hex') as fingerprint_id
 		FROM crdb_internal.statement_statistics %s
 		GROUP BY
-				aggregation_interval
+				aggregation_interval,
+				fingerprint_id
 		LIMIT 1`, whereClause)
 
-	const expectedNumDatums = 5
+	const expectedNumDatums = 6
 	var statement serverpb.StatementDetailsResponse_CollectedStatementSummary
 
 	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-total", nil,
@@ -547,6 +549,8 @@ func getTotalStatementDetails(
 	cfg.Align = tree.PrettyAlignOnly
 	cfg.LineWidth = tree.ConsoleLineWidth
 	aggregatedMetadata.FormattedQuery = cfg.Pretty(queryTree.AST)
+
+	aggregatedMetadata.FingerprintID = string(tree.MustBeDString(row[5]))
 
 	statement = serverpb.StatementDetailsResponse_CollectedStatementSummary{
 		Metadata:            aggregatedMetadata,
