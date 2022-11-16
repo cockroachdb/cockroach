@@ -17,23 +17,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
 // InternalExecutorWriter implements kvserver.RangeLogWriter
-// using the InternalExecutor.
+// using the Executor.
 type InternalExecutorWriter struct {
 	generateUniqueID func() int64
-	ie               sqlutil.InternalExecutor
+	ie               isql.Executor
 	insertQuery      string
 }
 
 // NewInternalExecutorWriter returns a new InternalExecutorWriter which
-// implements kvserver.RangeLogWriter using the InternalExecutor.
+// implements kvserver.RangeLogWriter using the Executor.
 func NewInternalExecutorWriter(
-	generateUniqueID func() int64, ie sqlutil.InternalExecutor, tableName string,
+	generateUniqueID func() int64, ie isql.Executor, tableName string,
 ) *InternalExecutorWriter {
 	return &InternalExecutorWriter{
 		generateUniqueID: generateUniqueID,

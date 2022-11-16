@@ -20,15 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -77,12 +75,12 @@ var _ jobs.ScheduledJobExecutor = (*scheduledChangefeedExecutor)(nil)
 // ExecuteJob implements jobs.ScheduledJobExecutor interface.
 func (s *scheduledChangefeedExecutor) ExecuteJob(
 	ctx context.Context,
+	txn isql.Txn,
 	cfg *scheduledjobs.JobExecutionConfig,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
-	txn *kv.Txn,
 ) error {
-	if err := s.executeChangefeed(ctx, cfg, sj, txn); err != nil {
+	if err := s.executeChangefeed(ctx, txn, cfg, sj); err != nil {
 		s.metrics.NumFailed.Inc(1)
 		return err
 	}
@@ -93,13 +91,12 @@ func (s *scheduledChangefeedExecutor) ExecuteJob(
 // NotifyJobTermination implements jobs.ScheduledJobExecutor interface.
 func (s *scheduledChangefeedExecutor) NotifyJobTermination(
 	ctx context.Context,
+	txn isql.Txn,
 	jobID jobspb.JobID,
 	jobStatus jobs.Status,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	schedule *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
-	txn *kv.Txn,
 ) error {
 	if jobStatus == jobs.StatusSucceeded {
 		s.metrics.NumSucceeded.Inc(1)
@@ -123,12 +120,7 @@ func (s *scheduledChangefeedExecutor) Metrics() metric.Struct {
 
 // GetCreateScheduleStatement implements jobs.ScheduledJobExecutor interface.
 func (s *scheduledChangefeedExecutor) GetCreateScheduleStatement(
-	ctx context.Context,
-	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	sj *jobs.ScheduledJob,
-	ex sqlutil.InternalExecutor,
+	ctx context.Context, txn isql.Txn, env scheduledjobs.JobSchedulerEnv, sj *jobs.ScheduledJob,
 ) (string, error) {
 	changefeedNode, err := extractChangefeedStatement(sj)
 	if err != nil {
@@ -175,7 +167,7 @@ func (s *scheduledChangefeedExecutor) GetCreateScheduleStatement(
 
 // executeChangefeed runs the changefeed.
 func (s *scheduledChangefeedExecutor) executeChangefeed(
-	ctx context.Context, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob, txn *kv.Txn,
+	ctx context.Context, txn isql.Txn, cfg *scheduledjobs.JobExecutionConfig, sj *jobs.ScheduledJob,
 ) error {
 	changefeedStmt, err := extractChangefeedStatement(sj)
 	if err != nil {
@@ -198,7 +190,7 @@ func (s *scheduledChangefeedExecutor) executeChangefeed(
 		sj.ScheduleID(), tree.AsString(changefeedStmt))
 
 	// Invoke changefeed plan hook.
-	hook, cleanup := cfg.PlanHookMaker("exec-changefeed", txn, sj.Owner())
+	hook, cleanup := cfg.PlanHookMaker("exec-changefeed", txn.KV(), sj.Owner())
 	defer cleanup()
 	changefeedFn, err := planCreateChangefeed(ctx, hook.(sql.PlanHookState), changefeedStmt)
 	if err != nil {
@@ -555,7 +547,7 @@ func doCreateChangefeedSchedule(
 		return errors.Newf("User needs CONTROLCHANGEFEED role to schedule changefeeds.")
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg())
+	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {
@@ -633,7 +625,7 @@ func doCreateChangefeedSchedule(
 		es.SetNextRun(*firstRun)
 	}
 
-	if err := es.Create(ctx, p.ExecCfg().InternalExecutor, p.Txn()); err != nil {
+	if err := jobs.ScheduledJobTxn(p.InternalSQLTxn()).Create(ctx, es); err != nil {
 		return err
 	}
 

@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -43,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -295,15 +295,15 @@ func resolveUDTsUsedByImportInto(
 	typeDescs := make([]catalog.TypeDescriptor, 0)
 	var dbDesc catalog.DatabaseDescriptor
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) (err error) {
-		dbDesc, err = descriptors.ByID(txn).WithoutNonPublic().Get().Database(ctx, table.GetParentID())
+		dbDesc, err = descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, table.GetParentID())
 		if err != nil {
 			return err
 		}
 		typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				immutDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Type(ctx, id)
+				immutDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Type(ctx, id)
 				if err != nil {
 					return nil, err
 				}
@@ -314,7 +314,7 @@ func resolveUDTsUsedByImportInto(
 		}
 
 		for _, typeID := range typeIDs {
-			immutDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Type(ctx, typeID)
+			immutDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Type(ctx, typeID)
 			if err != nil {
 				return err
 			}
@@ -889,9 +889,10 @@ func importPlanHook(
 		// computed columns such as `gateway_region`.
 		var databasePrimaryRegion catpb.RegionName
 		if db.IsMultiRegion() {
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
-				descsCol *descs.Collection) error {
-				regionConfig, err := sql.SynthesizeRegionConfig(ctx, txn, db.GetID(), descsCol)
+			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+				ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
+			) error {
+				regionConfig, err := sql.SynthesizeRegionConfig(ctx, txn.KV(), db.GetID(), descsCol)
 				if err != nil {
 					return err
 				}
@@ -955,7 +956,7 @@ func importPlanHook(
 			// record. We do not wait for the job to finish.
 			jobID := p.ExecCfg().JobRegistry.MakeJobID()
 			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, jobID, p.Txn())
+				ctx, jr, jobID, p.InternalSQLTxn())
 			if err != nil {
 				return err
 			}
@@ -967,7 +968,7 @@ func importPlanHook(
 
 		// We create the job record in the planner's transaction to ensure that
 		// the job record creation happens transactionally.
-		plannerTxn := p.Txn()
+		plannerTxn := p.InternalSQLTxn()
 
 		// Construct the job and commit the transaction. Perform this work in a
 		// closure to ensure that the job is cleaned up if an error occurs.
@@ -990,11 +991,12 @@ func importPlanHook(
 			// is safe because we're in an implicit transaction. If we were in an
 			// explicit transaction the job would have to be run with the detached
 			// option and would have been handled above.
-			return plannerTxn.Commit(ctx)
+			return plannerTxn.KV().Commit(ctx)
 		}(); err != nil {
 			return err
 		}
 
+		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}

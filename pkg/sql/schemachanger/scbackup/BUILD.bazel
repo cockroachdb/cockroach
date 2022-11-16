@@ -11,14 +11,13 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
-        "//pkg/kv",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/nstree",
+        "//pkg/sql/isql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/sql/schemachanger/screl",
-        "//pkg/sql/sqlutil",
     ],
 )
 

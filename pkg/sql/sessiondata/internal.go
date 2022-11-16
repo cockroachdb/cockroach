@@ -15,8 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 )
 
-// InternalExecutorOverride is used by the InternalExecutor interface
+// InternalExecutorOverride is used by the Executor interface
 // to allow control over some of the session data.
+//
+// TODO(ajwerner): Move this struct to isql and rename to Override.
 type InternalExecutorOverride struct {
 	// User represents the user that the query will run under.
 	User username.SQLUsername

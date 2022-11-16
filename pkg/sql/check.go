@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -26,12 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -49,11 +48,10 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
-	txn *kv.Txn,
+	txn isql.Txn,
 	sessionData *sessiondata.SessionData,
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
-	ie sqlutil.InternalExecutor,
 	indexIDForValidation descpb.IndexID,
 ) error {
 	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
@@ -67,10 +65,10 @@ func validateCheckExpr(
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
 	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
-	rows, err := ie.QueryRowEx(
+	rows, err := txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
-		txn,
+		txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		queryStr)
 	if err != nil {
@@ -282,12 +280,11 @@ func nonMatchingRowQuery(
 // reuse an existing kv.Txn safely.
 func validateForeignKey(
 	ctx context.Context,
+	txn isql.Txn,
 	srcTable *tabledesc.Mutable,
 	targetTable catalog.TableDescriptor,
 	fk *descpb.ForeignKeyConstraint,
 	indexIDForValidation descpb.IndexID,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
 ) error {
 	nCols := len(fk.OriginColumnIDs)
 
@@ -314,8 +311,8 @@ func validateForeignKey(
 			query,
 		)
 
-		values, err := ie.QueryRowEx(ctx, "validate foreign key constraint",
-			txn,
+		values, err := txn.QueryRowEx(ctx, "validate foreign key constraint",
+			txn.KV(),
 			sessiondata.NodeUserSessionDataOverride, query)
 		if err != nil {
 			return err
@@ -338,7 +335,7 @@ func validateForeignKey(
 		query,
 	)
 
-	values, err := ie.QueryRowEx(ctx, "validate fk constraint", txn,
+	values, err := txn.QueryRowEx(ctx, "validate fk constraint", txn.KV(),
 		sessiondata.NodeUserSessionDataOverride, query)
 	if err != nil {
 		return err
@@ -446,7 +443,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 			return err
 		}
 		return RevalidateUniqueConstraintsInTable(
-			ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+			ctx, p.InternalSQLTxn(), p.User(), tableDesc,
 		)
 	})
 }
@@ -461,7 +458,7 @@ func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableI
 		return err
 	}
 	return RevalidateUniqueConstraintsInTable(
-		ctx, p.Txn(), p.User(), p.ExecCfg().InternalExecutor, tableDesc,
+		ctx, p.InternalSQLTxn(), p.User(), tableDesc,
 	)
 }
 
@@ -492,8 +489,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 					index.GetPredicate(),
 					0, /* indexIDForValidation */
-					p.ExecCfg().InternalExecutor,
-					p.Txn(),
+					p.InternalSQLTxn(),
 					p.User(),
 					true, /* preExisting */
 				)
@@ -513,8 +509,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
 				0, /* indexIDForValidation */
-				p.ExecCfg().InternalExecutor,
-				p.Txn(),
+				p.InternalSQLTxn(),
 				p.User(),
 				true, /* preExisting */
 			)
@@ -562,11 +557,7 @@ func HasVirtualUniqueConstraints(tableDesc catalog.TableDescriptor) bool {
 // enforced by an index. This includes implicitly partitioned UNIQUE indexes
 // and UNIQUE WITHOUT INDEX constraints.
 func RevalidateUniqueConstraintsInTable(
-	ctx context.Context,
-	txn *kv.Txn,
-	user username.SQLUsername,
-	ie sqlutil.InternalExecutor,
-	tableDesc catalog.TableDescriptor,
+	ctx context.Context, txn isql.Txn, user username.SQLUsername, tableDesc catalog.TableDescriptor,
 ) error {
 	// Check implicitly partitioned UNIQUE indexes.
 	for _, index := range tableDesc.ActiveIndexes() {
@@ -578,7 +569,6 @@ func RevalidateUniqueConstraintsInTable(
 				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
 				index.GetPredicate(),
 				0, /* indexIDForValidation */
-				ie,
 				txn,
 				user,
 				true, /* preExisting */
@@ -599,7 +589,6 @@ func RevalidateUniqueConstraintsInTable(
 				uc.CollectKeyColumnIDs().Ordered(),
 				uc.GetPredicate(),
 				0, /* indexIDForValidation */
-				ie,
 				txn,
 				user,
 				true, /* preExisting */
@@ -634,8 +623,7 @@ func validateUniqueConstraint(
 	columnIDs []descpb.ColumnID,
 	pred string,
 	indexIDForValidation descpb.IndexID,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
+	txn isql.Txn,
 	user username.SQLUsername,
 	preExisting bool,
 ) error {
@@ -672,7 +660,7 @@ func validateUniqueConstraint(
 		MaxRetries:     5,
 	}
 	for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); {
-		values, err = ie.QueryRowEx(ctx, "validate unique constraint", txn, sessionDataOverride, query)
+		values, err = txn.QueryRowEx(ctx, "validate unique constraint", txn.KV(), sessionDataOverride, query)
 		if err == nil {
 			break
 		}
@@ -744,7 +732,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 	ttl := tableDesc.GetRowLevelTTL()
 
 	execCfg := p.ExecCfg()
-	env := JobSchedulerEnv(execCfg)
+	env := JobSchedulerEnv(execCfg.JobsKnobs())
 
 	wrapError := func(origErr error) error {
 		return errors.WithHintf(
@@ -754,13 +742,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 		)
 	}
 
-	sj, err := jobs.LoadScheduledJob(
-		ctx,
-		env,
-		ttl.ScheduleID,
-		execCfg.InternalExecutor,
-		p.txn,
-	)
+	sj, err := jobs.ScheduledJobTxn(p.InternalSQLTxn()).Load(ctx, env, ttl.ScheduleID)
 	if err != nil {
 		if jobs.HasScheduledJobNotFoundError(err) {
 			return wrapError(
@@ -818,8 +800,8 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 	}
 	sj, err := CreateRowLevelTTLScheduledJob(
 		ctx,
-		p.ExecCfg(),
-		p.txn,
+		p.ExecCfg().JobsKnobs(),
+		jobs.ScheduledJobTxn(p.InternalSQLTxn()),
 		p.User(),
 		tableDesc.GetID(),
 		tableDesc.GetRowLevelTTL(),

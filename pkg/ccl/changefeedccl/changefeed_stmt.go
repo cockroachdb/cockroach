@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -280,14 +281,14 @@ func changefeedPlanHook(
 				// must have specified transaction to use, and is responsible for committing
 				// transaction.
 
-				txn := p.ExtendedEvalContext().Txn
-				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jobID, txn)
+				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jobID, p.InternalSQLTxn())
 				if err != nil {
 					return err
 				}
 
 				if ptr != nil {
-					if err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr); err != nil {
+					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+					if err := pts.Protect(ctx, ptr); err != nil {
 						return err
 					}
 				}
@@ -302,12 +303,12 @@ func changefeedPlanHook(
 				}
 			}
 
-			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
 					return err
 				}
 				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr)
+					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 				}
 				return nil
 			}); err != nil {
@@ -938,7 +939,7 @@ func validateDetailsAndOptions(
 // TODO(yevgeniy): Add virtual column support.
 func validateAndNormalizeChangefeedExpression(
 	ctx context.Context,
-	execCtx sql.JobExecContext,
+	execCtx sql.PlanHookState,
 	opts changefeedbase.StatementOptions,
 	sc *tree.SelectClause,
 	descriptors map[tree.TablePattern]catalog.Descriptor,
@@ -973,7 +974,7 @@ func (b *changefeedResumer) setJobRunningStatus(
 	}
 
 	status := jobs.RunningStatus(fmt.Sprintf(fmtOrMsg, args...))
-	if err := b.job.RunningStatus(ctx, nil,
+	if err := b.job.NoTxn().RunningStatus(ctx,
 		func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return status, nil
 		},
@@ -1022,8 +1023,8 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.PauseRequested(ctx, nil /* txn */, func(ctx context.Context,
-			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
+		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context,
+			planHookState interface{}, txn isql.Txn, progress *jobspb.Progress) error {
 			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
 			if err != nil {
 				return err
@@ -1118,8 +1119,12 @@ func (b *changefeedResumer) OnFailOrCancel(
 	exec := jobExec.(sql.JobExecContext)
 	execCfg := exec.ExecCfg()
 	progress := b.job.Progress()
-	b.maybeCleanUpProtectedTimestamp(ctx, execCfg.DB, execCfg.ProtectedTimestampProvider,
-		progress.GetChangefeed().ProtectedTimestampRecord)
+	b.maybeCleanUpProtectedTimestamp(
+		ctx,
+		execCfg.InternalDB,
+		execCfg.ProtectedTimestampProvider,
+		progress.GetChangefeed().ProtectedTimestampRecord,
+	)
 
 	// If this job has failed (not canceled), increment the counter.
 	if jobs.HasErrJobCanceled(
@@ -1136,13 +1141,13 @@ func (b *changefeedResumer) OnFailOrCancel(
 
 // Try to clean up a protected timestamp created by the changefeed.
 func (b *changefeedResumer) maybeCleanUpProtectedTimestamp(
-	ctx context.Context, db *kv.DB, pts protectedts.Storage, ptsID uuid.UUID,
+	ctx context.Context, db isql.DB, pts protectedts.Manager, ptsID uuid.UUID,
 ) {
 	if ptsID == uuid.Nil {
 		return
 	}
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return pts.Release(ctx, txn, ptsID)
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return pts.WithTxn(txn).Release(ctx, ptsID)
 	}); err != nil && !errors.Is(err, protectedts.ErrNotExists) {
 		// NB: The record should get cleaned up by the reconciliation loop.
 		// No good reason to cause more trouble by returning an error here.
@@ -1156,7 +1161,7 @@ var _ jobs.PauseRequester = (*changefeedResumer)(nil)
 // OnPauseRequest implements jobs.PauseRequester. If this changefeed is being
 // paused, we may want to clear the protected timestamp record.
 func (b *changefeedResumer) OnPauseRequest(
-	ctx context.Context, jobExec interface{}, txn *kv.Txn, progress *jobspb.Progress,
+	ctx context.Context, jobExec interface{}, txn isql.Txn, progress *jobspb.Progress,
 ) error {
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 
@@ -1167,7 +1172,8 @@ func (b *changefeedResumer) OnPauseRequest(
 		// Release existing pts record to avoid a single changefeed left on pause
 		// resulting in storage issues
 		if cp.ProtectedTimestampRecord != uuid.Nil {
-			if err := execCfg.ProtectedTimestampProvider.Release(ctx, txn, cp.ProtectedTimestampRecord); err != nil {
+			pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+			if err := pts.Release(ctx, cp.ProtectedTimestampRecord); err != nil {
 				log.Warningf(ctx, "failed to release protected timestamp %v: %v", cp.ProtectedTimestampRecord, err)
 			} else {
 				cp.ProtectedTimestampRecord = uuid.Nil
@@ -1181,9 +1187,9 @@ func (b *changefeedResumer) OnPauseRequest(
 		if resolved == nil {
 			return nil
 		}
-		pts := execCfg.ProtectedTimestampProvider
+		pts := execCfg.ProtectedTimestampProvider.WithTxn(txn)
 		ptr := createProtectedTimestampRecord(ctx, execCfg.Codec, b.job.ID(), AllTargets(details), *resolved, cp)
-		return pts.Protect(ctx, txn, ptr)
+		return pts.Protect(ctx, ptr)
 	}
 
 	return nil
@@ -1389,7 +1395,7 @@ func maybeUpgradePreProductionReadyExpression(
 
 	const useReadLock = false
 	if err := jobExec.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, nil, useReadLock,
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			payload := md.Payload
 			payload.Details = jobspb.WrapPayloadDetails(details)
 			ju.UpdatePayload(payload)

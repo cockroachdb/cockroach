@@ -96,7 +96,7 @@ WHERE s.descriptor_id = $1
   AND s.end_key > r.start_key
   AND r.start_key >= s.start_key -- only consider split points inside the table keyspace.
   AND split_enforced_until IS NOT NULL`
-	ie := params.p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(params.SessionData())
+	ie := params.p.ExecCfg().InternalDB.NewInternalExecutor(params.SessionData())
 	it, err := ie.QueryIteratorEx(
 		params.ctx, "split points query", params.p.txn, sessiondata.NoSessionDataOverride,
 		statement,

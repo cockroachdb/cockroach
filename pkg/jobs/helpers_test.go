@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -59,7 +59,7 @@ type OnPauseRequestFunc = onPauseRequestFunc
 var _ PauseRequester = FakeResumer{}
 
 func (d FakeResumer) OnPauseRequest(
-	ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress,
+	ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress,
 ) error {
 	if d.PauseRequest == nil {
 		return nil
@@ -67,54 +67,53 @@ func (d FakeResumer) OnPauseRequest(
 	return d.PauseRequest(ctx, execCtx, txn, details)
 }
 
+func (r *Registry) CancelRequested(ctx context.Context, txn isql.Txn, id jobspb.JobID) error {
+	return r.cancelRequested(ctx, txn, id)
+}
+
 // Started is a wrapper around the internal function that moves a job to the
 // started state.
 func (j *Job) Started(ctx context.Context) error {
-	return j.started(ctx, nil /* txn */)
+	return j.NoTxn().started(ctx)
 }
 
 // Reverted is a wrapper around the internal function that moves a job to the
 // reverting state.
 func (j *Job) Reverted(ctx context.Context, err error) error {
-	return j.reverted(ctx, nil /* txn */, err, nil)
+	return j.NoTxn().reverted(ctx, err, nil)
 }
 
 // Paused is a wrapper around the internal function that moves a job to the
 // paused state.
 func (j *Job) Paused(ctx context.Context) error {
-	return j.paused(ctx, nil /* txn */, nil /* fn */)
+	return j.NoTxn().paused(ctx, nil /* fn */)
 }
 
 // Failed is a wrapper around the internal function that moves a job to the
 // failed state.
 func (j *Job) Failed(ctx context.Context, causingErr error) error {
-	return j.failed(ctx, nil /* txn */, causingErr, nil /* fn */)
+	return j.NoTxn().failed(ctx, causingErr)
 }
 
 // Succeeded is a wrapper around the internal function that moves a job to the
 // succeeded state.
 func (j *Job) Succeeded(ctx context.Context) error {
-	return j.succeeded(ctx, nil /* txn */, nil /* fn */)
+	return j.NoTxn().succeeded(ctx, nil /* fn */)
 }
 
 // TestingCurrentStatus returns the current job status from the jobs table or error.
-func (j *Job) TestingCurrentStatus(ctx context.Context, txn *kv.Txn) (Status, error) {
+func (j *Job) TestingCurrentStatus(ctx context.Context) (Status, error) {
 	var statusString tree.DString
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRow(ctx, "job-status", txn, selectStmt, j.ID())
-		if err != nil {
-			return errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
-		}
-		if row == nil {
-			return errors.Errorf("job %d: not found in system.jobs", j.ID())
-		}
-
-		statusString = tree.MustBeDString(row[0])
-		return nil
-	}); err != nil {
-		return "", err
+	const selectStmt = "SELECT status FROM system.jobs WHERE id = $1"
+	row, err := j.registry.db.Executor().QueryRow(ctx, "job-status", nil, selectStmt, j.ID())
+	if err != nil {
+		return "", errors.Wrapf(err, "job %d: can't query system.jobs", j.ID())
 	}
+	if row == nil {
+		return "", errors.Errorf("job %d: not found in system.jobs", j.ID())
+	}
+
+	statusString = tree.MustBeDString(row[0])
 	return Status(statusString), nil
 }
 

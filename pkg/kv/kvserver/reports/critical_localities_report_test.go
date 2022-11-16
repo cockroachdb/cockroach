@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -181,7 +181,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 	// doesn't interfere with the test.
 	ReporterInterval.Override(ctx, &st.SV, 0)
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{Settings: st})
-	con := s.InternalExecutor().(sqlutil.InternalExecutor)
+	con := s.InternalExecutor().(isql.Executor)
 	defer s.Stopper().Stop(ctx)
 
 	// Verify that tables are empty.
@@ -288,9 +288,7 @@ func TestCriticalLocalitiesSaving(t *testing.T) {
 }
 
 // TableData reads a table and returns the rows as strings.
-func TableData(
-	ctx context.Context, tableName string, executor sqlutil.InternalExecutor,
-) [][]string {
+func TableData(ctx context.Context, tableName string, executor isql.Executor) [][]string {
 	if it, err := executor.QueryIterator(
 		ctx, "test-select-"+tableName, nil /* txn */, "select * from "+tableName,
 	); err == nil {

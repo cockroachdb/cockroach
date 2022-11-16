@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -31,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -43,8 +43,7 @@ import (
 func NewBuilderDependencies(
 	clusterID uuid.UUID,
 	codec keys.SQLCodec,
-	txn *kv.Txn,
-	descsCollection *descs.Collection,
+	txn descs.Txn,
 	schemaResolverFactory scbuild.SchemaResolverFactory,
 	authAccessor scbuild.AuthorizationAccessor,
 	astFormatter scbuild.AstFormatter,
@@ -52,23 +51,22 @@ func NewBuilderDependencies(
 	sessionData *sessiondata.SessionData,
 	settings *cluster.Settings,
 	statements []string,
-	internalExecutor sqlutil.InternalExecutor,
 	clientNoticeSender eval.ClientNoticeSender,
 ) scbuild.Dependencies {
 	return &buildDeps{
 		clusterID:        clusterID,
 		codec:            codec,
-		txn:              txn,
-		descsCollection:  descsCollection,
+		txn:              txn.KV(),
+		descsCollection:  txn.Descriptors(),
 		authAccessor:     authAccessor,
 		sessionData:      sessionData,
 		settings:         settings,
 		statements:       statements,
 		astFormatter:     astFormatter,
 		featureChecker:   featureChecker,
-		internalExecutor: internalExecutor,
+		internalExecutor: txn,
 		schemaResolver: schemaResolverFactory(
-			descsCollection, sessiondata.NewStack(sessionData), txn, authAccessor,
+			txn.Descriptors(), sessiondata.NewStack(sessionData), txn.KV(), authAccessor,
 		),
 		clientNoticeSender: clientNoticeSender,
 	}
@@ -86,7 +84,7 @@ type buildDeps struct {
 	statements         []string
 	astFormatter       scbuild.AstFormatter
 	featureChecker     scbuild.FeatureChecker
-	internalExecutor   sqlutil.InternalExecutor
+	internalExecutor   isql.Executor
 	clientNoticeSender eval.ClientNoticeSender
 }
 

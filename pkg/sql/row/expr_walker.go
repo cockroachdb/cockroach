@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
@@ -288,7 +289,7 @@ func importGenUUID(
 type SeqChunkProvider struct {
 	JobID    jobspb.JobID
 	Registry *jobs.Registry
-	DB       *kv.DB
+	DB       isql.DB
 }
 
 // RequestChunk updates seqMetadata with information about the chunk of sequence
@@ -299,9 +300,9 @@ func (j *SeqChunkProvider) RequestChunk(
 	ctx context.Context, evalCtx *eval.Context, c *CellInfoAnnotation, seqMetadata *SequenceMetadata,
 ) error {
 	var hasAllocatedChunk bool
-	return j.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	return j.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var foundFromPreviouslyAllocatedChunk bool
-		resolveChunkFunc := func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		resolveChunkFunc := func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 
 			// Check if we have already reserved a chunk corresponding to this row in a
@@ -318,7 +319,7 @@ func (j *SeqChunkProvider) RequestChunk(
 
 			// Reserve a new sequence value chunk at the KV level.
 			if !hasAllocatedChunk {
-				if err := reserveChunkOfSeqVals(ctx, evalCtx, c, seqMetadata, j.DB); err != nil {
+				if err := reserveChunkOfSeqVals(ctx, evalCtx, c, seqMetadata, j.DB.KV()); err != nil {
 					return err
 				}
 				hasAllocatedChunk = true
@@ -356,9 +357,11 @@ func (j *SeqChunkProvider) RequestChunk(
 			ju.UpdateProgress(progress)
 			return nil
 		}
-		const useReadLock = true
-		err := j.Registry.UpdateJobWithTxn(ctx, j.JobID, txn, useReadLock, resolveChunkFunc)
+		job, err := j.Registry.LoadJobWithTxn(ctx, j.JobID, txn)
 		if err != nil {
+			return err
+		}
+		if err := job.WithTxn(txn).WithReadLock().Update(ctx, resolveChunkFunc); err != nil {
 			return err
 		}
 

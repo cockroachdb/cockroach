@@ -261,7 +261,8 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		),
 	)
 	if _, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.txn); err != nil {
+		ctx, record, p.ExecCfg().JobRegistry.MakeJobID(), p.InternalSQLTxn(),
+	); err != nil {
 		return err
 	}
 
@@ -291,7 +292,7 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		NewIndexes:        newIndexIDs[1:],
 	}
 	if err := maybeUpdateZoneConfigsForPKChange(
-		ctx, p.txn, p.ExecCfg(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(), p.Descriptors(), tableDesc, swapInfo,
+		ctx, p.InternalSQLTxn(), p.ExecCfg(), p.ExtendedEvalContext().Tracing.KVTracingEnabled(), p.Descriptors(), tableDesc, swapInfo,
 	); err != nil {
 		return err
 	}

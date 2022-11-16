@@ -69,6 +69,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/enum",
         "//pkg/sql/execinfra",
+        "//pkg/sql/isql",
         "//pkg/sql/parser",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",

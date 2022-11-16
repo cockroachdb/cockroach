@@ -14,14 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // CreateDeclarativeSchemaChangeJobs is called during the last phase of a
@@ -32,11 +31,7 @@ import (
 // It should only be called for backups which do not restore the jobs table
 // directly.
 func CreateDeclarativeSchemaChangeJobs(
-	ctx context.Context,
-	registry *jobs.Registry,
-	txn *kv.Txn,
-	ie sqlutil.InternalExecutor,
-	allMut nstree.Catalog,
+	ctx context.Context, registry *jobs.Registry, txn isql.Txn, allMut nstree.Catalog,
 ) error {
 	byJobID := make(map[catpb.JobID][]catalog.MutableDescriptor)
 	_ = allMut.ForEachDescriptor(func(d catalog.Descriptor) error {
@@ -76,6 +71,6 @@ func CreateDeclarativeSchemaChangeJobs(
 			runningStatus,
 		))
 	}
-	_, err := registry.CreateJobsWithTxn(ctx, txn, ie, records)
+	_, err := registry.CreateJobsWithTxn(ctx, txn, records)
 	return err
 }

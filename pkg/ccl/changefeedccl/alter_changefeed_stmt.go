@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -81,8 +81,6 @@ func alterChangefeedPlanHook(
 		return nil, nil, nil, false, nil
 	}
 
-	lockForUpdate := false
-
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 		if err := validateSettings(ctx, p); err != nil {
 			return err
@@ -94,7 +92,7 @@ func alterChangefeedPlanHook(
 		}
 		jobID := jobspb.JobID(tree.MustBeDInt(typedExpr))
 
-		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.Txn())
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
 			err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
 			return err
@@ -187,17 +185,19 @@ func alterChangefeedPlanHook(
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
 
-		err = p.ExecCfg().JobRegistry.UpdateJobWithTxn(ctx, jobID, p.Txn(), lockForUpdate, func(
-			txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
+		if err != nil {
+			return err
+		}
+		if err := j.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			ju.UpdatePayload(&newPayload)
 			if newProgress != nil {
 				ju.UpdateProgress(newProgress)
 			}
 			return nil
-		})
-
-		if err != nil {
+		}); err != nil {
 			return err
 		}
 

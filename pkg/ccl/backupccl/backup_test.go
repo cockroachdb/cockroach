@@ -80,11 +80,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -643,9 +643,7 @@ func TestBackupRestoreAppend(t *testing.T) {
 				tc.Servers[0].ClusterSettings(),
 				blobs.TestEmptyBlobClientFactory,
 				username.RootUserName(),
-				tc.Servers[0].InternalExecutor().(*sql.InternalExecutor),
-				tc.Servers[0].InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
-				tc.Servers[0].DB(),
+				tc.Servers[0].InternalDB().(isql.DB),
 				nil, /* limiters */
 				cloud.NilMetrics,
 			)
@@ -4361,9 +4359,8 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 type testKMSEnv struct {
 	settings         *cluster.Settings
 	externalIOConfig *base.ExternalIODirConfig
-	db               *kv.DB
+	db               isql.DB
 	user             username.SQLUsername
-	ie               sqlutil.InternalExecutor
 }
 
 var _ cloud.KMSEnv = &testKMSEnv{}
@@ -4376,16 +4373,12 @@ func (e *testKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 	return e.externalIOConfig
 }
 
-func (e *testKMSEnv) DBHandle() *kv.DB {
+func (e *testKMSEnv) DBHandle() isql.DB {
 	return e.db
 }
 
 func (e *testKMSEnv) User() username.SQLUsername {
 	return e.user
-}
-
-func (e *testKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
-	return e.ie
 }
 
 type testKMS struct {
@@ -4502,7 +4495,6 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			externalIOConfig: &base.ExternalIODirConfig{},
 			db:               nil,
 			user:             username.RootUserName(),
-			ie:               nil,
 		}
 		kmsInfo, err := backupencryption.ValidateKMSURIsAgainstFullBackup(
 			ctx, tc.incrementalBackupURIs, masterKeyIDToDataKey, kmsEnv)
@@ -5841,9 +5833,8 @@ func TestBackupRestoreCorruptedStatsIgnored(t *testing.T) {
 	kmsEnv := &testKMSEnv{
 		settings:         execCfg.Settings,
 		externalIOConfig: &execCfg.ExternalIODirConfig,
-		db:               execCfg.DB,
+		db:               execCfg.InternalDB,
 		user:             username.RootUserName(),
-		ie:               execCfg.InternalExecutor,
 	}
 	require.NoError(t, backupinfo.WriteTableStatistics(ctx, store, nil, /* encryption */
 		kmsEnv, &statsTable))
@@ -8205,9 +8196,7 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		st,
 		blobs.TestBlobServiceClient(dir),
 		username.RootUserName(),
-		nil, /* ie */
-		nil, /* ief */
-		nil, /* kvDB */
+		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)
@@ -8230,7 +8219,6 @@ func TestReadBackupManifestMemoryMonitoring(t *testing.T) {
 		externalIOConfig: &base.ExternalIODirConfig{},
 		db:               nil,
 		user:             username.RootUserName(),
-		ie:               nil,
 	}
 	require.NoError(t, backupinfo.WriteBackupManifest(ctx, storage, "testmanifest", encOpts,
 		&kmsEnv, desc))
@@ -10499,31 +10487,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1")
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 106, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 107, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 108, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10551,31 +10539,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1_new")
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1_new")
 		require.NoError(t, err)
 		require.Equal(t, 112, int(dbDesc.GetID()))
 
-		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 114, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1_new", "sc1", "tbl1")
-		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 115, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1_new", "sc1", "enum1")
-		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 116, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1_new", "sc1", "sq1")
-		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 118, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 119, int(fnDesc.GetID()))
 		require.Equal(t, 112, int(fnDesc.GetParentID()))
@@ -10638,31 +10626,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err := strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1")
+	err = sql.TestingDescsTxn(ctx, srcServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 104, int(dbDesc.GetID()))
 
-		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 106, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 107, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 108, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 110, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 111, int(fnDesc.GetID()))
 		require.Equal(t, 104, int(fnDesc.GetParentID()))
@@ -10692,31 +10680,31 @@ $$;
 	require.Equal(t, 1, len(rows[0]))
 	udfID, err = strconv.Atoi(rows[0][0])
 	require.NoError(t, err)
-	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, "db1")
+	err = sql.TestingDescsTxn(ctx, tgtServer, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, "db1")
 		require.NoError(t, err)
 		require.Equal(t, 107, int(dbDesc.GetID()))
 
-		scDesc, err := col.ByNameWithLeased(txn).Get().Schema(ctx, dbDesc, "sc1")
+		scDesc, err := col.ByNameWithLeased(txn.KV()).Get().Schema(ctx, dbDesc, "sc1")
 		require.NoError(t, err)
 		require.Equal(t, 125, int(scDesc.GetID()))
 
 		tbName := tree.MakeTableNameWithSchema("db1", "sc1", "tbl1")
-		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 126, int(tbDesc.GetID()))
 
 		typName := tree.MakeQualifiedTypeName("db1", "sc1", "enum1")
-		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn).Get(), &typName)
+		_, typDesc, err := descs.PrefixAndType(ctx, col.ByNameWithLeased(txn.KV()).Get(), &typName)
 		require.NoError(t, err)
 		require.Equal(t, 127, int(typDesc.GetID()))
 
 		tbName = tree.MakeTableNameWithSchema("db1", "sc1", "sq1")
-		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn).Get(), &tbName)
+		_, tbDesc, err = descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), &tbName)
 		require.NoError(t, err)
 		require.Equal(t, 129, int(tbDesc.GetID()))
 
-		fnDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
+		fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, descpb.ID(udfID))
 		require.NoError(t, err)
 		require.Equal(t, 130, int(fnDesc.GetID()))
 		require.Equal(t, 107, int(fnDesc.GetParentID()))

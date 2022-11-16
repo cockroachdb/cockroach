@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
@@ -222,8 +223,8 @@ func (cb *ColumnBackfiller) InitForDistributedUse(
 	var defaultExprs, computedExprs []tree.TypedExpr
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in the column expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		resolver := flowCtx.NewTypeResolver(txn)
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
 		if err := typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
 			return err
@@ -650,8 +651,8 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 
 	// Install type metadata in the target descriptors, as well as resolve any
 	// user defined types in partial index predicate expressions.
-	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		resolver := flowCtx.NewTypeResolver(txn)
+	if err := flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		resolver := flowCtx.NewTypeResolver(txn.KV())
 		// Hydrate all the types present in the table.
 		if err = typedesc.HydrateTypesInDescriptor(ctx, desc, &resolver); err != nil {
 			return err

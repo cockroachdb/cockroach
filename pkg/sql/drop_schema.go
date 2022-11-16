@@ -241,7 +241,7 @@ func (p *planner) createDropSchemaJob(
 		typeIDs = append(typeIDs, t.ID)
 	}
 
-	_, err := p.extendedEvalCtx.QueueJob(ctx, p.Txn(), jobs.Record{
+	_, err := p.extendedEvalCtx.QueueJob(ctx, p.InternalSQLTxn(), jobs.Record{
 		Description:   jobDesc,
 		Username:      p.User(),
 		DescriptorIDs: schemas,

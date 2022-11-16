@@ -401,7 +401,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
 	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
 	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	fileTableInternalExecutor := sql.MakeInternalExecutor(s.PGServer().SQLServer, sql.MemoryMetrics{}, ieMon)
 	s.externalStorageBuilder.init(
 		ctx,
 		s.sqlCfg.ExternalIODirConfig,
@@ -409,9 +408,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.sqlServer.cfg.IDContainer,
 		s.nodeDialer,
 		s.sqlServer.cfg.TestingKnobs,
-		&fileTableInternalExecutor,
-		s.sqlServer.execCfg.InternalExecutorFactory,
-		s.db,
+		s.sqlServer.execCfg.InternalDB.
+			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
 		s.costController,
 		s.registry,
 	)
@@ -889,30 +887,33 @@ func makeTenantSQLServerArgs(
 		tenantConnect,
 	)
 
+	// Define structures which have circular dependencies. The underlying structures
+	// will be filled in during the construction of the sql server.
 	circularInternalExecutor := &sql.InternalExecutor{}
-	internalExecutorFactory := &sql.InternalExecutorFactory{}
+	internalExecutorFactory := sql.NewShimInternalDB(db)
 	circularJobRegistry := &jobs.Registry{}
 
 	// Initialize the protectedts subsystem in multi-tenant clusters.
 	var protectedTSProvider protectedts.Provider
 	protectedtsKnobs, _ := baseCfg.TestingKnobs.ProtectedTS.(*protectedts.TestingKnobs)
 	pp, err := ptprovider.New(ptprovider.Config{
-		DB:               db,
-		InternalExecutor: circularInternalExecutor,
-		Settings:         st,
-		Knobs:            protectedtsKnobs,
+		DB:       internalExecutorFactory,
+		Settings: st,
+		Knobs:    protectedtsKnobs,
 		ReconcileStatusFuncs: ptreconcile.StatusFuncs{
 			jobsprotectedts.GetMetaType(jobsprotectedts.Jobs): jobsprotectedts.MakeStatusFunc(
-				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Jobs),
+				circularJobRegistry, jobsprotectedts.Jobs,
+			),
 			jobsprotectedts.GetMetaType(jobsprotectedts.Schedules): jobsprotectedts.MakeStatusFunc(
-				circularJobRegistry, circularInternalExecutor, jobsprotectedts.Schedules),
+				circularJobRegistry, jobsprotectedts.Schedules,
+			),
 		},
 	})
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
 	registry.AddMetricStruct(pp.Metrics())
-	protectedTSProvider = tenantProtectedTSProvider{Provider: pp, st: st}
+	protectedTSProvider = pp
 
 	recorder := status.NewMetricsRecorder(clock, nil, rpcContext, nil, st)
 
@@ -993,7 +994,7 @@ func makeTenantSQLServerArgs(
 		sessionRegistry:          sessionRegistry,
 		remoteFlowRunner:         remoteFlowRunner,
 		circularInternalExecutor: circularInternalExecutor,
-		internalExecutorFactory:  internalExecutorFactory,
+		internalDB:               internalExecutorFactory,
 		circularJobRegistry:      circularJobRegistry,
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,

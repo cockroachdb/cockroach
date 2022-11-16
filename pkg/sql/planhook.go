@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -126,6 +127,7 @@ type PlanHookState interface {
 	Txn() *kv.Txn
 	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*descpb.TenantInfo, error)
 	GetAvailableTenantID(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)
+	InternalSQLTxn() descs.Txn
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a

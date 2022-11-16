@@ -18,7 +18,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -30,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -70,11 +68,8 @@ type TableStatisticsCache struct {
 		// from the system table.
 		numInternalQueries int64
 	}
-	ClientDB    *kv.DB
-	SQLExecutor sqlutil.InternalExecutor
-	Settings    *cluster.Settings
-
-	internalExecutorFactory descs.TxnManager
+	db       descs.DB
+	settings *cluster.Settings
 
 	// Used when decoding KV from the range feed.
 	datumAlloc tree.DatumAlloc
@@ -118,17 +113,11 @@ type cacheEntry struct {
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
 // statistics for <cacheSize> tables.
 func NewTableStatisticsCache(
-	cacheSize int,
-	db *kv.DB,
-	sqlExecutor sqlutil.InternalExecutor,
-	settings *cluster.Settings,
-	ief descs.TxnManager,
+	cacheSize int, settings *cluster.Settings, db descs.DB,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
-		ClientDB:                db,
-		SQLExecutor:             sqlExecutor,
-		Settings:                settings,
-		internalExecutorFactory: ief,
+		db:       db,
+		settings: settings,
 	}
 	tableStatsCache.mu.cache = cache.NewUnorderedCache(cache.Config{
 		Policy:      cache.CacheLRU,
@@ -179,7 +168,7 @@ func (sc *TableStatisticsCache) Start(
 		ctx,
 		"table-stats-cache",
 		[]roachpb.Span{statsTableSpan},
-		sc.ClientDB.Clock().Now(),
+		sc.db.KV().Clock().Now(),
 		handleEvent,
 		rangefeed.WithSystemTablePriority(),
 	)
@@ -222,10 +211,10 @@ func decodeTableStatisticsKV(
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, table catalog.TableDescriptor,
 ) ([]*TableStatistic, error) {
-	if !statsUsageAllowed(table, sc.Settings) {
+	if !statsUsageAllowed(table, sc.settings) {
 		return nil, nil
 	}
-	forecast := forecastAllowed(table, sc.Settings)
+	forecast := forecastAllowed(table, sc.settings)
 	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast)
 }
 
@@ -646,10 +635,10 @@ func (sc *TableStatisticsCache) parseStats(
 			// TypeDescriptor's with the timestamp that the stats were recorded with.
 			//
 			// TODO(ajwerner): We now do delete members from enum types. See #67050.
-			if err := sc.internalExecutorFactory.DescsTxn(ctx, sc.ClientDB, func(
-				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			if err := sc.db.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
 			) error {
-				resolver := descs.NewDistSQLTypeResolver(descriptors, txn)
+				resolver := descs.NewDistSQLTypeResolver(txn.Descriptors(), txn.KV())
 				var err error
 				res.HistogramData.ColumnType, err = resolver.ResolveTypeByOID(ctx, typ.Oid())
 				return err
@@ -751,7 +740,7 @@ func (tabStat *TableStatistic) String() string {
 func (sc *TableStatisticsCache) getTableStatsFromDB(
 	ctx context.Context, tableID descpb.ID, forecast bool,
 ) ([]*TableStatistic, error) {
-	partialStatisticsColumnsVerActive := sc.Settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns)
+	partialStatisticsColumnsVerActive := sc.settings.Version.IsActive(ctx, clusterversion.V23_1AddPartialStatisticsColumns)
 	var partialPredicateCol string
 	var fullStatisticIDCol string
 	if partialStatisticsColumnsVerActive {
@@ -782,7 +771,7 @@ ORDER BY "createdAt" DESC, "columnIDs" DESC, "statisticID" DESC
 	// TODO(michae2): Add an index on system.table_statistics (tableID, createdAt,
 	// columnIDs, statisticID).
 
-	it, err := sc.SQLExecutor.QueryIterator(
+	it, err := sc.db.Executor().QueryIterator(
 		ctx, "get-table-statistics", nil /* txn */, getTableStatisticsStmt, tableID,
 	)
 	if err != nil {
