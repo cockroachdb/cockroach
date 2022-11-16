@@ -32,7 +32,7 @@ do
         continue
     fi
     exit_status=0
-    $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- --config=ci test "$test" \
+    $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci "$test" \
                                           --test_env=COCKROACH_NIGHTLY_STRESS=true \
                                           --test_timeout="$TESTTIMEOUTSECS" \
                                           --run_under "@com_github_cockroachdb_stress//:stress -bazel -shardable-artifacts 'XML_OUTPUT_FILE=$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci merge-test-xmls' $STRESSFLAGS" \
