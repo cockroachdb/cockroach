@@ -41,20 +41,21 @@ import (
 // CockroachDB uses that as a sentinel for key metadata anyway.
 //
 // Expected usage:
-//    iter := NewMVCCIncrementalIterator(e, IterOptions{
-//        StartTime:  startTime,
-//        EndTime:    endTime,
-//        UpperBound: endKey,
-//    })
-//    defer iter.Close()
-//    for iter.SeekGE(startKey); ; iter.Next() {
-//        ok, err := iter.Valid()
-//        if !ok { ... }
-//        [code using iter.Key() and iter.Value()]
-//    }
-//    if err := iter.Error(); err != nil {
-//      ...
-//    }
+//
+//	iter := NewMVCCIncrementalIterator(e, IterOptions{
+//	    StartTime:  startTime,
+//	    EndTime:    endTime,
+//	    UpperBound: endKey,
+//	})
+//	defer iter.Close()
+//	for iter.SeekGE(startKey); ; iter.Next() {
+//	    ok, err := iter.Valid()
+//	    if !ok { ... }
+//	    [code using iter.Key() and iter.Value()]
+//	}
+//	if err := iter.Error(); err != nil {
+//	  ...
+//	}
 //
 // Note regarding the correctness of the time-bound iterator optimization:
 //
@@ -159,8 +160,8 @@ type MVCCIncrementalIterOptions struct {
 // specified reader and options. The timestamp hint range should not be more
 // restrictive than the start and end time range.
 // TODO(pbardea): Add validation here and in C++ implementation that the
-//  timestamp hints are not more restrictive than incremental iterator's
-//  (startTime, endTime] interval.
+// timestamp hints are not more restrictive than incremental iterator's
+// (startTime, endTime] interval.
 func NewMVCCIncrementalIterator(
 	reader Reader, opts MVCCIncrementalIterOptions,
 ) *MVCCIncrementalIterator {
@@ -272,8 +273,8 @@ func (i *MVCCIncrementalIterator) NextKey() {
 // maybeSkipKeys checks if any keys can be skipped by using a time-bound
 // iterator. If keys can be skipped, it will update the main iterator to point
 // to the earliest version of the next candidate key.
-// It is expected that TBI is at a key <= main iterator key when calling
-// maybeSkipKeys().
+// It is expected (but not required) that TBI is at a key <= main iterator key
+// when calling maybeSkipKeys().
 func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	if i.timeBoundIter == nil {
 		// If there is no time bound iterator, we cannot skip any keys.
@@ -284,16 +285,15 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 	if iterKey.Compare(tbiKey) > 0 {
 		// If the iterKey got ahead of the TBI key, advance the TBI Key.
 		//
-		// The case where iterKey == tbiKey, after this call, is the fast-path is
-		// when the TBI and the main iterator are in lockstep. In this case, the
-		// main iterator was referencing the next key that would be visited by the
-		// TBI. This means that for the incremental iterator to perform a Next or
-		// NextKey will require only 1 extra NextKey invocation while they remain in
-		// lockstep. This could be common if most keys are modified or the
-		// modifications are clustered in keyspace.
-		//
-		// NB: The Seek() below is expensive, so we aim to avoid it if both
-		// iterators remain in lockstep as described above.
+		// We fast-path the case where the main iterator is referencing the next
+		// key that would be visited by the TBI. In that case, after the following
+		// NextKey call, we will have iterKey == tbiKey. This means that for the
+		// incremental iterator to perform a Next or NextKey will require only 1
+		// extra NextKey invocation while they remain in lockstep. This case will
+		// be common if most keys are modified, or the modifications are clustered
+		// in keyspace, which makes the incremental iterator optimization
+		// ineffective. And so in this case we want to minimize the extra cost of
+		// using the incremental iterator, by avoiding a SeekGE.
 		i.timeBoundIter.NextKey()
 		if ok, err := i.timeBoundIter.Valid(); !ok {
 			i.err = err
@@ -325,7 +325,9 @@ func (i *MVCCIncrementalIterator) maybeSkipKeys() {
 			// same as the main iterator, we may be able to skip over a large group
 			// of keys. The main iterator is seeked to the TBI in hopes that many
 			// keys were skipped. Note that a Seek is an order of magnitude more
-			// expensive than a Next call.
+			// expensive than a Next call, but the engine has low-level
+			// optimizations that attempt to make it cheaper if the seeked key is
+			// "nearby" (within the same sstable block).
 			seekKey := MakeMVCCMetadataKey(tbiKey)
 			i.iter.SeekGE(seekKey)
 			if !i.checkValidAndSaveErr() {
@@ -349,7 +351,7 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 	}
 
 	// The key is a metakey (an intent or inline meta). If an inline meta, we
-	// will error below. If an intent meta, then this is used later to see if
+	// will handle below. If an intent meta, then this is used later to see if
 	// the timestamp of this intent is within the incremental iterator's time
 	// bounds.
 	if i.err = protoutil.Unmarshal(i.iter.UnsafeValue(), &i.meta); i.err != nil {
@@ -408,10 +410,12 @@ func (i *MVCCIncrementalIterator) initMetaAndCheckForIntentOrInlineError() error
 // It populates i.err with an error if either of the following was encountered:
 //
 // a) an inline value when the inline policy is
-//    MVCCIncrementalIterInlinePolicyError; or
+//
+//	MVCCIncrementalIterInlinePolicyError; or
 //
 // b) an intent with a timestamp within the incremental iterator's bounds when
-//    the intent policy is MVCCIncrementalIterIntentPolicyError.
+//
+//	the intent policy is MVCCIncrementalIterIntentPolicyError.
 func (i *MVCCIncrementalIterator) advance() {
 	for {
 		i.maybeSkipKeys()
@@ -430,6 +434,8 @@ func (i *MVCCIncrementalIterator) advance() {
 		if i.meta.IsInline() && i.inlinePolicy == MVCCIncrementalIterInlinePolicyEmit {
 			return
 		}
+
+		// INVARIANT: we have an intent or an MVCC value.
 
 		if i.meta.Txn != nil {
 			switch i.intentPolicy {
@@ -452,7 +458,7 @@ func (i *MVCCIncrementalIterator) advance() {
 
 		// Note that MVCC keys are sorted by key, then by _descending_ timestamp
 		// order with the exception of the metakey (timestamp 0) being sorted
-		// first. See mvcc.h for more information.
+		// first.
 		metaTimestamp := i.meta.Timestamp.ToTimestamp()
 		if i.endTime.Less(metaTimestamp) {
 			i.iter.Next()
@@ -528,7 +534,7 @@ func (i *MVCCIncrementalIterator) NextIgnoringTime() {
 			continue
 		}
 
-		// We have a valid KV or an intent to emit.
+		// We have a valid KV or an intent or an inline value to emit.
 		return
 	}
 }
