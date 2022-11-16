@@ -512,7 +512,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID.ToUint64())
+		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, fmt.Sprintf(`tenant "%d" does not exist`, tenID.ToUint64()))
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -609,7 +609,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			"SELECT status FROM [SHOW JOBS] WHERE description = 'GC for tenant 10'",
 			[][]string{{"succeeded"}},
 		)
-		_, err := sql.GetTenantRecord(ctx, &execCfg, nil /* txn */, tenID.ToUint64())
+		_, err := sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, tenID)
 		require.EqualError(t, err, `tenant "10" does not exist`)
 
 		// PTS record protecting system tenant cluster should block tenant GC.

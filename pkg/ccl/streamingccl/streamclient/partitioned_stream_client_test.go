@@ -76,7 +76,8 @@ func TestPartitionedStreamReplicationClient(t *testing.T) {
 
 	defer cleanup()
 
-	tenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID())
+	testTenantName := roachpb.TenantName("test-tenant")
+	tenant, cleanupTenant := h.CreateTenant(t, serverutils.TestTenantID(), testTenantName)
 	defer cleanupTenant()
 
 	ctx := context.Background()

@@ -181,6 +181,8 @@ func (rf *ReplicationFeed) consumeUntil(
 
 // TenantState maintains test state related to tenant.
 type TenantState struct {
+	// Name is the name of the tenant.
+	Name roachpb.TenantName
 	// ID is the ID of the tenant.
 	ID roachpb.TenantID
 	// Codec is the Codec of the tenant.
@@ -240,10 +242,14 @@ SET CLUSTER SETTING sql.defaults.experimental_stream_replication.enabled = 'on';
 
 // CreateTenant creates a tenant under the replication helper's server
 func (rh *ReplicationHelper) CreateTenant(
-	t *testing.T, tenantID roachpb.TenantID,
+	t *testing.T, tenantID roachpb.TenantID, tenantName roachpb.TenantName,
 ) (TenantState, func()) {
-	_, tenantConn := serverutils.StartTenant(t, rh.SysServer, base.TestTenantArgs{TenantID: tenantID})
+	_, tenantConn := serverutils.StartTenant(t, rh.SysServer, base.TestTenantArgs{
+		TenantID:   tenantID,
+		TenantName: tenantName,
+	})
 	return TenantState{
+			Name:  tenantName,
 			ID:    tenantID,
 			Codec: keys.MakeSQLCodec(tenantID),
 			SQL:   sqlutils.MakeSQLRunner(tenantConn),

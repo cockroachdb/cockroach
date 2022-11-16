@@ -71,7 +71,8 @@ func (p *partitionedStreamClient) Create(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var streamID streampb.StreamID
-	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantID.ToUint64())
+	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1::INT)`,
+		tenantID.ToUint64())
 	err := row.Scan(&streamID)
 	if err != nil {
 		return streampb.InvalidStreamID,
