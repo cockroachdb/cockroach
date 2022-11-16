@@ -2566,6 +2566,31 @@ var charts = []sectionDescription{
 		Organization: [][]string{{SQLLayer, "SQL"}},
 		Charts: []chartDescription{
 			{
+				Title: "New Connections, prior to tenant selection",
+				Metrics: []string{
+					"sql.pre_serve.new_conns",
+				},
+			},
+			{
+				Title: "Connection Failures, prior to tenant selection",
+				Metrics: []string{
+					"sql.pre_serve.conn.failures",
+				},
+				AxisLabel: "Failures",
+			},
+			{
+				Title: "Byte I/O, prior to tenant selection",
+				Metrics: []string{
+					"sql.pre_serve.bytesin",
+					"sql.pre_serve.bytesout",
+				},
+			},
+		},
+	},
+	{
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Charts: []chartDescription{
+			{
 				Title: "Active Connections",
 				Metrics: []string{
 					"sql.conns",
