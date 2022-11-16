@@ -1212,6 +1212,10 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (remo
 	case errors.Is(err, apply.ErrRemoved):
 		return true
 	default:
+		// TODO(tbg): we can remove the entire `safe` thing because we have properly
+		// redactable errors here. In particular,
+		// GetRedactedNonDeterministicFailureExplanation can go and also
+		// NonDeterministicFailure can be a simple error marker.
 		log.FatalfDepth(ctx, 1, "%s: %+v", redact.Safe(expl), err)
 		panic("unreachable")
 	}
