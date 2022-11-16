@@ -12,7 +12,6 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
@@ -667,7 +666,7 @@ var noSnap IncomingSnapshot
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReady(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (handleRaftReadyStats, string, error) {
+) (handleRaftReadyStats, error) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
@@ -680,15 +679,15 @@ func (r *Replica) handleRaftReady(
 // non-sensitive cue as to what happened.
 func (r *Replica) handleRaftReadyRaftMuLocked(
 	ctx context.Context, inSnap IncomingSnapshot,
-) (stats handleRaftReadyStats, _ string, _ error) {
+) (handleRaftReadyStats, error) {
 	// handleRaftReadyRaftMuLocked is not prepared to handle context cancellation,
 	// so assert that it's given a non-cancellable context.
 	if ctx.Done() != nil {
-		return handleRaftReadyStats{}, "", errors.AssertionFailedf(
+		return handleRaftReadyStats{}, errors.AssertionFailedf(
 			"handleRaftReadyRaftMuLocked cannot be called with a cancellable context")
 	}
 
-	stats = handleRaftReadyStats{
+	stats := handleRaftReadyStats{
 		tBegin: timeutil.Now(),
 	}
 	defer func() {
@@ -739,10 +738,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Unlock()
 	if errors.Is(err, errRemoved) {
 		// If we've been removed then just return.
-		return stats, "", nil
+		return stats, nil
 	} else if err != nil {
-		const expl = "while checking raft group for Ready"
-		return stats, expl, errors.Wrap(err, expl)
+		return stats, errors.Wrap(err, "checking raft group for Ready")
 	}
 	if !hasReady {
 		// We must update the proposal quota even if we don't have a ready.
@@ -754,7 +752,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// replica has caught up, we can release
 		// some quota back to the pool.
 		r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
-		return stats, "", nil
+		return stats, nil
 	}
 
 	logRaftReady(ctx, rd)
@@ -781,8 +779,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		if !raft.IsEmptySnap(rd.Snapshot) {
 			snapUUID, err := uuid.FromBytes(rd.Snapshot.Data)
 			if err != nil {
-				const expl = "invalid snapshot id"
-				return stats, expl, errors.Wrap(err, expl)
+				return stats, errors.Wrap(err, "invalid snapshot id")
 			}
 			if inSnap.SnapUUID == (uuid.UUID{}) {
 				log.Fatalf(ctx, "programming error: a snapshot application was attempted outside of the streaming snapshot codepath")
@@ -801,8 +798,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 			stats.tSnapBegin = timeutil.Now()
 			if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
-				const expl = "while applying snapshot"
-				return stats, expl, errors.Wrap(err, expl)
+				return stats, errors.Wrap(err, "while applying snapshot")
 			}
 			stats.tSnapEnd = timeutil.Now()
 			stats.snap.applied = true
@@ -833,11 +829,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		// If we didn't expect Raft to have a snapshot but it has one
 		// regardless, that is unexpected and indicates a programming
 		// error.
-		err := kvserverbase.NonDeterministicErrorf(
+		return stats, errors.AssertionFailedf(
 			"have inSnap=nil, but raft has a snapshot %s",
 			raft.DescribeSnapshot(rd.Snapshot),
 		)
-		return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
 	}
 
 	// If the ready struct includes entries that have been committed, these
@@ -864,11 +859,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	appTask.SetMaxBatchSize(r.store.TestingKnobs().MaxApplicationBatchSize)
 	defer appTask.Close()
 	if err := appTask.Decode(ctx, rd.CommittedEntries); err != nil {
-		return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
+		return stats, err
 	}
 	if knobs := r.store.TestingKnobs(); knobs == nil || !knobs.DisableCanAckBeforeApplication {
 		if err := appTask.AckCommittedEntriesBeforeApplication(ctx, state.lastIndex); err != nil {
-			return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
+			return stats, err
 		}
 	}
 
@@ -946,8 +941,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		metrics:     r.store.metrics,
 	}
 	if state, err = s.storeEntries(ctx, state, rd, &stats); err != nil {
-		const expl = "while storing log entries"
-		return stats, expl, err
+		return stats, errors.Wrap(err, "while storing log entries")
 	}
 
 	if len(rd.Entries) > 0 {
@@ -961,8 +955,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		lastPurge := prevLastIndex // old end of the log, include in deletion
 		purgedSize, err := maybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
 		if err != nil {
-			const expl = "while purging sideloaded storage"
-			return stats, expl, err
+			return stats, errors.Wrap(err, "while purging sideloaded storage")
 		}
 		state.byteSize -= purgedSize
 		if state.byteSize < 0 {
@@ -1004,14 +997,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	if len(rd.CommittedEntries) > 0 {
 		err := appTask.ApplyCommittedEntries(ctx)
 		stats.apply = sm.moveStats()
-		if errors.Is(err, apply.ErrRemoved) {
-			// We know that our replica has been removed. All future calls to
-			// r.withRaftGroup() will return errRemoved so no future Ready objects
-			// will be processed by this Replica.
-			return stats, "", err
-		} else if err != nil {
-			return stats, fmt.Sprint(kvserverbase.GetRedactedNonDeterministicFailureExplanation(err)), err
+		if err != nil {
+			// NB: this branch will be hit when the replica has been removed,
+			// in which case errors.Is(err, apply.ErrRemoved). Our callers
+			// special-case this.
+			//
+			// No future Ready objects will be processed by this Replica since
+			// it is now marked as destroyed.
+			return stats, err
 		}
+
 		if r.store.cfg.KVAdmissionController != nil &&
 			stats.apply.followerStoreWriteBytes.NumEntries > 0 {
 			r.store.cfg.KVAdmissionController.FollowerStoreWriteBytes(
@@ -1052,7 +1047,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// raft group we will early return before this point. This, combined with
 	// the fact that we'll refuse to process messages intended for a higher
 	// replica ID ensures that our replica ID could not have changed.
-	const expl = "during advance"
 
 	r.mu.Lock()
 	err = r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
@@ -1079,7 +1073,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.applyingEntries = false
 	r.mu.Unlock()
 	if err != nil {
-		return stats, expl, errors.Wrap(err, expl)
+		return stats, errors.Wrap(err, "during advance")
 	}
 
 	// NB: All early returns other than the one due to not having a ready
@@ -1093,7 +1087,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// quota back at the end of handleRaftReadyRaftMuLocked, the next write will
 	// get blocked.
 	r.updateProposalQuotaRaftMuLocked(ctx, lastLeaderID)
-	return stats, "", nil
+	return stats, nil
 }
 
 // logStore is a stub of a separated Raft log storage.
@@ -1129,15 +1123,13 @@ func (s *logStore) storeEntries(
 		// last index.
 		thinEntries, numSideloaded, sideLoadedEntriesSize, otherEntriesSize, err := maybeSideloadEntries(ctx, rd.Entries, s.sideload)
 		if err != nil {
-			const expl = "during sideloading"
-			return raftLogState{}, errors.Wrap(err, expl)
+			return raftLogState{}, errors.Wrap(err, "during sideloading")
 		}
 		state.byteSize += sideLoadedEntriesSize
 		if state, err = logAppend(
 			ctx, s.stateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
-			const expl = "during append"
-			return raftLogState{}, errors.Wrap(err, expl)
+			return raftLogState{}, errors.Wrap(err, "during append")
 		}
 		stats.appendedRegularCount += len(thinEntries) - numSideloaded
 		stats.appendedRegularBytes += otherEntriesSize
@@ -1156,8 +1148,7 @@ func (s *logStore) storeEntries(
 		// We have both in the same batch, so there's no problem. If that ever
 		// changes, we must write and sync the Entries before the HardState.
 		if err := s.stateLoader.SetHardState(ctx, batch, rd.HardState); err != nil {
-			const expl = "during setHardState"
-			return raftLogState{}, errors.Wrap(err, expl)
+			return raftLogState{}, errors.Wrap(err, "setting HardState")
 		}
 	}
 	// Synchronously commit the batch with the Raft log entries and Raft hard
@@ -1177,8 +1168,7 @@ func (s *logStore) storeEntries(
 	stats.pebbleBatchBytes = int64(batch.Len())
 	sync := rd.MustSync && !disableSyncRaftLog.Get(&s.settings.SV)
 	if err := batch.Commit(sync); err != nil {
-		const expl = "while committing batch"
-		return raftLogState{}, errors.Wrap(err, expl)
+		return raftLogState{}, errors.Wrap(err, "committing batch")
 	}
 	stats.sync = sync
 	stats.tPebbleCommitEnd = timeutil.Now()
@@ -1205,14 +1195,14 @@ func splitMsgApps(msgs []raftpb.Message) (msgApps, otherMsgs []raftpb.Message) {
 
 // maybeFatalOnRaftReadyErr will fatal if err is neither nil nor
 // apply.ErrRemoved.
-func maybeFatalOnRaftReadyErr(ctx context.Context, expl string, err error) (removed bool) {
+func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 	switch {
 	case err == nil:
 		return false
 	case errors.Is(err, apply.ErrRemoved):
 		return true
 	default:
-		log.FatalfDepth(ctx, 1, "%s: %+v", redact.Safe(expl), err)
+		log.FatalfDepth(ctx, 1, "%+v", err)
 		panic("unreachable")
 	}
 }
