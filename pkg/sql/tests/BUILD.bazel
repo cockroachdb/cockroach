@@ -58,7 +58,6 @@ go_test(
         "//pkg/base",
         "//pkg/bench",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/config/zonepb",
         "//pkg/internal/rsg",

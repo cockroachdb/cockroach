@@ -60,7 +60,6 @@ go_test(
         "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
-        "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
