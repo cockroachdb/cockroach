@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -103,7 +103,7 @@ func TestTenantCanUseEnterpriseFeatures(t *testing.T) {
 		Type: licenseccl.License_Enterprise,
 	}).Encode()
 
-	defer utilccl.TestingDisableEnterprise()()
+	defer ccl.TestingDisableEnterprise()()
 	defer envutil.TestSetEnv(t, "COCKROACH_TENANT_LICENSE", license)()
 
 	tc := serverutils.StartNewTestCluster(t, 1, base.TestClusterArgs{})
