@@ -52,6 +52,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		nil, /* localProcessors */
 		nil, /* onFlowCleanup */
 		"",  /* statementSQL */
+		"",  /* diagram */
 	)
 	flow := colflow.NewVectorizedFlow(base)
 

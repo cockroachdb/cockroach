@@ -202,6 +202,7 @@ type FlowBase struct {
 	onFlowCleanup func()
 
 	statementSQL string
+	diagram      string
 
 	status flowStatus
 
@@ -277,6 +278,7 @@ func NewFlowBase(
 	localProcessors []execinfra.LocalProcessor,
 	onFlowCleanup func(),
 	statementSQL string,
+	diagram string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
 	// cluster, where the SQL node is single tenant. The tenant below is used
@@ -302,12 +304,17 @@ func NewFlowBase(
 		onFlowCleanup:         onFlowCleanup,
 		status:                flowNotStarted,
 		statementSQL:          statementSQL,
+		diagram:               diagram,
 	}
 }
 
 // StatementSQL is part of the Flow interface.
 func (f *FlowBase) StatementSQL() string {
 	return f.statementSQL
+}
+
+func (f *FlowBase) Diagram() string {
+	return f.diagram
 }
 
 // GetFlowCtx is part of the Flow interface.

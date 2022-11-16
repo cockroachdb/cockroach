@@ -381,6 +381,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 	recv *DistSQLReceiver,
 	localState distsql.LocalState,
 	statementSQL string,
+	diagram string,
 ) (context.Context, flowinfra.Flow, error) {
 	thisNodeID := dsp.gatewaySQLInstanceID
 	_, ok := flows[thisNodeID]
@@ -402,6 +403,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		TraceKV:           evalCtx.Tracing.KVTracingEnabled(),
 		CollectStats:      planCtx.collectExecStats,
 		StatementSQL:      statementSQL,
+		Diagram:           diagram,
 	}
 
 	var isVectorized bool
@@ -711,18 +713,17 @@ func (dsp *DistSQLPlanner) Run(
 		}
 	}
 
-	if !planCtx.skipDistSQLDiagramGeneration && log.ExpensiveLogEnabled(ctx, 2) {
-		var stmtStr string
-		if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
-			stmtStr = planCtx.planner.stmt.String()
-		}
-		_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
-		if err != nil {
-			log.VEventf(ctx, 2, "error generating diagram: %s", err)
-		} else {
-			log.VEventf(ctx, 2, "plan diagram URL:\n%s", url.String())
-		}
+	//if !planCtx.skipDistSQLDiagramGeneration && log.ExpensiveLogEnabled(ctx, 2) {
+	var stmtStr string
+	if planCtx.planner != nil && planCtx.planner.stmt.AST != nil {
+		stmtStr = planCtx.planner.stmt.String()
 	}
+	_, url, err := execinfrapb.GeneratePlanDiagramURL(stmtStr, flows, execinfrapb.DiagramFlags{})
+	if err != nil {
+		recv.SetError(errors.Wrap(err, "error generating diagram"))
+		return
+	}
+	//}
 
 	log.VEvent(ctx, 2, "running DistSQL plan")
 
@@ -756,7 +757,7 @@ func (dsp *DistSQLPlanner) Run(
 		statementSQL = planCtx.planner.stmt.StmtNoConstants
 	}
 	ctx, flow, err := dsp.setupFlows(
-		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL,
+		ctx, evalCtx, planCtx, leafInputState, flows, recv, localState, statementSQL, url.String(),
 	)
 	// Make sure that the local flow is always cleaned up if it was created.
 	if flow != nil {

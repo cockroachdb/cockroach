@@ -390,7 +390,7 @@ func (ds *ServerImpl) setupFlow(
 	isVectorized := req.EvalContext.SessionData.VectorizeMode != sessiondatapb.VectorizeOff
 	f := newFlow(
 		flowCtx, sp, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
-		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL,
+		localState.LocalProcs, isVectorized, onFlowCleanup, req.StatementSQL, req.Diagram,
 	)
 	opt := flowinfra.FuseNormally
 	if !localState.MustUseLeafTxn() {
@@ -402,17 +402,18 @@ func (ds *ServerImpl) setupFlow(
 		opt = flowinfra.FuseAggressively
 	}
 
+	if !f.IsLocal() {
+		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
+		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
+		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
+	}
+
 	var opChains execopnode.OpChains
 	var err error
 	ctx, opChains, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		return ctx, nil, nil, err
-	}
-	if !f.IsLocal() {
-		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
-		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
-		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
 	if isVectorized {
 		telemetry.Inc(sqltelemetry.VecExecCounter)
@@ -511,8 +512,12 @@ func newFlow(
 	isVectorized bool,
 	onFlowCleanup func(),
 	statementSQL string,
+	diagram string,
 ) flowinfra.Flow {
-	base := flowinfra.NewFlowBase(flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer, localProcessors, onFlowCleanup, statementSQL)
+	base := flowinfra.NewFlowBase(
+		flowCtx, sp, flowReg, rowSyncFlowConsumer, batchSyncFlowConsumer,
+		localProcessors, onFlowCleanup, statementSQL, diagram,
+	)
 	if isVectorized {
 		return colflow.NewVectorizedFlow(base)
 	}
