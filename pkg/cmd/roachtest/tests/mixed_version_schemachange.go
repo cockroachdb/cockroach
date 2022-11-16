@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
@@ -77,14 +78,11 @@ func runSchemaChangeMixedVersions(
 	concurrency int,
 	buildVersion version.Version,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// An empty string will lead to the cockroach binary specified by flag
-	// `cockroach` to be used.
-	const mainVersion = ""
 	schemaChangeStep := runSchemaChangeWorkloadStep(c.All().RandNode()[0], maxOps, concurrency)
 	if buildVersion.Major() < 20 {
 		// Schema change workload is meant to run only on versions 19.2 or higher.
@@ -107,13 +105,13 @@ func runSchemaChangeMixedVersions(
 		// Roll the nodes into the new version one by one, while repeatedly running
 		// schema changes. We use an empty string for the version below, which means
 		// use the main ./cockroach binary (i.e. the one being tested in this run).
-		binaryUpgradeStep(c.Node(3), mainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
 		schemaChangeStep,
-		binaryUpgradeStep(c.Node(2), mainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
 		schemaChangeStep,
-		binaryUpgradeStep(c.Node(1), mainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
 		schemaChangeStep,
-		binaryUpgradeStep(c.Node(4), mainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
 		schemaChangeStep,
 
 		// Roll back again, which ought to be fine because the cluster upgrade was
@@ -128,13 +126,13 @@ func runSchemaChangeMixedVersions(
 		schemaChangeStep,
 
 		// Roll nodes forward and finalize upgrade.
-		binaryUpgradeStep(c.Node(4), mainVersion),
+		binaryUpgradeStep(c.Node(4), clusterupgrade.MainVersion),
 		schemaChangeStep,
-		binaryUpgradeStep(c.Node(3), mainVersion),
+		binaryUpgradeStep(c.Node(3), clusterupgrade.MainVersion),
 		schemaChangeStep,
-		binaryUpgradeStep(c.Node(1), mainVersion),
+		binaryUpgradeStep(c.Node(1), clusterupgrade.MainVersion),
 		schemaChangeStep,
-		binaryUpgradeStep(c.Node(2), mainVersion),
+		binaryUpgradeStep(c.Node(2), clusterupgrade.MainVersion),
 		schemaChangeStep,
 
 		allowAutoUpgradeStep(1),
