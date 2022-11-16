@@ -85,7 +85,7 @@ func TestReplicaStateMachineChangeReplicas(t *testing.T) {
 		}
 
 		// Create a new application batch.
-		b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
+		b := sm.NewBatch().(*replicaAppBatch)
 		defer b.Close()
 
 		// Stage a command with the ChangeReplicas trigger.
@@ -167,7 +167,7 @@ func TestReplicaStateMachineRaftLogTruncationStronglyCoupled(t *testing.T) {
 		sm := r.getStateMachine()
 
 		// Create a new application batch.
-		b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
+		b := sm.NewBatch().(*replicaAppBatch)
 		defer b.Close()
 
 		r.mu.Lock()
@@ -293,7 +293,7 @@ func TestReplicaStateMachineRaftLogTruncationLooselyCoupled(t *testing.T) {
 			sm := r.getStateMachine()
 
 			// Create a new application batch.
-			b := sm.NewBatch(false /* ephemeral */).(*replicaAppBatch)
+			b := sm.NewBatch().(*replicaAppBatch)
 			defer b.Close()
 			// Stage a command that truncates one raft log entry which we pretend has a
 			// byte size of 1.

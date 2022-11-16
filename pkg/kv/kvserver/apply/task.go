@@ -26,19 +26,20 @@ import (
 // deterministic, which ensures that if each instance is driven from the
 // same consistent shared log, they will all stay in sync.
 type StateMachine interface {
-	// NewBatch creates a new batch that is suitable for accumulating the
-	// effects that a group of Commands will have on the replicated state
-	// machine. Commands are staged in the batch one-by-one and then the
-	// entire batch is committed at once.
+	// NewEphemeralBatch creates an EphemeralBatch. This kind of batch is not able
+	// to make changes to the StateMachine, but can be used for the purpose of
+	// checking commands to determine whether they will be rejected or not when
+	// staged in a real Batch. The principal user of ephemeral batches is
+	// AckCommittedEntriesBeforeApplication.
 	//
-	// Batch comes in two flavors - real batches and ephemeral batches.
-	// Real batches are capable of accumulating updates from commands and
-	// applying them to the state machine. Ephemeral batches are not able
-	// to make changes to the durable state machine, but can still be used
-	// for the purpose of checking commands to determine whether they will
-	// be rejected or not when staged in a real batch. The principal user
-	// of ephemeral batches is AckCommittedEntriesBeforeApplication.
-	NewBatch(ephemeral bool) Batch
+	// There must only be a single EphemeralBatch *or* Batch open at any given
+	// point in time.
+	NewEphemeralBatch() EphemeralBatch
+	// NewBatch creates a new batch that is suitable for accumulating the effects
+	// that a group of Commands will have on the replicated state machine.
+	// Commands are staged in the batch one-by-one and then the entire batch is
+	// applied to the StateMachine at once via its ApplyToStateMachine method.
+	NewBatch() Batch
 	// ApplySideEffects applies the in-memory side-effects of a Command to
 	// the replicated state machine. The method will be called in the order
 	// that the commands are committed to the state machine's log. Once the
@@ -60,22 +61,28 @@ type StateMachine interface {
 // only be thrown by non-trivial commands.
 var ErrRemoved = errors.New("replica removed")
 
+// An EphemeralBatch can stage a number of commands, but lacks the ability
+// to apply them to a state machine.
+type EphemeralBatch interface {
+	// Stage inserts a Command into the Batch. In doing so, the Command is
+	// checked for rejection and a CheckedCommand is returned.
+	Stage(context.Context, Command) (CheckedCommand, error)
+	// Close closes the batch and releases any resources that it holds.
+	Close()
+}
+
 // Batch accumulates a series of updates from Commands and performs them
 // all at once to its StateMachine when applied. Groups of Commands will be
 // staged in the Batch such that one or more trivial Commands are staged or
 // exactly one non-trivial Command is staged.
 type Batch interface {
-	// Stage inserts a Command into the Batch. In doing so, the Command is
-	// checked for rejection and a CheckedCommand is returned.
-	Stage(context.Context, Command) (CheckedCommand, error)
+	EphemeralBatch
 	// ApplyToStateMachine applies the persistent state transitions staged
 	// in the Batch to the StateMachine, atomically.
 	//
 	// Command application can not resume in the event of an error, that is,
 	// the surrounding StateMachine must be considered defunct.
 	ApplyToStateMachine(context.Context) error
-	// Close closes the batch and releases any resources that it holds.
-	Close()
 }
 
 // Decoder is capable of decoding a list of committed raft entries and
@@ -195,7 +202,7 @@ func (t *Task) AckCommittedEntriesBeforeApplication(ctx context.Context, maxInde
 
 	// Create a new ephemeral application batch. All we're interested in is
 	// whether commands will be rejected or not when staged in a real batch.
-	batch := t.sm.NewBatch(true /* ephemeral */)
+	batch := t.sm.NewEphemeralBatch()
 	defer batch.Close()
 
 	iter := t.dec.NewCommandIter()
@@ -264,7 +271,7 @@ func (t *Task) ApplyCommittedEntries(ctx context.Context) error {
 // b) exactly one non-trivial command
 func (t *Task) applyOneBatch(ctx context.Context, iter CommandIterator) error {
 	// Create a new application batch.
-	batch := t.sm.NewBatch(false /* ephemeral */)
+	batch := t.sm.NewBatch()
 	defer batch.Close()
 
 	// Consume a batch-worth of commands.
