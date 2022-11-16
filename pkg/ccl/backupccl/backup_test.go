@@ -6552,7 +6552,7 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	_, _ = tc, systemDB
 	defer cleanupFn()
 
-	// NB: tenant certs for 10, 11, and 20 are embedded. See:
+	// NB: tenant certs for 2, 10, 11, and 20 are embedded. See:
 	_ = security.EmbeddedTenantIDs()
 
 	// Create another server.
@@ -6560,8 +6560,8 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	srv2 := tc2.Server(0)
 	defer cleanupEmptyCluster()
 
-	tenant10C2, cleanupT10C2 := makeTenant(srv2, 10)
-	defer cleanupT10C2()
+	tenant2C2, cleanupT2C2 := makeTenant(srv2, 2)
+	defer cleanupT2C2()
 
 	systemDB.Exec(t, `ALTER TENANT ALL SET CLUSTER SETTING sql.notices.enabled = false`)
 	backup2HttpAddr, backup2Cleanup := makeInsecureHTTPServer(t)
@@ -6569,7 +6569,7 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	systemDB.Exec(t, `BACKUP TO $1`, backup2HttpAddr)
 
 	t.Run("cluster-restore-into-tenant-with-tenant-settings-succeeds", func(t *testing.T) {
-		tenant10C2.Exec(t, `RESTORE FROM $1`, backup2HttpAddr)
+		tenant2C2.Exec(t, `RESTORE FROM $1`, backup2HttpAddr)
 	})
 
 	_, systemDB2, cleanupDB2 := backupRestoreTestSetupEmpty(t, singleNode, dir, InitManualReplication, base.TestClusterArgs{})
