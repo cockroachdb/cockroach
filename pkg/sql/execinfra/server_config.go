@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/diskmap"
@@ -37,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -75,11 +73,7 @@ type ServerConfig struct {
 	Codec keys.SQLCodec
 
 	// DB is a handle to the cluster.
-	DB *kv.DB
-	// Executor can be used to run "internal queries". Note that Flows also have
-	// access to an executor in the EvalContext. That one is "session bound"
-	// whereas this one isn't.
-	Executor sqlutil.InternalExecutor
+	DB descs.DB
 
 	RPCContext   *rpc.Context
 	Stopper      *stop.Stopper
@@ -148,10 +142,10 @@ type ServerConfig struct {
 	// Dialer for communication between SQL nodes/pods.
 	PodNodeDialer *nodedialer.Dialer
 
-	// InternalExecutorFactory is used to construct session-bound
+	// InternalDB is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	InternalExecutorFactory descs.TxnManager
+	InternalDB descs.DB
 
 	ExternalStorage        cloud.ExternalStorageFactory
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory

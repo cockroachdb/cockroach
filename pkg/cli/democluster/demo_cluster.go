@@ -483,7 +483,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			// Also create the user/password for the secondary tenant.
 			ts := c.tenantServers[0]
 			tctx := ts.AnnotateCtx(ctx)
-			ieTenant := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
+			ieTenant := ts.DistSQLServer().(*distsql.ServerImpl).ServerConfig.InternalDB.Executor()
 			_, err = ieTenant.Exec(tctx, "tenant-password", nil,
 				fmt.Sprintf("CREATE USER %s WITH PASSWORD '%s'", demoUsername, demoPassword))
 			if err != nil {
@@ -497,7 +497,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 
 		if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
 			// Select the default tenant.
-			ie := c.firstServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
+			ie := c.firstServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.InternalDB.Executor()
 			// Choose the tenant to use when no tenant is specified on a
 			// connection or web URL.
 			if _, err := ie.Exec(ctx, "default-tenant", nil,

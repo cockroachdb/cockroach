@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -439,9 +438,7 @@ func (p *planner) MemberOfWithAdminOption(
 	return MemberOfWithAdminOption(
 		ctx,
 		p.execCfg,
-		p.ExecCfg().InternalExecutor,
-		p.Descriptors(),
-		p.Txn(),
+		p.InternalSQLTxn(),
 		member,
 	)
 }
@@ -451,12 +448,7 @@ func (p *planner) MemberOfWithAdminOption(
 // The "isAdmin" flag applies to both direct and indirect members.
 // Requires a valid transaction to be open.
 func MemberOfWithAdminOption(
-	ctx context.Context,
-	execCfg *ExecutorConfig,
-	ie sqlutil.InternalExecutor,
-	descsCol *descs.Collection,
-	txn *kv.Txn,
-	member username.SQLUsername,
+	ctx context.Context, execCfg *ExecutorConfig, txn descs.Txn, member username.SQLUsername,
 ) (map[username.SQLUsername]bool, error) {
 	if txn == nil {
 		return nil, errors.AssertionFailedf("cannot use MemberOfWithAdminoption without a txn")
@@ -465,14 +457,16 @@ func MemberOfWithAdminOption(
 	roleMembersCache := execCfg.RoleMemberCache
 
 	// Lookup table version.
-	_, tableDesc, err := descs.PrefixAndTable(ctx, descsCol.ByNameWithLeased(txn).Get(), &roleMembersTableName)
+	_, tableDesc, err := descs.PrefixAndTable(
+		ctx, txn.Descriptors().ByNameWithLeased(txn.KV()).Get(), &roleMembersTableName,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	tableVersion := tableDesc.GetVersion()
 	if tableDesc.IsUncommittedVersion() {
-		return resolveMemberOfWithAdminOption(ctx, member, ie, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
+		return resolveMemberOfWithAdminOption(ctx, member, txn, useSingleQueryForRoleMembershipCache.Get(execCfg.SV()))
 	}
 
 	// Check version and maybe clear cache while holding the mutex.
@@ -513,7 +507,7 @@ func MemberOfWithAdminOption(
 		},
 		func(ctx context.Context) (interface{}, error) {
 			return resolveMemberOfWithAdminOption(
-				ctx, member, ie, txn,
+				ctx, member, txn,
 				useSingleQueryForRoleMembershipCache.Get(execCfg.SV()),
 			)
 		})
@@ -564,11 +558,7 @@ var useSingleQueryForRoleMembershipCache = settings.RegisterBoolSetting(
 
 // resolveMemberOfWithAdminOption performs the actual recursive role membership lookup.
 func resolveMemberOfWithAdminOption(
-	ctx context.Context,
-	member username.SQLUsername,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	singleQuery bool,
+	ctx context.Context, member username.SQLUsername, txn isql.Txn, singleQuery bool,
 ) (map[username.SQLUsername]bool, error) {
 	ret := map[username.SQLUsername]bool{}
 	if singleQuery {
@@ -577,7 +567,7 @@ func resolveMemberOfWithAdminOption(
 			isAdmin bool
 		}
 		memberToRoles := make(map[username.SQLUsername][]membership)
-		if err := forEachRoleMembership(ctx, ie, txn, func(role, member username.SQLUsername, isAdmin bool) error {
+		if err := forEachRoleMembership(ctx, txn, func(role, member username.SQLUsername, isAdmin bool) error {
 			memberToRoles[member] = append(memberToRoles[member], membership{role, isAdmin})
 			return nil
 		}); err != nil {
@@ -616,8 +606,10 @@ func resolveMemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		it, err := ie.QueryIterator(
-			ctx, "expand-roles", txn, lookupRolesStmt, m.Normalized(),
+		it, err := txn.QueryIteratorEx(
+			ctx, "expand-roles", txn.KV(), sessiondata.InternalExecutorOverride{
+				User: username.NodeUserName(),
+			}, lookupRolesStmt, m.Normalized(),
 		)
 		if err != nil {
 			return nil, err
@@ -667,7 +659,7 @@ func (p *planner) HasRoleOption(ctx context.Context, roleOption roleoption.Optio
 		return true, nil
 	}
 
-	hasRolePrivilege, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+	hasRolePrivilege, err := p.InternalSQLTxn().QueryRowEx(
 		ctx, "has-role-option", p.Txn(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(
@@ -778,7 +770,7 @@ func (p *planner) checkCanAlterToNewOwner(
 	ctx context.Context, desc catalog.MutableDescriptor, newOwner username.SQLUsername,
 ) error {
 	// Make sure the newOwner exists.
-	roleExists, err := RoleExists(ctx, p.ExecCfg().InternalExecutor, p.Txn(), newOwner)
+	roleExists, err := RoleExists(ctx, p.InternalSQLTxn(), newOwner)
 	if err != nil {
 		return err
 	}

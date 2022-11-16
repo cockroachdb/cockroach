@@ -15,14 +15,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/errors"
 )
@@ -166,9 +165,7 @@ func (b *selectQueryBuilder) nextQuery() (string, []interface{}) {
 	return b.cachedQuery, b.cachedArgs
 }
 
-func (b *selectQueryBuilder) run(
-	ctx context.Context, ie sqlutil.InternalExecutor,
-) ([]tree.Datums, error) {
+func (b *selectQueryBuilder) run(ctx context.Context, ie isql.Executor) ([]tree.Datums, error) {
 	q, args := b.nextQuery()
 
 	// Use a nil txn so that the AOST clause is handled correctly. Currently,
@@ -294,14 +291,14 @@ func (b *deleteQueryBuilder) buildQueryAndArgs(rows []tree.Datums) (string, []in
 }
 
 func (b *deleteQueryBuilder) run(
-	ctx context.Context, ie sqlutil.InternalExecutor, txn *kv.Txn, rows []tree.Datums,
+	ctx context.Context, txn isql.Txn, rows []tree.Datums,
 ) (int64, error) {
 	q, deleteArgs := b.buildQueryAndArgs(rows)
 	qosLevel := sessiondatapb.TTLLow
-	rowCount, err := ie.ExecEx(
+	rowCount, err := txn.ExecEx(
 		ctx,
 		b.deleteOpName,
-		txn,
+		txn.KV(),
 		sessiondata.InternalExecutorOverride{
 			User:             username.RootUserName(),
 			QualityOfService: &qosLevel,

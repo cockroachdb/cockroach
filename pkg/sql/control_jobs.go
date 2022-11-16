@@ -88,7 +88,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		job, err := reg.LoadJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.Txn())
+		job, err := reg.LoadJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.InternalSQLTxn())
 		if err != nil {
 			return err
 		}
@@ -109,14 +109,14 @@ func (n *controlJobsNode) startExec(params runParams) error {
 				}
 			}
 		}
-
+		ctrl := job.WithTxn(params.p.InternalSQLTxn())
 		switch n.desiredStatus {
 		case jobs.StatusPaused:
-			err = reg.PauseRequested(params.ctx, params.p.txn, jobspb.JobID(jobID), n.reason)
+			err = ctrl.PauseRequested(params.ctx, n.reason)
 		case jobs.StatusRunning:
-			err = reg.Unpause(params.ctx, params.p.txn, jobspb.JobID(jobID))
+			err = ctrl.Unpaused(params.ctx)
 		case jobs.StatusCanceled:
-			err = reg.CancelRequested(params.ctx, params.p.txn, jobspb.JobID(jobID))
+			err = ctrl.CancelRequested(params.ctx)
 		default:
 			err = errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
 		}

@@ -15,13 +15,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -31,7 +32,7 @@ import (
 //
 // Caller is expected to check the user's permission.
 func UpdateTenantRecord(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
+	ctx context.Context, settings *cluster.Settings, txn isql.Txn, info *descpb.TenantInfo,
 ) error {
 	if err := validateTenantInfo(info); err != nil {
 		return err
@@ -44,14 +45,14 @@ func UpdateTenantRecord(
 		return err
 	}
 
-	if num, err := execCfg.InternalExecutor.ExecEx(
-		ctx, "activate-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+	if num, err := txn.ExecEx(
+		ctx, "activate-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.tenants SET active = $2, info = $3 WHERE id = $1`,
 		tenID, active, infoBytes,
 	); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	} else if num != 1 {
-		logcrash.ReportOrPanic(ctx, &execCfg.Settings.SV, "unexpected number of rows affected: %d", num)
+		logcrash.ReportOrPanic(ctx, &settings.SV, "unexpected number of rows affected: %d", num)
 	}
 	return nil
 }
@@ -69,9 +70,9 @@ func validateTenantInfo(info *descpb.TenantInfo) error {
 // TestingUpdateTenantRecord is a public wrapper around updateTenantRecord
 // intended for testing purposes.
 func TestingUpdateTenantRecord(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
+	ctx context.Context, settings *cluster.Settings, txn isql.Txn, info *descpb.TenantInfo,
 ) error {
-	return UpdateTenantRecord(ctx, execCfg, txn, info)
+	return UpdateTenantRecord(ctx, settings, txn, info)
 }
 
 // UpdateTenantResourceLimits implements the tree.TenantOperator interface.
@@ -95,23 +96,22 @@ func (p *planner) UpdateTenantResourceLimits(
 	if err := rejectIfSystemTenant(tenantID, op); err != nil {
 		return err
 	}
-	return p.WithInternalExecutor(ctx, func(
-		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
-	) error {
-		return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
-			ctx, p.Txn(), ie, roachpb.MustMakeTenantID(tenantID), availableRU, refillRate,
-			maxBurstRU, asOf, asOfConsumedRequestUnits,
-		)
-	})
+
+	return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
+		ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenantID), availableRU, refillRate,
+		maxBurstRU, asOf, asOfConsumedRequestUnits,
+	)
 }
 
 // ActivateTenant marks a tenant active.
 //
 // The caller is responsible for checking that the user is authorized
 // to take this action.
-func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID uint64) error {
+func ActivateTenant(
+	ctx context.Context, settings *cluster.Settings, codec keys.SQLCodec, txn isql.Txn, tenID uint64,
+) error {
 	const op = "activate"
-	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
+	if err := rejectIfCantCoordinateMultiTenancy(codec, op); err != nil {
 		return err
 	}
 	if err := rejectIfSystemTenant(tenID, op); err != nil {
@@ -119,14 +119,14 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	}
 
 	// Retrieve the tenant's info.
-	info, err := GetTenantRecordByID(ctx, execCfg, txn, roachpb.MustMakeTenantID(tenID))
+	info, err := GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID))
 	if err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
 
 	// Mark the tenant as active.
 	info.State = descpb.TenantInfo_ACTIVE
-	if err := UpdateTenantRecord(ctx, execCfg, txn, info); err != nil {
+	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
 
@@ -160,7 +160,7 @@ func (p *planner) renameTenant(
 		}
 	}
 
-	if num, err := p.ExecCfg().InternalExecutor.ExecEx(
+	if num, err := p.InternalSQLTxn().ExecEx(
 		ctx, "rename-tenant", p.txn, sessiondata.NodeUserSessionDataOverride,
 		`UPDATE system.public.tenants
 SET info =

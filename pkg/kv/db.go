@@ -895,7 +895,9 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 // conscious about what they want.
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	return db.TxnWithAdmissionControl(
-		ctx, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri, retryable)
+		ctx, roachpb.AdmissionHeader_OTHER, admissionpb.NormalPri,
+		SteppingDisabled, retryable,
+	)
 }
 
 // TxnWithAdmissionControl is like Txn, but uses a configurable admission
@@ -904,6 +906,7 @@ func (db *DB) TxnWithAdmissionControl(
 	ctx context.Context,
 	source roachpb.AdmissionHeader_Source,
 	priority admissionpb.WorkPriority,
+	steppingMode SteppingMode,
 	retryable func(context.Context, *Txn) error,
 ) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
@@ -915,6 +918,7 @@ func (db *DB) TxnWithAdmissionControl(
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxnWithAdmissionControl(ctx, db, nodeID, source, priority)
 	txn.SetDebugName("unnamed")
+	txn.ConfigureStepping(ctx, steppingMode)
 	return runTxn(ctx, txn, retryable)
 }
 

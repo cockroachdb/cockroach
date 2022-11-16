@@ -94,7 +94,7 @@ LIMIT 1000
 func backfillSystemRoleMembersIDColumns(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	ie := d.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()
+	ie := d.DB.Executor()
 	for _, backfillStmt := range []string{backfillRoleIDColumnRoleMemberStmt, backfillMemberIDColumnRoleMembersStmt} {
 		for {
 			rowsAffected, err := ie.ExecEx(ctx, "backfill-id-columns-system-role-members", nil, /* txn */

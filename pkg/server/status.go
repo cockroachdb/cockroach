@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -2514,9 +2513,10 @@ func (s *systemStatusServer) HotRangesV2(
 						schemaName = meta.(tableMeta).schemaName
 						indexName = meta.(tableMeta).indexName
 					} else {
-						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
-							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
-								desc, err := col.ByID(txn).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
+						if err = s.sqlServer.distSQLServer.InternalDB.DescsTxn(
+							ctx, func(ctx context.Context, txn descs.Txn) error {
+								col := txn.Descriptors()
+								desc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, descpb.ID(tableID))
 								if err != nil {
 									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}
@@ -2534,13 +2534,13 @@ func (s *systemStatusServer) HotRangesV2(
 									}
 								}
 
-								if dbDesc, err := col.ByID(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
+								if dbDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, desc.GetParentID()); err != nil {
 									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
 								} else {
 									dbName = dbDesc.GetName()
 								}
 
-								if schemaDesc, err := col.ByID(txn).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
+								if schemaDesc, err := col.ByID(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID()); err != nil {
 									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()

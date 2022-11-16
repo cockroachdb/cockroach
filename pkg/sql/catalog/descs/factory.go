@@ -14,15 +14,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
@@ -45,24 +43,15 @@ func (cf *CollectionFactory) GetClusterSettings() *cluster.Settings {
 	return cf.settings
 }
 
-// TxnManager is used to enable running multiple queries with an internal
-// executor in a transactional manner.
-type TxnManager interface {
-	sqlutil.InternalExecutorFactory
+type Txn interface {
+	isql.Txn
+	Descriptors() *Collection
+}
 
-	// DescsTxnWithExecutor enables using an internal executor to run sql
-	// statements in a transactional manner. It creates a descriptor collection
-	// that lives within the scope of the passed in TxnWithExecutorFunc, and
-	// also ensures that the internal executor also share the same descriptor
-	// collection. Please use this interface if you want to run multiple sql
-	// statement with an internal executor in a txn.
-	DescsTxnWithExecutor(
-		ctx context.Context,
-		db *kv.DB,
-		sd *sessiondata.SessionData,
-		f TxnWithExecutorFunc,
-		opts ...sqlutil.TxnOption,
-	) error
+// DB is used to enable running multiple queries with an internal
+// executor in a transactional manner.
+type DB interface {
+	isql.DB
 
 	// DescsTxn is similar to DescsTxnWithExecutor but without an internal executor.
 	// It creates a descriptor collection that lives within the scope of the given
@@ -70,15 +59,10 @@ type TxnManager interface {
 	// them.
 	DescsTxn(
 		ctx context.Context,
-		db *kv.DB,
-		f func(context.Context, *kv.Txn, *Collection) error,
-		opts ...sqlutil.TxnOption,
+		f func(context.Context, Txn) error,
+		opts ...isql.TxnOption,
 	) error
 }
-
-// InternalExecutorCommitTxnFunc is to commit the txn associated with an
-// internal executor.
-type InternalExecutorCommitTxnFunc func(ctx context.Context) error
 
 // NewCollectionFactory constructs a new CollectionFactory which holds onto
 // the node-level dependencies needed to construct a Collection.

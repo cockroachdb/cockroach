@@ -34,7 +34,7 @@ func (p *planner) LookupNamespaceID(
 		`SELECT id FROM [%d AS namespace] WHERE "parentID" = $1 AND "parentSchemaID" = $2 AND name = $3`,
 		keys.NamespaceTableID,
 	)
-	r, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+	r, err := p.InternalSQLTxn().QueryRowEx(
 		ctx,
 		"crdb-internal-get-descriptor-id",
 		p.txn,

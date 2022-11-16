@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -892,13 +892,13 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	// Read descriptor without validation.
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	hasSameNameSchema := func(dbName string) (exists bool) {
-		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			// Using this method to avoid validation.
-			id, err := col.LookupDatabaseID(ctx, txn, dbName)
+			id, err := col.LookupDatabaseID(ctx, txn.KV(), dbName)
 			if err != nil {
 				return err
 			}
-			res, err := txn.Get(ctx, catalogkeys.MakeDescMetadataKey(execCfg.Codec, id))
+			res, err := txn.KV().Get(ctx, catalogkeys.MakeDescMetadataKey(execCfg.Codec, id))
 			if err != nil {
 				return err
 			}
@@ -1038,45 +1038,45 @@ func fullClusterRestoreUsersWithoutIDs(exportDir string) func(t *testing.T) {
 
 		sqlDB.Exec(t, fmt.Sprintf("RESTORE FROM '%s'", localFoo))
 
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "100"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "102"},
-			{"testuser3", "NULL", "false", "103"},
-			{"testuser4", "NULL", "false", "104"},
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id >= 100 FROM system.users`, [][]string{
+			{"admin", "", "true", "false"},
+			{"root", "", "false", "false"},
+			{"testrole", "NULL", "true", "true"},
+			{"testuser", "NULL", "false", "true"},
+			{"testuser2", "NULL", "false", "true"},
+			{"testuser3", "NULL", "false", "true"},
+			{"testuser4", "NULL", "false", "true"},
 		})
 
-		sqlDB.CheckQueryResults(t, `SELECT * FROM system.role_options`, [][]string{
-			{"testrole", "NOLOGIN", "NULL", "100"},
-			{"testuser", "CREATEROLE", "NULL", "101"},
-			{"testuser", "VALID UNTIL", "2021-01-10 00:00:00+00:00", "101"},
-			{"testuser2", "CONTROLCHANGEFEED", "NULL", "102"},
-			{"testuser2", "CONTROLJOB", "NULL", "102"},
-			{"testuser2", "CREATEDB", "NULL", "102"},
-			{"testuser2", "CREATELOGIN", "NULL", "102"},
-			{"testuser2", "NOLOGIN", "NULL", "102"},
-			{"testuser2", "VIEWACTIVITY", "NULL", "102"},
-			{"testuser3", "CANCELQUERY", "NULL", "103"},
-			{"testuser3", "MODIFYCLUSTERSETTING", "NULL", "103"},
-			{"testuser3", "VIEWACTIVITYREDACTED", "NULL", "103"},
-			{"testuser3", "VIEWCLUSTERSETTING", "NULL", "103"},
-			{"testuser4", "NOSQLLOGIN", "NULL", "104"},
+		sqlDB.CheckQueryResults(t, `SELECT username, option, value FROM system.role_options`, [][]string{
+			{"testrole", "NOLOGIN", "NULL"},
+			{"testuser", "CREATEROLE", "NULL"},
+			{"testuser", "VALID UNTIL", "2021-01-10 00:00:00+00:00"},
+			{"testuser2", "CONTROLCHANGEFEED", "NULL"},
+			{"testuser2", "CONTROLJOB", "NULL"},
+			{"testuser2", "CREATEDB", "NULL"},
+			{"testuser2", "CREATELOGIN", "NULL"},
+			{"testuser2", "NOLOGIN", "NULL"},
+			{"testuser2", "VIEWACTIVITY", "NULL"},
+			{"testuser3", "CANCELQUERY", "NULL"},
+			{"testuser3", "MODIFYCLUSTERSETTING", "NULL"},
+			{"testuser3", "VIEWACTIVITYREDACTED", "NULL"},
+			{"testuser3", "VIEWCLUSTERSETTING", "NULL"},
+			{"testuser4", "NOSQLLOGIN", "NULL"},
 		})
 
 		// Verify that the next user we create uses the next biggest ID.
 		sqlDB.Exec(t, "CREATE USER testuser5")
 
-		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users`, [][]string{
-			{"admin", "", "true", "2"},
-			{"root", "", "false", "1"},
-			{"testrole", "NULL", "true", "100"},
-			{"testuser", "NULL", "false", "101"},
-			{"testuser2", "NULL", "false", "102"},
-			{"testuser3", "NULL", "false", "103"},
-			{"testuser4", "NULL", "false", "104"},
-			{"testuser5", "NULL", "false", "105"},
+		sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole" FROM system.users`, [][]string{
+			{"admin", "", "true"},
+			{"root", "", "false"},
+			{"testrole", "NULL", "true"},
+			{"testuser", "NULL", "false"},
+			{"testuser2", "NULL", "false"},
+			{"testuser3", "NULL", "false"},
+			{"testuser4", "NULL", "false"},
+			{"testuser5", "NULL", "false"},
 		})
 	}
 }

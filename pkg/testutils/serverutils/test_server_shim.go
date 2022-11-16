@@ -131,12 +131,12 @@ type TestServerInterface interface {
 	LeaseManager() interface{}
 
 	// InternalExecutor returns a *sql.InternalExecutor as an interface{} (which
-	// also implements sqlutil.InternalExecutor if the test cannot depend on sql).
+	// also implements insql.InternalExecutor if the test cannot depend on sql).
 	InternalExecutor() interface{}
 
 	// InternalExecutorInternalExecutorFactory returns a
-	// sqlutil.InternalExecutorFactory as an interface{}.
-	InternalExecutorFactory() interface{}
+	// insql.InternalDB as an interface{}.
+	InternalDB() interface{}
 
 	// TracerI returns a *tracing.Tracer as an interface{}.
 	TracerI() interface{}

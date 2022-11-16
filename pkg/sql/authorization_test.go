@@ -15,11 +15,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,44 +37,45 @@ func TestCheckAnyPrivilegeForNodeUser(t *testing.T) {
 
 	require.NotNil(t, ts.InternalExecutor())
 
-	ief := ts.InternalExecutorFactory().(descs.TxnManager)
+	ief := ts.InternalDB().(descs.DB)
 
-	if err := ief.DescsTxnWithExecutor(ctx, s.DB(), nil /* sessionData */, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+	if err := ief.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
-		row, err := ie.QueryRowEx(
-			ctx, "get-all-databases", txn, sessiondata.NodeUserSessionDataOverride,
+
+		row, err := txn.QueryRowEx(
+			ctx, "get-all-databases", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			"SELECT count(1) FROM crdb_internal.databases",
 		)
 		require.NoError(t, err)
 		// 3 databases (system, defaultdb, postgres).
 		require.Equal(t, row.String(), "(3)")
 
-		_, err = ie.ExecEx(ctx, "create-database1", txn, sessiondata.RootUserSessionDataOverride,
+		_, err = txn.ExecEx(ctx, "create-database1", txn.KV(), sessiondata.RootUserSessionDataOverride,
 			"CREATE DATABASE test1")
 		require.NoError(t, err)
 
-		_, err = ie.ExecEx(ctx, "create-database2", txn, sessiondata.RootUserSessionDataOverride,
+		_, err = txn.ExecEx(ctx, "create-database2", txn.KV(), sessiondata.RootUserSessionDataOverride,
 			"CREATE DATABASE test2")
 		require.NoError(t, err)
 
 		// Revoke CONNECT on all non-system databases and ensure that when querying
 		// with node, we can still see all the databases.
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
+		_, err = txn.ExecEx(ctx, "revoke-privileges", txn.KV(), sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE test1 FROM public")
 		require.NoError(t, err)
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
+		_, err = txn.ExecEx(ctx, "revoke-privileges", txn.KV(), sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE test2 FROM public")
 		require.NoError(t, err)
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
+		_, err = txn.ExecEx(ctx, "revoke-privileges", txn.KV(), sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE defaultdb FROM public")
 		require.NoError(t, err)
-		_, err = ie.ExecEx(ctx, "revoke-privileges", txn, sessiondata.RootUserSessionDataOverride,
+		_, err = txn.ExecEx(ctx, "revoke-privileges", txn.KV(), sessiondata.RootUserSessionDataOverride,
 			"REVOKE CONNECT ON DATABASE postgres FROM public")
 		require.NoError(t, err)
 
-		row, err = ie.QueryRowEx(
-			ctx, "get-all-databases", txn, sessiondata.NodeUserSessionDataOverride,
+		row, err = txn.QueryRowEx(
+			ctx, "get-all-databases", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			"SELECT count(1) FROM crdb_internal.databases",
 		)
 		require.NoError(t, err)
