@@ -52,6 +52,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/util/leaktest",
+        "//pkg/util/log",
         "//pkg/util/randutil",
         "@com_github_stretchr_testify//require",
     ],

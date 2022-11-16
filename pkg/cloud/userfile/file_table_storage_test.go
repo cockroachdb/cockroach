@@ -29,11 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPutUserFileTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 	filename := "path/to/file"
@@ -97,6 +99,7 @@ func createUserGrantAllPrivieleges(
 
 func TestUserScoping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	qualifiedTableName := "defaultdb.public.user_file_table_test"
 	filename := "path/to/file"

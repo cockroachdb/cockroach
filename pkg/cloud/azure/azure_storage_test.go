@@ -34,7 +34,11 @@ type azureConfig struct {
 }
 
 func (a azureConfig) filePath(f string) string {
-	uri := url.URL{Scheme: "azure", Host: a.bucket, Path: f}
+	return a.filePathWithScheme("azure", f)
+}
+
+func (a azureConfig) filePathWithScheme(scheme string, f string) string {
+	uri := url.URL{Scheme: scheme, Host: a.bucket, Path: f}
 	values := uri.Query()
 	values.Add(AzureAccountNameParam, a.account)
 	values.Add(AzureAccountKeyParam, a.key)
@@ -81,6 +85,20 @@ func TestAzure(t *testing.T) {
 		nil, /* kvDB */
 		testSettings,
 	)
+}
+
+func TestAzureSchemes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cfg, err := getAzureConfig()
+	if err != nil {
+		skip.IgnoreLint(t, "Test not configured for Azure")
+	}
+	for _, scheme := range []string{"azure", "azure-storage", "azure-blob"} {
+		uri := cfg.filePathWithScheme(scheme, "not-used")
+		_, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
+		require.NoError(t, err)
+	}
 }
 
 func TestAntagonisticAzureRead(t *testing.T) {
