@@ -29,9 +29,49 @@ type constraintToUpdateForTest struct {
 	desc *descpb.ConstraintToUpdate
 }
 
-// Check returns the underlying check constraint, if there is one.
-func (c constraintToUpdateForTest) AsCheck() *descpb.TableDescriptor_CheckConstraint {
+var _ catalog.CheckConstraint = (*constraintToUpdateForTest)(nil)
+
+// AsCheck implements the catalog.Constraint interface.
+func (c constraintToUpdateForTest) AsCheck() catalog.CheckConstraint {
+	if c.desc.ConstraintType != descpb.ConstraintToUpdate_CHECK {
+		return nil
+	}
+	return c
+}
+
+// CheckDesc implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) CheckDesc() *descpb.TableDescriptor_CheckConstraint {
 	return &c.desc.Check
+}
+
+// GetExpr implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) GetExpr() string {
+	return c.desc.Check.Expr
+}
+
+// NumReferencedColumns implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) NumReferencedColumns() int {
+	return len(c.desc.Check.ColumnIDs)
+}
+
+// GetReferencedColumnID implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) GetReferencedColumnID(columnOrdinal int) descpb.ColumnID {
+	return c.desc.Check.ColumnIDs[columnOrdinal]
+}
+
+// CollectReferencedColumnIDs implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) CollectReferencedColumnIDs() catalog.TableColSet {
+	return catalog.MakeTableColSet(c.desc.Check.ColumnIDs...)
+}
+
+// IsHashShardingConstraint implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) IsHashShardingConstraint() bool {
+	return c.desc.Check.FromHashShardedColumn
+}
+
+// IsNotNullColumnConstraint implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) IsNotNullColumnConstraint() bool {
+	return c.desc.NotNullColumn != 0
 }
 
 func TestShouldSkipConstraintValidation(t *testing.T) {

@@ -1036,7 +1036,7 @@ ALTER TABLE check_table ADD g INT
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT g_0 CHECK (g > 0)
 
-statement error unimplemented: constraint "g_0" in the middle of being added, try again later
+statement error pgcode 0A000 constraint "g_0" in the middle of being added, try again later
 ALTER TABLE check_table DROP COLUMN g
 
 statement ok

@@ -237,6 +237,7 @@ func TestSafeMessage(t *testing.T) {
 				mutable.PrimaryIndex.StoreColumnNames = append(mutable.PrimaryIndex.StoreColumnNames, "c")
 				mutable.NextColumnID = 6
 				mutable.NextIndexID = 4
+				mutable.NextConstraintID = 8
 				mutable.Families[0].ColumnNames = append(mutable.Families[0].ColumnNames, "c")
 				mutable.Families[0].ColumnIDs = append(mutable.Families[0].ColumnIDs, 5)
 				mutable.ModificationTime = hlc.Timestamp{WallTime: 1e9}

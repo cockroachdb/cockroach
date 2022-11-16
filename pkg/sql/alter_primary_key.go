@@ -513,22 +513,14 @@ func (p *planner) AlterPrimaryKey(
 
 	// Determine if removing this index would lead to the uniqueness for a foreign
 	// key back reference, which will cause this swap operation to be blocked.
-	nonDropIndexes := tableDesc.NonDropIndexes()
-	remainingIndexes := make([]descpb.UniqueConstraint, 0, len(nonDropIndexes))
-	for i := range nonDropIndexes {
-		// We can't copy directly because of the interface conversion.
-		if nonDropIndexes[i].GetID() == tableDesc.GetPrimaryIndex().GetID() {
-			continue
-		}
-		remainingIndexes = append(remainingIndexes, nonDropIndexes[i])
-	}
-	remainingIndexes = append(remainingIndexes, newPrimaryIndexDesc)
+	const withSearchForReplacement = true
 	err = p.tryRemoveFKBackReferences(
 		ctx,
 		tableDesc,
 		tableDesc.GetPrimaryIndex(),
 		tree.DropRestrict,
-		remainingIndexes)
+		withSearchForReplacement,
+	)
 	if err != nil {
 		return err
 	}
@@ -737,6 +729,7 @@ func addIndexMutationWithSpecificPrimaryKey(
 ) error {
 	// Reset the ID so that a call to AllocateIDs will set up the index.
 	toAdd.ID = 0
+	toAdd.ConstraintID = 0
 	if err := table.AddIndexMutationMaybeWithTempIndex(toAdd, descpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}

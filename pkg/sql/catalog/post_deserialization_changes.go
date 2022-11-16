@@ -102,4 +102,8 @@ const (
 	// SetSystemDatabaseDescriptorVersion indicates that the system database
 	// descriptor did not have its version set.
 	SetSystemDatabaseDescriptorVersion
+
+	// SetCheckConstraintColumnIDs that a table's check constraint's ColumnIDs slice
+	// was unset and had a non-empty column ID slice assigned to it.
+	SetCheckConstraintColumnIDs
 )
