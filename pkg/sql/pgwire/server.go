@@ -795,7 +795,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	case versionCancel:
 		// The cancel message is rather peculiar: it is sent without
 		// authentication, always over an unencrypted channel.
-		s.handleCancel(ctx, conn, &buf)
+		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+			s.handleCancel(ctx, key)
+		}
 		return nil
 
 	case versionGSSENC:
@@ -847,7 +849,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		// Yet, we've found clients in the wild that send the cancel
 		// after the TLS handshake, for example at
 		// https://github.com/cockroachlabs/support/issues/600.
-		s.handleCancel(ctx, conn, &buf)
+		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+			s.handleCancel(ctx, key)
+		}
 		return nil
 
 	default:
@@ -910,6 +914,26 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	return nil
 }
 
+// readCancelKeyAndCloseConn retrieves the "backend data" key that identifies
+// a cancellable query, then closes the connection.
+func readCancelKeyAndCloseConn(
+	ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer,
+) (ok bool, cancelKey pgwirecancel.BackendKeyData) {
+	telemetry.Inc(sqltelemetry.CancelRequestCounter)
+	backendKeyDataBits, err := buf.GetUint64()
+	// The connection that issued the cancel is not a SQL session -- it's an
+	// entirely new connection that's created just to send the cancel. We close
+	// the connection as soon as possible after reading the data, since there
+	// is nothing to send back to the client.
+	_ = conn.Close()
+	// The client is also unwilling to read an error payload, so we just log it locally.
+	if err != nil {
+		log.Sessions.Warningf(ctx, "%v", errors.Wrap(err, "reading cancel key from client"))
+		return false, 0
+	}
+	return true, pgwirecancel.BackendKeyData(backendKeyDataBits)
+}
+
 // handleCancel handles a pgwire query cancellation request. Note that the
 // request is unauthenticated. To mitigate the security risk (i.e., a
 // malicious actor spamming this endpoint with random data to try to cancel
@@ -919,21 +943,10 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 // This function does not return an error, so the caller (and possible
 // attacker) will not know if the cancellation attempt succeeded. Errors are
 // logged so that an operator can be aware of any possibly malicious requests.
-func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebase.ReadBuffer) {
-	telemetry.Inc(sqltelemetry.CancelRequestCounter)
+func (s *Server) handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
 	s.tenantMetrics.PGWireCancelTotalCount.Inc(1)
 
 	resp, err := func() (*serverpb.CancelQueryByKeyResponse, error) {
-		backendKeyDataBits, err := buf.GetUint64()
-		// The connection that issued the cancel is not a SQL session -- it's an
-		// entirely new connection that's created just to send the cancel. We close
-		// the connection as soon as possible after reading the data, since there
-		// is nothing to send back to the client.
-		_ = conn.Close()
-		if err != nil {
-			return nil, err
-		}
-		cancelKey := pgwirecancel.BackendKeyData(backendKeyDataBits)
 		// The request is forwarded to the appropriate node.
 		req := &serverpb.CancelQueryByKeyRequest{
 			SQLInstanceID:  cancelKey.GetSQLInstanceID(),
@@ -941,7 +954,7 @@ func (s *Server) handleCancel(ctx context.Context, conn net.Conn, buf *pgwirebas
 		}
 		resp, err := s.execCfg.SQLStatusServer.CancelQueryByKey(ctx, req)
 		if resp != nil && len(resp.Error) > 0 {
-			err = errors.CombineErrors(err, errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error))
+			err = errors.Newf("error from CancelQueryByKeyResponse: %s", resp.Error)
 		}
 		return resp, err
 	}()
