@@ -87,4 +87,8 @@ type IntentResolverTestingKnobs struct {
 	// containing the function that executes async intent resolution, rather than
 	// executing async intent resolution directly.
 	TestingAsyncIntentResolution func(func() error) error
+
+	// TargetBytesPerBatchReq overrides the maximum number of bytes that an
+	// intent resolution request write batch can be.
+	TargetBytesPerBatchReq int64
 }

@@ -1955,6 +1955,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
 		RangeDescriptorCache: intentResolverRangeCache,
+		MaxRaftCommandSizeFn: func() int64 {
+			return kvserverbase.MaxCommandSize.Get(&s.cfg.Settings.SV)
+		},
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
