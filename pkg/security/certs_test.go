@@ -188,7 +188,7 @@ func TestGenerateClientCerts(t *testing.T) {
 	require.NoError(t, security.CreateCAPair(certsDir, caKeyFile, testKeySize,
 		time.Hour*72, false /* allowReuse */, false /* overwrite */))
 	user := username.MakeSQLUsernameFromPreNormalizedString("user")
-	tenantIDs := []roachpb.TenantID{roachpb.SystemTenantID, roachpb.MakeTenantID(123)}
+	tenantIDs := []roachpb.TenantID{roachpb.SystemTenantID, roachpb.MustMakeTenantID(123)}
 	// Create tenant-scoped client cert.
 	require.NoError(t, security.CreateClientPair(
 		certsDir,

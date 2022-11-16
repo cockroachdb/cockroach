@@ -245,13 +245,13 @@ func TestStoreClone(t *testing.T) {
 		),
 		makeSpanConfigAddition(
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-				t, roachpb.SystemTenantID, roachpb.MakeTenantID(10),
+				t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10),
 			)),
 			spanconfigtestutils.ParseConfig(t, "H"),
 		),
 		makeSpanConfigAddition(
 			spanconfig.MakeTargetFromSystemTarget(spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-				t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10),
+				t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10),
 			)),
 			spanconfigtestutils.ParseConfig(t, "I"),
 		),

@@ -1533,7 +1533,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	for _, tenant := range details.Tenants {
-		to := roachpb.MakeTenantID(tenant.ID)
+		to := roachpb.MustMakeTenantID(tenant.ID)
 		from := to
 		if details.PreRewriteTenantId != nil {
 			from = *details.PreRewriteTenantId

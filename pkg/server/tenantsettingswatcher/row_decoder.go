@@ -58,7 +58,7 @@ func (d *RowDecoder) DecodeRow(
 			return roachpb.TenantID{}, roachpb.TenantSetting{}, false, err
 		}
 	}
-	// We do not use MakeTenantID because we want to tolerate the 0 value.
+	// We do not use MustMakeTenantID because we want to tolerate the 0 value.
 	tenantID := roachpb.TenantID{InternalValue: uint64(tree.MustBeDInt(keyVals[0].Datum))}
 	var setting roachpb.TenantSetting
 	setting.Name = string(tree.MustBeDString(keyVals[1].Datum))

@@ -184,7 +184,7 @@ func resolveTenantID(
 	if *tenantID == 0 {
 		return 0, nil, pgerror.Newf(pgcode.InvalidParameterValue, "tenant ID must be non-zero")
 	}
-	if roachpb.MakeTenantID(uint64(*tenantID)) == roachpb.SystemTenantID {
+	if roachpb.MustMakeTenantID(uint64(*tenantID)) == roachpb.SystemTenantID {
 		return 0, nil, errors.WithHint(pgerror.Newf(pgcode.InvalidParameterValue,
 			"cannot use this statement to access cluster settings in system tenant"),
 			"Use a regular SHOW/SET CLUSTER SETTING statement.")

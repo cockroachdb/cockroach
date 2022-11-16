@@ -54,7 +54,7 @@ func TestCommitTSIntervals(t *testing.T) {
 	defer ts.Stopper().Stop(ctx)
 
 	tt, _ := serverutils.StartTenant(t, ts, base.TestTenantArgs{
-		TenantID: roachpb.MakeTenantID(10),
+		TenantID: roachpb.MustMakeTenantID(10),
 	})
 
 	manual.Pause() // control the clock manually below

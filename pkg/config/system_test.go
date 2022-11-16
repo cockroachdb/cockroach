@@ -49,11 +49,11 @@ func tkey(tableID uint32, chunks ...string) []byte {
 }
 
 func tenantPrefix(tenID uint64) []byte {
-	return keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+	return keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
 }
 
 func tenantTkey(tenID uint64, tableID uint32, chunks ...string) []byte {
-	key := keys.MakeSQLCodec(roachpb.MakeTenantID(tenID)).TablePrefix(tableID)
+	key := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenID)).TablePrefix(tableID)
 	for _, c := range chunks {
 		key = append(key, []byte(c)...)
 	}
@@ -80,7 +80,7 @@ func descriptor(descID uint32) roachpb.KeyValue {
 }
 
 func tenant(tenID uint64) roachpb.KeyValue {
-	k := keys.SystemSQLCodec.TenantMetadataKey(roachpb.MakeTenantID(tenID))
+	k := keys.SystemSQLCodec.TenantMetadataKey(roachpb.MustMakeTenantID(tenID))
 	return kv(k, nil)
 }
 

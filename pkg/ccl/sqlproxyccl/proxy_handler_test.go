@@ -121,7 +121,7 @@ func TestBackendDownRetry(t *testing.T) {
 		callCount++
 		// After 3 dials, we delete the tenant.
 		if callCount >= 3 {
-			directoryServer.DeleteTenant(roachpb.MakeTenantID(28))
+			directoryServer.DeleteTenant(roachpb.MustMakeTenantID(28))
 		}
 		return nil, newErrorf(codeBackendDown, "SQL pod is down")
 	})()
@@ -768,7 +768,7 @@ func TestDirectoryConnect(t *testing.T) {
 		defer testutils.TestingHook(&reportFailureToDirectoryCache, func(
 			ctx context.Context, tenantID roachpb.TenantID, addr string, directoryCache tenant.DirectoryCache,
 		) error {
-			require.Equal(t, roachpb.MakeTenantID(28), tenantID)
+			require.Equal(t, roachpb.MustMakeTenantID(28), tenantID)
 			pods, err := directoryCache.TryLookupTenantPods(ctx, tenantID)
 			require.NoError(t, err)
 			require.Len(t, pods, 1)
@@ -2004,7 +2004,7 @@ func TestClusterNameAndTenantFromParams(t *testing.T) {
 				require.NoErrorf(t, err, "failed test case\n%+v", tc)
 
 				// When expectedError is specified, we always have a valid expectedTenantID.
-				require.Equal(t, roachpb.MakeTenantID(tc.expectedTenantID), tenantID)
+				require.Equal(t, roachpb.MustMakeTenantID(tc.expectedTenantID), tenantID)
 
 				require.Equal(t, tc.expectedClusterName, clusterName)
 				require.Equal(t, tc.expectedParams, outMsg.Parameters)
@@ -2225,7 +2225,7 @@ func newDirectoryServer(
 
 		tenantStopper := tenantdirsvr.NewSubStopper(tdsStopper)
 		ten, err := srv.StartTenant(ctx, base.TestTenantArgs{
-			TenantID:      roachpb.MakeTenantID(tenantID),
+			TenantID:      roachpb.MustMakeTenantID(tenantID),
 			ForceInsecure: true,
 			Stopper:       tenantStopper,
 		})

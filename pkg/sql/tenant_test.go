@@ -34,7 +34,7 @@ func TestDestroyTenantSynchronous(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 	codec := keys.MakeSQLCodec(tenantID)
 	const tenantStateQuery = `
 SELECT id, active FROM system.tenants WHERE id = 10

@@ -128,7 +128,7 @@ func CreateTenantRecord(
 			  total_consumption)
 			VALUES (
 				$1, 0, 0, now(),
-				$2, $3, $4, 0, 
+				$2, $3, $4, 0,
 				$5)`,
 			tenID,
 			u.RUBurstLimit, u.RURefillRate, u.RUCurrent,
@@ -170,7 +170,7 @@ func CreateTenantRecord(
 	// Make it behave like usual system database ranges, for good measure.
 	tenantSpanConfig.GCPolicy.IgnoreStrictEnforcement = true
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(tenID))
+	tenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenID))
 	record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(roachpb.Span{
 		Key:    tenantPrefix,
 		EndKey: tenantPrefix.Next(),
@@ -285,7 +285,7 @@ func (p *planner) CreateTenant(
 	if err := p.CreateTenantWithID(ctx, uint64(nextID), tenantName); err != nil {
 		return roachpb.TenantID{}, err
 	}
-	return roachpb.MakeTenantID(uint64(nextID)), nil
+	return roachpb.MustMakeTenantID(uint64(nextID)), nil
 }
 
 // CreateTenantWithID implements the tree.TenantOperator interface.
@@ -316,7 +316,7 @@ func (p *planner) CreateTenantWithID(
 	}
 
 	// Initialize the tenant's keyspace.
-	codec := keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID))
+	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID))
 	schema := bootstrap.MakeMetadataSchema(
 		codec,
 		initialTenantZoneConfig, /* defaultZoneConfig */
@@ -432,7 +432,7 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 	}
 
 	// Retrieve the tenant's info.
-	info, err := GetTenantRecordByID(ctx, execCfg, txn, roachpb.MakeTenantID(tenID))
+	info, err := GetTenantRecordByID(ctx, execCfg, txn, roachpb.MustMakeTenantID(tenID))
 	if err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
@@ -455,7 +455,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 
 	log.Infof(ctx, "clearing data for tenant %d", info.ID)
 
-	prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(info.ID))
+	prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(info.ID))
 	prefixEnd := prefix.PrefixEnd()
 
 	log.VEventf(ctx, 2, "ClearRange %s - %s", prefix, prefixEnd)
@@ -483,7 +483,7 @@ func (p *planner) DestroyTenant(ctx context.Context, tenID uint64, synchronous b
 	}
 
 	// Retrieve the tenant's info.
-	info, err := GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MakeTenantID(tenID))
+	info, err := GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MustMakeTenantID(tenID))
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
@@ -550,7 +550,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		}
 
 		// Clear out all span config records left over by the tenant.
-		tenID := roachpb.MakeTenantID(info.ID)
+		tenID := roachpb.MustMakeTenantID(info.ID)
 		tenantPrefix := keys.MakeTenantPrefix(tenID)
 		tenantSpan := roachpb.Span{
 			Key:    tenantPrefix,
@@ -635,7 +635,7 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	var info *descpb.TenantInfo
 	if txnErr := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		var err error
-		info, err = GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MakeTenantID(tenID))
+		info, err = GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MustMakeTenantID(tenID))
 		return err
 	}); txnErr != nil {
 		return errors.Wrapf(txnErr, "retrieving tenant %d", tenID)
@@ -677,7 +677,7 @@ func (p *planner) UpdateTenantResourceLimits(
 		ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor,
 	) error {
 		return p.ExecCfg().TenantUsageServer.ReconfigureTokenBucket(
-			ctx, p.Txn(), ie, roachpb.MakeTenantID(tenantID), availableRU, refillRate,
+			ctx, p.Txn(), ie, roachpb.MustMakeTenantID(tenantID), availableRU, refillRate,
 			maxBurstRU, asOf, asOfConsumedRequestUnits,
 		)
 	})

@@ -121,10 +121,10 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	// the processors.
 	const oldTenantID = 10
 	const newTenantID = 30
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MakeTenantID(oldTenantID)),
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MustMakeTenantID(oldTenantID)),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{{
-			OldID: roachpb.MakeTenantID(oldTenantID),
-			NewID: roachpb.MakeTenantID(newTenantID),
+			OldID: roachpb.MustMakeTenantID(oldTenantID),
+			NewID: roachpb.MustMakeTenantID(newTenantID),
 		}}, true /* restoreTenantFromStream */)
 	require.NoError(t, err)
 	streamValidator := newStreamClientValidator(rekeyer)
@@ -235,7 +235,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tenantPrefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(uint64(newTenantID)))
+	tenantPrefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(uint64(newTenantID)))
 	t.Logf("counting kvs in span %v", tenantPrefix)
 	maxIngestedTS := assertExactlyEqualKVs(t, tc, streamValidator, revertRangeTargetTime, tenantPrefix)
 	// Sanity check that the max ts in the store is less than the revert range

@@ -185,7 +185,7 @@ INSERT INTO d.t2 VALUES (2);
 	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
 		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
 
-	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), DisableCreateTenant: true})
+	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20), DisableCreateTenant: true})
 	defer func() {
 		require.NoError(t, destTenantConn.Close())
 	}()

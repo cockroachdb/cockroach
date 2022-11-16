@@ -882,8 +882,8 @@ func backupShowerDefault(p sql.PlanHookState, showSchemas bool, opts tree.KVOpti
 					row := tree.Datums{
 						tree.DNull, // Database
 						tree.DNull, // Schema
-						tree.NewDString(roachpb.MakeTenantID(t.ID).String()), // Object Name
-						tree.NewDString("TENANT"),                            // Object Type
+						tree.NewDString(roachpb.MustMakeTenantID(t.ID).String()), // Object Name
+						tree.NewDString("TENANT"),                                // Object Type
 						backupType,
 						start,
 						end,

@@ -421,7 +421,7 @@ func StartTenant(
 // starting a test Tenant. The returned tenant IDs match those built
 // into the test certificates.
 func TestTenantID() roachpb.TenantID {
-	return roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0])
+	return roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0])
 }
 
 // GetJSONProto uses the supplied client to GET the URL specified by the parameters

@@ -3408,7 +3408,7 @@ func TestBackupTenantsWithRevisionHistory(t *testing.T) {
 	tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
 
 	const msg = "can not backup tenants with revision history"
@@ -5856,7 +5856,7 @@ func TestProtectedTimestampsDuringBackup(t *testing.T) {
 
 	// Setup a tenant.
 	ts := tc.Server(0)
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 	tt, ttSQLDBRaw := serverutils.StartTenant(
 		t, ts, base.TestTenantArgs{
 			TenantID: tenantID,
@@ -6323,7 +6323,7 @@ func TestPaginatedBackupTenant(t *testing.T) {
 	}
 
 	_, conn10 := serverutils.StartTenant(t, srv,
-		base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+		base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
 	tenant10.Exec(t, `
@@ -6423,7 +6423,7 @@ func TestBackupRestoreInsideTenant(t *testing.T) {
 	const numAccounts = 1
 
 	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64) (*sqlutils.SQLRunner, func()) {
-		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant)})
+		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(tenant)})
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
@@ -6544,7 +6544,7 @@ func TestBackupRestoreTenantSettings(t *testing.T) {
 	const numAccounts = 1
 
 	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64) (*sqlutils.SQLRunner, func()) {
-		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant)})
+		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(tenant)})
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
@@ -6595,7 +6595,7 @@ func TestBackupRestoreInsideMultiPodTenant(t *testing.T) {
 	const npods = 2
 
 	makeTenant := func(srv serverutils.TestServerInterface, tenant uint64, existing bool) (*sqlutils.SQLRunner, func()) {
-		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(tenant), DisableCreateTenant: existing})
+		_, conn := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(tenant), DisableCreateTenant: existing})
 		cleanup := func() { conn.Close() }
 		return sqlutils.MakeSQLRunner(conn), cleanup
 	}
@@ -6740,7 +6740,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	_ = security.EmbeddedTenantIDs()
 
 	// Setup a few tenants, each with a different table.
-	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
 	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
@@ -6764,12 +6764,12 @@ func TestBackupRestoreTenant(t *testing.T) {
 	systemDB.Exec(t, `BACKUP system.users TO 'nodelocal://1/users'`)
 	systemDB.CheckQueryResults(t, `SELECT manifest->>'tenants' FROM [SHOW BACKUP 'nodelocal://1/users' WITH as_json]`, [][]string{{"[]"}})
 
-	_, conn11 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)})
+	_, conn11 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(11)})
 	defer conn11.Close()
 	tenant11 := sqlutils.MakeSQLRunner(conn11)
 	tenant11.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.baz(i int primary key); INSERT INTO foo.baz VALUES (111), (211)`)
 
-	_, conn20 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20)})
+	_, conn20 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20)})
 	defer conn20.Close()
 	tenant20 := sqlutils.MakeSQLRunner(conn20)
 	tenant20.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.qux(i int primary key); INSERT INTO foo.qux VALUES (120), (220)`)
@@ -6841,7 +6841,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		ten10Stopper := stop.NewStopper()
 		_, restoreConn10 := serverutils.StartTenant(
 			t, restoreTC.Server(0), base.TestTenantArgs{
-				TenantID: roachpb.MakeTenantID(10), Stopper: ten10Stopper,
+				TenantID: roachpb.MustMakeTenantID(10), Stopper: ten10Stopper,
 			},
 		)
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -6873,7 +6873,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 			[][]string{{"succeeded"}},
 		)
 
-		ten10Prefix := keys.MakeTenantPrefix(roachpb.MakeTenantID(10))
+		ten10Prefix := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(10))
 		ten10PrefixEnd := ten10Prefix.PrefixEnd()
 		rows, err := restoreTC.Server(0).DB().Scan(ctx, ten10Prefix, ten10PrefixEnd, 0 /* maxRows */)
 		require.NoError(t, err)
@@ -6889,7 +6889,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		_, restoreConn10 = serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 = sqlutils.MakeSQLRunner(restoreConn10)
@@ -6949,7 +6949,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -6991,7 +6991,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		)
 
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7004,7 +7004,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreTenant10.CheckQueryResults(t, `SHOW CLUSTER SETTING tenant_cost_model.write_payload_cost_per_mebibyte`, [][]string{{"456"}})
 
 		_, restoreConn11 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(11)},
 		)
 		defer restoreConn11.Close()
 		restoreTenant11 := sqlutils.MakeSQLRunner(restoreConn11)
@@ -7018,7 +7018,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 
 		restoreDB.Exec(t, `RESTORE TENANT 11 FROM 'nodelocal://1/clusterwide' WITH tenant = '20'`)
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20), DisableCreateTenant: true},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20), DisableCreateTenant: true},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)
@@ -7053,7 +7053,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10' AS OF SYSTEM TIME `+ts1)
 
 		_, restoreConn10 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)},
 		)
 		defer restoreConn10.Close()
 		restoreTenant10 := sqlutils.MakeSQLRunner(restoreConn10)
@@ -7078,7 +7078,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.Exec(t, `RESTORE TENANT 20 FROM 'nodelocal://1/t20'`)
 
 		_, restoreConn20 := serverutils.StartTenant(
-			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(20)},
+			t, restoreTC.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20)},
 		)
 		defer restoreConn20.Close()
 		restoreTenant20 := sqlutils.MakeSQLRunner(restoreConn20)

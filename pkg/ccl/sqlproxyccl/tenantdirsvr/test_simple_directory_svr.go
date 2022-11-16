@@ -62,7 +62,7 @@ func (d *TestSimpleDirectoryServer) ListPods(
 ) (*tenant.ListPodsResponse, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if _, ok := d.mu.deleted[roachpb.MakeTenantID(req.TenantID)]; ok {
+	if _, ok := d.mu.deleted[roachpb.MustMakeTenantID(req.TenantID)]; ok {
 		return &tenant.ListPodsResponse{}, nil
 	}
 	return &tenant.ListPodsResponse{
@@ -97,7 +97,7 @@ func (d *TestSimpleDirectoryServer) EnsurePod(
 ) (*tenant.EnsurePodResponse, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if _, ok := d.mu.deleted[roachpb.MakeTenantID(req.TenantID)]; ok {
+	if _, ok := d.mu.deleted[roachpb.MustMakeTenantID(req.TenantID)]; ok {
 		return nil, status.Errorf(codes.NotFound, "tenant has been deleted")
 	}
 	return &tenant.EnsurePodResponse{}, nil
@@ -112,7 +112,7 @@ func (d *TestSimpleDirectoryServer) GetTenant(
 ) (*tenant.GetTenantResponse, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if _, ok := d.mu.deleted[roachpb.MakeTenantID(req.TenantID)]; ok {
+	if _, ok := d.mu.deleted[roachpb.MustMakeTenantID(req.TenantID)]; ok {
 		return nil, status.Errorf(codes.NotFound, "tenant has been deleted")
 	}
 	// Note that we do not return a ClusterName field here. Doing this skips

@@ -280,7 +280,7 @@ func TestTenantVersionCheck(t *testing.T) {
 	})
 	// Ensure that the same ping succeeds with a secondary tenant context.
 	t.Run("old, secondary tenant", func(t *testing.T) {
-		tenantCtx := roachpb.NewContextForTenant(context.Background(), roachpb.MakeTenantID(2))
+		tenantCtx := roachpb.NewContextForTenant(context.Background(), roachpb.MustMakeTenantID(2))
 		_, err := heartbeat.Ping(tenantCtx, request)
 		require.NoError(t, err)
 	})

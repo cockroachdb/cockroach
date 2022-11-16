@@ -230,7 +230,7 @@ func newTenantClusterHelper(
 	var cluster tenantCluster = make([]TestTenant, tenantClusterSize)
 	for i := 0; i < tenantClusterSize; i++ {
 		cluster[i] =
-			newTestTenant(t, server, roachpb.MakeTenantID(tenantID), knobs)
+			newTestTenant(t, server, roachpb.MustMakeTenantID(tenantID), knobs)
 	}
 
 	return cluster

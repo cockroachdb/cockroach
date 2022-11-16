@@ -132,7 +132,7 @@ func (ts *testState) start(t *testing.T) {
 	ts.provider = newTestProvider()
 	ts.controller, err = tenantcostclient.TestingTenantSideCostController(
 		ts.settings,
-		roachpb.MakeTenantID(5),
+		roachpb.MustMakeTenantID(5),
 		ts.provider,
 		ts.timeSrc,
 		ts.eventWait,

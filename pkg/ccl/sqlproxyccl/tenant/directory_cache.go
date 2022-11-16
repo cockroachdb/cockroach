@@ -433,13 +433,13 @@ func (d *directoryCache) watchPods(ctx context.Context, stopper *stop.Stopper) e
 func (d *directoryCache) updateTenantEntry(ctx context.Context, pod *Pod) {
 	if pod.Addr == "" || pod.TenantID == 0 {
 		// Nothing needs to be done if there is no IP address specified.
-		// We also check on TenantID here because roachpb.MakeTenantID will
+		// We also check on TenantID here because roachpb.MustMakeTenantID will
 		// panic with TenantID = 0.
 		return
 	}
 
 	// Ensure that a directory entry exists for this tenant.
-	entry, err := d.getEntry(ctx, roachpb.MakeTenantID(pod.TenantID), true /* allowCreate */)
+	entry, err := d.getEntry(ctx, roachpb.MustMakeTenantID(pod.TenantID), true /* allowCreate */)
 	if err != nil {
 		if !grpcutil.IsContextCanceled(err) {
 			// This should only happen in case of a deleted tenant or a transient

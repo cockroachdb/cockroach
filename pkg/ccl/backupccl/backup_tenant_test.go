@@ -50,7 +50,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	tSrv, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID:     roachpb.MakeTenantID(10),
+		TenantID:     roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
 	defer tSQL.Close()
@@ -87,7 +87,7 @@ func TestBackupTenantImportingTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	tSrv, tSQL = serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID:     roachpb.MakeTenantID(10),
+		TenantID:     roachpb.MustMakeTenantID(10),
 		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},
 	})
 	defer tSQL.Close()
@@ -136,7 +136,7 @@ func TestTenantBackupMultiRegionDatabases(t *testing.T) {
 	defer cleanup()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	tenID := roachpb.MakeTenantID(10)
+	tenID := roachpb.MustMakeTenantID(10)
 	_, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantID:     tenID,
 		TestingKnobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()},

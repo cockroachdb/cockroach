@@ -28,7 +28,7 @@ func TestServerAssignment(t *testing.T) {
 	tracker, err := NewConnTracker(ctx, stopper, nil /* timeSource */)
 	require.NoError(t, err)
 
-	tenantID := roachpb.MakeTenantID(10)
+	tenantID := roachpb.MustMakeTenantID(10)
 	handle := &testConnHandle{}
 	sa := NewServerAssignment(tenantID, tracker, handle, "127.0.0.10")
 	require.Equal(t, handle, sa.Owner())

@@ -299,7 +299,7 @@ func TestClusterWideMigrationOnlyRunBySystemTenant(t *testing.T) {
 		if systemTenant {
 			codec = keys.SystemSQLCodec
 		} else {
-			codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+			codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 		}
 
 		ctx := context.Background()

@@ -390,7 +390,7 @@ func TestExportInsideTenant(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
 	defer srv.Stopper().Stop(context.Background())
 
-	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
 	tenant10 := sqlutils.MakeSQLRunner(conn10)
 
@@ -425,12 +425,12 @@ func TestImportInTenant(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	// Setup a few tenants, each with a different table.
-	_, conn10 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, conn10 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	defer conn10.Close()
 	t10 := sqlutils.MakeSQLRunner(conn10)
 
 	// Setup a few tenants, each with a different table.
-	_, conn11 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MakeTenantID(11)})
+	_, conn11 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(11)})
 	defer conn11.Close()
 	t11 := sqlutils.MakeSQLRunner(conn11)
 
@@ -474,14 +474,14 @@ func TestImportInMultiServerTenant(t *testing.T) {
 
 	// Setup a SQL server on a tenant.
 	_, conn1 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID: roachpb.MakeTenantID(10),
+		TenantID: roachpb.MustMakeTenantID(10),
 	})
 	defer conn1.Close()
 	t1 := sqlutils.MakeSQLRunner(conn1)
 
 	// Setup another SQL server on the same tenant.
 	_, conn2 := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
-		TenantID:            roachpb.MakeTenantID(10),
+		TenantID:            roachpb.MustMakeTenantID(10),
 		DisableCreateTenant: true,
 	})
 	defer conn2.Close()

@@ -1763,7 +1763,7 @@ func (n *Node) TokenBucket(
 			)),
 		}, nil
 	}
-	tenantID := roachpb.MakeTenantID(in.TenantID)
+	tenantID := roachpb.MustMakeTenantID(in.TenantID)
 	return n.tenantUsage.TokenBucketRequest(ctx, tenantID, in), nil
 }
 

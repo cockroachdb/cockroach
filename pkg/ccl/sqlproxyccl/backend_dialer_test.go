@@ -69,11 +69,11 @@ func TestBackendDialTLS(t *testing.T) {
 	})
 	defer storageServer.Stopper().Stop(ctx)
 
-	tenant10 := roachpb.MakeTenantID(10)
+	tenant10 := roachpb.MustMakeTenantID(10)
 	sql10, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant10})
 	defer sql10.Stopper().Stop(ctx)
 
-	tenant11 := roachpb.MakeTenantID(11)
+	tenant11 := roachpb.MustMakeTenantID(11)
 	sql11, _ := serverutils.StartTenant(t, storageServer, base.TestTenantArgs{TenantID: tenant11})
 	defer sql11.Stopper().Stop(ctx)
 
@@ -113,7 +113,7 @@ func TestBackendDialTLS(t *testing.T) {
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tenantID := roachpb.MakeTenantID(tc.tenantID)
+			tenantID := roachpb.MustMakeTenantID(tc.tenantID)
 
 			tenantConfig, err := tlsConfigForTenant(tenantID, tc.addr, tlsConfig)
 			require.NoError(t, err)

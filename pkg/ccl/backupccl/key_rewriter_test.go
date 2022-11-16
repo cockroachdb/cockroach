@@ -183,8 +183,8 @@ func TestKeyRewriter(t *testing.T) {
 		}
 	})
 	systemTenant := roachpb.SystemTenantID
-	tenant3 := roachpb.MakeTenantID(3)
-	tenant4 := roachpb.MakeTenantID(4)
+	tenant3 := roachpb.MustMakeTenantID(3)
+	tenant4 := roachpb.MustMakeTenantID(4)
 
 	// Restoring a tenant's data from a backup as another tenant.
 	testTableRekeyAsDiffTenant := func(srcTenant, destTenant roachpb.TenantID) {

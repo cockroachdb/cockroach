@@ -397,7 +397,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
-					TenantID:              roachpb.MakeTenantID(uint64(i + 2)),
+					TenantID:              roachpb.MustMakeTenantID(uint64(i + 2)),
 					Stopper:               tenantStopper,
 					ForceInsecure:         c.demoCtx.Insecure,
 					SSLCertsDir:           c.demoDir,
@@ -1112,7 +1112,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 			); err != nil {
 				return err
 			}
-			rootUserScope = append(rootUserScope, roachpb.MakeTenantID(tenantID))
+			rootUserScope = append(rootUserScope, roachpb.MustMakeTenantID(tenantID))
 		}
 	}
 	// Create a certificate for the root user. This certificate will be scoped to the

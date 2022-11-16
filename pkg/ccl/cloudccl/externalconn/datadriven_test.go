@@ -69,7 +69,7 @@ func TestDataDriven(t *testing.T) {
 			if d.HasArg("tenant") {
 				var id uint64
 				d.ScanArgs(t, "tenant", &id)
-				tenantID = roachpb.MakeTenantID(id)
+				tenantID = roachpb.MustMakeTenantID(id)
 			}
 
 			tenant, found := externalConnTestCluster.LookupTenant(tenantID)
