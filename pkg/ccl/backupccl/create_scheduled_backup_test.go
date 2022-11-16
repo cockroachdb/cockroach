@@ -623,7 +623,7 @@ func TestSerializesScheduledBackupExecutionArgs(t *testing.T) {
 			if tc.user == freeUser {
 				defer utilccl.TestingDisableEnterprise()()
 			} else {
-				defer utilccl.TestingEnableEnterprise()()
+				defer utilccl.TestingEnableEnterpriseTricky()()
 			}
 
 			schedules, err := th.createBackupSchedule(t, tc.query, tc.queryArgs...)
@@ -1228,7 +1228,7 @@ func TestShowCreateScheduleStatement(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			defer utilccl.TestingEnableEnterprise()()
+			defer utilccl.TestingEnableEnterpriseTricky()()
 			defer th.clearSchedules(t)
 
 			destination := "nodelocal://0/" + tc.name

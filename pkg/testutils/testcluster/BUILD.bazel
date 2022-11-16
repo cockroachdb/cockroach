@@ -22,7 +22,6 @@ go_library(
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/skip",
         "//pkg/util/contextutil",
         "//pkg/util/hlc",
         "//pkg/util/log",

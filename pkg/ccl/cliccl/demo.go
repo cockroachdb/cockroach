@@ -22,7 +22,7 @@ func enableEnterpriseForDemo(db *gosql.DB, org string) (func(), error) {
 	if err != nil {
 		return nil, err
 	}
-	return utilccl.TestingEnableEnterprise(), nil
+	return utilccl.TestingEnableEnterpriseTricky(), nil
 }
 
 func init() {

@@ -6,14 +6,14 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package partitionccl
+package partitionccl_test
 
 import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -23,7 +23,12 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	defer utilccl.TestingEnableEnterprise()()
+	// TODO(andrei): The common thing to do is to call
+	// ccl.TestingEnableEnterprise() instead of the utilccl version. That requires
+	// this file to move to the partitionccl_test package. Doing that causes one
+	// of the tests to panic. I haven't investigated why.
+	//defer utilccl.TestingEnableEnterpriseTricky()()
+	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)

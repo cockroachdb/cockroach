@@ -57,9 +57,9 @@ go_test(
     embed = [":schemafeed"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
-        "//pkg/ccl/utilccl",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/roachpb",

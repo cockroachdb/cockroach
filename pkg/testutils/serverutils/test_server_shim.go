@@ -23,7 +23,6 @@ import (
 	"flag"
 	"math/rand"
 	"net/url"
-	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -48,14 +47,6 @@ import (
 // TenantModeFlagName is the exported name of the tenantMode flag, for use
 // in other packages.
 const TenantModeFlagName = "tenantMode"
-
-// TenantSkipCCLBinaryMessage is the message we return any time we need to
-// skip a test due to the lack of a CCL binary.
-const TenantSkipCCLBinaryMessage = "skipping due to lack of CCL binary"
-
-// RequiresCCLBinaryMessage is the message we look for to determine if we've
-// encountered an error due to the lack of a CCL binary.
-const RequiresCCLBinaryMessage = "requires a CCL binary"
 
 var tenantModeFlag = flag.String(
 	TenantModeFlagName, tenantModeDefault,
@@ -313,9 +304,6 @@ func StartServer(
 	}
 
 	if err := server.Start(context.Background()); err != nil {
-		if strings.Contains(err.Error(), RequiresCCLBinaryMessage) {
-			skip.IgnoreLint(t, TenantSkipCCLBinaryMessage)
-		}
 		t.Fatalf("%+v", err)
 	}
 	goDB := OpenDBConn(

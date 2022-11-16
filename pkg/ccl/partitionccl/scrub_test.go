@@ -40,7 +40,7 @@ func tenantOrSystemCodec(s serverutils.TestServerInterface) keys.SQLCodec {
 func TestScrubUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	utilccl.TestingEnableEnterprise()
+	utilccl.TestingEnableEnterpriseTricky()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableDefaultTestTenant: false,
 	})
@@ -127,7 +127,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 func TestScrubUniqueIndexWithNulls(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	utilccl.TestingEnableEnterprise()
+	utilccl.TestingEnableEnterpriseTricky()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -198,7 +198,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 func TestScrubUniqueIndexExplicitPartition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	utilccl.TestingEnableEnterprise()
+	utilccl.TestingEnableEnterpriseTricky()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -264,7 +264,7 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 func TestScrubPartialUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	utilccl.TestingEnableEnterprise()
+	utilccl.TestingEnableEnterpriseTricky()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -381,7 +381,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 func TestScrubUniqueIndexMultiCol(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	utilccl.TestingEnableEnterprise()
+	utilccl.TestingEnableEnterpriseTricky()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
@@ -470,7 +470,7 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 func TestScrubPrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	utilccl.TestingEnableEnterprise()
+	utilccl.TestingEnableEnterpriseTricky()
 	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
