@@ -119,25 +119,25 @@ const (
 var (
 	MetaConns = metric.Metadata{
 		Name:        "sql.conns",
-		Help:        "Number of active sql connections",
+		Help:        "Number of active SQL connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
-		Help:        "Counter of the number of sql connections created",
+		Help:        "Counter of the number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaBytesIn = metric.Metadata{
 		Name:        "sql.bytesin",
-		Help:        "Number of sql bytes received",
+		Help:        "Number of SQL bytes received",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	MetaBytesOut = metric.Metadata{
 		Name:        "sql.bytesout",
-		Help:        "Number of sql bytes sent",
+		Help:        "Number of SQL bytes sent",
 		Measurement: "SQL Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -149,7 +149,7 @@ var (
 	}
 	MetaConnFailures = metric.Metadata{
 		Name:        "sql.conn.failures",
-		Help:        "Number of sql conection failures",
+		Help:        "Number of SQL connection failures",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
