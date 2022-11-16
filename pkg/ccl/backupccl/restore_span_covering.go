@@ -87,6 +87,7 @@ func makeSimpleImportSpans(
 	backups []backuppb.BackupManifest,
 	backupLocalityMap map[int]storeByLocalityKV,
 	introducedSpanFrontier *spanUtils.Frontier,
+	// TODO(mb): Remove lowWaterMark argument in 23.1.
 	lowWaterMark roachpb.Key,
 	targetSize int64,
 ) []execinfrapb.RestoreSpanEntry {
