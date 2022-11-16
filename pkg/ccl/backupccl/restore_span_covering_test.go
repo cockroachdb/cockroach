@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -503,4 +504,65 @@ func TestRestoreEntryCover(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestFilterCompletedImportSpans checks that all completed spans are
+// skipped over when creating the completed span frontier and toDoSpans slice in memory.
+func TestFilterCompletedImportSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sp := func(start, end string) roachpb.Span {
+		return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
+	}
+	f := func(start, end, path string) backuppb.BackupManifest_File {
+		return backuppb.BackupManifest_File{Span: sp(start, end), Path: path}
+	}
+	paths := func(names ...string) []execinfrapb.RestoreFileSpec {
+		r := make([]execinfrapb.RestoreFileSpec, len(names))
+		for i := range names {
+			r[i].Path = names[i]
+		}
+		return r
+	}
+
+	// Setup and test the example in the comment of makeSimpleImportSpans.
+	spans := []roachpb.Span{sp("a", "f"), sp("f", "i"), sp("l", "m")}
+	backups := []backuppb.BackupManifest{
+		{Files: []backuppb.BackupManifest_File{f("a", "c", "1"), f("c", "e", "2"), f("h", "i", "3")}},
+		{Files: []backuppb.BackupManifest_File{f("b", "d", "4"), f("g", "i", "5")}},
+		{Files: []backuppb.BackupManifest_File{f("a", "h", "6"), f("j", "k", "7")}},
+		{Files: []backuppb.BackupManifest_File{f("h", "i", "8"), f("l", "m", "9")}},
+	}
+
+	emptySpanFrontier, err := spanUtils.MakeFrontier(roachpb.Span{})
+	require.NoError(t, err)
+
+	importSpans := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, 2<<20)
+
+	// Tests that no completed spans returns a frontier with all empty timestamps and the original import span slice.
+	completedImportSpans, newImportSpans, err := filterCompletedImportSpans(nil, importSpans)
+	require.NoError(t, err)
+	completedImportSpans.Entries(func(s roachpb.Span,
+		ts hlc.Timestamp) (done spanUtils.OpResult) {
+		require.Equal(t, hlc.Timestamp{}, ts)
+		return spanUtils.ContinueMatch
+	})
+	require.Equal(t, importSpans, newImportSpans)
+
+	// Tests that one completed span returns a frontier with one forwarded timestamp
+	// and the import spans are reduced by one span.
+	mockCompletedSpans := []jobspb.RestoreProgress_RestoreProgressFrontierEntry{{sp("a", "f"), hlc.Timestamp{WallTime: 1}}}
+	completedImportSpans, newImportSpans, err = filterCompletedImportSpans(mockCompletedSpans, importSpans)
+	require.NoError(t, err)
+	completedImportSpans.Entries(func(s roachpb.Span,
+		ts hlc.Timestamp) (done spanUtils.OpResult) {
+		if !ts.IsEmpty() {
+			require.Equal(t, sp("a", "f"), s)
+		}
+		return spanUtils.ContinueMatch
+	})
+	require.Equal(t, []execinfrapb.RestoreSpanEntry{
+		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
+		{Span: sp("l", "m"), Files: paths("9")},
+	}, newImportSpans)
 }

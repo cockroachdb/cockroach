@@ -451,7 +451,14 @@ message RestoreDetails {
 
 
 message RestoreProgress {
+  message RestoreProgressFrontierEntry {
+    roachpb.Span entry = 1 [(gogoproto.nullable) = false];
+    util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  }
+
   bytes high_water = 1;
+  // CompletedSpans tracks the completed spans in a RESTORE operation.
+  repeated RestoreProgressFrontierEntry completed_spans = 2 [(gogoproto.nullable) = false];
 }
 
 message ImportDetails {
