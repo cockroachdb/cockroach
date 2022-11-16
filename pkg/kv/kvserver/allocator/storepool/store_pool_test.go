@@ -78,7 +78,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
-	sp *StorePool,
+	sp AllocatorStorePool,
 	constraints []roachpb.ConstraintsConjunction,
 	storeIDs roachpb.StoreIDSlice, // optional
 	filter StoreFilter,
