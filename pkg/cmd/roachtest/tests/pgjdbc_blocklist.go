@@ -481,7 +481,6 @@ var pgjdbcBlockList = blocklist{
 	"org.postgresql.test.jdbc2.ServerErrorTest.testPrimaryKey":                                                                                                                 "27796",
 	"org.postgresql.test.jdbc2.StatementTest.testCloseInProgressStatement":                                                                                                     "17511",
 	"org.postgresql.test.jdbc2.StatementTest.testConcurrentWarningReadAndClear":                                                                                                "17511",
-	"org.postgresql.test.jdbc2.StatementTest.testDateFunctions":                                                                                                                "17511",
 	"org.postgresql.test.jdbc2.StatementTest.testFastCloses":                                                                                                                   "17511",
 	"org.postgresql.test.jdbc2.StatementTest.testParsingSemiColons":                                                                                                            "17511",
 	"org.postgresql.test.jdbc2.StatementTest.testUpdateCount":                                                                                                                  "17511",
