@@ -84,7 +84,7 @@ func TestSpanAssembler(t *testing.T) {
 								codec := keys.SystemSQLCodec
 								if !useSystemTenant {
 									tenantName = "SecondaryTenant"
-									codec = keys.MakeSQLCodec(roachpb.MakeTenantID(5))
+									codec = keys.MakeSQLCodec(roachpb.MustMakeTenantID(5))
 								}
 								t.Run(tenantName, func(t *testing.T) {
 									testTable, err := makeTable(useColFamilies)

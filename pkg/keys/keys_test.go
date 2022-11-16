@@ -601,7 +601,7 @@ func TestMakeFamilyKey(t *testing.T) {
 
 func TestEnsureSafeSplitKey(t *testing.T) {
 	tenSysCodec := SystemSQLCodec
-	ten5Codec := MakeSQLCodec(roachpb.MakeTenantID(5))
+	ten5Codec := MakeSQLCodec(roachpb.MustMakeTenantID(5))
 	encInt := encoding.EncodeUvarintAscending
 	encInts := func(c SQLCodec, vals ...uint64) roachpb.Key {
 		k := c.TenantPrefix()
@@ -706,9 +706,9 @@ func TestEnsureSafeSplitKey(t *testing.T) {
 func testDecodeTenantPrefixShared(t *testing.T) {
 	tIDs := []roachpb.TenantID{
 		roachpb.SystemTenantID,
-		roachpb.MakeTenantID(2),
-		roachpb.MakeTenantID(999),
-		roachpb.MakeTenantID(math.MaxUint64),
+		roachpb.MustMakeTenantID(2),
+		roachpb.MustMakeTenantID(999),
+		roachpb.MustMakeTenantID(math.MaxUint64),
 	}
 	for _, tID := range tIDs {
 		t.Run(fmt.Sprintf("%v", tID), func(t *testing.T) {

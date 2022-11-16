@@ -182,8 +182,8 @@ func TestStreamIngestionProcessor(t *testing.T) {
 	registry := tc.Server(0).JobRegistry().(*jobs.Registry)
 	const tenantID = 20
 	tenantRekey := execinfrapb.TenantRekey{
-		OldID: roachpb.MakeTenantID(tenantID),
-		NewID: roachpb.MakeTenantID(tenantID + 10),
+		OldID: roachpb.MustMakeTenantID(tenantID),
+		NewID: roachpb.MustMakeTenantID(tenantID + 10),
 	}
 
 	p1 := streamclient.SubscriptionToken("p1")
@@ -197,7 +197,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 
 	sampleKV := func() roachpb.KeyValue {
 		key, err := keys.RewriteKeyToTenantPrefix(p1Key,
-			keys.MakeTenantPrefix(roachpb.MakeTenantID(tenantID)))
+			keys.MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID)))
 		require.NoError(t, err)
 		return roachpb.KeyValue{Key: key, Value: v}
 	}
@@ -451,7 +451,7 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	randomStreamClient, ok := streamClient.(*streamclient.RandomStreamClient)
 	require.True(t, ok)
-	id, err := randomStreamClient.Create(ctx, roachpb.MakeTenantID(tenantID))
+	id, err := randomStreamClient.Create(ctx, roachpb.MustMakeTenantID(tenantID))
 	require.NoError(t, err)
 
 	topo, err := randomStreamClient.Plan(ctx, id)
@@ -466,10 +466,10 @@ func TestRandomClientGeneration(t *testing.T) {
 	mu := syncutil.Mutex{}
 	cancelAfterCheckpoints := makeCheckpointEventCounter(&mu, 1000, cancel)
 	tenantRekey := execinfrapb.TenantRekey{
-		OldID: roachpb.MakeTenantID(tenantID),
-		NewID: roachpb.MakeTenantID(tenantID + 10),
+		OldID: roachpb.MustMakeTenantID(tenantID),
+		NewID: roachpb.MustMakeTenantID(tenantID + 10),
 	}
-	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MakeTenantID(tenantID)),
+	rekeyer, err := backupccl.MakeKeyRewriterFromRekeys(keys.MakeSQLCodec(roachpb.MustMakeTenantID(tenantID)),
 		nil /* tableRekeys */, []execinfrapb.TenantRekey{tenantRekey}, true /* restoreTenantFromStream */)
 	require.NoError(t, err)
 	streamValidator := newStreamClientValidator(rekeyer)

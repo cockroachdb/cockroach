@@ -177,7 +177,7 @@ func parseRandomStreamConfig(streamURL *url.URL) (randomStreamConfig, error) {
 		if err != nil {
 			return c, err
 		}
-		c.tenantID = roachpb.MakeTenantID(uint64(id))
+		c.tenantID = roachpb.MustMakeTenantID(uint64(id))
 	}
 	return c, nil
 }

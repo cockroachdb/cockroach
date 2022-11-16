@@ -241,7 +241,7 @@ func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
 	if err != nil {
 		panic(&ErrUglifyUnsupported{err})
 	}
-	output = MakeTenantPrefix(roachpb.MakeTenantID(tenantID))
+	output = MakeTenantPrefix(roachpb.MustMakeTenantID(tenantID))
 	if strings.HasPrefix(remainder, strTable) {
 		var indexKey roachpb.Key
 		remainder = remainder[len(strTable)-1:]

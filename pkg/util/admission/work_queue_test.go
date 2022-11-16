@@ -316,7 +316,7 @@ func TestWorkQueueBasic(t *testing.T) {
 func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	var id int
 	d.ScanArgs(t, "tenant", &id)
-	return roachpb.MakeTenantID(uint64(id))
+	return roachpb.MustMakeTenantID(uint64(id))
 }
 
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used
@@ -349,7 +349,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 			select {
 			case <-ticker.C:
 				ctx, cancel := context.WithCancel(context.Background())
-				work2 := &testWork{tenantID: roachpb.MakeTenantID(tenantID), cancel: cancel}
+				work2 := &testWork{tenantID: roachpb.MustMakeTenantID(tenantID), cancel: cancel}
 				tenantID++
 				go func(ctx context.Context, w *testWork, createTime int64) {
 					enabled, err := q.Admit(ctx, WorkInfo{

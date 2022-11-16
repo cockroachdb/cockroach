@@ -127,7 +127,7 @@ func TestDataDriven(t *testing.T) {
 
 		var tenant *spanconfigtestcluster.Tenant
 		if strings.Contains(path, "tenant") {
-			tenantID := roachpb.MakeTenantID(10)
+			tenantID := roachpb.MustMakeTenantID(10)
 			tenant = spanConfigTestCluster.InitializeTenant(ctx, tenantID)
 			spanConfigTestCluster.AllowSecondaryTenantToSetZoneConfigurations(t, tenantID)
 			spanConfigTestCluster.EnsureTenantCanSetZoneConfigurationsOrFatal(t, tenant)

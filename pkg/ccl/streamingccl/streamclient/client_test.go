@@ -174,7 +174,7 @@ func ExampleClient() {
 		_ = client.Close(ctx)
 	}()
 
-	id, err := client.Create(ctx, roachpb.MakeTenantID(1))
+	id, err := client.Create(ctx, roachpb.MustMakeTenantID(1))
 	if err != nil {
 		panic(err)
 	}

@@ -1097,7 +1097,7 @@ func restorePlanHook(
 			if x < int(roachpb.MinTenantID.ToUint64()) {
 				return nil, errors.New("invalid tenant ID value")
 			}
-			id := roachpb.MakeTenantID(uint64(x))
+			id := roachpb.MustMakeTenantID(uint64(x))
 			return &id, nil
 		}()
 		if err != nil {
@@ -1627,7 +1627,7 @@ func doRestorePlan(
 			if res != nil {
 				return errors.Errorf("tenant %s already exists", newTenantID)
 			}
-			old := roachpb.MakeTenantID(tenants[0].ID)
+			old := roachpb.MustMakeTenantID(tenants[0].ID)
 			tenants[0].ID = newTenantID.ToUint64()
 			oldTenantID = &old
 		} else {

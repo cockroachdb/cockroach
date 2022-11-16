@@ -50,23 +50,23 @@ func TestDirectoryErrors(t *testing.T) {
 	tc, dir, _ := newTestDirectoryCache(t)
 	defer tc.Stopper().Stop(ctx)
 
-	_, err := dir.TryLookupTenantPods(ctx, roachpb.MakeTenantID(1000))
+	_, err := dir.TryLookupTenantPods(ctx, roachpb.MustMakeTenantID(1000))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not in directory cache")
-	_, err = dir.TryLookupTenantPods(ctx, roachpb.MakeTenantID(1001))
+	_, err = dir.TryLookupTenantPods(ctx, roachpb.MustMakeTenantID(1001))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1001 not in directory cache")
-	_, err = dir.TryLookupTenantPods(ctx, roachpb.MakeTenantID(1002))
+	_, err = dir.TryLookupTenantPods(ctx, roachpb.MustMakeTenantID(1002))
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1002 not in directory cache")
 
 	// Fail to find tenant that does not exist.
-	_, err = dir.LookupTenantPods(ctx, roachpb.MakeTenantID(1000), "")
+	_, err = dir.LookupTenantPods(ctx, roachpb.MustMakeTenantID(1000), "")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = tenant 1000 not found")
 
 	// Fail to find tenant when cluster name doesn't match.
-	_, err = dir.LookupTenantPods(ctx, roachpb.MakeTenantID(tenantID), "unknown")
+	_, err = dir.LookupTenantPods(ctx, roachpb.MustMakeTenantID(tenantID), "unknown")
 	require.EqualError(t, err, "rpc error: code = NotFound desc = cluster name unknown doesn't match expected tenant-cluster")
 
 	// No-op when reporting failure for tenant that doesn't exit.
-	require.NoError(t, dir.ReportFailure(ctx, roachpb.MakeTenantID(1000), ""))
+	require.NoError(t, dir.ReportFailure(ctx, roachpb.MustMakeTenantID(1000), ""))
 }
 
 func TestWatchPods(t *testing.T) {
@@ -90,7 +90,7 @@ func TestWatchPods(t *testing.T) {
 		return nil
 	})
 
-	tenantID := roachpb.MakeTenantID(20)
+	tenantID := roachpb.MustMakeTenantID(20)
 	tds.CreateTenant(tenantID, "my-tenant")
 
 	// Add a new pod to the tenant.
@@ -203,7 +203,7 @@ func TestCancelLookups(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 
-	tenantID := roachpb.MakeTenantID(20)
+	tenantID := roachpb.MustMakeTenantID(20)
 	const lookupCount = 1
 
 	// Create the directory.
@@ -238,7 +238,7 @@ func TestResume(t *testing.T) {
 	defer log.ScopeWithoutShowLogs(t).Close(t)
 	skip.UnderDeadlockWithIssue(t, 71365)
 
-	tenantID := roachpb.MakeTenantID(40)
+	tenantID := roachpb.MustMakeTenantID(40)
 	const lookupCount = 5
 
 	// Create the directory.
@@ -289,7 +289,7 @@ func TestDeleteTenant(t *testing.T) {
 	tc, dir, tds := newTestDirectoryCache(t, tenant.RefreshDelay(-1))
 	defer tc.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MakeTenantID(50)
+	tenantID := roachpb.MustMakeTenantID(50)
 	// Create test tenant.
 	require.NoError(t, createTenant(tc, tenantID))
 
@@ -347,7 +347,7 @@ func TestRefreshThrottling(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 
 	// Create test tenant.
-	tenantID := roachpb.MakeTenantID(60)
+	tenantID := roachpb.MustMakeTenantID(60)
 	require.NoError(t, createTenant(tc, tenantID))
 
 	// Perform lookup to create entry in cache.
@@ -424,7 +424,7 @@ func startTenant(
 	t, err := srv.StartTenant(
 		ctx,
 		base.TestTenantArgs{
-			TenantID: roachpb.MakeTenantID(id),
+			TenantID: roachpb.MustMakeTenantID(id),
 			// Disable tenant creation, since this function assumes a tenant
 			// already exists.
 			DisableCreateTenant: true,

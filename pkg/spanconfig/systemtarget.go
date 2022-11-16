@@ -329,7 +329,7 @@ func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 		if err != nil {
 			return SystemTarget{}, err
 		}
-		tenID := roachpb.MakeTenantID(tenIDRaw)
+		tenID := roachpb.MustMakeTenantID(tenIDRaw)
 		return MakeTenantKeyspaceTarget(roachpb.SystemTenantID, tenID)
 	case bytes.HasPrefix(span.Key, keys.SystemSpanConfigSecondaryTenantOnEntireKeyspace):
 		// System span config was applied by a secondary tenant over its entire
@@ -339,7 +339,7 @@ func decodeSystemTarget(span roachpb.Span) (SystemTarget, error) {
 		if err != nil {
 			return SystemTarget{}, err
 		}
-		tenID := roachpb.MakeTenantID(tenIDRaw)
+		tenID := roachpb.MustMakeTenantID(tenIDRaw)
 		return MakeTenantKeyspaceTarget(tenID, tenID)
 	default:
 		return SystemTarget{},

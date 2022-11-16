@@ -74,28 +74,28 @@ func TestSystemSpanConfigStoreCombine(t *testing.T) {
 		),
 		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-				t, roachpb.SystemTenantID, roachpb.MakeTenantID(10),
+				t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(10),
 			),
 		),
 			makeSystemSpanConfig(150),
 		),
 		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-				t, roachpb.MakeTenantID(10), roachpb.MakeTenantID(10),
+				t, roachpb.MustMakeTenantID(10), roachpb.MustMakeTenantID(10),
 			),
 		),
 			makeSystemSpanConfig(200),
 		),
 		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-				t, roachpb.MakeTenantID(20), roachpb.MakeTenantID(20),
+				t, roachpb.MustMakeTenantID(20), roachpb.MustMakeTenantID(20),
 			),
 		),
 			makeSystemSpanConfig(300),
 		),
 		makeSpanConfigAddition(spanconfig.MakeTargetFromSystemTarget(
 			spanconfig.TestingMakeTenantKeyspaceTargetOrFatal(
-				t, roachpb.SystemTenantID, roachpb.MakeTenantID(30),
+				t, roachpb.SystemTenantID, roachpb.MustMakeTenantID(30),
 			),
 		),
 			makeSystemSpanConfig(500),
@@ -116,21 +116,21 @@ func TestSystemSpanConfigStoreCombine(t *testing.T) {
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100), ts(120)},
 		},
 		{
-			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MakeTenantID(10)), byte('a'))),
+			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MustMakeTenantID(10)), byte('a'))),
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100), ts(150), ts(200)},
 		},
 		{
-			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MakeTenantID(20)), byte('a'))),
+			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MustMakeTenantID(20)), byte('a'))),
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100), ts(300)},
 		},
 		{
-			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MakeTenantID(30)), byte('a'))),
+			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MustMakeTenantID(30)), byte('a'))),
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100), ts(500)},
 		},
 		{
 			// Only the system span config over the entire keyspace should apply to
 			// tenant 40.
-			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MakeTenantID(40)), byte('a'))),
+			key:          roachpb.RKey(append(keys.MakeTenantPrefix(roachpb.MustMakeTenantID(40)), byte('a'))),
 			expectedPTSs: []hlc.Timestamp{ts(1), ts(100)},
 		},
 	} {

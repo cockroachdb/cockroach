@@ -106,7 +106,7 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 
 	t.Run("regular-tenant", func(t *testing.T) {
 		_, tenDB := serverutils.StartTenant(t, s, base.TestTenantArgs{
-			TenantID:     roachpb.MakeTenantID(security.EmbeddedTenantIDs()[0]),
+			TenantID:     roachpb.MustMakeTenantID(security.EmbeddedTenantIDs()[0]),
 			TestingKnobs: args.Knobs,
 		})
 		defer tenDB.Close()

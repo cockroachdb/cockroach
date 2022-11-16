@@ -38,7 +38,7 @@ func tenantFromCommonName(commonName string) (roachpb.TenantID, error) {
 	if tenID < roachpb.MinTenantID.ToUint64() || tenID > roachpb.MaxTenantID.ToUint64() {
 		return roachpb.TenantID{}, authErrorf("invalid tenant ID %d in Common Name (CN)", tenID)
 	}
-	return roachpb.MakeTenantID(tenID), nil
+	return roachpb.MustMakeTenantID(tenID), nil
 }
 
 // authorize enforces a security boundary around endpoints that tenants
@@ -269,7 +269,7 @@ func (a tenantAuthorizer) authTokenBucket(
 	if args.TenantID == 0 {
 		return authErrorf("token bucket request with unspecified tenant not permitted")
 	}
-	if argTenant := roachpb.MakeTenantID(args.TenantID); argTenant != tenID {
+	if argTenant := roachpb.MustMakeTenantID(args.TenantID); argTenant != tenID {
 		return authErrorf("token bucket request for tenant %s not permitted", argTenant)
 	}
 	return nil

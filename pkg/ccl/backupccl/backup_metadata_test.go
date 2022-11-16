@@ -71,7 +71,7 @@ func TestMetadataSST(t *testing.T) {
 
 	// Check for correct backup metadata on tenant backups.
 	userfile2 := "userfile:///2"
-	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MakeTenantID(10)})
+	_, err := tc.Servers[0].StartTenant(ctx, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
 	require.NoError(t, err)
 	sqlDB.Exec(t, `BACKUP TENANT 10 TO $1`, userfile2)
 	checkMetadata(ctx, t, tc, userfile2)

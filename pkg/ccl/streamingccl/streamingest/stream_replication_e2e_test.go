@@ -63,7 +63,7 @@ type tenantStreamingClustersArgs struct {
 }
 
 var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
-	srcTenantID: roachpb.MakeTenantID(10),
+	srcTenantID: roachpb.MustMakeTenantID(10),
 	srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		tenantSQL.Exec(t, `
 	CREATE DATABASE d;
@@ -76,7 +76,7 @@ var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
 	},
 	srcNumNodes:         1,
 	srcClusterSettings:  defaultSrcClusterSetting,
-	destTenantID:        roachpb.MakeTenantID(20),
+	destTenantID:        roachpb.MustMakeTenantID(20),
 	destNumNodes:        1,
 	destClusterSettings: defaultDestClusterSetting,
 }

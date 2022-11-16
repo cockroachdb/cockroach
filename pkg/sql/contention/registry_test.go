@@ -232,7 +232,7 @@ func TestSerializedRegistryInvariants(t *testing.T) {
 			// Always append a tenant ID at the start of the key so that in case
 			// we choose to generate a non-SQL key, it doesn't have the first
 			// byte randomly equal to tenantPrefixByte.
-			key := keys.MakeTenantPrefix(roachpb.MakeTenantID(1 + uint64(rng.Uint32())))
+			key := keys.MakeTenantPrefix(roachpb.MustMakeTenantID(1 + uint64(rng.Uint32())))
 			if rng.Float64() > nonSQLKeyProbability {
 				// Create a key with a valid SQL prefix.
 				tableID := uint32(1 + rng.Intn(testIndexMapMaxSize+1))

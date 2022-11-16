@@ -236,7 +236,7 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 				"BACKUP TENANT 2 INTO 'nodelocal://1/foo'",
 			},
 			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: false,
-				TenantTarget: roachpb.MakeTenantID(2)}},
+				TenantTarget: roachpb.MustMakeTenantID(2)}},
 		},
 	}
 

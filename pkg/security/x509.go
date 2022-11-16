@@ -348,5 +348,5 @@ func ParseTenantURISAN(rawURL string) (roachpb.TenantID, string, error) {
 	if err != nil {
 		return roachpb.TenantID{}, "", errors.Errorf("invalid tenant URI SAN %s", rawURL)
 	}
-	return roachpb.MakeTenantID(tID), username, nil
+	return roachpb.MustMakeTenantID(tID), username, nil
 }

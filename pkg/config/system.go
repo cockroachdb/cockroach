@@ -642,7 +642,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 			// MaxTenantID already split or outside range.
 			return nil
 		}
-		lowTenID = roachpb.MakeTenantID(lowTenIDExcl.ToUint64() + 1)
+		lowTenID = roachpb.MustMakeTenantID(lowTenIDExcl.ToUint64() + 1)
 	}
 	if searchSpan.EndKey.Compare(tenantSpan.EndKey) >= 0 {
 		// endKey after tenant keyspace.
@@ -663,7 +663,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 			// for DecodeTenantPrefix(searchSpan.EndKey) == MinTenantID. This is
 			// because tenantSpan.Key is set to MakeTenantPrefix(MinTenantID),
 			// so we would have already returned early in that case.
-			highTenID = roachpb.MakeTenantID(highTenIDExcl.ToUint64() - 1)
+			highTenID = roachpb.MustMakeTenantID(highTenIDExcl.ToUint64() - 1)
 		} else {
 			highTenID = highTenIDExcl
 		}
