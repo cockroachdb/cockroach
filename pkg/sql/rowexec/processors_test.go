@@ -315,7 +315,8 @@ func TestAggregatorSpecAggregationEquals(t *testing.T) {
 func TestProcessorBaseContext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
+	// Use a custom context to distinguish it from the background one.
+	ctx := context.WithValue(context.Background(), struct{}{}, struct{}{})
 	st := cluster.MakeTestingClusterSettings()
 
 	runTest := func(t *testing.T, f func(noop *noopProcessor)) {
@@ -332,18 +333,22 @@ func TestProcessorBaseContext(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// Before Start we should get the background context.
+		if noop.Ctx() != context.Background() {
+			t.Fatalf("ProcessorBase.Ctx() didn't return the background context before Start")
+		}
 		noop.Start(ctx)
-		origCtx := noop.Ctx
+		origCtx := noop.Ctx()
 
 		// The context should be valid after Start but before Next is called in case
 		// ConsumerDone or ConsumerClosed are called without calling Next.
-		if noop.Ctx == nil {
+		if noop.Ctx() == context.Background() {
 			t.Fatalf("ProcessorBase.ctx not initialized")
 		}
 		f(noop)
 		// The context should be reset after ConsumerClosed is called so that any
 		// subsequent logging calls will not operate on closed spans.
-		if noop.Ctx != origCtx {
+		if noop.Ctx() != origCtx {
 			t.Fatalf("ProcessorBase.ctx not reset on close")
 		}
 	}

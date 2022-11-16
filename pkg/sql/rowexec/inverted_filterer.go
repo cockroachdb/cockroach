@@ -169,7 +169,7 @@ func (ifr *invertedFilterer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		case ifrEmittingRows:
 			ifr.runningState, row, meta = ifr.emitRow()
 		default:
-			log.Fatalf(ifr.Ctx, "unsupported state: %d", ifr.runningState)
+			log.Fatalf(ifr.Ctx(), "unsupported state: %d", ifr.runningState)
 		}
 		if row == nil && meta == nil {
 			continue
@@ -194,9 +194,9 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		return ifrReadingInput, meta
 	}
 	if row == nil {
-		log.VEventf(ifr.Ctx, 1, "no more input rows")
+		log.VEventf(ifr.Ctx(), 1, "no more input rows")
 		evalResult := ifr.invertedEval.evaluate()
-		ifr.rc.SetupForRead(ifr.Ctx, evalResult)
+		ifr.rc.SetupForRead(ifr.Ctx(), evalResult)
 		// invertedEval had a single expression in the batch, and the results
 		// for that expression are in evalResult[0].
 		ifr.evalResult = evalResult[0]
@@ -245,7 +245,7 @@ func (ifr *invertedFilterer) readInput() (invertedFiltererState, *execinfrapb.Pr
 		// evaluator.
 		copy(ifr.keyRow, row[:ifr.invertedColIdx])
 		copy(ifr.keyRow[ifr.invertedColIdx:], row[ifr.invertedColIdx+1:])
-		keyIndex, err := ifr.rc.AddRow(ifr.Ctx, ifr.keyRow)
+		keyIndex, err := ifr.rc.AddRow(ifr.Ctx(), ifr.keyRow)
 		if err != nil {
 			ifr.MoveToDraining(err)
 			return ifrStateUnknown, ifr.DrainHelper()
@@ -273,11 +273,11 @@ func (ifr *invertedFilterer) emitRow() (
 	}
 	if ifr.resultIdx >= len(ifr.evalResult) {
 		// We are done emitting all rows.
-		return drainFunc(ifr.rc.UnsafeReset(ifr.Ctx))
+		return drainFunc(ifr.rc.UnsafeReset(ifr.Ctx()))
 	}
 	curRowIdx := ifr.resultIdx
 	ifr.resultIdx++
-	keyRow, err := ifr.rc.GetRow(ifr.Ctx, ifr.evalResult[curRowIdx], false /* skip */)
+	keyRow, err := ifr.rc.GetRow(ifr.Ctx(), ifr.evalResult[curRowIdx], false /* skip */)
 	if err != nil {
 		return drainFunc(err)
 	}
@@ -301,12 +301,12 @@ func (ifr *invertedFilterer) ConsumerClosed() {
 
 func (ifr *invertedFilterer) close() {
 	if ifr.InternalClose() {
-		ifr.rc.Close(ifr.Ctx)
+		ifr.rc.Close(ifr.Ctx())
 		if ifr.MemMonitor != nil {
-			ifr.MemMonitor.Stop(ifr.Ctx)
+			ifr.MemMonitor.Stop(ifr.Ctx())
 		}
 		if ifr.diskMonitor != nil {
-			ifr.diskMonitor.Stop(ifr.Ctx)
+			ifr.diskMonitor.Stop(ifr.Ctx())
 		}
 	}
 }
