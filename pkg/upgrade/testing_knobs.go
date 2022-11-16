@@ -12,7 +12,7 @@ package upgrade
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // TestingKnobs are knobs to inject behavior into the upgrade manager which
@@ -22,10 +22,10 @@ type TestingKnobs struct {
 	// ListBetweenOverride injects an override for `clusterversion.ListBetween()
 	// in order to run upgrades corresponding to versions which do not
 	// actually exist.
-	ListBetweenOverride func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion
+	ListBetweenOverride func(from, to roachpb.Version) []roachpb.Version
 
 	// RegistryOverride is used to inject upgrades for specific cluster versions.
-	RegistryOverride func(cv clusterversion.ClusterVersion) (Upgrade, bool)
+	RegistryOverride func(v roachpb.Version) (Upgrade, bool)
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

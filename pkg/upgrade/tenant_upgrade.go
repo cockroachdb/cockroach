@@ -55,7 +55,13 @@ type TenantDeps struct {
 
 // TenantUpgradeFunc is used to perform sql-level upgrades. It may be run from
 // any tenant.
-type TenantUpgradeFunc func(context.Context, clusterversion.ClusterVersion, TenantDeps, *jobs.Job) error
+//
+// NOTE: The upgrade func runs inside a job, and the job can in principle be
+// used to checkpoint the upgrade's progress ergonomically. The tenant func used
+// to take a reference to the job running it for this purpose, but it was
+// removed because it was no longer used and because of testing complications.
+// It can be added back, though, if some upgrade needs it again.
+type TenantUpgradeFunc func(context.Context, clusterversion.ClusterVersion, TenantDeps) error
 
 // PreconditionFunc is a function run without isolation before attempting an
 // upgrade that includes this upgrade. It is used to verify that the
@@ -77,15 +83,12 @@ var _ Upgrade = (*TenantUpgrade)(nil)
 
 // NewTenantUpgrade constructs a TenantUpgrade.
 func NewTenantUpgrade(
-	description string,
-	cv clusterversion.ClusterVersion,
-	precondition PreconditionFunc,
-	fn TenantUpgradeFunc,
+	description string, v roachpb.Version, precondition PreconditionFunc, fn TenantUpgradeFunc,
 ) *TenantUpgrade {
 	m := &TenantUpgrade{
 		upgrade: upgrade{
 			description: description,
-			cv:          cv,
+			v:           v,
 		},
 		fn:           fn,
 		precondition: precondition,
@@ -94,11 +97,9 @@ func NewTenantUpgrade(
 }
 
 // Run kick-starts the actual upgrade process for tenant-level upgrades.
-func (m *TenantUpgrade) Run(
-	ctx context.Context, cv clusterversion.ClusterVersion, d TenantDeps, job *jobs.Job,
-) error {
-	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", cv), nil)
-	return m.fn(ctx, cv, d, job)
+func (m *TenantUpgrade) Run(ctx context.Context, v roachpb.Version, d TenantDeps) error {
+	ctx = logtags.AddTag(ctx, fmt.Sprintf("upgrade=%s", v), nil)
+	return m.fn(ctx, clusterversion.ClusterVersion{Version: v}, d)
 }
 
 // Precondition runs the precondition check if there is one and reports

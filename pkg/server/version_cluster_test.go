@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -420,19 +419,18 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.
 		UpgradeManager: &upgrade.TestingKnobs{
-			ListBetweenOverride: func(from, to clusterversion.ClusterVersion) []clusterversion.ClusterVersion {
-				return []clusterversion.ClusterVersion{to}
+			ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
+				return []roachpb.Version{to}
 			},
-			RegistryOverride: func(cv clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
-				if !cv.Version.Equal(v1) {
+			RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+				if !cv.Equal(v1) {
 					return nil, false
 				}
-				return upgrade.NewTenantUpgrade("testing", clusterversion.ClusterVersion{
-					Version: v1,
-				},
+				return upgrade.NewTenantUpgrade("testing",
+					v1,
 					upgrades.NoPrecondition,
 					func(
-						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps, _ *jobs.Job,
+						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 					) error {
 						return nil
 					}), true

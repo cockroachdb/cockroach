@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schematelemetry/schematelemetrycontroller"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
@@ -22,7 +21,7 @@ import (
 )
 
 func ensureSQLSchemaTelemetrySchedule(
-	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return d.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		_, err := schematelemetrycontroller.CreateSchemaTelemetrySchedule(

@@ -24,7 +24,7 @@ package upgrade
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // Upgrade defines a program to be executed once every node in the cluster is
@@ -61,7 +61,7 @@ import (
 // [3]: truncatedStateMigration
 // [4]: pkg/kv/kvserver/batch_eval/cmd_migrate.go
 type Upgrade interface {
-	ClusterVersion() clusterversion.ClusterVersion
+	Version() roachpb.Version
 	Name() string
 	internal() // restrict implementations to this package
 }
@@ -72,7 +72,7 @@ type JobDeps interface {
 
 	// GetUpgrade returns the upgrade associated with the cluster version
 	// if one exists.
-	GetUpgrade(key clusterversion.ClusterVersion) (Upgrade, bool)
+	GetUpgrade(key roachpb.Version) (Upgrade, bool)
 
 	// SystemDeps returns a handle to upgrade dependencies on a system tenant.
 	SystemDeps() SystemDeps
@@ -80,17 +80,17 @@ type JobDeps interface {
 
 type upgrade struct {
 	description string
-	cv          clusterversion.ClusterVersion
+	v           roachpb.Version
 }
 
 // ClusterVersion makes SystemUpgrade an Upgrade.
-func (m *upgrade) ClusterVersion() clusterversion.ClusterVersion {
-	return m.cv
+func (m *upgrade) Version() roachpb.Version {
+	return m.v
 }
 
 // Name returns a human-readable name for this upgrade.
 func (m *upgrade) Name() string {
-	return fmt.Sprintf("Upgrade to %s: %q", m.cv.String(), m.description)
+	return fmt.Sprintf("Upgrade to %s: %q", m.v.String(), m.description)
 }
 
 func (m *upgrade) internal() {}
