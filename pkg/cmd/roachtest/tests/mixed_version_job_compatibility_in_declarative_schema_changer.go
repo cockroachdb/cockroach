@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/stretchr/testify/require"
@@ -91,13 +92,10 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 			if c.IsLocal() && runtime.GOARCH == "arm64" {
 				t.Skip("Skip under ARM64. See https://github.com/cockroachdb/cockroach/issues/89268")
 			}
-			// An empty string means that the cockroach binary specified by flag
-			// `cockroach` will be used.
-			const mainVersion = ""
 			allNodes := c.All()
 			upgradedNodes := c.Nodes(1, 2)
 			oldNodes := c.Nodes(3, 4)
-			predV, err := PredecessorVersion(*t.BuildVersion())
+			predV, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 
 			u := newVersionUpgradeTest(c,
@@ -109,7 +107,7 @@ func registerDeclarativeSchemaChangerJobCompatibilityInMixedVersion(r registry.R
 				setShortGCTTLInSystemZoneConfig(c),
 
 				// Upgrade some nodes.
-				binaryUpgradeStep(upgradedNodes, mainVersion),
+				binaryUpgradeStep(upgradedNodes, clusterupgrade.MainVersion),
 
 				// Job backward compatibility test:
 				//   - upgraded nodes: plan schema change and create schema changer jobs

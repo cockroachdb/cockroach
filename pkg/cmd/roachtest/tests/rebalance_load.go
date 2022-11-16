@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -63,7 +64,7 @@ func registerRebalanceLoad(r registry.Registry) {
 			"--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		settings := install.MakeClusterSettings()
 		if mixedVersion {
-			predecessorVersion, err := PredecessorVersion(*t.BuildVersion())
+			predecessorVersion, err := clusterupgrade.PredecessorVersion(*t.BuildVersion())
 			require.NoError(t, err)
 			settings.Binary = uploadVersion(ctx, t, c, c.All(), predecessorVersion)
 			// Upgrade some (or all) of the first N-1 CRDB nodes. We ignore the last
@@ -72,11 +73,8 @@ func registerRebalanceLoad(r registry.Registry) {
 			lastNodeToUpgrade := rand.Intn(c.Spec().NodeCount-2) + 1
 			t.L().Printf("upgrading %d nodes to the current cockroach binary", lastNodeToUpgrade)
 			nodesToUpgrade := c.Range(1, lastNodeToUpgrade)
-			// An empty string means that the cockroach binary specified by the
-			// `cockroach` flag will be used.
-			const newVersion = ""
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
-			upgradeNodes(ctx, nodesToUpgrade, startOpts, newVersion, t, c)
+			upgradeNodes(ctx, t, c, nodesToUpgrade, startOpts, clusterupgrade.MainVersion)
 		} else {
 			c.Put(ctx, t.Cockroach(), "./cockroach", roachNodes)
 			c.Start(ctx, t.L(), startOpts, settings, roachNodes)
