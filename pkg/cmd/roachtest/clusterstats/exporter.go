@@ -48,6 +48,7 @@ type AggQuery struct {
 	Query    string
 	AggFn    AggregateFn
 	Interval Interval
+	Tag      string
 }
 
 // StatExporter defines an interface to export statistics to roachperf.
@@ -278,6 +279,9 @@ func (cs *clusterStatCollector) getStatSummary(
 		}
 
 		ret.AggTag = summaryQuery.Query
+		if summaryQuery.Tag != "" {
+			ret.AggTag = summaryQuery.Tag
+		}
 		// If there is more than one label name associated with the summary, we
 		// cannot be sure which is the correct label.
 		if len(taggedSummarySeries) != 1 {
