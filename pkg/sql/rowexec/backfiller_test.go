@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -76,10 +75,6 @@ func TestWriteResumeSpan(t *testing.T) {
 				SchemaChangeJobNoOp: func() bool {
 					return true
 				},
-			},
-			// Disable backfill upgrades, we still need the jobs table upgrade.
-			StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-				DisableBackfillMigrations: true,
 			},
 		},
 	})

@@ -745,7 +745,6 @@ go_test(
         "//pkg/sql/stmtdiagnostics",
         "//pkg/sql/tests",
         "//pkg/sql/types",
-        "//pkg/startupmigrations",
         "//pkg/storage",
         "//pkg/testutils",
         "//pkg/testutils/jobutils",

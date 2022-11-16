@@ -385,14 +385,6 @@ func (ts *TestServer) JobRegistry() interface{} {
 	return nil
 }
 
-// StartupMigrationsManager returns the *startupmigrations.Manager as an interface{}.
-func (ts *TestServer) StartupMigrationsManager() interface{} {
-	if ts != nil {
-		return ts.sqlServer.startupMigrationsMgr
-	}
-	return nil
-}
-
 // NodeLiveness exposes the NodeLiveness instance used by the TestServer as an
 // interface{}.
 func (ts *TestServer) NodeLiveness() interface{} {
