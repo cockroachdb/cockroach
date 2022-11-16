@@ -790,113 +790,137 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		}
 	}()
 
-	// In any case, first check the command in the start-up message.
-	//
-	// We're assuming that a client is not willing/able to receive error
-	// packets before we drain that message.
-	version, buf, err := s.readVersion(conn)
+	conn, preServeStatus, err := func(s *PreServeConnHandler, ctx context.Context, origConn net.Conn, socketType SocketType) (conn net.Conn, st PreServeStatus, err error) {
+		conn = origConn
+		st.State = PreServeError // Will be overridden below as needed.
+
+		// In any case, first check the command in the start-up message.
+		//
+		// We're assuming that a client is not willing/able to receive error
+		// packets before we drain that message.
+		version, buf, err := s.readVersion(conn)
+		if err != nil {
+			return conn, st, err
+		}
+
+		switch version {
+		case versionCancel:
+			// The cancel message is rather peculiar: it is sent without
+			// authentication, always over an unencrypted channel.
+			if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+				return conn, PreServeStatus{
+					State:     PreServeCancel,
+					CancelKey: key,
+				}, nil
+			} else {
+				return conn, st, errors.New("cannot read cancel key")
+			}
+
+		case versionGSSENC:
+			// This is a request for an unsupported feature: GSS encryption.
+			// https://github.com/cockroachdb/cockroach/issues/52184
+			//
+			// Ensure the right SQLSTATE is sent to the SQL client.
+			err := pgerror.New(pgcode.ProtocolViolation, "GSS encryption is not yet supported")
+			// Annotate a telemetry key. These objects
+			// are treated specially by sendErr: they increase a
+			// telemetry counter to indicate an attempt was made
+			// to use this feature.
+			err = errors.WithTelemetry(err, "#52184")
+			return conn, st, s.sendErr(ctx, conn, err)
+		}
+
+		// Compute the initial connType.
+		st.ConnType, err = socketType.asConnType()
+		if err != nil {
+			return conn, st, err
+		}
+
+		// If the client requests SSL, upgrade the connection to use TLS.
+		var clientErr error
+		conn, st.ConnType, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, st.ConnType, version, &buf)
+		if err != nil {
+			return conn, st, err
+		}
+		if clientErr != nil {
+			return conn, st, s.sendErr(ctx, conn, clientErr)
+		}
+
+		// What does the client want to do?
+		switch version {
+		case version30:
+			// Normal SQL connection. Proceed normally below.
+
+		case versionCancel:
+			// The PostgreSQL protocol definition says that cancel payloads
+			// must be sent *prior to upgrading the connection to use TLS*.
+			// Yet, we've found clients in the wild that send the cancel
+			// after the TLS handshake, for example at
+			// https://github.com/cockroachlabs/support/issues/600.
+			if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+				return conn, PreServeStatus{
+					State:     PreServeCancel,
+					CancelKey: key,
+				}, nil
+			} else {
+				return conn, st, errors.New("cannot read cancel key")
+			}
+
+		default:
+			// We don't know this protocol.
+			err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
+			err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
+			return conn, st, s.sendErr(ctx, conn, err)
+		}
+
+		// Reserve some memory for this connection using the server's monitor. This
+		// reduces pressure on the shared pool because the server monitor allocates in
+		// chunks from the shared pool and these chunks should be larger than
+		// baseSQLMemoryBudget.
+		st.Reserved = s.tenantIndependentConnMonitor.MakeBoundAccount()
+		if err := st.Reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
+			return conn, st, errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
+				baseSQLMemoryBudget)
+		}
+
+		// Load the client-provided session parameters.
+		st.clientParameters, err = parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
+		if err != nil {
+			st.Reserved.Close(ctx)
+			return conn, st, s.sendErr(ctx, conn, err)
+		}
+
+		st.State = PreServeReady
+		return conn, st, nil
+	}(&s.preServeHandler, ctx, conn, socketType)
 	if err != nil {
 		return err
 	}
 
-	switch version {
-	case versionCancel:
-		// The cancel message is rather peculiar: it is sent without
-		// authentication, always over an unencrypted channel.
-		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
-			s.handleCancel(ctx, key)
-		}
+	if preServeStatus.State == PreServeCancel {
+		s.handleCancel(ctx, preServeStatus.CancelKey)
 		return nil
-
-	case versionGSSENC:
-		// This is a request for an unsupported feature: GSS encryption.
-		// https://github.com/cockroachdb/cockroach/issues/52184
-		//
-		// Ensure the right SQLSTATE is sent to the SQL client.
-		err := pgerror.New(pgcode.ProtocolViolation, "GSS encryption is not yet supported")
-		// Annotate a telemetry key. These objects
-		// are treated specially by sendErr: they increase a
-		// telemetry counter to indicate an attempt was made
-		// to use this feature.
-		err = errors.WithTelemetry(err, "#52184")
-		return s.sendErr(ctx, conn, err)
 	}
 
+	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
 		log.Ops.Info(ctx, "rejecting new connection while server is draining")
-		return s.sendErr(ctx, conn, newAdminShutdownErr(ErrDrainingNewConn))
+		return s.sendErr(ctx, st, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
-	// Compute the initial connType.
-	connType, err := socketType.asConnType()
+	sArgs, err := finalizeClientParameters(ctx, preServeStatus.clientParameters,
+		&st.SV, s.trustClientProvidedRemoteAddr.Get())
 	if err != nil {
-		return err
-	}
-
-	// If the client requests SSL, upgrade the connection to use TLS.
-	var clientErr error
-	conn, connType, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, connType, version, &buf)
-	if err != nil {
-		return err
-	}
-	if clientErr != nil {
-		return s.sendErr(ctx, conn, clientErr)
-	}
-	sp := tracing.SpanFromContext(ctx)
-	sp.SetTag("conn_type", attribute.StringValue(connType.String()))
-
-	// What does the client want to do?
-	switch version {
-	case version30:
-		// Normal SQL connection. Proceed normally below.
-
-	case versionCancel:
-		// The PostgreSQL protocol definition says that cancel payloads
-		// must be sent *prior to upgrading the connection to use TLS*.
-		// Yet, we've found clients in the wild that send the cancel
-		// after the TLS handshake, for example at
-		// https://github.com/cockroachlabs/support/issues/600.
-		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
-			s.handleCancel(ctx, key)
-		}
-		return nil
-
-	default:
-		// We don't know this protocol.
-		err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
-		err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
-		return s.sendErr(ctx, conn, err)
-	}
-
-	// Reserve some memory for this connection using the server's monitor. This
-	// reduces pressure on the shared pool because the server monitor allocates in
-	// chunks from the shared pool and these chunks should be larger than
-	// baseSQLMemoryBudget.
-	reserved := s.preServeHandler.tenantIndependentConnMonitor.MakeBoundAccount()
-	if err := reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
-		return errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
-			baseSQLMemoryBudget)
-	}
-
-	// Load the client-provided session parameters.
-	cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
-	if err != nil {
-		reserved.Close(ctx)
-		return s.sendErr(ctx, conn, err)
-	}
-
-	sArgs, err := finalizeClientParameters(ctx, cp, &s.execCfg.Settings.SV, s.trustClientProvidedRemoteAddr.Get())
-	if err != nil {
-		reserved.Close(ctx)
-		return s.sendErr(ctx, conn, err)
+		preServeStatus.Reserved.Close(ctx)
+		return s.sendErr(ctx, st, conn, err)
 	}
 
 	// Transfer the memory account into this tenant.
-	tenantReserved, err := s.tenantSpecificConnMonitor.TransferAccount(ctx, &reserved)
+	tenantReserved, err := s.tenantSpecificConnMonitor.TransferAccount(ctx, &preServeStatus.Reserved)
 	if err != nil {
-		reserved.Close(ctx)
-		return s.sendErr(ctx, conn, err)
+		preServeStatus.Reserved.Close(ctx)
+		return s.sendErr(ctx, st, conn, err)
 	}
 
 	// Populate the client address field in the context tags and the
@@ -904,7 +928,9 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// Only now do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
 	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
+	sp := tracing.SpanFromContext(ctx)
 	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(connDetails.RemoteAddress))
+	sp.SetTag("conn_type", attribute.StringValue(preServeStatus.ConnType.String()))
 	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
 
 	// If a test is hooking in some authentication option, load it.
@@ -922,7 +948,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 		&tenantReserved,
 		connStart,
 		authOptions{
-			connType:        connType,
+			connType:        preServeStatus.ConnType,
 			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
 			ie:              s.execCfg.InternalExecutor,
@@ -1305,16 +1331,6 @@ func (s *Server) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
 	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
 }
 
-func (s *Server) maybeUpgradeToSecureConn(
-	ctx context.Context,
-	conn net.Conn,
-	connType hba.ConnType,
-	version uint32,
-	buf *pgwirebase.ReadBuffer,
-) (newConn net.Conn, newConnType hba.ConnType, newVersion uint32, clientErr, serverErr error) {
-	return s.preServeHandler.maybeUpgradeToSecureConn(ctx, conn, connType, version, buf)
-}
-
 // maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
 // requested by the client, and available in the server configuration.
 func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
@@ -1437,10 +1453,23 @@ func (s *Server) registerConn(
 	return
 }
 
-func (s *Server) readVersion(
-	conn io.Reader,
-) (version uint32, buf pgwirebase.ReadBuffer, err error) {
-	return s.preServeHandler.readVersion(conn)
+// sendErr sends errors to the client during the connection startup
+// sequence. Later error sends during/after authentication are handled
+// in conn.go.
+func (s *Server) sendErr(
+	ctx context.Context, st *cluster.Settings, conn net.Conn, err error,
+) error {
+	w := errWriter{
+		sv:         &st.SV,
+		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount),
+	}
+	// We could, but do not, report server-side network errors while
+	// trying to send the client error. This is because clients that
+	// receive error payload are highly correlated with clients
+	// disconnecting abruptly.
+	_ /* err */ = w.writeErr(ctx, err, conn)
+	_ = conn.Close()
+	return err
 }
 
 // readVersion reads the start-up message, then returns the version
@@ -1463,13 +1492,6 @@ func (s *PreServeConnHandler) readVersion(
 	}
 	s.tenantIndependentMetrics.PreServeBytesInCount.Inc(int64(n))
 	return
-}
-
-// sendErr sends errors to the client during the connection startup
-// sequence. Later error sends during/after authentication are handled
-// in conn.go.
-func (s *Server) sendErr(ctx context.Context, conn net.Conn, err error) error {
-	return s.preServeHandler.sendPreServeErr(ctx, conn, err)
 }
 
 func newAdminShutdownErr(msg string) error {
