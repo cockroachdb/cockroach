@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package logstore
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -27,9 +28,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
-var _ SideloadStorage = &diskSideloadStorage{}
+var _ SideloadStorage = &DiskSideloadStorage{}
 
-type diskSideloadStorage struct {
+// DiskSideloadStorage implements SideloadStorage using the given storage
+// engine.
+//
+// TODO(pavelkalinnikov): remove the interface, this type is the only impl.
+type DiskSideloadStorage struct {
 	st         *cluster.Settings
 	limiter    *rate.Limiter
 	dir        string
@@ -74,14 +79,16 @@ func exists(eng storage.Engine, path string) (bool, error) {
 	return false, err
 }
 
-func newDiskSideloadStorage(
+// NewDiskSideloadStorage creates a SideloadStorage for a given replica, stored
+// in the specified engine.
+func NewDiskSideloadStorage(
 	st *cluster.Settings,
 	rangeID roachpb.RangeID,
 	replicaID roachpb.ReplicaID,
 	baseDir string,
 	limiter *rate.Limiter,
 	eng storage.Engine,
-) (*diskSideloadStorage, error) {
+) (*DiskSideloadStorage, error) {
 	path := deprecatedSideloadedPath(baseDir, rangeID, replicaID)
 	newPath := sideloadedPath(baseDir, rangeID)
 	// NB: this call to exists() is in the hot path when the server starts
@@ -112,7 +119,7 @@ func newDiskSideloadStorage(
 	}
 	path = newPath
 
-	ss := &diskSideloadStorage{
+	ss := &DiskSideloadStorage{
 		dir:     path,
 		eng:     eng,
 		st:      st,
@@ -121,26 +128,26 @@ func newDiskSideloadStorage(
 	return ss, nil
 }
 
-func (ss *diskSideloadStorage) createDir() error {
+func (ss *DiskSideloadStorage) createDir() error {
 	err := ss.eng.MkdirAll(ss.dir)
 	ss.dirCreated = ss.dirCreated || err == nil
 	return err
 }
 
 // Dir implements SideloadStorage.
-func (ss *diskSideloadStorage) Dir() string {
+func (ss *DiskSideloadStorage) Dir() string {
 	return ss.dir
 }
 
 // Put implements SideloadStorage.
-func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
+func (ss *DiskSideloadStorage) Put(ctx context.Context, index, term uint64, contents []byte) error {
 	filename := ss.filename(ctx, index, term)
 	// There's a chance the whole path is missing (for example after Clear()),
 	// in which case handle that transparently.
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
-		if err := writeFileSyncing(ctx, filename, contents, ss.eng, 0644, ss.st, ss.limiter); err == nil {
+		if err := kvserverbase.WriteFileSyncing(ctx, filename, contents, ss.eng, 0644, ss.st, ss.limiter); err == nil {
 			return nil
 		} else if !oserror.IsNotExist(err) {
 			return err
@@ -155,7 +162,7 @@ func (ss *diskSideloadStorage) Put(ctx context.Context, index, term uint64, cont
 }
 
 // Get implements SideloadStorage.
-func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
+func (ss *DiskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]byte, error) {
 	filename := ss.filename(ctx, index, term)
 	b, err := fs.ReadFile(ss.eng, filename)
 	if oserror.IsNotExist(err) {
@@ -165,20 +172,20 @@ func (ss *diskSideloadStorage) Get(ctx context.Context, index, term uint64) ([]b
 }
 
 // Filename implements SideloadStorage.
-func (ss *diskSideloadStorage) Filename(ctx context.Context, index, term uint64) (string, error) {
+func (ss *DiskSideloadStorage) Filename(ctx context.Context, index, term uint64) (string, error) {
 	return ss.filename(ctx, index, term), nil
 }
 
-func (ss *diskSideloadStorage) filename(ctx context.Context, index, term uint64) string {
+func (ss *DiskSideloadStorage) filename(ctx context.Context, index, term uint64) string {
 	return filepath.Join(ss.dir, fmt.Sprintf("i%d.t%d", index, term))
 }
 
 // Purge implements SideloadStorage.
-func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (int64, error) {
+func (ss *DiskSideloadStorage) Purge(ctx context.Context, index, term uint64) (int64, error) {
 	return ss.purgeFile(ctx, ss.filename(ctx, index, term))
 }
 
-func (ss *diskSideloadStorage) fileSize(filename string) (int64, error) {
+func (ss *DiskSideloadStorage) fileSize(filename string) (int64, error) {
 	info, err := ss.eng.Stat(filename)
 	if err != nil {
 		if oserror.IsNotExist(err) {
@@ -189,7 +196,7 @@ func (ss *diskSideloadStorage) fileSize(filename string) (int64, error) {
 	return info.Size(), nil
 }
 
-func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (int64, error) {
+func (ss *DiskSideloadStorage) purgeFile(ctx context.Context, filename string) (int64, error) {
 	size, err := ss.fileSize(filename)
 	if err != nil {
 		return 0, err
@@ -204,21 +211,21 @@ func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (
 }
 
 // Clear implements SideloadStorage.
-func (ss *diskSideloadStorage) Clear(_ context.Context) error {
+func (ss *DiskSideloadStorage) Clear(_ context.Context) error {
 	err := ss.eng.RemoveAll(ss.dir)
 	ss.dirCreated = ss.dirCreated && err != nil
 	return err
 }
 
 // TruncateTo implements SideloadStorage.
-func (ss *diskSideloadStorage) TruncateTo(
+func (ss *DiskSideloadStorage) TruncateTo(
 	ctx context.Context, firstIndex uint64,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	return ss.possiblyTruncateTo(ctx, 0, firstIndex, true /* doTruncate */)
 }
 
 // Helper for truncation or byte calculation for [from, to).
-func (ss *diskSideloadStorage) possiblyTruncateTo(
+func (ss *DiskSideloadStorage) possiblyTruncateTo(
 	ctx context.Context, from uint64, to uint64, doTruncate bool,
 ) (bytesFreed, bytesRetained int64, _ error) {
 	deletedAll := true
@@ -265,13 +272,13 @@ func (ss *diskSideloadStorage) possiblyTruncateTo(
 }
 
 // BytesIfTruncatedFromTo implements SideloadStorage.
-func (ss *diskSideloadStorage) BytesIfTruncatedFromTo(
+func (ss *DiskSideloadStorage) BytesIfTruncatedFromTo(
 	ctx context.Context, from uint64, to uint64,
 ) (freed, retained int64, _ error) {
 	return ss.possiblyTruncateTo(ctx, from, to, false /* doTruncate */)
 }
 
-func (ss *diskSideloadStorage) forEach(
+func (ss *DiskSideloadStorage) forEach(
 	ctx context.Context, visit func(index uint64, filename string) error,
 ) error {
 	matches, err := ss.eng.List(ss.dir)
@@ -307,7 +314,7 @@ func (ss *diskSideloadStorage) forEach(
 }
 
 // String lists the files in the storage without guaranteeing an ordering.
-func (ss *diskSideloadStorage) String() string {
+func (ss *DiskSideloadStorage) String() string {
 	var buf strings.Builder
 	var count int
 	if err := ss.forEach(context.Background(), func(_ uint64, filename string) error {
