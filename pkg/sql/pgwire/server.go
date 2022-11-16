@@ -1386,12 +1386,16 @@ func (s *Server) readVersion(
 // sequence. Later error sends during/after authentication are handled
 // in conn.go.
 func (s *Server) sendErr(ctx context.Context, conn net.Conn, err error) error {
-	msgBuilder := newWriteBuffer(s.tenantMetrics.BytesOutCount)
+	// NB: this errWriter definition will be removed in the next commit.
+	w := errWriter{
+		sv:         &s.execCfg.Settings.SV,
+		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount),
+	}
 	// We could, but do not, report server-side network errors while
 	// trying to send the client error. This is because clients that
 	// receive error payload are highly correlated with clients
 	// disconnecting abruptly.
-	_ /* err */ = writeErr(ctx, &s.execCfg.Settings.SV, err, msgBuilder, conn)
+	_ /* err */ = w.writeErr(ctx, err, conn)
 	_ = conn.Close()
 	return err
 }
