@@ -12,8 +12,10 @@ package pgwire
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
@@ -52,19 +54,26 @@ var (
 // or state.
 type PreServeConnHandler struct {
 	errWriter                errWriter
+	cfg                      *base.Config
 	tenantIndependentMetrics tenantIndependentMetrics
+
+	getTLSConfig func() (*tls.Config, error)
 }
 
 // MakePreServeConnHandler creates a PreServeConnHandler.
 // sv refers to the setting values "outside" of the current tenant - i.e. from the storage cluster.
-func MakePreServeConnHandler(sv *settings.Values) PreServeConnHandler {
+func MakePreServeConnHandler(
+	cfg *base.Config, sv *settings.Values, getTLSConfig func() (*tls.Config, error),
+) PreServeConnHandler {
 	metrics := makeTenantIndependentMetrics()
 	return PreServeConnHandler{
 		errWriter: errWriter{
 			sv:         sv,
 			msgBuilder: newWriteBuffer(metrics.PreServeBytesOutCount),
 		},
+		cfg:                      cfg,
 		tenantIndependentMetrics: metrics,
+		getTLSConfig:             getTLSConfig,
 	}
 }
 

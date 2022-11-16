@@ -345,7 +345,9 @@ func MakeServer(
 
 		// We are initializing preServeHandler here until the following issue is resolved:
 		// https://github.com/cockroachdb/cockroach/issues/84585
-		preServeHandler: MakePreServeConnHandler(&st.SV),
+		preServeHandler: MakePreServeConnHandler(
+			cfg, &st.SV,
+			executorConfig.RPCContext.GetServerTLSConfig),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -1252,9 +1254,19 @@ func (s *Server) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
 	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
 }
 
+func (s *Server) maybeUpgradeToSecureConn(
+	ctx context.Context,
+	conn net.Conn,
+	connType hba.ConnType,
+	version uint32,
+	buf *pgwirebase.ReadBuffer,
+) (newConn net.Conn, newConnType hba.ConnType, newVersion uint32, clientErr, serverErr error) {
+	return s.preServeHandler.maybeUpgradeToSecureConn(ctx, conn, connType, version, buf)
+}
+
 // maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
 // requested by the client, and available in the server configuration.
-func (s *Server) maybeUpgradeToSecureConn(
+func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 	ctx context.Context,
 	conn net.Conn,
 	connType hba.ConnType,
@@ -1304,7 +1316,7 @@ func (s *Server) maybeUpgradeToSecureConn(
 	// connection to use TLS/SSL.
 
 	// Do we have a TLS configuration?
-	tlsConfig, serverErr := s.execCfg.RPCContext.GetServerTLSConfig()
+	tlsConfig, serverErr := s.getTLSConfig()
 	if serverErr != nil {
 		return
 	}
@@ -1325,7 +1337,7 @@ func (s *Server) maybeUpgradeToSecureConn(
 		newConn = tls.Server(conn, tlsConfig)
 		newConnType = hba.ConnHostSSL
 	}
-	s.tenantMetrics.BytesOutCount.Inc(int64(n))
+	s.tenantIndependentMetrics.PreServeBytesOutCount.Inc(int64(n))
 
 	// Finally, re-read the version/command from the client.
 	newVersion, *buf, serverErr = s.readVersion(newConn)
@@ -1374,15 +1386,21 @@ func (s *Server) registerConn(
 	return
 }
 
+func (s *Server) readVersion(
+	conn io.Reader,
+) (version uint32, buf pgwirebase.ReadBuffer, err error) {
+	return s.preServeHandler.readVersion(conn)
+}
+
 // readVersion reads the start-up message, then returns the version
 // code (first uint32 in message) and the buffer containing the rest
 // of the payload.
-func (s *Server) readVersion(
+func (s *PreServeConnHandler) readVersion(
 	conn io.Reader,
 ) (version uint32, buf pgwirebase.ReadBuffer, err error) {
 	var n int
 	buf = pgwirebase.MakeReadBuffer(
-		pgwirebase.ReadBufferOptionWithClusterSettings(&s.execCfg.Settings.SV),
+		pgwirebase.ReadBufferOptionWithClusterSettings(s.errWriter.sv),
 	)
 	n, err = buf.ReadUntypedMsg(conn)
 	if err != nil {
@@ -1392,7 +1410,7 @@ func (s *Server) readVersion(
 	if err != nil {
 		return
 	}
-	s.tenantMetrics.BytesInCount.Inc(int64(n))
+	s.tenantIndependentMetrics.PreServeBytesInCount.Inc(int64(n))
 	return
 }
 
