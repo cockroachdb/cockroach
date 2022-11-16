@@ -12,7 +12,6 @@ go_library(
     deps = [
         "//pkg/sql/lexbase",
         "//pkg/util/ctxgroup",
-        "//pkg/util/errorutil",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/util/version",
