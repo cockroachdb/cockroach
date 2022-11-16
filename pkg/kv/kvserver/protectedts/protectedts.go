@@ -15,10 +15,10 @@ package protectedts
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -37,12 +37,16 @@ var ErrExists = errors.New("protected timestamp record already exists")
 // Provider is the central coordinator for the protectedts subsystem.
 // It exists to abstract interaction with subsystem.
 type Provider interface {
-	Storage
+	Manager
 	Cache
 	Reconciler
 
 	Start(context.Context, *stop.Stopper) error
 	Metrics() metric.Struct
+}
+
+type Manager interface {
+	WithTxn(txn isql.Txn) Storage
 }
 
 // Storage provides clients with a mechanism to transactionally protect and
@@ -67,7 +71,7 @@ type Storage interface {
 	//
 	// An error will be returned if the ID of the provided record already exists
 	// so callers should be sure to generate new IDs when creating records.
-	Protect(context.Context, *kv.Txn, *ptpb.Record) error
+	Protect(context.Context, *ptpb.Record) error
 
 	// GetRecord retreives the record with the specified UUID as well as the MVCC
 	// timestamp at which it was written. If no corresponding record exists
@@ -78,30 +82,30 @@ type Storage interface {
 	// should be protected as well as the timestamp at which the Record providing
 	// that protection is known to be alive. The ReadTimestamp of the Txn used in
 	// this method can be used to provide such a timestamp.
-	GetRecord(context.Context, *kv.Txn, uuid.UUID) (*ptpb.Record, error)
+	GetRecord(context.Context, uuid.UUID) (*ptpb.Record, error)
 
 	// MarkVerified will mark a protected timestamp as verified.
 	//
 	// This method is generally used by an implementation of Verifier.
-	MarkVerified(context.Context, *kv.Txn, uuid.UUID) error
+	MarkVerified(context.Context, uuid.UUID) error
 
 	// Release allows spans which were previously protected to now be garbage
 	// collected.
 	//
 	// If the specified UUID does not exist ErrNotFound is returned but the
 	// passed txn remains safe for future use.
-	Release(context.Context, *kv.Txn, uuid.UUID) error
+	Release(context.Context, uuid.UUID) error
 
 	// GetMetadata retrieves the metadata with the provided Txn.
-	GetMetadata(context.Context, *kv.Txn) (ptpb.Metadata, error)
+	GetMetadata(context.Context) (ptpb.Metadata, error)
 
 	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
-	GetState(context.Context, *kv.Txn) (ptpb.State, error)
+	GetState(context.Context) (ptpb.State, error)
 
 	// UpdateTimestamp updates the timestamp protected by the record with the
 	// specified UUID.
-	UpdateTimestamp(ctx context.Context, txn *kv.Txn, id uuid.UUID, timestamp hlc.Timestamp) error
+	UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error
 }
 
 // Iterator iterates records in a cache until wantMore is false or all Records

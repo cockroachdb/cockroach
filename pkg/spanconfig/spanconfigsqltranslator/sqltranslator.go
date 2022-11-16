@@ -26,33 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
 // SQLTranslator implements the spanconfig.SQLTranslator interface.
 var _ spanconfig.SQLTranslator = &SQLTranslator{}
 
-// txnBundle is created to emphasize that the SQL translator is correspond to
-// a certain txn, and all fields here are a whole. It essentially keeps the
-// semantics of “translate at a snapshot in time”. This means that this
-// txnBundle should be written only in `NewTranslator`.
-type txnBundle struct {
-	txn      *kv.Txn
-	descsCol *descs.Collection
-	// TODO(janexing): we inject ie here is to replace the executor used in
-	// s.ptsProvider.GetState() in SQLTranslator.Translate().
-	ie sqlutil.InternalExecutor
-}
-
 // SQLTranslator is the concrete implementation of spanconfig.SQLTranslator.
 type SQLTranslator struct {
-	ptsProvider protectedts.Provider
-	codec       keys.SQLCodec
-	knobs       *spanconfig.TestingKnobs
-
-	txnBundle txnBundle
+	codec keys.SQLCodec
+	knobs *spanconfig.TestingKnobs
+	txn   descs.Txn
+	pts   protectedts.Storage
 }
 
 // Factory is used to construct transaction-scoped SQLTranslators.
@@ -79,40 +64,19 @@ func NewFactory(
 // NewSQLTranslator constructs and returns a transaction-scoped
 // spanconfig.SQLTranslator. The caller must ensure that the collection and
 // internal executor and the transaction are associated with each other.
-func (f *Factory) NewSQLTranslator(
-	txn *kv.Txn, ie sqlutil.InternalExecutor, descsCol *descs.Collection,
-) *SQLTranslator {
+func (f *Factory) NewSQLTranslator(txn descs.Txn) *SQLTranslator {
 	return &SQLTranslator{
-		ptsProvider: f.ptsProvider,
-		codec:       f.codec,
-		knobs:       f.knobs,
-		txnBundle: txnBundle{
-			txn:      txn,
-			descsCol: descsCol,
-			ie:       ie,
-		},
+		codec: f.codec,
+		knobs: f.knobs,
+		txn:   txn,
+		pts:   f.ptsProvider.WithTxn(txn),
 	}
-}
-
-// GetTxn returns the txn bound to this sql translator.
-func (s *SQLTranslator) GetTxn() *kv.Txn {
-	return s.txnBundle.txn
-}
-
-// GetDescsCollection returns the descriptor collection bound to this sql translator.
-func (s *SQLTranslator) GetDescsCollection() *descs.Collection {
-	return s.txnBundle.descsCol
-}
-
-// GetInternalExecutor returns the internal executor bound to this sql translator.
-func (s *SQLTranslator) GetInternalExecutor() sqlutil.InternalExecutor {
-	return s.txnBundle.ie
 }
 
 // Translate is part of the spanconfig.SQLTranslator interface.
 func (s *SQLTranslator) Translate(
 	ctx context.Context, ids descpb.IDs, generateSystemSpanConfigurations bool,
-) (records []spanconfig.Record, _ hlc.Timestamp, _ error) {
+) (records []spanconfig.Record, _ error) {
 	// Construct an in-memory view of the system.protected_ts_records table to
 	// populate the protected timestamp field on the emitted span configs.
 	//
@@ -122,16 +86,16 @@ func (s *SQLTranslator) Translate(
 	// timestamp subsystem, and the internal limits to limit the size of this
 	// table, there is scope for improvement in the future. One option could be
 	// a rangefeed-backed materialized view of the system table.
-	ptsState, err := s.ptsProvider.GetState(ctx, s.GetTxn())
+	ptsState, err := s.pts.GetState(ctx)
 	if err != nil {
-		return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to get protected timestamp state")
+		return nil, errors.Wrap(err, "failed to get protected timestamp state")
 	}
 	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(ctx, ptsState)
 
 	if generateSystemSpanConfigurations {
 		records, err = s.generateSystemSpanConfigRecords(ptsStateReader)
 		if err != nil {
-			return nil, hlc.Timestamp{}, errors.Wrap(err, "failed to generate SystemTarget records")
+			return nil, errors.Wrap(err, "failed to generate SystemTarget records")
 		}
 	}
 
@@ -141,9 +105,9 @@ func (s *SQLTranslator) Translate(
 	seen := make(map[descpb.ID]struct{})
 	var leafIDs descpb.IDs
 	for _, id := range ids {
-		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id, s.GetTxn(), s.GetDescsCollection())
+		descendantLeafIDs, err := s.findDescendantLeafIDs(ctx, id)
 		if err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, err
 		}
 		for _, descendantLeafID := range descendantLeafIDs {
 			if _, found := seen[descendantLeafID]; !found {
@@ -153,15 +117,15 @@ func (s *SQLTranslator) Translate(
 		}
 	}
 
-	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, s.GetTxn(), ids)
+	pseudoTableRecords, err := s.maybeGeneratePseudoTableRecords(ctx, ids)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, err
 	}
 	records = append(records, pseudoTableRecords...)
 
-	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, s.GetTxn(), ids)
+	scratchRangeRecord, err := s.maybeGenerateScratchRangeRecord(ctx, ids)
 	if err != nil {
-		return nil, hlc.Timestamp{}, err
+		return nil, err
 	}
 	if !scratchRangeRecord.IsEmpty() {
 		records = append(records, scratchRangeRecord)
@@ -169,14 +133,14 @@ func (s *SQLTranslator) Translate(
 
 	// For every unique leaf ID, generate span configurations.
 	for _, leafID := range leafIDs {
-		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, s.GetTxn(), s.GetDescsCollection(), ptsStateReader)
+		translatedRecords, err := s.generateSpanConfigurations(ctx, leafID, ptsStateReader)
 		if err != nil {
-			return nil, hlc.Timestamp{}, err
+			return nil, err
 		}
 		records = append(records, translatedRecords...)
 	}
 
-	return records, s.GetTxn().CommitTimestamp(), nil
+	return records, nil
 }
 
 // generateSystemSpanConfigRecords is responsible for generating all the SpanConfigs
@@ -237,18 +201,14 @@ func (s *SQLTranslator) generateSystemSpanConfigRecords(
 // ID. The ID must belong to an object that has a span configuration associated
 // with it, i.e, it should either belong to a table or a named zone.
 func (s *SQLTranslator) generateSpanConfigurations(
-	ctx context.Context,
-	id descpb.ID,
-	txn *kv.Txn,
-	descsCol *descs.Collection,
-	ptsStateReader *spanconfig.ProtectedTimestampStateReader,
+	ctx context.Context, id descpb.ID, ptsStateReader *spanconfig.ProtectedTimestampStateReader,
 ) (_ []spanconfig.Record, err error) {
 	if zonepb.IsNamedZoneID(uint32(id)) {
-		return s.generateSpanConfigurationsForNamedZone(ctx, txn, id)
+		return s.generateSpanConfigurationsForNamedZone(ctx, s.txn.KV(), id)
 	}
 
 	// We're dealing with a SQL object.
-	desc, err := descsCol.ByID(txn).Get().Desc(ctx, id)
+	desc, err := s.txn.Descriptors().ByID(s.txn.KV()).Get().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here
@@ -271,7 +231,7 @@ func (s *SQLTranslator) generateSpanConfigurations(
 			"can only generate span configurations for tables, but got %s", desc.DescriptorType(),
 		)
 	}
-	return s.generateSpanConfigurationsForTable(ctx, txn, table, ptsStateReader)
+	return s.generateSpanConfigurationsForTable(ctx, s.txn.KV(), table, ptsStateReader)
 }
 
 // generateSpanConfigurationsForNamedZone expects an ID corresponding to a named
@@ -323,14 +283,18 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		return nil, errors.AssertionFailedf("unknown named zone config %s", name)
 	}
 
-	zoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(ctx, txn, s.txnBundle.descsCol, name)
+	zoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(
+		ctx, txn, s.txn.Descriptors(), name,
+	)
 	if err != nil {
 		return nil, err
 	}
 	spanConfig := zoneConfig.AsSpanConfig()
 	var records []spanconfig.Record
 	for _, span := range spans {
-		record, err := spanconfig.MakeRecord(spanconfig.MakeTargetFromSpan(span), spanConfig)
+		record, err := spanconfig.MakeRecord(
+			spanconfig.MakeTargetFromSpan(span), spanConfig,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +319,9 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		return nil, nil
 	}
 
-	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.txnBundle.descsCol, table.GetID())
+	zone, err := sql.GetHydratedZoneConfigForTable(
+		ctx, txn, s.txn.Descriptors(), table.GetID(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -510,13 +476,13 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 // configuration hierarchy. Leaf IDs are either table IDs or named zone IDs
 // (other than RANGE DEFAULT).
 func (s *SQLTranslator) findDescendantLeafIDs(
-	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context, id descpb.ID,
 ) (descpb.IDs, error) {
 	if zonepb.IsNamedZoneID(uint32(id)) {
-		return s.findDescendantLeafIDsForNamedZone(ctx, id, txn, descsCol)
+		return s.findDescendantLeafIDsForNamedZone(ctx, id)
 	}
 	// We're dealing with a SQL Object here.
-	return s.findDescendantLeafIDsForDescriptor(ctx, id, txn, descsCol)
+	return s.findDescendantLeafIDsForDescriptor(ctx, id)
 }
 
 // findDescendantLeafIDsForDescriptor finds all leaf object IDs below the given
@@ -527,9 +493,9 @@ func (s *SQLTranslator) findDescendantLeafIDs(
 //   - Other: Nothing, as these do not carry zone configurations and
 //     are not part of the zone configuration hierarchy.
 func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
-	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context, id descpb.ID,
 ) (descpb.IDs, error) {
-	desc, err := descsCol.ByID(txn).Get().Desc(ctx, id)
+	desc, err := s.txn.Descriptors().ByID(s.txn.KV()).Get().Desc(ctx, id)
 	if err != nil {
 		if errors.Is(err, catalog.ErrDescriptorNotFound) {
 			return nil, nil // the descriptor has been deleted; nothing to do here
@@ -565,7 +531,7 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	// GetAll is the only way to retrieve dropped descriptors whose IDs are not known
 	// ahead of time. This has unfortunate performance implications tracked by
 	// https://github.com/cockroachdb/cockroach/issues/90655
-	all, err := descsCol.GetAll(ctx, txn)
+	all, err := s.txn.Descriptors().GetAll(ctx, s.txn.KV())
 	if err != nil {
 		return nil, err
 	}
@@ -585,7 +551,7 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 // - RANGE DEFAULT: All tables (and named zones iff system tenant).
 // - Any other named zone: ID of the named zone itself.
 func (s *SQLTranslator) findDescendantLeafIDsForNamedZone(
-	ctx context.Context, id descpb.ID, txn *kv.Txn, descsCol *descs.Collection,
+	ctx context.Context, id descpb.ID,
 ) (descpb.IDs, error) {
 	name, ok := zonepb.NamedZonesByID[uint32(id)]
 	if !ok {
@@ -599,14 +565,14 @@ func (s *SQLTranslator) findDescendantLeafIDsForNamedZone(
 	}
 
 	// A change to RANGE DEFAULT translates to every SQL object of the tenant.
-	databases, err := descsCol.GetAllDatabaseDescriptors(ctx, txn)
+	databases, err := s.txn.Descriptors().GetAllDatabaseDescriptors(ctx, s.txn.KV())
 	if err != nil {
 		return nil, err
 	}
 	var descendantIDs descpb.IDs
 	for _, dbDesc := range databases {
 		tableIDs, err := s.findDescendantLeafIDsForDescriptor(
-			ctx, dbDesc.GetID(), txn, descsCol,
+			ctx, dbDesc.GetID(),
 		)
 		if err != nil {
 			return nil, err
@@ -632,7 +598,7 @@ func (s *SQLTranslator) findDescendantLeafIDsForNamedZone(
 // maybeGeneratePseudoTableRecords generates span configs for
 // pseudo table ID key spans, if applicable.
 func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
-	ctx context.Context, txn *kv.Txn, ids descpb.IDs,
+	ctx context.Context, ids descpb.IDs,
 ) ([]spanconfig.Record, error) {
 	if !s.codec.ForSystemTenant() {
 		return nil, nil
@@ -664,7 +630,9 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 		//      emulate. As for what config to apply over said range -- we do as
 		//      the system config span does, applying the config for the system
 		//      database.
-		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.txnBundle.descsCol, keys.SystemDatabaseID)
+		zone, err := sql.GetHydratedZoneConfigForDatabase(
+			ctx, s.txn.KV(), s.txn.Descriptors(), keys.SystemDatabaseID,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -690,7 +658,7 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 }
 
 func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
-	ctx context.Context, txn *kv.Txn, ids descpb.IDs,
+	ctx context.Context, ids descpb.IDs,
 ) (spanconfig.Record, error) {
 	if !s.knobs.ConfigureScratchRange || !s.codec.ForSystemTenant() {
 		return spanconfig.Record{}, nil // nothing to do
@@ -701,7 +669,9 @@ func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 			continue // nothing to do
 		}
 
-		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.txnBundle.descsCol, keys.RootNamespaceID)
+		zone, err := sql.GetHydratedZoneConfigForDatabase(
+			ctx, s.txn.KV(), s.txn.Descriptors(), keys.RootNamespaceID,
+		)
 		if err != nil {
 			return spanconfig.Record{}, err
 		}

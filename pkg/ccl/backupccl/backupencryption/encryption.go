@@ -22,10 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -56,28 +55,21 @@ type BackupKMSEnv struct {
 	// Conf represents the ExternalIODirConfig that applies to the BackupKMSEnv.
 	Conf *base.ExternalIODirConfig
 	// DB is the database handle that applies to the BackupKMSEnv.
-	DB *kv.DB
+	DB isql.DB
 	// Username is the use that applies to the BackupKMSEnv.
 	Username username.SQLUsername
-	// InternalEx is the InternalExecutor that applies to the BackupKMSEnv.
-	InternalEx sqlutil.InternalExecutor
 }
 
 // MakeBackupKMSEnv returns an instance of `BackupKMSEnv` that defines the
 // environment in which KMS is configured and used.
 func MakeBackupKMSEnv(
-	settings *cluster.Settings,
-	conf *base.ExternalIODirConfig,
-	db *kv.DB,
-	user username.SQLUsername,
-	ie sqlutil.InternalExecutor,
+	settings *cluster.Settings, conf *base.ExternalIODirConfig, db isql.DB, user username.SQLUsername,
 ) BackupKMSEnv {
 	return BackupKMSEnv{
-		Settings:   settings,
-		Conf:       conf,
-		DB:         db,
-		Username:   user,
-		InternalEx: ie,
+		Settings: settings,
+		Conf:     conf,
+		DB:       db,
+		Username: user,
 	}
 }
 
@@ -94,18 +86,13 @@ func (p *BackupKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 }
 
 // DBHandle implements the cloud.KMSEnv interface.
-func (p *BackupKMSEnv) DBHandle() *kv.DB {
+func (p *BackupKMSEnv) DBHandle() isql.DB {
 	return p.DB
 }
 
 // User returns the user associated with the KMSEnv.
 func (p *BackupKMSEnv) User() username.SQLUsername {
 	return p.Username
-}
-
-// InternalExecutor returns the internal executor associated with the KMSEnv.
-func (p *BackupKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
-	return p.InternalEx
 }
 
 type (

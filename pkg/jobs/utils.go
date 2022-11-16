@@ -14,9 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,8 +27,7 @@ import (
 func RunningJobExists(
 	ctx context.Context,
 	jobID jobspb.JobID,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
+	txn isql.Txn,
 	payloadPredicate func(payload *jobspb.Payload) bool,
 ) (exists bool, retErr error) {
 	const stmt = `
@@ -41,10 +39,10 @@ WHERE
   status IN ` + NonTerminalStatusTupleString + `
 ORDER BY created`
 
-	it, err := ie.QueryIterator(
+	it, err := txn.QueryIterator(
 		ctx,
 		"get-jobs",
-		txn,
+		txn.KV(),
 		stmt,
 	)
 	if err != nil {

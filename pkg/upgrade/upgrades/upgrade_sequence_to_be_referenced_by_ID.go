@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -34,29 +34,26 @@ import (
 func upgradeSequenceToBeReferencedByID(
 	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	return d.InternalExecutorFactory.DescsTxnWithExecutor(ctx, d.DB, d.SessionData, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
-	) (err error) {
-		var lastUpgradedID descpb.ID
-		// Upgrade each table/view, one at a time, until we exhaust all of them.
-		for {
-			done, idToUpgrade, err := findNextTableToUpgrade(ctx, d.InternalExecutor, txn, lastUpgradedID,
-				func(table *descpb.TableDescriptor) bool {
-					return table.IsTable() || table.IsView()
-				})
-			if err != nil || done {
-				return err
-			}
-
-			// Table/View `idToUpgrade` might contain reference to sequences by name. If so, we need to upgrade
-			// those references to be by ID.
-			err = maybeUpgradeSeqReferencesInTableOrView(ctx, idToUpgrade, d)
-			if err != nil {
-				return err
-			}
-			lastUpgradedID = idToUpgrade
+	var lastUpgradedID descpb.ID
+	// Upgrade each table/view, one at a time, until we exhaust all of them.
+	for {
+		done, idToUpgrade, err := findNextTableToUpgrade(
+			ctx, d.DB.Executor(), nil, /* kvTxn */
+			lastUpgradedID, func(table *descpb.TableDescriptor) bool {
+				return table.IsTable() || table.IsView()
+			})
+		if err != nil || done {
+			return err
 		}
-	})
+
+		// Table/View `idToUpgrade` might contain reference to sequences by name. If so, we need to upgrade
+		// those references to be by ID.
+		err = maybeUpgradeSeqReferencesInTableOrView(ctx, idToUpgrade, d)
+		if err != nil {
+			return err
+		}
+		lastUpgradedID = idToUpgrade
+	}
 }
 
 // Find the next table descriptor ID that is > `lastUpgradedID`
@@ -64,13 +61,13 @@ func upgradeSequenceToBeReferencedByID(
 // If no such ID exists, `done` will be true.
 func findNextTableToUpgrade(
 	ctx context.Context,
-	ie sqlutil.InternalExecutor,
-	txn *kv.Txn,
+	ex isql.Executor,
+	kvTxn *kv.Txn,
 	lastUpgradedID descpb.ID,
 	tableSelector func(table *descpb.TableDescriptor) bool,
 ) (done bool, idToUpgrade descpb.ID, err error) {
-	var rows sqlutil.InternalRows
-	rows, err = ie.QueryIterator(ctx, "upgrade-seq-find-desc", txn,
+	var rows isql.Rows
+	rows, err = ex.QueryIterator(ctx, "upgrade-seq-find-desc", kvTxn,
 		`SELECT id, descriptor, crdb_internal_mvcc_timestamp FROM system.descriptor WHERE id > $1 ORDER BY ID ASC`, lastUpgradedID)
 	if err != nil {
 		return false, 0, err
@@ -111,11 +108,12 @@ func findNextTableToUpgrade(
 func maybeUpgradeSeqReferencesInTableOrView(
 	ctx context.Context, idToUpgrade descpb.ID, d upgrade.TenantDeps,
 ) error {
-	return d.InternalExecutorFactory.DescsTxn(ctx, d.DB, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	return d.DB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) error {
 		// Set up: retrieve table desc for `idToUpgrade` and a schema resolver
-		tableDesc, sc, cleanup, err := upgradeSetUpForTableOrView(ctx, d, txn, descriptors, idToUpgrade)
+		kvTxn, descriptors := txn.KV(), txn.Descriptors()
+		tableDesc, sc, cleanup, err := upgradeSetUpForTableOrView(ctx, d, kvTxn, descriptors, idToUpgrade)
 		if err != nil {
 			return err
 		}
@@ -123,11 +121,11 @@ func maybeUpgradeSeqReferencesInTableOrView(
 
 		// Act: upgrade the table's (or view's) sequence references accordingly.
 		if tableDesc.IsTable() {
-			if err = upgradeSequenceReferenceInTable(ctx, txn, tableDesc, sc, descriptors); err != nil {
+			if err = upgradeSequenceReferenceInTable(ctx, kvTxn, tableDesc, sc, descriptors); err != nil {
 				return err
 			}
 		} else if tableDesc.IsView() {
-			if err = upgradeSequenceReferenceInView(ctx, txn, tableDesc, sc, descriptors); err != nil {
+			if err = upgradeSequenceReferenceInView(ctx, kvTxn, tableDesc, sc, descriptors); err != nil {
 				return err
 			}
 		} else {

@@ -14,8 +14,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/tracedumper"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -44,7 +44,7 @@ func WithJobID(jobID jobspb.JobID) TestCreateAndStartJobOption {
 // RegisterConstructor. The ctx passed to this function is not the context the
 // job will be started with (canceling ctx will not cause the job to cancel).
 func TestingCreateAndStartJob(
-	ctx context.Context, r *Registry, db *kv.DB, record Record, opts ...TestCreateAndStartJobOption,
+	ctx context.Context, r *Registry, db isql.DB, record Record, opts ...TestCreateAndStartJobOption,
 ) (*StartableJob, error) {
 	var rj *StartableJob
 	c := config{
@@ -53,7 +53,7 @@ func TestingCreateAndStartJob(
 	for _, opt := range opts {
 		opt(&c)
 	}
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		return r.CreateStartableJobWithTxn(ctx, &rj, c.jobID, txn, record)
 	}); err != nil {
 		if rj != nil {

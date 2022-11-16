@@ -67,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
@@ -1215,7 +1216,6 @@ type ExecutorConfig struct {
 	DistSQLPlanner     *DistSQLPlanner
 	TableStatsCache    *stats.TableStatisticsCache
 	StatsRefresher     *stats.Refresher
-	InternalExecutor   *InternalExecutor
 	QueryCache         *querycache.C
 
 	SchemaChangerMetrics *SchemaChangerMetrics
@@ -1347,9 +1347,9 @@ type ExecutorConfig struct {
 	// records.
 	SpanConfigKVAccessor spanconfig.KVAccessor
 
-	// InternalExecutorFactory is used to create an InternalExecutor bound with
-	// SessionData and other ExtraTxnState.
-	InternalExecutorFactory descs.TxnManager
+	// InternalDB is used to create an isql.Executor bound with SessionData and
+	// other ExtraTxnState.
+	InternalDB *InternalDB
 
 	// ConsistencyChecker is to generate the results in calls to
 	// crdb_internal.check_consistency.
@@ -1408,6 +1408,11 @@ func (cfg *ExecutorConfig) GetFeatureFlagMetrics() *featureflag.DenialMetrics {
 // SV returns the setting values.
 func (cfg *ExecutorConfig) SV() *settings.Values {
 	return &cfg.Settings.SV
+}
+
+func (cfg *ExecutorConfig) JobsKnobs() *jobs.TestingKnobs {
+	knobs, _ := cfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs)
+	return knobs
 }
 
 var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
@@ -3518,12 +3523,16 @@ func formatStatementSummary(ast tree.Statement) string {
 
 // DescsTxn is a convenient method for running a transaction on descriptors
 // when you have an ExecutorConfig.
+//
+// TODO(ajwerner): Remove this now that it is such a thin shim.
 func DescsTxn(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
-	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
 ) error {
-	return execCfg.InternalExecutorFactory.DescsTxn(ctx, execCfg.DB, f)
+	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		return f(ctx, txn, txn.Descriptors())
+	})
 }
 
 // TestingDescsTxn is a convenience function for running a transaction on
@@ -3531,7 +3540,7 @@ func DescsTxn(
 func TestingDescsTxn(
 	ctx context.Context,
 	s serverutils.TestServerInterface,
-	f func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
 ) error {
 	execCfg := s.ExecutorConfig().(ExecutorConfig)
 	return DescsTxn(ctx, &execCfg, f)

@@ -17,12 +17,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -75,7 +75,7 @@ func ComputeScheduleRecurrence(now time.Time, rec *string) (*ScheduleRecurrence,
 func CheckScheduleAlreadyExists(
 	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
 ) (bool, error) {
-	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
+	row, err := p.InternalSQLTxn().QueryRowEx(ctx, "check-sched",
 		p.Txn(), sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
 			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
@@ -175,8 +175,9 @@ func FullyQualifyTables(
 		}
 		switch tp := tablePattern.(type) {
 		case *tree.TableName:
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
-				col *descs.Collection) error {
+			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+				ctx context.Context, txn isql.Txn, col *descs.Collection,
+			) error {
 				// Resolve the table.
 				un := tp.ToUnresolvedObjectName()
 				found, _, tableDesc, err := resolver.ResolveExisting(
@@ -191,13 +192,13 @@ func FullyQualifyTables(
 				}
 
 				// Resolve the database.
-				dbDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
+				dbDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, tableDesc.GetParentID())
 				if err != nil {
 					return err
 				}
 
 				// Resolve the schema.
-				schemaDesc, err := col.ByIDWithLeased(txn).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+				schemaDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -221,12 +222,14 @@ func FullyQualifyTables(
 				// Otherwise, no updates are needed since the schema field refers to the
 				// database.
 				var schemaID descpb.ID
-				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-					dbDesc, err := col.ByNameWithLeased(txn).Get().Database(ctx, p.CurrentDatabase())
+				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(
+					ctx context.Context, txn isql.Txn, col *descs.Collection,
+				) error {
+					dbDesc, err := col.ByNameWithLeased(txn.KV()).Get().Database(ctx, p.CurrentDatabase())
 					if err != nil {
 						return err
 					}
-					schemaID, err = col.LookupSchemaID(ctx, txn, dbDesc.GetID(), tp.SchemaName.String())
+					schemaID, err = col.LookupSchemaID(ctx, txn.KV(), dbDesc.GetID(), tp.SchemaName.String())
 					return err
 				}); err != nil {
 					return nil, err

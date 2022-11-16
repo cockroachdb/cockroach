@@ -133,7 +133,7 @@ func (ts *tenantSpecName) getTenantInfo(
 	if err != nil {
 		return nil, err
 	}
-	return GetTenantRecordByName(ctx, p.ExecCfg(), p.Txn(), tenantName)
+	return GetTenantRecordByName(ctx, p.ExecCfg().Settings, p.InternalSQLTxn(), tenantName)
 }
 
 func (ts *tenantSpecId) getTenantInfo(
@@ -143,7 +143,7 @@ func (ts *tenantSpecId) getTenantInfo(
 	if err != nil {
 		return nil, err
 	}
-	return GetTenantRecordByID(ctx, p.ExecCfg(), p.Txn(), tid)
+	return GetTenantRecordByID(ctx, p.InternalSQLTxn(), tid)
 }
 
 // LookupTenantInfo implements PlanHookState for the benefits of CCL statements.

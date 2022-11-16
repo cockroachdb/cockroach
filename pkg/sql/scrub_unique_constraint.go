@@ -142,7 +142,7 @@ ON %[4]s
 		asOf,                            // 5
 	)
 
-	rows, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	rows, err := params.p.InternalSQLTxn().QueryBuffered(
 		ctx, "scrub-unique", params.p.txn, sel,
 	)
 	if err != nil {

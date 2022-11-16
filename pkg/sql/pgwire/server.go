@@ -779,7 +779,6 @@ func (s *Server) ServeConn(
 			connType:        preServeStatus.ConnType,
 			connDetails:     connDetails,
 			insecure:        s.cfg.Insecure,
-			ie:              s.execCfg.InternalExecutor,
 			auth:            hbaConf,
 			identMap:        identMap,
 			testingAuthHook: testingAuthHook,

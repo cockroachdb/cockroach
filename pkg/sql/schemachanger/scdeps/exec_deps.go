@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,9 +41,9 @@ import (
 // job registry. Outside of tests this should always be backed by *job.Registry.
 type JobRegistry interface {
 	MakeJobID() jobspb.JobID
-	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn *kv.Txn) (*jobs.Job, error)
+	CreateJobWithTxn(ctx context.Context, record jobs.Record, jobID jobspb.JobID, txn isql.Txn) (*jobs.Job, error)
 	UpdateJobWithTxn(
-		ctx context.Context, jobID jobspb.JobID, txn *kv.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
+		ctx context.Context, jobID jobspb.JobID, txn isql.Txn, useReadLock bool, updateFunc jobs.UpdateFn,
 	) error
 	CheckPausepoint(name string) error
 }
@@ -53,7 +54,7 @@ func NewExecutorDependencies(
 	settings *cluster.Settings,
 	codec keys.SQLCodec,
 	sessionData *sessiondata.SessionData,
-	txn *kv.Txn,
+	txn isql.Txn,
 	user username.SQLUsername,
 	descsCollection *descs.Collection,
 	jobRegistry JobRegistry,
@@ -99,7 +100,7 @@ func NewExecutorDependencies(
 }
 
 type txnDeps struct {
-	txn                 *kv.Txn
+	txn                 isql.Txn
 	codec               keys.SQLCodec
 	descsCollection     *descs.Collection
 	jobRegistry         JobRegistry
@@ -119,7 +120,7 @@ func (d *txnDeps) UpdateSchemaChangeJob(
 ) error {
 	const useReadLock = false
 	return d.jobRegistry.UpdateJobWithTxn(ctx, id, d.txn, useReadLock, func(
-		txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 	) error {
 		return callback(md, ju.UpdateProgress, ju.UpdatePayload)
 	})
@@ -131,12 +132,12 @@ var _ scexec.Catalog = (*txnDeps)(nil)
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	return d.descsCollection.ByID(d.txn).WithoutSynthetic().Get().Descs(ctx, ids)
+	return d.descsCollection.ByID(d.txn.KV()).WithoutSynthetic().Get().Descs(ctx, ids)
 }
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	g := d.descsCollection.ByID(d.txn).WithoutSynthetic().Get()
+	g := d.descsCollection.ByID(d.txn.KV()).WithoutSynthetic().Get()
 	objectDesc, err := g.Desc(ctx, id)
 	if err != nil {
 		return "", err
@@ -175,7 +176,7 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 func (d *txnDeps) MustReadMutableDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (catalog.MutableDescriptor, error) {
-	return d.descsCollection.MutableByID(d.txn).Desc(ctx, id)
+	return d.descsCollection.MutableByID(d.txn.KV()).Desc(ctx, id)
 }
 
 // AddSyntheticDescriptor is part of the
@@ -188,7 +189,7 @@ func (d *txnDeps) AddSyntheticDescriptor(desc catalog.Descriptor) {
 func (d *txnDeps) NewCatalogChangeBatcher() scexec.CatalogChangeBatcher {
 	return &catalogChangeBatcher{
 		txnDeps: d,
-		batch:   d.txn.NewBatch(),
+		batch:   d.txn.KV().NewBatch(),
 	}
 }
 
@@ -225,10 +226,10 @@ func (b *catalogChangeBatcher) DeleteZoneConfig(ctx context.Context, id descpb.I
 
 // ValidateAndRun implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) ValidateAndRun(ctx context.Context) error {
-	if err := b.descsCollection.ValidateUncommittedDescriptors(ctx, b.txn); err != nil {
+	if err := b.descsCollection.ValidateUncommittedDescriptors(ctx, b.txn.KV()); err != nil {
 		return err
 	}
-	if err := b.txn.Run(ctx, b.batch); err != nil {
+	if err := b.txn.KV().Run(ctx, b.batch); err != nil {
 		return errors.Wrap(err, "writing descriptors")
 	}
 	return nil
@@ -305,15 +306,15 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 
 	span := table.IndexSpan(d.codec, indexToBackfill.GetID())
 	const backfillSplitExpiration = time.Hour
-	expirationTime := d.txn.DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
-	return d.txn.DB().AdminSplit(ctx, span.Key, expirationTime)
+	expirationTime := d.txn.KV().DB().Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
+	return d.txn.KV().DB().AdminSplit(ctx, span.Key, expirationTime)
 }
 
 // GetResumeSpans implements the scexec.BackfillerTracker interface.
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.ByID(d.txn).WithoutNonPublic().WithoutSynthetic().Get().Table(ctx, tableID)
+	table, err := d.descsCollection.ByID(d.txn.KV()).WithoutNonPublic().WithoutSynthetic().Get().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -407,10 +408,10 @@ func (d *execDeps) DescriptorMetadataUpdater(ctx context.Context) scexec.Descrip
 }
 
 // EventLoggerFactory constructs a new event logger with a txn.
-type EventLoggerFactory = func(*kv.Txn) scexec.EventLogger
+type EventLoggerFactory = func(isql.Txn) scexec.EventLogger
 
 // MetadataUpdaterFactory constructs a new metadata updater with a txn.
-type MetadataUpdaterFactory = func(ctx context.Context, descriptors *descs.Collection, txn *kv.Txn) scexec.DescriptorMetadataUpdater
+type MetadataUpdaterFactory = func(ctx context.Context, descriptors *descs.Collection, txn isql.Txn) scexec.DescriptorMetadataUpdater
 
 // EventLogger implements scexec.Dependencies
 func (d *execDeps) EventLogger() scexec.EventLogger {

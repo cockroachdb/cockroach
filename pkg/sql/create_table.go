@@ -455,7 +455,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		if err := ApplyZoneConfigForMultiRegionTable(
 			params.ctx,
-			params.p.txn,
+			params.p.Txn(),
 			params.p.ExecCfg(),
 			params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 			params.p.Descriptors(),
@@ -2339,10 +2339,11 @@ func newTableDesc(
 			return nil, err
 		}
 
+		params.p.Txn()
 		j, err := CreateRowLevelTTLScheduledJob(
 			params.ctx,
-			params.ExecCfg(),
-			params.p.txn,
+			params.ExecCfg().JobsKnobs(),
+			jobs.ScheduledJobTxn(params.p.InternalSQLTxn()),
 			params.p.User(),
 			ret.GetID(),
 			ttl,
@@ -2392,19 +2393,19 @@ func newRowLevelTTLScheduledJob(
 // CreateRowLevelTTLScheduledJob creates a new row-level TTL schedule.
 func CreateRowLevelTTLScheduledJob(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	knobs *jobs.TestingKnobs,
+	s jobs.ScheduledJobStorage,
 	owner username.SQLUsername,
 	tblID descpb.ID,
 	ttl *catpb.RowLevelTTL,
 ) (*jobs.ScheduledJob, error) {
 	telemetry.Inc(sqltelemetry.RowLevelTTLCreated)
-	env := JobSchedulerEnv(execCfg)
+	env := JobSchedulerEnv(knobs)
 	j, err := newRowLevelTTLScheduledJob(env, owner, tblID, ttl)
 	if err != nil {
 		return nil, err
 	}
-	if err := j.Create(ctx, execCfg.InternalExecutor, txn); err != nil {
+	if err := s.Create(ctx, j); err != nil {
 		return nil, err
 	}
 	return j, nil

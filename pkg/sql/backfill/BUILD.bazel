@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/catalog/typedesc",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
+        "//pkg/sql/isql",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
         "//pkg/sql/rowinfra",
