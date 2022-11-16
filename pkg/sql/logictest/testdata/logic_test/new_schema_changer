@@ -955,7 +955,7 @@ CREATE INDEX fail ON foo (b DESC)
 statement ok
 CREATE VIEW vIndx AS SELECT a,b FROM tIndx
 
-statement error pgcode 42809 "vindx" is not an indexable table or a materialized view
+statement error pgcode 42809 "vindx" is not a table or materialized view
 CREATE INDEX failview ON vIndx (b DESC)
 
 statement ok
