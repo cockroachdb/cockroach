@@ -4354,7 +4354,7 @@ func (k *testKMS) Close() error {
 	return nil
 }
 
-func MakeTestKMS(uri string, _ cloud.KMSEnv) (cloud.KMS, error) {
+func MakeTestKMS(_ context.Context, uri string, _ cloud.KMSEnv) (cloud.KMS, error) {
 	return &testKMS{uri}, nil
 }
 
@@ -4425,7 +4425,7 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 			}
 		}
 
-		kmsInfo, err := validateKMSURIsAgainstFullBackup(
+		kmsInfo, err := validateKMSURIsAgainstFullBackup(context.Background(),
 			tc.incrementalBackupURIs, masterKeyIDToDataKey,
 			&testKMSEnv{cluster.NoSettings, &base.ExternalIODirConfig{}})
 		if tc.expectError {
@@ -4465,7 +4465,7 @@ func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 		expectedMap := newEncryptedDataKeyMap()
 		var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 		for _, uri := range tc.fullBackupURIs {
-			testKMS, err := MakeTestKMS(uri, nil)
+			testKMS, err := MakeTestKMS(ctx, uri, nil)
 			require.NoError(t, err)
 
 			masterKeyID, err := testKMS.MasterKeyID()

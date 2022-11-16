@@ -56,7 +56,7 @@ func distRestore(
 	evalCtx := execCtx.ExtendedEvalContext()
 
 	if encryption != nil && encryption.Mode == jobspb.EncryptionMode_KMS {
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupKMSEnv{
 			settings: execCtx.ExecCfg().Settings,
 			conf:     &execCtx.ExecCfg().ExternalIODirConfig,
 		})

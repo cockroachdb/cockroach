@@ -565,7 +565,7 @@ func getEncryptionKey(
 		// Contact the selected KMS to derive the decrypted data key.
 		// TODO(pbardea): Add a check here if encryption.KMSInfo is unexpectedly nil
 		// here to avoid a panic, and return an error instead.
-		kms, err := cloud.KMSFromURI(encryption.KMSInfo.Uri, &backupKMSEnv{
+		kms, err := cloud.KMSFromURI(ctx, encryption.KMSInfo.Uri, &backupKMSEnv{
 			settings: settings,
 			conf:     &ioConf,
 		})

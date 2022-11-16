@@ -344,7 +344,7 @@ func getEncryptionFromBase(
 		case jobspb.EncryptionMode_KMS:
 			var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 			for _, encFile := range opts {
-				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(encryptionParams.RawKmsUris,
+				defaultKMSInfo, err = validateKMSURIsAgainstFullBackup(ctx, encryptionParams.RawKmsUris,
 					newEncryptedDataKeyMapFromProtoMap(encFile.EncryptedDataKeyByKMSMasterKeyID), kmsEnv)
 				if err == nil {
 					break

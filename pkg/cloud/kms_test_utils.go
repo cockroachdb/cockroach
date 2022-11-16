@@ -42,7 +42,7 @@ func (e *TestKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 // correctly encrypt and decrypt a string
 func KMSEncryptDecrypt(t *testing.T, kmsURI string, env TestKMSEnv) {
 	ctx := context.Background()
-	kms, err := KMSFromURI(kmsURI, &env)
+	kms, err := KMSFromURI(ctx, kmsURI, &env)
 	require.NoError(t, err)
 
 	t.Run("simple encrypt decrypt", func(t *testing.T) {

@@ -476,11 +476,14 @@ func backupJobDescription(
 // encryption/decryption operations during this BACKUP. By default it is the
 // first KMS URI passed during the incremental BACKUP.
 func validateKMSURIsAgainstFullBackup(
-	kmsURIs []string, kmsMasterKeyIDToDataKey *encryptedDataKeyMap, kmsEnv cloud.KMSEnv,
+	ctx context.Context,
+	kmsURIs []string,
+	kmsMasterKeyIDToDataKey *encryptedDataKeyMap,
+	kmsEnv cloud.KMSEnv,
 ) (*jobspb.BackupEncryptionOptions_KMSInfo, error) {
 	var defaultKMSInfo *jobspb.BackupEncryptionOptions_KMSInfo
 	for _, kmsURI := range kmsURIs {
-		kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
+		kms, err := cloud.KMSFromURI(ctx, kmsURI, kmsEnv)
 		if err != nil {
 			return nil, err
 		}
@@ -1637,7 +1640,7 @@ func protectTimestampForBackup(
 func getEncryptedDataKeyFromURI(
 	ctx context.Context, plaintextDataKey []byte, kmsURI string, kmsEnv cloud.KMSEnv,
 ) (string, []byte, error) {
-	kms, err := cloud.KMSFromURI(kmsURI, kmsEnv)
+	kms, err := cloud.KMSFromURI(ctx, kmsURI, kmsEnv)
 	if err != nil {
 		return "", nil, err
 	}

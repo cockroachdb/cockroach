@@ -62,7 +62,7 @@ func TestEncryptDecryptGCS(t *testing.T) {
 
 			uri := fmt.Sprintf("gs:///%s?%s", keyID, params.Encode())
 
-			_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
+			_, err := cloud.KMSFromURI(context.Background(), uri, &cloud.TestKMSEnv{ExternalIOConfig: &base.ExternalIODirConfig{}})
 			require.EqualError(t, err, fmt.Sprintf(
 				`%s is set to '%s', but %s is not set`,
 				cloud.AuthParam,
@@ -134,7 +134,7 @@ func TestGCSKMSDisallowImplicitCredentials(t *testing.T) {
 			skip.IgnoreLint(t, "%s env var must be set", id)
 		}
 		uri := fmt.Sprintf("gs:///%s?%s", keyID, q.Encode())
-		_, err := cloud.KMSFromURI(uri, &cloud.TestKMSEnv{
+		_, err := cloud.KMSFromURI(context.Background(), uri, &cloud.TestKMSEnv{
 			Settings:         cluster.NoSettings,
 			ExternalIOConfig: &base.ExternalIODirConfig{DisableImplicitCredentials: true}})
 		require.True(t, testutils.IsError(err,
