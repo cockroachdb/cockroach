@@ -357,9 +357,6 @@ func (sc *StoredCatalog) GetValidationLevelByID(id descpb.ID) catalog.Validation
 	if vl, ok := sc.validationLevels[id]; ok {
 		return vl
 	}
-	if id == keys.SystemDatabaseID {
-		return validate.Write
-	}
 	return catalog.NoValidation
 }
 
