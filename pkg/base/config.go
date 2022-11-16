@@ -26,6 +26,8 @@ import (
 )
 
 // Base config defaults.
+//
+// When changing these, TestDefaultRaftConfig must also be updated via -rewrite.
 const (
 	defaultInsecure = false
 	defaultUser     = username.RootUser
