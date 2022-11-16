@@ -4141,7 +4141,7 @@ comment_text:
 // %Text:
 // CREATE DATABASE, CREATE TABLE, CREATE INDEX, CREATE TABLE AS,
 // CREATE USER, CREATE VIEW, CREATE SEQUENCE, CREATE STATISTICS,
-// CREATE ROLE, CREATE TYPE, CREATE EXTENSION, CREATE TENANT
+// CREATE ROLE, CREATE TYPE, CREATE EXTENSION
 create_stmt:
   create_role_stmt     // EXTEND WITH HELP: CREATE ROLE
 | create_ddl_stmt      // help texts in sub-rule
@@ -4150,16 +4150,14 @@ create_stmt:
 | create_changefeed_stmt
 | create_extension_stmt  // EXTEND WITH HELP: CREATE EXTENSION
 | create_external_connection_stmt // EXTEND WITH HELP: CREATE EXTERNAL CONNECTION
-| create_tenant_stmt // EXTEND WITH HELP: CREATE TENANT
+| create_tenant_stmt // help texts in sub-rule
 | create_unsupported   {}
 | CREATE error         // SHOW HELP: CREATE
 
-// %Help: CREATE TENANT - create new tenant
-// %Category: Group
-// %Text: CREATE TENANT name
 create_tenant_stmt:
   CREATE TENANT name
   {
+    /* SKIP DOC */
     $$.val = &tree.CreateTenant{Name: tree.Name($3)}
   }
 | CREATE TENANT error // SHOW HELP: CREATE TENANT
@@ -5948,15 +5946,10 @@ set_csetting_stmt:
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
 
-// %Help: ALTER TENANT - alter tenant configuration
-// %Category: Group
-// %Text:
-// ALTER TENANT { <tenant_id> | ALL } SET CLUSTER SETTING <var> { TO | = } <value>
-// ALTER TENANT { <tenant_id> | ALL } RESET CLUSTER SETTING <var>
-// %SeeAlso: SET CLUSTER SETTING
 alter_tenant_csetting_stmt:
   ALTER TENANT d_expr set_or_reset_csetting_stmt
   {
+    /* SKIP DOC */
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
       SetClusterSetting: *csettingStmt,
@@ -5965,6 +5958,7 @@ alter_tenant_csetting_stmt:
   }
 | ALTER TENANT_ALL ALL set_or_reset_csetting_stmt
   {
+    /* SKIP DOC */
     csettingStmt := $4.stmt().(*tree.SetClusterSetting)
     $$.val = &tree.AlterTenantSetClusterSetting{
       SetClusterSetting: *csettingStmt,
