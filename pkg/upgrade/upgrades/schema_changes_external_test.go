@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -381,11 +381,11 @@ func testMigrationWithFailures(
 			tdb.Exec(t, "CREATE DATABASE test")
 			tdb.Exec(t, createTableAfter)
 			var desc catalog.TableDescriptor
-			require.NoError(t, s.InternalExecutorFactory().(descs.TxnManager).DescsTxn(ctx, s.DB(), func(
-				ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			require.NoError(t, s.InternalDB().(descs.DB).DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
 			) (err error) {
 				tn := tree.MakeTableNameWithSchema("test", "public", "test_table")
-				_, desc, err = descs.PrefixAndTable(ctx, descriptors.ByName(txn).Get(), &tn)
+				_, desc, err = descs.PrefixAndTable(ctx, txn.Descriptors().ByName(txn.KV()).Get(), &tn)
 				return err
 			}))
 			tdb.Exec(t, "DROP TABLE test.test_table")
@@ -523,11 +523,12 @@ func testMigrationWithFailures(
 func cancelJob(
 	t *testing.T, ctx context.Context, s serverutils.TestServerInterface, jobID jobspb.JobID,
 ) {
-	err := s.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Using this way of canceling because the migration job us non-cancelable.
 		// Canceling in this way skips the check.
 		return s.JobRegistry().(*jobs.Registry).UpdateJobWithTxn(
-			ctx, jobID, txn, false /* useReadLock */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+			ctx, jobID, txn, false /* useReadLock */, func(
+				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 			) error {
 				ju.UpdateStatus(jobs.StatusCancelRequested)
 				return nil

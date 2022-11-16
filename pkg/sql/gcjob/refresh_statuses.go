@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -103,8 +103,8 @@ func updateStatusForGCElements(
 	protectedtsCache := execCfg.ProtectedTimestampProvider
 	earliestDeadline := timeutil.Unix(0, int64(math.MaxInt64))
 
-	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		table, err := col.ByID(txn).Get().Table(ctx, tableID)
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		table, err := col.ByID(txn.KV()).Get().Table(ctx, tableID)
 		if err != nil {
 			return err
 		}
@@ -410,8 +410,8 @@ func isTenantProtected(
 
 	isProtected := false
 	ptsProvider := execCfg.ProtectedTimestampProvider
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		ptsState, err := ptsProvider.GetState(ctx, txn)
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ptsState, err := ptsProvider.WithTxn(txn).GetState(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to get protectedts State")
 		}

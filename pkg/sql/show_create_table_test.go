@@ -16,12 +16,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,23 +43,21 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 	tdb.Exec(t, `CREATE SCHEMA schema`)
 	tdb.Exec(t, `CREATE TABLE db.schema.table(x INT, y INT, INDEX(y) USING HASH)`)
 
-	ief := s0.InternalExecutorFactory().(descs.TxnManager)
+	ief := s0.InternalDB().(descs.DB)
 	require.NoError(
 		t,
-		ief.DescsTxnWithExecutor(ctx, s0.DB(), nil /* sessionData */, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
-		) error {
+		ief.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
-			_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), &tn)
+			_, mut, err := descs.PrefixAndMutableTable(ctx, txn.Descriptors().MutableByName(txn.KV()), &tn)
 			require.NoError(t, err)
 			require.NotNil(t, mut)
 
 			// Check the show create table res before we invalidate the constraint.
 			// The check constraint from the hash shared index should not appear.
-			rows, err := ie.QueryRowEx(
+			rows, err := txn.QueryRowEx(
 				ctx,
 				"show-create-table-before-invalidate-constraint",
-				txn,
+				txn.KV(),
 				sessiondata.NoSessionDataOverride,
 				`SHOW CREATE TABLE db.schema.table`,
 			)
@@ -88,14 +84,16 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 				}
 			}
 
-			require.NoError(t, descriptors.WriteDesc(ctx, true /* kvTrace */, mut, txn))
+			require.NoError(t, txn.Descriptors().WriteDesc(
+				ctx, true /* kvTrace */, mut, txn.KV(),
+			))
 
 			// Check the show create table res after we invalidate the constraint.
 			// The constraint should appear now.
-			rows, err = ie.QueryRowEx(
+			rows, err = txn.QueryRowEx(
 				ctx,
 				"show-create-table-after-invalidate-constraint",
-				txn,
+				txn.KV(),
 				sessiondata.NoSessionDataOverride,
 				`SHOW CREATE TABLE db.schema.table`,
 			)

@@ -59,7 +59,7 @@ func WithBuilderDependenciesFromTestServer(
 	)
 	defer cleanup()
 	planner := ip.(interface {
-		Txn() *kv.Txn
+		InternalSQLTxn() descs.Txn
 		Descriptors() *descs.Collection
 		SessionData() *sessiondata.SessionData
 		resolver.SchemaResolver
@@ -76,8 +76,7 @@ func WithBuilderDependenciesFromTestServer(
 	fn(scdeps.NewBuilderDependencies(
 		execCfg.NodeInfo.LogicalClusterID(),
 		execCfg.Codec,
-		planner.Txn(),
-		planner.Descriptors(),
+		planner.InternalSQLTxn(),
 		sql.NewSkippingCacheSchemaResolver, /* schemaResolverFactory */
 		planner,                            /* authAccessor */
 		planner,                            /* astFormatter */
@@ -85,7 +84,6 @@ func WithBuilderDependenciesFromTestServer(
 		planner.SessionData(),
 		execCfg.Settings,
 		nil, /* statements */
-		execCfg.InternalExecutor,
 		&faketreeeval.DummyClientNoticeSender{},
 	))
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowflow"
@@ -65,7 +66,6 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, base.TestClusterArgs{})
 	defer tc.Stopper().Stop(context.Background())
-	kvDB := tc.Server(0).DB()
 
 	testCases := []struct {
 		name     string
@@ -232,7 +232,7 @@ func TestSplitAndScatterProcessor(t *testing.T) {
 			flowCtx := execinfra.FlowCtx{
 				Cfg: &execinfra.ServerConfig{
 					Settings: st,
-					DB:       kvDB,
+					DB:       tc.Server(0).InternalDB().(descs.DB),
 					Codec:    keys.SystemSQLCodec,
 					Stopper:  tc.Stopper(),
 				},

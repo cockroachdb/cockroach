@@ -145,7 +145,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						FROM system.table_statistics
 						WHERE "tableID" = $1
 						ORDER BY "createdAt", "columnIDs", "statisticID"`, partialPredicateCol, fullStatisticIDCol)
-			rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
+			rows, err := p.InternalSQLTxn().QueryBuffered(
 				ctx,
 				"read-table-stats",
 				p.txn,

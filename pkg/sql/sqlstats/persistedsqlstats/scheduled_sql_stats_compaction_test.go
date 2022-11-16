@@ -22,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -112,14 +112,8 @@ func getSQLStatsCompactionSchedule(t *testing.T, helper *testHelper) *jobs.Sched
 	helper.sqlDB.
 		QueryRow(t, `SELECT schedule_id FROM system.scheduled_jobs WHERE schedule_name = 'sql-stats-compaction'`).
 		Scan(&jobID)
-	sj, err :=
-		jobs.LoadScheduledJob(
-			context.Background(),
-			helper.env,
-			jobID,
-			helper.server.InternalExecutor().(sqlutil.InternalExecutor),
-			nil, /* txn */
-		)
+	schedules := jobs.ScheduledJobDB(helper.server.InternalDB().(isql.DB))
+	sj, err := schedules.Load(context.Background(), helper.env, jobID)
 	require.NoError(t, err)
 	require.NotNil(t, sj)
 	return sj

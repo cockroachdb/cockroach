@@ -18,12 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -67,8 +67,7 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	deps := scdeps.NewBuilderDependencies(
 		p.ExecCfg().NodeInfo.LogicalClusterID(),
 		p.ExecCfg().Codec,
-		p.Txn(),
-		p.Descriptors(),
+		p.InternalSQLTxn(),
 		NewSkippingCacheSchemaResolver, /* schemaResolverFactory */
 		p,                              /* authAccessor */
 		p,                              /* astFormatter */
@@ -76,7 +75,6 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		p.SessionData(),
 		p.ExecCfg().Settings,
 		scs.stmts,
-		p.execCfg.InternalExecutor,
 		p,
 	)
 	state, err := scbuild.Build(ctx, deps, scs.state, stmt)
@@ -130,14 +128,15 @@ func (p *planner) waitForDescriptorIDGeneratorMigration(ctx context.Context) err
 				timeutil.Since(start),
 			)
 		}
-		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
-			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+			kvTxn := txn.KV()
+			if err := kvTxn.SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
 			k := catalogkeys.MakeDescMetadataKey(p.ExecCfg().Codec, keys.DescIDSequenceID)
-			result, err := txn.Get(ctx, k)
+			result, err := txn.KV().Get(ctx, k)
 			if err != nil {
 				return err
 			}
@@ -191,13 +190,13 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			)
 		}
 		blocked := false
-		if err := p.ExecCfg().InternalExecutorFactory.DescsTxn(ctx, p.ExecCfg().DB, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
-			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+			if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			desc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Desc(ctx, descID)
+			desc, err := txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Desc(ctx, descID)
 			if err != nil {
 				return err
 			}
@@ -246,8 +245,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		deps := scdeps.NewBuilderDependencies(
 			p.ExecCfg().NodeInfo.LogicalClusterID(),
 			p.ExecCfg().Codec,
-			p.Txn(),
-			p.Descriptors(),
+			p.InternalSQLTxn(),
 			NewSkippingCacheSchemaResolver,
 			p,
 			p,
@@ -255,7 +253,6 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 			p.SessionData(),
 			p.ExecCfg().Settings,
 			scs.stmts,
-			p.ExecCfg().InternalExecutor,
 			p,
 		)
 		state, err := scbuild.Build(params.ctx, deps, scs.state, s.stmt)
@@ -271,7 +268,7 @@ func (s *schemaChangePlanNode) startExec(params runParams) error {
 		p.SessionData(),
 		p.User(),
 		p.ExecCfg(),
-		p.Txn(),
+		p.InternalSQLTxn(),
 		p.Descriptors(),
 		p.EvalContext(),
 		p.ExtendedEvalContext().Tracing.KVTracingEnabled(),
@@ -294,7 +291,7 @@ func newSchemaChangerTxnRunDependencies(
 	sessionData *sessiondata.SessionData,
 	user username.SQLUsername,
 	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descriptors *descs.Collection,
 	evalContext *eval.Context,
 	kvTrace bool,
@@ -303,10 +300,9 @@ func newSchemaChangerTxnRunDependencies(
 ) scexec.Dependencies {
 	metaDataUpdater := descmetadata.NewMetadataUpdater(
 		ctx,
-		execCfg.InternalExecutorFactory,
+		txn,
 		descriptors,
 		&execCfg.Settings.SV,
-		txn,
 		sessionData,
 	)
 	return scdeps.NewExecutorDependencies(

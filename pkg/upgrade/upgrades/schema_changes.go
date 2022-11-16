@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -141,10 +140,10 @@ func readTableDescriptor(
 ) (catalog.TableDescriptor, error) {
 	var t catalog.TableDescriptor
 
-	if err := d.InternalExecutorFactory.DescsTxn(ctx, d.DB, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+	if err := d.DB.DescsTxn(ctx, func(
+		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		t, err = descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, tableID)
+		t, err = txn.Descriptors().ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		return nil, err

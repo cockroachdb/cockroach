@@ -17,9 +17,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -68,7 +68,7 @@ func initDetailsAndProgress(
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
 	var job *jobs.Job
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
 		job, err = execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 		if err != nil {
@@ -122,12 +122,12 @@ func initializeProgress(
 	}
 
 	if update {
-		if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 			if err != nil {
 				return err
 			}
-			return job.SetProgress(ctx, txn, *progress)
+			return job.WithTxn(txn).SetProgress(ctx, *progress)
 		}); err != nil {
 			return err
 		}
@@ -278,16 +278,16 @@ func persistProgress(
 	progress *jobspb.SchemaChangeGCProgress,
 	runningStatus jobs.RunningStatus,
 ) {
-	if err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		job, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 		if err != nil {
 			return err
 		}
-		if err := job.SetProgress(ctx, txn, *progress); err != nil {
+		if err := job.WithTxn(txn).SetProgress(ctx, *progress); err != nil {
 			return err
 		}
 		log.Infof(ctx, "updated progress payload: %+v", progress)
-		err = job.RunningStatus(ctx, txn, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		err = job.WithTxn(txn).RunningStatus(ctx, func(_ context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
 			return runningStatus, nil
 		})
 		if err != nil {

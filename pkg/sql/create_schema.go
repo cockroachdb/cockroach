@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -32,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
@@ -49,9 +47,7 @@ func CreateUserDefinedSchemaDescriptor(
 	ctx context.Context,
 	sessionData *sessiondata.SessionData,
 	n *tree.CreateSchema,
-	txn *kv.Txn,
-	descriptors *descs.Collection,
-	ie sqlutil.InternalExecutor,
+	txn descs.Txn,
 	descIDGenerator eval.DescIDGenerator,
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
@@ -71,7 +67,7 @@ func CreateUserDefinedSchemaDescriptor(
 	}
 
 	// Ensure there aren't any name collisions.
-	exists, schemaID, err := schemaExists(ctx, txn, descriptors, db.GetID(), schemaName)
+	exists, schemaID, err := schemaExists(ctx, txn.KV(), txn.Descriptors(), db.GetID(), schemaName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -82,7 +78,7 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				sc, err := descriptors.ByID(txn).Get().Schema(ctx, schemaID)
+				sc, err := txn.Descriptors().ByID(txn.KV()).Get().Schema(ctx, schemaID)
 				if err != nil || sc.SchemaKind() != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}
@@ -104,7 +100,7 @@ func CreateUserDefinedSchemaDescriptor(
 
 	owner := user
 	if !n.AuthRole.Undefined() {
-		exists, err := RoleExists(ctx, ie, txn, authRole)
+		exists, err := RoleExists(ctx, txn, authRole)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -202,9 +198,8 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	}
 
 	desc, privs, err := CreateUserDefinedSchemaDescriptor(
-		params.ctx, params.SessionData(), n, p.Txn(), p.Descriptors(),
-		p.ExecCfg().InternalExecutor, p.extendedEvalCtx.DescIDGenerator,
-		db, true, /* allocateID */
+		params.ctx, params.SessionData(), n, p.InternalSQLTxn(),
+		p.extendedEvalCtx.DescIDGenerator, db, true, /* allocateID */
 	)
 	if err != nil {
 		return err

@@ -376,6 +376,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/isql",
         "//pkg/sql/protoreflect",
         "//pkg/sql/tests",
         "//pkg/storage",

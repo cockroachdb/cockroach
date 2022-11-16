@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package sqlutil
+package isql
 
 import (
 	"context"
@@ -20,11 +20,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
-// InternalExecutor is meant to be used by layers below SQL in the system that
+// DB enables clients to create and execute sql transactions from code inside
+// the database. Multi-statement transactions should leverage the Txn method.
+type DB interface {
+
+	// KV returns the underlying *kv.DB.
+	KV() *kv.DB
+
+	// Txn enables callers to run transactions with a *Collection such that all
+	// retrieved immutable descriptors are properly leased and all mutable
+	// descriptors are handled. The function deals with verifying the two version
+	// invariant and retrying when it is violated. Callers need not worry that they
+	// write mutable descriptors multiple times. The call will explicitly wait for
+	// the leases to drain on old versions of descriptors modified or deleted in the
+	// transaction; callers do not need to call lease.WaitForOneVersion.
+	// It also enables using internal executor to run sql queries in a txn manner.
+	Txn(context.Context, func(context.Context, Txn) error, ...TxnOption) error
+
+	// Executor constructs an internal executor not bound to a transaction.
+	Executor(...ExecutorOption) Executor
+}
+
+// Txn is an internal sql transaction.
+type Txn interface {
+
+	// KV returns the underlying kv.Txn.
+	KV() *kv.Txn
+
+	// SessionData returns the transaction's SessionData.
+	SessionData() *sessiondata.SessionData
+
+	// Executor allows the user to execute transactional SQL statements.
+	Executor
+}
+
+// Executor is meant to be used by layers below SQL in the system that
 // nevertheless want to execute SQL queries (presumably against system tables).
-// It is extracted in this "sqlutil" package to avoid circular references and
+// It is extracted in this "isql" package to avoid circular references and
 // is implemented by *sql.InternalExecutor.
-type InternalExecutor interface {
+//
+// TODO(ajwerner): Remove the txn argument from all the functions. They are
+// now implicit -- if you have your hands on an isql.Txn, you know it's
+// transactional. If you just have an Executor, you don't know, but you
+// cannot assume one way or the other.
+type Executor interface {
 	// Exec executes the supplied SQL statement and returns the number of rows
 	// affected (not like the full results; see QueryIterator()). If no user has
 	// been previously set through SetSessionData, the statement is executed as
@@ -130,7 +169,7 @@ type InternalExecutor interface {
 		txn *kv.Txn,
 		stmt string,
 		qargs ...interface{},
-	) (InternalRows, error)
+	) (Rows, error)
 
 	// QueryIteratorEx executes the query, returning an iterator that can be
 	// used to get the results. If the call is successful, the returned iterator
@@ -142,7 +181,7 @@ type InternalExecutor interface {
 		session sessiondata.InternalExecutorOverride,
 		stmt string,
 		qargs ...interface{},
-	) (InternalRows, error)
+	) (Rows, error)
 
 	// QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the computed
 	// ResultColumns of the input query.
@@ -171,9 +210,9 @@ type InternalExecutor interface {
 	) error
 }
 
-// InternalRows is an iterator interface that's exposed by the internal
+// Rows is an iterator interface that's exposed by the internal
 // executor. It provides access to the rows from a query.
-type InternalRows interface {
+type Rows interface {
 	// Next advances the iterator by one row, returning false if there are no
 	// more rows in this iterator or if an error is encountered (the latter is
 	// then returned).
@@ -188,7 +227,7 @@ type InternalRows interface {
 	// invalidate it).
 	Cur() tree.Datums
 
-	// RowsAffected() returns the count of rows affected by the statement.
+	// RowsAffected returns the count of rows affected by the statement.
 	// This is only guaranteed to be accurate after Next() has returned
 	// false (no more rows).
 	RowsAffected() int
@@ -205,64 +244,4 @@ type InternalRows interface {
 	// WARNING: this method is safe to call anytime *after* the first call to
 	// Next() (including after Close() was called).
 	Types() colinfo.ResultColumns
-}
-
-// InternalExecutorFactory is an interface that allow the creation of an
-// internal executor, and run sql statement without a txn with the internal
-// executor.
-type InternalExecutorFactory interface {
-	// NewInternalExecutor constructs a new internal executor.
-	// TODO (janexing): this should be deprecated soon.
-	NewInternalExecutor(sd *sessiondata.SessionData) InternalExecutor
-
-	// TxnWithExecutor enables callers to run transactions with a *Collection such that all
-	// retrieved immutable descriptors are properly leased and all mutable
-	// descriptors are handled. The function deals with verifying the two version
-	// invariant and retrying when it is violated. Callers need not worry that they
-	// write mutable descriptors multiple times. The call will explicitly wait for
-	// the leases to drain on old versions of descriptors modified or deleted in the
-	// transaction; callers do not need to call lease.WaitForOneVersion.
-	// It also enables using internal executor to run sql queries in a txn manner.
-	//
-	// The passed transaction is pre-emptively anchored to the system config key on
-	// the system tenant.
-	TxnWithExecutor(context.Context, *kv.DB, *sessiondata.SessionData, func(context.Context, *kv.Txn, InternalExecutor) error, ...TxnOption) error
-
-	// MakeInternalExecutorWithoutTxn returns an internal executor not bound with any
-	// txn.
-	MakeInternalExecutorWithoutTxn() InternalExecutor
-}
-
-// TxnOption is used to configure a Txn or TxnWithExecutor.
-type TxnOption interface {
-	Apply(*TxnConfig)
-}
-
-// TxnConfig is the config to be set for txn.
-type TxnConfig struct {
-	steppingEnabled bool
-}
-
-// GetSteppingEnabled return the steppingEnabled setting from the txn config.
-func (tc *TxnConfig) GetSteppingEnabled() bool {
-	return tc.steppingEnabled
-}
-
-type txnOptionFn func(options *TxnConfig)
-
-// Apply is to apply the txn config.
-func (f txnOptionFn) Apply(options *TxnConfig) { f(options) }
-
-var steppingEnabled = txnOptionFn(func(o *TxnConfig) {
-	o.steppingEnabled = true
-})
-
-// SteppingEnabled creates a TxnOption to determine whether the underlying
-// transaction should have stepping enabled. If stepping is enabled, the
-// transaction will implicitly use lower admission priority. However, the
-// user will need to remember to Step the Txn to make writes visible. The
-// InternalExecutor will automatically (for better or for worse) step the
-// transaction when executing each statement.
-func SteppingEnabled() TxnOption {
-	return steppingEnabled
 }

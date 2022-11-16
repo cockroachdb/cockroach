@@ -23,11 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/userfile/filetable"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -82,8 +80,6 @@ type fileTableStorage struct {
 	fs       *filetable.FileToTableSystem
 	cfg      cloudpb.ExternalStorage_FileTable
 	ioConf   base.ExternalIODirConfig
-	db       *kv.DB
-	ie       sqlutil.InternalExecutor
 	prefix   string // relative filepath
 	settings *cluster.Settings
 }
@@ -122,7 +118,7 @@ func makeFileTableStorage(
 
 	// cfg.User is already a normalized SQL username.
 	user := username.MakeSQLUsernameFromPreNormalizedString(cfg.User)
-	executor := filetable.MakeInternalFileToTableExecutor(args.InternalExecutor, args.InternalExecutorFactory, args.DB)
+	executor := filetable.MakeInternalFileToTableExecutor(args.DB)
 
 	fileToTableSystem, err := filetable.NewFileToTableSystem(ctx,
 		cfg.QualifiedTableName, executor, user)
@@ -133,8 +129,6 @@ func makeFileTableStorage(
 		fs:       fileToTableSystem,
 		cfg:      cfg,
 		ioConf:   args.IOConf,
-		db:       args.DB,
-		ie:       args.InternalExecutor,
 		prefix:   cfg.Path,
 		settings: args.Settings,
 	}, nil
@@ -251,12 +245,6 @@ func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.Writ
 	filepath, err := checkBaseAndJoinFilePath(f.prefix, basename)
 	if err != nil {
 		return nil, err
-	}
-
-	// This is only possible if the method is invoked by a SQLConnFileTableStorage
-	// which should never be the case.
-	if f.ie == nil {
-		return nil, errors.New("cannot Write without a configured internal executor")
 	}
 
 	return f.fs.NewFileWriter(ctx, filepath, filetable.ChunkDefaultSize)
