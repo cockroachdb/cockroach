@@ -872,9 +872,14 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	}
 
 	// Load the client-provided session parameters.
-	var sArgs sql.SessionArgs
-	if sArgs, err = parseClientProvidedSessionParameters(ctx, &s.execCfg.Settings.SV, &buf,
-		conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get()); err != nil {
+	cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
+	if err != nil {
+		reserved.Close(ctx)
+		return s.sendErr(ctx, conn, err)
+	}
+
+	sArgs, err := finalizeClientParameters(ctx, cp, &s.execCfg.Settings.SV, s.trustClientProvidedRemoteAddr.Get())
+	if err != nil {
 		reserved.Close(ctx)
 		return s.sendErr(ctx, conn, err)
 	}
@@ -969,27 +974,74 @@ func (s *Server) handleCancel(ctx context.Context, cancelKey pgwirecancel.Backen
 	}
 }
 
-// parseClientProvidedSessionParameters reads the incoming k/v pairs
-// in the startup message into a sql.SessionArgs struct.
-func parseClientProvidedSessionParameters(
+// finalizeClientParameters "fills in" the session arguments with
+// any tenant-specific defaults.
+func finalizeClientParameters(
 	ctx context.Context,
-	sv *settings.Values,
-	buf *pgwirebase.ReadBuffer,
-	origRemoteAddr net.Addr,
+	cp tenantIndependentClientParameters,
+	tenantSV *settings.Values,
 	trustClientProvidedRemoteAddr bool,
 ) (sql.SessionArgs, error) {
-	args := sql.SessionArgs{
+	// Inject the result buffer size if not defined by client.
+	if !cp.foundBufferSize && tenantSV != nil {
+		cp.ConnResultsBufferSize = connResultsBufferSize.Get(tenantSV)
+	}
+
+	// Replace RemoteAddr if specified by client and we trust the client.
+	if cp.clientProvidedRemoteAddr != "" {
+		if !trustClientProvidedRemoteAddr {
+			return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				"server not configured to accept remote address override (requested: %q)",
+				cp.clientProvidedRemoteAddr)
+		}
+
+		hostS, portS, err := net.SplitHostPort(cp.clientProvidedRemoteAddr)
+		if err != nil {
+			return sql.SessionArgs{}, pgerror.Wrap(
+				err, pgcode.ProtocolViolation,
+				"invalid address format",
+			)
+		}
+		port, err := strconv.Atoi(portS)
+		if err != nil {
+			return sql.SessionArgs{}, pgerror.Wrap(
+				err, pgcode.ProtocolViolation,
+				"remote port is not numeric",
+			)
+		}
+		ip := net.ParseIP(hostS)
+		if ip == nil {
+			return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
+				"remote address is not numeric")
+		}
+		cp.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
+	}
+
+	return cp.SessionArgs, nil
+}
+
+// parseClientProvidedSessionParameters reads the incoming k/v pairs
+// in the startup message into a sql.SessionArgs struct.
+//
+// This code is tenant-independent, and cannot use configuration
+// specific to one tenant. To perform tenant-specific adjustments to
+// the session configuration, pass the necessary input in the
+// tenantIndependentClientParameters struct then add logic to
+// finalizeClientParameters() accordingly.
+func parseClientProvidedSessionParameters(
+	ctx context.Context, buf *pgwirebase.ReadBuffer, origRemoteAddr net.Addr,
+) (args tenantIndependentClientParameters, err error) {
+	args.SessionArgs = sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
 		CustomOptionSessionDefaults: make(map[string]string),
 		RemoteAddr:                  origRemoteAddr,
 	}
-	foundBufferSize := false
 
 	for {
 		// Read a key-value pair from the client.
 		key, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrap(
+			return args, pgerror.Wrap(
 				err, pgcode.ProtocolViolation,
 				"error reading option key",
 			)
@@ -1000,7 +1052,7 @@ func parseClientProvidedSessionParameters(
 		}
 		value, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.Wrapf(
+			return args, pgerror.Wrapf(
 				err, pgcode.ProtocolViolation,
 				"error reading option value for key %q", key,
 			)
@@ -1024,7 +1076,7 @@ func parseClientProvidedSessionParameters(
 		case "crdb:session_revival_token_base64":
 			token, err := base64.StdEncoding.DecodeString(value)
 			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrapf(
+				return args, pgerror.Wrapf(
 					err, pgcode.ProtocolViolation,
 					"%s", key,
 				)
@@ -1033,47 +1085,23 @@ func parseClientProvidedSessionParameters(
 
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, errors.WithSecondaryError(
+				return args, errors.WithSecondaryError(
 					pgerror.Newf(pgcode.ProtocolViolation,
 						"error parsing results_buffer_size option value '%s' as bytes", value), err)
 			}
 			if args.ConnResultsBufferSize < 0 {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
+				return args, pgerror.Newf(pgcode.ProtocolViolation,
 					"results_buffer_size option value '%s' cannot be negative", value)
 			}
-			foundBufferSize = true
+			args.foundBufferSize = true
 
 		case "crdb:remote_addr":
-			if !trustClientProvidedRemoteAddr {
-				return sql.SessionArgs{}, pgerror.Newf(pgcode.ProtocolViolation,
-					"server not configured to accept remote address override (requested: %q)", value)
-			}
-
-			hostS, portS, err := net.SplitHostPort(value)
-			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
-					err, pgcode.ProtocolViolation,
-					"invalid address format",
-				)
-			}
-			port, err := strconv.Atoi(portS)
-			if err != nil {
-				return sql.SessionArgs{}, pgerror.Wrap(
-					err, pgcode.ProtocolViolation,
-					"remote port is not numeric",
-				)
-			}
-			ip := net.ParseIP(hostS)
-			if ip == nil {
-				return sql.SessionArgs{}, pgerror.New(pgcode.ProtocolViolation,
-					"remote address is not numeric")
-			}
-			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
+			args.clientProvidedRemoteAddr = value
 
 		case "options":
 			opts, err := parseOptions(value)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return args, err
 			}
 			for _, opt := range opts {
 				// crdb:jwt_auth_enabled must be passed as an option in order for us to support non-CRDB
@@ -1081,27 +1109,22 @@ func parseClientProvidedSessionParameters(
 				if strings.ToLower(opt.key) == "crdb:jwt_auth_enabled" {
 					b, err := strconv.ParseBool(opt.value)
 					if err != nil {
-						return sql.SessionArgs{}, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "crdb:jwt_auth_enabled")
+						return args, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "crdb:jwt_auth_enabled")
 					}
 					args.JWTAuthEnabled = b
 					continue
 				}
-				err = loadParameter(ctx, opt.key, opt.value, &args)
+				err = loadParameter(ctx, opt.key, opt.value, &args.SessionArgs)
 				if err != nil {
-					return sql.SessionArgs{}, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
+					return args, pgerror.Wrapf(err, pgerror.GetPGCode(err), "options")
 				}
 			}
 		default:
-			err = loadParameter(ctx, key, value, &args)
+			err = loadParameter(ctx, key, value, &args.SessionArgs)
 			if err != nil {
-				return sql.SessionArgs{}, err
+				return args, err
 			}
 		}
-	}
-
-	if !foundBufferSize && sv != nil {
-		// The client did not provide buffer_size; use the cluster setting as default.
-		args.ConnResultsBufferSize = connResultsBufferSize.Get(sv)
 	}
 
 	// TODO(richardjcai): When connecting to the database, we'll want to
