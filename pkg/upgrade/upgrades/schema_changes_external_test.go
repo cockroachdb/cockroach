@@ -45,6 +45,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type schemaChangeTestCase struct {
+	// Test identifier.
+	name string
+	// Job status when the job is intercepted while transitioning to the intercepted status.
+	query string
+	// Whether the schema-change job should wait for the migration to restart
+	// after failure before proceeding.
+	waitForMigrationRestart bool
+	// Cancel the intercepted schema-change to inject a failure during migration.
+	cancelSchemaJob bool
+	// Expected number of schema-changes that are skipped during migration.
+	expectedSkipped int
+}
+
 // TestMigrationWithFailures tests modification of a table during
 // migration with different failures. It tests the system behavior with failure
 // combinations of the migration job and schema-change jobs at different stages
@@ -54,49 +68,6 @@ import (
 // exponential backoff to the system.jobs table, but was retrofitted to prevent
 // regressions.
 func TestMigrationWithFailures(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	skip.UnderRace(t, "very slow")
-
-	// We're going to be migrating from startCV to endCV.
-	startCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 2041}}
-	endCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 2042}}
-
-	// The tests follows the following procedure.
-	//
-	// Inject the old table descriptor and ensure that the system is using the
-	// deprecated jobs-table.
-	//
-	// Start migration, which initiates two schema-change jobs one by one. Test
-	// the system for each schema-change job separately. Later on, we inject
-	// failure in this migration, causing it to fail.
-	//
-	// Depending on the test setting, intercept the target schema-change job,
-	// preventing the job from progressing. We may cancel this schema-change or
-	// let it succeed to test different scenarios.
-	//
-	// Cancel the migration, causing the migration to revert and fail.
-	//
-	// Wait for the canceled migration-job to finish, expecting its failure. The
-	// schema-change job is still not progressing to control what the restarted
-	// migration will observe.
-	//
-	// Restart the migration, expecting it to succeed. Depending on the test setting,
-	// the intercepted schema-change job may wail for the migration job to resume.
-	// If it does, the migration job is expected to observe the ongoing schema-change.
-	// The ongoing schema-change is canceled or not, depending on the test case.
-	// In either case, we expect the correct number of mutations to be skipped
-	// during the migration.
-	//
-	// If we canceled the schema-job, expect it to rerun
-	// as part of the migration. Otherwise, expect the schema-change to be ignored
-	// during the migration.
-	//
-	// Finally, we validate that the schema changes are in effect by reading the new
-	// columns and the index, and by running a job that is failed and retried to
-	// practice exponential-backoff machinery.
-
 	const createTableBefore = `
 CREATE TABLE test.test_table (
 	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
@@ -142,19 +113,7 @@ CREATE TABLE test.test_table (
 );
 `
 
-	for _, test := range []struct {
-		// Test identifier.
-		name string
-		// Job status when the job is intercepted while transitioning to the intercepted status.
-		query string
-		// Whether the schema-change job should wait for the migration to restart
-		// after failure before proceeding.
-		waitForMigrationRestart bool
-		// Cancel the intercepted schema-change to inject a failure during migration.
-		cancelSchemaJob bool
-		// Expected number of schema-changes that are skipped during migration.
-		expectedSkipped int
-	}{
+	testCases := []schemaChangeTestCase{
 		{
 			name:                    "adding columns",
 			query:                   upgrades.TestingAddColsQuery,
@@ -204,7 +163,123 @@ CREATE TABLE test.test_table (
 			cancelSchemaJob:         false, // To fail adding index and skip adding column.
 			expectedSkipped:         2,     // Both columns and index must not be added again.
 		},
-	} {
+	}
+
+	testMigrationWithFailures(t, createTableBefore, createTableAfter, upgrades.MakeFakeMigrationForTestMigrationWithFailures, testCases)
+}
+
+// TestMigrationWithFailuresMultipleAltersOnSameColumn tests a migration that
+// alters a column in a table multiple times with failures at different stages
+// of the migration.
+func TestMigrationWithFailuresMultipleAltersOnSameColumn(t *testing.T) {
+	const createTableBefore = `
+CREATE TABLE test.test_table (
+   username STRING NOT NULL
+);
+`
+
+	const createTableAfter = `
+CREATE TABLE test.test_table (
+	username STRING NOT NULL,
+	user_id OID NOT NULL
+);
+`
+
+	testCases := []schemaChangeTestCase{
+		{
+			name:                    "add column",
+			query:                   upgrades.TestingAddNewColStmt,
+			waitForMigrationRestart: false,
+			cancelSchemaJob:         false,
+			expectedSkipped:         0,
+		},
+		{
+			name:                    "alter column",
+			query:                   upgrades.TestingAlterNewColStmt,
+			waitForMigrationRestart: false,
+			cancelSchemaJob:         false,
+			expectedSkipped:         0,
+		},
+		{
+			name:                    "skip none",
+			query:                   upgrades.TestingAddNewColStmt,
+			waitForMigrationRestart: true,
+			cancelSchemaJob:         true,
+			expectedSkipped:         0,
+		},
+		{
+			name:                    "skip adding column",
+			query:                   upgrades.TestingAlterNewColStmt,
+			waitForMigrationRestart: true,
+			cancelSchemaJob:         true,
+			expectedSkipped:         1,
+		},
+		{
+			name:                    "skip adding column and altering column",
+			query:                   upgrades.TestingAlterNewColStmt,
+			waitForMigrationRestart: true,
+			cancelSchemaJob:         false,
+			expectedSkipped:         2,
+		},
+	}
+
+	testMigrationWithFailures(t, createTableBefore, createTableAfter, upgrades.MakeFakeMigrationForTestMigrationWithFailuresMultipleAltersOnSameColumn, testCases)
+}
+
+// testMigrationWithFailures tests a migration that alters the schema of a
+// table with failures injected at multiple points within the migration.
+// The table should be named test.test_table.
+func testMigrationWithFailures(
+	t *testing.T,
+	createTableBefore string,
+	createTableAfter string,
+	testMigrationFunc upgrades.SchemaChangeTestMigrationFunc,
+	testCases []schemaChangeTestCase,
+) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "very slow")
+
+	// We're going to be migrating from startCV to endCV.
+	startCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 2041}}
+	endCV := clusterversion.ClusterVersion{Version: roachpb.Version{Major: 2042}}
+
+	// The tests follows the following procedure.
+	//
+	// Inject the old table descriptor and ensure that the system is using the
+	// deprecated jobs-table.
+	//
+	// Start migration, which initiates two schema-change jobs one by one. Test
+	// the system for each schema-change job separately. Later on, we inject
+	// failure in this migration, causing it to fail.
+	//
+	// Depending on the test setting, intercept the target schema-change job,
+	// preventing the job from progressing. We may cancel this schema-change or
+	// let it succeed to test different scenarios.
+	//
+	// Cancel the migration, causing the migration to revert and fail.
+	//
+	// Wait for the canceled migration-job to finish, expecting its failure. The
+	// schema-change job is still not progressing to control what the restarted
+	// migration will observe.
+	//
+	// Restart the migration, expecting it to succeed. Depending on the test setting,
+	// the intercepted schema-change job may wail for the migration job to resume.
+	// If it does, the migration job is expected to observe the ongoing schema-change.
+	// The ongoing schema-change is canceled or not, depending on the test case.
+	// In either case, we expect the correct number of mutations to be skipped
+	// during the migration.
+	//
+	// If we canceled the schema-job, expect it to rerun
+	// as part of the migration. Otherwise, expect the schema-change to be ignored
+	// during the migration.
+	//
+	// Finally, we validate that the schema changes are in effect by reading the new
+	// columns and the index, and by running a job that is failed and retried to
+	// practice exponential-backoff machinery.
+
+	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			scope := log.Scope(t)
 			defer scope.Close(t)
@@ -253,8 +328,7 @@ CREATE TABLE test.test_table (
 			))
 			jobsKnobs := jobs.NewTestingKnobsWithShortIntervals()
 			jobsKnobs.BeforeUpdate = beforeUpdate
-			migrationFunc, expectedDescriptor := upgrades.
-				MakeFakeMigrationForTestMigrationWithFailures()
+			migrationFunc, expectedDescriptor := testMigrationFunc()
 			clusterArgs := base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Settings: settings,
