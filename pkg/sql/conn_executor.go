@@ -375,8 +375,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
-	reportedSQLStatsController :=
-		reportedSQLStats.GetController(cfg.SQLStatusServer, cfg.DB, cfg.InternalExecutor)
+	reportedSQLStatsController := reportedSQLStats.GetController(cfg.SQLStatusServer)
 	memSQLStats := sslocal.New(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
@@ -416,27 +415,30 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 	sqlStatsInternalExecutorMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	sqlStatsInternalExecutorMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
-	sqlStatsInternalExecutor := MakeInternalExecutor(s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor)
 	persistedSQLStats := persistedsqlstats.New(&persistedsqlstats.Config{
 		Settings:                s.cfg.Settings,
-		InternalExecutor:        &sqlStatsInternalExecutor,
 		InternalExecutorMonitor: sqlStatsInternalExecutorMonitor,
-		KvDB:                    cfg.DB,
-		SQLIDContainer:          cfg.NodeInfo.NodeID,
-		JobRegistry:             s.cfg.JobRegistry,
-		Knobs:                   cfg.SQLStatsTestingKnobs,
-		FlushCounter:            serverMetrics.StatsMetrics.SQLStatsFlushStarted,
-		FailureCounter:          serverMetrics.StatsMetrics.SQLStatsFlushFailure,
-		FlushDuration:           serverMetrics.StatsMetrics.SQLStatsFlushDuration,
+		DB: NewInternalDB(
+			s, MemoryMetrics{}, sqlStatsInternalExecutorMonitor,
+		),
+		SQLIDContainer: cfg.NodeInfo.NodeID,
+		JobRegistry:    s.cfg.JobRegistry,
+		Knobs:          cfg.SQLStatsTestingKnobs,
+		FlushCounter:   serverMetrics.StatsMetrics.SQLStatsFlushStarted,
+		FailureCounter: serverMetrics.StatsMetrics.SQLStatsFlushFailure,
+		FlushDuration:  serverMetrics.StatsMetrics.SQLStatsFlushDuration,
 	}, memSQLStats)
 
 	s.sqlStats = persistedSQLStats
 	s.sqlStatsController = persistedSQLStats.GetController(cfg.SQLStatusServer)
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
-	schemaTelemetryIE := MakeInternalExecutor(s, MemoryMetrics{}, schemaTelemetryIEMonitor)
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
-		s.cfg.DB, &schemaTelemetryIE, schemaTelemetryIEMonitor, s.cfg.Settings, s.cfg.JobRegistry,
+		NewInternalDB(
+			s, MemoryMetrics{}, schemaTelemetryIEMonitor,
+		),
+		schemaTelemetryIEMonitor,
+		s.cfg.Settings, s.cfg.JobRegistry,
 		s.cfg.NodeInfo.LogicalClusterID,
 	)
 	s.indexUsageStatsController = idxusage.NewController(cfg.SQLStatusServer)
@@ -718,7 +720,7 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 	onDefaultIntSizeChange func(newSize int32),
 ) (ConnectionHandler, error) {
-	sd := s.newSessionData(args)
+	sd := newSessionData(args)
 	sds := sessiondata.NewStack(sd)
 	// Set the SessionData from args.SessionDefaults. This also validates the
 	// respective values.
@@ -840,7 +842,7 @@ func (s *Server) GetLocalIndexStatistics() *idxusage.LocalIndexUsageStats {
 }
 
 // newSessionData a SessionData that can be passed to newConnExecutor.
-func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
+func newSessionData(args SessionArgs) *sessiondata.SessionData {
 	sd := &sessiondata.SessionData{
 		SessionData: sessiondatapb.SessionData{
 			UserProto: args.User.EncodeProto(),
@@ -860,7 +862,7 @@ func (s *Server) newSessionData(args SessionArgs) *sessiondata.SessionData {
 			sd.CustomOptions[k] = v
 		}
 	}
-	s.populateMinimalSessionData(sd)
+	populateMinimalSessionData(sd)
 	return sd
 }
 
@@ -879,7 +881,7 @@ func (s *Server) makeSessionDataMutatorIterator(
 
 // populateMinimalSessionData populates sd with some minimal values needed for
 // not crashing. Fields of sd that are already set are not overwritten.
-func (s *Server) populateMinimalSessionData(sd *sessiondata.SessionData) {
+func populateMinimalSessionData(sd *sessiondata.SessionData) {
 	if sd.SequenceState == nil {
 		sd.SequenceState = sessiondata.NewSequenceState()
 	}
@@ -1128,9 +1130,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	if ex.hasCreatedTemporarySchema && !ex.server.cfg.TestingKnobs.DisableTempObjectsCleanupOnSessionExit {
 		err := cleanupSessionTempObjects(
 			ctx,
-			ex.server.cfg.Settings,
-			ex.server.cfg.InternalExecutorFactory,
-			ex.server.cfg.DB,
+			ex.server.cfg.InternalDB,
 			ex.server.cfg.Codec,
 			ex.sessionID,
 		)
@@ -1762,7 +1762,7 @@ func (ex *connExecutor) Ctx() context.Context {
 	if _, ok := ex.machine.CurState().(stateNoTxn); ok {
 		ctx = ex.ctxHolder.ctx()
 	}
-	// stateInternalError is used by the InternalExecutor.
+	// stateInternalError is used by the Executor.
 	if _, ok := ex.machine.CurState().(stateInternalError); ok {
 		ctx = ex.ctxHolder.ctx()
 	}
@@ -3078,9 +3078,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 
 		ex.statsCollector.PhaseTimes().SetSessionPhaseTime(sessionphase.SessionStartPostCommitJob, timeutil.Now())
 		if err := ex.server.cfg.JobRegistry.Run(
-			ex.ctxHolder.connCtx,
-			ex.server.cfg.InternalExecutor,
-			*ex.extraTxnState.jobs,
+			ex.ctxHolder.connCtx, *ex.extraTxnState.jobs,
 		); err != nil {
 			handleErr(err)
 		}
@@ -3379,7 +3377,7 @@ func (ex *connExecutor) runPreCommitStages(ctx context.Context) error {
 		ex.planner.SessionData(),
 		ex.planner.User(),
 		ex.server.cfg,
-		ex.planner.txn,
+		ex.planner.InternalSQLTxn(),
 		ex.extraTxnState.descCollection,
 		ex.planner.EvalContext(),
 		ex.planner.ExtendedEvalContext().Tracing.KVTracingEnabled(),

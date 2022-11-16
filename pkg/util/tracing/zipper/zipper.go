@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/memzipper"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -53,7 +53,7 @@ type InflightTraceZipper interface {
 type InternalInflightTraceZipper struct {
 	traceStrBuf         *bytes.Buffer
 	nodeTraceCollection *tracingpb.TraceCollection
-	ie                  sqlutil.InternalExecutor
+	ie                  isql.Executor
 	z                   *memzipper.Zipper
 }
 
@@ -186,9 +186,7 @@ func (i *InternalInflightTraceZipper) populateInflightTraceRow(
 
 // MakeInternalExecutorInflightTraceZipper returns an instance of
 // InternalInflightTraceZipper.
-func MakeInternalExecutorInflightTraceZipper(
-	ie sqlutil.InternalExecutor,
-) *InternalInflightTraceZipper {
+func MakeInternalExecutorInflightTraceZipper(ie isql.Executor) *InternalInflightTraceZipper {
 	t := &InternalInflightTraceZipper{
 		traceStrBuf:         &bytes.Buffer{},
 		nodeTraceCollection: nil,

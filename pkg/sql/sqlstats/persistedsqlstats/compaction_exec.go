@@ -15,13 +15,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -31,8 +30,7 @@ import (
 // executed by sql.sqlStatsCompactionResumer.
 type StatsCompactor struct {
 	st *cluster.Settings
-	db *kv.DB
-	ie sqlutil.InternalExecutor
+	db isql.DB
 
 	rowsRemovedCounter *metric.Counter
 
@@ -46,15 +44,13 @@ type StatsCompactor struct {
 // NewStatsCompactor returns a new instance of StatsCompactor.
 func NewStatsCompactor(
 	setting *cluster.Settings,
-	internalEx sqlutil.InternalExecutor,
-	db *kv.DB,
+	db isql.DB,
 	rowsRemovedCounter *metric.Counter,
 	knobs *sqlstats.TestingKnobs,
 ) *StatsCompactor {
 	return &StatsCompactor{
 		st:                 setting,
 		db:                 db,
-		ie:                 internalEx,
 		rowsRemovedCounter: rowsRemovedCounter,
 		knobs:              knobs,
 	}
@@ -114,7 +110,7 @@ func (c *StatsCompactor) removeStaleRowsPerShard(
 func (c *StatsCompactor) getRowCountForShard(
 	ctx context.Context, stmt string, shardIdx int, count *int64,
 ) error {
-	row, err := c.ie.QueryRowEx(ctx,
+	row, err := c.db.Executor().QueryRowEx(ctx,
 		"scan-row-count",
 		nil,
 		sessiondata.NodeUserSessionDataOverride,
@@ -211,7 +207,7 @@ func (c *StatsCompactor) removeStaleRowsForShard(
 func (c *StatsCompactor) executeDeleteStmt(
 	ctx context.Context, delStmt string, qargs []interface{},
 ) (lastRow tree.Datums, rowsDeleted int64, err error) {
-	it, err := c.ie.QueryIteratorEx(ctx,
+	it, err := c.db.Executor().QueryIteratorEx(ctx,
 		"delete-old-sql-stats",
 		nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,

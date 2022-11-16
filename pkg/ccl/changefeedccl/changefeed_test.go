@@ -48,7 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -5259,7 +5259,9 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 			ctx := context.Background()
 			serverCfg := s.Server.DistSQLServer().(*distsql.ServerImpl).ServerConfig
 			jr := serverCfg.JobRegistry
-			pts := serverCfg.ProtectedTimestampProvider
+			pts := ptstorage.WithDatabase(
+				serverCfg.ProtectedTimestampProvider, serverCfg.DB,
+			)
 
 			feedJob := foo.(cdctest.EnterpriseTestFeed)
 			require.NoError(t, feedJob.Pause())
@@ -5270,11 +5272,8 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 				details := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 				if shouldPause {
 					require.NotEqual(t, uuid.Nil, details.ProtectedTimestampRecord)
-					var r *ptpb.Record
-					require.NoError(t, serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-						r, err = pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
-						return err
-					}))
+					r, err := pts.GetRecord(ctx, details.ProtectedTimestampRecord)
+					require.NoError(t, err)
 					require.True(t, r.Timestamp.LessEq(*progress.GetHighWater()))
 				} else {
 					require.Equal(t, uuid.Nil, details.ProtectedTimestampRecord)
@@ -5289,15 +5288,11 @@ func TestChangefeedProtectedTimestampOnPause(t *testing.T) {
 				j, err := jr.LoadJob(ctx, feedJob.JobID())
 				require.NoError(t, err)
 				details := j.Progress().Details.(*jobspb.Progress_Changefeed).Changefeed
-
-				err = serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-					r, err := pts.GetRecord(ctx, txn, details.ProtectedTimestampRecord)
-					if err != nil || r.Timestamp.Less(resolvedTs) {
-						return fmt.Errorf("expected protected timestamp record %v to have timestamp greater than %v", r, resolvedTs)
-					}
-					return nil
-				})
-				return err
+				r, err := pts.GetRecord(ctx, details.ProtectedTimestampRecord)
+				if err != nil || r.Timestamp.Less(resolvedTs) {
+					return fmt.Errorf("expected protected timestamp record %v to have timestamp greater than %v", r, resolvedTs)
+				}
+				return nil
 			})
 		}
 	}

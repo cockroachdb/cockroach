@@ -43,12 +43,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -85,14 +85,14 @@ func init() {
 	lease.MoveTablePrimaryIndexIDto2 = func(
 		ctx context.Context, t *testing.T, s serverutils.TestServerInterface, id descpb.ID,
 	) {
-		require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			t, err := col.MutableByID(txn).Table(ctx, id)
+		require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			t, err := col.MutableByID(txn.KV()).Table(ctx, id)
 			if err != nil {
 				return err
 			}
 			t.PrimaryIndex.ID = 2
 			t.NextIndexID++
-			return col.WriteDesc(ctx, false /* kvTrace */, t, txn)
+			return col.WriteDesc(ctx, false /* kvTrace */, t, txn.KV())
 		}))
 	}
 
@@ -249,9 +249,8 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		mgr = lease.NewLeaseManager(
 			ambientCtx,
 			nc,
-			cfgCpy.DB,
+			cfgCpy.InternalDB,
 			cfgCpy.Clock,
-			cfgCpy.InternalExecutor,
 			cfgCpy.Settings,
 			cfgCpy.Codec,
 			t.leaseManagerTestingKnobs,
@@ -1336,7 +1335,6 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
-
 	params := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
@@ -1347,7 +1345,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 					if err != nil {
 						return
 					}
-					if !catalog.IsSystemDescriptor(desc) {
+					if _, isTable := desc.(catalog.TableDescriptor); isTable && !catalog.IsSystemDescriptor(desc) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
@@ -1791,10 +1789,10 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	ctx := context.Background()
 
 	var mu syncutil.Mutex
-	releasedIDs := make(map[descpb.ID]struct{})
-
+	releasedIDs := catalog.DescriptorIDSet{}
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
+	var expected catalog.DescriptorIDSet
 
 	params := createTestServerParams()
 	params.Knobs = base.TestingKnobs{
@@ -1807,16 +1805,18 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(id descpb.ID, _ descpb.DescriptorVersion, _ error) {
-					if uint32(id) < bootstrap.TestingMinUserDescID() {
-						return
-					}
+				LeaseReleasedEvent: func(id descpb.ID, v descpb.DescriptorVersion, err error) {
 					mu.Lock()
 					defer mu.Unlock()
-					releasedIDs[id] = struct{}{}
+					if !expected.Contains(id) {
+						return
+					}
+					releasedIDs.Add(id)
 				},
 				LeaseAcquireResultBlockEvent: func(typ lease.AcquireType, id descpb.ID) {
-					if uint32(id) < bootstrap.TestingMinUserDescID() || typ == lease.AcquireBackground {
+					mu.Lock()
+					defer mu.Unlock()
+					if !expected.Contains(id) || typ == lease.AcquireBackground {
 						return
 					}
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
@@ -1848,19 +1848,23 @@ CREATE TABLE t.test2 ();
 		t.Fatal(err)
 	}
 
-	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
+	test1Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test1")
 	test2Desc := desctestutils.TestingGetPublicTableDescriptor(t.kvDB, keys.SystemSQLCodec, "t", "test2")
 	dbID := test2Desc.GetParentID()
-
-	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
-
-	numReleasedLeases := func() int {
+	func() {
 		mu.Lock()
 		defer mu.Unlock()
-		return len(releasedIDs)
+		expected = catalog.MakeDescriptorIDSet(test1Desc.GetID(), test2Desc.GetID())
+		atomic.StoreInt32(&testAcquisitionBlockCount, 0)
+	}()
+
+	releasedLeases := func() catalog.DescriptorIDSet {
+		mu.Lock()
+		defer mu.Unlock()
+		return catalog.MakeDescriptorIDSet(releasedIDs.Ordered()...)
 	}
-	if count := numReleasedLeases(); count != 0 {
-		t.Fatalf("expected no leases to be releases, released %d", count)
+	if released := releasedLeases(); released.Len() != 0 {
+		t.Fatalf("expected no leases to be released, released %v", released.Ordered())
 	}
 
 	// Acquire a lease on test1 by name.
@@ -1902,9 +1906,9 @@ CREATE TABLE t.test2 ();
 		if count := atomic.LoadInt32(&testAcquiredCount); count <= 4 {
 			return errors.Errorf("expected more than 4 leases to be acquired, but acquired %d times", count)
 		}
-
-		if count := numReleasedLeases(); count != 2 {
-			return errors.Errorf("expected 2 leases to be releases, released %d", count)
+		released := releasedLeases()
+		if notYetReleased := expected.Difference(released); notYetReleased.Len() != 0 {
+			return errors.Errorf("expected %v to be released, released %v", expected.Ordered(), released.Ordered())
 		}
 		return nil
 	})
@@ -2432,13 +2436,13 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 	setTableState := func(expected descpb.DescriptorState, next descpb.DescriptorState) {
 		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			ctx context.Context, txn isql.Txn, descsCol *descs.Collection,
 		) error {
-			desc, err := descsCol.MutableByID(txn).Table(ctx, testTableID())
+			desc, err := descsCol.MutableByID(txn.KV()).Table(ctx, testTableID())
 			require.NoError(t, err)
 			require.Equal(t, desc.State, expected)
 			desc.State = next
-			return descsCol.WriteDesc(ctx, false /* kvTrace */, desc, txn)
+			return descsCol.WriteDesc(ctx, false /* kvTrace */, desc, txn.KV())
 		}))
 
 		// Wait for the lease manager's refresh worker to have processed the
@@ -2806,16 +2810,16 @@ CREATE TABLE d1.t2 (name int);
 	cfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	var tableID descpb.ID
 	require.NoError(t, sql.DescsTxn(ctx, &cfg, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		tn := tree.NewTableNameWithSchema("d1", "public", "t1")
-		_, tableDesc, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn), tn)
+		_, tableDesc, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), tn)
 		if err != nil {
 			return err
 		}
 		tableID = tableDesc.GetID()
 		tableDesc.SetOffline("For unit test")
-		err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
+		err = descriptors.WriteDesc(ctx, false, tableDesc, txn.KV())
 		if err != nil {
 			return err
 		}
@@ -2824,21 +2828,21 @@ CREATE TABLE d1.t2 (name int);
 
 	go func() {
 		err := sql.DescsTxn(ctx, &cfg, func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+			ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 		) error {
 			close(waitForRqstFilter)
 			mu.Lock()
 			waitForRqstFilter = make(chan chan struct{})
-			txnID = txn.ID()
+			txnID = txn.KV().ID()
 			mu.Unlock()
 
 			// Online the descriptor by making it public
-			tableDesc, err := descriptors.MutableByID(txn).Table(ctx, tableID)
+			tableDesc, err := descriptors.MutableByID(txn.KV()).Table(ctx, tableID)
 			if err != nil {
 				return err
 			}
 			tableDesc.SetPublic()
-			err = descriptors.WriteDesc(ctx, false, tableDesc, txn)
+			err = descriptors.WriteDesc(ctx, false, tableDesc, txn.KV())
 			if err != nil {
 				return err
 			}
@@ -2850,7 +2854,7 @@ CREATE TABLE d1.t2 (name int);
 			<-notify
 
 			// Select from an unrelated table
-			_, err = s.InternalExecutor().(sqlutil.InternalExecutor).ExecEx(ctx, "inline-exec", txn,
+			_, err = txn.ExecEx(ctx, "inline-exec", txn.KV(),
 				sessiondata.RootUserSessionDataOverride,
 				"insert into d1.t2 values (10);")
 			return err

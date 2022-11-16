@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -42,7 +42,7 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 	aggInterval := s.GetAggregationInterval()
 	memIter := newMemTxnStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
-	var persistedIter sqlutil.InternalRows
+	var persistedIter isql.Rows
 	var colCnt int
 	persistedIter, colCnt, err = s.persistedTxnStatsIter(ctx, options)
 	if err != nil {
@@ -79,22 +79,20 @@ func (s *PersistedSQLStats) IterateTransactionStats(
 
 func (s *PersistedSQLStats) persistedTxnStatsIter(
 	ctx context.Context, options *sqlstats.IteratorOptions,
-) (iter sqlutil.InternalRows, expectedColCnt int, err error) {
+) (iter isql.Rows, expectedColCnt int, err error) {
 	query, expectedColCnt := s.getFetchQueryForTxnStatsTable(options)
-
-	persistedIter, err := s.cfg.InternalExecutor.QueryIteratorEx(
+	exec := s.cfg.DB.Executor()
+	if iter, err = exec.QueryIteratorEx(
 		ctx,
 		"read-txn-stats",
 		nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
 		query,
-	)
-
-	if err != nil {
+	); err != nil {
 		return nil /* iter */, 0 /* expectedColCnt */, err
 	}
 
-	return persistedIter, expectedColCnt, err
+	return iter, expectedColCnt, err
 }
 
 func (s *PersistedSQLStats) getFetchQueryForTxnStatsTable(

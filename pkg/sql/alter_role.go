@@ -190,7 +190,7 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	}
 
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -225,10 +225,11 @@ func (n *alterRoleNode) startExec(params runParams) error {
 	if hasPasswordOpt {
 		// Updating PASSWORD is a special case since PASSWORD lives in system.users
 		// while the rest of the role options lives in system.role_options.
-		rowAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		rowAffected, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx,
 			opName,
 			params.p.txn,
+			sessiondata.NodeUserSessionDataOverride,
 			`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1`,
 			n.roleName,
 			hashedPassword,
@@ -435,7 +436,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 		var rowsAffected int
 		var internalExecErr error
 		if newSettings == nil {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.p.InternalSQLTxn().ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -445,7 +446,7 @@ func (n *alterRoleSetNode) startExec(params runParams) error {
 				roleName,
 			)
 		} else {
-			rowsAffected, internalExecErr = params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			rowsAffected, internalExecErr = params.p.InternalSQLTxn().ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,
@@ -550,7 +551,7 @@ func (n *alterRoleSetNode) getRoleName(
 		return false, username.SQLUsername{}, pgerror.Newf(pgcode.InsufficientPrivilege, "cannot edit public role")
 	}
 	// Check if role exists.
-	row, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	row, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -601,7 +602,7 @@ func (n *alterRoleSetNode) makeNewSettings(
 		`SELECT settings FROM %s WHERE database_id = $1 AND role_name = $2`,
 		sessioninit.DatabaseRoleSettingsTableName,
 	)
-	datums, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRowEx(
+	datums, err := params.p.InternalSQLTxn().QueryRowEx(
 		params.ctx,
 		opName,
 		params.p.txn,

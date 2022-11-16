@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptcache"
@@ -27,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -39,6 +40,37 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func withDatabase(ptm protectedts.Manager, idb isql.DB) *storageWithLastCommit {
+	var m storageWithLastCommit
+	m.internalDBWithLastCommit.DB = idb
+	m.Storage = ptstorage.WithDatabase(ptm, &m.internalDBWithLastCommit)
+	return &m
+}
+
+type storageWithLastCommit struct {
+	internalDBWithLastCommit
+	protectedts.Storage
+}
+
+type internalDBWithLastCommit struct {
+	isql.DB
+	lastCommit hlc.Timestamp
+}
+
+func (idb *internalDBWithLastCommit) Txn(
+	ctx context.Context, f func(context.Context, isql.Txn) error, opts ...isql.TxnOption,
+) error {
+	var kvTxn *kv.Txn
+	err := idb.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		kvTxn = txn.KV()
+		return f(ctx, txn)
+	})
+	if err == nil {
+		idb.lastCommit = kvTxn.CommitTimestamp()
+	}
+	return err
+}
 
 // TestCacheBasic exercises the basic behavior of the Cache.
 func TestCacheBasic(t *testing.T) {
@@ -53,20 +85,19 @@ func TestCacheBasic(t *testing.T) {
 			},
 		})
 	defer s.Stopper().Stop(ctx)
-	p := ptstorage.WithDatabase(
-		ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
-		s.DB(),
-	)
+	insqlDB := s.InternalDB().(isql.DB)
+	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
+		DisableProtectedTimestampForMultiTenant: true,
+	})
+	p := withDatabase(m, insqlDB)
 
 	// Set the poll interval to be very short.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Microsecond)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		DB:       insqlDB,
+		Storage:  m,
 	})
 	require.NoError(t, c.Start(ctx, s.Stopper()))
 
@@ -78,7 +109,7 @@ func TestCacheBasic(t *testing.T) {
 
 	// Then we'll add a record and make sure it gets seen.
 	sp := tableSpan(42)
-	r, createdAt := protect(t, s, p, s.Clock().Now(), sp)
+	r, createdAt := protect(t, p, s.Clock().Now(), sp)
 	testutils.SucceedsSoon(t, func() error {
 		var coveredBy []*ptpb.Record
 		seenTS := c.Iterate(ctx, sp.Key, sp.EndKey,
@@ -96,7 +127,7 @@ func TestCacheBasic(t *testing.T) {
 	})
 
 	// Then release the record and make sure that that gets seen.
-	require.Nil(t, p.Release(ctx, nil /* txn */, r.ID.GetUUID()))
+	require.Nil(t, p.Release(ctx, r.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
 		var coveredBy []*ptpb.Record
 		_ = c.Iterate(ctx, sp.Key, sp.EndKey,
@@ -128,21 +159,17 @@ func TestRefresh(t *testing.T) {
 			},
 		})
 	defer s.Stopper().Stop(ctx)
-	p := ptstorage.WithDatabase(
-		ptstorage.New(
-			s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			ptsKnobs),
-		s.DB(),
-	)
+	db := s.InternalDB().(isql.DB)
+	m := ptstorage.New(s.ClusterSettings(), ptsKnobs)
+	p := withDatabase(m, db)
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		DB:       db,
+		Storage:  m,
 	})
 	require.NoError(t, c.Start(ctx, s.Stopper()))
 	t.Run("already up-to-date", func(t *testing.T) {
@@ -157,7 +184,7 @@ func TestRefresh(t *testing.T) {
 		st.verifyCounters(t, 1, 0) // just need to scan meta
 	})
 	t.Run("needs refresh, with change", func(t *testing.T) {
-		_, createdAt := protect(t, s, p, s.Clock().Now(), metaTableSpan)
+		_, createdAt := protect(t, p, s.Clock().Now(), metaTableSpan)
 		st.resetCounters()
 		require.NoError(t, c.Refresh(ctx, createdAt))
 		st.verifyCounters(t, 2, 1) // need to scan meta and then scan everything
@@ -194,7 +221,7 @@ func TestRefresh(t *testing.T) {
 		require.Regexp(t, "boom", c.Refresh(ctx, s.Clock().Now()).Error())
 	})
 	t.Run("error propagates while fetching records", func(t *testing.T) {
-		protect(t, s, p, s.Clock().Now(), metaTableSpan)
+		protect(t, p, s.Clock().Now(), metaTableSpan)
 		st.setFilter(func(ba *roachpb.BatchRequest) *roachpb.Error {
 			if scanReq, ok := ba.GetArg(roachpb.Scan); ok {
 				scan := scanReq.(*roachpb.ScanRequest)
@@ -209,7 +236,7 @@ func TestRefresh(t *testing.T) {
 	})
 	t.Run("Iterate does not hold mutex", func(t *testing.T) {
 		inIterate := make(chan chan struct{})
-		rec, createdAt := protect(t, s, p, s.Clock().Now(), metaTableSpan)
+		rec, createdAt := protect(t, p, s.Clock().Now(), metaTableSpan)
 		require.NoError(t, c.Refresh(ctx, createdAt))
 		go c.Iterate(ctx, keys.MinKey, keys.MaxKey, func(r *ptpb.Record) (wantMore bool) {
 			if r.ID.GetUUID() != rec.ID.GetUUID() {
@@ -227,7 +254,7 @@ func TestRefresh(t *testing.T) {
 		// operation, amd then refresh after it. This will demonstrate that the
 		// iteration call does not block concurrent refreshes.
 		ch := <-inIterate
-		require.NoError(t, p.Release(ctx, nil /* txn */, rec.ID.GetUUID()))
+		require.NoError(t, p.Release(ctx, rec.ID.GetUUID()))
 		require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 		// Signal the Iterate loop to exit and wait for it to close the channel.
 		close(ch)
@@ -247,12 +274,13 @@ func TestStart(t *testing.T) {
 					},
 				},
 			})
-		p := s.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
+		execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+		p := execCfg.ProtectedTimestampProvider
 		// Set the poll interval to be very long.
 		protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 		c := ptcache.New(ptcache.Config{
 			Settings: s.ClusterSettings(),
-			DB:       s.DB(),
+			DB:       execCfg.InternalDB,
 			Storage:  p,
 		})
 		return s, c
@@ -278,19 +306,17 @@ func TestQueryRecord(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	p := ptstorage.WithDatabase(
-		ptstorage.New(
-			s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
-		s.DB(),
-	)
+	db := s.InternalDB().(isql.DB)
+	storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
+		DisableProtectedTimestampForMultiTenant: true,
+	})
+	p := withDatabase(storage, db)
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		DB:       db,
+		Storage:  storage,
 	})
 	require.NoError(t, c.Start(ctx, s.Stopper()))
 
@@ -298,8 +324,8 @@ func TestQueryRecord(t *testing.T) {
 	waitForAsOfAfter(t, c, hlc.Timestamp{})
 	// Create two records.
 	sp42 := tableSpan(42)
-	r1, createdAt1 := protect(t, s, p, s.Clock().Now(), sp42)
-	r2, createdAt2 := protect(t, s, p, s.Clock().Now(), sp42)
+	r1, createdAt1 := protect(t, p, s.Clock().Now(), sp42)
+	r2, createdAt2 := protect(t, p, s.Clock().Now(), sp42)
 	// Ensure they both don't exist and that the read timestamps precede the
 	// create timestamps.
 	exists1, asOf := c.QueryRecord(ctx, r1.ID.GetUUID())
@@ -317,8 +343,8 @@ func TestQueryRecord(t *testing.T) {
 	require.True(t, exists2)
 	require.True(t, !asOf.Less(createdAt2))
 	// Release 2 and then create 3.
-	require.NoError(t, p.Release(ctx, nil /* txn */, r2.ID.GetUUID()))
-	r3, createdAt3 := protect(t, s, p, s.Clock().Now(), sp42)
+	require.NoError(t, p.Release(ctx, r2.ID.GetUUID()))
+	r3, createdAt3 := protect(t, p, s.Clock().Now(), sp42)
 	exists2, asOf = c.QueryRecord(ctx, r2.ID.GetUUID())
 	require.True(t, exists2)
 	require.True(t, asOf.Less(createdAt3))
@@ -339,30 +365,29 @@ func TestIterate(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	p := ptstorage.WithDatabase(
-		ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
-		s.DB(),
-	)
+	db := s.InternalDB().(isql.DB)
+	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
+		DisableProtectedTimestampForMultiTenant: true,
+	})
+	p := withDatabase(m, db)
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		DB:       db,
+		Storage:  m,
 	})
 	require.NoError(t, c.Start(ctx, s.Stopper()))
 
 	sp42 := tableSpan(42)
 	sp43 := tableSpan(43)
 	sp44 := tableSpan(44)
-	r1, _ := protect(t, s, p, s.Clock().Now(), sp42)
-	r2, _ := protect(t, s, p, s.Clock().Now(), sp43)
-	r3, _ := protect(t, s, p, s.Clock().Now(), sp44)
-	r4, _ := protect(t, s, p, s.Clock().Now(), sp42, sp43)
+	r1, _ := protect(t, p, s.Clock().Now(), sp42)
+	r2, _ := protect(t, p, s.Clock().Now(), sp43)
+	r3, _ := protect(t, p, s.Clock().Now(), sp44)
+	r4, _ := protect(t, p, s.Clock().Now(), sp42, sp43)
 	require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 	t.Run("all", func(t *testing.T) {
 		var recs records
@@ -429,14 +454,14 @@ func TestGetProtectionTimestamps(t *testing.T) {
 
 	for _, testCase := range []struct {
 		name string
-		test func(t *testing.T, p protectedts.Storage, c *ptcache.Cache, cleanup func(...*ptpb.Record))
+		test func(t *testing.T, p *storageWithLastCommit, c *ptcache.Cache, cleanup func(...*ptpb.Record))
 	}{
 		{
 			name: "multiple records apply to a single span",
-			test: func(t *testing.T, p protectedts.Storage, c *ptcache.Cache, cleanup func(...*ptpb.Record)) {
-				r1, _ := protect(t, s, p, ts(10), sp42)
-				r2, _ := protect(t, s, p, ts(11), sp42)
-				r3, _ := protect(t, s, p, ts(6), sp42)
+			test: func(t *testing.T, p *storageWithLastCommit, c *ptcache.Cache, cleanup func(...*ptpb.Record)) {
+				r1, _ := protect(t, p, ts(10), sp42)
+				r2, _ := protect(t, p, ts(11), sp42)
+				r3, _ := protect(t, p, ts(6), sp42)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 
 				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp42)
@@ -450,9 +475,9 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 		{
 			name: "no records apply",
-			test: func(t *testing.T, p protectedts.Storage, c *ptcache.Cache, cleanup func(...*ptpb.Record)) {
-				r1, _ := protect(t, s, p, ts(5), sp43)
-				r2, _ := protect(t, s, p, ts(10), sp44)
+			test: func(t *testing.T, p *storageWithLastCommit, c *ptcache.Cache, cleanup func(...*ptpb.Record)) {
+				r1, _ := protect(t, p, ts(5), sp43)
+				r2, _ := protect(t, p, ts(10), sp44)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp42)
 				require.NoError(t, err)
@@ -462,15 +487,15 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 		{
 			name: "multiple overlapping spans multiple records",
-			test: func(t *testing.T, p protectedts.Storage, c *ptcache.Cache, cleanup func(...*ptpb.Record)) {
-				r1, _ := protect(t, s, p, ts(10), sp42)
-				r2, _ := protect(t, s, p, ts(15), sp42)
-				r3, _ := protect(t, s, p, ts(5), sp43)
-				r4, _ := protect(t, s, p, ts(6), sp43)
-				r5, _ := protect(t, s, p, ts(25), keys.EverythingSpan)
+			test: func(t *testing.T, p *storageWithLastCommit, c *ptcache.Cache, cleanup func(...*ptpb.Record)) {
+				r1, _ := protect(t, p, ts(10), sp42)
+				r2, _ := protect(t, p, ts(15), sp42)
+				r3, _ := protect(t, p, ts(5), sp43)
+				r4, _ := protect(t, p, ts(6), sp43)
+				r5, _ := protect(t, p, ts(25), keys.EverythingSpan)
 				// Also add a record that doesn't overlap with the requested span and
 				// ensure it isn't retrieved below.
-				r6, _ := protect(t, s, p, ts(20), sp44)
+				r6, _ := protect(t, p, ts(20), sp44)
 				require.NoError(t, c.Refresh(ctx, s.Clock().Now()))
 
 				protectionTimestamps, _, err := c.GetProtectionTimestamps(ctx, sp4243)
@@ -486,23 +511,20 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			p := ptstorage.WithDatabase(
-				ptstorage.New(s.ClusterSettings(),
-					s.InternalExecutor().(sqlutil.InternalExecutor),
-					&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
-				s.DB(),
-			)
-
+			storage := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
+				DisableProtectedTimestampForMultiTenant: true,
+			})
+			p := withDatabase(storage, s.InternalDB().(isql.DB))
 			c := ptcache.New(ptcache.Config{
 				Settings: s.ClusterSettings(),
-				DB:       s.DB(),
-				Storage:  p,
+				DB:       s.InternalDB().(isql.DB),
+				Storage:  storage,
 			})
 			require.NoError(t, c.Start(ctx, s.Stopper()))
 
 			testCase.test(t, p, c, func(records ...*ptpb.Record) {
 				for _, r := range records {
-					require.NoError(t, p.Release(ctx, nil, r.ID.GetUUID()))
+					require.NoError(t, p.Release(ctx, r.ID.GetUUID()))
 				}
 			})
 		})
@@ -513,20 +535,18 @@ func TestSettingChangedLeadsToFetch(t *testing.T) {
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	p := ptstorage.WithDatabase(
-		ptstorage.New(s.ClusterSettings(),
-			s.InternalExecutor().(sqlutil.InternalExecutor),
-			&protectedts.TestingKnobs{DisableProtectedTimestampForMultiTenant: true}),
-		s.DB(),
-	)
+	db := s.InternalDB().(isql.DB)
+	m := ptstorage.New(s.ClusterSettings(), &protectedts.TestingKnobs{
+		DisableProtectedTimestampForMultiTenant: true,
+	})
 
 	// Set the poll interval to be very long.
 	protectedts.PollInterval.Override(ctx, &s.ClusterSettings().SV, 500*time.Hour)
 
 	c := ptcache.New(ptcache.Config{
 		Settings: s.ClusterSettings(),
-		DB:       s.DB(),
-		Storage:  p,
+		DB:       db,
+		Storage:  m,
 	})
 	require.NoError(t, c.Start(ctx, s.Stopper()))
 
@@ -564,11 +584,7 @@ func tableSpan(tableID uint32) roachpb.Span {
 }
 
 func protect(
-	t *testing.T,
-	s serverutils.TestServerInterface,
-	p protectedts.Storage,
-	protectTS hlc.Timestamp,
-	spans ...roachpb.Span,
+	t *testing.T, p *storageWithLastCommit, protectTS hlc.Timestamp, spans ...roachpb.Span,
 ) (r *ptpb.Record, createdAt hlc.Timestamp) {
 	r = &ptpb.Record{
 		ID:              uuid.MakeV4().GetBytes(),
@@ -577,12 +593,10 @@ func protect(
 		DeprecatedSpans: spans,
 	}
 	ctx := context.Background()
-	txn := s.DB().NewTxn(ctx, "test")
-	require.NoError(t, p.Protect(ctx, txn, r))
-	require.NoError(t, txn.Commit(ctx))
-	_, err := p.GetRecord(ctx, nil, r.ID.GetUUID())
+	require.NoError(t, p.Protect(ctx, r))
+	createdAt = p.lastCommit
+	_, err := p.GetRecord(ctx, r.ID.GetUUID())
 	require.NoError(t, err)
-	createdAt = txn.CommitTimestamp()
 	return r, createdAt
 }
 

@@ -129,7 +129,7 @@ func (n *RevokeRoleNode) startExec(params runParams) error {
 					"role/user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					username.RootUser, username.AdminRole)
 			}
-			affected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.ExecEx(
+			affected, err := params.p.InternalSQLTxn().ExecEx(
 				params.ctx,
 				opName,
 				params.p.txn,

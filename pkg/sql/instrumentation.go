@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
@@ -395,8 +396,8 @@ func (ih *instrumentationHelper) Finish(
 	var bundle diagnosticsBundle
 	var warnings []string
 	if ih.collectBundle {
-		ie := p.extendedEvalCtx.ExecCfg.InternalExecutorFactory.NewInternalExecutor(
-			p.SessionData(),
+		ie := p.extendedEvalCtx.ExecCfg.InternalDB.Executor(
+			isql.WithSessionData(p.SessionData()),
 		)
 		phaseTimes := statsCollector.PhaseTimes()
 		execLatency := phaseTimes.GetServiceLatencyNoOverhead()

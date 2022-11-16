@@ -595,7 +595,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-auth-members.html`,
 	schema: vtable.PGCatalogAuthMembers,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		return forEachRoleMembership(ctx, p.ExecCfg().InternalExecutor, p.Txn(),
+		return forEachRoleMembership(ctx, p.InternalSQLTxn(),
 			func(roleName, memberName username.SQLUsername, isAdmin bool) error {
 				return addRow(
 					h.UserOid(roleName),                 // roleid
@@ -1535,10 +1535,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-depend.html`,
 // as a datum row, containing object id, sub id (column id in the case of
 // columns), comment text, and comment type (keys.FooCommentType).
 func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
-	return p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBuffered(
+	return p.InternalSQLTxn().QueryBufferedEx(
 		ctx,
 		"select-comments",
 		p.Txn(),
+		sessiondata.NodeUserSessionDataOverride,
 		`SELECT
 	object_id,
 	sub_id,
@@ -3470,7 +3471,7 @@ var pgCatalogDbRoleSettingTable = virtualSchemaTable{
 https://www.postgresql.org/docs/13/catalog-pg-db-role-setting.html`,
 	schema: vtable.PgCatalogDbRoleSetting,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		rows, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.QueryBufferedEx(
+		rows, err := p.InternalSQLTxn().QueryBufferedEx(
 			ctx,
 			"select-db-role-settings",
 			p.Txn(),
@@ -3555,8 +3556,10 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 		//  statistics.
 		query := `SELECT "tableID", name, "columnIDs", "statisticID", '{d}'::"char"[] FROM system.table_statistics;`
 
-		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryBuffered(
-			ctx, "read-statistics-objects", p.txn, query,
+		rows, err := p.InternalSQLTxn().QueryBufferedEx(
+			ctx, "read-statistics-objects", p.txn,
+			sessiondata.NodeUserSessionDataOverride,
+			query,
 		)
 		if err != nil {
 			return err

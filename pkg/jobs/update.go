@@ -18,7 +18,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -37,7 +38,210 @@ import (
 //
 // The function is free to modify contents of JobMetadata in place (but the
 // changes will be ignored unless JobUpdater is used).
-type UpdateFn func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error
+type UpdateFn func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error
+
+type Updater struct {
+	j   *Job
+	txn isql.Txn
+}
+
+func (j *Job) NoTxn() Updater {
+	return Updater{j: j}
+}
+
+func (j *Job) WithTxn(txn isql.Txn) Updater {
+	return Updater{j: j, txn: txn}
+}
+
+func (j *Job) maybeWithTxn(txn isql.Txn) Updater {
+	if txn != nil {
+		return j.WithTxn(txn)
+	}
+	return j.NoTxn()
+}
+
+func (u Updater) update(ctx context.Context, useReadLock bool, updateFn UpdateFn) (retErr error) {
+	if u.txn == nil {
+		return u.j.registry.internalDB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
+			u.txn = txn
+			return u.update(ctx, useReadLock, updateFn)
+		})
+	}
+	ctx, sp := tracing.ChildSpan(ctx, "update-job")
+	defer sp.Finish()
+
+	var payload *jobspb.Payload
+	var progress *jobspb.Progress
+	var status Status
+	var runStats *RunStats
+	j := u.j
+	defer func() {
+		if retErr != nil {
+			retErr = errors.Wrapf(retErr, "job %d", j.id)
+			return
+		}
+		j.mu.Lock()
+		defer j.mu.Unlock()
+		if payload != nil {
+			j.mu.payload = *payload
+		}
+		if progress != nil {
+			j.mu.progress = *progress
+		}
+		if runStats != nil {
+			j.mu.runStats = runStats
+		}
+		if status != "" {
+			j.mu.status = status
+		}
+	}()
+
+	row, err := u.txn.QueryRowEx(
+		ctx, "select-job", u.txn.KV(),
+		sessiondata.RootUserSessionDataOverride,
+		getSelectStmtForJobUpdate(j.session != nil, useReadLock), j.ID(),
+	)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return errors.Errorf("not found in system.jobs table")
+	}
+
+	if status, err = unmarshalStatus(row[0]); err != nil {
+		return err
+	}
+	if payload, err = UnmarshalPayload(row[1]); err != nil {
+		return err
+	}
+	if progress, err = UnmarshalProgress(row[2]); err != nil {
+		return err
+	}
+	if j.session != nil {
+		if row[3] == tree.DNull {
+			return errors.Errorf(
+				"with status %q: expected session %q but found NULL",
+				status, j.session.ID())
+		}
+		storedSession := []byte(*row[3].(*tree.DBytes))
+		if !bytes.Equal(storedSession, j.session.ID().UnsafeBytes()) {
+			return errors.Errorf(
+				"with status %q: expected session %q but found %q",
+				status, j.session.ID(), sqlliveness.SessionID(storedSession))
+		}
+	} else {
+		log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
+	}
+
+	md := JobMetadata{
+		ID:       j.ID(),
+		Status:   status,
+		Payload:  payload,
+		Progress: progress,
+	}
+
+	offset := 0
+	if j.session != nil {
+		offset = 1
+	}
+	var lastRun *tree.DTimestamp
+	var ok bool
+	lastRun, ok = row[3+offset].(*tree.DTimestamp)
+	if !ok {
+		return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
+	}
+	var numRuns *tree.DInt
+	numRuns, ok = row[4+offset].(*tree.DInt)
+	if !ok {
+		return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
+	}
+	md.RunStats = &RunStats{
+		NumRuns: int(*numRuns),
+		LastRun: lastRun.Time,
+	}
+
+	var ju JobUpdater
+	if err := updateFn(u.txn, md, &ju); err != nil {
+		return err
+	}
+	if j.registry.knobs.BeforeUpdate != nil {
+		if err := j.registry.knobs.BeforeUpdate(md, ju.md); err != nil {
+			return err
+		}
+	}
+
+	if !ju.hasUpdates() {
+		return nil
+	}
+
+	// Build a statement of the following form, depending on which properties
+	// need updating:
+	//
+	//   UPDATE system.jobs
+	//   SET
+	//     [status = $2,]
+	//     [payload = $y,]
+	//     [progress = $z]
+	//   WHERE
+	//     id = $1
+
+	var setters []string
+	params := []interface{}{j.ID()} // $1 is always the job ID.
+	addSetter := func(column string, value interface{}) {
+		params = append(params, value)
+		setters = append(setters, fmt.Sprintf("%s = $%d", column, len(params)))
+	}
+
+	if ju.md.Status != "" {
+		addSetter("status", ju.md.Status)
+	}
+
+	if ju.md.Payload != nil {
+		payload = ju.md.Payload
+		payloadBytes, err := protoutil.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		addSetter("payload", payloadBytes)
+	}
+
+	if ju.md.Progress != nil {
+		progress = ju.md.Progress
+		progress.ModifiedMicros = timeutil.ToUnixMicros(u.now())
+		progressBytes, err := protoutil.Marshal(progress)
+		if err != nil {
+			return err
+		}
+		addSetter("progress", progressBytes)
+	}
+
+	if ju.md.RunStats != nil {
+		runStats = ju.md.RunStats
+		addSetter("last_run", ju.md.RunStats.LastRun)
+		addSetter("num_runs", ju.md.RunStats.NumRuns)
+	}
+
+	updateStmt := fmt.Sprintf(
+		"UPDATE system.jobs SET %s WHERE id = $1",
+		strings.Join(setters, ", "),
+	)
+	n, err := u.txn.ExecEx(
+		ctx, "job-update", u.txn.KV(),
+		sessiondata.InternalExecutorOverride{User: username.NodeUserName()},
+		updateStmt, params...,
+	)
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return errors.Errorf(
+			"expected exactly one row affected, but %d rows affected by job update", n,
+		)
+	}
+	return nil
+}
 
 // RunStats consists of job-run statistics: num of runs and last-run timestamp.
 type RunStats struct {
@@ -134,183 +338,13 @@ func UpdateHighwaterProgressed(highWater hlc.Timestamp, md JobMetadata, ju *JobU
 //
 // Note that there are various convenience wrappers (like FractionProgressed)
 // defined in jobs.go.
-func (j *Job) Update(ctx context.Context, txn *kv.Txn, updateFn UpdateFn) error {
+func (u Updater) Update(ctx context.Context, updateFn UpdateFn) error {
 	const useReadLock = false
-	return j.update(ctx, txn, useReadLock, updateFn)
+	return u.update(ctx, useReadLock, updateFn)
 }
 
-func (j *Job) update(ctx context.Context, txn *kv.Txn, useReadLock bool, updateFn UpdateFn) error {
-	ctx, sp := tracing.ChildSpan(ctx, "update-job")
-	defer sp.Finish()
-
-	var payload *jobspb.Payload
-	var progress *jobspb.Progress
-	var status Status
-	var runStats *RunStats
-
-	if err := j.runInTxn(ctx, txn, func(ctx context.Context, txn *kv.Txn) error {
-		payload, progress, runStats = nil, nil, nil
-		var err error
-		var row tree.Datums
-		row, err = j.registry.ex.QueryRowEx(
-			ctx, "select-job", txn,
-			sessiondata.RootUserSessionDataOverride,
-			getSelectStmtForJobUpdate(j.session != nil, useReadLock), j.ID(),
-		)
-		if err != nil {
-			return err
-		}
-		if row == nil {
-			return errors.Errorf("not found in system.jobs table")
-		}
-
-		if status, err = unmarshalStatus(row[0]); err != nil {
-			return err
-		}
-		if payload, err = UnmarshalPayload(row[1]); err != nil {
-			return err
-		}
-		if progress, err = UnmarshalProgress(row[2]); err != nil {
-			return err
-		}
-		if j.session != nil {
-			if row[3] == tree.DNull {
-				return errors.Errorf(
-					"with status %q: expected session %q but found NULL",
-					status, j.session.ID())
-			}
-			storedSession := []byte(*row[3].(*tree.DBytes))
-			if !bytes.Equal(storedSession, j.session.ID().UnsafeBytes()) {
-				return errors.Errorf(
-					"with status %q: expected session %q but found %q",
-					status, j.session.ID(), sqlliveness.SessionID(storedSession))
-			}
-		} else {
-			log.VInfof(ctx, 1, "job %d: update called with no session ID", j.ID())
-		}
-
-		md := JobMetadata{
-			ID:       j.ID(),
-			Status:   status,
-			Payload:  payload,
-			Progress: progress,
-		}
-
-		offset := 0
-		if j.session != nil {
-			offset = 1
-		}
-		var lastRun *tree.DTimestamp
-		var ok bool
-		lastRun, ok = row[3+offset].(*tree.DTimestamp)
-		if !ok {
-			return errors.AssertionFailedf("expected timestamp last_run, but got %T", lastRun)
-		}
-		var numRuns *tree.DInt
-		numRuns, ok = row[4+offset].(*tree.DInt)
-		if !ok {
-			return errors.AssertionFailedf("expected int num_runs, but got %T", numRuns)
-		}
-		md.RunStats = &RunStats{
-			NumRuns: int(*numRuns),
-			LastRun: lastRun.Time,
-		}
-
-		var ju JobUpdater
-		if err := updateFn(txn, md, &ju); err != nil {
-			return err
-		}
-		if j.registry.knobs.BeforeUpdate != nil {
-			if err := j.registry.knobs.BeforeUpdate(md, ju.md); err != nil {
-				return err
-			}
-		}
-
-		if !ju.hasUpdates() {
-			return nil
-		}
-
-		// Build a statement of the following form, depending on which properties
-		// need updating:
-		//
-		//   UPDATE system.jobs
-		//   SET
-		//     [status = $2,]
-		//     [payload = $y,]
-		//     [progress = $z]
-		//   WHERE
-		//     id = $1
-
-		var setters []string
-		params := []interface{}{j.ID()} // $1 is always the job ID.
-		addSetter := func(column string, value interface{}) {
-			params = append(params, value)
-			setters = append(setters, fmt.Sprintf("%s = $%d", column, len(params)))
-		}
-
-		if ju.md.Status != "" {
-			addSetter("status", ju.md.Status)
-		}
-
-		if ju.md.Payload != nil {
-			payload = ju.md.Payload
-			payloadBytes, err := protoutil.Marshal(payload)
-			if err != nil {
-				return err
-			}
-			addSetter("payload", payloadBytes)
-		}
-
-		if ju.md.Progress != nil {
-			progress = ju.md.Progress
-			progress.ModifiedMicros = timeutil.ToUnixMicros(txn.ReadTimestamp().GoTime())
-			progressBytes, err := protoutil.Marshal(progress)
-			if err != nil {
-				return err
-			}
-			addSetter("progress", progressBytes)
-		}
-
-		if ju.md.RunStats != nil {
-			runStats = ju.md.RunStats
-			addSetter("last_run", ju.md.RunStats.LastRun)
-			addSetter("num_runs", ju.md.RunStats.NumRuns)
-		}
-
-		updateStmt := fmt.Sprintf(
-			"UPDATE system.jobs SET %s WHERE id = $1",
-			strings.Join(setters, ", "),
-		)
-		n, err := j.registry.ex.Exec(ctx, "job-update", txn, updateStmt, params...)
-		if err != nil {
-			return err
-		}
-		if n != 1 {
-			return errors.Errorf(
-				"expected exactly one row affected, but %d rows affected by job update", n,
-			)
-		}
-		return nil
-	}); err != nil {
-		return errors.Wrapf(err, "job %d", j.id)
-	}
-	func() {
-		j.mu.Lock()
-		defer j.mu.Unlock()
-		if payload != nil {
-			j.mu.payload = *payload
-		}
-		if progress != nil {
-			j.mu.progress = *progress
-		}
-		if runStats != nil {
-			j.mu.runStats = runStats
-		}
-		if status != "" {
-			j.mu.status = status
-		}
-	}()
-	return nil
+func (u Updater) now() time.Time {
+	return u.j.registry.clock.Now().GoTime()
 }
 
 // getSelectStmtForJobUpdate constructs the select statement used in Job.update.

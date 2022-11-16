@@ -16,11 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -28,8 +27,7 @@ func makeExternalConnectionSink(
 	ctx context.Context,
 	u sinkURL,
 	user username.SQLUsername,
-	db *kv.DB,
-	ie sqlutil.InternalExecutor,
+	db isql.DB,
 	serverCfg *execinfra.ServerConfig,
 	// TODO(cdc): Replace jobspb.ChangefeedDetails with ChangefeedConfig.
 	feedCfg jobspb.ChangefeedDetails,
@@ -46,9 +44,9 @@ func makeExternalConnectionSink(
 
 	// Retrieve the external connection object from the system table.
 	var ec externalconn.ExternalConnection
-	if err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
-		ec, err = externalconn.LoadExternalConnection(ctx, externalConnectionName, ie, txn)
+		ec, err = externalconn.LoadExternalConnection(ctx, externalConnectionName, txn)
 		return err
 	}); err != nil {
 		return nil, errors.Wrap(err, "failed to load external connection object")

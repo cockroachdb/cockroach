@@ -74,5 +74,5 @@ WHERE
 		}
 		jobList[i] = jobspb.JobID(*id)
 	}
-	return d.JobRegistry.WaitForJobsIgnoringJobErrors(ctx, d.InternalExecutor, jobList)
+	return d.JobRegistry.WaitForJobsIgnoringJobErrors(ctx, jobList)
 }

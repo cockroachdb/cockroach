@@ -16,10 +16,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,9 +26,8 @@ import (
 type TestKMSEnv struct {
 	Settings         *cluster.Settings
 	ExternalIOConfig *base.ExternalIODirConfig
-	DB               *kv.DB
+	DB               isql.DB
 	Username         username.SQLUsername
-	InternalEx       sqlutil.InternalExecutor
 }
 
 var _ KMSEnv = &TestKMSEnv{}
@@ -45,18 +43,13 @@ func (e *TestKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 }
 
 // DBHandle returns the database handle associated with the KMSEnv.
-func (e *TestKMSEnv) DBHandle() *kv.DB {
+func (e *TestKMSEnv) DBHandle() isql.DB {
 	return e.DB
 }
 
 // User returns the user associated with the KMSEnv.
 func (e *TestKMSEnv) User() username.SQLUsername {
 	return e.Username
-}
-
-// InternalExecutor returns the internal executor associated with the KMSEnv.
-func (e *TestKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
-	return e.InternalEx
 }
 
 // KMSEncryptDecrypt is the method used to test if the given KMS can

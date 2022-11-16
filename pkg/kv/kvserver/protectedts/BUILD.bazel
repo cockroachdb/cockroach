@@ -12,11 +12,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/kv",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/spanconfig",
+        "//pkg/sql/isql",
         "//pkg/util/hlc",
         "//pkg/util/metric",
         "//pkg/util/stop",

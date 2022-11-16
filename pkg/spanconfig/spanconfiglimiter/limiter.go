@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,15 +39,13 @@ var tenantLimitSetting = settings.RegisterIntSetting(
 // Limiter is used to limit the number of span configs installed by secondary
 // tenants. It's a concrete implementation of the spanconfig.Limiter interface.
 type Limiter struct {
-	ie       sqlutil.InternalExecutor
+	ie       isql.Executor
 	settings *cluster.Settings
 	knobs    *spanconfig.TestingKnobs
 }
 
 // New constructs and returns a Limiter.
-func New(
-	ie sqlutil.InternalExecutor, settings *cluster.Settings, knobs *spanconfig.TestingKnobs,
-) *Limiter {
+func New(ie isql.Executor, settings *cluster.Settings, knobs *spanconfig.TestingKnobs) *Limiter {
 	if knobs == nil {
 		knobs = &spanconfig.TestingKnobs{}
 	}

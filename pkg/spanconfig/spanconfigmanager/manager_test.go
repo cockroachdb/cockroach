@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigmanager"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -69,9 +69,8 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 
 	ts := tc.Server(0)
 	manager := spanconfigmanager.New(
-		ts.DB(),
+		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
@@ -155,9 +154,8 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 
 	ts := tc.Server(0)
 	manager := spanconfigmanager.New(
-		ts.DB(),
+		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
@@ -218,9 +216,8 @@ func TestManagerCheckJobConditions(t *testing.T) {
 		return currentCount
 	}
 	manager := spanconfigmanager.New(
-		ts.DB(),
+		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
@@ -318,9 +315,8 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	var jobID jobspb.JobID
 	ts := tc.Server(0)
 	manager := spanconfigmanager.New(
-		ts.DB(),
+		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),
@@ -412,9 +408,8 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 
 	ts := tc.Server(0)
 	manager := spanconfigmanager.New(
-		ts.DB(),
+		ts.InternalDB().(isql.DB),
 		ts.JobRegistry().(*jobs.Registry),
-		ts.InternalExecutor().(*sql.InternalExecutor),
 		ts.Stopper(),
 		ts.ClusterSettings(),
 		ts.SpanConfigReconciler().(spanconfig.Reconciler),

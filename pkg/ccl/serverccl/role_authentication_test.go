@@ -44,12 +44,6 @@ func TestVerifyPassword(t *testing.T) {
 	)
 	defer s.Stopper().Stop(ctx)
 
-	mon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	mon.StartNoReserved(ctx, s.(*server.TestServer).Server.PGServer().SQLServer.GetBytesMonitor())
-	ie := sql.MakeInternalExecutor(
-		s.(*server.TestServer).Server.PGServer().SQLServer, sql.MemoryMetrics{}, mon,
-	)
-
 	ts := s.(*server.TestServer)
 
 	if util.RaceEnabled {
@@ -138,7 +132,7 @@ func TestVerifyPassword(t *testing.T) {
 			execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
 			exists, canLoginSQL, canLoginDBConsole, isSuperuser, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
-				context.Background(), &execCfg, &ie, username, "", /* databaseName */
+				context.Background(), &execCfg, username, "", /* databaseName */
 			)
 
 			if err != nil {

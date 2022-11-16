@@ -17,13 +17,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -106,8 +105,7 @@ type Registry struct {
 		rand *rand.Rand
 	}
 	st *cluster.Settings
-	ie sqlutil.InternalExecutor
-	db *kv.DB
+	db isql.DB
 }
 
 // Request describes a statement diagnostics request along with some conditional
@@ -136,9 +134,8 @@ func (r *Request) continueCollecting(st *cluster.Settings) bool {
 }
 
 // NewRegistry constructs a new Registry.
-func NewRegistry(ie sqlutil.InternalExecutor, db *kv.DB, st *cluster.Settings) *Registry {
+func NewRegistry(db isql.DB, st *cluster.Settings) *Registry {
 	r := &Registry{
-		ie: ie,
 		db: db,
 		st: st,
 	}
@@ -306,9 +303,9 @@ func (r *Registry) insertRequestInternal(
 
 	var reqID RequestID
 	var expiresAt time.Time
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Check if there's already a pending request for this fingerprint.
-		row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-pending", txn,
+		row, err := txn.QueryRowEx(ctx, "stmt-diag-check-pending", txn.KV(),
 			sessiondata.RootUserSessionDataOverride,
 			`SELECT count(1) FROM system.statement_diagnostics_requests
 				WHERE
@@ -354,8 +351,8 @@ func (r *Registry) insertRequestInternal(
 		}
 		stmt := "INSERT INTO system.statement_diagnostics_requests (" +
 			insertColumns + ") VALUES (" + valuesClause + ") RETURNING id;"
-		row, err = r.ie.QueryRowEx(
-			ctx, "stmt-diag-insert-request", txn,
+		row, err = txn.QueryRowEx(
+			ctx, "stmt-diag-insert-request", txn.KV(),
 			sessiondata.RootUserSessionDataOverride,
 			stmt, qargs...,
 		)
@@ -387,7 +384,7 @@ func (r *Registry) insertRequestInternal(
 
 // CancelRequest is part of the server.StmtDiagnosticsRequester interface.
 func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
-	row, err := r.ie.QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
+	row, err := r.db.Executor().QueryRowEx(ctx, "stmt-diag-cancel-request", nil, /* txn */
 		sessiondata.RootUserSessionDataOverride,
 		// Rather than deleting the row from the table, we choose to mark the
 		// request as "expired" by setting `expires_at` into the past. This will
@@ -523,9 +520,9 @@ func (r *Registry) InsertStatementDiagnostics(
 		ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // nolint:context
 		defer cancel()
 	}
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		if requestID != 0 {
-			row, err := r.ie.QueryRowEx(ctx, "stmt-diag-check-completed", txn,
+			row, err := txn.QueryRowEx(ctx, "stmt-diag-check-completed", txn.KV(),
 				sessiondata.RootUserSessionDataOverride,
 				"SELECT count(1) FROM system.statement_diagnostics_requests WHERE id = $1 AND completed = false",
 				requestID)
@@ -560,8 +557,8 @@ func (r *Registry) InsertStatementDiagnostics(
 			bundle = bundle[len(chunk):]
 
 			// Insert the chunk into system.statement_bundle_chunks.
-			row, err := r.ie.QueryRowEx(
-				ctx, "stmt-bundle-chunks-insert", txn,
+			row, err := txn.QueryRowEx(
+				ctx, "stmt-bundle-chunks-insert", txn.KV(),
 				sessiondata.RootUserSessionDataOverride,
 				"INSERT INTO system.statement_bundle_chunks(description, data) VALUES ($1, $2) RETURNING id",
 				"statement diagnostics bundle",
@@ -582,8 +579,8 @@ func (r *Registry) InsertStatementDiagnostics(
 		collectionTime := timeutil.Now()
 
 		// Insert the collection metadata into system.statement_diagnostics.
-		row, err := r.ie.QueryRowEx(
-			ctx, "stmt-diag-insert", txn,
+		row, err := txn.QueryRowEx(
+			ctx, "stmt-diag-insert", txn.KV(),
 			sessiondata.RootUserSessionDataOverride,
 			"INSERT INTO system.statement_diagnostics "+
 				"(statement_fingerprint, statement, collected_at, bundle_chunks, error) "+
@@ -616,7 +613,7 @@ func (r *Registry) InsertStatementDiagnostics(
 					shouldMarkCompleted = false
 				}
 			}
-			_, err := r.ie.ExecEx(ctx, "stmt-diag-mark-completed", txn,
+			_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
 				sessiondata.RootUserSessionDataOverride,
 				"UPDATE system.statement_diagnostics_requests "+
 					"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
@@ -628,7 +625,7 @@ func (r *Registry) InsertStatementDiagnostics(
 			// Insert a completed request into system.statement_diagnostics_request.
 			// This is necessary because the UI uses this table to discover completed
 			// diagnostics.
-			_, err := r.ie.ExecEx(ctx, "stmt-diag-add-completed", txn,
+			_, err := txn.ExecEx(ctx, "stmt-diag-add-completed", txn.KV(),
 				sessiondata.RootUserSessionDataOverride,
 				"INSERT INTO system.statement_diagnostics_requests"+
 					" (completed, statement_fingerprint, statement_diagnostics_id, requested_at)"+
@@ -662,7 +659,7 @@ func (r *Registry) pollRequests(ctx context.Context) error {
 		if isSamplingProbabilitySupported {
 			extraColumns = ", sampling_probability"
 		}
-		it, err := r.ie.QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.RootUserSessionDataOverride,
 			fmt.Sprintf(`SELECT id, statement_fingerprint, min_execution_latency, expires_at%s
 				FROM system.statement_diagnostics_requests

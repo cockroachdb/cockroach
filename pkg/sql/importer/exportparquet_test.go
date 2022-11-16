@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/importer"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -77,7 +78,7 @@ type parquetTest struct {
 // validateParquetFile reads the parquet file and validates various aspects of
 // the parquet file.
 func validateParquetFile(
-	t *testing.T, ctx context.Context, ie *sql.InternalExecutor, test parquetTest,
+	t *testing.T, ctx context.Context, ie isql.Executor, test parquetTest,
 ) error {
 	paths, err := filepath.Glob(filepath.Join(test.dir, test.filePrefix, parquetExportFilePattern+test.fileSuffix))
 	require.NoError(t, err)
@@ -211,7 +212,7 @@ func TestRandomParquetExports(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	var tableName string
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	idb := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB
 	// Try at most 10 times to populate a random table with at least 10 rows.
 	{
 		var (
@@ -242,7 +243,7 @@ func TestRandomParquetExports(t *testing.T) {
 				// Ensure the table only contains columns supported by EXPORT Parquet. If an
 				// unsupported column cannot be dropped, try populating another table
 				if err := func() error {
-					_, cols, err := ie.QueryRowExWithCols(
+					_, cols, err := idb.Executor().QueryRowExWithCols(
 						ctx,
 						"",
 						nil,
@@ -281,7 +282,7 @@ func TestRandomParquetExports(t *testing.T) {
 			tableName, tableName),
 	}
 	sqlDB.Exec(t, test.stmt)
-	err := validateParquetFile(t, ctx, ie, test)
+	err := validateParquetFile(t, ctx, idb.Executor(), test)
 	require.NoError(t, err, "failed to validate parquet file")
 }
 
@@ -308,7 +309,7 @@ func TestBasicParquetTypes(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
 
 	// instantiating an internal executor to easily get datums from the table
-	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalExecutor
+	ie := srv.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor()
 
 	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x STRING, y INT, z FLOAT NOT NULL, a BOOL, 
 INDEX (y))`)

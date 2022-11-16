@@ -15,9 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,11 +52,9 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 
 // GetAllNonDropTenantIDs returns all tenants in the system table, excluding
 // those in the DROP state.
-func GetAllNonDropTenantIDs(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn,
-) ([]roachpb.TenantID, error) {
-	rows, err := execCfg.InternalExecutor.QueryBuffered(
-		ctx, "get-tenant-ids", txn, `
+func GetAllNonDropTenantIDs(ctx context.Context, txn isql.Txn) ([]roachpb.TenantID, error) {
+	rows, err := txn.QueryBuffered(
+		ctx, "get-tenant-ids", txn.KV(), `
 		 SELECT id
 		 FROM system.tenants
 		 WHERE crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)->>'state' != 'DROP'
@@ -82,14 +81,14 @@ func GetAllNonDropTenantIDs(
 // GetTenantRecordByName retrieves a tenant with the provided name from
 // system.tenants.
 func GetTenantRecordByName(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenantName roachpb.TenantName,
+	ctx context.Context, settings *cluster.Settings, txn isql.Txn, tenantName roachpb.TenantName,
 ) (*descpb.TenantInfo, error) {
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
+	if !settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
 		return nil, errors.Newf("tenant names not supported until upgrade to %s or higher is completed",
 			clusterversion.V23_1TenantNames.String())
 	}
-	row, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "get-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+	row, err := txn.QueryRowEx(
+		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`SELECT info FROM system.tenants WHERE name = $1`, tenantName,
 	)
 	if err != nil {
@@ -108,10 +107,10 @@ func GetTenantRecordByName(
 
 // GetTenantRecordByID retrieves a tenant in system.tenants.
 func GetTenantRecordByID(
-	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, tenID roachpb.TenantID,
+	ctx context.Context, txn isql.Txn, tenID roachpb.TenantID,
 ) (*descpb.TenantInfo, error) {
-	row, err := execCfg.InternalExecutor.QueryRowEx(
-		ctx, "get-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+	row, err := txn.QueryRowEx(
+		ctx, "get-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 		`SELECT info FROM system.tenants WHERE id = $1`, tenID.ToUint64(),
 	)
 	if err != nil {
@@ -141,7 +140,7 @@ func (p *planner) LookupTenantID(
 		return tid, err
 	}
 
-	rec, err := GetTenantRecordByName(ctx, p.execCfg, p.Txn(), tenantName)
+	rec, err := GetTenantRecordByName(ctx, p.execCfg.Settings, p.InternalSQLTxn(), tenantName)
 	if err != nil {
 		return tid, err
 	}

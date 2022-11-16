@@ -18,8 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,9 +66,9 @@ func makeExternalConnectionStorage(
 
 	// Retrieve the external connection object from the system table.
 	var ec ExternalConnection
-	if err := args.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := args.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
-		ec, err = LoadExternalConnection(ctx, cfg.Name, args.InternalExecutor, txn)
+		ec, err = LoadExternalConnection(ctx, cfg.Name, txn)
 		return err
 	}); err != nil {
 		return nil, errors.Wrap(err, "failed to load external connection object")
@@ -92,7 +92,6 @@ func makeExternalConnectionStorage(
 		uri.Path = path.Join(uri.Path, cfg.Path)
 		return cloud.ExternalStorageFromURI(ctx, uri.String(), args.IOConf, args.Settings,
 			args.BlobClientFactory, username.MakeSQLUsernameFromPreNormalizedString(cfg.User),
-			args.InternalExecutor, args.InternalExecutorFactory,
 			args.DB, args.Limiters, args.MetricsRecorder.Metrics(), args.Options...)
 	default:
 		return nil, errors.Newf("cannot connect to %T; unsupported resource for an ExternalStorage connection", d)

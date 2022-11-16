@@ -175,9 +175,7 @@ func TestCloudStorageSink(t *testing.T) {
 		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
 			clientFactory,
 			user,
-			nil, /* ie */
-			nil, /* ief */
-			nil, /* kvDB */
+			nil, /* db */
 			nil, /* limiters */
 			cloud.NilMetrics,
 			opts...)

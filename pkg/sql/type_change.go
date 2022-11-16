@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -196,10 +196,10 @@ func (t *typeSchemaChanger) getTypeDescFromStore(
 	ctx context.Context,
 ) (catalog.TypeDescriptor, error) {
 	var typeDesc catalog.TypeDescriptor
-	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+	if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		// Avoid GetImmutableTypeByID, downstream logic relies on
 		// catalog.ErrDescriptorNotFound.
-		desc, err := col.ByID(txn).Get().Desc(ctx, t.typeID)
+		desc, err := col.ByID(txn.KV()).Get().Desc(ctx, t.typeID)
 		if err != nil {
 			return err
 		}
@@ -299,10 +299,10 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// (it just cleans up non-public states).
 		var multiRegionPreDropIsNecessary bool
 		withDatabaseRegionChangeFinalizer := func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			ctx context.Context, txn descs.Txn,
 			f func(finalizer *databaseRegionChangeFinalizer) error,
 		) error {
-			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
+			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -310,7 +310,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				ctx,
 				txn,
 				t.execCfg,
-				descsCol,
 				typeDesc.GetParentID(),
 				typeDesc.GetID(),
 			)
@@ -321,20 +320,20 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			return f(regionChangeFinalizer)
 		}
 		prepareRepartitionedRegionalByRowTables := func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			ctx context.Context, txn descs.Txn,
 		) (repartitioned []*tabledesc.Mutable, err error) {
-			err = withDatabaseRegionChangeFinalizer(ctx, txn, descsCol, func(
+			err = withDatabaseRegionChangeFinalizer(ctx, txn, func(
 				finalizer *databaseRegionChangeFinalizer,
 			) (err error) {
-				repartitioned, _, err = finalizer.repartitionRegionalByRowTables(ctx, txn)
+				repartitioned, _, err = finalizer.repartitionRegionalByRowTables(ctx, txn.KV())
 				return err
 			})
 			return repartitioned, err
 		}
 		repartitionRegionalByRowTables := func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+			ctx context.Context, txn descs.Txn,
 		) error {
-			return withDatabaseRegionChangeFinalizer(ctx, txn, descsCol, func(
+			return withDatabaseRegionChangeFinalizer(ctx, txn, func(
 				finalizer *databaseRegionChangeFinalizer,
 			) error {
 				return finalizer.preDrop(ctx, txn)
@@ -344,8 +343,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// First, we check if any of the enum values that are being removed are in
 		// use and fail. This is done in a separate txn to the one that mutates the
 		// descriptor, as this validation can take arbitrarily long.
-		validateDrops := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
+		validateDrops := func(ctx context.Context, txn descs.Txn) error {
+			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -372,7 +371,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// a lot of data to refresh. We instead defer the repartitioning until
 			// after this checking confirms the safety of the change.
 			if multiRegionPreDropIsNecessary {
-				repartitioned, err := prepareRepartitionedRegionalByRowTables(ctx, txn, descsCol)
+				repartitioned, err := prepareRepartitionedRegionalByRowTables(ctx, txn)
 				if err != nil {
 					return err
 				}
@@ -380,20 +379,20 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				for i, d := range repartitioned {
 					synthetic[i] = d
 				}
-				descsCol.SetSyntheticDescriptors(synthetic)
+				txn.Descriptors().SetSyntheticDescriptors(synthetic)
 			}
 			for _, member := range toDrop {
-				if err := t.canRemoveEnumValue(ctx, typeDesc, txn, &member, descsCol); err != nil {
+				if err := t.canRemoveEnumValue(ctx, typeDesc, txn, &member, txn.Descriptors()); err != nil {
 					return err
 				}
 			}
 			return nil
 		}
-		if err := DescsTxn(ctx, t.execCfg, validateDrops); err != nil {
+		if err := t.execCfg.InternalDB.DescsTxn(ctx, validateDrops); err != nil {
 			return err
 		}
 		if multiRegionPreDropIsNecessary {
-			if err := DescsTxn(ctx, t.execCfg, repartitionRegionalByRowTables); err != nil {
+			if err := t.execCfg.InternalDB.DescsTxn(ctx, repartitionRegionalByRowTables); err != nil {
 				return err
 			}
 		}
@@ -401,8 +400,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 		// Now that we've ascertained that the enum values can be removed, and
 		// have performed any necessary pre-drop work, we can actually go about
 		// modifying the type descriptor.
-		run := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
+		run := func(ctx context.Context, txn descs.Txn) error {
+			typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
 			if err != nil {
 				return err
 			}
@@ -429,7 +428,6 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				ctx,
 				txn,
 				t.execCfg,
-				descsCol,
 				typeDesc.GetParentID(),
 				typeDesc.GetID(),
 			)
@@ -438,8 +436,8 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			}
 			defer regionChangeFinalizer.cleanup()
 
-			b := txn.NewBatch()
-			if err := descsCol.WriteDescToBatch(
+			b := txn.KV().NewBatch()
+			if err := txn.Descriptors().WriteDescToBatch(
 				ctx, kvTrace, typeDesc, b,
 			); err != nil {
 				return err
@@ -448,17 +446,17 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 			// The version of the array type needs to get bumped as well so that
 			// changes to the underlying type are picked up. Simply reading the
 			// mutable descriptor and writing it back should do the trick.
-			arrayTypeDesc, err := descsCol.MutableByID(txn).Type(ctx, typeDesc.ArrayTypeID)
+			arrayTypeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, typeDesc.ArrayTypeID)
 			if err != nil {
 				return err
 			}
-			if err := descsCol.WriteDescToBatch(
+			if err := txn.Descriptors().WriteDescToBatch(
 				ctx, kvTrace, arrayTypeDesc, b,
 			); err != nil {
 				return err
 			}
 
-			if err := txn.Run(ctx, b); err != nil {
+			if err := txn.KV().Run(ctx, b); err != nil {
 				return err
 			}
 
@@ -479,7 +477,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 			return nil
 		}
-		if err := DescsTxn(ctx, t.execCfg, run); err != nil {
+		if err := t.execCfg.InternalDB.DescsTxn(ctx, run); err != nil {
 			return err
 		}
 
@@ -492,12 +490,12 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	// If the type is being dropped, remove the descriptor here only
 	// if the declarative schema changer is not in use.
 	if typeDesc.Dropped() && typeDesc.GetDeclarativeSchemaChangerState() == nil {
-		if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			b := txn.NewBatch()
+		if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			b := txn.KV().NewBatch()
 			if err := col.DeleteDescToBatch(ctx, kvTrace, typeDesc.GetID(), b); err != nil {
 				return err
 			}
-			return txn.Run(ctx, b)
+			return txn.KV().Run(ctx, b)
 		}); err != nil {
 			return err
 		}
@@ -545,8 +543,8 @@ func applyFilterOnEnumMembers(
 func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 	var regionChangeFinalizer *databaseRegionChangeFinalizer
 	// Cleanup:
-	cleanup := func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		typeDesc, err := descsCol.MutableByID(txn).Type(ctx, t.typeID)
+	cleanup := func(ctx context.Context, txn descs.Txn) error {
+		typeDesc, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, t.typeID)
 		if err != nil {
 			return err
 		}
@@ -560,7 +558,6 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 				ctx,
 				txn,
 				t.execCfg,
-				descsCol,
 				typeDesc.GetParentID(),
 				typeDesc.GetID(),
 			)
@@ -585,7 +582,7 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 			return t.isTransitioningInCurrentJob(member) && enumMemberIsAdding(member)
 		})
 
-		if err := descsCol.WriteDesc(ctx, true /* kvTrace */, typeDesc, txn); err != nil {
+		if err := txn.Descriptors().WriteDesc(ctx, true /* kvTrace */, typeDesc, txn.KV()); err != nil {
 			return err
 		}
 
@@ -597,7 +594,7 @@ func (t *typeSchemaChanger) cleanupEnumValues(ctx context.Context) error {
 
 		return nil
 	}
-	return DescsTxn(ctx, t.execCfg, cleanup)
+	return t.execCfg.InternalDB.DescsTxn(ctx, cleanup)
 }
 
 // convertToSQLStringRepresentation takes an array of bytes (the physical
@@ -752,12 +749,12 @@ func findUsagesOfEnumValueInViewQuery(
 func (t *typeSchemaChanger) canRemoveEnumValue(
 	ctx context.Context,
 	typeDesc *typedesc.Mutable,
-	txn *kv.Txn,
+	txn isql.Txn,
 	member *descpb.TypeDescriptor_EnumMember,
 	descsCol *descs.Collection,
 ) error {
 	for _, ID := range typeDesc.ReferencingDescriptorIDs {
-		desc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Table(ctx, ID)
+		desc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, ID)
 		if err != nil {
 			return errors.Wrapf(err,
 				"could not validate enum value removal for %q", member.LogicalRepresentation)
@@ -912,7 +909,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 			// be unset by default) when executing the query constructed above. This is
 			// because the enum value may be used in a view expression, which is
 			// name resolved in the context of the type's database.
-			dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
+			dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, typeDesc.ParentID)
 			const validationErr = "could not validate removal of enum value %q"
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
@@ -921,7 +918,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 				User:     username.RootUserName(),
 				Database: dbDesc.GetName(),
 			}
-			rows, err := t.execCfg.InternalExecutor.QueryRowEx(ctx, "count-value-usage", txn, override, query.String())
+			rows, err := txn.QueryRowEx(ctx, "count-value-usage", txn.KV(), override, query.String())
 			if err != nil {
 				return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 			}
@@ -950,7 +947,7 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	}
 
 	// Do validation for the array type now.
-	arrayTypeDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Type(ctx, typeDesc.ArrayTypeID)
+	arrayTypeDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, typeDesc.ArrayTypeID)
 	if err != nil {
 		return err
 	}
@@ -1078,13 +1075,13 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 	ctx context.Context,
 	arrayTypeDesc catalog.TypeDescriptor,
 	member *descpb.TypeDescriptor_EnumMember,
-	txn *kv.Txn,
+	txn isql.Txn,
 	descsCol *descs.Collection,
 ) error {
 	const validationErr = "could not validate removal of enum value %q"
 	for i := 0; i < arrayTypeDesc.NumReferencingDescriptors(); i++ {
 		id := arrayTypeDesc.GetReferencingDescriptorID(i)
-		desc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, id)
+		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -1133,7 +1130,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		query.WriteString(fmt.Sprintf(") WHERE unnest = %s", sqlPhysRep))
 
-		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, arrayTypeDesc.GetParentID())
+		dbDesc, err := descsCol.ByID(txn.KV()).WithoutNonPublic().Get().Database(ctx, arrayTypeDesc.GetParentID())
 		if err != nil {
 			return errors.Wrapf(err, validationErr, member.LogicalRepresentation)
 		}
@@ -1141,10 +1138,10 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 			User:     username.RootUserName(),
 			Database: dbDesc.GetName(),
 		}
-		rows, err := t.execCfg.InternalExecutor.QueryRowEx(
+		rows, err := txn.QueryRowEx(
 			ctx,
 			"count-array-type-value-usage",
-			txn,
+			txn.KV(),
 			override,
 			query.String(),
 		)
@@ -1153,7 +1150,7 @@ func (t *typeSchemaChanger) canRemoveEnumValueFromArrayUsages(
 		}
 		if len(rows) > 0 {
 			// Use an FQN in the error message.
-			parentSchema, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID())
+			parentSchema, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, desc.GetParentSchemaID())
 			if err != nil {
 				return err
 			}

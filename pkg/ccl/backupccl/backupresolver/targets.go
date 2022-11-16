@@ -14,13 +14,13 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -661,12 +661,12 @@ func DescriptorsMatchingTargets(
 func LoadAllDescs(
 	ctx context.Context, execCfg *sql.ExecutorConfig, asOf hlc.Timestamp,
 ) (allDescs []catalog.Descriptor, _ error) {
-	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		err := txn.SetFixedTimestamp(ctx, asOf)
+	if err := sql.DescsTxn(ctx, execCfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err := txn.KV().SetFixedTimestamp(ctx, asOf)
 		if err != nil {
 			return err
 		}
-		all, err := col.GetAllDescriptors(ctx, txn)
+		all, err := col.GetAllDescriptors(ctx, txn.KV())
 		allDescs = all.OrderedDescriptors()
 		return err
 	}); err != nil {

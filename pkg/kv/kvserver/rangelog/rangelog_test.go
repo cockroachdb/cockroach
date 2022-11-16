@@ -78,7 +78,7 @@ func TestRangeLog(t *testing.T) {
 	// Write the data.
 	ec := s.ExecutorConfig().(sql.ExecutorConfig)
 	codec := ec.Codec
-	ie := ec.InternalExecutor
+	ie := ec.InternalDB.Executor()
 	mkWriter := func(genID func() int64) kvserver.RangeLogWriter {
 		genA, genB := makeTeeIDGen(genID)
 		return &teeWriter{

@@ -14,13 +14,13 @@ import (
 	"context"
 	"math/rand"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/redact"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -48,12 +48,12 @@ func CollectClusterSchemaForTelemetry(
 ) ([]logpb.EventPayload, error) {
 	// Scrape the raw catalog.
 	var raw nstree.Catalog
-	if err := sql.DescsTxn(ctx, cfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		err := txn.SetFixedTimestamp(ctx, asOf)
+	if err := sql.DescsTxn(ctx, cfg, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		err := txn.KV().SetFixedTimestamp(ctx, asOf)
 		if err != nil {
 			return err
 		}
-		raw, err = col.GetAllFromStorageUnvalidated(ctx, txn)
+		raw, err = col.GetAllFromStorageUnvalidated(ctx, txn.KV())
 		return err
 	}); err != nil {
 		return nil, err

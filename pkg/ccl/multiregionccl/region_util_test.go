@@ -14,12 +14,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,12 +42,12 @@ func TestGetLocalityRegionEnumPhysicalRepresentation(t *testing.T) {
 	tDB.Exec(t, `CREATE DATABASE foo PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3"`)
 
 	s0 := tc.ServerTyped(0)
-	ief := s0.InternalExecutorFactory().(descs.TxnManager)
+	idb := s0.InternalDB().(descs.DB)
 	dbID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "foo"))
 
 	t.Run("with locality that exists", func(t *testing.T) {
 		regionEnum, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
-			ctx, ief, s0.DB(), dbID, roachpb.Locality{
+			ctx, idb, dbID, roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: "us-east2"}},
 			},
 		)
@@ -60,7 +60,7 @@ func TestGetLocalityRegionEnumPhysicalRepresentation(t *testing.T) {
 
 	t.Run("with non-existent locality", func(t *testing.T) {
 		regionEnum, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
-			ctx, ief, s0.DB(), dbID, roachpb.Locality{
+			ctx, idb, dbID, roachpb.Locality{
 				Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}},
 			},
 		)
@@ -74,7 +74,7 @@ func TestGetLocalityRegionEnumPhysicalRepresentation(t *testing.T) {
 
 	t.Run("without locality", func(t *testing.T) {
 		regionEnum, err := sql.GetLocalityRegionEnumPhysicalRepresentation(
-			ctx, ief, s0.DB(), dbID, roachpb.Locality{})
+			ctx, idb, dbID, roachpb.Locality{})
 		require.NoError(t, err)
 
 		// Fallback to primary region is locality information is missing.
@@ -97,8 +97,10 @@ func TestGetRegionEnumRepresentations(t *testing.T) {
 	tDB.Exec(t, `CREATE DATABASE foo PRIMARY REGION "us-east1" REGIONS "us-east1", "us-east2", "us-east3"`)
 
 	dbID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "foo"))
-	err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		enumReps, primaryRegion, err := sql.GetRegionEnumRepresentations(ctx, txn, dbID, col)
+	err := sql.TestingDescsTxn(ctx, tc.Server(0), func(
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
+	) error {
+		enumReps, primaryRegion, err := sql.GetRegionEnumRepresentations(ctx, txn.KV(), dbID, col)
 		require.NoError(t, err)
 
 		require.Equal(t, catpb.RegionName("us-east1"), primaryRegion)
@@ -122,12 +124,12 @@ func getEnumMembers(
 ) map[string][]byte {
 	t.Helper()
 	enumMembers := make(map[string][]byte)
-	err := sql.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
-		dbDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Database(ctx, dbID)
+	err := sql.TestingDescsTxn(ctx, ts, func(ctx context.Context, txn isql.Txn, descsCol *descs.Collection) error {
+		dbDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dbID)
 		require.NoError(t, err)
 		regionEnumID, err := dbDesc.MultiRegionEnumID()
 		require.NoError(t, err)
-		regionEnumDesc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Type(ctx, regionEnumID)
+		regionEnumDesc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Type(ctx, regionEnumID)
 		require.NoError(t, err)
 		for ord := 0; ord < regionEnumDesc.NumEnumMembers(); ord++ {
 			enumMembers[regionEnumDesc.GetMemberLogicalRepresentation(ord)] = regionEnumDesc.GetMemberPhysicalRepresentation(ord)

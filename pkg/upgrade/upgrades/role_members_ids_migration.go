@@ -100,7 +100,7 @@ ALTER COLUMN member_id SET NOT NULL
 func backfillSystemRoleMembersIDColumns(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	ie := d.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()
+	ie := d.DB.Executor()
 	for _, backfillStmt := range []string{backfillRoleIDColumnRoleMemberStmt, backfillMemberIDColumnRoleMembersStmt} {
 		for {
 			rowsAffected, err := ie.ExecEx(ctx, "backfill-id-columns-system-role-members", nil, /* txn */

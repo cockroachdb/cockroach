@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -54,31 +53,24 @@ func (r *Registry) NotifyToResume(ctx context.Context, jobs ...jobspb.JobID) {
 
 // WaitForJobs waits for a given list of jobs to reach some sort
 // of terminal state.
-func (r *Registry) WaitForJobs(
-	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
-) error {
+func (r *Registry) WaitForJobs(ctx context.Context, jobs []jobspb.JobID) error {
 	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
 	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
-	return r.waitForJobs(ctx, ex, jobs, jobFinishedLocally)
+	return r.waitForJobs(ctx, jobs, jobFinishedLocally)
 }
 
 // WaitForJobsIgnoringJobErrors is like WaitForJobs but it only
 // returns an error in the case that polling the jobs table fails.
-func (r *Registry) WaitForJobsIgnoringJobErrors(
-	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
-) error {
+func (r *Registry) WaitForJobsIgnoringJobErrors(ctx context.Context, jobs []jobspb.JobID) error {
 	log.Infof(ctx, "waiting for %d %v queued jobs to complete", len(jobs), jobs)
 	jobFinishedLocally, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
-	return r.waitForJobsToBeTerminalOrPaused(ctx, ex, jobs, jobFinishedLocally)
+	return r.waitForJobsToBeTerminalOrPaused(ctx, jobs, jobFinishedLocally)
 }
 
 func (r *Registry) waitForJobsToBeTerminalOrPaused(
-	ctx context.Context,
-	ex sqlutil.InternalExecutor,
-	jobs []jobspb.JobID,
-	jobFinishedLocally <-chan struct{},
+	ctx context.Context, jobs []jobspb.JobID, jobFinishedLocally <-chan struct{},
 ) error {
 	if len(jobs) == 0 {
 		return nil
@@ -115,7 +107,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 		if fn := r.knobs.BeforeWaitForJobsQuery; fn != nil {
 			fn()
 		}
-		row, err := ex.QueryRowEx(
+		row, err := r.db.Executor().QueryRowEx(
 			ctx,
 			"poll-show-jobs",
 			nil, /* txn */
@@ -140,10 +132,7 @@ func (r *Registry) waitForJobsToBeTerminalOrPaused(
 }
 
 func (r *Registry) waitForJobs(
-	ctx context.Context,
-	ex sqlutil.InternalExecutor,
-	jobs []jobspb.JobID,
-	jobFinishedLocally <-chan struct{},
+	ctx context.Context, jobs []jobspb.JobID, jobFinishedLocally <-chan struct{},
 ) error {
 	if len(jobs) == 0 {
 		return nil
@@ -154,7 +143,7 @@ func (r *Registry) waitForJobs(
 			len(jobs), jobs, timeutil.Since(start))
 	}()
 
-	if err := r.waitForJobsToBeTerminalOrPaused(ctx, ex, jobs, jobFinishedLocally); err != nil {
+	if err := r.waitForJobsToBeTerminalOrPaused(ctx, jobs, jobFinishedLocally); err != nil {
 		return err
 	}
 
@@ -203,16 +192,14 @@ func makeWaitForJobsQuery(jobs []jobspb.JobID) string {
 
 // Run starts previously unstarted jobs from a list of scheduled
 // jobs. Canceling ctx interrupts the waiting but doesn't cancel the jobs.
-func (r *Registry) Run(
-	ctx context.Context, ex sqlutil.InternalExecutor, jobs []jobspb.JobID,
-) error {
+func (r *Registry) Run(ctx context.Context, jobs []jobspb.JobID) error {
 	if len(jobs) == 0 {
 		return nil
 	}
 	done, cleanup := r.installWaitingSet(jobs...)
 	defer cleanup()
 	r.NotifyToResume(ctx, jobs...)
-	return r.waitForJobs(ctx, ex, jobs, done)
+	return r.waitForJobs(ctx, jobs, done)
 }
 
 // jobWaitingSets stores the set of waitingSets currently waiting on a job ID.

@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/dumpstore"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -50,7 +50,7 @@ func TestTraceDumperZipCreation(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	filename := "foo"
-	td.Dump(ctx, filename, 123, s.InternalExecutor().(sqlutil.InternalExecutor))
+	td.Dump(ctx, filename, 123, s.InternalExecutor().(isql.Executor))
 	expectedFilename := fmt.Sprintf("%s.%s.%s.zip", jobTraceDumpPrefix, baseTime.Format(timeFormat),
 		filename)
 	fullpath := td.store.GetFullPath(expectedFilename)

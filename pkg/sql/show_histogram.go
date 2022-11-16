@@ -43,7 +43,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		columns: showHistogramColumns,
 
 		constructor: func(ctx context.Context, p *planner) (planNode, error) {
-			row, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRowEx(
+			row, err := p.InternalSQLTxn().QueryRowEx(
 				ctx,
 				"read-histogram",
 				p.txn,

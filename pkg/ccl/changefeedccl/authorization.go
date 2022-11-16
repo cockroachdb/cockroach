@@ -114,7 +114,7 @@ func authorizeUserToCreateChangefeed(
 			return errors.Newf("failed to parse url %s", sinkURI)
 		}
 		if uri.Scheme == changefeedbase.SinkSchemeExternalConnection {
-			ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.ExecCfg().InternalExecutor, p.Txn())
+			ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, p.InternalSQLTxn())
 			if err != nil {
 				return errors.Wrap(err, "failed to load external connection object")
 			}

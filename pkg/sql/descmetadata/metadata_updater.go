@@ -15,22 +15,20 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // metadataUpdater which implements scexec.MetaDataUpdater that is used to update
 // comments on different schema objects.
 type metadataUpdater struct {
 	ctx          context.Context
-	txn          *kv.Txn
-	ieFactory    sqlutil.InternalExecutorFactory
+	txn          isql.Txn
 	sessionData  *sessiondata.SessionData
 	descriptors  *descs.Collection
 	cacheEnabled bool
@@ -41,16 +39,14 @@ type metadataUpdater struct {
 // schema objects.
 func NewMetadataUpdater(
 	ctx context.Context,
-	ieFactory sqlutil.InternalExecutorFactory,
+	txn isql.Txn,
 	descriptors *descs.Collection,
 	settings *settings.Values,
-	txn *kv.Txn,
 	sessionData *sessiondata.SessionData,
 ) scexec.DescriptorMetadataUpdater {
 	return metadataUpdater{
 		ctx:          ctx,
 		txn:          txn,
-		ieFactory:    ieFactory,
 		sessionData:  sessionData,
 		descriptors:  descriptors,
 		cacheEnabled: sessioninit.CacheEnabled.Get(settings),
@@ -59,10 +55,9 @@ func NewMetadataUpdater(
 
 // DeleteDatabaseRoleSettings implement scexec.DescriptorMetaDataUpdater.
 func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID descpb.ID) error {
-	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
-	rowsDeleted, err := ie.ExecEx(ctx,
+	rowsDeleted, err := mu.txn.ExecEx(ctx,
 		"delete-db-role-setting",
-		mu.txn,
+		mu.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		fmt.Sprintf(
 			`DELETE FROM %s WHERE database_id = $1`,
@@ -79,21 +74,20 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
-	desc, err := mu.descriptors.MutableByID(mu.txn).Table(ctx, keys.DatabaseRoleSettingsTableID)
+	desc, err := mu.descriptors.MutableByID(mu.txn.KV()).Table(ctx, keys.DatabaseRoleSettingsTableID)
 	if err != nil {
 		return err
 	}
 	desc.MaybeIncrementVersion()
-	return mu.descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, mu.txn)
+	return mu.descriptors.WriteDesc(ctx, false /*kvTrace*/, desc, mu.txn.KV())
 }
 
 // DeleteSchedule implement scexec.DescriptorMetadataUpdater.
 func (mu metadataUpdater) DeleteSchedule(ctx context.Context, scheduleID int64) error {
-	ie := mu.ieFactory.NewInternalExecutor(mu.sessionData)
-	_, err := ie.ExecEx(
+	_, err := mu.txn.ExecEx(
 		ctx,
 		"delete-schedule",
-		mu.txn,
+		mu.txn.KV(),
 		sessiondata.RootUserSessionDataOverride,
 		"DELETE FROM system.scheduled_jobs WHERE schedule_id = $1",
 		scheduleID,

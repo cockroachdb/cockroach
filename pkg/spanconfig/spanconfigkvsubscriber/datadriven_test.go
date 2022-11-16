@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvaccessor"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigkvsubscriber"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -126,7 +126,7 @@ func TestDataDriven(t *testing.T) {
 
 		kvAccessor := spanconfigkvaccessor.New(
 			tc.Server(0).DB(),
-			tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
+			tc.Server(0).InternalExecutor().(isql.Executor),
 			tc.Server(0).ClusterSettings(),
 			tc.Server(0).Clock(),
 			fmt.Sprintf("defaultdb.public.%s", dummyTableName),

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -61,16 +60,12 @@ func (p *planner) CreateJoinToken(ctx context.Context) (string, error) {
 		return "", errors.Wrap(err, "error when marshaling join token")
 	}
 	expiration := timeutil.Now().Add(security.JoinTokenExpiration)
-	err = p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		_, err = p.ExecCfg().InternalExecutor.Exec(
-			ctx, "insert-join-token", txn,
-			"insert into system.join_tokens(id, secret, expiration) "+
-				"values($1, $2, $3)",
-			jt.TokenID.String(), jt.SharedSecret, expiration.Format(time.RFC3339),
-		)
-		return err
-	})
-	if err != nil {
+	if _, err := p.ExecCfg().InternalDB.Executor().Exec(
+		ctx, "insert-join-token", nil, /* txn */
+		"insert into system.join_tokens(id, secret, expiration) "+
+			"values($1, $2, $3)",
+		jt.TokenID.String(), jt.SharedSecret, expiration.Format(time.RFC3339),
+	); err != nil {
 		return "", errors.Wrap(err, "could not persist join token in system table")
 	}
 	return string(token), nil

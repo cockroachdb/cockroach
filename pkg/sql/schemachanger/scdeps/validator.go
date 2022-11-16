@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
 // ValidateForwardIndexesFn callback function for validating forward indexes.
@@ -72,7 +72,7 @@ type validator struct {
 	db                         *kv.DB
 	codec                      keys.SQLCodec
 	settings                   *cluster.Settings
-	ieFactory                  sqlutil.InternalExecutorFactory
+	ieFactory                  isql.DB
 	validateForwardIndexes     ValidateForwardIndexesFn
 	validateInvertedIndexes    ValidateInvertedIndexesFn
 	validateConstraint         ValidateConstraintFn
@@ -130,13 +130,13 @@ func (vd validator) ValidateConstraint(
 func (vd validator) makeHistoricalInternalExecTxnRunner() descs.HistoricalInternalExecTxnRunner {
 	now := vd.db.Clock().Now()
 	return descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
-		return vd.ieFactory.(descs.TxnManager).DescsTxnWithExecutor(ctx, vd.db, vd.newFakeSessionData(&vd.settings.SV), func(
-			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
+		return vd.ieFactory.(descs.DB).DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
-			if err := txn.SetFixedTimestamp(ctx, now); err != nil {
+			if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
 				return err
 			}
-			return fn(ctx, txn, ie, descriptors)
+			return fn(ctx, txn, txn.Descriptors())
 		})
 	})
 }
@@ -147,7 +147,7 @@ func NewValidator(
 	db *kv.DB,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	ieFactory sqlutil.InternalExecutorFactory,
+	ieFactory isql.DB,
 	protectedTimestampProvider scexec.ProtectedTimestampManager,
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,

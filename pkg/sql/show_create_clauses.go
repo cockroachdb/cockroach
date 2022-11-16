@@ -54,10 +54,10 @@ type comment struct {
 // An alternative approach would be to leverage a virtual table which internally
 // uses the collection.
 func selectComment(ctx context.Context, p PlanHookState, tableID descpb.ID) (tc *tableComments) {
-	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d", tableID)
+	query := fmt.Sprintf("SELECT type, object_id, sub_id, comment FROM system.comments WHERE object_id = %d ORDER BY type, sub_id", tableID)
 
 	txn := p.Txn()
-	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIterator(
+	it, err := p.InternalSQLTxn().QueryIterator(
 		ctx, "show-tables-with-comment", txn, query)
 	if err != nil {
 		log.VEventf(ctx, 1, "%q", err)

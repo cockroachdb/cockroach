@@ -579,7 +579,7 @@ func (n *alterTableSetLocalityNode) writeNewTableLocalityAndZoneConfig(
 	// Update the zone configuration.
 	if err := ApplyZoneConfigForMultiRegionTable(
 		params.ctx,
-		params.p.txn,
+		params.p.Txn(),
 		params.p.ExecCfg(),
 		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 		params.p.Descriptors(),
@@ -640,12 +640,12 @@ func (p *planner) alterTableDescLocalityToGlobal(
 // if it existed before the locality switch.
 func setNewLocalityConfig(
 	ctx context.Context,
-	desc *tabledesc.Mutable,
 	txn *kv.Txn,
+	descsCol *descs.Collection,
 	b *kv.Batch,
+	desc *tabledesc.Mutable,
 	config catpb.LocalityConfig,
 	kvTrace bool,
-	descsCol *descs.Collection,
 ) error {
 	getMultiRegionTypeDesc := func() (*typedesc.Mutable, error) {
 		dbDesc, err := descsCol.ByID(txn).WithoutNonPublic().Get().Database(ctx, desc.GetParentID())

@@ -214,7 +214,7 @@ func (m *rowLevelTTLMetrics) fetchStatistics(
 		// really care if statistics gets left behind and prefer the TTL job to
 		// have priority.
 		qosLevel := sessiondatapb.SystemLow
-		datums, err := execCfg.InternalExecutor.QueryRowEx(
+		datums, err := execCfg.InternalDB.Executor().QueryRowEx(
 			ctx,
 			c.opName,
 			nil,

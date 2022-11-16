@@ -12,11 +12,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -25,7 +25,7 @@ import (
 
 type replicationStreamManagerImpl struct {
 	evalCtx *eval.Context
-	txn     *kv.Txn
+	txn     isql.Txn
 }
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
@@ -64,7 +64,7 @@ func (r *replicationStreamManagerImpl) CompleteReplicationStream(
 }
 
 func newReplicationStreamManagerWithPrivilegesCheck(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn,
+	ctx context.Context, evalCtx *eval.Context, txn isql.Txn,
 ) (eval.ReplicationStreamManager, error) {
 	isAdmin, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -223,7 +224,7 @@ func getTableIndexUsageStats(
 	ctx context.Context,
 	req *serverpb.TableIndexStatsRequest,
 	idxUsageStatsProvider *idxusage.LocalIndexUsageStats,
-	ie *sql.InternalExecutor,
+	ie isql.Executor,
 	st *cluster.Settings,
 	execConfig *sql.ExecutorConfig,
 ) (*serverpb.TableIndexStatsResponse, error) {
@@ -346,7 +347,7 @@ func getTableIDFromDatabaseAndTableName(
 	ctx context.Context,
 	database string,
 	table string,
-	ie *sql.InternalExecutor,
+	ie isql.Executor,
 	userName username.SQLUsername,
 ) (int, error) {
 	// Fully qualified table name is either database.table or database.schema.table
@@ -373,9 +374,9 @@ func getTableIDFromDatabaseAndTableName(
 func getDatabaseIndexRecommendations(
 	ctx context.Context,
 	dbName string,
-	ie *sql.InternalExecutor,
+	ie isql.Executor,
 	st *cluster.Settings,
-	execConfig *sql.ExecutorConfig,
+	knobs *idxusage.UnusedIndexRecommendationTestingKnobs,
 ) ([]*serverpb.IndexRecommendation, error) {
 
 	// Omit fetching index recommendations for the 'system' database.
@@ -442,7 +443,7 @@ func getDatabaseIndexRecommendations(
 			CreatedAt:        createdAt,
 			LastRead:         lastRead,
 			IndexType:        string(indexType),
-			UnusedIndexKnobs: execConfig.UnusedIndexRecommendationsKnobs,
+			UnusedIndexKnobs: knobs,
 		}
 		recommendations := statsRow.GetRecommendationsFromIndexStats(dbName, st)
 		idxRecommendations = append(idxRecommendations, recommendations...)

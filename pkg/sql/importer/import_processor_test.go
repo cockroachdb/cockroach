@@ -31,10 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
@@ -240,6 +242,7 @@ func TestImportIgnoresProcessedFiles(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
+			DB:              fakeDB{},
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				_ kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -324,6 +327,28 @@ type observedKeys struct {
 	keys []roachpb.Key
 }
 
+// fakeDB implements descs.DB but will panic on all method calls and will
+// return a nil kv.DB.
+type fakeDB struct{}
+
+func (fakeDB) KV() *kv.DB { return nil }
+
+func (fakeDB) Txn(
+	ctx context.Context, f2 func(context.Context, isql.Txn) error, option ...isql.TxnOption,
+) error {
+	panic("unimplemented")
+}
+
+func (fakeDB) Executor(option ...isql.ExecutorOption) isql.Executor {
+	panic("unimplemented")
+}
+
+func (fakeDB) DescsTxn(
+	ctx context.Context, f func(context.Context, descs.Txn) error, opts ...isql.TxnOption,
+) error {
+	panic("unimplemented")
+}
+
 func TestImportHonorsResumePosition(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -341,6 +366,7 @@ func TestImportHonorsResumePosition(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
+			DB:              fakeDB{},
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -469,6 +495,7 @@ func TestImportHandlesDuplicateKVs(t *testing.T) {
 		Cfg: &execinfra.ServerConfig{
 			Settings:        &cluster.Settings{},
 			ExternalStorage: externalStorageFactory,
+			DB:              fakeDB{},
 			BulkAdder: func(
 				_ context.Context, _ *kv.DB, _ hlc.Timestamp,
 				opts kvserverbase.BulkAdderOptions) (kvserverbase.BulkAdder, error) {
@@ -882,9 +909,7 @@ func externalStorageFactory(
 	}
 	return cloud.MakeExternalStorage(ctx, dest, base.ExternalIODirConfig{},
 		nil, blobs.TestBlobServiceClient(workdir),
-		nil, /* ie */
-		nil, /* ief */
-		nil, /* kvDB */
+		nil, /* db */
 		nil, /* limiters */
 		cloud.NilMetrics,
 	)

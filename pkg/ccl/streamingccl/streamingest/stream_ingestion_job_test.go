@@ -25,13 +25,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -237,7 +237,9 @@ func TestCutoverBuiltin(t *testing.T) {
 	}
 	var job *jobs.StartableJob
 	id := registry.MakeJobID()
-	err := tc.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+	err := tc.Server(0).InternalDB().(isql.DB).Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) (err error) {
 		return registry.CreateStartableJobWithTxn(ctx, &job, id, txn, streamIngestJobRecord)
 	})
 	require.NoError(t, err)
@@ -249,7 +251,7 @@ func TestCutoverBuiltin(t *testing.T) {
 	require.True(t, sp.StreamIngest.CutoverTime.IsEmpty())
 
 	var highWater time.Time
-	err = job.Update(ctx, nil, func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	err = job.NoTxn().Update(ctx, func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		highWater = timeutil.Now().Round(time.Microsecond)
 		hlcHighWater := hlc.Timestamp{WallTime: highWater.UnixNano()}
 		return jobs.UpdateHighwaterProgressed(hlcHighWater, md, ju)
@@ -324,7 +326,7 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	<-planned
 	registry := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig).JobRegistry
 	var replicationJobDetails jobspb.StreamIngestionDetails
-	require.NoError(t, c.DestSysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		j, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
 		require.NoError(t, err)
 		var ok bool
@@ -463,7 +465,7 @@ func TestCutoverFractionProgressed(t *testing.T) {
 	jobID := registry.MakeJobID()
 	replicationJob, err := registry.CreateJobWithTxn(ctx, mockReplicationJobRecord, jobID, nil)
 	require.NoError(t, err)
-	require.NoError(t, replicationJob.Update(ctx, nil, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	require.NoError(t, replicationJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		return jobs.UpdateHighwaterProgressed(cutover, md, ju)
 	}))
 

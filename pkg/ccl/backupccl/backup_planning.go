@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -795,7 +797,7 @@ func backupPlanHook(
 			// When running inside an explicit transaction, we simply create the job
 			// record. We do not wait for the job to finish.
 			_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(
-				ctx, jr, jobID, plannerTxn)
+				ctx, jr, jobID, p.InternalSQLTxn())
 			if err != nil {
 				return err
 			}
@@ -812,7 +814,9 @@ func backupPlanHook(
 					log.Errorf(ctx, "failed to cleanup job: %v", cleanupErr)
 				}
 			}()
-			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, plannerTxn, jr); err != nil {
+			if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(
+				ctx, &sj, jobID, p.InternalSQLTxn(), jr,
+			); err != nil {
 				return err
 			}
 			// We commit the transaction here so that the job can be started. This
@@ -823,6 +827,16 @@ func backupPlanHook(
 		}(); err != nil {
 			return err
 		}
+		// Release all descriptor leases here. Note that we committed the
+		// underlying transaction in the above closure -- so we're not using any
+		// leases anymore, but we might be holding some because some sql queries
+		// might have been executed by this transaction (indeed some certainly
+		// were when we created the job we're going to run).
+		//
+		// This call is not strictly necessary, but it's parallel to the other
+		// locations where we commit a transaction and wait for a job; it seems
+		// best to release leases we don't need.
+		p.InternalSQLTxn().Descriptors().ReleaseAll(ctx)
 		if err := sj.Start(ctx); err != nil {
 			return err
 		}
@@ -950,12 +964,11 @@ func collectTelemetry(
 func getScheduledBackupExecutionArgsFromSchedule(
 	ctx context.Context,
 	env scheduledjobs.JobSchedulerEnv,
-	txn *kv.Txn,
-	ie *sql.InternalExecutor,
+	storage jobs.ScheduledJobStorage,
 	scheduleID int64,
 ) (*jobs.ScheduledJob, *backuppb.ScheduledBackupExecutionArgs, error) {
 	// Load the schedule that has spawned this job.
-	sj, err := jobs.LoadScheduledJob(ctx, env, scheduleID, ie, txn)
+	sj, err := storage.Load(ctx, env, scheduleID)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "failed to load scheduled job %d", scheduleID)
 	}
@@ -975,16 +988,14 @@ func getScheduledBackupExecutionArgsFromSchedule(
 // completion of the backup job.
 func planSchedulePTSChaining(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	knobs *jobs.TestingKnobs,
+	txn isql.Txn,
 	backupDetails *jobspb.BackupDetails,
 	createdBy *jobs.CreatedByInfo,
 ) error {
 	env := scheduledjobs.ProdJobSchedulerEnv
-	if knobs, ok := execCfg.DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
-		if knobs.JobSchedulerEnv != nil {
-			env = knobs.JobSchedulerEnv
-		}
+	if knobs != nil && knobs.JobSchedulerEnv != nil {
+		env = knobs.JobSchedulerEnv
 	}
 	// If this is not a scheduled backup, we do not chain pts records.
 	if createdBy == nil || createdBy.Name != jobs.CreatedByScheduledJobs {
@@ -992,7 +1003,8 @@ func planSchedulePTSChaining(
 	}
 
 	_, args, err := getScheduledBackupExecutionArgsFromSchedule(
-		ctx, env, txn, execCfg.InternalExecutor, createdBy.ID)
+		ctx, env, jobs.ScheduledJobTxn(txn), createdBy.ID,
+	)
 	if err != nil {
 		return err
 	}
@@ -1014,7 +1026,8 @@ func planSchedulePTSChaining(
 		}
 
 		_, incArgs, err := getScheduledBackupExecutionArgsFromSchedule(
-			ctx, env, txn, execCfg.InternalExecutor, args.DependentScheduleID)
+			ctx, env, jobs.ScheduledJobTxn(txn), args.DependentScheduleID,
+		)
 		if err != nil {
 			// We should always be able to resolve the dependent schedule ID. If the
 			// incremental schedule was dropped then it would have unlinked itself
@@ -1193,9 +1206,8 @@ func getProtectedTimestampTargetForBackup(backupManifest *backuppb.BackupManifes
 
 func protectTimestampForBackup(
 	ctx context.Context,
-	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
 	jobID jobspb.JobID,
+	pts protectedts.Storage,
 	backupManifest *backuppb.BackupManifest,
 	backupDetails jobspb.BackupDetails,
 ) error {
@@ -1213,9 +1225,14 @@ func protectTimestampForBackup(
 	// `exclude_data_from_backup`. This ensures that the backup job does not
 	// holdup GC on that table span for the duration of execution.
 	target.IgnoreIfExcludedFromBackup = true
-	rec := jobsprotectedts.MakeRecord(*backupDetails.ProtectedTimestampRecord, int64(jobID),
-		tsToProtect, backupManifest.Spans, jobsprotectedts.Jobs, target)
-	return execCfg.ProtectedTimestampProvider.Protect(ctx, txn, rec)
+	return pts.Protect(ctx, jobsprotectedts.MakeRecord(
+		*backupDetails.ProtectedTimestampRecord,
+		int64(jobID),
+		tsToProtect,
+		backupManifest.Spans,
+		jobsprotectedts.Jobs,
+		target,
+	))
 }
 
 // checkForNewDatabases returns an error if any new complete databases were
@@ -1297,24 +1314,22 @@ func checkForNewTables(
 }
 
 func getTenantInfo(
-	ctx context.Context, execCfg *sql.ExecutorConfig, txn *kv.Txn, jobDetails jobspb.BackupDetails,
+	ctx context.Context, codec keys.SQLCodec, txn isql.Txn, jobDetails jobspb.BackupDetails,
 ) ([]roachpb.Span, []descpb.TenantInfoWithUsage, error) {
 	var spans []roachpb.Span
 	var tenants []descpb.TenantInfoWithUsage
 	var err error
-	if jobDetails.FullCluster && execCfg.Codec.ForSystemTenant() {
+	if jobDetails.FullCluster && codec.ForSystemTenant() {
 		// Include all tenants.
 		tenants, err = retrieveAllTenantsMetadata(
-			ctx, execCfg.InternalExecutor, txn,
+			ctx, txn,
 		)
 		if err != nil {
 			return nil, nil, err
 		}
 	} else if len(jobDetails.SpecificTenantIds) > 0 {
 		for _, id := range jobDetails.SpecificTenantIds {
-			tenantInfo, err := retrieveSingleTenantMetadata(
-				ctx, execCfg.InternalExecutor, txn, id,
-			)
+			tenantInfo, err := retrieveSingleTenantMetadata(ctx, txn, id)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -1340,7 +1355,7 @@ func getTenantInfo(
 func createBackupManifest(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
-	txn *kv.Txn,
+	txn isql.Txn,
 	jobDetails jobspb.BackupDetails,
 	prevBackups []backuppb.BackupManifest,
 ) (backuppb.BackupManifest, error) {
@@ -1399,7 +1414,7 @@ func createBackupManifest(
 	var spans []roachpb.Span
 	var tenants []descpb.TenantInfoWithUsage
 	tenantSpans, tenantInfos, err := getTenantInfo(
-		ctx, execCfg, txn, jobDetails,
+		ctx, execCfg.Codec, txn, jobDetails,
 	)
 	if err != nil {
 		return backuppb.BackupManifest{}, err

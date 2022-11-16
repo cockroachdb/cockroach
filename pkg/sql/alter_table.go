@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -44,7 +43,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -540,30 +538,28 @@ func (n *alterTableNode) startExec(params runParams) error {
 					"constraint %q in the middle of being dropped", t.Constraint)
 			}
 			if ck := c.AsCheck(); ck != nil {
-				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateCheckInTxn(ctx, &params.p.semaCtx, params.p.SessionData(), n.tableDesc, txn, ie, ck.GetExpr())
-				}); err != nil {
+				if err := validateCheckInTxn(
+					params.ctx, params.p.InternalSQLTxn(), &params.p.semaCtx,
+					params.p.SessionData(), n.tableDesc, ck.GetExpr(),
+				); err != nil {
 					return err
 				}
 				ck.CheckDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if fk := c.AsForeignKey(); fk != nil {
-				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateFkInTxn(ctx, n.tableDesc, txn, ie, params.p.descCollection, name)
-				}); err != nil {
+				if err := validateFkInTxn(
+					params.ctx, params.p.InternalSQLTxn(), params.p.descCollection, n.tableDesc, name,
+				); err != nil {
 					return err
 				}
 				fk.ForeignKeyDesc().Validity = descpb.ConstraintValidity_Validated
 			} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
-				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateUniqueWithoutIndexConstraintInTxn(
-						params.ctx,
-						n.tableDesc,
-						txn,
-						ie,
-						params.p.User(),
-						name,
-					)
-				}); err != nil {
+				if err := validateUniqueWithoutIndexConstraintInTxn(
+					params.ctx,
+					params.p.InternalSQLTxn(),
+					n.tableDesc,
+					params.p.User(),
+					name,
+				); err != nil {
 					return err
 				}
 				uwoi.UniqueWithoutIndexDesc().Validity = descpb.ConstraintValidity_Validated
@@ -653,7 +649,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 				if err := deleteRemovedPartitionZoneConfigs(
 					params.ctx,
-					params.p.txn,
+					params.p.InternalSQLTxn(),
 					n.tableDesc,
 					params.p.Descriptors(),
 					n.tableDesc.GetPrimaryIndexID(),
@@ -1223,7 +1219,7 @@ func injectTableStats(
 	}
 
 	// First, delete all statistics for the table.
-	if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+	if _ /* rows */, err := params.p.InternalSQLTxn().Exec(
 		params.ctx,
 		"delete-stats",
 		params.p.Txn(),
@@ -1287,8 +1283,7 @@ func insertJSONStatistic(
 ) error {
 	var (
 		ctx      = params.ctx
-		ie       = params.ExecCfg().InternalExecutor
-		txn      = params.p.Txn()
+		txn      = params.p.InternalSQLTxn()
 		settings = params.ExecCfg().Settings
 	)
 
@@ -1303,10 +1298,10 @@ func insertJSONStatistic(
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "statistic for columns %v with collection time %s to insert is partial but cluster version is below 23.1", s.Columns, s.CreatedAt)
 		}
 
-		_ /* rows */, err := ie.Exec(
+		_ /* rows */, err := txn.Exec(
 			ctx,
 			"insert-stats",
-			txn,
+			txn.KV(),
 			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -1340,10 +1335,10 @@ func insertJSONStatistic(
 		fullStatisticIDValue = s.FullStatisticID
 	}
 
-	_ /* rows */, err := ie.Exec(
+	_ /* rows */, err := txn.Exec(
 		ctx,
 		"insert-stats",
-		txn,
+		txn.KV(),
 		`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -1770,13 +1765,12 @@ func handleTTLStorageParamChange(
 
 		// Update cron schedule if required.
 		if before.DeletionCron != after.DeletionCron {
-			env := JobSchedulerEnv(params.ExecCfg())
-			s, err := jobs.LoadScheduledJob(
+			env := JobSchedulerEnv(params.ExecCfg().JobsKnobs())
+			schedules := jobs.ScheduledJobTxn(params.p.InternalSQLTxn())
+			s, err := schedules.Load(
 				params.ctx,
 				env,
 				after.ScheduleID,
-				params.ExecCfg().InternalExecutor,
-				params.p.txn,
 			)
 			if err != nil {
 				return false, err
@@ -1784,7 +1778,7 @@ func handleTTLStorageParamChange(
 			if err := s.SetSchedule(after.DeletionCronOrDefault()); err != nil {
 				return false, err
 			}
-			if err := s.Update(params.ctx, params.ExecCfg().InternalExecutor, params.p.txn); err != nil {
+			if err := schedules.Update(params.ctx, s); err != nil {
 				return false, err
 			}
 		}

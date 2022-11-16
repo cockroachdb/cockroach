@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -171,75 +169,70 @@ func (p *planner) GrantRoleNode(ctx context.Context, n *tree.GrantRole) (*GrantR
 func (n *GrantRoleNode) startExec(params runParams) error {
 	var rowsAffected int
 	roleMembersHasIDs := params.p.ExecCfg().Settings.Version.IsActive(params.ctx, clusterversion.V23_1RoleMembersTableHasIDColumns)
-	if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-		// Add memberships. Existing memberships are allowed.
-		// If admin option is false, we do not remove it from existing memberships.
-		memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+
+	// Add memberships. Existing memberships are allowed.
+	// If admin option is false, we do not remove it from existing memberships.
+	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+	if roleMembersHasIDs {
+		memberStmt = `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member")`
+	}
+	if n.adminOption {
+		// admin option: true, set "isAdmin" even if the membership exists.
+		memberStmt += ` DO UPDATE SET "isAdmin" = true`
+	} else {
+		// admin option: false, do not clear it from existing memberships.
+		memberStmt += ` DO NOTHING`
+	}
+
+	// Get user IDs for both role and member if ID columns have been added.
+	var qargs []interface{}
+	if roleMembersHasIDs {
+		qargs = make([]interface{}, 5)
+	} else {
+		qargs = make([]interface{}, 3)
+	}
+
+	qargs[2] = n.adminOption
+	for _, r := range n.roles {
+		qargs[0] = r.Normalized()
+
 		if roleMembersHasIDs {
-			memberStmt = `INSERT INTO system.role_members ("role", "member", "isAdmin", "role_id", "member_id") VALUES ($1, $2, $3, $4, $5) ON CONFLICT ("role", "member")`
-		}
-		if n.adminOption {
-			// admin option: true, set "isAdmin" even if the membership exists.
-			memberStmt += ` DO UPDATE SET "isAdmin" = true`
-		} else {
-			// admin option: false, do not clear it from existing memberships.
-			memberStmt += ` DO NOTHING`
+			idRow, err := params.p.InternalSQLTxn().QueryRowEx(
+				params.ctx, "get-user-id", params.p.Txn(),
+				sessiondata.NodeUserSessionDataOverride,
+				`SELECT user_id FROM system.users WHERE username = $1`, r.Normalized(),
+			)
+			if err != nil {
+				return err
+			}
+			qargs[3] = tree.MustBeDOid(idRow[0])
 		}
 
-		// Get user IDs for both role and member if ID columns have been added.
-		var qargs []interface{}
-		if roleMembersHasIDs {
-			qargs = make([]interface{}, 5)
-		} else {
-			qargs = make([]interface{}, 3)
-		}
-
-		qargs[2] = n.adminOption
-		for _, r := range n.roles {
-			qargs[0] = r.Normalized()
+		for _, m := range n.members {
+			qargs[1] = m.Normalized()
 
 			if roleMembersHasIDs {
-				idRow, err := ie.QueryRowEx(
-					ctx, "get-user-id", txn,
+				idRow, err := params.p.InternalSQLTxn().QueryRowEx(
+					params.ctx, "get-user-id", params.p.Txn(),
 					sessiondata.NodeUserSessionDataOverride,
-					`SELECT user_id FROM system.users WHERE username = $1`, r.Normalized(),
+					`SELECT user_id FROM system.users WHERE username = $1`, m.Normalized(),
 				)
 				if err != nil {
 					return err
 				}
-				qargs[3] = tree.MustBeDOid(idRow[0])
+				qargs[4] = tree.MustBeDOid(idRow[0])
 			}
 
-			for _, m := range n.members {
-				qargs[1] = m.Normalized()
-
-				if roleMembersHasIDs {
-					idRow, err := ie.QueryRowEx(
-						ctx, "get-user-id", txn,
-						sessiondata.NodeUserSessionDataOverride,
-						`SELECT user_id FROM system.users WHERE username = $1`, m.Normalized(),
-					)
-					if err != nil {
-						return err
-					}
-					qargs[4] = tree.MustBeDOid(idRow[0])
-				}
-
-				memberStmtRowsAffected, err := ie.ExecEx(
-					ctx, "grant-role", txn,
-					sessiondata.RootUserSessionDataOverride,
-					memberStmt, qargs...,
-				)
-				if err != nil {
-					return err
-				}
-				rowsAffected += memberStmtRowsAffected
+			memberStmtRowsAffected, err := params.p.InternalSQLTxn().ExecEx(
+				params.ctx, "grant-role", params.p.Txn(),
+				sessiondata.RootUserSessionDataOverride,
+				memberStmt, qargs...,
+			)
+			if err != nil {
+				return err
 			}
+			rowsAffected += memberStmtRowsAffected
 		}
-
-		return nil
-	}); err != nil {
-		return err
 	}
 
 	// We need to bump the table version to trigger a refresh if anything changed.
