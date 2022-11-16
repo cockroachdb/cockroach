@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -353,7 +354,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(node int) versionStep {
 func runCDCMixedVersions(
 	ctx context.Context, t test.Test, c cluster.Cluster, buildVersion version.Version,
 ) {
-	predecessorVersion, err := PredecessorVersion(buildVersion)
+	predecessorVersion, err := clusterupgrade.PredecessorVersion(buildVersion)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,9 +373,6 @@ func runCDCMixedVersions(
 		return tester.crdbNodes[rng.Intn(len(tester.crdbNodes))]
 	}
 
-	// An empty string will lead to the cockroach binary specified by flag
-	// `cockroach` to be used.
-	const mainVersion = ""
 	newVersionUpgradeTest(c,
 		uploadAndStartFromCheckpointFixture(tester.crdbNodes, predecessorVersion),
 		tester.setupVerifier(sqlNode()),
@@ -388,7 +386,7 @@ func runCDCMixedVersions(
 
 		tester.waitForResolvedTimestamps(),
 		// Roll the nodes into the new version one by one in random order
-		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, mainVersion)),
+		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, clusterupgrade.MainVersion)),
 		// let the workload run in the new version for a while
 		tester.waitForResolvedTimestamps(),
 
@@ -402,7 +400,7 @@ func runCDCMixedVersions(
 		tester.assertValid(),
 
 		// Roll nodes forward and finalize upgrade.
-		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, mainVersion)),
+		tester.crdbUpgradeStep(binaryUpgradeStep(tester.crdbNodes, clusterupgrade.MainVersion)),
 
 		// allow cluster version to update
 		allowAutoUpgradeStep(sqlNode()),
