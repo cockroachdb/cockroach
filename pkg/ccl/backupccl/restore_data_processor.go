@@ -444,7 +444,7 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 		var err error
 		batcher, err = bulk.MakeSSTBatcher(ctx,
 			"restore",
-			db,
+			db.KV(),
 			evalCtx.Settings,
 			disallowShadowingBelow,
 			writeAtBatchTS,

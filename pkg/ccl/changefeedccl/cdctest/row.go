@@ -14,12 +14,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -102,8 +102,8 @@ func GetHydratedTableDescriptor(
 
 	execCfg := execCfgI.(sql.ExecutorConfig)
 	require.NoError(t, sql.DescsTxn(context.Background(), &execCfg,
-		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			_, td, err = descs.PrefixAndTable(ctx, col.ByName(txn).Get(), tree.NewTableNameWithSchema(dbName, scName, tableName))
+		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+			_, td, err = descs.PrefixAndTable(ctx, col.ByName(txn.KV()).Get(), tree.NewTableNameWithSchema(dbName, scName, tableName))
 			return err
 		}))
 	require.NotNil(t, td)

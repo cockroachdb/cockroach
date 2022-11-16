@@ -80,7 +80,7 @@ func populateVersionSetting(
 	ctx context.Context, _ clusterversion.ClusterVersion, deps upgrade.SystemDeps,
 ) error {
 	var v roachpb.Version
-	if err := deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	if err := deps.DB.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		return txn.GetProto(ctx, keys.BootstrapVersionKey, &v)
 	}); err != nil {
 		return err
@@ -101,7 +101,8 @@ func populateVersionSetting(
 	// (overwriting also seems reasonable, but what for).
 	// We don't allow users to perform version changes until we have run
 	// the insert below.
-	_, err = deps.InternalExecutor.Exec(
+	ie := deps.DB.Executor()
+	_, err = ie.Exec(
 		ctx, "insert-setting", nil, /* txn */
 		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', now(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 	)
@@ -112,7 +113,7 @@ func populateVersionSetting(
 	// Tenant ID 0 indicates that we're overriding the value for all
 	// tenants.
 	tenantID := tree.NewDInt(0)
-	_, err = deps.InternalExecutor.Exec(
+	_, err = ie.Exec(
 		ctx,
 		"insert-setting", nil, /* txn */
 		fmt.Sprintf(`INSERT INTO system.tenant_settings (tenant_id, name, value, "last_updated", "value_type") VALUES (%d, 'version', x'%x', now(), 'm') ON CONFLICT(tenant_id, name) DO NOTHING`, tenantID, b),

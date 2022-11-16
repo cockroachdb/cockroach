@@ -18,11 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -108,18 +107,13 @@ func (e *externalConnectionKMSEnv) KMSConfig() *base.ExternalIODirConfig {
 }
 
 // DBHandle implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) DBHandle() *kv.DB {
-	return e.execCfg.DB
+func (e *externalConnectionKMSEnv) DBHandle() isql.DB {
+	return e.execCfg.InternalDB
 }
 
 // User implements the KMSEnv interface.
 func (e *externalConnectionKMSEnv) User() username.SQLUsername {
 	return e.user
-}
-
-// InternalExecutor implements the KMSEnv interface.
-func (e *externalConnectionKMSEnv) InternalExecutor() sqlutil.InternalExecutor {
-	return e.execCfg.InternalExecutor
 }
 
 var _ cloud.KMSEnv = &externalConnectionKMSEnv{}

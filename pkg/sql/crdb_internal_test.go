@@ -36,12 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -83,7 +85,13 @@ func TestGetAllNamesInternal(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	names, err := sql.TestingGetAllNames(ctx, nil, s.InternalExecutor().(*sql.InternalExecutor))
+	var names map[descpb.ID]catalog.NameKey
+	require.NoError(t, s.InternalDB().(isql.DB).Txn(ctx, func(
+		ctx context.Context, txn isql.Txn,
+	) (err error) {
+		names, err = sql.TestingGetAllNames(ctx, txn)
+		return err
+	}))
 	require.NoError(t, err)
 
 	assert.Equal(t, descpb.NameInfo{ParentID: 999, ParentSchemaID: 444, Name: "bob"}, names[9999])

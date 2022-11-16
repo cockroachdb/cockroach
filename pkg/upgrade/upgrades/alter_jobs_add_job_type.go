@@ -67,7 +67,7 @@ func alterSystemJobsAddJobType(
 func backfillJobTypeColumn(
 	ctx context.Context, cs clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
-	ie := d.InternalExecutorFactory.MakeInternalExecutorWithoutTxn()
+	ie := d.InternalExecutor
 	_, err := ie.Exec(ctx, "backfill-jobs-type-column", nil /* txn */, backfillTypeColumnStmt, username.RootUser)
 	if err != nil {
 		return err

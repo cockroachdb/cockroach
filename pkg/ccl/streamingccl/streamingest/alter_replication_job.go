@@ -16,12 +16,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
@@ -160,23 +160,26 @@ func alterReplicationJobHook(
 		}
 		jobRegistry := p.ExecCfg().JobRegistry
 		if alterTenantStmt.Cutover != nil {
-			if err := alterTenantJobCutover(ctx, p.Txn(), jobRegistry,
-				p.ExecCfg().ProtectedTimestampProvider, alterTenantStmt, tenInfo, cutoverTime); err != nil {
+			pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+			if err := alterTenantJobCutover(
+				ctx, p.InternalSQLTxn(), jobRegistry, pts,
+				alterTenantStmt, tenInfo, cutoverTime,
+			); err != nil {
 				return err
 			}
 			resultsCh <- tree.Datums{eval.TimestampToDecimalDatum(cutoverTime)}
 		} else if !alterTenantStmt.Options.IsDefault() {
-			if err := alterTenantOptions(ctx, p.Txn(), jobRegistry, options, tenInfo); err != nil {
+			if err := alterTenantOptions(ctx, p.InternalSQLTxn(), jobRegistry, options, tenInfo); err != nil {
 				return err
 			}
 		} else {
 			switch alterTenantStmt.Command {
 			case tree.ResumeJob:
-				if err := jobRegistry.Unpause(ctx, p.Txn(), tenInfo.TenantReplicationJobID); err != nil {
+				if err := jobRegistry.Unpause(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID); err != nil {
 					return err
 				}
 			case tree.PauseJob:
-				if err := jobRegistry.PauseRequested(ctx, p.Txn(), tenInfo.TenantReplicationJobID,
+				if err := jobRegistry.PauseRequested(ctx, p.InternalSQLTxn(), tenInfo.TenantReplicationJobID,
 					"ALTER TENANT PAUSE REPLICATION"); err != nil {
 					return err
 				}
@@ -194,9 +197,9 @@ func alterReplicationJobHook(
 
 func alterTenantJobCutover(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	jobRegistry *jobs.Registry,
-	ptp protectedts.Provider,
+	ptp protectedts.Storage,
 	alterTenantStmt *tree.AlterTenantReplication,
 	tenInfo *descpb.TenantInfo,
 	cutoverTime hlc.Timestamp,
@@ -235,7 +238,7 @@ func alterTenantJobCutover(
 		return errors.Newf("replicated tenant %q (%d) has not yet recorded a retained timestamp",
 			tenantName, tenInfo.ID)
 	} else {
-		record, err := ptp.GetRecord(ctx, txn, *stats.IngestionDetails.ProtectedTimestampRecordID)
+		record, err := ptp.GetRecord(ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
 		if err != nil {
 			return err
 		}
@@ -256,13 +259,13 @@ func alterTenantJobCutover(
 
 func alterTenantOptions(
 	ctx context.Context,
-	txn *kv.Txn,
+	txn isql.Txn,
 	jobRegistry *jobs.Registry,
 	options *resolvedTenantReplicationOptions,
 	tenInfo *descpb.TenantInfo,
 ) error {
 	return jobRegistry.UpdateJobWithTxn(ctx, tenInfo.TenantReplicationJobID, txn, false, /* useReadLock */
-		func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			streamIngestionDetails := md.Payload.GetStreamIngestion()
 			if ret, ok := options.GetRetention(); ok {
 				streamIngestionDetails.ReplicationTTLSeconds = ret

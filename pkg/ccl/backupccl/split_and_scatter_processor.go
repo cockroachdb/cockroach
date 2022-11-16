@@ -227,7 +227,7 @@ func newSplitAndScatterProcessor(
 		return nil, err
 	}
 
-	scatterer := makeSplitAndScatterer(db, kr)
+	scatterer := makeSplitAndScatterer(db.KV(), kr)
 	if spec.ValidateOnly {
 		nodeID, _ := flowCtx.NodeID.OptionalNodeID()
 		scatterer = noopSplitAndScatterer{nodeID}

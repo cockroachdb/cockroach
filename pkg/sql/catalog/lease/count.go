@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -25,7 +25,7 @@ import (
 // CountLeases returns the number of unexpired leases for a number of descriptors
 // each at a particular version at a particular time.
 func CountLeases(
-	ctx context.Context, executor sqlutil.InternalExecutor, versions []IDVersion, at hlc.Timestamp,
+	ctx context.Context, executor isql.Executor, versions []IDVersion, at hlc.Timestamp,
 ) (int, error) {
 	var whereClauses []string
 	for _, t := range versions {

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -610,9 +611,9 @@ func TestCompleteStreamReplication(t *testing.T) {
 		pj, err := jr.LoadJob(ctx, jobspb.JobID(streamID))
 		require.NoError(t, err)
 		payload := pj.Payload()
-		require.ErrorIs(t, h.SysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			ptp := h.SysServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
-			_, err = ptp.GetRecord(ctx, txn, payload.GetStreamReplication().ProtectedTimestampRecordID)
+		ptp := h.SysServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.ProtectedTimestampProvider
+		require.ErrorIs(t, h.SysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err = ptp.WithTxn(txn).GetRecord(ctx, payload.GetStreamReplication().ProtectedTimestampRecordID)
 			return err
 		}), protectedts.ErrNotExists)
 	}

@@ -341,7 +341,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				}
 				if err := ApplyZoneConfigForMultiRegionTable(
 					params.ctx,
-					params.p.txn,
+					params.p.Txn(),
 					params.p.ExecCfg(),
 					params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 					params.p.Descriptors(),

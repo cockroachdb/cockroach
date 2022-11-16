@@ -16,11 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -48,7 +48,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				return nil, pgerror.Newf(pgcode.NoActiveSQLTransaction, "DECLARE CURSOR can only be used in transaction blocks")
 			}
 
-			ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
+			ie := p.ExecCfg().InternalDB.NewInternalExecutor(p.SessionData())
 			if cursor := p.sqlCursors.getCursor(s.Name); cursor != nil {
 				return nil, pgerror.Newf(pgcode.DuplicateCursor, "cursor %q already exists", s.Name)
 			}
@@ -94,12 +94,12 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 			}
 			inputState := p.txn.GetLeafTxnInputState(ctx)
 			cursor := &sqlCursor{
-				InternalRows: rows,
-				readSeqNum:   inputState.ReadSeqNum,
-				txn:          p.txn,
-				statement:    statement,
-				created:      timeutil.Now(),
-				withHold:     s.Hold,
+				Rows:       rows,
+				readSeqNum: inputState.ReadSeqNum,
+				txn:        p.txn,
+				statement:  statement,
+				created:    timeutil.Now(),
+				withHold:   s.Hold,
 			}
 			if err := p.sqlCursors.addCursor(s.Name, cursor); err != nil {
 				// This case shouldn't happen because cursor names are scoped to a session,
@@ -226,7 +226,7 @@ func (f fetchNode) Values() tree.Datums {
 }
 
 func (f fetchNode) Close(ctx context.Context) {
-	// We explicitly do not pass through the Close to our InternalRows, because
+	// We explicitly do not pass through the Close to our Rows, because
 	// running FETCH on a CURSOR does not close it.
 
 	// Reset the transaction's read sequence number to what it was before the
@@ -249,7 +249,7 @@ func (p *planner) CloseCursor(ctx context.Context, n *tree.CloseCursor) (planNod
 }
 
 type sqlCursor struct {
-	sqlutil.InternalRows
+	isql.Rows
 	// txn is the transaction object that the internal executor for this cursor
 	// is running with.
 	txn *kv.Txn
@@ -262,9 +262,9 @@ type sqlCursor struct {
 	withHold   bool
 }
 
-// Next implements the InternalRows interface.
+// Next implements the Rows interface.
 func (s *sqlCursor) Next(ctx context.Context) (bool, error) {
-	more, err := s.InternalRows.Next(ctx)
+	more, err := s.Rows.Next(ctx)
 	if err == nil {
 		s.curRow++
 	}

@@ -330,7 +330,7 @@ func startConnExecutor(
 		),
 		QueryCache:              querycache.New(0),
 		TestingKnobs:            ExecutorTestingKnobs{},
-		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, nil, st),
+		StmtDiagnosticsRecorder: stmtdiagnostics.NewRegistry(nil, st),
 		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
 		CollectionFactory:       descs.NewBareBonesCollectionFactory(st, keys.SystemSQLCodec),
 	}

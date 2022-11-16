@@ -18,11 +18,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
 )
@@ -44,7 +44,7 @@ func (s *PersistedSQLStats) IterateStatementStats(
 	aggInterval := s.GetAggregationInterval()
 	memIter := newMemStmtStatsIterator(s.SQLStats, options, curAggTs, aggInterval)
 
-	var persistedIter sqlutil.InternalRows
+	var persistedIter isql.Rows
 	var colCnt int
 	persistedIter, colCnt, err = s.persistedStmtStatsIter(ctx, options)
 	if err != nil {
@@ -81,10 +81,10 @@ func (s *PersistedSQLStats) IterateStatementStats(
 
 func (s *PersistedSQLStats) persistedStmtStatsIter(
 	ctx context.Context, options *sqlstats.IteratorOptions,
-) (iter sqlutil.InternalRows, expectedColCnt int, err error) {
+) (iter isql.Rows, expectedColCnt int, err error) {
 	query, expectedColCnt := s.getFetchQueryForStmtStatsTable(ctx, options)
 
-	persistedIter, err := s.cfg.InternalExecutor.QueryIteratorEx(
+	persistedIter, err := s.cfg.DB.Executor().QueryIteratorEx(
 		ctx,
 		"read-stmt-stats",
 		nil, /* txn */

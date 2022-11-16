@@ -9,11 +9,10 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/kv",
         "//pkg/security/username",
         "//pkg/settings/cluster",
         "//pkg/sql",
-        "//pkg/sql/sqlutil",
+        "//pkg/sql/isql",
         "//pkg/util/ioctx",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",

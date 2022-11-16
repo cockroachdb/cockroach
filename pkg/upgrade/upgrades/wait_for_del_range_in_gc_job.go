@@ -16,11 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -120,7 +120,7 @@ SELECT job_id
 // collectJobIDsFromQuery is a helper to execute a query which returns rows
 // where the first column is a jobID and returns the job IDs from those rows.
 func collectJobIDsFromQuery(
-	ctx context.Context, ie sqlutil.InternalExecutor, opName string, query string,
+	ctx context.Context, ie isql.Executor, opName string, query string,
 ) (jobIDs []jobspb.JobID, retErr error) {
 	it, err := ie.QueryIteratorEx(ctx, opName, nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride, query)

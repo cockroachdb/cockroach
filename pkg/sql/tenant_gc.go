@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,9 +43,9 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		return errors.Wrap(err, "clear tenant")
 	}
 
-	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		if num, err := execCfg.InternalExecutor.ExecEx(
-			ctx, "delete-tenant", txn, sessiondata.NodeUserSessionDataOverride,
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if num, err := txn.ExecEx(
+			ctx, "delete-tenant", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.tenants WHERE id = $1`, info.ID,
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d", info.ID)
@@ -54,15 +55,15 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 			log.Warningf(ctx, "tenant GC: no record to delete for %d", info.ID)
 		}
 
-		if _, err := execCfg.InternalExecutor.ExecEx(
-			ctx, "delete-tenant-usage", txn, sessiondata.NodeUserSessionDataOverride,
+		if _, err := txn.ExecEx(
+			ctx, "delete-tenant-usage", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.tenant_usage WHERE tenant_id = $1`, info.ID,
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d usage", info.ID)
 		}
 
-		if _, err := execCfg.InternalExecutor.ExecEx(
-			ctx, "delete-tenant-settings", txn, sessiondata.NodeUserSessionDataOverride,
+		if _, err := txn.ExecEx(
+			ctx, "delete-tenant-settings", txn.KV(), sessiondata.NodeUserSessionDataOverride,
 			`DELETE FROM system.tenant_settings WHERE tenant_id = $1`, info.ID,
 		); err != nil {
 			return errors.Wrapf(err, "deleting tenant %d settings", info.ID)
@@ -80,7 +81,7 @@ func GCTenantSync(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Ten
 		if err != nil {
 			return err
 		}
-		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
+		scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV())
 		records, err := scKVAccessor.GetSpanConfigRecords(
 			ctx, []spanconfig.Target{
 				spanconfig.MakeTargetFromSpan(tenantSpan),
@@ -138,13 +139,9 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 	if err := p.RequireAdminRole(ctx, "gc tenant"); err != nil {
 		return err
 	}
-	var info *descpb.TenantInfo
-	if txnErr := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		var err error
-		info, err = GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MustMakeTenantID(tenID))
-		return err
-	}); txnErr != nil {
-		return errors.Wrapf(txnErr, "retrieving tenant %d", tenID)
+	info, err := GetTenantRecordByID(ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenID))
+	if err != nil {
+		return errors.Wrapf(err, "retrieving tenant %d", tenID)
 	}
 
 	// Confirm tenant is ready to be cleared.
@@ -152,8 +149,8 @@ func (p *planner) GCTenant(ctx context.Context, tenID uint64) error {
 		return errors.Errorf("tenant %d is not in state DROP", info.ID)
 	}
 
-	_, err := createGCTenantJob(
-		ctx, p.ExecCfg(), p.Txn(), p.User(), tenID, false, /* synchronous */
+	_, err = createGCTenantJob(
+		ctx, p.ExecCfg().JobRegistry, p.InternalSQLTxn(), p.User(), tenID, false, /* synchronous */
 	)
 	return err
 }

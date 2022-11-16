@@ -396,16 +396,18 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	ts timeutil.TimeSource,
-	internalExecutorFactory descs.TxnManager,
+	db descs.DB,
 	sessionExpirationFn func() hlc.Timestamp,
 ) error {
 	loadRegions := func() ([][]byte, error) {
 		// Load regions from the system DB.
 		var regions [][]byte
-		if err := internalExecutorFactory.DescsTxn(ctx, s.db, func(
-			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
+		if err := db.DescsTxn(ctx, func(
+			ctx context.Context, txn descs.Txn,
 		) error {
-			enumReps, _, err := sql.GetRegionEnumRepresentations(ctx, txn, keys.SystemDatabaseID, descsCol)
+			enumReps, _, err := sql.GetRegionEnumRepresentations(
+				ctx, txn.KV(), keys.SystemDatabaseID, txn.Descriptors(),
+			)
 			if err != nil {
 				if errors.Is(err, sql.ErrNotMultiRegionDatabase) {
 					return nil
