@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -101,7 +100,7 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	r := sm.r
 	b := &sm.batch
 	b.r = r
-	b.appHandler = b
+	b.h = (*replicaAppBatchHandler)(b)
 	b.sm = sm
 	b.batch = r.store.engine.NewBatch()
 	r.mu.RLock()
@@ -114,53 +113,22 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	return b
 }
 
-type appBatch struct {
-	appHandler
-	// batch accumulates writes implied by the raft entries in this batch.
-	batch storage.Batch
-	// state is this batch's view of the replica's state. It may be updated
-	// as commands are staged into this batch.
-	state kvserverpb.ReplicaState
-	// changeRemovesReplica tracks whether the command in the batch (there must
-	// be only one) removes this replica from the range. If this is the case,
-	// the command that does so effectively removes the replica.
-	changeRemovesReplica bool
-}
-
-// appBatchHandlerConcrete "implements" appHandler. It doesn't implement it
-// verbatim but instead uses the concrete inputs needed for each methods. The
-// true implementation of appHandler is appBatchHandler, which calls through to
-// appBatchHandlerConcrete.
-//
-// The benefit of this approach is avoiding extra type assertions when the
-// replicaAppBatch appHandler implementation wants to call through to a base
-// implementation.
-type appBatchHandlerConcrete appBatch
-
-func (h *appBatchHandlerConcrete) CheckForcedErr(
-	ctx context.Context,
-	idKey kvserverbase.CmdIDKey,
-	raftCmd *kvserverpb.RaftCommand,
-	isLocal bool,
-	state *kvserverpb.ReplicaState,
-) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error) {
-	return kvserverbase.CheckForcedErr(ctx, idKey, raftCmd, isLocal, state)
-}
-
-type appBatchHandler appBatch
-
-var _ appHandler = (*appBatchHandler)(nil)
-
-func (h *appBatchHandler) CheckForcedErr(
-	ctx context.Context, cmdI apply.Command,
-) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error) {
-	cmd := cmdI.(*raftlog.ReplicatedCmd)
-	const isLocal = false // standalone application is never local
-	return (*appBatchHandlerConcrete)(h).CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, isLocal, &h.state)
-}
-
 type appHandler interface {
+	// CheckForcedErr checks whether the command is allowed to apply. If so, the
+	// lease index is returned. If not, an error which is the result of the
+	// command's application is returned instead, and the command applies as a
+	// no-op.
+	//
+	// TODO(sep-raft-log): rename this to CheckCommand.
 	CheckForcedErr(context.Context, apply.Command) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error)
+	// AssertCheckedCommand runs assertions on the command after it has been
+	// checked (i.e. either populated with a lease index or turned into a no-op)
+	// and before it has had any effect on the state machine.
+	//
+	// Errors emitted from this method are considered nondeterministic and thus
+	// fatal. Checks that are deterministic can be implemented in CheckForcedErr
+	// where they can refuse only the respective Command.
+	AssertCheckedCommand(context.Context, apply.CheckedCommand) error
 }
 
 // replicaAppBatch implements the apply.Batch interface.
@@ -171,12 +139,18 @@ type appHandler interface {
 // to the current view of ReplicaState and staged in the batch. The batch is
 // committed to the state machine's storage engine atomically.
 type replicaAppBatch struct {
-	appBatch
-	r  *Replica
+	h appHandler
+	appBatchNoMethods
+	r *Replica
+	// TODO(sep-raft-log): this dependency is really light, we're only ever
+	// accessing sm.stats here.
 	sm *replicaStateMachine
 
 	// closedTimestampSetter maintains historical information about the
 	// advancement of the closed timestamp.
+	//
+	// TODO(sep-raft-log): this seems to be used only for assertions, and most
+	// of the tracking it does is specific to local commands.
 	closedTimestampSetter closedTimestampSetterInfo
 	// stats is stored on the application batch to avoid an allocation in
 	// tracking the batch's view of replicaState. All pointer fields in
@@ -196,31 +170,43 @@ type replicaAppBatch struct {
 	asAlloc enginepb.RangeAppliedState
 }
 
+func (b *replicaAppBatch) c() *appBatchConcrete {
+	return (*appBatchConcrete)(&b.appBatchNoMethods)
+}
+
+// replicaAppBatchHandler is replicaAppBatch with an implementation of appHandler.
+//
+// TODO(sep-raft-log): this will grow to be a bigger struct that in particular contains
+// the *Replica which will no longer be present on replicaAppBatch.
+type replicaAppBatchHandler replicaAppBatch
+
+func (b *replicaAppBatchHandler) c() *appBatchConcrete {
+	return (*appBatchConcrete)(&b.appBatchNoMethods)
+}
+
 // CheckForcedErr implements appHandler. It calls through to appBatch's
 // implementation, then optionally adjusts the results via testing hooks,
 // and if the command has no forced error,
-func (b *replicaAppBatch) CheckForcedErr(
+func (b *replicaAppBatchHandler) CheckForcedErr(
 	ctx context.Context, cmdI apply.Command,
 ) (leaseIndex uint64, _ kvserverbase.ProposalRejectionType, _ *roachpb.Error) {
 	cmd := cmdI.(*replicatedCmd)
 	// Call appBatch's implementation first.
-	leaseIndex, rejection, forcedErr := (*appBatchHandlerConcrete)(&b.appBatch).CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &b.state)
+	leaseIndex, rejection, forcedErr := b.c().CheckForcedErr(ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &b.state)
 	// Then, maybe override the result with testing knobs.
 	rejection, forcedErr = replicaApplyTestingFilters(ctx, b.r, cmd, rejection, forcedErr)
 
-	if forcedErr == nil {
-		// TODO(sep-raft-log): the assertions below also apply to standalone mode,
-		// so they should be decoupled from *Replica and made available on
-		// appBatchConcrete.
-		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd, leaseIndex); err != nil {
-			return 0, 0, roachpb.NewError(err)
-		}
-		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
-			return 0, 0, roachpb.NewError(err)
-		}
-	}
-
 	return leaseIndex, rejection, forcedErr
+}
+
+func (b *replicaAppBatchHandler) AssertCheckedCommand(
+	ctx context.Context, cmdI apply.CheckedCommand,
+) error {
+	cmd := cmdI.(*replicatedCmd)
+	if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
+		return err
+	}
+	return b.assertNoWriteBelowClosedTimestamp(cmd)
 }
 
 func replicaApplyTestingFilters(
@@ -290,14 +276,6 @@ func (b *replicaAppBatch) Stage(
 	ctx context.Context, cmdI apply.Command,
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	if cmd.Index() == 0 {
-		return nil, kvserverbase.NonDeterministicErrorf("processRaftCommand requires a non-zero index")
-	}
-	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
-		// If we have an out of order index, there's corruption. No sense in
-		// trying to update anything or running the command. Simply return.
-		return nil, kvserverbase.NonDeterministicErrorf("applied index jumped from %d to %d", applied, idx)
-	}
 	if log.V(4) {
 		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
 			cmd.ID, cmd.Index(), cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
@@ -307,7 +285,7 @@ func (b *replicaAppBatch) Stage(
 	// machine or whether it should be rejected (and replaced by an empty command).
 	// This check is deterministic on all replicas, so if one replica decides to
 	// reject a command, all will.
-	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = b.appHandler.CheckForcedErr(ctx, cmd)
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = b.h.CheckForcedErr(ctx, cmd)
 	if cmd.Rejected() {
 		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
 
@@ -318,6 +296,10 @@ func (b *replicaAppBatch) Stage(
 		cmd.Cmd.ClosedTimestamp = nil
 	} else {
 		log.Event(ctx, "applying command")
+	}
+
+	if err := b.h.AssertCheckedCommand(ctx, apply.CheckedCommand(cmd)); err != nil {
+		return nil, err
 	}
 
 	// Acquire the split or merge lock, if necessary. If a split or merge
@@ -894,7 +876,9 @@ var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_R
 // cmd.Cmd.ClosedTimestamp. A command is allowed to write below the closed
 // timestamp carried by itself; in other words cmd.Cmd.ClosedTimestamp is a
 // promise about future commands, not the command carrying it.
-func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) error {
+//
+// TODO(sep-raft-log): move to group with the receiver's other methods.
+func (b *replicaAppBatchHandler) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) error {
 	if !cmd.IsLocal() || !cmd.proposal.Request.AppliesTimestampCache() {
 		return nil
 	}
@@ -910,15 +894,14 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 		} else {
 			req.SafeString("request unknown; not leaseholder")
 		}
-		return kvserverbase.NonDeterministicErrorWrapf(errors.AssertionFailedf(
+		return kvserverbase.NonDeterministicErrorf(
 			"command writing below closed timestamp; cmd: %x, write ts: %s, "+
 				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n"+
 				"This assertion will fire again on restart; to ignore run with env var\n"+
 				"COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false",
 			cmd.ID, wts,
 			b.state.RaftClosedTimestamp, cmd.Cmd.ClosedTimestamp,
-			req, b.state.Lease),
-			"command writing below closed timestamp")
+			req, b.state.Lease)
 	}
 	return nil
 }
@@ -926,8 +909,10 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 // Assert that the closed timestamp carried by the command is not below one from
 // previous commands. The `cmd` will not have its LeaseIndex set yet; it is passed
 // in separately.
-func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
-	ctx context.Context, cmd *replicatedCmd, leaseIndex uint64,
+//
+// TODO(sep-raft-log): move to group with the receiver's other methods.
+func (b *replicaAppBatchHandler) assertNoCmdClosedTimestampRegression(
+	ctx context.Context, cmd *replicatedCmd,
 ) error {
 	if !raftClosedTimestampAssertionsEnabled {
 		return nil
@@ -957,12 +942,12 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 			}
 		}
 
-		return errors.AssertionFailedf(
+		return kvserverbase.NonDeterministicErrorf(
 			"raft closed timestamp regression in cmd: %x (term: %d, index: %d); batch state: %s, command: %s, lease: %s, req: %s, applying at LAI: %d.\n"+
 				"Closed timestamp was set by req: %s under lease: %s; applied at LAI: %d. Batch idx: %d.\n"+
 				"This assertion will fire again on restart; to ignore run with env var COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false\n"+
 				"Raft log tail:\n%s",
-			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, leaseIndex,
+			cmd.ID, cmd.Term, cmd.Index(), existingClosed, newClosed, b.state.Lease, req, cmd.LeaseIndex,
 			prevReq, b.closedTimestampSetter.lease, b.closedTimestampSetter.leaseIdx, b.entries,
 			logTail)
 	}
@@ -1300,12 +1285,15 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 	s.leaseIdx = ctpb.LAI(cmd.LeaseIndex)
 	s.lease = lease
 	if !cmd.IsLocal() {
+		// TODO(tbg): make this all work regardless of IsLocal(), see comments below.
 		return
 	}
 	req := cmd.proposal.Request
 	et, ok := req.GetArg(roachpb.EndTxn)
 	if ok {
 		endTxn := et.(*roachpb.EndTxnRequest)
+		// TODO(tbg): we can determine those from the ReplicatedEvalResult
+		// as well, i.e. for non-local commands.
 		if trig := endTxn.InternalCommitTrigger; trig != nil {
 			if trig.SplitTrigger != nil {
 				s.split = true
@@ -1314,6 +1302,9 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 			}
 		}
 	} else if req.IsSingleRequestLeaseRequest() {
+		// TODO(tbg): we can also get some of the lease info (though not the entire
+		// request) out of the ReplicatedEvalResult.State.Lease field.
+
 		// Make a deep copy since we're not allowed to hold on to request
 		// memory.
 		lr, _ := req.GetArg(roachpb.RequestLease)
