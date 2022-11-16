@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -173,16 +173,15 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	beforeWrites := s0.Clock().Now()
 	gcSoon()
 
-	pts := ptstorage.New(s0.ClusterSettings(), s0.InternalExecutor().(*sql.InternalExecutor),
-		nil /* knobs */)
-	ptsWithDB := ptstorage.WithDatabase(pts, s0.DB())
+	pts := ptstorage.New(s0.ClusterSettings(), nil)
+	ptsWithDB := ptstorage.WithDatabase(pts, s0.InternalDB().(isql.DB))
 	ptsRec := ptpb.Record{
 		ID:        uuid.MakeV4().GetBytes(),
 		Timestamp: s0.Clock().Now(),
 		Mode:      ptpb.PROTECT_AFTER,
 		Target:    ptpb.MakeSchemaObjectsTarget([]descpb.ID{getTableID()}),
 	}
-	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &ptsRec))
+	require.NoError(t, ptsWithDB.Protect(ctx, &ptsRec))
 	upsertUntilBackpressure()
 	// We need to be careful choosing a time. We're a little limited because the
 	// ttl is defined in seconds and we need to wait for the threshold to be
@@ -220,8 +219,8 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	failedRec.ID = uuid.MakeV4().GetBytes()
 	failedRec.Timestamp = beforeWrites
 	failedRec.Timestamp.Logical = 0
-	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &failedRec))
-	_, err = ptsWithDB.GetRecord(ctx, nil /* txn */, failedRec.ID.GetUUID())
+	require.NoError(t, ptsWithDB.Protect(ctx, &failedRec))
+	_, err = ptsWithDB.GetRecord(ctx, failedRec.ID.GetUUID())
 	require.NoError(t, err)
 
 	// Verify that the record did indeed make its way down into KV where the
@@ -239,7 +238,7 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	laterRec.ID = uuid.MakeV4().GetBytes()
 	laterRec.Timestamp = afterWrites
 	laterRec.Timestamp.Logical = 0
-	require.NoError(t, ptsWithDB.Protect(ctx, nil /* txn */, &laterRec))
+	require.NoError(t, ptsWithDB.Protect(ctx, &laterRec))
 	require.NoError(
 		t,
 		ptutil.TestingVerifyProtectionTimestampExistsOnSpans(
@@ -249,7 +248,7 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 
 	// Release the record that had succeeded and ensure that GC eventually
 	// happens up to the protected timestamp of the new record.
-	require.NoError(t, ptsWithDB.Release(ctx, nil, ptsRec.ID.GetUUID()))
+	require.NoError(t, ptsWithDB.Release(ctx, ptsRec.ID.GetUUID()))
 	testutils.SucceedsSoon(t, func() error {
 		trace, _, err = s.Enqueue(ctx, "mvccGC", repl, false /* skipShouldQueue */, false /* async */)
 		require.NoError(t, err)
@@ -265,9 +264,9 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 	})
 
 	// Release the failed record.
-	require.NoError(t, ptsWithDB.Release(ctx, nil, failedRec.ID.GetUUID()))
-	require.NoError(t, ptsWithDB.Release(ctx, nil, laterRec.ID.GetUUID()))
-	state, err := ptsWithDB.GetState(ctx, nil)
+	require.NoError(t, ptsWithDB.Release(ctx, failedRec.ID.GetUUID()))
+	require.NoError(t, ptsWithDB.Release(ctx, laterRec.ID.GetUUID()))
+	state, err := ptsWithDB.GetState(ctx)
 	require.NoError(t, err)
 	require.Len(t, state.Records, 0)
 	require.Equal(t, int(state.NumRecords), len(state.Records))

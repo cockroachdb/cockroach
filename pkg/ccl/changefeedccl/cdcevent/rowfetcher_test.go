@@ -70,7 +70,7 @@ func TestRowFetcherCache(t *testing.T) {
 	rfCache, err := newRowFetcherCache(ctx, serverCfg.Codec,
 		serverCfg.LeaseManager.(*lease.Manager),
 		serverCfg.CollectionFactory,
-		serverCfg.DB,
+		serverCfg.DB.KV(),
 		targets)
 	if err != nil {
 		t.Fatal(err)

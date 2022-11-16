@@ -17,12 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -60,9 +59,8 @@ var jobEnabledSetting = settings.RegisterBoolSetting(
 //
 //	configurations with the clusters span configurations.
 type Manager struct {
-	db       *kv.DB
+	db       isql.DB
 	jr       *jobs.Registry
-	ie       sqlutil.InternalExecutor
 	stopper  *stop.Stopper
 	settings *cluster.Settings
 	knobs    *spanconfig.TestingKnobs
@@ -72,9 +70,8 @@ type Manager struct {
 
 // New constructs a new Manager.
 func New(
-	db *kv.DB,
+	idb isql.DB,
 	jr *jobs.Registry,
-	ie sqlutil.InternalExecutor,
 	stopper *stop.Stopper,
 	settings *cluster.Settings,
 	reconciler spanconfig.Reconciler,
@@ -84,9 +81,8 @@ func New(
 		knobs = &spanconfig.TestingKnobs{}
 	}
 	return &Manager{
-		db:         db,
+		db:         idb,
 		jr:         jr,
-		ie:         ie,
 		stopper:    stopper,
 		settings:   settings,
 		Reconciler: reconciler,
@@ -188,8 +184,8 @@ func (m *Manager) createAndStartJobIfNoneExists(ctx context.Context) (bool, erro
 	}
 
 	var job *jobs.Job
-	if err := m.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		exists, err := jobs.RunningJobExists(ctx, jobspb.InvalidJobID, m.ie, txn,
+	if err := m.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		exists, err := jobs.RunningJobExists(ctx, jobspb.InvalidJobID, txn,
 			func(payload *jobspb.Payload) bool {
 				return payload.Type() == jobspb.TypeAutoSpanConfigReconciliation
 			},

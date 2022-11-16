@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -145,11 +145,7 @@ RETURNING id;`).Scan(&secondID))
 	runErr := make(chan error)
 	go func() {
 		runErr <- tc.Server(0).JobRegistry().(*jobs.Registry).
-			Run(
-				ctx,
-				tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor),
-				[]jobspb.JobID{secondID},
-			)
+			Run(ctx, []jobspb.JobID{secondID})
 	}()
 	fakeJobBlockChan := <-ch
 
@@ -174,7 +170,7 @@ RETURNING id;`).Scan(&secondID))
 	upgrade2Err := make(chan error, 1)
 	go func() {
 		// Use an internal executor to get access to the trace as it happens.
-		_, err := tc.Server(0).InternalExecutor().(sqlutil.InternalExecutor).Exec(
+		_, err := tc.Server(0).InternalExecutor().(isql.Executor).Exec(
 			recCtx, "test", nil /* txn */, `SET CLUSTER SETTING version = $1`, endCV.String())
 		upgrade2Err <- err
 	}()
@@ -234,7 +230,7 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
 						) error {
-							return d.DB.Migrate(ctx, desc.StartKey, desc.EndKey, cv)
+							return d.DB.KV().Migrate(ctx, desc.StartKey, desc.EndKey, cv)
 						}), true
 					},
 				},

@@ -140,7 +140,7 @@ func (h *testHelper) createChangefeedSchedule(
 		return nil, err
 	}
 	// Query system.scheduled_job table and load those schedules.
-	datums, cols, err := h.cfg.InternalExecutor.QueryRowExWithCols(
+	datums, cols, err := h.cfg.DB.Executor().QueryRowExWithCols(
 		context.Background(), "sched-load", nil,
 		sessiondata.RootUserSessionDataOverride,
 		"SELECT * FROM system.scheduled_jobs WHERE schedule_id = $1",
@@ -355,7 +355,7 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 
 	const selectQuery = "SELECT label FROM [SHOW SCHEDULES FOR CHANGEFEED]"
 
-	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
+	rows, err := th.cfg.DB.Executor().QueryBufferedEx(
 		context.Background(), "check-sched", nil,
 		sessiondata.RootUserSessionDataOverride,
 		selectQuery)
@@ -368,7 +368,7 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 
 	th.sqlDB.Exec(t, fmt.Sprintf(createQuery, newScheduleLabel))
 
-	rows, err = th.cfg.InternalExecutor.QueryBufferedEx(
+	rows, err = th.cfg.DB.Executor().QueryBufferedEx(
 		context.Background(), "check-sched2", nil,
 		sessiondata.RootUserSessionDataOverride,
 		selectQuery)

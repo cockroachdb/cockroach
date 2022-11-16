@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -43,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
@@ -145,7 +145,7 @@ func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 // QueueJob creates a new job from record and queues it for execution after
 // the transaction commits.
 func (evalCtx *extendedEvalContext) QueueJob(
-	ctx context.Context, txn *kv.Txn, record jobs.Record,
+	ctx context.Context, txn isql.Txn, record jobs.Record,
 ) (*jobs.Job, error) {
 	jobID := evalCtx.ExecCfg.JobRegistry.MakeJobID()
 	job, err := evalCtx.ExecCfg.JobRegistry.CreateJobWithTxn(
@@ -173,6 +173,14 @@ type planner struct {
 	schemaResolver
 
 	txn *kv.Txn
+
+	// internalSQLTxn corresponds to the object returned from InternalSQLTxn.
+	// It is here to avoid the need to allocate another structure. The value
+	// is initialized lazily. The assumption is that that method is called
+	// during statement execution when the planner is in a valid state.
+	// The internalSQLTxn may hold on to a stale txn reference and should
+	// never be accessed directly. Nothing explicitly resets this field.
+	internalSQLTxn internalTxn
 
 	// isInternalPlanner is set to true when this planner is not bound to
 	// a SQL session.
@@ -453,12 +461,12 @@ func internalExtendedEvalCtx(
 	var sqlStatsController eval.SQLStatsController
 	var schemaTelemetryController eval.SchemaTelemetryController
 	var indexUsageStatsController eval.IndexUsageStatsController
-	if execCfg.InternalExecutor != nil {
-		if execCfg.InternalExecutor.s != nil {
-			indexUsageStats = execCfg.InternalExecutor.s.indexUsageStats
-			sqlStatsController = execCfg.InternalExecutor.s.sqlStatsController
-			schemaTelemetryController = execCfg.InternalExecutor.s.schemaTelemetryController
-			indexUsageStatsController = execCfg.InternalExecutor.s.indexUsageStatsController
+	if ief := execCfg.InternalDB; ief != nil {
+		if ief.server != nil {
+			indexUsageStats = ief.server.indexUsageStats
+			sqlStatsController = ief.server.sqlStatsController
+			schemaTelemetryController = ief.server.schemaTelemetryController
+			indexUsageStatsController = ief.server.indexUsageStatsController
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
 			// index usage stats collector. The sql.Server in the ExecutorConfig
@@ -556,6 +564,30 @@ func (p *planner) LeaseMgr() *lease.Manager {
 
 func (p *planner) Txn() *kv.Txn {
 	return p.txn
+}
+
+func (p *planner) InternalSQLTxn() descs.Txn {
+	if p.txn == nil {
+		return nil
+	}
+
+	// We lazily initialize the internalSQLTxn structure so that we don't have
+	// to pay to initialize this structure if the statement being executed does
+	// not execute internal sql statements.
+	if p.internalSQLTxn.txn != p.txn {
+		ief := p.ExecCfg().InternalDB
+		ie := MakeInternalExecutor(ief.server, ief.memMetrics, ief.monitor)
+		ie.SetSessionData(p.SessionData())
+		ie.extraTxnState = &extraTxnState{
+			txn:                    p.Txn(),
+			descCollection:         p.Descriptors(),
+			jobs:                   p.extendedEvalCtx.Jobs,
+			schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
+			schemaChangerState:     p.extendedEvalCtx.SchemaChangerState,
+		}
+		p.internalSQLTxn.init(p.txn, ie)
+	}
+	return &p.internalSQLTxn
 }
 
 func (p *planner) User() username.SQLUsername {
@@ -691,21 +723,6 @@ func (p *planner) IsActive(ctx context.Context, key clusterversion.Key) bool {
 	return p.execCfg.Settings.Version.IsActive(ctx, key)
 }
 
-// initInternalExecutor is to initialize an internal executor with a planner.
-// Note that this function should only be used when using internal executor
-// to run sql statement under the planner context.
-func initInternalExecutor(ctx context.Context, p *planner) sqlutil.InternalExecutor {
-	ie := p.ExecCfg().InternalExecutorFactory.NewInternalExecutor(p.SessionData())
-	ie.(*InternalExecutor).extraTxnState = &extraTxnState{
-		txn:                    p.Txn(),
-		descCollection:         p.Descriptors(),
-		jobs:                   p.extendedEvalCtx.Jobs,
-		schemaChangeJobRecords: p.extendedEvalCtx.SchemaChangeJobRecords,
-		schemaChangerState:     p.extendedEvalCtx.SchemaChangerState,
-	}
-	return ie
-}
-
 // QueryRowEx executes the supplied SQL statement and returns a single row, or
 // nil if no row is found, or an error if more that one row is returned.
 //
@@ -718,8 +735,7 @@ func (p *planner) QueryRowEx(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, error) {
-	ie := initInternalExecutor(ctx, p)
-	return ie.QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+	return p.InternalSQLTxn().QueryRowEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // ExecEx is like Exec, but allows the caller to override some session data
@@ -731,8 +747,7 @@ func (p *planner) ExecEx(
 	stmt string,
 	qargs ...interface{},
 ) (int, error) {
-	ie := initInternalExecutor(ctx, p)
-	return ie.ExecEx(ctx, opName, p.Txn(), override, stmt, qargs...)
+	return p.InternalSQLTxn().ExecEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryIteratorEx executes the query, returning an iterator that can be used
@@ -748,9 +763,7 @@ func (p *planner) QueryIteratorEx(
 	stmt string,
 	qargs ...interface{},
 ) (eval.InternalRows, error) {
-	ie := initInternalExecutor(ctx, p)
-	rows, err := ie.QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
-	return rows.(eval.InternalRows), err
+	return p.InternalSQLTxn().QueryIteratorEx(ctx, opName, p.Txn(), override, stmt, qargs...)
 }
 
 // QueryBufferedEx executes the supplied SQL statement and returns the resulting
@@ -764,8 +777,7 @@ func (p *planner) QueryBufferedEx(
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, error) {
-	ie := initInternalExecutor(ctx, p)
-	return ie.QueryBufferedEx(ctx, opName, p.Txn(), session, stmt, qargs...)
+	return p.InternalSQLTxn().QueryBufferedEx(ctx, opName, p.Txn(), session, stmt, qargs...)
 }
 
 // QueryRowExWithCols is like QueryRowEx, additionally returning the computed
@@ -777,8 +789,7 @@ func (p *planner) QueryRowExWithCols(
 	stmt string,
 	qargs ...interface{},
 ) (tree.Datums, colinfo.ResultColumns, error) {
-	ie := initInternalExecutor(ctx, p)
-	return ie.QueryRowExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
+	return p.InternalSQLTxn().QueryRowExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
 }
 
 // QueryBufferedExWithCols is like QueryBufferedEx, additionally returning the
@@ -790,19 +801,7 @@ func (p *planner) QueryBufferedExWithCols(
 	stmt string,
 	qargs ...interface{},
 ) ([]tree.Datums, colinfo.ResultColumns, error) {
-	ie := initInternalExecutor(ctx, p)
-	return ie.QueryBufferedExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
-}
-
-// WithInternalExecutor let user run multiple sql statements within the same
-// internal executor initialized under a planner context. To run single sql
-// statements, please use the query functions above.
-func (p *planner) WithInternalExecutor(
-	ctx context.Context,
-	run func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error,
-) error {
-	ie := initInternalExecutor(ctx, p)
-	return run(ctx, p.Txn(), ie)
+	return p.InternalSQLTxn().QueryBufferedExWithCols(ctx, opName, p.Txn(), session, stmt, qargs...)
 }
 
 func (p *planner) resetPlanner(
@@ -841,10 +840,10 @@ func (p *planner) resetPlanner(
 func (p *planner) GetReplicationStreamManager(
 	ctx context.Context,
 ) (eval.ReplicationStreamManager, error) {
-	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.Txn())
+	return repstream.GetReplicationStreamManager(ctx, p.EvalContext(), p.InternalSQLTxn())
 }
 
 // GetStreamIngestManager returns a StreamIngestManager.
 func (p *planner) GetStreamIngestManager(ctx context.Context) (eval.StreamIngestManager, error) {
-	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.Txn())
+	return repstream.GetStreamIngestManager(ctx, p.EvalContext(), p.InternalSQLTxn())
 }

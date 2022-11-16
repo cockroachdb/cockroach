@@ -47,13 +47,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -392,7 +392,7 @@ func (s *adminServer) databasesHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	var resp serverpb.DatabasesResponse
 	var hasNext bool
@@ -480,7 +480,7 @@ func (s *adminServer) getDatabaseGrants(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 	{
 		const (
 			userCol       = "grantee"
@@ -544,7 +544,7 @@ WHERE table_catalog = $ AND table_type != 'SYSTEM VIEW'`, req.Database)
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 	{
 		ok, err := it.Next(ctx)
 		if err != nil {
@@ -642,7 +642,9 @@ func (s *adminServer) databaseDetailsHelper(
 		if err != nil {
 			return nil, err
 		}
-		dbIndexRecommendations, err := getDatabaseIndexRecommendations(ctx, req.Database, s.ie, s.st, s.sqlServer.execCfg)
+		dbIndexRecommendations, err := getDatabaseIndexRecommendations(
+			ctx, req.Database, s.ie, s.st, s.sqlServer.execCfg.UnusedIndexRecommendationsKnobs,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -834,7 +836,7 @@ func (s *adminServer) tableDetailsHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 	// TODO(cdo): protobuf v3's default behavior for fields with zero values (e.g. empty strings)
 	// is to suppress them. So, if protobuf field "foo" is an empty string, "foo" won't show
 	// up in the marshaled JSON. I feel that this is counterintuitive, and this should be fixed
@@ -907,7 +909,7 @@ func (s *adminServer) tableDetailsHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 	{
 		const (
 			nameCol      = "index_name"
@@ -971,7 +973,7 @@ func (s *adminServer) tableDetailsHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 	{
 		const (
 			userCol       = "grantee"
@@ -1467,7 +1469,7 @@ func (s *adminServer) usersHelper(
 		return nil, err
 	}
 	// We have to make sure to close the iterator.
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	var resp serverpb.UsersResponse
 	var ok bool
@@ -1558,7 +1560,7 @@ func (s *adminServer) eventsHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	// Marshal response.
 	var resp serverpb.EventsResponse
@@ -1695,7 +1697,7 @@ func (s *adminServer) rangeLogHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	// Marshal response.
 	var resp serverpb.RangeLogResponse
@@ -1891,7 +1893,7 @@ func (s *adminServer) SetUIData(
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
-		ie := s.sqlServer.internalExecutorFactory.MakeInternalExecutorWithoutTxn()
+		ie := s.sqlServer.internalDB.Executor()
 		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, now())`
 		rowsAffected, err := ie.ExecEx(
 			ctx, "admin-set-ui-data", nil, /* txn */
@@ -2300,7 +2302,7 @@ func jobsHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	ok, err := it.Next(ctx)
 	if err != nil {
@@ -2507,7 +2509,7 @@ func (s *adminServer) locationsHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	ok, err := it.Next(ctx)
 	if err != nil {
@@ -2868,7 +2870,7 @@ func (s *adminServer) dataDistributionHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	// Used later when we're scanning Meta2 and only have IDs, not names.
 	tableInfosByTableID := map[uint32]serverpb.DataDistributionResponse_TableInfo{}
@@ -3000,7 +3002,7 @@ func (s *adminServer) dataDistributionHelper(
 	}
 	// We have to make sure to close the iterator since we might return from the
 	// for loop early (before Next() returns false).
-	defer func(it sqlutil.InternalRows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
+	defer func(it isql.Rows) { retErr = errors.CombineErrors(retErr, it.Close()) }(it)
 
 	for hasNext, err = it.Next(ctx); hasNext; hasNext, err = it.Next(ctx) {
 		row := it.Cur()
@@ -3541,7 +3543,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // TODO(mrtracy): The following methods, used to look up the zone configuration
 // for a database or table, use the same algorithm as a set of methods in
 // cli/zone.go for the same purpose. However, as that code connects to the
-// server with a SQL connections, while this code uses the InternalExecutor, the
+// server with a SQL connections, while this code uses the Executor, the
 // code cannot be commonized.
 //
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
@@ -3679,7 +3681,7 @@ func (s *adminServer) dialNode(
 // adminPrivilegeChecker is a helper struct to check whether given usernames
 // have admin privileges.
 type adminPrivilegeChecker struct {
-	ie *sql.InternalExecutor
+	ie isql.Executor
 	st *cluster.Settings
 	// makePlanner is a function that calls NewInternalPlanner
 	// to make a planner outside of the sql package. This is a hack

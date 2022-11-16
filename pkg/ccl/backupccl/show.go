@@ -317,8 +317,12 @@ func showBackupPlanHook(
 			defer encStore.Close()
 		}
 		var encryption *jobspb.BackupEncryptionOptions
-		kmsEnv := backupencryption.MakeBackupKMSEnv(p.ExecCfg().Settings,
-			&p.ExecCfg().ExternalIODirConfig, p.ExecCfg().DB, p.User(), p.ExecCfg().InternalExecutor)
+		kmsEnv := backupencryption.MakeBackupKMSEnv(
+			p.ExecCfg().Settings,
+			&p.ExecCfg().ExternalIODirConfig,
+			p.ExecCfg().InternalDB,
+			p.User(),
+		)
 		showEncErr := `If you are running SHOW BACKUP exclusively on an incremental backup, 
 you must pass the 'encryption_info_dir' parameter that points to the directory of your full backup`
 		if passphrase, ok := opts[backupencryption.BackupOptEncPassphrase]; ok {

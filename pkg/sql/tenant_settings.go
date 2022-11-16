@@ -122,7 +122,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 	if n.value == nil {
 		// TODO(radu,knz): DEFAULT might be confusing, we really want to say "NO OVERRIDE"
 		reportedValue = "DEFAULT"
-		if _, err := params.p.execCfg.InternalExecutor.ExecEx(
+		if _, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx, "reset-tenant-setting", params.p.Txn(),
 			sessiondata.RootUserSessionDataOverride,
 			"DELETE FROM system.tenant_settings WHERE tenant_id = $1 AND name = $2", tenantID, n.name,
@@ -139,7 +139,7 @@ func (n *alterTenantSetClusterSettingNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
-		if _, err := params.p.execCfg.InternalExecutor.ExecEx(
+		if _, err := params.p.InternalSQLTxn().ExecEx(
 			params.ctx, "update-tenant-setting", params.p.Txn(),
 			sessiondata.RootUserSessionDataOverride,
 			`UPSERT INTO system.tenant_settings (tenant_id, name, value, last_updated, value_type) VALUES ($1, $2, $3, now(), $4)`,
@@ -248,7 +248,7 @@ FROM
   LEFT JOIN system.tenant_settings AS overrideall
          ON setting.variable = overrideall.name AND overrideall.tenant_id = 0`
 
-			datums, err := p.ExecCfg().InternalExecutor.QueryRowEx(
+			datums, err := p.InternalSQLTxn().QueryRowEx(
 				ctx, "get-tenant-setting-value", p.txn,
 				sessiondata.RootUserSessionDataOverride,
 				lookupEncodedTenantSetting,

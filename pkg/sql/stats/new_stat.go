@@ -14,11 +14,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -27,18 +26,13 @@ import (
 // InsertNewStats inserts a slice of statistics at the current time into the
 // system table.
 func InsertNewStats(
-	ctx context.Context,
-	settings *cluster.Settings,
-	executor sqlutil.InternalExecutor,
-	txn *kv.Txn,
-	tableStats []*TableStatisticProto,
+	ctx context.Context, settings *cluster.Settings, txn isql.Txn, tableStats []*TableStatisticProto,
 ) error {
 	var err error
 	for _, statistic := range tableStats {
 		err = InsertNewStat(
 			ctx,
 			settings,
-			executor,
 			txn,
 			statistic.TableID,
 			statistic.Name,
@@ -65,8 +59,7 @@ func InsertNewStats(
 func InsertNewStat(
 	ctx context.Context,
 	settings *cluster.Settings,
-	executor sqlutil.InternalExecutor,
-	txn *kv.Txn,
+	txn isql.Txn,
 	tableID descpb.ID,
 	name string,
 	columnIDs []descpb.ColumnID,
@@ -99,8 +92,8 @@ func InsertNewStat(
 		if partialPredicate != "" {
 			return errors.New("unable to insert new partial statistic as cluster version is from before V23.1.")
 		}
-		_, err := executor.Exec(
-			ctx, "insert-statistic", txn,
+		_, err := txn.Exec(
+			ctx, "insert-statistic", txn.KV(),
 			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -130,8 +123,8 @@ func InsertNewStat(
 		predicateValue = partialPredicate
 	}
 
-	_, err := executor.Exec(
-		ctx, "insert-statistic", txn,
+	_, err := txn.Exec(
+		ctx, "insert-statistic", txn.KV(),
 		`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",

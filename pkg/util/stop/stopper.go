@@ -283,7 +283,7 @@ func (s *Stopper) WithCancelOnQuiesce(ctx context.Context) (context.Context, fun
 // RunTask adds one to the count of tasks left to quiesce in the system.
 // Any worker which is a "first mover" when starting tasks must call this method
 // before starting work on a new task. First movers include goroutines launched
-// to do periodic work and the kv/db.go gateway which accepts external client
+// to do periodic work and the kv/isql_db.go gateway which accepts external client
 // requests.
 //
 // taskName is used as the "operation" field of the span opened for this task

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/backfiller"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -124,11 +124,11 @@ func (im *IndexBackfillerMergePlanner) plan(
 	var planCtx *PlanningCtx
 
 	if err := DescsTxn(ctx, im.execCfg, func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewFakeSessionData(im.execCfg.SV())
-		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.ReadTimestamp(), descriptors)
-		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn,
+		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
+		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(ctx, &evalCtx, nil /* planner */, txn.KV(),
 			DistributionTypeSystemTenantOnly)
 
 		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
@@ -279,7 +279,7 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 		details.ResumeSpanList[progress.MutationIdx[idx]].ResumeSpans = progress.TodoSpans[idx]
 	}
 
-	return imt.jobMu.job.SetDetails(ctx, nil, details)
+	return imt.jobMu.job.NoTxn().SetDetails(ctx, details)
 }
 
 // FlushFractionCompleted writes out the fraction completed based on the number of total
@@ -306,8 +306,9 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 
 		imt.jobMu.Lock()
 		defer imt.jobMu.Unlock()
-		if err := imt.jobMu.job.FractionProgressed(ctx, nil,
-			jobs.FractionUpdater(frac)); err != nil {
+		if err := imt.jobMu.job.NoTxn().FractionProgressed(
+			ctx, jobs.FractionUpdater(frac),
+		); err != nil {
 			return jobs.SimplifyInvalidStatusError(err)
 		}
 	}

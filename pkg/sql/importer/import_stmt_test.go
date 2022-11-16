@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -52,13 +51,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -2060,8 +2059,8 @@ func TestFailedImportGC(t *testing.T) {
 	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "failedimport")
 	tableID := descpb.ID(dbID + 2)
 	var td catalog.TableDescriptor
-	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-		td, err = col.ByID(txn).Get().Table(ctx, tableID)
+	if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+		td, err = col.ByID(txn.KV()).Get().Table(ctx, tableID)
 		return err
 	}); err != nil {
 		t.Fatal(err)
@@ -2766,11 +2765,12 @@ func TestImportObjectLevelRBAC(t *testing.T) {
 
 	writeToUserfile := func(filename, data string) {
 		// Write to userfile storage now that testuser has CREATE privileges.
-		ie := tc.Server(0).InternalExecutor().(*sql.InternalExecutor)
-		ief := tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory)
-		fileTableSystem1, err := cloud.ExternalStorageFromURI(ctx, dest, base.ExternalIODirConfig{},
-			cluster.NoSettings, blobs.TestEmptyBlobClientFactory, username.TestUserName(), ie, ief,
-			tc.Server(0).DB(), nil, cloud.NilMetrics)
+		ief := tc.Server(0).InternalDB().(isql.DB)
+		fileTableSystem1, err := cloud.ExternalStorageFromURI(
+			ctx, dest, base.ExternalIODirConfig{},
+			cluster.NoSettings, blobs.TestEmptyBlobClientFactory,
+			username.TestUserName(), ief, nil, cloud.NilMetrics,
+		)
 		require.NoError(t, err)
 		require.NoError(t, cloud.WriteFile(ctx, fileTableSystem1, filename, bytes.NewReader([]byte(data))))
 	}
@@ -5199,7 +5199,9 @@ func TestImportControlJobRBAC(t *testing.T) {
 	}, jobs.UsesTenantCostControl)
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) *jobs.StartableJob {
-		job, err := jobs.TestingCreateAndStartJob(ctx, registry, tc.Server(0).DB(), record)
+		job, err := jobs.TestingCreateAndStartJob(
+			ctx, registry, tc.Server(0).InternalDB().(isql.DB), record,
+		)
 		require.NoError(t, err)
 		return job
 	}
@@ -5994,9 +5996,7 @@ func TestImportPgDumpIgnoredStmts(t *testing.T) {
 			tc.Server(0).ClusterSettings(),
 			blobs.TestEmptyBlobClientFactory,
 			username.RootUserName(),
-			tc.Server(0).InternalExecutor().(*sql.InternalExecutor),
-			tc.Server(0).InternalExecutorFactory().(sqlutil.InternalExecutorFactory),
-			tc.Server(0).DB(),
+			tc.Server(0).InternalDB().(isql.DB),
 			nil,
 			cloud.NilMetrics,
 		)
@@ -6411,8 +6411,8 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		for _, schemaID := range schemaIDs {
 			// Expect that the schema descriptor is deleted.
-			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.ByID(txn).Get().Schema(ctx, schemaID)
+			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				_, err := col.ByID(txn.KV()).Get().Schema(ctx, schemaID)
 				if pgerror.GetPGCode(err) == pgcode.InvalidSchemaName {
 					return nil
 				}
@@ -6427,8 +6427,8 @@ func TestImportPgDumpSchemas(t *testing.T) {
 
 		for _, tableID := range tableIDs {
 			// Expect that the table descriptor is deleted.
-			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.ByID(txn).Get().Table(ctx, tableID)
+			if err := sql.TestingDescsTxn(ctx, tc.Server(0), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				_, err := col.ByID(txn.KV()).Get().Table(ctx, tableID)
 				if !testutils.IsError(err, "descriptor not found") {
 					return err
 				}

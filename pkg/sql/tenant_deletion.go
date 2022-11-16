@@ -16,10 +16,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -32,11 +33,20 @@ func (p *planner) DropTenantByID(
 		return err
 	}
 
-	info, err := GetTenantRecordByID(ctx, p.execCfg, p.txn, roachpb.MustMakeTenantID(tenID))
+	info, err := GetTenantRecordByID(ctx, p.InternalSQLTxn(), roachpb.MustMakeTenantID(tenID))
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
-	return dropTenantInternal(ctx, p.txn, p.execCfg, &p.extendedEvalCtx, p.User(), info, synchronousImmediateDrop)
+	return dropTenantInternal(
+		ctx,
+		p.ExecCfg().Settings,
+		p.InternalSQLTxn(),
+		p.ExecCfg().JobRegistry,
+		p.extendedEvalCtx.Jobs,
+		p.User(),
+		info,
+		synchronousImmediateDrop,
+	)
 }
 
 func (p *planner) validateDropTenant(ctx context.Context) error {
@@ -53,9 +63,10 @@ func (p *planner) validateDropTenant(ctx context.Context) error {
 
 func dropTenantInternal(
 	ctx context.Context,
-	txn *kv.Txn,
-	execCfg *ExecutorConfig,
-	extendedEvalCtx *extendedEvalContext,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	sessionJobs *jobsCollection,
 	user username.SQLUsername,
 	info *descpb.TenantInfo,
 	synchronousImmediateDrop bool,
@@ -75,7 +86,11 @@ func dropTenantInternal(
 	// Cancel any running replication job on this tenant record.
 	// The GCJob will wait for this job to enter a terminal state.
 	if info.TenantReplicationJobID != 0 {
-		if err := execCfg.JobRegistry.CancelRequested(ctx, txn, info.TenantReplicationJobID); err != nil {
+		job, err := jobRegistry.LoadJobWithTxn(ctx, info.TenantReplicationJobID, txn)
+		if err != nil {
+			return errors.Wrap(err, "loading tenant replication job for cancelation")
+		}
+		if err := job.WithTxn(txn).CancelRequested(ctx); err != nil {
 			return errors.Wrapf(err, "canceling tenant replication job %d", info.TenantReplicationJobID)
 		}
 	}
@@ -85,16 +100,16 @@ func dropTenantInternal(
 	info.State = descpb.TenantInfo_DROP
 	info.DroppedName = info.Name
 	info.Name = ""
-	if err := UpdateTenantRecord(ctx, execCfg, txn, info); err != nil {
+	if err := UpdateTenantRecord(ctx, settings, txn, info); err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
 
-	jobID, err := createGCTenantJob(ctx, execCfg, txn, user, tenID, synchronousImmediateDrop)
+	jobID, err := createGCTenantJob(ctx, jobRegistry, txn, user, tenID, synchronousImmediateDrop)
 	if err != nil {
 		return errors.Wrap(err, "scheduling gc job")
 	}
 	if synchronousImmediateDrop {
-		extendedEvalCtx.Jobs.add(jobID)
+		sessionJobs.add(jobID)
 	}
 	return nil
 }
@@ -103,8 +118,8 @@ func dropTenantInternal(
 // data and removes its tenant record.
 func createGCTenantJob(
 	ctx context.Context,
-	execCfg *ExecutorConfig,
-	txn *kv.Txn,
+	jobRegistry *jobs.Registry,
+	txn isql.Txn,
 	user username.SQLUsername,
 	tenID uint64,
 	dropImmediately bool,
@@ -129,8 +144,8 @@ func createGCTenantJob(
 		Progress:      progress,
 		NonCancelable: true,
 	}
-	jobID := execCfg.JobRegistry.MakeJobID()
-	if _, err := execCfg.JobRegistry.CreateJobWithTxn(
+	jobID := jobRegistry.MakeJobID()
+	if _, err := jobRegistry.CreateJobWithTxn(
 		ctx, gcJobRecord, jobID, txn,
 	); err != nil {
 		return 0, err

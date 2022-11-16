@@ -21,11 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -151,9 +150,7 @@ func ExternalStorageFromURI(
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
 	user username.SQLUsername,
-	ie sqlutil.InternalExecutor,
-	ief sqlutil.InternalExecutorFactory,
-	kvDB *kv.DB,
+	db isql.DB,
 	limiters Limiters,
 	metrics metric.Struct,
 	opts ...ExternalStorageOption,
@@ -163,7 +160,7 @@ func ExternalStorageFromURI(
 		return nil, err
 	}
 	return MakeExternalStorage(ctx, conf, externalConfig, settings, blobClientFactory,
-		ie, ief, kvDB, limiters, metrics, opts...)
+		db, limiters, metrics, opts...)
 }
 
 // SanitizeExternalStorageURI returns the external storage URI with with some
@@ -207,9 +204,7 @@ func MakeExternalStorage(
 	conf base.ExternalIODirConfig,
 	settings *cluster.Settings,
 	blobClientFactory blobs.BlobClientFactory,
-	ie sqlutil.InternalExecutor,
-	ief sqlutil.InternalExecutorFactory,
-	kvDB *kv.DB,
+	db isql.DB,
 	limiters Limiters,
 	metrics metric.Struct,
 	opts ...ExternalStorageOption,
@@ -220,15 +215,13 @@ func MakeExternalStorage(
 		return nil, errors.Newf("invalid metrics type: %T", metrics)
 	}
 	args := ExternalStorageContext{
-		IOConf:                  conf,
-		Settings:                settings,
-		BlobClientFactory:       blobClientFactory,
-		InternalExecutor:        ie,
-		InternalExecutorFactory: ief,
-		DB:                      kvDB,
-		Options:                 opts,
-		Limiters:                limiters,
-		MetricsRecorder:         cloudMetrics,
+		IOConf:            conf,
+		Settings:          settings,
+		BlobClientFactory: blobClientFactory,
+		DB:                db,
+		Options:           opts,
+		Limiters:          limiters,
+		MetricsRecorder:   cloudMetrics,
 	}
 	if conf.DisableOutbound && dest.Provider != cloudpb.ExternalStorageProvider_userfile {
 		return nil, errors.New("external network access is disabled")

@@ -15,11 +15,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdeps"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
@@ -62,7 +62,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
-	if err := n.job.Update(ctx, nil /* txn */, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	if err := n.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		return nil
 	}); err != nil {
 		// TODO(ajwerner): Detect transient errors and classify as retriable here or
@@ -77,12 +77,11 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 	payload := n.job.Payload()
 	deps := scdeps.NewJobRunDependencies(
 		execCfg.CollectionFactory,
-		execCfg.InternalExecutorFactory,
-		execCfg.DB,
+		execCfg.InternalDB,
 		execCfg.IndexBackfiller,
 		execCfg.IndexMerger,
 		NewRangeCounter(execCfg.DB, execCfg.DistSQLPlanner),
-		func(txn *kv.Txn) scexec.EventLogger {
+		func(txn isql.Txn) scexec.EventLogger {
 			return sql.NewSchemaChangerEventLogger(txn, execCfg, 0)
 		},
 		execCfg.JobRegistry,
@@ -90,12 +89,11 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		execCfg.Codec,
 		execCfg.Settings,
 		execCfg.Validator,
-		func(ctx context.Context, descriptors *descs.Collection, txn *kv.Txn) scexec.DescriptorMetadataUpdater {
+		func(ctx context.Context, descriptors *descs.Collection, txn isql.Txn) scexec.DescriptorMetadataUpdater {
 			return descmetadata.NewMetadataUpdater(ctx,
-				execCfg.InternalExecutorFactory,
+				txn,
 				descriptors,
 				&execCfg.Settings.SV,
-				txn,
 				execCtx.SessionData(),
 			)
 		},

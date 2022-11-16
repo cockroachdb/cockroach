@@ -83,16 +83,14 @@ func New(
 	tolerances changefeedbase.CanHandle,
 ) SchemaFeed {
 	m := &schemaFeed{
-		filter:                  schemaChangeEventFilters[events],
-		db:                      cfg.DB,
-		clock:                   cfg.DB.Clock(),
-		settings:                cfg.Settings,
-		targets:                 targets,
-		leaseMgr:                cfg.LeaseManager.(*lease.Manager),
-		collectionFactory:       cfg.CollectionFactory,
-		internalExecutorFactory: cfg.InternalExecutorFactory,
-		metrics:                 metrics,
-		tolerances:              tolerances,
+		filter:     schemaChangeEventFilters[events],
+		db:         cfg.DB,
+		clock:      cfg.DB.KV().Clock(),
+		settings:   cfg.Settings,
+		targets:    targets,
+		leaseMgr:   cfg.LeaseManager.(*lease.Manager),
+		metrics:    metrics,
+		tolerances: tolerances,
 	}
 	m.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
 	m.mu.highWater = initialHighwater
@@ -112,7 +110,7 @@ func New(
 // lowest timestamp where at least one table doesn't meet the invariant.
 type schemaFeed struct {
 	filter     tableEventFilter
-	db         *kv.DB
+	db         descs.DB
 	clock      *hlc.Clock
 	settings   *cluster.Settings
 	targets    changefeedbase.Targets
@@ -122,9 +120,7 @@ type schemaFeed struct {
 	// TODO(ajwerner): Should this live underneath the FilterFunc?
 	// Should there be another function to decide whether to update the
 	// lease manager?
-	leaseMgr                *lease.Manager
-	collectionFactory       *descs.CollectionFactory
-	internalExecutorFactory descs.TxnManager
+	leaseMgr *lease.Manager
 
 	mu struct {
 		syncutil.Mutex
@@ -264,15 +260,16 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 	tf.mu.Unlock()
 	var initialDescs []catalog.Descriptor
 	initialTableDescsFn := func(
-		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+		ctx context.Context, txn descs.Txn,
 	) error {
+		descriptors := txn.Descriptors()
 		initialDescs = initialDescs[:0]
-		if err := txn.SetFixedTimestamp(ctx, initialTableDescTs); err != nil {
+		if err := txn.KV().SetFixedTimestamp(ctx, initialTableDescTs); err != nil {
 			return err
 		}
 		// Note that all targets are currently guaranteed to be tables.
 		return tf.targets.EachTableID(func(id descpb.ID) error {
-			tableDesc, err := descriptors.ByID(txn).WithoutNonPublic().Get().Table(ctx, id)
+			tableDesc, err := descriptors.ByID(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
 			if err != nil {
 				return err
 			}
@@ -281,7 +278,7 @@ func (tf *schemaFeed) primeInitialTableDescs(ctx context.Context) error {
 		})
 	}
 
-	if err := tf.internalExecutorFactory.DescsTxn(ctx, tf.db, initialTableDescsFn); err != nil {
+	if err := tf.db.DescsTxn(ctx, initialTableDescsFn); err != nil {
 		return err
 	}
 
@@ -632,7 +629,7 @@ func (tf *schemaFeed) fetchDescriptorVersions(
 	codec := tf.leaseMgr.Codec()
 	start := timeutil.Now()
 	res, err := fetchDescriptorsWithPriorityOverride(
-		ctx, tf.settings, tf.db.NonTransactionalSender(), codec, startTS, endTS)
+		ctx, tf.settings, tf.db.KV().NonTransactionalSender(), codec, startTS, endTS)
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.Infof(ctx, `fetched table descs (%s,%s] took %s err=%s`, startTS, endTS, timeutil.Since(start), err)
 	}

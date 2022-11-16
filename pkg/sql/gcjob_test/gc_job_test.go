@@ -39,8 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob"
 	"github.com/cockroachdb/cockroach/pkg/sql/gcjob/gcjobnotifier"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
@@ -108,13 +108,13 @@ func TestSchemaChangeGCJob(t *testing.T) {
 
 			var myTableDesc *tabledesc.Mutable
 			var myOtherTableDesc *tabledesc.Mutable
-			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.ByID(txn).Get().Table(ctx, myTableID)
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.ByID(txn).Get().Table(ctx, myOtherTableID)
+				myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -208,7 +208,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				Details:       details,
 			}
 
-			job, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, jobRecord)
+			job, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, s.InternalDB().(isql.DB), jobRecord)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -237,8 +237,8 @@ func TestSchemaChangeGCJob(t *testing.T) {
 				}
 			}
 
-			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				myImm, err := col.ByID(txn).Get().Table(ctx, myTableID)
+			if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+				myImm, err := col.ByID(txn.KV()).Get().Table(ctx, myTableID)
 				if err != nil {
 					return err
 				}
@@ -248,7 +248,7 @@ func TestSchemaChangeGCJob(t *testing.T) {
 					return nil
 				}
 				myTableDesc = tabledesc.NewBuilder(myImm.TableDesc()).BuildExistingMutableTable()
-				myOtherImm, err := col.ByID(txn).Get().Table(ctx, myOtherTableID)
+				myOtherImm, err := col.ByID(txn.KV()).Get().Table(ctx, myOtherTableID)
 				if err != nil {
 					return err
 				}
@@ -324,7 +324,7 @@ func TestGCResumer(t *testing.T) {
 
 	ctx := context.Background()
 	args := base.TestServerArgs{Knobs: base.TestingKnobs{JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals()}}
-	srv, sqlDB, kvDB := serverutils.StartServer(t, args)
+	srv, sqlDB, _ := serverutils.StartServer(t, args)
 	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	jobRegistry := execCfg.JobRegistry
 	defer srv.Stopper().Stop(ctx)
@@ -342,13 +342,17 @@ func TestGCResumer(t *testing.T) {
 			Username: username.TestUserName(),
 		}
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, execCfg.InternalDB, record)
 		require.NoError(t, err)
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
+		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID))
+			return err
+		})
+
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -367,7 +371,7 @@ func TestGCResumer(t *testing.T) {
 			Username: username.TestUserName(),
 		}
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, execCfg.InternalDB, record)
 		require.NoError(t, err)
 
 		_, err = sqlDB.Exec("ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
@@ -377,7 +381,10 @@ func TestGCResumer(t *testing.T) {
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
 		require.Equal(t, jobs.StatusSucceeded, job.Status())
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
+		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(tenID))
+			return err
+		})
 		require.EqualError(t, err, `tenant "10" does not exist`)
 		progress := job.Progress()
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.GetSchemaChangeGC().Tenant.Status)
@@ -400,7 +407,7 @@ func TestGCResumer(t *testing.T) {
 			Username: username.TestUserName(),
 		}
 
-		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, kvDB, record)
+		sj, err := jobs.TestingCreateAndStartJob(ctx, jobRegistry, execCfg.InternalDB, record)
 		require.NoError(t, err)
 		require.Error(t, sj.AwaitCompletion(ctx))
 	})
@@ -427,14 +434,31 @@ func TestGCTenant(t *testing.T) {
 		dropTenID        = 11
 		nonexistentTenID = 12
 	)
-	_, err := sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{ID: activeTenID},
-	}, execCfg.DefaultZoneConfig)
-	require.NoError(t, err)
-	_, err = sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
-		TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
-	}, execCfg.DefaultZoneConfig)
-	require.NoError(t, err)
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := sql.CreateTenantRecord(
+			ctx, execCfg.Codec, execCfg.Settings,
+			txn,
+			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			&descpb.TenantInfoWithUsage{
+				TenantInfo: descpb.TenantInfo{ID: activeTenID},
+			},
+			execCfg.DefaultZoneConfig,
+		)
+		return err
+	}))
+
+	require.NoError(t, execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := sql.CreateTenantRecord(
+			ctx, execCfg.Codec, execCfg.Settings,
+			txn,
+			execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn.KV()),
+			&descpb.TenantInfoWithUsage{
+				TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
+			},
+			execCfg.DefaultZoneConfig,
+		)
+		return err
+	}))
 
 	t.Run("unexpected progress state", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{
@@ -506,7 +530,10 @@ func TestGCTenant(t *testing.T) {
 
 		require.NoError(t, gcClosure(dropTenID, progress))
 		require.Equal(t, jobspb.SchemaChangeGCProgress_CLEARED, progress.Tenant.Status)
-		_, err = sql.GetTenantRecordByID(ctx, &execCfg, nil /* txn */, roachpb.MustMakeTenantID(dropTenID))
+		err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			_, err := sql.GetTenantRecordByID(ctx, txn, roachpb.MustMakeTenantID(dropTenID))
+			return err
+		})
 		require.EqualError(t, err, `tenant "11" does not exist`)
 		require.NoError(t, gcClosure(dropTenID, progress))
 
@@ -626,9 +653,8 @@ SELECT descriptor_id, index_id
 			close(ch)
 		}
 		// Ensure that the job completes successfully in either case.
-		require.NoError(t, s.JobRegistry().(*jobs.Registry).WaitForJobs(
-			ctx, s.InternalExecutor().(sqlutil.InternalExecutor), []jobspb.JobID{jobID},
-		))
+		jr := s.JobRegistry().(*jobs.Registry)
+		require.NoError(t, jr.WaitForJobs(ctx, []jobspb.JobID{jobID}))
 	})
 }
 

@@ -15,14 +15,12 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -52,9 +50,7 @@ var _ sqlstats.Provider = &SQLStats{}
 
 // GetController returns a sqlstats.Controller responsible for the current
 // SQLStats.
-func (s *SQLStats) GetController(
-	server serverpb.SQLStatusServer, db *kv.DB, ie sqlutil.InternalExecutor,
-) *Controller {
+func (s *SQLStats) GetController(server serverpb.SQLStatusServer) *Controller {
 	return NewController(s, server)
 }
 

@@ -37,9 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -350,7 +350,7 @@ func (r *reportErrorResumer) OnFailOrCancel(
 
 // OnPauseRequest implements PauseRequester interface.
 func (r *reportErrorResumer) OnPauseRequest(
-	ctx context.Context, execCtx interface{}, txn *kv.Txn, details *jobspb.Progress,
+	ctx context.Context, execCtx interface{}, txn isql.Txn, details *jobspb.Progress,
 ) error {
 	return r.wrapped.(*changefeedResumer).OnPauseRequest(ctx, execCtx, txn, details)
 }

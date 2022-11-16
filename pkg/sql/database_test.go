@@ -16,10 +16,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,8 +32,8 @@ func TestDatabaseAccessors(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, err := col.ByID(txn).Get().Database(ctx, keys.SystemDatabaseID)
+	if err := TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		_, err := col.ByID(txn.KV()).Get().Database(ctx, keys.SystemDatabaseID)
 		return err
 	}); err != nil {
 		t.Fatal(err)

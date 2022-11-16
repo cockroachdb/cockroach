@@ -16,6 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,8 +44,11 @@ func gcTenant(
 		)
 	}
 
-	info, err := sql.GetTenantRecordByID(ctx, execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
-	if err != nil {
+	var info *descpb.TenantInfo
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		info, err = sql.GetTenantRecordByID(ctx, txn /* txn */, roachpb.MustMakeTenantID(tenID))
+		return err
+	}); err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
 			// The tenant row is deleted only after its data is cleared so there is
 			// nothing to do in this case but mark the job as done.

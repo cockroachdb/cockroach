@@ -8,12 +8,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs/jobspb",
-        "//pkg/kv",
         "//pkg/scheduledjobs",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/resolver",
+        "//pkg/sql/isql",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/tree",

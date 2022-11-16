@@ -18,16 +18,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -68,8 +68,8 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 	var pkColumns []string
 	var pkTypes []*types.T
 	var labelMetrics bool
-	if err := serverCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		desc, err := descsCol.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, details.TableID)
+	if err := serverCfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		desc, err := descsCol.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 		if err != nil {
 			return err
 		}
@@ -91,7 +91,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		rowLevelTTL := desc.GetRowLevelTTL()
 		labelMetrics = rowLevelTTL.LabelMetrics
 
-		tn, err := descs.GetObjectName(ctx, txn, descsCol, desc)
+		tn, err := descs.GetObjectName(ctx, txn.KV(), descsCol, desc)
 		if err != nil {
 			return errors.Wrapf(err, "error fetching table relation name for TTL")
 		}
@@ -177,7 +177,7 @@ func (t *ttlProcessor) work(ctx context.Context) error {
 		jobID,
 		nil,  /* txn */
 		true, /* useReadLock */
-		func(_ *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		func(_ isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			progress := md.Progress
 			rowLevelTTL := progress.Details.(*jobspb.Progress_RowLevelTTL).RowLevelTTL
 			rowLevelTTL.JobRowCount += processorRowCount
@@ -222,7 +222,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 	ttlExpr := ttlSpec.TTLExpr
 	flowCtx := t.FlowCtx
 	serverCfg := flowCtx.Cfg
-	ie := serverCfg.Executor
+	ie := serverCfg.DB.Executor()
 
 	selectBatchSize := ttlSpec.SelectBatchSize
 
@@ -294,10 +294,10 @@ func (t *ttlProcessor) runTTLOnSpan(
 				until = numExpiredRows
 			}
 			deleteBatch := expiredRowsPKs[startRowIdx:until]
-			if err := serverCfg.DB.TxnWithSteppingEnabled(ctx, sessiondatapb.TTLLow, func(ctx context.Context, txn *kv.Txn) error {
+			do := func(ctx context.Context, txn isql.Txn) error {
 				// If we detected a schema change here, the DELETE will not succeed
 				// (the SELECT still will because of the AOST). Early exit here.
-				desc, err := flowCtx.Descriptors.ByIDWithLeased(txn).WithoutNonPublic().Get().Table(ctx, details.TableID)
+				desc, err := flowCtx.Descriptors.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, details.TableID)
 				if err != nil {
 					return err
 				}
@@ -314,7 +314,7 @@ func (t *ttlProcessor) runTTLOnSpan(
 				defer tokens.Consume()
 
 				start := timeutil.Now()
-				batchRowCount, err := deleteBuilder.run(ctx, ie, txn, deleteBatch)
+				batchRowCount, err := deleteBuilder.run(ctx, txn, deleteBatch)
 				if err != nil {
 					return err
 				}
@@ -323,7 +323,10 @@ func (t *ttlProcessor) runTTLOnSpan(
 				metrics.RowDeletions.Inc(batchRowCount)
 				spanRowCount += batchRowCount
 				return nil
-			}); err != nil {
+			}
+			if err := serverCfg.DB.Txn(
+				ctx, do, isql.SteppingEnabled(), isql.WithPriority(admissionpb.UserLowPri),
+			); err != nil {
 				return spanRowCount, errors.Wrapf(err, "error during row deletion")
 			}
 		}

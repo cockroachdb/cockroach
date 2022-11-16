@@ -13,12 +13,11 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
-        "//pkg/kv",
         "//pkg/multitenant/tenantcostmodel",
         "//pkg/roachpb",
         "//pkg/settings",
+        "//pkg/sql/isql",
         "//pkg/sql/sqlliveness",
-        "//pkg/sql/sqlutil",
         "//pkg/util/metric",
         "//pkg/util/stop",
     ],
