@@ -605,6 +605,15 @@ func (s *kafkaSink) handleBufferedRetries(msgs []*sarama.ProducerMessage, retryE
 		// SendMessages will attempt to send all messages into an AsyncProducer with
 		// the client's config and then block until the results come in.
 		lastSendErr = newProducer.SendMessages(msgs)
+		if lastSendErr != nil {
+			// nolint:errcmp
+			if sendErrs, ok := lastSendErr.(sarama.ProducerErrors); ok && len(sendErrs) > 0 {
+				// Just check the first error since all these messages being retried
+				// were likely from a single partition and therefore would've been
+				// marked with the same error.
+				lastSendErr = sendErrs[0].Err
+			}
+		}
 
 		if err := newProducer.Close(); err != nil {
 			log.Errorf(s.ctx, "closing of previous sarama producer for retry failed with: %s", err.Error())
