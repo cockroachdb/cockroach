@@ -363,7 +363,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
-  transactions: (statType: StatisticType) => {
+  transactions: () => {
     return (
       <Tooltip
         placement="bottom"
@@ -549,20 +549,16 @@ export const statisticsTableTitles: StatisticTableTitleType = {
     );
   },
   time: (statType: StatisticType) => {
-    let columnLabel = "";
     let contentModifier = "";
     let fingerprintModifier = "";
     switch (statType) {
       case "transaction":
         contentModifier = contentModifiers.transactions;
-        columnLabel = contentModifiers.transactionCapital;
         break;
       case "statement":
         contentModifier = contentModifiers.statements;
-        columnLabel = contentModifiers.statementCapital;
         break;
       case "transactionDetails":
-        columnLabel = contentModifiers.statementCapital;
         contentModifier = contentModifiers.statements;
         fingerprintModifier =
           " for this " + contentModifiers.transactionFingerprint;
@@ -809,7 +805,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
-  diagnostics: (statType: StatisticType) => {
+  diagnostics: () => {
     return (
       <Tooltip
         placement="bottom"
@@ -833,7 +829,7 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
-  statementsCount: (statType: StatisticType) => {
+  statementsCount: () => {
     return (
       <Tooltip
         placement="bottom"

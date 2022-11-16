@@ -330,7 +330,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                   />
                   <Route
                     exact
-                    path="/debug/tracez_v2/snapshot/:snapshotID"
+                    path="/debug/tracez_v2/node/:nodeID"
+                    component={SnapshotPage}
+                  />
+                  <Route
+                    exact
+                    path="/debug/tracez_v2/node/:nodeID/snapshot/:snapshotID"
                     component={SnapshotPage}
                   />
                   <Route exact path="/debug/redux" component={ReduxDebug} />
