@@ -19,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -179,4 +181,44 @@ type tenantIndependentClientParameters struct {
 	sql.SessionArgs
 	foundBufferSize          bool
 	clientProvidedRemoteAddr string
+}
+
+// PreServeState describes the state of a connection after PrepareConn,
+// before a specific tenant has been selected.
+type PreServeState int8
+
+const (
+	// PreServeReady indicates the connection was set up successfully
+	// and can serve SQL traffic.
+	PreServeReady PreServeState = iota
+	// PreServeCancel indicates that the client has sent a cancel
+	// request. No further traffic is expected and the net.Conn
+	// has been closed already.
+	PreServeCancel
+	// PreServeError indicates that an error was encountered during
+	// PrepareConn. No further traffic is expected. The caller is responsible
+	// for closing the net.Conn.
+	PreServeError
+)
+
+// PreServeStatus encapsulates the result of PrepareConn, before
+// a specific tenant has been selected.
+type PreServeStatus struct {
+	// State is the state of the connection. See the values
+	// defined above.
+	State PreServeState
+
+	// ConnType is the type of incoming connection.
+	ConnType hba.ConnType
+
+	// CancelKey is the data sufficient to serve a cancel request.
+	// Defined only if State == PreServeCancel.
+	CancelKey pgwirecancel.BackendKeyData
+
+	// Reserved is a memory account of the memory overhead for the
+	// connection. Defined only if State == PreServeReady.
+	Reserved mon.BoundAccount
+
+	// clientParameters is the set of client-provided status parameters.
+	clientParameters tenantIndependentClientParameters
 }
