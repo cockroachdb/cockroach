@@ -927,14 +927,15 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		return int(atomic.LoadUint64(&p.atomic.compactionConcurrency))
 	}
 
-	cfg.Opts.EventListener = pebble.TeeEventListener(
+	l := pebble.TeeEventListener(
 		pebble.MakeLoggingEventListener(pebbleLogger{
 			ctx:   logCtx,
 			depth: 2, // skip over the EventListener stack frame
 		}),
 		p.makeMetricEtcEventListener(ctx),
 	)
-	p.eventListener = &cfg.Opts.EventListener
+	p.eventListener = &l
+	cfg.Opts.EventListener = &l
 	p.wrappedIntentWriter = wrapIntentWriter(p)
 
 	// Read the current store cluster version.
