@@ -110,7 +110,6 @@ go_library(
         "pgx.go",
         "pgx_blocklist.go",
         "pop.go",
-        "predecessor_version.go",
         "psycopg.go",
         "psycopg_blocklist.go",
         "query_comparison_util.go",
@@ -165,7 +164,6 @@ go_library(
         "versionupgrade.go",
         "ycsb.go",
     ],
-    embedsrcs = ["predecessor_version.json"],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/tests",
     visibility = ["//visibility:public"],
     deps = [
@@ -184,6 +182,7 @@ go_library(
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/registry",
         "//pkg/cmd/roachtest/roachtestutil",
+        "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
         "//pkg/cmd/roachtest/spec",
         "//pkg/cmd/roachtest/test",
         "//pkg/gossip",
