@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -77,12 +78,50 @@ type cdcTester struct {
 	crdbNodes    option.NodeListOption
 	workloadNode option.NodeListOption
 	logger       *logger.Logger
+	promCfg      *prometheus.Config
 
 	// sinkType -> sinkURI
 	sinkCache map[sinkType]string
 
 	workloadWg *sync.WaitGroup
 	doneCh     chan struct{}
+}
+
+// startStatsCollection sets the start point of the stats collection window
+// and returns a function which should be called at the end of the test to dump a
+// stats.json file to the artifacts directory.
+func (ct *cdcTester) startStatsCollection() func() {
+	if ct.promCfg == nil {
+		ct.t.Error("prometheus configuration is nil")
+	}
+	promClient, err := clusterstats.SetupCollectorPromClient(ct.ctx, ct.cluster, ct.t.L(), ct.promCfg)
+	if err != nil {
+		ct.t.Errorf("error creating prometheus client for stats collector: %s", err)
+	}
+
+	statsCollector := clusterstats.NewStatsCollector(ct.ctx, promClient)
+	startTime := timeutil.Now()
+	return func() {
+		endTime := timeutil.Now()
+		err := statsCollector.Exporter().Export(ct.ctx, ct.cluster, ct.t,
+			startTime,
+			endTime,
+			[]clusterstats.AggQuery{sqlServiceLatencyAgg, changefeedThroughputAgg, cpuUsageAgg},
+			func(stats map[string]clusterstats.StatSummary) (string, float64) {
+				// TODO(jayant): update this metric to be more accurate.
+				// It may be worth plugging in real latency values from the latency
+				// verifier here in the future for more accuracy. However, it may not be
+				// worth the added complexity. Since latency verifier failures will show
+				// up as roachtest failures, we don't need to make them very apparent in
+				// roachperf. Note that other roachperf stats, such as the aggregate stats
+				// above, will be accurate.
+				return "Total Run Time (mins)", endTime.Sub(startTime).Minutes()
+			},
+		)
+		if err != nil {
+			ct.t.Errorf("error exporting stats file: %s", err)
+		}
+	}
 }
 
 func (ct *cdcTester) startCRDBChaos() {
@@ -468,18 +507,19 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester
 	if !t.SkipInit() {
 		tester.startGrafana()
 	}
-
 	return tester
 }
 
 func (ct *cdcTester) startGrafana() {
-	// Setup the prometheus instance on the workload node
 	cfg := (&prometheus.Config{}).
 		WithPrometheusNode(ct.workloadNode.InstallNodes()[0]).
 		WithCluster(ct.crdbNodes.InstallNodes()).
 		WithNodeExporter(ct.crdbNodes.InstallNodes()).
 		WithGrafanaDashboard("https://go.crdb.dev/p/changefeed-roachtest-grafana-dashboard")
 	cfg.Grafana.Enabled = true
+
+	ct.promCfg = cfg
+
 	err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
 	if err != nil {
 		ct.t.Errorf("error starting prometheus/grafana: %s", err)
@@ -846,6 +886,7 @@ func registerCDC(r registry.Registry) {
 
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
 
+			exportStatsFile := ct.startStatsCollection()
 			feed := ct.newChangefeed(feedArgs{
 				sinkType: kafkaSink,
 				targets:  allTpccTargets,
@@ -855,6 +896,7 @@ func registerCDC(r registry.Registry) {
 				initialScanLatency: 30 * time.Minute,
 			})
 			feed.waitForCompletion()
+			exportStatsFile()
 		},
 	})
 	r.Add(registry.TestSpec{
