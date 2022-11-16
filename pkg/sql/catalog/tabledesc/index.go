@@ -425,72 +425,45 @@ func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
-// ConstraintToUpdateDesc implements catalog.Constraint interface.
-func (w index) ConstraintToUpdateDesc() *descpb.ConstraintToUpdate {
-	return nil
-}
-
-// IsCheck implements catalog.Constraint interface.
-func (w index) IsCheck() bool {
-	return false
-}
-
-// IsForeignKey implements catalog.Constraint interface.
-func (w index) IsForeignKey() bool {
-	return false
-}
-
-// IsNotNull implements catalog.Constraint interface.
-func (w index) IsNotNull() bool {
-	return false
-}
-
-// IsUniqueWithoutIndex implements catalog.Constraint interface.
-func (w index) IsUniqueWithoutIndex() bool {
-	return false
-}
-
-// IsPrimaryKey implements catalog.Constraint interface.
-// The reason we didn't implement this function with
-// `return w.Primary()` is because it's possible this
-// PRIMARY KEY constraint is on the mutation slice.
-func (w index) IsPrimaryKey() bool {
-	return w.GetEncodingType() == descpb.PrimaryIndexEncoding
-}
-
-// IsUniqueConstraint implements catalog.Constraint interface.
-func (w index) IsUniqueConstraint() bool {
-	return w.GetEncodingType() == descpb.SecondaryIndexEncoding && w.IndexDesc().Unique
-}
-
-// Check implements catalog.Constraint interface.
-func (w index) Check() descpb.TableDescriptor_CheckConstraint {
-	return descpb.TableDescriptor_CheckConstraint{}
-}
-
-// ForeignKey implements catalog.Constraint interface.
-func (w index) ForeignKey() descpb.ForeignKeyConstraint {
-	return descpb.ForeignKeyConstraint{}
-}
-
-// NotNullColumnID implements catalog.Constraint interface.
+// NotNullColumnID implements the catalog.Constraint interface.
 func (w index) NotNullColumnID() descpb.ColumnID {
 	return 0
 }
 
-// UniqueWithoutIndex implements catalog.Constraint interface.
-func (w index) UniqueWithoutIndex() descpb.UniqueWithoutIndexConstraint {
-	return descpb.UniqueWithoutIndexConstraint{}
+// AsCheck implements the catalog.Constraint interface.
+func (w index) AsCheck() *descpb.TableDescriptor_CheckConstraint {
+	return nil
 }
 
-// PrimaryKey implements catalog.Constraint interface.
-func (w index) PrimaryKey() catalog.Index {
+// AsForeignKey implements the catalog.Constraint interface.
+func (w index) AsForeignKey() *descpb.ForeignKeyConstraint {
+	return nil
+}
+
+// AsUniqueWithoutIndex implements the catalog.Constraint interface.
+func (w index) AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint {
+	return nil
+}
+
+// AsPrimaryKey implements the catalog.Constraint interface.
+func (w index) AsPrimaryKey() catalog.Index {
+	if w.GetEncodingType() != descpb.PrimaryIndexEncoding {
+		return nil
+	}
 	return w
 }
 
-// Unique implements catalog.Constraint interface.
-func (w index) Unique() catalog.Index {
+// AsUnique implements the catalog.Constraint interface.
+func (w index) AsUnique() catalog.Index {
+	if !w.desc.Unique {
+		return nil
+	}
 	return w
+}
+
+// String implements the catalog.Constraint interface.
+func (w index) String() string {
+	return fmt.Sprintf("%v", w.desc)
 }
 
 // GetConstraintValidity implements catalog.Constraint interface.
