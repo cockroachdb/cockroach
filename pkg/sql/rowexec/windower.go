@@ -222,7 +222,7 @@ func (w *windower) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 		case windowerEmittingRows:
 			w.runningState, row, meta = w.emitRow()
 		default:
-			log.Fatalf(w.Ctx, "unsupported state: %d", w.runningState)
+			log.Fatalf(w.Ctx(), "unsupported state: %d", w.runningState)
 		}
 
 		if row == nil && meta == nil {
@@ -244,16 +244,16 @@ func (w *windower) close() {
 		if w.allRowsIterator != nil {
 			w.allRowsIterator.Close()
 		}
-		w.allRowsPartitioned.Close(w.Ctx)
+		w.allRowsPartitioned.Close(w.Ctx())
 		if w.partition != nil {
-			w.partition.Close(w.Ctx)
+			w.partition.Close(w.Ctx())
 		}
 		for _, builtin := range w.builtins {
-			builtin.Close(w.Ctx, w.EvalCtx)
+			builtin.Close(w.Ctx(), w.EvalCtx)
 		}
-		w.acc.Close(w.Ctx)
-		w.MemMonitor.Stop(w.Ctx)
-		w.diskMonitor.Stop(w.Ctx)
+		w.acc.Close(w.Ctx())
+		w.MemMonitor.Stop(w.Ctx())
+		w.diskMonitor.Stop(w.Ctx())
 	}
 }
 
@@ -277,17 +277,17 @@ func (w *windower) accumulateRows() (
 			return windowerAccumulating, nil, meta
 		}
 		if row == nil {
-			log.VEvent(w.Ctx, 1, "accumulation complete")
+			log.VEvent(w.Ctx(), 1, "accumulation complete")
 			w.inputDone = true
 			// We need to sort all the rows based on partitionBy columns so that all
 			// rows belonging to the same hash bucket are contiguous.
-			w.allRowsPartitioned.Sort(w.Ctx)
+			w.allRowsPartitioned.Sort(w.Ctx())
 			break
 		}
 
 		// The underlying row container will decode all datums as necessary, so we
 		// don't need to worry about that.
-		if err := w.allRowsPartitioned.AddRow(w.Ctx, row); err != nil {
+		if err := w.allRowsPartitioned.AddRow(w.Ctx(), row); err != nil {
 			w.MoveToDraining(err)
 			return windowerStateUnknown, nil, w.DrainHelper()
 		}
@@ -310,7 +310,7 @@ func (w *windower) emitRow() (windowerState, rowenc.EncDatumRow, *execinfrapb.Pr
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
 
-			if err := w.computeWindowFunctions(w.Ctx, w.EvalCtx); err != nil {
+			if err := w.computeWindowFunctions(w.Ctx(), w.EvalCtx); err != nil {
 				w.MoveToDraining(err)
 				return windowerStateUnknown, nil, w.DrainHelper()
 			}
@@ -340,7 +340,7 @@ func (w *windower) emitRow() (windowerState, rowenc.EncDatumRow, *execinfrapb.Pr
 func (w *windower) spillAllRowsToDisk() error {
 	if w.allRowsPartitioned != nil {
 		if !w.allRowsPartitioned.UsingDisk() {
-			if err := w.allRowsPartitioned.SpillToDisk(w.Ctx); err != nil {
+			if err := w.allRowsPartitioned.SpillToDisk(w.Ctx()); err != nil {
 				return err
 			}
 		} else {
@@ -348,7 +348,7 @@ func (w *windower) spillAllRowsToDisk() error {
 			// w.partition if possible.
 			if w.partition != nil {
 				if !w.partition.UsingDisk() {
-					if err := w.partition.SpillToDisk(w.Ctx); err != nil {
+					if err := w.partition.SpillToDisk(w.Ctx()); err != nil {
 						return err
 					}
 				}
@@ -362,12 +362,12 @@ func (w *windower) spillAllRowsToDisk() error {
 // error, it forces all rows to spill and attempts to grow acc by usage
 // one more time.
 func (w *windower) growMemAccount(acc *mon.BoundAccount, usage int64) error {
-	if err := acc.Grow(w.Ctx, usage); err != nil {
+	if err := acc.Grow(w.Ctx(), usage); err != nil {
 		if sqlerrors.IsOutOfMemoryError(err) {
 			if err := w.spillAllRowsToDisk(); err != nil {
 				return err
 			}
-			if err := acc.Grow(w.Ctx, usage); err != nil {
+			if err := acc.Grow(w.Ctx(), usage); err != nil {
 				return err
 			}
 		} else {
@@ -693,7 +693,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 				}
 			}
 		}
-		if err := w.partition.AddRow(w.Ctx, row); err != nil {
+		if err := w.partition.AddRow(w.Ctx(), row); err != nil {
 			return err
 		}
 	}
@@ -707,7 +707,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 func (w *windower) populateNextOutputRow() (bool, error) {
 	if w.partitionIdx < len(w.partitionSizes) {
 		if w.allRowsIterator == nil {
-			w.allRowsIterator = w.allRowsPartitioned.NewUnmarkedIterator(w.Ctx)
+			w.allRowsIterator = w.allRowsPartitioned.NewUnmarkedIterator(w.Ctx())
 			w.allRowsIterator.Rewind()
 		}
 		// rowIdx is the index of the next row to be emitted from the

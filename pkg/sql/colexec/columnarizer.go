@@ -53,10 +53,11 @@ type Columnarizer struct {
 	execinfra.ProcessorBaseNoHelper
 	colexecop.NonExplainable
 
-	mode   columnarizerMode
-	helper colmem.SetAccountingHelper
-	input  execinfra.RowSource
-	da     tree.DatumAlloc
+	mode        columnarizerMode
+	initialized bool
+	helper      colmem.SetAccountingHelper
+	input       execinfra.RowSource
+	da          tree.DatumAlloc
 
 	batch           coldata.Batch
 	vecs            coldata.TypedVecs
@@ -131,7 +132,7 @@ func newColumnarizer(
 				// Close will call InternalClose(). Note that we don't return
 				// any trailing metadata here because the columnarizers
 				// propagate it in DrainMeta.
-				if err := c.Close(c.Ctx); buildutil.CrdbTestBuild && err != nil {
+				if err := c.Close(c.Ctx()); buildutil.CrdbTestBuild && err != nil {
 					// Close never returns an error.
 					colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from Columnarizer.Close"))
 				}
@@ -145,13 +146,10 @@ func newColumnarizer(
 
 // Init is part of the colexecop.Operator interface.
 func (c *Columnarizer) Init(ctx context.Context) {
-	if c.removedFromFlow {
+	if c.removedFromFlow || c.initialized {
 		return
 	}
-	if c.Ctx != nil {
-		// Init has already been called.
-		return
-	}
+	c.initialized = true
 	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 	ctx = c.StartInternalNoSpan(ctx)
 	c.input.Start(ctx)
@@ -241,7 +239,7 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	// We no longer need the batch.
 	c.batch = nil
 	c.helper.ReleaseMemory()
-	if c.Ctx == nil {
+	if !c.initialized {
 		// The columnarizer wasn't initialized, so the wrapped processors might
 		// not have been started leaving them in an unsafe to drain state, so
 		// we skip the draining. Mostly likely this happened because a panic was

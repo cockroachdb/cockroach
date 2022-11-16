@@ -227,7 +227,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 func (bp *backupDataProcessor) close() {
 	bp.cancelAndWaitForWorker()
 	if bp.InternalClose() {
-		bp.memAcc.Close(bp.Ctx)
+		bp.memAcc.Close(bp.Ctx())
 	}
 }
 

@@ -194,7 +194,7 @@ func (s *joinReaderNoOrderingStrategy) generateRemoteSpans() (roachpb.Spans, err
 		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 	s.remoteSpansGenerated = true
-	return gen.generateRemoteSpans(s.Ctx, s.inputRows)
+	return gen.generateRemoteSpans(s.Ctx(), s.inputRows)
 }
 
 func (s *joinReaderNoOrderingStrategy) generatedRemoteSpans() bool {
@@ -207,7 +207,7 @@ func (s *joinReaderNoOrderingStrategy) processLookupRows(
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
 	s.emitState.unmatchedInputRowIndicesInitialized = false
-	return s.generateSpans(s.Ctx, s.inputRows)
+	return s.generateSpans(s.Ctx(), s.inputRows)
 }
 
 func (s *joinReaderNoOrderingStrategy) processLookedUpRow(
@@ -327,13 +327,13 @@ func (s *joinReaderNoOrderingStrategy) spilled() bool { return false }
 func (s *joinReaderNoOrderingStrategy) growMemoryAccount(
 	memAcc *mon.BoundAccount, delta int64,
 ) error {
-	return addWorkmemHint(memAcc.Grow(s.Ctx, delta))
+	return addWorkmemHint(memAcc.Grow(s.Ctx(), delta))
 }
 
 func (s *joinReaderNoOrderingStrategy) resizeMemoryAccount(
 	memAcc *mon.BoundAccount, oldSz, newSz int64,
 ) error {
-	return addWorkmemHint(memAcc.Resize(s.Ctx, oldSz, newSz))
+	return addWorkmemHint(memAcc.Resize(s.Ctx(), oldSz, newSz))
 }
 
 func (s *joinReaderNoOrderingStrategy) close(ctx context.Context) {
@@ -416,7 +416,7 @@ func (s *joinReaderIndexJoinStrategy) processLookupRows(
 	rows []rowenc.EncDatumRow,
 ) (roachpb.Spans, error) {
 	s.inputRows = rows
-	return s.generateSpans(s.Ctx, s.inputRows)
+	return s.generateSpans(s.Ctx(), s.inputRows)
 }
 
 func (s *joinReaderIndexJoinStrategy) processLookedUpRow(
@@ -446,13 +446,13 @@ func (s *joinReaderIndexJoinStrategy) spilled() bool {
 func (s *joinReaderIndexJoinStrategy) growMemoryAccount(
 	memAcc *mon.BoundAccount, delta int64,
 ) error {
-	return addWorkmemHint(memAcc.Grow(s.Ctx, delta))
+	return addWorkmemHint(memAcc.Grow(s.Ctx(), delta))
 }
 
 func (s *joinReaderIndexJoinStrategy) resizeMemoryAccount(
 	memAcc *mon.BoundAccount, oldSz, newSz int64,
 ) error {
-	return addWorkmemHint(memAcc.Resize(s.Ctx, oldSz, newSz))
+	return addWorkmemHint(memAcc.Resize(s.Ctx(), oldSz, newSz))
 }
 
 func (s *joinReaderIndexJoinStrategy) close(ctx context.Context) {
@@ -595,7 +595,7 @@ func (s *joinReaderOrderingStrategy) generateRemoteSpans() (roachpb.Spans, error
 		return nil, errors.AssertionFailedf("generateRemoteSpans can only be called for locality optimized lookup joins")
 	}
 	s.remoteSpansGenerated = true
-	return gen.generateRemoteSpans(s.Ctx, s.inputRows)
+	return gen.generateRemoteSpans(s.Ctx(), s.inputRows)
 }
 
 func (s *joinReaderOrderingStrategy) generatedRemoteSpans() bool {
@@ -645,7 +645,7 @@ func (s *joinReaderOrderingStrategy) processLookupRows(
 
 	s.inputRows = rows
 	s.remoteSpansGenerated = false
-	return s.generateSpans(s.Ctx, s.inputRows)
+	return s.generateSpans(s.Ctx(), s.inputRows)
 }
 
 func (s *joinReaderOrderingStrategy) processLookedUpRow(
@@ -771,7 +771,7 @@ func (s *joinReaderOrderingStrategy) nextRowToEmit(
 		return nil, jrEmittingRows, nil
 	}
 
-	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx, lookedUpRowIdx, false /* skip */)
+	lookedUpRow, err := s.lookedUpRows.GetRow(s.Ctx(), lookedUpRowIdx, false /* skip */)
 	if err != nil {
 		return nil, jrStateUnknown, err
 	}
@@ -820,16 +820,16 @@ func (s *joinReaderOrderingStrategy) close(ctx context.Context) {
 func (s *joinReaderOrderingStrategy) growMemoryAccount(
 	memAcc *mon.BoundAccount, delta int64,
 ) error {
-	if err := memAcc.Grow(s.Ctx, delta); err != nil {
+	if err := memAcc.Grow(s.Ctx(), delta); err != nil {
 		// We don't have enough budget to account for the new size. Check
 		// whether we can spill the looked up rows to disk to free up the
 		// budget.
-		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx)
+		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx())
 		if !spilled || spillErr != nil {
 			return addWorkmemHint(errors.CombineErrors(err, spillErr))
 		}
 		// We freed up some budget, so try to perform the accounting again.
-		return addWorkmemHint(memAcc.Grow(s.Ctx, delta))
+		return addWorkmemHint(memAcc.Grow(s.Ctx(), delta))
 	}
 	return nil
 }
@@ -841,16 +841,16 @@ func (s *joinReaderOrderingStrategy) growMemoryAccount(
 func (s *joinReaderOrderingStrategy) resizeMemoryAccount(
 	memAcc *mon.BoundAccount, oldSz, newSz int64,
 ) error {
-	if err := memAcc.Resize(s.Ctx, oldSz, newSz); err != nil {
+	if err := memAcc.Resize(s.Ctx(), oldSz, newSz); err != nil {
 		// We don't have enough budget to account for the new size. Check
 		// whether we can spill the looked up rows to disk to free up the
 		// budget.
-		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx)
+		spilled, spillErr := s.lookedUpRows.SpillToDisk(s.Ctx())
 		if !spilled || spillErr != nil {
 			return addWorkmemHint(errors.CombineErrors(err, spillErr))
 		}
 		// We freed up some budget, so try to perform the accounting again.
-		return addWorkmemHint(memAcc.Resize(s.Ctx, oldSz, newSz))
+		return addWorkmemHint(memAcc.Resize(s.Ctx(), oldSz, newSz))
 	}
 	return nil
 }

@@ -212,7 +212,7 @@ func (mtr *MetadataTestReceiver) Next() (rowenc.EncDatumRow, *execinfrapb.Produc
 		// We don't use ProcessorBase.ProcessRowHelper() here because we need
 		// special handling for errors: this proc never starts draining in order for
 		// it to be as unintrusive as possible.
-		outRow, ok, err := mtr.OutputHelper.ProcessRow(mtr.Ctx, row)
+		outRow, ok, err := mtr.OutputHelper.ProcessRow(mtr.Ctx(), row)
 		if err != nil {
 			mtr.trailingMeta = append(mtr.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
 			continue

@@ -322,7 +322,7 @@ func (sip *streamIngestionProcessor) close() {
 		_ = client.Close()
 	}
 	if sip.batcher != nil {
-		sip.batcher.Close(sip.Ctx)
+		sip.batcher.Close(sip.Ctx())
 	}
 	if sip.maxFlushRateTimer != nil {
 		sip.maxFlushRateTimer.Stop()
@@ -476,7 +476,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 				if streamingKnobs != nil {
 					if streamingKnobs.RunAfterReceivingEvent != nil {
-						streamingKnobs.RunAfterReceivingEvent(sip.Ctx)
+						streamingKnobs.RunAfterReceivingEvent(sip.Ctx())
 					}
 				}
 			}
@@ -503,13 +503,13 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 				return sip.flush()
 			case streamingccl.GenerationEvent:
-				log.Info(sip.Ctx, "GenerationEvent received")
+				log.Info(sip.Ctx(), "GenerationEvent received")
 				select {
 				case <-sip.cutoverCh:
 					sip.internalDrained = true
 					return nil, nil
-				case <-sip.Ctx.Done():
-					return nil, sip.Ctx.Err()
+				case <-sip.Ctx().Done():
+					return nil, sip.Ctx().Err()
 				}
 			default:
 				return nil, errors.Newf("unknown streaming event type %v", event.Type())
@@ -552,7 +552,7 @@ func (sip *streamIngestionProcessor) bufferKV(event partitionEvent) error {
 }
 
 func (sip *streamIngestionProcessor) bufferCheckpoint(event partitionEvent) error {
-	log.Infof(sip.Ctx, "got checkpoint %v", event.GetResolved())
+	log.Infof(sip.Ctx(), "got checkpoint %v", event.GetResolved())
 	resolvedTimePtr := event.GetResolved()
 	if resolvedTimePtr == nil {
 		return errors.New("checkpoint event expected to have a resolved timestamp")
@@ -574,13 +574,13 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 
 	totalSize := 0
 	for _, kv := range sip.curBatch {
-		if err := sip.batcher.AddMVCCKey(sip.Ctx, kv.Key, kv.Value); err != nil {
+		if err := sip.batcher.AddMVCCKey(sip.Ctx(), kv.Key, kv.Value); err != nil {
 			return nil, errors.Wrapf(err, "adding key %+v", kv)
 		}
 		totalSize += len(kv.Key.Key) + len(kv.Value)
 	}
 
-	if err := sip.batcher.Flush(sip.Ctx); err != nil {
+	if err := sip.batcher.Flush(sip.Ctx()); err != nil {
 		return nil, errors.Wrap(err, "flushing")
 	}
 	sip.metrics.Flushes.Inc(1)
@@ -605,7 +605,7 @@ func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
 	sip.lastFlushTime = timeutil.Now()
 	sip.bufferedCheckpoints = make(map[string]hlc.Timestamp)
 
-	return &flushedCheckpoints, sip.batcher.Reset(sip.Ctx)
+	return &flushedCheckpoints, sip.batcher.Reset(sip.Ctx())
 }
 
 func init() {

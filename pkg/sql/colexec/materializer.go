@@ -311,15 +311,7 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 
 func (m *Materializer) close() {
 	if m.InternalClose() {
-		if m.Ctx == nil {
-			// In some edge cases (like when Init of an operator above this
-			// materializer encounters a panic), the materializer might never be
-			// started, yet it still will attempt to close its Closers. This
-			// context is only used for logging purposes, so it is ok to grab
-			// the background context in order to prevent a NPE below.
-			m.Ctx = context.Background()
-		}
-		m.closers.CloseAndLogOnErr(m.Ctx, "materializer")
+		m.closers.CloseAndLogOnErr(m.Ctx(), "materializer")
 	}
 }
 

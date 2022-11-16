@@ -385,7 +385,7 @@ func (ij *invertedJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 		case ijEmittingRows:
 			ij.runningState, row, meta = ij.emitRow()
 		default:
-			log.Fatalf(ij.Ctx, "unsupported state: %d", ij.runningState)
+			log.Fatalf(ij.Ctx(), "unsupported state: %d", ij.runningState)
 		}
 		if row == nil && meta == nil {
 			continue
@@ -416,7 +416,7 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 			break
 		}
 
-		expr, preFilterState, err := ij.datumsToInvertedExpr.Convert(ij.Ctx, row)
+		expr, preFilterState, err := ij.datumsToInvertedExpr.Convert(ij.Ctx(), row)
 		if err != nil {
 			ij.MoveToDraining(err)
 			return ijStateUnknown, ij.DrainHelper()
@@ -475,12 +475,12 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 	}
 
 	if len(ij.inputRows) == 0 {
-		log.VEventf(ij.Ctx, 1, "no more input rows")
+		log.VEventf(ij.Ctx(), 1, "no more input rows")
 		// We're done.
 		ij.MoveToDraining(nil)
 		return ijStateUnknown, ij.DrainHelper()
 	}
-	log.VEventf(ij.Ctx, 1, "read %d input rows", len(ij.inputRows))
+	log.VEventf(ij.Ctx(), 1, "read %d input rows", len(ij.inputRows))
 
 	spans, err := ij.batchedExprEval.init()
 	if err != nil {
@@ -504,9 +504,9 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 		return ijStateUnknown, ij.DrainHelper()
 	}
 
-	log.VEventf(ij.Ctx, 1, "scanning %d spans", len(ij.indexSpans))
+	log.VEventf(ij.Ctx(), 1, "scanning %d spans", len(ij.indexSpans))
 	if err = ij.fetcher.StartScan(
-		ij.Ctx, ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
+		ij.Ctx(), ij.FlowCtx.Txn, ij.indexSpans, rowinfra.NoBytesLimit, rowinfra.NoRowLimit,
 		ij.FlowCtx.TraceKV, ij.EvalCtx.TestingKnobs.ForceProductionBatchSizes,
 	); err != nil {
 		ij.MoveToDraining(err)
@@ -517,11 +517,11 @@ func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.Produce
 }
 
 func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.ProducerMetadata) {
-	log.VEventf(ij.Ctx, 1, "joining rows")
+	log.VEventf(ij.Ctx(), 1, "joining rows")
 	// Read the entire set of rows that are part of the scan.
 	for {
 		// Fetch the next row and copy it into the row container.
-		ok, err := ij.fetcher.NextRowInto(ij.Ctx, ij.row, ij.colIdxMap)
+		ok, err := ij.fetcher.NextRowInto(ij.Ctx(), ij.row, ij.colIdxMap)
 		if err != nil {
 			ij.MoveToDraining(scrub.UnwrapScrubError(err))
 			return ijStateUnknown, ij.DrainHelper()
@@ -574,7 +574,7 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 			return ijStateUnknown, ij.DrainHelper()
 		}
 		if shouldAdd {
-			rowIdx, err := ij.indexRows.AddRow(ij.Ctx, ij.indexRow)
+			rowIdx, err := ij.indexRows.AddRow(ij.Ctx(), ij.indexRow)
 			if err != nil {
 				ij.MoveToDraining(err)
 				return ijStateUnknown, ij.DrainHelper()
@@ -586,8 +586,8 @@ func (ij *invertedJoiner) performScan() (invertedJoinerState, *execinfrapb.Produ
 		}
 	}
 	ij.joinedRowIdx = ij.batchedExprEval.evaluate()
-	ij.indexRows.SetupForRead(ij.Ctx, ij.joinedRowIdx)
-	log.VEventf(ij.Ctx, 1, "done evaluating expressions")
+	ij.indexRows.SetupForRead(ij.Ctx(), ij.joinedRowIdx)
+	log.VEventf(ij.Ctx(), 1, "done evaluating expressions")
 
 	return ijEmittingRows, nil
 }
@@ -604,7 +604,7 @@ func (ij *invertedJoiner) emitRow() (
 ) {
 	// Finished processing the batch.
 	if ij.emitCursor.inputRowIdx >= len(ij.joinedRowIdx) {
-		log.VEventf(ij.Ctx, 1, "done emitting rows")
+		log.VEventf(ij.Ctx(), 1, "done emitting rows")
 		// Ready for another input batch. Reset state.
 		ij.inputRows = ij.inputRows[:0]
 		ij.batchedExprEval.reset()
@@ -612,7 +612,7 @@ func (ij *invertedJoiner) emitRow() (
 		ij.emitCursor.outputRowIdx = 0
 		ij.emitCursor.inputRowIdx = 0
 		ij.emitCursor.seenMatch = false
-		if err := ij.indexRows.UnsafeReset(ij.Ctx); err != nil {
+		if err := ij.indexRows.UnsafeReset(ij.Ctx()); err != nil {
 			ij.MoveToDraining(err)
 			return ijStateUnknown, nil, ij.DrainHelper()
 		}
@@ -642,7 +642,7 @@ func (ij *invertedJoiner) emitRow() (
 
 	inputRow := ij.inputRows[ij.emitCursor.inputRowIdx]
 	joinedRowIdx := ij.joinedRowIdx[ij.emitCursor.inputRowIdx][ij.emitCursor.outputRowIdx]
-	indexedRow, err := ij.indexRows.GetRow(ij.Ctx, joinedRowIdx, false /* skip */)
+	indexedRow, err := ij.indexRows.GetRow(ij.Ctx(), joinedRowIdx, false /* skip */)
 	if err != nil {
 		ij.MoveToDraining(err)
 		return ijStateUnknown, nil, ij.DrainHelper()
@@ -657,7 +657,7 @@ func (ij *invertedJoiner) emitRow() (
 	skipRemaining := func() error {
 		for ; ij.emitCursor.outputRowIdx < len(ij.joinedRowIdx[ij.emitCursor.inputRowIdx]); ij.emitCursor.outputRowIdx++ {
 			idx := ij.joinedRowIdx[ij.emitCursor.inputRowIdx][ij.emitCursor.outputRowIdx]
-			if _, err := ij.indexRows.GetRow(ij.Ctx, idx, true /* skip */); err != nil {
+			if _, err := ij.indexRows.GetRow(ij.Ctx(), idx, true /* skip */); err != nil {
 				return err
 			}
 		}
@@ -760,14 +760,14 @@ func (ij *invertedJoiner) ConsumerClosed() {
 func (ij *invertedJoiner) close() {
 	if ij.InternalClose() {
 		if ij.fetcher != nil {
-			ij.fetcher.Close(ij.Ctx)
+			ij.fetcher.Close(ij.Ctx())
 		}
 		if ij.indexRows != nil {
-			ij.indexRows.Close(ij.Ctx)
+			ij.indexRows.Close(ij.Ctx())
 		}
-		ij.MemMonitor.Stop(ij.Ctx)
+		ij.MemMonitor.Stop(ij.Ctx())
 		if ij.diskMonitor != nil {
-			ij.diskMonitor.Stop(ij.Ctx)
+			ij.diskMonitor.Stop(ij.Ctx())
 		}
 	}
 }
@@ -782,14 +782,14 @@ func (ij *invertedJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 	if !ok {
 		return nil
 	}
-	ij.scanStats = execinfra.GetScanStats(ij.Ctx, ij.ExecStatsTrace)
+	ij.scanStats = execinfra.GetScanStats(ij.Ctx(), ij.ExecStatsTrace)
 	ret := execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
 			BytesRead:      optional.MakeUint(uint64(ij.fetcher.GetBytesRead())),
 			TuplesRead:     fis.NumTuples,
 			KVTime:         fis.WaitTime,
-			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx, ij.ExecStatsTrace)),
+			ContentionTime: optional.MakeTimeValue(execinfra.GetCumulativeContentionTime(ij.Ctx(), ij.ExecStatsTrace)),
 		},
 		Exec: execinfrapb.ExecStats{
 			MaxAllocatedMem:  optional.MakeUint(uint64(ij.MemMonitor.MaximumBytes())),
@@ -807,7 +807,7 @@ func (ij *invertedJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = ij.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = ij.rowsRead
-	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx, ij.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx(), ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

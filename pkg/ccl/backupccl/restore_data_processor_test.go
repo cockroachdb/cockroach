@@ -374,8 +374,7 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			}
 			expectedKVs := slurpSSTablesLatestKey(t, filepath.Join(dir, "foo"), slurp, srcPrefix, newPrefix)
 
-			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(ctx, &evalCtx, &flowCtx,
-				mockRestoreDataSpec)
+			mockRestoreDataProcessor, err := newTestingRestoreDataProcessor(&evalCtx, &flowCtx, mockRestoreDataSpec)
 			require.NoError(t, err)
 			ssts := make(chan mergedSST, 1)
 			require.NoError(t, mockRestoreDataProcessor.openSSTs(ctx, restoreSpanEntry, ssts))
@@ -417,15 +416,11 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 }
 
 func newTestingRestoreDataProcessor(
-	ctx context.Context,
-	evalCtx *tree.EvalContext,
-	flowCtx *execinfra.FlowCtx,
-	spec execinfrapb.RestoreDataSpec,
+	evalCtx *tree.EvalContext, flowCtx *execinfra.FlowCtx, spec execinfrapb.RestoreDataSpec,
 ) (*restoreDataProcessor, error) {
 	rd := &restoreDataProcessor{
 		ProcessorBase: execinfra.ProcessorBase{
 			ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
-				Ctx:     ctx,
 				EvalCtx: evalCtx,
 			},
 		},
