@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/startupmigrations"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -769,10 +768,6 @@ func TestDropWhileBackfill(t *testing.T) {
 				return context.DeadlineExceeded
 			},
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 		// Prevent the GC job from running.
 		GCJob: &sql.GCJobTestingKnobs{
 			RunBeforeResume: func(_ jobspb.JobID) error {
@@ -1031,10 +1026,6 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 				<-commandsDone
 			},
 			BulkAdderFlushesEveryBatch: true,
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -1373,10 +1364,6 @@ func TestSchemaChangeRetry(t *testing.T) {
 			BulkAdderFlushesEveryBatch:                 true,
 			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		GCJob: &sql.GCJobTestingKnobs{
@@ -1479,10 +1466,6 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 			},
 			BulkAdderFlushesEveryBatch:                 true,
 			SerializeIndexBackfillCreationAndIngestion: make(chan struct{}, 1),
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -1613,10 +1596,6 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 			},
 			BulkAdderFlushesEveryBatch: true,
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -1738,11 +1717,6 @@ func TestSchemaChangeFailureAfterCheckpointing(t *testing.T) {
 				return nil
 			},
 		},
-		// Disable backfill migrations so it doesn't interfere with the
-		// backfill in this test.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -1833,10 +1807,6 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -2212,10 +2182,6 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 				return nil
 			},
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.Background())
@@ -2313,11 +2279,6 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 				}
 				return nil
 			},
-		},
-		// Disable backfill migrations so it doesn't interfere with the
-		// backfill in this test.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
@@ -3513,11 +3474,6 @@ func TestGrantRevokeWhileIndexBackfill(t *testing.T) {
 				}
 			},
 		},
-
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
@@ -3613,10 +3569,6 @@ func TestCRUDWhileColumnBackfill(t *testing.T) {
 					<-continueSchemaChangeNotification
 				}
 			},
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
@@ -5322,10 +5274,6 @@ func TestIndexBackfillValidation(t *testing.T) {
 			},
 			BulkAdderFlushesEveryBatch: true,
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	db = kvDB
@@ -5393,10 +5341,6 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 			},
 			BulkAdderFlushesEveryBatch: true,
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	db = kvDB
@@ -5446,10 +5390,6 @@ func TestMultipleIndexBackfills(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 	}
 	server, sqlDB, _ := serverutils.StartServer(t, params)
@@ -5586,10 +5526,6 @@ func TestTableValidityWhileAddingFK(t *testing.T) {
 				return nil
 			},
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 
 	server, sqlDB, _ := serverutils.StartServer(t, params)
@@ -5673,10 +5609,6 @@ func TestTableValidityWhileAddingUniqueConstraint(t *testing.T) {
 				return nil
 			},
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 
 	server, sqlDB, _ := serverutils.StartServer(t, params)
@@ -5757,10 +5689,6 @@ func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
 				}
 				return nil
 			},
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 	}
 
@@ -5856,10 +5784,6 @@ func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
 				}
 				return nil
 			},
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 	}
 
@@ -6072,10 +5996,6 @@ func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
 				return runBeforeConstraintValidation()
 			},
 		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
-		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -6124,10 +6044,6 @@ func TestFKReferencesAddedOnlyOnceOnRetry(t *testing.T) {
 			RunBeforeConstraintValidation: func(constraints []catalog.Constraint) error {
 				return runBeforeConstraintValidation()
 			},
-		},
-		// Disable backfill migrations, we still need the jobs table migration.
-		StartupMigrationManager: &startupmigrations.MigrationManagerTestingKnobs{
-			DisableBackfillMigrations: true,
 		},
 		// Decrease the adopt loop interval so that retries happen quickly.
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),

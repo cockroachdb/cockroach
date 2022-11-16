@@ -45,16 +45,6 @@ var (
 
 // MigrationManagerTestingKnobs contains testing knobs.
 type MigrationManagerTestingKnobs struct {
-	// DisableBackfillMigrations stops applying migrations once
-	// a migration with 'doesBackfill == true' is encountered.
-	// TODO(mberhault): we could skip only backfill migrations and dependencies
-	// if we had some concept of migration dependencies.
-	DisableBackfillMigrations bool
-	AfterJobMigration         func()
-	// AlwaysRunJobMigration controls whether to always run the schema change job
-	// migration regardless of whether it has been marked as complete.
-	AlwaysRunJobMigration bool
-
 	// AfterEnsureMigrations is called after each call to EnsureMigrations.
 	AfterEnsureMigrations func()
 }
@@ -344,8 +334,6 @@ type migrationDescriptor struct {
 	// Generally when setting this field you'll want to introduce a new cluster
 	// version.
 	includedInBootstrap roachpb.Version
-	// doesBackfill should be set to true if the migration triggers a backfill.
-	doesBackfill bool
 	// clusterWide migrations are only run by the system tenant. All other
 	// migrations are run by each individual tenant. clusterWide migrations
 	// typically have to do with cluster settings, which is a cluster-wide
@@ -592,12 +580,6 @@ func (m *Manager) EnsureMigrations(ctx context.Context, bootstrapVersion roachpb
 			continue
 		}
 
-		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
-			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
-				migration.name)
-			break
-		}
-
 		if log.V(1) {
 			log.Infof(ctx, "running migration %q", migration.name)
 		}
@@ -626,11 +608,6 @@ func (m *Manager) checkIfAllMigrationsAreComplete(
 	for _, migration := range backwardCompatibleMigrations {
 		if !m.shouldRunMigration(migration, bootstrapVersion) {
 			continue
-		}
-		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
-			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
-				migration.name)
-			break
 		}
 		key := migrationKey(m.codec, migration)
 		if _, ok := completedMigrations[string(key)]; !ok {
