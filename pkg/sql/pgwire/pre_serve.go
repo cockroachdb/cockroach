@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -131,3 +132,13 @@ func (s *PreServeConnHandler) sendErr(ctx context.Context, conn net.Conn, err er
 	_ = conn.Close()
 	return err
 }
+
+// tenantIndependentClientParameters encapsulates the session
+// parameters provided to the client, prior to any tenant-specific
+// configuration adjustements.
+type tenantIndependentClientParameters struct {
+	sql.SessionArgs
+	foundBufferSize          bool
+	clientProvidedRemoteAddr string
+}
+
