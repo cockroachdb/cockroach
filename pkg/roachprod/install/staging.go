@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	edgeBinaryServer    = "https://edge-binaries.cockroachdb.com"
-	releaseBinaryServer = "https://s3.amazonaws.com/binaries.cockroachdb.com/"
+	edgeBinaryServer    = "https://storage.googleapis.com/cockroach-edge-artifacts-prod/"
+	releaseBinaryServer = "https://storage.googleapis.com/cockroach-release-artifacts-prod/"
 )
 
 type archInfo struct {
@@ -81,7 +81,7 @@ func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	edgeBinaryLocation.Path = urlPathBase
+	edgeBinaryLocation.Path += urlPathBase
 	// If a target architecture is provided, attach that.
 	if len(arch) > 0 {
 		edgeBinaryLocation.Path += "." + arch
@@ -108,7 +108,11 @@ func getEdgeURL(urlPathBase, SHA, arch string, ext string) (*url.URL, error) {
 // on the current format of URLs.
 func shaFromEdgeURL(u *url.URL) string {
 	urlSplit := strings.Split(u.Path, ".")
-	return urlSplit[len(urlSplit)-1]
+	maybeSha := urlSplit[len(urlSplit)-1]
+	if maybeSha == "LATEST" {
+		return ""
+	}
+	return maybeSha
 }
 
 func cockroachReleaseURL(version string, arch string) (*url.URL, error) {
