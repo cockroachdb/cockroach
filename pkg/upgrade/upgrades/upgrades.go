@@ -18,14 +18,14 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/errors"
 )
 
 // GetUpgrade returns the upgrade corresponding to this version if
 // one exists.
-func GetUpgrade(key clusterversion.ClusterVersion) (upgrade.Upgrade, bool) {
+func GetUpgrade(key roachpb.Version) (upgrade.Upgrade, bool) {
 	m, ok := registry[key]
 	return m, ok
 }
@@ -36,16 +36,14 @@ func NoPrecondition(context.Context, clusterversion.ClusterVersion, upgrade.Tena
 }
 
 // NoTenantUpgradeFunc is a TenantUpgradeFunc that doesn't do anything.
-func NoTenantUpgradeFunc(
-	context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps, *jobs.Job,
-) error {
+func NoTenantUpgradeFunc(context.Context, clusterversion.ClusterVersion, upgrade.TenantDeps) error {
 	return nil
 }
 
 // registry defines the global mapping between a cluster version and the
 // associated upgrade. The upgrade is only executed after a cluster-wide
 // bump of the corresponding version gate.
-var registry = make(map[clusterversion.ClusterVersion]upgrade.Upgrade)
+var registry = make(map[roachpb.Version]upgrade.Upgrade)
 
 var upgrades = []upgrade.Upgrade{
 	upgrade.NewTenantUpgrade(
@@ -183,15 +181,13 @@ var upgrades = []upgrade.Upgrade{
 
 func init() {
 	for _, m := range upgrades {
-		if _, exists := registry[m.ClusterVersion()]; exists {
-			panic(errors.AssertionFailedf("duplicate upgrade registration for %v", m.ClusterVersion()))
+		if _, exists := registry[m.Version()]; exists {
+			panic(errors.AssertionFailedf("duplicate upgrade registration for %v", m.Version()))
 		}
-		registry[m.ClusterVersion()] = m
+		registry[m.Version()] = m
 	}
 }
 
-func toCV(key clusterversion.Key) clusterversion.ClusterVersion {
-	return clusterversion.ClusterVersion{
-		Version: clusterversion.ByKey(key),
-	}
+func toCV(key clusterversion.Key) roachpb.Version {
+	return clusterversion.ByKey(key)
 }

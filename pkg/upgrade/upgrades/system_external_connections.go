@@ -14,7 +14,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 )
@@ -22,7 +21,7 @@ import (
 // systemExternalConnectionsTableMigration creates the
 // system.external_connections table.
 func systemExternalConnectionsTableMigration(
-	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps, _ *jobs.Job,
+	ctx context.Context, _ clusterversion.ClusterVersion, d upgrade.TenantDeps,
 ) error {
 	return createSystemTable(
 		ctx, d.DB, d.Settings, d.Codec, systemschema.SystemExternalConnectionsTable,
