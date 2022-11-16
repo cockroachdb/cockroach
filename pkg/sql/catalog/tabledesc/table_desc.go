@@ -83,30 +83,15 @@ func (desc *wrapper) SkipNamespace() bool {
 	return false
 }
 
-// ActiveChecks implements the TableDescriptor interface.
-func (desc *wrapper) ActiveChecks() []descpb.TableDescriptor_CheckConstraint {
-	checks := make([]descpb.TableDescriptor_CheckConstraint, len(desc.Checks))
-	for i, c := range desc.Checks {
-		checks[i] = *c
-	}
-	return checks
-}
-
 // immutable is a custom type for TableDescriptors
 // It holds precomputed values and the underlying TableDescriptor
 // should be const.
 type immutable struct {
 	wrapper
 
-	allChecks []descpb.TableDescriptor_CheckConstraint
-
 	// isUncommittedVersion is set to true if this descriptor was created from
 	// a copy of a Mutable with an uncommitted version.
 	isUncommittedVersion bool
-
-	// TODO (lucy): populate these and use them
-	// inboundFKs  []*ForeignKeyConstraint
-	// outboundFKs []*ForeignKeyConstraint
 }
 
 // GetRawBytesInStorage implements the catalog.Descriptor interface.
@@ -290,7 +275,7 @@ func UpdateIndexPartitioning(
 }
 
 // GetPrimaryIndex implements the TableDescriptor interface.
-func (desc *wrapper) GetPrimaryIndex() catalog.Index {
+func (desc *wrapper) GetPrimaryIndex() catalog.UniqueWithIndexConstraint {
 	return desc.getExistingOrNewIndexCache().primary
 }
 
@@ -561,6 +546,60 @@ func (desc *wrapper) IndexStoredColumns(idx catalog.Index) []catalog.Column {
 		return ic.stored
 	}
 	return nil
+}
+
+// CheckConstraintColumns implements the TableDescriptor interface.
+func (desc *wrapper) CheckConstraintColumns(ck catalog.CheckConstraint) []catalog.Column {
+	n := ck.NumReferencedColumns()
+	if n == 0 {
+		return nil
+	}
+	ret := make([]catalog.Column, n)
+	for i := 0; i < n; i++ {
+		ret[i], _ = desc.FindColumnWithID(ck.GetReferencedColumnID(i))
+	}
+	return ret
+}
+
+// ForeignKeyReferencedColumns implements the TableDescriptor interface.
+func (desc *wrapper) ForeignKeyReferencedColumns(fk catalog.ForeignKeyConstraint) []catalog.Column {
+	n := fk.NumReferencedColumns()
+	if fk.GetReferencedTableID() != desc.GetID() || n == 0 {
+		return nil
+	}
+	ret := make([]catalog.Column, n)
+	for i := 0; i < n; i++ {
+		ret[i], _ = desc.FindColumnWithID(fk.GetReferencedColumnID(i))
+	}
+	return ret
+}
+
+// ForeignKeyOriginColumns implements the TableDescriptor interface.
+func (desc *wrapper) ForeignKeyOriginColumns(fk catalog.ForeignKeyConstraint) []catalog.Column {
+	n := fk.NumOriginColumns()
+	if fk.GetOriginTableID() != desc.GetID() || n == 0 {
+		return nil
+	}
+	ret := make([]catalog.Column, n)
+	for i := 0; i < n; i++ {
+		ret[i], _ = desc.FindColumnWithID(fk.GetOriginColumnID(i))
+	}
+	return ret
+}
+
+// UniqueWithoutIndexColumns implements the TableDescriptor interface.
+func (desc *wrapper) UniqueWithoutIndexColumns(
+	uwoi catalog.UniqueWithoutIndexConstraint,
+) []catalog.Column {
+	n := uwoi.NumKeyColumns()
+	if uwoi.ParentTableID() != desc.GetID() || n == 0 {
+		return nil
+	}
+	ret := make([]catalog.Column, n)
+	for i := 0; i < n; i++ {
+		ret[i], _ = desc.FindColumnWithID(uwoi.GetKeyColumnID(i))
+	}
+	return ret
 }
 
 // IndexFetchSpecKeyAndSuffixColumns implements the TableDescriptor interface.

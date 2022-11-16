@@ -1757,23 +1757,25 @@ SELECT count(descriptor_id)
 
 # Validation for #47719 where a mutation is canceled out by a drop.
 statement ok
-create table tColDrop (a int);
+CREATE TABLE t_col_drop (a INT);
+
+statement error pgcode 0A000 constraint "a_auto_not_null" in the middle of being added, try again later
+BEGIN;
+ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
+ALTER TABLE t_col_drop DROP COLUMN a;
 
 statement ok
-begin;
-alter table tColDrop alter column a set not null;
-alter table tColDrop drop column a;
-commit;
+ROLLBACK
 
 statement ok
-drop table tColDrop;
+DROP TABLE t_col_drop
 
 statement ok
-begin;
-create table tColDrop (a int);
-alter table tColDrop alter column a set not null;
-alter table tColDrop drop column a;
-commit;
+BEGIN;
+CREATE TABLE t_col_drop (a INT);
+ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
+ALTER TABLE t_col_drop DROP COLUMN a;
+COMMIT
 
 # Validate that the schema_change_successful metric
 query T
@@ -2325,7 +2327,7 @@ alter table const_tbl drop constraint "bob";
 alter table const_tbl add constraint "steve" primary key (a, b); -- this statement
 
 statement error pq: relation \"const_tbl\" \(\d+\): unimplemented: cannot perform other schema changes in the same transaction as a primary key change.*
-alter table const_tbl add constraint "bob" CHECK (a > 100);
+alter table const_tbl add constraint "dave" CHECK (a > 100);
 
 statement ok
 rollback
@@ -2333,16 +2335,9 @@ rollback
 statement ok
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 
-statement ok
-BEGIN;
-alter table const_tbl drop constraint "steve";
-alter table const_tbl add constraint "steve" CHECK (a > 100);
-COMMIT;
-
 statement error  pq: duplicate constraint name: "steve"
 BEGIN;
 alter table const_tbl drop constraint "steve";
-alter table const_tbl add constraint "steve" CHECK (a > 100);
 alter table const_tbl add constraint "steve" CHECK (a > 100);
 COMMIT;
 

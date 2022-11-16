@@ -27,7 +27,7 @@ import (
 )
 
 var _ catalog.Index = (*index)(nil)
-var _ catalog.Constraint = (*index)(nil)
+var _ catalog.UniqueWithIndexConstraint = (*index)(nil)
 
 // index implements the catalog.Index interface by wrapping the protobuf index
 // descriptor along with some metadata from its parent table descriptor.
@@ -36,9 +36,8 @@ var _ catalog.Constraint = (*index)(nil)
 // (i.e. PRIMARY KEY or UNIQUE).
 type index struct {
 	maybeMutation
-	desc                 *descpb.IndexDescriptor
-	ordinal              int
-	validityIfConstraint descpb.ConstraintValidity // validity of this index-backed-constraint if is.
+	desc    *descpb.IndexDescriptor
+	ordinal int
 }
 
 // IndexDesc returns the underlying protobuf descriptor.
@@ -159,24 +158,18 @@ func (w index) ExplicitColumnStartIdx() int {
 	return w.desc.ExplicitColumnStartIdx()
 }
 
-// IsValidOriginIndex returns whether the index can serve as an origin index for
-// a foreign key constraint with the provided set of originColIDs.
-func (w index) IsValidOriginIndex(originColIDs descpb.ColumnIDs) bool {
-	return w.desc.IsValidOriginIndex(originColIDs)
+// IsValidOriginIndex implements the catalog.Index interface.
+func (w index) IsValidOriginIndex(fk catalog.ForeignKeyConstraint) bool {
+	if w.IsPartial() {
+		return false
+	}
+	return descpb.ColumnIDs(w.desc.KeyColumnIDs).HasPrefix(fk.ForeignKeyDesc().OriginColumnIDs)
 }
 
-// IsHelpfulOriginIndex returns whether the index may be a helpful index for
-// performing foreign key checks and cascades for a foreign key with the given
-// origin columns.
-func (w index) IsHelpfulOriginIndex(originColIDs descpb.ColumnIDs) bool {
-	return w.desc.IsHelpfulOriginIndex(originColIDs)
-}
-
-// IsValidReferencedUniqueConstraint returns whether the index can serve as a
-// referenced index for a foreign  key constraint with the provided set of
-// referencedColumnIDs.
-func (w index) IsValidReferencedUniqueConstraint(referencedColIDs descpb.ColumnIDs) bool {
-	return w.desc.IsValidReferencedUniqueConstraint(referencedColIDs)
+// IsValidReferencedUniqueConstraint implements the catalog.UniqueConstraint
+// interface.
+func (w index) IsValidReferencedUniqueConstraint(fk catalog.ForeignKeyConstraint) bool {
+	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -415,7 +408,7 @@ func (w index) CreatedAt() time.Time {
 	return timeutil.Unix(0, w.desc.CreatedAtNanos)
 }
 
-// IsTemporaryIndexForBackfill() returns true iff the index is
+// IsTemporaryIndexForBackfill returns true iff the index is
 // an index being used as the temporary index being used by an
 // in-progress index backfill.
 //
@@ -425,40 +418,30 @@ func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
-// NotNullColumnID implements the catalog.Constraint interface.
-func (w index) NotNullColumnID() descpb.ColumnID {
-	return 0
-}
-
-// AsCheck implements the catalog.Constraint interface.
-func (w index) AsCheck() *descpb.TableDescriptor_CheckConstraint {
+// AsCheck implements the catalog.ConstraintProvider interface.
+func (w index) AsCheck() catalog.CheckConstraint {
 	return nil
 }
 
-// AsForeignKey implements the catalog.Constraint interface.
-func (w index) AsForeignKey() *descpb.ForeignKeyConstraint {
+// AsForeignKey implements the catalog.ConstraintProvider interface.
+func (w index) AsForeignKey() catalog.ForeignKeyConstraint {
 	return nil
 }
 
-// AsUniqueWithoutIndex implements the catalog.Constraint interface.
-func (w index) AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint {
+// AsUniqueWithoutIndex implements the catalog.ConstraintProvider interface.
+func (w index) AsUniqueWithoutIndex() catalog.UniqueWithoutIndexConstraint {
 	return nil
 }
 
-// AsPrimaryKey implements the catalog.Constraint interface.
-func (w index) AsPrimaryKey() catalog.Index {
-	if w.GetEncodingType() != descpb.PrimaryIndexEncoding {
-		return nil
+// AsUniqueWithIndex implements the catalog.ConstraintProvider interface.
+func (w index) AsUniqueWithIndex() catalog.UniqueWithIndexConstraint {
+	if w.Primary() {
+		return &w
 	}
-	return w
-}
-
-// AsUnique implements the catalog.Constraint interface.
-func (w index) AsUnique() catalog.Index {
-	if !w.desc.Unique {
-		return nil
+	if w.IsUnique() && !w.desc.UseDeletePreservingEncoding {
+		return &w
 	}
-	return w
+	return nil
 }
 
 // String implements the catalog.Constraint interface.
@@ -466,9 +449,30 @@ func (w index) String() string {
 	return fmt.Sprintf("%v", w.desc)
 }
 
-// GetConstraintValidity implements catalog.Constraint interface.
+// IsConstraintValidated implements the catalog.Constraint interface.
+func (w index) IsConstraintValidated() bool {
+	return !w.IsMutation()
+}
+
+// IsConstraintUnvalidated implements the catalog.Constraint interface.
+func (w index) IsConstraintUnvalidated() bool {
+	return false
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
 func (w index) GetConstraintValidity() descpb.ConstraintValidity {
-	return w.validityIfConstraint
+	if w.Adding() {
+		return descpb.ConstraintValidity_Validating
+	}
+	if w.Dropped() {
+		return descpb.ConstraintValidity_Dropping
+	}
+	return descpb.ConstraintValidity_Validated
+}
+
+// IsEnforced implements the catalog.Constraint interface.
+func (w index) IsEnforced() bool {
+	return !w.IsMutation() || w.WriteAndDeleteOnly()
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.
@@ -589,7 +593,7 @@ func (p partitioning) NumImplicitColumns() int {
 
 // indexCache contains precomputed slices of catalog.Index interfaces.
 type indexCache struct {
-	primary              catalog.Index
+	primary              catalog.UniqueWithIndexConstraint
 	all                  []catalog.Index
 	active               []catalog.Index
 	nonDrop              []catalog.Index
@@ -623,7 +627,7 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 		c.all = append(c.all, m.AsIndex())
 	}
 	// Populate the remaining fields in c.
-	c.primary = c.all[0]
+	c.primary = c.all[0].AsUniqueWithIndex()
 	c.active = c.all[:numPublic]
 	c.publicNonPrimary = c.active[1:]
 	for _, idx := range c.all[1:] {

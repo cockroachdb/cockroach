@@ -247,13 +247,7 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 	desc.mutationCache = newMutationCache(desc.TableDesc())
 	desc.indexCache = newIndexCache(desc.TableDesc(), desc.mutationCache)
 	desc.columnCache = newColumnCache(desc.TableDesc(), desc.mutationCache)
-	desc.constraintCache = newConstraintCache(desc.TableDesc(), desc.mutationCache)
-
-	desc.allChecks = make([]descpb.TableDescriptor_CheckConstraint, len(tbl.Checks))
-	for i, c := range tbl.Checks {
-		desc.allChecks[i] = *c
-	}
-
+	desc.constraintCache = newConstraintCache(desc.TableDesc(), desc.indexCache, desc.mutationCache)
 	return &desc
 }
 
@@ -311,6 +305,7 @@ func maybeFillInDescriptor(
 	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
+	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	return changes, nil
 }
 
@@ -469,21 +464,18 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				// reference, or the other table was upgraded. Assume the second for now.
 				// If we also find no matching reference in the new-style foreign keys,
 				// that indicates a corrupt reference.
-				var forwardFK *descpb.ForeignKeyConstraint
-				_ = otherTable.ForeachOutboundFK(func(otherFK *descpb.ForeignKeyConstraint) error {
-					if forwardFK != nil {
-						return nil
-					}
+				var forwardFK catalog.ForeignKeyConstraint
+				for _, otherFK := range otherTable.OutboundForeignKeys() {
 					// To find a match, we find a foreign key reference that has the same
 					// referenced table ID, and that the index we point to is a valid
 					// index to satisfy the columns in the foreign key.
-					if otherFK.ReferencedTableID == desc.ID &&
-						descpb.ColumnIDs(originIndex.KeyColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
+					if otherFK.GetReferencedTableID() == desc.ID &&
+						descpb.ColumnIDs(originIndex.KeyColumnIDs).HasPrefix(otherFK.ForeignKeyDesc().OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
+						break
 					}
-					return nil
-				})
+				}
 				if forwardFK == nil {
 					// Corrupted foreign key - there was no forward reference for the back
 					// reference.
@@ -493,14 +485,14 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				}
 				inFK = descpb.ForeignKeyConstraint{
 					OriginTableID:       ref.Table,
-					OriginColumnIDs:     forwardFK.OriginColumnIDs,
+					OriginColumnIDs:     forwardFK.ForeignKeyDesc().OriginColumnIDs,
 					ReferencedTableID:   desc.ID,
-					ReferencedColumnIDs: forwardFK.ReferencedColumnIDs,
-					Name:                forwardFK.Name,
-					Validity:            forwardFK.Validity,
-					OnDelete:            forwardFK.OnDelete,
-					OnUpdate:            forwardFK.OnUpdate,
-					Match:               forwardFK.Match,
+					ReferencedColumnIDs: forwardFK.ForeignKeyDesc().ReferencedColumnIDs,
+					Name:                forwardFK.GetName(),
+					Validity:            forwardFK.GetConstraintValidity(),
+					OnDelete:            forwardFK.OnDelete(),
+					OnUpdate:            forwardFK.OnUpdate(),
+					Match:               forwardFK.Match(),
 					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			} else {
@@ -751,91 +743,147 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 	if !desc.IsTable() {
 		return false
 	}
-	initialConstraintID := desc.NextConstraintID
-	// Maps index IDs to indexes for one which have
-	// a constraint ID assigned.
-	constraintIndexes := make(map[descpb.IndexID]*descpb.IndexDescriptor)
-	if desc.NextConstraintID == 0 {
-		desc.NextConstraintID = 1
-	}
-	nextConstraintID := func() descpb.ConstraintID {
-		id := desc.GetNextConstraintID()
-		desc.NextConstraintID++
-		return id
-	}
-	// Loop over all constraints and assign constraint IDs.
-	if desc.PrimaryIndex.ConstraintID == 0 {
-		desc.PrimaryIndex.ConstraintID = nextConstraintID()
-		constraintIndexes[desc.PrimaryIndex.ID] = &desc.PrimaryIndex
+	// Collect pointers to constraint ID variables.
+	var idPtrs []*descpb.ConstraintID
+	if len(desc.PrimaryIndex.KeyColumnIDs) > 0 {
+		idPtrs = append(idPtrs, &desc.PrimaryIndex.ConstraintID)
 	}
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
-		if idx.Unique && idx.ConstraintID == 0 {
-			idx.ConstraintID = nextConstraintID()
-			constraintIndexes[idx.ID] = idx
+		if !idx.Unique || idx.UseDeletePreservingEncoding {
+			continue
 		}
+		idPtrs = append(idPtrs, &idx.ConstraintID)
 	}
+	checkByName := make(map[string]*descpb.TableDescriptor_CheckConstraint)
 	for i := range desc.Checks {
-		check := desc.Checks[i]
-		if check.ConstraintID == 0 {
-			check.ConstraintID = nextConstraintID()
-		}
+		ck := desc.Checks[i]
+		idPtrs = append(idPtrs, &ck.ConstraintID)
+		checkByName[ck.Name] = ck
 	}
-	for i := range desc.InboundFKs {
-		fk := &desc.InboundFKs[i]
-		if fk.ConstraintID == 0 {
-			fk.ConstraintID = nextConstraintID()
-		}
-	}
+	fkByName := make(map[string]*descpb.ForeignKeyConstraint)
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
-		if fk.ConstraintID == 0 {
-			fk.ConstraintID = nextConstraintID()
-		}
+		idPtrs = append(idPtrs, &fk.ConstraintID)
+		fkByName[fk.Name] = fk
 	}
+	for i := range desc.InboundFKs {
+		idPtrs = append(idPtrs, &desc.InboundFKs[i].ConstraintID)
+	}
+	uwoiByName := make(map[string]*descpb.UniqueWithoutIndexConstraint)
 	for i := range desc.UniqueWithoutIndexConstraints {
-		unique := desc.UniqueWithoutIndexConstraints[i]
-		if unique.ConstraintID == 0 {
-			unique.ConstraintID = nextConstraintID()
+		uwoi := &desc.UniqueWithoutIndexConstraints[i]
+		idPtrs = append(idPtrs, &uwoi.ConstraintID)
+		uwoiByName[uwoi.Name] = uwoi
+	}
+	for _, m := range desc.GetMutations() {
+		if idx := m.GetIndex(); idx != nil && idx.Unique && !idx.UseDeletePreservingEncoding {
+			idPtrs = append(idPtrs, &idx.ConstraintID)
+		} else if c := m.GetConstraint(); c != nil {
+			switch c.ConstraintType {
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+				idPtrs = append(idPtrs, &c.Check.ConstraintID)
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
+				idPtrs = append(idPtrs, &c.ForeignKey.ConstraintID)
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				idPtrs = append(idPtrs, &c.UniqueWithoutIndexConstraint.ConstraintID)
+			}
 		}
 	}
-	// Update mutations to add the constraint ID. In the case of a PK swap
-	// we may need to maintain the same constraint ID.
-	for _, mutation := range desc.GetMutations() {
-		if idx := mutation.GetIndex(); idx != nil &&
-			idx.ConstraintID == 0 &&
-			mutation.Direction == descpb.DescriptorMutation_ADD &&
-			idx.Unique {
-			idx.ConstraintID = nextConstraintID()
-			constraintIndexes[idx.ID] = idx
-		} else if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
-			for idx := range pkSwap.NewIndexes {
-				oldIdx, firstOk := constraintIndexes[pkSwap.OldIndexes[idx]]
-				newIdx := constraintIndexes[pkSwap.NewIndexes[idx]]
-				if !firstOk {
-					continue
-				}
-				newIdx.ConstraintID = oldIdx.ConstraintID
-			}
-		} else if constraint := mutation.GetConstraint(); constraint != nil {
-			switch constraint.ConstraintType {
-			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-				if constraint.UniqueWithoutIndexConstraint.ConstraintID == 0 {
-					constraint.UniqueWithoutIndexConstraint.ConstraintID = nextConstraintID()
-				}
+	// Set constraint ID counter to sane initial value.
+	var maxID descpb.ConstraintID
+	for _, p := range idPtrs {
+		if id := *p; id > maxID {
+			maxID = id
+		}
+	}
+	if desc.NextConstraintID <= maxID {
+		desc.NextConstraintID = maxID + 1
+		hasChanged = true
+	}
+	// Update zero constraint IDs using counter.
+	for _, p := range idPtrs {
+		if *p != 0 {
+			continue
+		}
+		*p = desc.NextConstraintID
+		desc.NextConstraintID++
+		hasChanged = true
+	}
+	// Reconcile constraint IDs between enforced slice and mutation.
+	for _, m := range desc.GetMutations() {
+		if c := m.GetConstraint(); c != nil {
+			switch c.ConstraintType {
 			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
-				if constraint.Check.ConstraintID == 0 {
-					constraint.Check.ConstraintID = nextConstraintID()
+				if other, ok := checkByName[c.Check.Name]; ok {
+					c.Check.ConstraintID = other.ConstraintID
 				}
 			case descpb.ConstraintToUpdate_FOREIGN_KEY:
-				if constraint.ForeignKey.ConstraintID == 0 {
-					constraint.ForeignKey.ConstraintID = nextConstraintID()
+				if other, ok := fkByName[c.ForeignKey.Name]; ok {
+					c.ForeignKey.ConstraintID = other.ConstraintID
+				}
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				if other, ok := uwoiByName[c.UniqueWithoutIndexConstraint.Name]; ok {
+					c.UniqueWithoutIndexConstraint.ConstraintID = other.ConstraintID
 				}
 			}
 		}
-
 	}
-	return desc.NextConstraintID != initialConstraintID
+	return hasChanged
+}
+
+// maybeSetCheckConstraintColumnIDs ensures that all check constraints have a
+// ColumnIDs slice which is populated if it should be.
+func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	// Collect valid column names.
+	nonDropColumnIDs := make(map[string]descpb.ColumnID, len(desc.Columns))
+	for i := range desc.Columns {
+		nonDropColumnIDs[desc.Columns[i].Name] = desc.Columns[i].ID
+	}
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
+			nonDropColumnIDs[col.Name] = col.ID
+		}
+	}
+	var colIDsUsed catalog.TableColSet
+	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				colID, found := nonDropColumnIDs[string(c.ColumnName)]
+				if !found {
+					return false, nil, errors.New("column not found")
+				}
+				colIDsUsed.Add(colID)
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	for _, ck := range desc.Checks {
+		if len(ck.ColumnIDs) > 0 {
+			continue
+		}
+		parsed, err := parser.ParseExpr(ck.Expr)
+		if err != nil {
+			// We do this on a best-effort basis.
+			continue
+		}
+		colIDsUsed = catalog.TableColSet{}
+		if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
+			// We do this on a best-effort basis.
+			continue
+		}
+		if !colIDsUsed.Empty() {
+			ck.ColumnIDs = colIDsUsed.Ordered()
+			hasChanged = true
+		}
+	}
+	return hasChanged
 }
 
 // maybeSetCreateAsOfTime ensures that the CreateAsOfTime field is set.
