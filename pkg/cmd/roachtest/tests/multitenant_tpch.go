@@ -72,7 +72,7 @@ func runMultiTenantTPCH(ctx context.Context, t test.Test, c cluster.Cluster) {
 		tenantSQLPort  = 30258
 		tenantNode     = 1
 	)
-	_, err := singleTenantConn.Exec(`SELECT crdb_internal.create_tenant($1)`, tenantID)
+	_, err := singleTenantConn.Exec(`SELECT crdb_internal.create_tenant($1::INT)`, tenantID)
 	if err != nil {
 		t.Fatal(err)
 	}
