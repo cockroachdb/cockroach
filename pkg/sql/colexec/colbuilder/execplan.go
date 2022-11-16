@@ -100,7 +100,6 @@ func wrapRowSources(
 			// able to pool the underlying slices.
 			inputs[i].StatsCollectors = nil
 			inputs[i].MetadataSources = nil
-			inputs[i].ToClose = nil
 			toWrapInputs = append(toWrapInputs, toWrapInput)
 			*releasables = append(*releasables, toWrapInput)
 		}
@@ -493,10 +492,8 @@ func takeOverMetaInfo(target *colexecargs.OpWithMetaInfo, inputs []colexecargs.O
 	for i := range inputs {
 		target.StatsCollectors = append(target.StatsCollectors, inputs[i].StatsCollectors...)
 		target.MetadataSources = append(target.MetadataSources, inputs[i].MetadataSources...)
-		target.ToClose = append(target.ToClose, inputs[i].ToClose...)
 		inputs[i].MetadataSources = nil
 		inputs[i].StatsCollectors = nil
-		inputs[i].ToClose = nil
 	}
 }
 
@@ -599,10 +596,10 @@ func MaybeRemoveRootColumnarizer(r colexecargs.OpWithMetaInfo) execinfra.RowSour
 		return nil
 	}
 	// We have the columnarizer as the root, and it must be included into the
-	// MetadataSources and ToClose slices, so if we don't see any other objects,
-	// then the responsibility over other meta components has been claimed by
-	// the children of the columnarizer.
-	if len(r.StatsCollectors) != 0 || len(r.MetadataSources) != 1 || len(r.ToClose) != 1 {
+	// MetadataSources slice, so if we don't see any other objects, then the
+	// responsibility over other meta components has been claimed by the
+	// children of the columnarizer.
+	if len(r.StatsCollectors) != 0 || len(r.MetadataSources) != 1 {
 		return nil
 	}
 	c.MarkAsRemovedFromFlow()

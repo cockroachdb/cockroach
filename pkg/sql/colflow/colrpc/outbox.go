@@ -113,7 +113,7 @@ func NewOutbox(
 	return o, nil
 }
 
-func (o *Outbox) close(ctx context.Context) {
+func (o *Outbox) close() {
 	o.scratch.buf = nil
 	o.scratch.msg = nil
 	// Unset the input (which is a deselector operator) so that its output batch
@@ -122,7 +122,6 @@ func (o *Outbox) close(ctx context.Context) {
 	// the deselector).
 	o.Input = nil
 	o.unlimitedAllocator.ReleaseAll()
-	o.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "outbox")
 }
 
 // Run starts an outbox by connecting to the provided node and pushing
@@ -217,7 +216,7 @@ func (o *Outbox) Run(
 		return nil
 	}(); err != nil {
 		// error during stream set up.
-		o.close(ctx)
+		o.close()
 		return
 	}
 
@@ -436,6 +435,6 @@ func (o *Outbox) runWithStream(
 		}
 	}
 
-	o.close(ctx)
+	o.close()
 	<-waitCh
 }
