@@ -541,7 +541,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 		return nil, err
 	}
 
-	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
+	metrics := makeTenantSpecificMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
 	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, timeutil.Now(), nil)
 	return pgwireConn, nil
 }
@@ -1079,7 +1079,7 @@ func TestMaliciousInputs(t *testing.T) {
 			}(tc)
 
 			sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-			metrics := makeServerMetrics(sqlMetrics, time.Second /* histogramWindow */)
+			metrics := makeTenantSpecificMetrics(sqlMetrics, time.Second /* histogramWindow */)
 
 			conn := newConn(
 				r,

@@ -64,7 +64,7 @@ type conn struct {
 	conn net.Conn
 
 	sessionArgs sql.SessionArgs
-	metrics     *ServerMetrics
+	metrics     *tenantSpecificMetrics
 
 	// startTime is the time when the connection attempt was first received
 	// by the server.
@@ -164,7 +164,7 @@ func (s *Server) serveConn(
 		log.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
-	c := newConn(netConn, sArgs, &s.metrics, connStart, &s.execCfg.Settings.SV)
+	c := newConn(netConn, sArgs, &s.tenantMetrics, connStart, &s.execCfg.Settings.SV)
 	c.alwaysLogAuthActivity = alwaysLogAuthActivity || atomic.LoadInt32(&s.testingAuthLogEnabled) > 0
 	if s.execCfg.PGWireTestingKnobs != nil {
 		c.afterReadMsgTestingKnob = s.execCfg.PGWireTestingKnobs.AfterReadMsgTestingKnob
@@ -184,7 +184,7 @@ var alwaysLogAuthActivity = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_LOG_AUTHN
 func newConn(
 	netConn net.Conn,
 	sArgs sql.SessionArgs,
-	metrics *ServerMetrics,
+	metrics *tenantSpecificMetrics,
 	connStart time.Time,
 	sv *settings.Values,
 ) *conn {
