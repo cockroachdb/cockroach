@@ -53,12 +53,6 @@ var upgrades = []upgrade.Upgrade{
 		NoTenantUpgradeFunc,
 	),
 	upgrade.NewTenantUpgrade(
-		"remove grant privilege from users",
-		toCV(clusterversion.V22_2RemoveGrantPrivilege),
-		NoPrecondition,
-		removeGrantMigration,
-	),
-	upgrade.NewTenantUpgrade(
 		"upgrade sequences to be referenced by ID",
 		toCV(clusterversion.V22_2UpgradeSequenceToBeReferencedByID),
 		NoPrecondition,
