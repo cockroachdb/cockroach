@@ -739,7 +739,7 @@ func (jr *joinReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata)
 			meta = jr.DrainHelper()
 			jr.runningState = jrStateUnknown
 		default:
-			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
+			log.Fatalf(jr.Ctx(), "unsupported state: %d", jr.runningState)
 		}
 		if row == nil && meta == nil {
 			continue
@@ -916,7 +916,7 @@ func (jr *joinReader) readInput() (
 	}
 
 	if len(jr.scratchInputRows) == 0 {
-		log.VEventf(jr.Ctx, 1, "no more input rows")
+		log.VEventf(jr.Ctx(), 1, "no more input rows")
 		if outRow != nil {
 			return jrReadyToDrain, outRow, nil
 		}
@@ -924,7 +924,7 @@ func (jr *joinReader) readInput() (
 		jr.MoveToDraining(nil)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
-	log.VEventf(jr.Ctx, 1, "read %d input rows", len(jr.scratchInputRows))
+	log.VEventf(jr.Ctx(), 1, "read %d input rows", len(jr.scratchInputRows))
 
 	if jr.groupingState != nil && len(jr.scratchInputRows) > 0 {
 		jr.updateGroupingStateForNonEmptyBatch()
@@ -980,7 +980,7 @@ func (jr *joinReader) readInput() (
 		}
 	}
 
-	log.VEventf(jr.Ctx, 1, "scanning %d spans", len(spans))
+	log.VEventf(jr.Ctx(), 1, "scanning %d spans", len(spans))
 	// Note that the fetcher takes ownership of the spans slice - it will modify
 	// it and perform the memory accounting. We don't care about the
 	// modification here, but we want to be conscious about the memory
@@ -998,7 +998,7 @@ func (jr *joinReader) readInput() (
 		}
 	}
 	if err = jr.fetcher.StartScan(
-		jr.Ctx, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+		jr.Ctx(), spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 	); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -1011,7 +1011,7 @@ func (jr *joinReader) readInput() (
 func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMetadata) {
 	for {
 		// Fetch the next row and tell the strategy to process it.
-		lookedUpRow, spanID, err := jr.fetcher.NextRow(jr.Ctx)
+		lookedUpRow, spanID, err := jr.fetcher.NextRow(jr.Ctx())
 		if err != nil {
 			jr.MoveToDraining(scrub.UnwrapScrubError(err))
 			return jrStateUnknown, jr.DrainHelper()
@@ -1023,7 +1023,7 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		jr.rowsRead++
 		jr.curBatchRowsRead++
 
-		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx, lookedUpRow, spanID); err != nil {
+		if nextState, err := jr.strategy.processLookedUpRow(jr.Ctx(), lookedUpRow, spanID); err != nil {
 			jr.MoveToDraining(err)
 			return jrStateUnknown, jr.DrainHelper()
 		} else if nextState != jrPerformingLookup {
@@ -1056,13 +1056,13 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 				sortSpans(spans, spanIDs)
 			}
 
-			log.VEventf(jr.Ctx, 1, "scanning %d remote spans", len(spans))
+			log.VEventf(jr.Ctx(), 1, "scanning %d remote spans", len(spans))
 			bytesLimit := rowinfra.GetDefaultBatchBytesLimit(jr.EvalCtx.TestingKnobs.ForceProductionValues)
 			if !jr.shouldLimitBatches {
 				bytesLimit = rowinfra.NoBytesLimit
 			}
 			if err := jr.fetcher.StartScan(
-				jr.Ctx, spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
+				jr.Ctx(), spans, spanIDs, bytesLimit, rowinfra.NoRowLimit,
 			); err != nil {
 				jr.MoveToDraining(err)
 				return jrStateUnknown, jr.DrainHelper()
@@ -1071,8 +1071,8 @@ func (jr *joinReader) performLookup() (joinReaderState, *execinfrapb.ProducerMet
 		}
 	}
 
-	log.VEvent(jr.Ctx, 1, "done joining rows")
-	jr.strategy.prepareToEmit(jr.Ctx)
+	log.VEvent(jr.Ctx(), 1, "done joining rows")
+	jr.strategy.prepareToEmit(jr.Ctx())
 
 	// Check if the strategy spilled to disk and reduce the batch size if it
 	// did.
@@ -1103,7 +1103,7 @@ func (jr *joinReader) emitRow() (
 	rowenc.EncDatumRow,
 	*execinfrapb.ProducerMetadata,
 ) {
-	rowToEmit, nextState, err := jr.strategy.nextRowToEmit(jr.Ctx)
+	rowToEmit, nextState, err := jr.strategy.nextRowToEmit(jr.Ctx())
 	if err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
@@ -1135,26 +1135,26 @@ func (jr *joinReader) ConsumerClosed() {
 func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
-			jr.fetcher.Close(jr.Ctx)
+			jr.fetcher.Close(jr.Ctx())
 		}
 		if jr.usesStreamer {
-			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
-			jr.streamerInfo.txnKVStreamerMemAcc.Close(jr.Ctx)
-			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
+			jr.streamerInfo.budgetAcc.Close(jr.Ctx())
+			jr.streamerInfo.txnKVStreamerMemAcc.Close(jr.Ctx())
+			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx())
 			if jr.streamerInfo.diskMonitor != nil {
-				jr.streamerInfo.diskMonitor.Stop(jr.Ctx)
+				jr.streamerInfo.diskMonitor.Stop(jr.Ctx())
 			}
 		}
-		jr.strategy.close(jr.Ctx)
-		jr.memAcc.Close(jr.Ctx)
+		jr.strategy.close(jr.Ctx())
+		jr.memAcc.Close(jr.Ctx())
 		if jr.limitedMemMonitor != nil {
-			jr.limitedMemMonitor.Stop(jr.Ctx)
+			jr.limitedMemMonitor.Stop(jr.Ctx())
 		}
 		if jr.MemMonitor != nil {
-			jr.MemMonitor.Stop(jr.Ctx)
+			jr.MemMonitor.Stop(jr.Ctx())
 		}
 		if jr.diskMonitor != nil {
-			jr.diskMonitor.Stop(jr.Ctx)
+			jr.diskMonitor.Stop(jr.Ctx())
 		}
 	}
 }
@@ -1170,8 +1170,8 @@ func (jr *joinReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		return nil
 	}
 
-	jr.scanStats = execstats.GetScanStats(jr.Ctx, jr.ExecStatsTrace)
-	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(jr.Ctx, jr.ExecStatsTrace)
+	jr.scanStats = execstats.GetScanStats(jr.Ctx(), jr.ExecStatsTrace)
+	contentionTime, contentionEvents := execstats.GetCumulativeContentionTime(jr.Ctx(), jr.ExecStatsTrace)
 	ret := &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		KV: execinfrapb.KVStats{
@@ -1207,7 +1207,7 @@ func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.rowsRead
 	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
-	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx, jr.txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx(), jr.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

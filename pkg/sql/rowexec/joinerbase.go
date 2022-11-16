@@ -170,7 +170,7 @@ func (jb *joinerBase) render(lrow, rrow rowenc.EncDatumRow) (rowenc.EncDatumRow,
 		} else {
 			combinedRow = jb.combine(lrow, rrow)
 		}
-		res, err := jb.onCond.EvalFilter(jb.Ctx, combinedRow)
+		res, err := jb.onCond.EvalFilter(jb.Ctx(), combinedRow)
 		if !res || err != nil {
 			return nil, err
 		}

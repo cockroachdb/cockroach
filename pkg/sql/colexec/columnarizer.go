@@ -58,6 +58,7 @@ type Columnarizer struct {
 	colexecop.NonExplainable
 
 	mode              columnarizerMode
+	initialized       bool
 	helper            colmem.SetAccountingHelper
 	metadataAllocator *colmem.Allocator
 	input             execinfra.RowSource
@@ -177,13 +178,10 @@ func newColumnarizer(
 
 // Init is part of the colexecop.Operator interface.
 func (c *Columnarizer) Init(ctx context.Context) {
-	if c.removedFromFlow {
+	if c.removedFromFlow || c.initialized {
 		return
 	}
-	if c.Ctx != nil {
-		// Init has already been called.
-		return
-	}
+	c.initialized = true
 	c.accumulatedMeta = make([]execinfrapb.ProducerMetadata, 0, 1)
 	ctx = c.StartInternal(ctx, "columnarizer" /* name */)
 	c.input.Start(ctx)
@@ -279,7 +277,7 @@ func (c *Columnarizer) DrainMeta() []execinfrapb.ProducerMetadata {
 	// When this method returns, we no longer will have the reference to the
 	// metadata, so we can release all memory from the metadata allocator.
 	defer c.metadataAllocator.ReleaseAll()
-	if c.Ctx == nil {
+	if !c.initialized {
 		// The columnarizer wasn't initialized, so the wrapped processors might
 		// not have been started leaving them in an unsafe to drain state, so
 		// we skip the draining. Mostly likely this happened because a panic was
@@ -303,13 +301,6 @@ func (c *Columnarizer) Close(context.Context) error {
 		return nil
 	}
 	c.helper.Release()
-	if c.Ctx == nil {
-		// The columnarizer wasn't initialized, so the wrapped processors might
-		// not have been started leaving them in a state unsafe for the
-		// InternalClose, so we skip that. Mostly likely this happened because a
-		// panic was encountered in Init.
-		return nil
-	}
 	c.InternalClose()
 	return nil
 }
@@ -317,7 +308,7 @@ func (c *Columnarizer) Close(context.Context) error {
 func (c *Columnarizer) trailingMetaCallback() []execinfrapb.ProducerMetadata {
 	// Close will call InternalClose(). Note that we don't return any trailing
 	// metadata here because the columnarizers propagate it in DrainMeta.
-	if err := c.Close(c.Ctx); buildutil.CrdbTestBuild && err != nil {
+	if err := c.Close(c.Ctx()); buildutil.CrdbTestBuild && err != nil {
 		// Close never returns an error.
 		colexecerror.InternalError(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error from Columnarizer.Close"))
 	}
