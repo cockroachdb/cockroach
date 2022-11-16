@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "storepool",
     srcs = [
+        "override_store_pool.go",
         "store_pool.go",
         "test_helpers.go",
     ],
@@ -35,7 +36,10 @@ go_library(
 
 go_test(
     name = "storepool_test",
-    srcs = ["store_pool_test.go"],
+    srcs = [
+        "override_store_pool_test.go",
+        "store_pool_test.go",
+    ],
     args = ["-test.timeout=295s"],
     embed = [":storepool"],
     deps = [
