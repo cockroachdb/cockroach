@@ -247,16 +247,16 @@ func (n *dropIndexNode) dropShardColumnAndConstraint(
 	tableDesc *tabledesc.Mutable, shardCol catalog.Column,
 ) error {
 	validChecks := tableDesc.Checks[:0]
-	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
-		if used, err := tableDesc.CheckConstraintUsesColumn(check, shardCol.GetID()); err != nil {
+	for _, check := range tableDesc.CheckConstraints() {
+		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), shardCol.GetID()); err != nil {
 			return err
 		} else if used {
-			if check.Validity == descpb.ConstraintValidity_Validating {
+			if check.GetConstraintValidity() == descpb.ConstraintValidity_Validating {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-					"referencing constraint %q in the middle of being added, try again later", check.Name)
+					"referencing constraint %q in the middle of being added, try again later", check.GetName())
 			}
 		} else {
-			validChecks = append(validChecks, check)
+			validChecks = append(validChecks, check.CheckDesc())
 		}
 	}
 
@@ -390,57 +390,40 @@ func (p *planner) dropIndexByName(
 	//  a mixed version cluster, but we have to remove all reads of the legacy
 	//  explicit index fields.
 
-	// Construct a list of all the remaining indexes, so that we can see if there
-	// is another index that could replace the one we are deleting for a given
-	// foreign key constraint.
-	remainingIndexes := make([]catalog.Index, 1, len(tableDesc.ActiveIndexes()))
-	remainingIndexes[0] = tableDesc.GetPrimaryIndex()
-	for _, index := range tableDesc.PublicNonPrimaryIndexes() {
-		if index.GetID() != idx.GetID() {
-			remainingIndexes = append(remainingIndexes, index)
+	// Check for foreign key mutations referencing this index.
+	activeIndexes := tableDesc.ActiveIndexes()
+	for _, fk := range tableDesc.OutboundForeignKeys() {
+		if !fk.IsMutation() || !idx.IsValidOriginIndex(fk) {
+			continue
 		}
-	}
-
-	// indexHasReplacementCandidate runs isValidIndex on each index in remainingIndexes and returns
-	// true if at least one index satisfies isValidIndex.
-	indexHasReplacementCandidate := func(isValidIndex func(index catalog.Index) bool) bool {
-		foundReplacement := false
-		for _, index := range remainingIndexes {
-			if isValidIndex(index) {
+		// If the index being deleted could be used as a index for this outbound
+		// foreign key mutation, then make sure that we have another index that
+		// could be used for this mutation.
+		var foundReplacement bool
+		for _, index := range activeIndexes {
+			if index.GetID() != idx.GetID() && index.IsValidOriginIndex(fk) {
 				foundReplacement = true
 				break
 			}
 		}
-		return foundReplacement
-	}
-
-	// Check for foreign key mutations referencing this index.
-	for _, m := range tableDesc.Mutations {
-		if c := m.GetConstraint(); c != nil &&
-			c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY &&
-			// If the index being deleted could be used as a index for this outbound
-			// foreign key mutation, then make sure that we have another index that
-			// could be used for this mutation.
-			idx.IsValidOriginIndex(c.ForeignKey.OriginColumnIDs) &&
-			!indexHasReplacementCandidate(func(idx catalog.Index) bool {
-				return idx.IsValidOriginIndex(c.ForeignKey.OriginColumnIDs)
-			}) {
+		if !foundReplacement {
 			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-				"referencing constraint %q in the middle of being added, try again later", c.ForeignKey.Name)
+				"referencing constraint %q in the middle of being added, try again later",
+				fk.GetName(),
+			)
 		}
 	}
 
 	// If this index is used on the referencing side of any FK constraints, try
 	// to remove the references or find an alternate index that will suffice.
-	candidateConstraints := make([]descpb.UniqueConstraint, len(remainingIndexes))
-	for i := range remainingIndexes {
-		// We can't copy directly because of the interface conversion.
-		candidateConstraints[i] = remainingIndexes[i]
-	}
-	if err := p.tryRemoveFKBackReferences(
-		ctx, tableDesc, idx, behavior, candidateConstraints,
-	); err != nil {
-		return err
+	if uwi := idx.AsUniqueWithIndex(); uwi != nil {
+
+		const withSearchForReplacement = true
+		if err := p.tryRemoveFKBackReferences(
+			ctx, tableDesc, uwi, behavior, withSearchForReplacement,
+		); err != nil {
+			return err
+		}
 	}
 
 	var droppedViews []string

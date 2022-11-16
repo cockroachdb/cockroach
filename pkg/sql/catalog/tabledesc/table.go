@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // ColumnDefDescs contains the non-error return values for MakeColumnDefDescs.
@@ -320,12 +319,7 @@ func (desc *wrapper) getExistingOrNewConstraintCache() *constraintCache {
 	if desc.constraintCache != nil {
 		return desc.constraintCache
 	}
-	return newConstraintCache(desc.TableDesc(), desc.getExistingOrNewMutationCache())
-}
-
-// GetConstraintInfo implements the TableDescriptor interface.
-func (desc *wrapper) GetConstraintInfo() (map[string]descpb.ConstraintDetail, error) {
-	return desc.collectConstraintInfo(nil)
+	return newConstraintCache(desc.TableDesc(), desc.getExistingOrNewIndexCache(), desc.getExistingOrNewMutationCache())
 }
 
 // FindConstraintWithID implements the TableDescriptor interface.
@@ -339,172 +333,75 @@ func (desc *wrapper) FindConstraintWithID(id descpb.ConstraintID) (catalog.Const
 	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint-id \"%d\" does not exist", id)
 }
 
+// FindConstraintWithName implements the TableDescriptor interface.
+func (desc *wrapper) FindConstraintWithName(name string) (catalog.Constraint, error) {
+	all := desc.AllConstraints()
+	for _, c := range all {
+		if c.GetName() == name {
+			return c, nil
+		}
+	}
+	return nil, pgerror.Newf(pgcode.UndefinedObject, "constraint named %q does not exist", name)
+}
+
 // AllConstraints implements the catalog.TableDescriptor interface.
 func (desc *wrapper) AllConstraints() []catalog.Constraint {
 	return desc.getExistingOrNewConstraintCache().all
 }
 
-// AllActiveAndInactiveConstraints implements the catalog.TableDescriptor interface.
-func (desc *wrapper) AllActiveAndInactiveConstraints() []catalog.Constraint {
-	return desc.getExistingOrNewConstraintCache().allActiveAndInactive
+// EnforcedConstraints implements the catalog.TableDescriptor interface.
+func (desc *wrapper) EnforcedConstraints() []catalog.Constraint {
+	return desc.getExistingOrNewConstraintCache().allEnforced
 }
 
-// AllActiveConstraints implements the catalog.TableDescriptor interface.
-func (desc *wrapper) AllActiveConstraints() []catalog.Constraint {
-	return desc.getExistingOrNewConstraintCache().allActive
+// CheckConstraints implements the catalog.TableDescriptor interface.
+func (desc *wrapper) CheckConstraints() []catalog.CheckConstraint {
+	return desc.getExistingOrNewConstraintCache().checks
 }
 
-// GetConstraintInfoWithLookup implements the TableDescriptor interface.
-func (desc *wrapper) GetConstraintInfoWithLookup(
-	tableLookup catalog.TableLookupFn,
-) (map[string]descpb.ConstraintDetail, error) {
-	return desc.collectConstraintInfo(tableLookup)
+// EnforcedCheckConstraints implements the catalog.TableDescriptor interface.
+func (desc *wrapper) EnforcedCheckConstraints() []catalog.CheckConstraint {
+	return desc.getExistingOrNewConstraintCache().checksEnforced
 }
 
-// CheckUniqueConstraints returns a non-nil error if a descriptor contains two
-// constraints with the same name.
-func (desc *wrapper) CheckUniqueConstraints() error {
-	_, err := desc.collectConstraintInfo(nil)
-	return err
+// OutboundForeignKeys implements the catalog.TableDescriptor interface.
+func (desc *wrapper) OutboundForeignKeys() []catalog.ForeignKeyConstraint {
+	return desc.getExistingOrNewConstraintCache().fks
 }
 
-// if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
-// check that constraints have unique names.
-func (desc *wrapper) collectConstraintInfo(
-	tableLookup catalog.TableLookupFn,
-) (map[string]descpb.ConstraintDetail, error) {
-	info := make(map[string]descpb.ConstraintDetail)
+// EnforcedOutboundForeignKeys implements the catalog.TableDescriptor
+// interface.
+func (desc *wrapper) EnforcedOutboundForeignKeys() []catalog.ForeignKeyConstraint {
+	return desc.getExistingOrNewConstraintCache().fksEnforced
+}
 
-	// Indexes provide PK and Unique constraints that are enforced by an index.
-	for _, indexI := range desc.NonDropIndexes() {
-		index := indexI.IndexDesc()
-		if index.ID == desc.PrimaryIndex.ID {
-			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.Newf(pgcode.DuplicateObject,
-					"duplicate constraint name: %q", index.Name)
-			}
-			indexName := index.Name
-			// If a primary key swap is occurring, then the primary index name can
-			// be seen as being under the new name.
-			for _, mutation := range desc.GetMutations() {
-				if mutation.GetPrimaryKeySwap() != nil {
-					indexName = mutation.GetPrimaryKeySwap().NewPrimaryIndexName
-				}
-			}
-			detail := descpb.ConstraintDetail{
-				Kind:         descpb.ConstraintTypePK,
-				ConstraintID: index.ConstraintID,
-			}
-			detail.Columns = index.KeyColumnNames
-			detail.Index = index
-			info[indexName] = detail
-		} else if index.Unique {
-			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.Newf(pgcode.DuplicateObject,
-					"duplicate constraint name: %q", index.Name)
-			}
-			detail := descpb.ConstraintDetail{
-				Kind:         descpb.ConstraintTypeUnique,
-				ConstraintID: index.ConstraintID,
-			}
-			detail.Columns = index.KeyColumnNames
-			detail.Index = index
-			info[index.Name] = detail
-		}
-	}
+// InboundForeignKeys implements the catalog.TableDescriptor interface.
+func (desc *wrapper) InboundForeignKeys() []catalog.ForeignKeyConstraint {
+	return desc.getExistingOrNewConstraintCache().fkBackRefs
+}
 
-	// Get the unique constraints that are not enforced by an index.
-	ucs := desc.AllActiveAndInactiveUniqueWithoutIndexConstraints()
-	for _, uc := range ucs {
-		if _, ok := info[uc.Name]; ok {
-			return nil, pgerror.Newf(pgcode.DuplicateObject,
-				"duplicate constraint name: %q", uc.Name)
-		}
-		detail := descpb.ConstraintDetail{
-			Kind:         descpb.ConstraintTypeUnique,
-			ConstraintID: uc.ConstraintID,
-		}
-		// Constraints in the Validating state are considered Unvalidated for this
-		// purpose.
-		detail.Unvalidated = uc.Validity != descpb.ConstraintValidity_Validated
-		var err error
-		detail.Columns, err = desc.NamesForColumnIDs(uc.ColumnIDs)
-		if err != nil {
-			return nil, err
-		}
-		detail.UniqueWithoutIndexConstraint = uc
-		info[uc.Name] = detail
-	}
+// UniqueConstraintsWithIndex implements the catalog.TableDescriptor
+// interface.
+func (desc *wrapper) UniqueConstraintsWithIndex() []catalog.UniqueWithIndexConstraint {
+	return desc.getExistingOrNewConstraintCache().uwis
+}
 
-	fks := desc.AllActiveAndInactiveForeignKeys()
-	for _, fk := range fks {
-		if _, ok := info[fk.Name]; ok {
-			return nil, pgerror.Newf(pgcode.DuplicateObject,
-				"duplicate constraint name: %q", fk.Name)
-		}
-		detail := descpb.ConstraintDetail{
-			Kind:         descpb.ConstraintTypeFK,
-			ConstraintID: fk.ConstraintID,
-		}
-		// Constraints in the Validating state are considered Unvalidated for this
-		// purpose.
-		detail.Unvalidated = fk.Validity != descpb.ConstraintValidity_Validated
-		var err error
-		detail.Columns, err = desc.NamesForColumnIDs(fk.OriginColumnIDs)
-		if err != nil {
-			return nil, err
-		}
-		detail.FK = fk
+// EnforcedUniqueConstraintsWithIndex implements the catalog.TableDescriptor
+// interface.
+func (desc *wrapper) EnforcedUniqueConstraintsWithIndex() []catalog.UniqueWithIndexConstraint {
+	return desc.getExistingOrNewConstraintCache().uwisEnforced
+}
 
-		if tableLookup != nil {
-			other, err := tableLookup(fk.ReferencedTableID)
-			if err != nil {
-				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-					"error resolving table %d referenced in foreign key",
-					redact.Safe(fk.ReferencedTableID))
-			}
-			referencedColumnNames, err := other.NamesForColumnIDs(fk.ReferencedColumnIDs)
-			if err != nil {
-				return nil, err
-			}
-			detail.Details = fmt.Sprintf("%s.%v", other.GetName(), referencedColumnNames)
-			detail.ReferencedTable = other.TableDesc()
-		}
-		info[fk.Name] = detail
-	}
+// UniqueConstraintsWithoutIndex implements the catalog.TableDescriptor
+// interface.
+func (desc *wrapper) UniqueConstraintsWithoutIndex() []catalog.UniqueWithoutIndexConstraint {
+	return desc.getExistingOrNewConstraintCache().uwois
+}
 
-	for _, c := range desc.AllActiveAndInactiveChecks() {
-		if _, ok := info[c.Name]; ok {
-			return nil, pgerror.Newf(pgcode.DuplicateObject,
-				"duplicate constraint name: %q", c.Name)
-		}
-		detail := descpb.ConstraintDetail{
-			Kind:         descpb.ConstraintTypeCheck,
-			ConstraintID: c.ConstraintID,
-		}
-		// Constraints in the Validating state are considered Unvalidated for this
-		// purpose.
-		detail.Unvalidated = c.Validity != descpb.ConstraintValidity_Validated
-		detail.CheckConstraint = c
-		detail.Details = c.Expr
-		if tableLookup != nil {
-			colsUsed, err := desc.ColumnsUsed(c)
-			if err != nil {
-				return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-					"error computing columns used in check constraint %q", c.Name)
-			}
-			for _, colID := range colsUsed {
-				col, err := desc.FindColumnWithID(colID)
-				if err != nil {
-					return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-						"error finding column %d in table %s", redact.Safe(colID), desc.Name)
-				}
-				detail.Columns = append(detail.Columns, col.GetName())
-			}
-		}
-		info[c.Name] = detail
-	}
-	return info, nil
+// EnforcedUniqueConstraintsWithoutIndex implements the catalog.TableDescriptor
+// interface.
+func (desc *wrapper) EnforcedUniqueConstraintsWithoutIndex() []catalog.UniqueWithoutIndexConstraint {
+	return desc.getExistingOrNewConstraintCache().uwoisEnforced
 }
 
 // FindFKReferencedUniqueConstraint finds the first index in the supplied
@@ -513,26 +410,16 @@ func (desc *wrapper) collectConstraintInfo(
 // column ids. If neither an index nor unique constraint is found, returns an
 // error.
 func FindFKReferencedUniqueConstraint(
-	referencedTable catalog.TableDescriptor, referencedColIDs descpb.ColumnIDs,
-) (descpb.UniqueConstraint, error) {
-	// Search for a unique index on the referenced table that matches our foreign
-	// key columns.
-	primaryIndex := referencedTable.GetPrimaryIndex()
-	if primaryIndex.IsValidReferencedUniqueConstraint(referencedColIDs) {
-		return primaryIndex.IndexDesc(), nil
-	}
-	// If the PK doesn't match, find the index corresponding to the referenced column.
-	for _, idx := range referencedTable.PublicNonPrimaryIndexes() {
-		if idx.IsValidReferencedUniqueConstraint(referencedColIDs) {
-			return idx.IndexDesc(), nil
+	referencedTable catalog.TableDescriptor, fk catalog.ForeignKeyConstraint,
+) (catalog.UniqueConstraint, error) {
+	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
+		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk) {
+			return uwi, nil
 		}
 	}
-	// As a last resort, try to find a unique constraint with matching columns.
-	uniqueWithoutIndexConstraints := referencedTable.GetUniqueWithoutIndexConstraints()
-	for i := range uniqueWithoutIndexConstraints {
-		c := &uniqueWithoutIndexConstraints[i]
-		if c.IsValidReferencedUniqueConstraint(referencedColIDs) {
-			return c, nil
+	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
+		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk) {
+			return uwoi, nil
 		}
 	}
 	return nil, pgerror.Newf(

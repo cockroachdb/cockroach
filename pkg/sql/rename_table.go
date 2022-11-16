@@ -311,13 +311,13 @@ func (n *renameTableNode) checkForCrossDbReferences(
 
 	// Checks inbound / outbound foreign key references for cross DB references.
 	// The refTableID flag determines if the reference or origin field are checked.
-	checkFkForCrossDbDep := func(fk *descpb.ForeignKeyConstraint, refTableID bool) error {
+	checkFkForCrossDbDep := func(fk catalog.ForeignKeyConstraint, refTableID bool) error {
 		if allowCrossDatabaseFKs.Get(&p.execCfg.Settings.SV) {
 			return nil
 		}
-		tableID := fk.ReferencedTableID
+		tableID := fk.GetReferencedTableID()
 		if !refTableID {
-			tableID = fk.OriginTableID
+			tableID = fk.GetOriginTableID()
 		}
 
 		referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID,
@@ -339,7 +339,7 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 				"a foreign key constraint %q will exist between databases after rename "+
 					"(see the '%s' cluster setting)",
-				fk.Name,
+				fk.GetName(),
 				allowCrossDatabaseFKsSetting),
 			crossDBReferenceDeprecationHint(),
 		)
@@ -477,18 +477,15 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	// For tables check if any outbound or inbound foreign key references would
 	// be impacted.
 	if tableDesc.IsTable() {
-		err := tableDesc.ForeachOutboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-			return checkFkForCrossDbDep(fk, true)
-		})
-		if err != nil {
-			return err
+		for _, fk := range tableDesc.OutboundForeignKeys() {
+			if err := checkFkForCrossDbDep(fk, false); err != nil {
+				return err
+			}
 		}
-
-		err = tableDesc.ForeachInboundFK(func(fk *descpb.ForeignKeyConstraint) error {
-			return checkFkForCrossDbDep(fk, false)
-		})
-		if err != nil {
-			return err
+		for _, fk := range tableDesc.InboundForeignKeys() {
+			if err := checkFkForCrossDbDep(fk, false); err != nil {
+				return err
+			}
 		}
 		// If cross database sequence owners are not allowed, then
 		// check if any column owns a sequence.

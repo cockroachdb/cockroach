@@ -1276,8 +1276,8 @@ CREATE TABLE t.test (
 
 	// Read table descriptor.
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if len(tableDesc.GetChecks()) != 3 {
-		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.GetChecks()))
+	if len(tableDesc.EnforcedCheckConstraints()) != 3 {
+		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.EnforcedCheckConstraints()))
 	}
 
 	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP v"); err != nil {
@@ -1287,16 +1287,16 @@ CREATE TABLE t.test (
 	// Re-read table descriptor.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
 	// Only check_ab should remain
-	if len(tableDesc.GetChecks()) != 1 {
+	if len(tableDesc.EnforcedCheckConstraints()) != 1 {
 		checkExprs := make([]string, 0)
-		for i := range tableDesc.GetChecks() {
-			checkExprs = append(checkExprs, tableDesc.GetChecks()[i].Expr)
+		for i := range tableDesc.EnforcedCheckConstraints() {
+			checkExprs = append(checkExprs, tableDesc.EnforcedCheckConstraints()[i].GetExpr())
 		}
-		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.GetChecks()), strings.Join(checkExprs, ", "))
+		t.Fatalf("Expected 1 check but got %d with CHECK expr %s ", len(tableDesc.EnforcedCheckConstraints()), strings.Join(checkExprs, ", "))
 	}
 
-	if tableDesc.GetChecks()[0].Name != "check_ab" {
-		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.GetChecks()[0].Name)
+	if tableDesc.EnforcedCheckConstraints()[0].GetName() != "check_ab" {
+		t.Fatalf("Only check_ab should remain, got: %s ", tableDesc.EnforcedCheckConstraints()[0].GetName())
 	}
 
 	// Test that a constraint being added prevents the column from being dropped.
@@ -1780,7 +1780,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Check that constraints are cleaned up on the latest version of the
 	// descriptor.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
+	if checks := tableDesc.CheckConstraints(); len(checks) > 0 {
 		t.Fatalf("found checks %+v", checks)
 	}
 }
@@ -4973,7 +4973,7 @@ func TestCancelSchemaChange(t *testing.T) {
 
 	// Check that constraints are cleaned up.
 	tableDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
-	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) != 1 {
+	if checks := tableDesc.CheckConstraints(); len(checks) != 1 {
 		t.Fatalf("expected 1 check, found %+v", checks)
 	}
 }

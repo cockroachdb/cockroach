@@ -56,7 +56,7 @@ type ValidateInvertedIndexesFn func(
 type ValidateCheckConstraintFn func(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.Constraint,
+	constraint catalog.CheckConstraint,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -114,7 +114,7 @@ func (vd validator) ValidateInvertedIndexes(
 func (vd validator) ValidateCheckConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.Constraint,
+	constraint catalog.CheckConstraint,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return vd.validateCheckConstraint(ctx, tbl, constraint, vd.newFakeSessionData(&vd.settings.SV),

@@ -346,7 +346,7 @@ type TableDescriptor interface {
 	GetPrimaryIndexID() descpb.IndexID
 	// GetPrimaryIndex returns the primary index in the form of a catalog.Index
 	// interface.
-	GetPrimaryIndex() Index
+	GetPrimaryIndex() UniqueWithIndexConstraint
 	// IsPartitionAllBy returns whether the table has a PARTITION ALL BY clause.
 	IsPartitionAllBy() bool
 
@@ -632,63 +632,75 @@ type TableDescriptor interface {
 	// It's only non-nil if IsView is true.
 	GetDependsOnTypes() []descpb.ID
 
-	// AllConstraints returns all constraints from this table.
-	// A constraint is considered
-	// - active if its validity is VALIDATED;
-	// - inactive if its validity is VALIDATING or UNVALIDATED;
-	// - dropping if its validity is DROPPING;
+	// AllConstraints returns all constraints in this table, regardless if
+	// they're enforced yet or not. The ordering of the constraints within this
+	// slice is partially defined:
+	//   - constraints are grouped by kind,
+	//   - the order of each kind is undefined,
+	//   - for each kind, the enforced constraints appear first
+	//   - and in the same order as the slice in the table descriptor protobuf;
+	//     Checks, OutboundFKs, etc.
+	//   - followed by the constraint mutations, in the same order as in the
+	//     table descriptor's Mutations slice.
 	AllConstraints() []Constraint
-	// AllActiveAndInactiveConstraints returns all active and inactive constraints from table.
-	AllActiveAndInactiveConstraints() []Constraint
-	// AllActiveConstraints returns all active constraints from table.
-	AllActiveConstraints() []Constraint
+	// EnforcedConstraints returns the subset of constraints in AllConstraints
+	// which are enforced for any data written to the table, regardless of
+	// whether a constraint is valid for table data present before the
+	// constraint's existence. The order from AllConstraints is preserved.
+	EnforcedConstraints() []Constraint
 
-	// GetConstraintInfoWithLookup returns a summary of all constraints on the
-	// table using the provided function to fetch a TableDescriptor from an ID.
-	// TODO (xiang): The following two legacy methods (`GetConstraintInfoWithLookup`
-	// and `GetConstraintInfo`) should be replaced with the methods above that
-	// retrieve constraints from the table and expose a `Constraint` interface.
-	GetConstraintInfoWithLookup(fn TableLookupFn) (map[string]descpb.ConstraintDetail, error)
-	// GetConstraintInfo returns a summary of all constraints on the table.
-	GetConstraintInfo() (map[string]descpb.ConstraintDetail, error)
-	// FindConstraintWithID returns a constraint given a constraint id.
+	// CheckConstraints returns the subset of check constraints in
+	// AllConstraints for this table, in the same order.
+	CheckConstraints() []CheckConstraint
+	// EnforcedCheckConstraints returns the subset of check constraints in
+	// EnforcedConstraints for this table, in the same order.
+	EnforcedCheckConstraints() []CheckConstraint
+
+	// OutboundForeignKeys returns the subset of foreign key constraints in
+	// AllConstraints for this table, in the same order.
+	OutboundForeignKeys() []ForeignKeyConstraint
+	// EnforcedOutboundForeignKeys returns the subset of foreign key constraints
+	// in EnforcedConstraints for this table, in the same order.
+	EnforcedOutboundForeignKeys() []ForeignKeyConstraint
+	// InboundForeignKeys returns all foreign key back-references from this
+	// table, in the same order as in the InboundFKs slice.
+	InboundForeignKeys() []ForeignKeyConstraint
+
+	// UniqueConstraintsWithIndex returns the subset of index-backed unique
+	// constraints in AllConstraints for this table, in the same order.
+	UniqueConstraintsWithIndex() []UniqueWithIndexConstraint
+	// EnforcedUniqueConstraintsWithIndex returns the subset of index-backed
+	// unique constraints in EnforcedConstraints for this table, in the same
+	// order.
+	EnforcedUniqueConstraintsWithIndex() []UniqueWithIndexConstraint
+
+	// UniqueConstraintsWithoutIndex returns the subset of non-index-backed
+	// unique constraints in AllConstraints for this table, in the same order.
+	UniqueConstraintsWithoutIndex() []UniqueWithoutIndexConstraint
+	// EnforcedUniqueConstraintsWithoutIndex returns the subset of
+	// non-index-backed unique constraints in EnforcedConstraints for this table,
+	// in the same order.
+	EnforcedUniqueConstraintsWithoutIndex() []UniqueWithoutIndexConstraint
+
+	// FindConstraintWithID traverses the slice returned by AllConstraints and
+	// returns the first catalog.Constraint that matches the desired ID, or an
+	// error if none was found.
 	FindConstraintWithID(id descpb.ConstraintID) (Constraint, error)
+	// FindConstraintWithName is like FindConstraintWithID but for names.
+	FindConstraintWithName(name string) (Constraint, error)
 
-	// GetUniqueWithoutIndexConstraints returns all the unique constraints defined
-	// on this table that are not enforced by an index.
-	GetUniqueWithoutIndexConstraints() []descpb.UniqueWithoutIndexConstraint
-	// AllActiveAndInactiveUniqueWithoutIndexConstraints returns all unique
-	// constraints that are not enforced by an index, including both "active"
-	// ones on the table descriptor which are being enforced for all writes, and
-	// "inactive" ones queued in the mutations list.
-	AllActiveAndInactiveUniqueWithoutIndexConstraints() []*descpb.UniqueWithoutIndexConstraint
-
-	// ForeachOutboundFK calls f for every outbound foreign key in desc until an
-	// error is returned.
-	ForeachOutboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
-	// ForeachInboundFK calls f for every inbound foreign key in desc until an
-	// error is returned.
-	ForeachInboundFK(f func(fk *descpb.ForeignKeyConstraint) error) error
-	// AllActiveAndInactiveForeignKeys returns all foreign keys, including both
-	// "active" ones on the index descriptor which are being enforced for all
-	// writes, and "inactive" ones queued in the mutations list. An error is
-	// returned if multiple foreign keys (including mutations) are found for the
-	// same index.
-	AllActiveAndInactiveForeignKeys() []*descpb.ForeignKeyConstraint
-
-	// GetChecks returns information about this table's check constraints, if
-	// there are any. Only valid if IsTable returns true.
-	GetChecks() []*descpb.TableDescriptor_CheckConstraint
-	// AllActiveAndInactiveChecks returns all check constraints, including both
-	// "active" ones on the table descriptor which are being enforced for all
-	// writes, and "inactive" new checks constraints queued in the mutations list.
-	// Additionally,  if there are any dropped mutations queued inside the mutation
-	// list, those will not cancel any "active" or "inactive" mutations.
-	AllActiveAndInactiveChecks() []*descpb.TableDescriptor_CheckConstraint
-	// ActiveChecks returns a list of all check constraints that should be enforced
-	// on writes (including constraints being added/validated). The columns
-	// referenced by the returned checks are writable, but not necessarily public.
-	ActiveChecks() []descpb.TableDescriptor_CheckConstraint
+	// CheckConstraintColumns returns the slice of columns referenced by a check
+	// constraint.
+	CheckConstraintColumns(ck CheckConstraint) []Column
+	// ForeignKeyReferencedColumns returns the slice of columns referenced by an
+	// inbound foreign key.
+	ForeignKeyReferencedColumns(fk ForeignKeyConstraint) []Column
+	// ForeignKeyOriginColumns returns the slice of columns originating in this
+	// table for an outbound foreign key.
+	ForeignKeyOriginColumns(fk ForeignKeyConstraint) []Column
+	// UniqueWithoutIndexColumns returns the slice of columns which are
+	// defined as unique by a non-index-backed constraint.
+	UniqueWithoutIndexColumns(uwoi UniqueWithoutIndexConstraint) []Column
 
 	// GetLocalityConfig returns the locality config for this table, which
 	// describes the table's multi-region locality policy if one is set (e.g.

@@ -402,20 +402,14 @@ func showComments(
 		})
 	}
 
-	// Get all the constraints for the table and create a map by ID.
-	constraints, err := table.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
-	constraintIDToConstraint := make(map[descpb.ConstraintID]string)
-	for constraintName, constraint := range constraints {
-		constraintIDToConstraint[constraint.ConstraintID] = constraintName
-	}
 	for _, constraintComment := range tc.constraints {
 		f.WriteString(";\n")
-		constraintName := constraintIDToConstraint[descpb.ConstraintID(constraintComment.subID)]
+		c, err := table.FindConstraintWithID(descpb.ConstraintID(constraintComment.subID))
+		if err != nil {
+			return err
+		}
 		f.FormatNode(&tree.CommentOnConstraint{
-			Constraint: tree.Name(constraintName),
+			Constraint: tree.Name(c.GetName()),
 			Table:      tn.ToUnresolvedObjectName(),
 			Comment:    &constraintComment.comment,
 		})
@@ -696,36 +690,36 @@ func showConstraintClause(
 	sessionData *sessiondata.SessionData,
 	f *tree.FmtCtx,
 ) error {
-	for _, e := range desc.AllActiveAndInactiveChecks() {
-		if e.FromHashShardedColumn && e.Validity != descpb.ConstraintValidity_Unvalidated {
+	for _, e := range desc.CheckConstraints() {
+		if e.IsHashShardingConstraint() && !e.IsConstraintUnvalidated() {
 			continue
 		}
 		f.WriteString(",\n\t")
-		if len(e.Name) > 0 {
+		if len(e.GetName()) > 0 {
 			f.WriteString("CONSTRAINT ")
-			formatQuoteNames(&f.Buffer, e.Name)
+			formatQuoteNames(&f.Buffer, e.GetName())
 			f.WriteString(" ")
 		}
 		f.WriteString("CHECK (")
-		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.Expr, semaCtx, sessionData, tree.FmtParsable)
+		expr, err := schemaexpr.FormatExprForDisplay(ctx, desc, e.GetExpr(), semaCtx, sessionData, tree.FmtParsable)
 		if err != nil {
 			return err
 		}
 		f.WriteString(expr)
 		f.WriteString(")")
-		if e.Validity != descpb.ConstraintValidity_Validated {
+		if !e.IsConstraintValidated() {
 			f.WriteString(" NOT VALID")
 		}
 	}
-	for _, c := range desc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
+	for _, c := range desc.UniqueConstraintsWithoutIndex() {
 		f.WriteString(",\n\t")
-		if len(c.Name) > 0 {
+		if len(c.GetName()) > 0 {
 			f.WriteString("CONSTRAINT ")
-			formatQuoteNames(&f.Buffer, c.Name)
+			formatQuoteNames(&f.Buffer, c.GetName())
 			f.WriteString(" ")
 		}
 		f.WriteString("UNIQUE WITHOUT INDEX (")
-		colNames, err := desc.NamesForColumnIDs(c.ColumnIDs)
+		colNames, err := desc.NamesForColumnIDs(c.CollectKeyColumnIDs().Ordered())
 		if err != nil {
 			return err
 		}
@@ -733,13 +727,13 @@ func showConstraintClause(
 		f.WriteString(")")
 		if c.IsPartial() {
 			f.WriteString(" WHERE ")
-			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.Predicate, semaCtx, sessionData, tree.FmtParsable)
+			pred, err := schemaexpr.FormatExprForDisplay(ctx, desc, c.GetPredicate(), semaCtx, sessionData, tree.FmtParsable)
 			if err != nil {
 				return err
 			}
 			f.WriteString(pred)
 		}
-		if c.Validity != descpb.ConstraintValidity_Validated {
+		if !c.IsConstraintValidated() {
 			f.WriteString(" NOT VALID")
 		}
 	}

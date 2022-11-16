@@ -472,7 +472,7 @@ func TestSerializedUDTsInTableDescriptor(t *testing.T) {
 		return desc.PublicColumns()[0].GetComputeExpr()
 	}
 	getCheck := func(desc catalog.TableDescriptor) string {
-		return desc.GetChecks()[0].Expr
+		return desc.EnforcedCheckConstraints()[0].GetExpr()
 	}
 	testdata := []struct {
 		colSQL       string

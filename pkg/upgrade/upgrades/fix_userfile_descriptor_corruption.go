@@ -139,21 +139,25 @@ func mutationsLookLikeuserfilePayloadCorruption(
 	}
 	mutation := tableDesc.AllMutations()[0]
 	if mutation.Adding() && mutation.DeleteOnly() {
-		if constraintMutation := mutation.AsConstraint(); constraintMutation != nil {
-			if fkConstraint := constraintMutation.AsForeignKey(); fkConstraint != nil {
-				targetTableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, fkConstraint.ReferencedTableID, tree.ObjectLookupFlags{
+		if fkConstraint := mutation.AsForeignKey(); fkConstraint != nil {
+			targetTableDesc, err := descriptors.GetImmutableTableByID(
+				ctx,
+				txn,
+				fkConstraint.GetReferencedTableID(),
+				tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						IncludeOffline: true,
 						IncludeDropped: true,
 					},
-				})
-				if err != nil {
-					return false
-				}
-				if tableLooksLikeUserfileFileTable(targetTableDesc) {
-					return true
-				}
+				},
+			)
+			if err != nil {
+				return false
 			}
+			if tableLooksLikeUserfileFileTable(targetTableDesc) {
+				return true
+			}
+
 		}
 	}
 	return false

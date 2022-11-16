@@ -1008,11 +1008,11 @@ func (r *importResumer) publishTables(
 				}
 
 				// Set CHECK constraints to unvalidated before publishing the table imported into.
-				for _, c := range newTableDesc.AllActiveAndInactiveChecks() {
+				for _, c := range newTableDesc.CheckConstraints() {
 					// We only "unvalidate" constraints that are not hash-sharded column
 					// check constraints.
-					if !c.FromHashShardedColumn {
-						c.Validity = descpb.ConstraintValidity_Unvalidated
+					if !c.IsHashShardingConstraint() {
+						c.CheckDesc().Validity = descpb.ConstraintValidity_Unvalidated
 					}
 				}
 			}

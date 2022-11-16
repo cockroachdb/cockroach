@@ -354,11 +354,11 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 					"cannot perform TRUNCATE on %q which has a column (%q) being "+
 						"dropped which depends on another object", desc.GetName(), col.GetName())
 			}
-		} else if c := m.AsConstraint(); c != nil {
+		} else if c := m.AsConstraintWithoutIndex(); c != nil {
 			var constraintType descpb.ConstraintToUpdate_ConstraintType
 			if ck := c.AsCheck(); ck != nil {
 				constraintType = descpb.ConstraintToUpdate_CHECK
-				if c.NotNullColumnID() != 0 {
+				if ck.IsNotNullColumnConstraint() {
 					constraintType = descpb.ConstraintToUpdate_NOT_NULL
 				}
 			} else if c.AsForeignKey() != nil {
