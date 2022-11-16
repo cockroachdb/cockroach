@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
@@ -1950,6 +1951,9 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		AmbientCtx:           s.cfg.AmbientCtx,
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
 		RangeDescriptorCache: intentResolverRangeCache,
+		MaxRaftCommandSizeFn: func() int64 {
+			return kvserverbase.MaxCommandSize.Get(&s.cfg.Settings.SV)
+		},
 	})
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 

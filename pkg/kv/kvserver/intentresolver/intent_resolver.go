@@ -77,6 +77,12 @@ const (
 	// resolution batch request can run for before timeout.
 	intentResolverSendBatchTimeout = 1 * time.Minute
 
+	// intentResolverMaxExceedTargetBytes is the maximum number of bytes a write
+	// batch from intent resolution can exceed the TargetBytes set in the batch
+	// request header. TargetBytes is set to the current value of
+	// kv.raft.command.max_size minus intentResolverMaxExceedTargetBytes.
+	intentResolverMaxExceedTargetBytes = 2 << 20
+
 	// MaxTxnsPerIntentCleanupBatch is the number of transactions whose
 	// corresponding intents will be resolved at a time. Intents are batched
 	// by transaction to avoid timeouts while resolving intents and ensure that
@@ -123,6 +129,7 @@ type Config struct {
 	MaxGCBatchIdle               time.Duration
 	MaxIntentResolutionBatchWait time.Duration
 	MaxIntentResolutionBatchIdle time.Duration
+	MaxRaftCommandSizeFn         func() int64
 }
 
 // RangeCache is a simplified interface to the rngcache.RangeCache.
@@ -239,10 +246,21 @@ func New(c Config) *IntentResolver {
 		intentResolutionBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 		intentResolutionRangeBatchSize = c.TestingKnobs.MaxIntentResolutionBatchSize
 	}
+	targetBytesPerBatchReqFn := func() int64 {
+		if c.TestingKnobs.TargetBytesPerBatchReq > 0 {
+			return c.TestingKnobs.TargetBytesPerBatchReq
+		}
+		if targetBytesPerBatchReq := c.MaxRaftCommandSizeFn() - intentResolverMaxExceedTargetBytes; targetBytesPerBatchReq <= 0 {
+			return 1
+		} else {
+			return targetBytesPerBatchReq
+		}
+	}
 	ir.irBatcher = requestbatcher.New(requestbatcher.Config{
 		AmbientCtx:                c.AmbientCtx,
 		Name:                      "intent_resolver_ir_batcher",
 		MaxMsgsPerBatch:           intentResolutionBatchSize,
+		TargetBytesPerBatchReqFn:  targetBytesPerBatchReqFn,
 		MaxWait:                   c.MaxIntentResolutionBatchWait,
 		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
 		MaxTimeout:                intentResolutionSendBatchTimeout,
@@ -255,6 +273,7 @@ func New(c Config) *IntentResolver {
 		Name:                      "intent_resolver_ir_range_batcher",
 		MaxMsgsPerBatch:           intentResolutionRangeBatchSize,
 		MaxKeysPerBatchReq:        intentResolverRangeRequestSize,
+		TargetBytesPerBatchReqFn:  targetBytesPerBatchReqFn,
 		MaxWait:                   c.MaxIntentResolutionBatchWait,
 		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
 		MaxTimeout:                intentResolutionSendBatchTimeout,

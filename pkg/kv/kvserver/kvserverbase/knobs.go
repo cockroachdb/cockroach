@@ -82,4 +82,8 @@ type IntentResolverTestingKnobs struct {
 	// that sending an intent resolution batch request can run for before timing
 	// out.
 	MaxIntentResolutionSendBatchTimeout time.Duration
+
+	// TargetBytesPerBatchReq overrides the maximum number of bytes that an intent
+	// resolution request write batch can be.
+	TargetBytesPerBatchReq int64
 }
