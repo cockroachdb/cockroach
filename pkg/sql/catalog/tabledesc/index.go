@@ -27,7 +27,7 @@ import (
 )
 
 var _ catalog.Index = (*index)(nil)
-var _ catalog.Constraint = (*index)(nil)
+var _ catalog.UniqueWithIndexConstraint = (*index)(nil)
 
 // index implements the catalog.Index interface by wrapping the protobuf index
 // descriptor along with some metadata from its parent table descriptor.
@@ -425,37 +425,24 @@ func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
-// NotNullColumnID implements the catalog.Constraint interface.
-func (w index) NotNullColumnID() descpb.ColumnID {
-	return 0
-}
-
 // AsCheck implements the catalog.Constraint interface.
-func (w index) AsCheck() *descpb.TableDescriptor_CheckConstraint {
+func (w index) AsCheck() catalog.CheckConstraint {
 	return nil
 }
 
 // AsForeignKey implements the catalog.Constraint interface.
-func (w index) AsForeignKey() *descpb.ForeignKeyConstraint {
+func (w index) AsForeignKey() catalog.ForeignKeyConstraint {
 	return nil
 }
 
 // AsUniqueWithoutIndex implements the catalog.Constraint interface.
-func (w index) AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint {
+func (w index) AsUniqueWithoutIndex() catalog.UniqueWithoutIndexConstraint {
 	return nil
 }
 
-// AsPrimaryKey implements the catalog.Constraint interface.
-func (w index) AsPrimaryKey() catalog.Index {
-	if w.GetEncodingType() != descpb.PrimaryIndexEncoding {
-		return nil
-	}
-	return w
-}
-
 // AsUnique implements the catalog.Constraint interface.
-func (w index) AsUnique() catalog.Index {
-	if !w.desc.Unique {
+func (w index) AsUnique() catalog.UniqueWithIndexConstraint {
+	if !w.desc.Unique && w.desc.EncodingType != descpb.PrimaryIndexEncoding {
 		return nil
 	}
 	return w

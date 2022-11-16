@@ -11,10 +11,203 @@
 package tabledesc
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/errors"
 )
+
+type constraintBase struct {
+	maybeMutation
+}
+
+// AsCheck implements the catalog.Constraint interface.
+func (c constraintBase) AsCheck() catalog.CheckConstraint {
+	return nil
+}
+
+// AsForeignKey implements the catalog.Constraint interface.
+func (c constraintBase) AsForeignKey() catalog.ForeignKeyConstraint {
+	return nil
+}
+
+// AsUniqueWithoutIndex implements the catalog.Constraint interface.
+func (c constraintBase) AsUniqueWithoutIndex() catalog.UniqueWithoutIndexConstraint {
+	return nil
+}
+
+// AsUnique implements the catalog.Constraint interface.
+func (c constraintBase) AsUnique() catalog.UniqueWithIndexConstraint {
+	return nil
+}
+
+type checkConstraint struct {
+	constraintBase
+	desc            *descpb.TableDescriptor_CheckConstraint
+	notNullColumnID descpb.ColumnID
+}
+
+var _ catalog.CheckConstraint = (*checkConstraint)(nil)
+
+// CheckDesc implements the catalog.CheckConstraint interface.
+func (c checkConstraint) CheckDesc() *descpb.TableDescriptor_CheckConstraint {
+	return c.desc
+}
+
+// Expr implements the catalog.CheckConstraint interface.
+func (c checkConstraint) Expr() string {
+	return c.desc.Expr
+}
+
+// NumReferencedColumns implements the catalog.CheckConstraint interface.
+func (c checkConstraint) NumReferencedColumns() int {
+	if c.notNullColumnID != 0 {
+		return 1
+	}
+	return len(c.desc.ColumnIDs)
+}
+
+// GetReferencedColumnID implements the catalog.CheckConstraint
+// interface.
+func (c checkConstraint) GetReferencedColumnID(columnOrdinal int) descpb.ColumnID {
+	if c.notNullColumnID != 0 {
+		if columnOrdinal != 0 {
+			return 0
+		}
+		return c.notNullColumnID
+	}
+	if columnOrdinal < 0 || columnOrdinal >= len(c.desc.ColumnIDs) {
+		return 0
+	}
+	return c.desc.ColumnIDs[columnOrdinal]
+}
+
+// IsNotNullColumnConstraint implements the catalog.CheckConstraint interface.
+func (c checkConstraint) IsNotNullColumnConstraint() bool {
+	return c.notNullColumnID != 0
+}
+
+// GetConstraintID implements the catalog.Constraint interface.
+func (c checkConstraint) GetConstraintID() descpb.ConstraintID {
+	return c.desc.ConstraintID
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
+func (c checkConstraint) GetConstraintValidity() descpb.ConstraintValidity {
+	return c.desc.Validity
+}
+
+// GetName implements the catalog.Constraint interface.
+func (c checkConstraint) GetName() string {
+	return c.desc.Name
+}
+
+// AsCheck implements the catalog.Constraint interface.
+func (c checkConstraint) AsCheck() catalog.CheckConstraint {
+	return c
+}
+
+// String implements the catalog.Constraint interface.
+func (c checkConstraint) String() string {
+	return fmt.Sprintf("%+v", c.desc)
+}
+
+type uniqueWithoutIndexConstraint struct {
+	constraintBase
+	desc *descpb.UniqueWithoutIndexConstraint
+}
+
+var _ catalog.UniqueWithoutIndexConstraint = (*uniqueWithoutIndexConstraint)(nil)
+
+// UniqueWithoutIndexDesc implements the catalog.UniqueWithoutIndexConstraint
+// interface.
+func (c uniqueWithoutIndexConstraint) UniqueWithoutIndexDesc() *descpb.UniqueWithoutIndexConstraint {
+	return c.desc
+}
+
+// GetConstraintID implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetConstraintID() descpb.ConstraintID {
+	return c.desc.ConstraintID
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetConstraintValidity() descpb.ConstraintValidity {
+	return c.desc.Validity
+}
+
+// GetName implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) GetName() string {
+	return c.desc.Name
+}
+
+// AsUniqueWithoutIndex implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) AsUniqueWithoutIndex() catalog.UniqueWithoutIndexConstraint {
+	return c
+}
+
+// String implements the catalog.Constraint interface.
+func (c uniqueWithoutIndexConstraint) String() string {
+	return fmt.Sprintf("%+v", c.desc)
+}
+
+type foreignKeyConstraint struct {
+	constraintBase
+	desc *descpb.ForeignKeyConstraint
+}
+
+var _ catalog.ForeignKeyConstraint = (*foreignKeyConstraint)(nil)
+
+// ForeignKeyDesc implements the catalog.ForeignKeyConstraint interface.
+func (c foreignKeyConstraint) ForeignKeyDesc() *descpb.ForeignKeyConstraint {
+	return c.desc
+}
+
+// GetReferencedTableID implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) GetReferencedTableID() descpb.ID {
+	return c.desc.ReferencedTableID
+}
+
+// NumReferencedColumns implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) NumReferencedColumns() int {
+	return len(c.desc.ReferencedColumnIDs)
+}
+
+// GetReferencedColumnID implements the catalog.ForeignKeyConstraint
+// interface.
+func (c foreignKeyConstraint) GetReferencedColumnID(columnOrdinal int) descpb.ColumnID {
+	if columnOrdinal < 0 || columnOrdinal >= len(c.desc.ReferencedColumnIDs) {
+		return 0
+	}
+	return c.desc.ReferencedColumnIDs[columnOrdinal]
+}
+
+// GetConstraintID implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetConstraintID() descpb.ConstraintID {
+	return c.desc.ConstraintID
+}
+
+// GetConstraintValidity implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetConstraintValidity() descpb.ConstraintValidity {
+	return c.desc.Validity
+}
+
+// GetName implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) GetName() string {
+	return c.desc.Name
+}
+
+// AsForeignKey implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) AsForeignKey() catalog.ForeignKeyConstraint {
+	return c
+}
+
+// String implements the catalog.Constraint interface.
+func (c foreignKeyConstraint) String() string {
+	return fmt.Sprintf("%+v", c.desc)
+}
 
 // constraintCache contains precomputed slices of constraints, categorized by kind and validity.
 // A constraint is considered
@@ -114,7 +307,7 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 		}
 	}
 	for _, cst := range desc.Checks {
-		backingStruct := constraint{
+		backingStruct := constraintToUpdate{
 			desc: &descpb.ConstraintToUpdate{
 				ConstraintType: descpb.ConstraintToUpdate_CHECK,
 				Name:           cst.Name,
@@ -124,7 +317,7 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 	}
 	for _, cst := range append(desc.OutboundFKs, desc.InboundFKs...) {
-		backingStruct := constraint{
+		backingStruct := constraintToUpdate{
 			desc: &descpb.ConstraintToUpdate{
 				ConstraintType: descpb.ConstraintToUpdate_FOREIGN_KEY,
 				Name:           cst.Name,
@@ -134,7 +327,7 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 	}
 	for _, cst := range desc.UniqueWithoutIndexConstraints {
-		backingStruct := constraint{
+		backingStruct := constraintToUpdate{
 			desc: &descpb.ConstraintToUpdate{
 				ConstraintType:               descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX,
 				Name:                         cst.Name,
@@ -144,8 +337,8 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 	}
 	for _, cstMutation := range mutations.all {
-		if cst := cstMutation.AsConstraint(); cst != nil {
-			backingStruct := constraint{
+		if cst := cstMutation.AsConstraintWithoutIndex(); cst != nil {
+			backingStruct := constraintToUpdate{
 				maybeMutation: maybeMutation{
 					mutationID:         cstMutation.MutationID(),
 					mutationDirection:  mutationDirection(cstMutation),
@@ -153,7 +346,7 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 					mutationIsRollback: cstMutation.IsRollback(),
 				},
 			}
-			if cc, ok := cst.(*constraint); ok {
+			if cc, ok := cst.(*constraintToUpdate); ok {
 				backingStruct.desc = cc.desc
 			}
 			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)

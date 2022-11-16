@@ -986,7 +986,7 @@ func (s *TestState) Validator() scexec.Validator {
 func (s *TestState) ValidateCheckConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
-	constraint catalog.Constraint,
+	constraint catalog.CheckConstraint,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	s.LogSideEffectf("validate check constraint %v in table #%d", constraint.GetName(), tbl.GetID())

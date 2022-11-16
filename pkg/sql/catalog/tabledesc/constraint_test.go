@@ -189,9 +189,6 @@ func checkIndexBackedConstraint(
 	require.Equal(t, expectedID, c.GetConstraintID())
 	require.Equal(t, expectedValidity, c.GetConstraintValidity())
 	idx := c.AsUnique()
-	if idx != nil {
-		idx = c.AsPrimaryKey()
-	}
 	require.NotNil(t, idx)
 	require.Equal(t, expectedEncodingType, idx.IndexDesc().EncodingType)
 	if expectedEncodingType == descpb.SecondaryIndexEncoding {
@@ -213,22 +210,20 @@ func checkNonIndexBackedConstraint(
 	switch expectedType {
 	case descpb.ConstraintToUpdate_CHECK:
 		require.NotNil(t, c.AsCheck())
-		require.Zero(t, c.NotNullColumnID())
+		require.False(t, c.AsCheck().IsNotNullColumnConstraint())
 		require.Nil(t, c.AsForeignKey())
 		require.Nil(t, c.AsUniqueWithoutIndex())
 	case descpb.ConstraintToUpdate_NOT_NULL:
 		require.NotNil(t, c.AsCheck())
-		require.NotZero(t, c.NotNullColumnID())
+		require.True(t, c.AsCheck().IsNotNullColumnConstraint())
 		require.Nil(t, c.AsForeignKey())
 		require.Nil(t, c.AsUniqueWithoutIndex())
 	case descpb.ConstraintToUpdate_FOREIGN_KEY:
 		require.Nil(t, c.AsCheck())
-		require.Zero(t, c.NotNullColumnID())
 		require.NotNil(t, c.AsForeignKey())
 		require.Nil(t, c.AsUniqueWithoutIndex())
 	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
 		require.Nil(t, c.AsCheck())
-		require.Zero(t, c.NotNullColumnID())
 		require.Nil(t, c.AsForeignKey())
 		require.NotNil(t, c.AsUniqueWithoutIndex())
 	default:

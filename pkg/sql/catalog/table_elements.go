@@ -72,9 +72,9 @@ type Mutation interface {
 	// nil otherwise.
 	AsIndex() Index
 
-	// AsConstraint returns the corresponding Constraint if the mutation
-	// is on a constraint, nil otherwise.
-	AsConstraint() Constraint
+	// AsConstraintWithoutIndex returns the corresponding WithoutIndexConstraint
+	// if the mutation is on a constraint not backed by an index, nil otherwise.
+	AsConstraintWithoutIndex() WithoutIndexConstraint
 
 	// AsPrimaryKeySwap returns the corresponding PrimaryKeySwap if the mutation
 	// is a primary key swap, nil otherwise.
@@ -411,27 +411,85 @@ type Constraint interface {
 	// GetName returns the name of this constraint update mutation.
 	GetName() string
 
-	// NotNullColumnID returns the underlying not-null column ID, if there is one.
-	NotNullColumnID() descpb.ColumnID
-
 	// AsCheck returns the underlying check constraint, if there is one.
-	AsCheck() *descpb.TableDescriptor_CheckConstraint
+	AsCheck() CheckConstraint
 
 	// AsForeignKey returns the underlying foreign key constraint, if there is
 	// one.
-	AsForeignKey() *descpb.ForeignKeyConstraint
+	AsForeignKey() ForeignKeyConstraint
 
 	// AsUniqueWithoutIndex returns the underlying unique without index
 	// constraint, if there is one.
-	AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint
+	AsUniqueWithoutIndex() UniqueWithoutIndexConstraint
 
-	// AsPrimaryKey returns the index descriptor backing the PRIMARY KEY
-	// constraint, if there is one.
-	AsPrimaryKey() Index
+	// AsUnique returns the index descriptor backing the UNIQUE or the
+	// PRIMARY KEY constraint, if there is one.
+	AsUnique() UniqueWithIndexConstraint
+}
 
-	// AsUnique returns the index descriptor backing the UNIQUE constraint,
-	// if there is one.
-	AsUnique() Index
+// UniqueWithIndexConstraint is an interface around a unique constraint
+// which backed by an index.
+type UniqueWithIndexConstraint interface {
+	Constraint
+	Index
+}
+
+// WithoutIndexConstraint is the supertype of all constraint subtypes which are
+// not backed by an index.
+type WithoutIndexConstraint interface {
+	Constraint
+}
+
+// CheckConstraint is an interface around a check constraint.
+type CheckConstraint interface {
+	WithoutIndexConstraint
+
+	// CheckDesc returns the underlying descriptor protobuf.
+	CheckDesc() *descpb.TableDescriptor_CheckConstraint
+
+	// Expr returns the check expression as a string.
+	Expr() string
+
+	// NumReferencedColumns returns the number of columns referenced in the check
+	// expression.
+	NumReferencedColumns() int
+
+	// GetReferencedColumnID returns the ID of the column referenced in the check
+	// expression at ordinal `columnOrdinal`.
+	GetReferencedColumnID(columnOrdinal int) descpb.ColumnID
+
+	// IsNotNullColumnConstraint returns true iff this check constraint is a
+	// NOT NULL on a column.
+	IsNotNullColumnConstraint() bool
+}
+
+// ForeignKeyConstraint is an interface around a check constraint.
+type ForeignKeyConstraint interface {
+	WithoutIndexConstraint
+
+	// ForeignKeyDesc returns the underlying descriptor protobuf.
+	ForeignKeyDesc() *descpb.ForeignKeyConstraint
+
+	// GetReferencedTableID returns the ID of the table referenced by this
+	// foreign key.
+	GetReferencedTableID() descpb.ID
+
+	// NumReferencedColumns returns the number of columns referenced in this
+	// foreign key.
+	NumReferencedColumns() int
+
+	// GetReferencedColumnID returns the ID of the column referenced in the
+	// foreign key at ordinal `columnOrdinal`.
+	GetReferencedColumnID(columnOrdinal int) descpb.ColumnID
+}
+
+// UniqueWithoutIndexConstraint is an interface around a unique constraint
+// which is not backed by an index.
+type UniqueWithoutIndexConstraint interface {
+	WithoutIndexConstraint
+
+	// UniqueWithoutIndexDesc returns the underlying descriptor protobuf.
+	UniqueWithoutIndexDesc() *descpb.UniqueWithoutIndexConstraint
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.
