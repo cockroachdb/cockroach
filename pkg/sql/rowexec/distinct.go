@@ -189,7 +189,7 @@ func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, erro
 		// the references to the row (and to the newly allocated datums)
 		// shortly, it'll likely take some time before GC reclaims that memory,
 		// so we choose the over-accounting route to be safe.
-		appendTo, err = datum.Fingerprint(d.Ctx, d.types[colIdx], &d.datumAlloc, appendTo, &d.memAcc)
+		appendTo, err = datum.Fingerprint(d.Ctx(), d.types[colIdx], &d.datumAlloc, appendTo, &d.memAcc)
 		if err != nil {
 			return nil, err
 		}
@@ -212,8 +212,8 @@ func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, erro
 
 func (d *distinct) close() {
 	if d.InternalClose() {
-		d.memAcc.Close(d.Ctx)
-		d.MemMonitor.Stop(d.Ctx)
+		d.memAcc.Close(d.Ctx())
+		d.MemMonitor.Stop(d.Ctx())
 	}
 }
 
@@ -258,7 +258,7 @@ func (d *distinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			// allocated on it, which implies that UnsafeReset() is safe to call here.
 			copy(d.lastGroupKey, row)
 			d.haveLastGroupKey = true
-			if err := d.arena.UnsafeReset(d.Ctx); err != nil {
+			if err := d.arena.UnsafeReset(d.Ctx()); err != nil {
 				d.MoveToDraining(err)
 				break
 			}
@@ -282,7 +282,7 @@ func (d *distinct) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 			}
 			continue
 		}
-		s, err := d.arena.AllocBytes(d.Ctx, encoding)
+		s, err := d.arena.AllocBytes(d.Ctx(), encoding)
 		if err != nil {
 			d.MoveToDraining(err)
 			break

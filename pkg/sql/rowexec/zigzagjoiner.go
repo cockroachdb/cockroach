@@ -493,9 +493,9 @@ func (z *zigzagJoiner) setupInfo(
 func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
-			z.infos[i].fetcher.Close(z.Ctx)
+			z.infos[i].fetcher.Close(z.Ctx())
 		}
-		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
+		log.VEventf(z.Ctx(), 2, "exiting zigzag joiner run")
 	}
 }
 
@@ -790,17 +790,17 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 
 		curInfo := &z.infos[z.side]
 		err := curInfo.fetcher.StartScan(
-			z.Ctx,
+			z.Ctx(),
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			nil, /* spanIDs */
 			rowinfra.GetDefaultBatchBytesLimit(z.EvalCtx.TestingKnobs.ForceProductionValues),
 			zigzagJoinerBatchSize,
 		)
 		if err != nil {
-			log.Errorf(z.Ctx, "scan error: %s", err)
+			log.Errorf(z.Ctx(), "scan error: %s", err)
 			return err
 		}
-		fetchedRow, err := z.fetchRow(z.Ctx)
+		fetchedRow, err := z.fetchRow(z.Ctx())
 		if err != nil {
 			return scrub.UnwrapScrubError(err)
 		}
@@ -818,7 +818,7 @@ func (z *zigzagJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 			z.MoveToDraining(err)
 			break
 		}
-		row, err := z.nextRow(z.Ctx)
+		row, err := z.nextRow(z.Ctx())
 		if err != nil {
 			z.MoveToDraining(err)
 			break
@@ -843,11 +843,11 @@ func (z *zigzagJoiner) ConsumerClosed() {
 
 // execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
 func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
-	z.scanStats = execstats.GetScanStats(z.Ctx, z.ExecStatsTrace)
+	z.scanStats = execstats.GetScanStats(z.Ctx(), z.ExecStatsTrace)
 
 	kvStats := execinfrapb.KVStats{
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
-		ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx, z.ExecStatsTrace)),
+		ContentionTime:      optional.MakeTimeValue(execstats.GetCumulativeContentionTime(z.Ctx(), z.ExecStatsTrace)),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
 	}
 	execstats.PopulateKVMVCCStats(&kvStats, &z.scanStats)
@@ -895,7 +895,7 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
-	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx, z.FlowCtx.Txn); tfs != nil {
+	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}
 	return trailingMeta

@@ -404,10 +404,10 @@ func (sip *streamIngestionProcessor) close() {
 	}
 
 	for _, client := range sip.streamPartitionClients {
-		_ = client.Close(sip.Ctx)
+		_ = client.Close(sip.Ctx())
 	}
 	if sip.batcher != nil {
-		sip.batcher.Close(sip.Ctx)
+		sip.batcher.Close(sip.Ctx())
 	}
 	if sip.maxFlushRateTimer != nil {
 		sip.maxFlushRateTimer.Stop()
@@ -538,7 +538,7 @@ func (sip *streamIngestionProcessor) consumeEvents() (*jobspb.ResolvedSpans, err
 
 			if streamingKnobs, ok := sip.FlowCtx.TestingKnobs().StreamingTestingKnobs.(*sql.StreamingTestingKnobs); ok {
 				if streamingKnobs != nil && streamingKnobs.RunAfterReceivingEvent != nil {
-					if err := streamingKnobs.RunAfterReceivingEvent(sip.Ctx); err != nil {
+					if err := streamingKnobs.RunAfterReceivingEvent(sip.Ctx()); err != nil {
 						return nil, err
 					}
 				}
@@ -602,7 +602,7 @@ func (sip *streamIngestionProcessor) bufferSST(sst *roachpb.RangeFeedSSTable) er
 	// careful with checkpoints: we can only send checkpoint whose TS >= SST batch TS
 	// after the full SST gets ingested.
 
-	_, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-buffer-sst")
+	_, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-buffer-sst")
 	defer sp.Finish()
 	return streamingccl.ScanSST(sst, sst.Span,
 		func(keyVal storage.MVCCKeyValue) error {
@@ -652,7 +652,7 @@ func (sip *streamIngestionProcessor) bufferDelRange(delRange *roachpb.RangeFeedD
 func (sip *streamIngestionProcessor) bufferRangeKeyVal(
 	rangeKeyVal storage.MVCCRangeKeyValue,
 ) error {
-	_, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-buffer-range-key")
+	_, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-buffer-range-key")
 	defer sp.Finish()
 
 	var err error
@@ -790,7 +790,7 @@ func (r *rangeKeyBatcher) reset() {
 }
 
 func (sip *streamIngestionProcessor) flush() (*jobspb.ResolvedSpans, error) {
-	ctx, sp := tracing.ChildSpan(sip.Ctx, "stream-ingestion-flush")
+	ctx, sp := tracing.ChildSpan(sip.Ctx(), "stream-ingestion-flush")
 	defer sp.Finish()
 
 	flushedCheckpoints := jobspb.ResolvedSpans{ResolvedSpans: make([]jobspb.ResolvedSpan, 0)}
