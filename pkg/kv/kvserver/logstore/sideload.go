@@ -139,6 +139,8 @@ func MaybeSideloadEntries(
 	return entriesToAppend, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
 }
 
+// SniffSideloadedRaftCommand returns whether the entry data indicates a
+// sideloaded entry.
 func SniffSideloadedRaftCommand(data []byte) (sideloaded bool) {
 	return len(data) > 0 && data[0] == byte(kvserverbase.RaftVersionSideloaded)
 }
