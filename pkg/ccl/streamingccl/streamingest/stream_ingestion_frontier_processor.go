@@ -298,13 +298,13 @@ func (sf *streamIngestionFrontier) Next() (
 
 		if err := sf.maybeUpdatePartitionProgress(); err != nil {
 			// Updating the partition progress isn't a fatal error.
-			log.Errorf(sf.Ctx, "failed to update partition progress: %+v", err)
+			log.Errorf(sf.Ctx(), "failed to update partition progress: %+v", err)
 		}
 
 		// Send back a row to the job so that it can update the progress.
 		select {
-		case <-sf.Ctx.Done():
-			sf.MoveToDraining(sf.Ctx.Err())
+		case <-sf.Ctx().Done():
+			sf.MoveToDraining(sf.Ctx().Err())
 			return nil, sf.DrainHelper()
 			// Send the latest persisted highwater in the heartbeat to the source cluster
 			// as even with retries we will never request an earlier row than it, and
@@ -315,7 +315,7 @@ func (sf *streamIngestionFrontier) Next() (
 		case <-sf.heartbeatSender.stoppedChan:
 			err := sf.heartbeatSender.wait()
 			if err != nil {
-				log.Errorf(sf.Ctx, "heartbeat sender exited with error: %s", err)
+				log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 			}
 			sf.MoveToDraining(err)
 			return nil, sf.DrainHelper()
@@ -326,7 +326,7 @@ func (sf *streamIngestionFrontier) Next() (
 
 func (sf *streamIngestionFrontier) close() {
 	if err := sf.heartbeatSender.stop(); err != nil {
-		log.Errorf(sf.Ctx, "heartbeat sender exited with error: %s", err)
+		log.Errorf(sf.Ctx(), "heartbeat sender exited with error: %s", err)
 	}
 	if sf.InternalClose() {
 		sf.metrics.RunningCount.Dec(1)
@@ -392,7 +392,7 @@ func (sf *streamIngestionFrontier) noteResolvedTimestamps(
 // maybeUpdatePartitionProgress polls the frontier and updates the job progress with
 // partition-specific information to track the status of each partition.
 func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
-	ctx := sf.Ctx
+	ctx := sf.Ctx()
 	updateFreq := JobCheckpointFrequency.Get(&sf.flowCtx.Cfg.Settings.SV)
 	if updateFreq == 0 || timeutil.Since(sf.lastPartitionUpdate) < updateFreq {
 		return nil

@@ -353,10 +353,10 @@ type ProcessorBaseNoHelper struct {
 	// has been closed.
 	Closed bool
 
-	// Ctx and span contain the tracing state while the processor is active
+	// ctx and span contain the tracing state while the processor is active
 	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
 	// used).
-	Ctx  context.Context
+	ctx  context.Context
 	span *tracing.Span
 	// origCtx is the context from which ctx was derived. InternalClose() resets
 	// ctx to this.
@@ -517,7 +517,7 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 		// not permitted.
 		if err != nil {
 			logcrash.ReportOrPanic(
-				pb.Ctx,
+				pb.Ctx(),
 				&pb.FlowCtx.Cfg.Settings.SV,
 				"MoveToDraining called in state %s with err: %+v",
 				pb.State, err)
@@ -547,7 +547,7 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 func (pb *ProcessorBaseNoHelper) DrainHelper() *execinfrapb.ProducerMetadata {
 	if pb.State == StateRunning {
 		logcrash.ReportOrPanic(
-			pb.Ctx,
+			pb.Ctx(),
 			&pb.FlowCtx.Cfg.Settings.SV,
 			"drain helper called in StateRunning",
 		)
@@ -658,7 +658,7 @@ func (pb *ProcessorBase) HijackExecStatsForTrace() func() *execinfrapb.Component
 func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 	if pb.State == StateTrailingMeta || pb.State == StateExhausted {
 		logcrash.ReportOrPanic(
-			pb.Ctx,
+			pb.Ctx(),
 			&pb.FlowCtx.Cfg.Settings.SV,
 			"moveToTrailingMeta called in state: %s",
 			pb.State,
@@ -681,10 +681,10 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 		}
 	}
 
-	if buildutil.CrdbTestBuild && pb.Ctx == nil {
+	if buildutil.CrdbTestBuild && pb.ctx == nil {
 		panic(
 			errors.AssertionFailedf(
-				"unexpected nil ProcessorBase.Ctx when draining. Was StartInternal called?",
+				"unexpected nil ProcessorBase.ctx when draining. Was StartInternal called?",
 			),
 		)
 	}
@@ -708,7 +708,7 @@ func (pb *ProcessorBaseNoHelper) moveToTrailingMeta() {
 // should continue processing other rows, with the awareness that the processor
 // might have been transitioned to the draining phase.
 func (pb *ProcessorBase) ProcessRowHelper(row rowenc.EncDatumRow) rowenc.EncDatumRow {
-	outRow, ok, err := pb.OutputHelper.ProcessRow(pb.Ctx, row)
+	outRow, ok, err := pb.OutputHelper.ProcessRow(pb.Ctx(), row)
 	if err != nil {
 		pb.MoveToDraining(err)
 		return nil
@@ -730,7 +730,7 @@ func (pb *ProcessorBaseNoHelper) Run(ctx context.Context) {
 		panic("processor output is not set for emitting rows")
 	}
 	pb.self.Start(ctx)
-	Run(pb.Ctx, pb.self, pb.Output)
+	Run(pb.ctx, pb.self, pb.Output)
 }
 
 // ProcStateOpts contains fields used by the ProcessorBase's family of functions
@@ -857,18 +857,27 @@ func ProcessorSpan(ctx context.Context, name string) (context.Context, *tracing.
 // so that the caller doesn't mistakenly use old ctx object.
 func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string) context.Context {
 	pb.origCtx = ctx
-	pb.Ctx = ctx
+	pb.ctx = ctx
 	noSpan := pb.FlowCtx != nil && pb.FlowCtx.Cfg != nil &&
 		pb.FlowCtx.Cfg.TestingKnobs.ProcessorNoTracingSpan
 	if !noSpan {
-		pb.Ctx, pb.span = ProcessorSpan(ctx, name)
+		pb.ctx, pb.span = ProcessorSpan(ctx, name)
 		if pb.span != nil && pb.span.IsVerbose() {
 			pb.span.SetTag(execinfrapb.FlowIDTagKey, attribute.StringValue(pb.FlowCtx.ID.String()))
 			pb.span.SetTag(execinfrapb.ProcessorIDTagKey, attribute.IntValue(int(pb.ProcessorID)))
 		}
 	}
-	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.Ctx)
-	return pb.Ctx
+	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.ctx)
+	return pb.ctx
+}
+
+// Ctx is an accessor method for ctx which is guaranteed to return non-nil
+// context even if StartInternal() hasn't been called.
+func (pb *ProcessorBaseNoHelper) Ctx() context.Context {
+	if pb.ctx == nil {
+		return context.Background()
+	}
+	return pb.ctx
 }
 
 // InternalClose helps processors implement the RowSource interface, performing
@@ -897,7 +906,7 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 	pb.span = nil
 	// Reset the context so that any incidental uses after this point do not
 	// access the finished span.
-	pb.Ctx = pb.origCtx
+	pb.ctx = pb.origCtx
 	pb.EvalCtx.SetDeprecatedContext(pb.evalOrigCtx)
 	return true
 }
