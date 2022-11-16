@@ -107,7 +107,6 @@ onlyif config local-mixed-22.2-23.1
 statement error user testuser does not have CREATE privilege on relation privs
 CREATE INDEX foo ON privs (b)
 
-
 user root
 
 query TTBITTBBB colnames
