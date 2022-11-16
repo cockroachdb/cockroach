@@ -119,6 +119,11 @@ type Config struct {
 	// request. If MaxKeysPerBatchReq <= 0 then no limit is enforced.
 	MaxKeysPerBatchReq int
 
+	// TargetBytesPerBatchReq is the desired TargetBytes assigned to the Header
+	// of each batch request. If TargetBytesPerBatchReq <= 0, then no TargetBytes
+	// is enforced.
+	TargetBytesPerBatchReq int64
+
 	// MaxWait is the maximum amount of time a message should wait in a batch
 	// before being sent. If MaxWait is <= 0 then no wait timeout is enforced.
 	// It is inadvisable to disable both MaxIdle and MaxWait.
@@ -288,14 +293,14 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 			}
 		}
 		// Send requests in a loop to support pagination, which may be necessary
-		// if MaxKeysPerBatchReq is set. If so, partial responses with resume
-		// spans may be returned for requests, indicating that the limit was hit
-		// before they could complete and that they should be resumed over the
-		// specified key span. Requests in the batch are neither guaranteed to
-		// be ordered nor guaranteed to be non-overlapping, so we can make no
-		// assumptions about the requests that will result in full responses
-		// (with no resume spans) vs. partial responses vs. empty responses (see
-		// the comment on roachpb.Header.MaxSpanRequestKeys).
+		// if MaxKeysPerBatchReq or TargetBytesPerBatchReq is set. If so, partial
+		// responses with resume spans may be returned for requests, indicating
+		// that the limit was hit before they could complete and that they should
+		// be resumed over the specified key span. Requests in the batch are
+		// neither guaranteed to be ordered nor guaranteed to be non-overlapping,
+		// so we can make no assumptions about the requests that will result in
+		// full responses (with no resume spans) vs. partial responses vs. empty
+		// responses (see the comment on roachpb.Header.MaxSpanRequestKeys).
 		//
 		// To accommodate this, we keep track of all partial responses from
 		// previous iterations. After receiving a batch of responses during an
@@ -312,6 +317,10 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 				var res Response
 				if br != nil {
 					resp := br.Responses[i].GetInner()
+					// For response types that do not implement the combinable interface,
+					// the resume span will be lost after roachpb.CombineResponses and
+					// resp = prevResp below, so extract the resume span now.
+					resume := resp.Header().ResumeSpan
 					if prevResps != nil {
 						prevResp := prevResps[i]
 						if cErr := roachpb.CombineResponses(prevResp, resp); cErr != nil {
@@ -319,7 +328,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 						}
 						resp = prevResp
 					}
-					if resume := resp.Header().ResumeSpan; resume != nil {
+					if resume != nil {
 						// Add a trimmed request to the next batch.
 						h := r.req.Header()
 						h.SetSpan(*resume)
@@ -536,6 +545,9 @@ func (b *batch) batchRequest(cfg *Config) *roachpb.BatchRequest {
 	}
 	if cfg.MaxKeysPerBatchReq > 0 {
 		req.MaxSpanRequestKeys = int64(cfg.MaxKeysPerBatchReq)
+	}
+	if cfg.TargetBytesPerBatchReq > 0 {
+		req.TargetBytes = cfg.TargetBytesPerBatchReq
 	}
 	return req
 }

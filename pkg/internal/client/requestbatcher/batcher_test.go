@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -544,6 +545,30 @@ func TestMaxKeysPerBatchReq(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatalf("expected no errors, got %v", err)
 	}
+}
+
+// TestTargetBytesPerBatchReq checks that the correct TargetBytes limit is set
+// according to the TargetBytesPerBatchReqFn passed in via the config.
+func TestTargetBytesPerBatchReq(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	b := New(Config{
+		// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
+		// immediately lead to a batch being sent.
+		MaxMsgsPerBatch:        1,
+		Sender:                 sc,
+		Stopper:                stopper,
+		TargetBytesPerBatchReq: 4 << 20,
+	})
+	respChan := make(chan Response, 1)
+
+	err := b.SendWithChan(context.Background(), respChan, 1, &roachpb.GetRequest{})
+	require.NoError(t, err)
+	s := <-sc
+	assert.Equal(t, int64(4<<20), s.ba.TargetBytes)
+	s.respChan <- batchResp{}
 }
 
 func TestPanicWithNilSender(t *testing.T) {
