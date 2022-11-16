@@ -12,12 +12,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -92,18 +90,8 @@ func (d *dev) getDockerRunArgs(
 	if err != nil {
 		return
 	}
-	buf, err := d.os.ReadFile(filepath.Join(workspace, "build/teamcity-bazel-support.sh"))
+	bazelImage, err := d.os.ReadFile(filepath.Join(workspace, ".bazelbuilderversion"))
 	if err != nil {
-		return
-	}
-	var bazelImage string
-	for _, line := range strings.Split(buf, "\n") {
-		if strings.HasPrefix(line, "BAZEL_IMAGE=") {
-			bazelImage = strings.Trim(strings.TrimPrefix(line, "BAZEL_IMAGE="), "\n ")
-		}
-	}
-	if bazelImage == "" {
-		err = errors.New("could not find BAZEL_IMAGE in build/teamcity-bazel-support.sh")
 		return
 	}
 
