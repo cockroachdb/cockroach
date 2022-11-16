@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
@@ -101,7 +102,7 @@ func (s *PreServeConnHandler) Metrics() (res []interface{}) {
 	return []interface{}{&s.tenantIndependentMetrics}
 }
 
-// sendErr sends errors to the client during the connection startup
+// sendPreServeErr sends errors to the client during the connection startup
 // sequence. Later error sends during/after authentication are handled
 // in conn.go.
 func (s *PreServeConnHandler) sendPreServeErr(ctx context.Context, conn net.Conn, err error) error {
@@ -112,6 +113,15 @@ func (s *PreServeConnHandler) sendPreServeErr(ctx context.Context, conn net.Conn
 	_ /* err */ = s.errWriter.writeErr(ctx, err, conn)
 	_ = conn.Close()
 	return err
+}
+
+// tenantIndependentClientParameters encapsulates the session
+// parameters provided to the client, prior to any tenant-specific
+// configuration adjustements.
+type tenantIndependentClientParameters struct {
+	sql.SessionArgs
+	foundBufferSize          bool
+	clientProvidedRemoteAddr string
 }
 
 // PreServe serves a single connection, up to and including the

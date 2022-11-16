@@ -575,9 +575,12 @@ func getSessionArgs(
 			return nil, sql.SessionArgs{}, errors.Errorf("unexpected protocol version: %d", version)
 		}
 
-		args, err := parseClientProvidedSessionParameters(
-			context.Background(), nil, &buf, conn.RemoteAddr(), trustRemoteAddr,
-		)
+		ctx := context.Background()
+		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
+		if err != nil {
+			return conn, sql.SessionArgs{}, err
+		}
+		args, err := finalizeClientParameters(ctx, cp, nil, trustRemoteAddr)
 		return conn, args, err
 	}
 }
