@@ -1,0 +1,55 @@
+
+# tickle the unprotected timestamp bug
+new-server name=s1 disable-tenant
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
+INSERT INTO foo VALUES (1, 'x'),(2,'y');
+----
+
+exec-sql
+BACKUP INTO 'nodelocal://1/full_cluster_backup/';
+----
+
+
+exec-sql
+SET CLUSTER SETTING bulkio.ingest.flush_delay='20s';
+----
+
+exec-sql
+SET CLUSTER SETTING spanconfig.reconciliation_job.check_interval='1s';
+----
+
+exec-sql
+ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1;
+----
+
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_flow';
+----
+
+restore expect-pausepoint tag=a
+RESTORE TABLE foo FROM LATEST IN 'nodelocal://1/full_cluster_backup/' WITH into_db='defaultdb';
+----
+job paused at pausepoint
+
+# ensure foo has adopted the ttl
+sleep ms=5000
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+job resume=a
+----
+
+# If this test worked, the job should fail. but currently it succeeds.
+job tag=a wait-for-state=failed
+----
+
+

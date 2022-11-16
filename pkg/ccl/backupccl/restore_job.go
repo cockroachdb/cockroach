@@ -1583,10 +1583,10 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		mainData.addTenant(from, to)
 	}
 
-	_, err = protectRestoreSpans(ctx, p.ExecCfg(), r.job.ID(), details, mainData.tenantRekeys)
-	if err != nil {
-		return err
-	}
+	//_, err = protectRestoreSpans(ctx, p.ExecCfg(), r.job.ID(), details, mainData.tenantRekeys)
+	//if err != nil {
+	//	return err
+	//}
 
 	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
 		"restore.before_flow"); err != nil {
