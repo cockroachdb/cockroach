@@ -1,18 +1,16 @@
+if [ -z "${root:-}" ]
+then
+    echo '$root is not set; please source teamcity-support.sh'
+    exit 1
+fi
+
 # FYI: You can run `./dev builder` to run this Docker image. :)
-# `dev` depends on this variable! Don't change the name or format unless you
-# also update `dev` accordingly.
-BAZEL_IMAGE=cockroachdb/bazel:20220328-163955
+BAZEL_IMAGE=$(cat $root/build/.bazelbuilderversion)
 
 # Call `run_bazel $NAME_OF_SCRIPT` to start an appropriately-configured Docker
 # container with the `cockroachdb/bazel` image running the given script.
 # BAZEL_SUPPORT_EXTRA_DOCKER_ARGS will be passed on to `docker run` unchanged.
 run_bazel() {
-    if [ -z "${root:-}" ]
-    then
-        echo '$root is not set; please source teamcity-support.sh'
-        exit 1
-    fi
-
     # Set up volumes.
     # TeamCity uses git alternates, so make sure we mount the path to the real
     # git objects.
