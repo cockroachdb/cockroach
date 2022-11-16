@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 	// a version injected. Pretend to be a very up-to-date version.
 	defer build.TestingOverrideTag("v999.0.0")()
 
-	defer utilccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

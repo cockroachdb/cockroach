@@ -79,6 +79,7 @@ go_test(
     embed = [":streamingest"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/backupccl",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/changefeedccl/changefeedbase",
@@ -88,7 +89,6 @@ go_test(
         "//pkg/ccl/streamingccl/streamclient",
         "//pkg/ccl/streamingccl/streamingtest",
         "//pkg/ccl/streamingccl/streamproducer",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
