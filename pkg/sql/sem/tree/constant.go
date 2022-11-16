@@ -71,6 +71,12 @@ func typeCheckConstant(
 	if !desired.IsAmbiguous() {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
+				if desired.UserDefined() && !desired.IsHydrated() {
+					desired, err = semaCtx.TypeResolver.ResolveTypeByOID(ctx, desired.Oid())
+					if err != nil {
+						return nil, err
+					}
+				}
 				return c.ResolveAsType(ctx, semaCtx, desired)
 			}
 		}
