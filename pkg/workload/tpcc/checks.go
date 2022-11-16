@@ -272,15 +272,19 @@ func check3325(db *gosql.DB, asOfSystemTime string) (retErr error) {
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)`)
-	if err := firstQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("left EXCEPT right returned nonzero results.")
+	if err := firstQuery.Scan(); err == nil {
+		return errors.Errorf("found at least one row in the new_order table without a corresponding order row")
+	} else if !errors.Is(err, gosql.ErrNoRows) {
+		return errors.Wrapf(err, "unexpected error during check")
 	}
 	secondQuery := txn.QueryRow(`
 (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 EXCEPT ALL
 (SELECT no_w_id, no_d_id, no_o_id FROM new_order)`)
-	if err := secondQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("right EXCEPT left returned nonzero results.")
+	if err := secondQuery.Scan(); err == nil {
+		return errors.Errorf("found at least one row in the order table (with o_carrier_id = NULL) without a corresponding new_order row")
+	} else if !errors.Is(err, gosql.ErrNoRows) {
+		return errors.Wrapf(err, "unexpected error during check")
 	}
 	return nil
 }
@@ -302,8 +306,10 @@ EXCEPT ALL
 (SELECT ol_w_id, ol_d_id, ol_o_id, count(*) FROM order_line
   GROUP BY (ol_w_id, ol_d_id, ol_o_id)
   ORDER BY ol_w_id, ol_d_id, ol_o_id DESC)`)
-	if err := firstQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("left EXCEPT right returned nonzero results")
+	if err := firstQuery.Scan(); err == nil {
+		return errors.Errorf("found at least one order count mismatch (using order table on LHS)")
+	} else if !errors.Is(err, gosql.ErrNoRows) {
+		return errors.Wrapf(err, "unexpected error during check")
 	}
 	secondQuery := txn.QueryRow(`
 (SELECT ol_w_id, ol_d_id, ol_o_id, count(*) FROM order_line
@@ -311,8 +317,10 @@ EXCEPT ALL
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM "order"
   ORDER BY o_w_id, o_d_id, o_id DESC)`)
-	if err := secondQuery.Scan(); !errors.Is(err, gosql.ErrNoRows) {
-		return errors.Errorf("right EXCEPT left returned nonzero results")
+	if err := secondQuery.Scan(); err == nil {
+		return errors.Errorf("found at least one order count mismatch (using order table on RHS)")
+	} else if !errors.Is(err, gosql.ErrNoRows) {
+		return errors.Wrapf(err, "unexpected error during check")
 	}
 	return nil
 }
