@@ -1635,7 +1635,7 @@ func TestSQLNetworkMetrics(t *testing.T) {
 		t, s.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupFn()
 
-	const minbytes = 20
+	const minbytes = 15
 	const maxbytes = 2 * 1024
 
 	// Make sure we're starting at 0.
