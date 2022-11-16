@@ -30,6 +30,10 @@ import (
 
 var _ SideloadStorage = &DiskSideloadStorage{}
 
+// DiskSideloadStorage implements SideloadStorage using the given storage
+// engine.
+//
+// TODO(pavelkalinnikov): remove the interface, this type is the only impl.
 type DiskSideloadStorage struct {
 	st         *cluster.Settings
 	limiter    *rate.Limiter
@@ -75,6 +79,8 @@ func exists(eng storage.Engine, path string) (bool, error) {
 	return false, err
 }
 
+// NewDiskSideloadStorage creates a SideloadStorage for a given replica, stored
+// in the specified engine.
 func NewDiskSideloadStorage(
 	st *cluster.Settings,
 	rangeID roachpb.RangeID,
