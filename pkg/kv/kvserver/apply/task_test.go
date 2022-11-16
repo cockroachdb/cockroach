@@ -131,7 +131,15 @@ func getTestStateMachine() *testStateMachine {
 	return new(testStateMachine)
 }
 
-func (sm *testStateMachine) NewBatch(ephemeral bool) apply.Batch {
+func (sm *testStateMachine) NewBatch() apply.Batch {
+	return sm.newBatch(false /* ephemeral */)
+}
+
+func (sm *testStateMachine) NewEphemeralBatch() apply.EphemeralBatch {
+	return sm.newBatch(true /* ephemeral */)
+}
+
+func (sm *testStateMachine) newBatch(ephemeral bool) apply.Batch {
 	if sm.batchOpen {
 		panic("batch not closed")
 	}
