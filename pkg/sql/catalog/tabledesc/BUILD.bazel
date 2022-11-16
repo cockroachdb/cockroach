@@ -26,7 +26,6 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/settings",
-        "//pkg/settings/cluster",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",

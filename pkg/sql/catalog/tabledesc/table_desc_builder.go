@@ -247,13 +247,7 @@ func makeImmutable(tbl *descpb.TableDescriptor) *immutable {
 	desc.mutationCache = newMutationCache(desc.TableDesc())
 	desc.indexCache = newIndexCache(desc.TableDesc(), desc.mutationCache)
 	desc.columnCache = newColumnCache(desc.TableDesc(), desc.mutationCache)
-	desc.constraintCache = newConstraintCache(desc.TableDesc(), desc.mutationCache)
-
-	desc.allChecks = make([]descpb.TableDescriptor_CheckConstraint, len(tbl.Checks))
-	for i, c := range tbl.Checks {
-		desc.allChecks[i] = *c
-	}
-
+	desc.constraintCache = newConstraintCache(desc.TableDesc(), desc.indexCache, desc.mutationCache)
 	return &desc
 }
 
@@ -311,6 +305,7 @@ func maybeFillInDescriptor(
 	set(catalog.UpgradedPrivileges, fixedPrivileges)
 	set(catalog.RemovedDuplicateIDsInRefs, maybeRemoveDuplicateIDsInRefs(desc))
 	set(catalog.AddedConstraintIDs, maybeAddConstraintIDs(desc))
+	set(catalog.SetCheckConstraintColumnIDs, maybeSetCheckConstraintColumnIDs(desc))
 	return changes, nil
 }
 
@@ -469,21 +464,18 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				// reference, or the other table was upgraded. Assume the second for now.
 				// If we also find no matching reference in the new-style foreign keys,
 				// that indicates a corrupt reference.
-				var forwardFK *descpb.ForeignKeyConstraint
-				_ = otherTable.ForeachOutboundFK(func(otherFK *descpb.ForeignKeyConstraint) error {
-					if forwardFK != nil {
-						return nil
-					}
+				var forwardFK catalog.ForeignKeyConstraint
+				for _, otherFK := range otherTable.OutboundForeignKeys() {
 					// To find a match, we find a foreign key reference that has the same
 					// referenced table ID, and that the index we point to is a valid
 					// index to satisfy the columns in the foreign key.
-					if otherFK.ReferencedTableID == desc.ID &&
-						descpb.ColumnIDs(originIndex.KeyColumnIDs).HasPrefix(otherFK.OriginColumnIDs) {
+					if otherFK.GetReferencedTableID() == desc.ID &&
+						descpb.ColumnIDs(originIndex.KeyColumnIDs).HasPrefix(otherFK.ForeignKeyDesc().OriginColumnIDs) {
 						// Found a match.
 						forwardFK = otherFK
+						break
 					}
-					return nil
-				})
+				}
 				if forwardFK == nil {
 					// Corrupted foreign key - there was no forward reference for the back
 					// reference.
@@ -493,14 +485,14 @@ func maybeUpgradeForeignKeyRepOnIndex(
 				}
 				inFK = descpb.ForeignKeyConstraint{
 					OriginTableID:       ref.Table,
-					OriginColumnIDs:     forwardFK.OriginColumnIDs,
+					OriginColumnIDs:     forwardFK.ForeignKeyDesc().OriginColumnIDs,
 					ReferencedTableID:   desc.ID,
-					ReferencedColumnIDs: forwardFK.ReferencedColumnIDs,
-					Name:                forwardFK.Name,
-					Validity:            forwardFK.Validity,
-					OnDelete:            forwardFK.OnDelete,
-					OnUpdate:            forwardFK.OnUpdate,
-					Match:               forwardFK.Match,
+					ReferencedColumnIDs: forwardFK.ForeignKeyDesc().ReferencedColumnIDs,
+					Name:                forwardFK.GetName(),
+					Validity:            forwardFK.GetConstraintValidity(),
+					OnDelete:            forwardFK.OnDelete(),
+					OnUpdate:            forwardFK.OnUpdate(),
+					Match:               forwardFK.Match(),
 					ConstraintID:        desc.GetNextConstraintID(),
 				}
 			} else {
@@ -836,6 +828,60 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 
 	}
 	return desc.NextConstraintID != initialConstraintID
+}
+
+// maybeSetCheckConstraintColumnIDs ensures that all check constraints have a
+// ColumnIDs slice which is populated if it should be.
+func maybeSetCheckConstraintColumnIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
+	// Collect valid column names.
+	nonDropColumnIDs := make(map[string]descpb.ColumnID, len(desc.Columns))
+	for i := range desc.Columns {
+		nonDropColumnIDs[desc.Columns[i].Name] = desc.Columns[i].ID
+	}
+	for _, m := range desc.Mutations {
+		if col := m.GetColumn(); col != nil && m.Direction != descpb.DescriptorMutation_DROP {
+			nonDropColumnIDs[col.Name] = col.ID
+		}
+	}
+	var colIDsUsed catalog.TableColSet
+	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return false, nil, err
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				colID, found := nonDropColumnIDs[string(c.ColumnName)]
+				if !found {
+					return false, nil, errors.New("column not found")
+				}
+				colIDsUsed.Add(colID)
+			}
+			return false, v, nil
+		}
+		return true, expr, nil
+	}
+
+	for _, ck := range desc.Checks {
+		if len(ck.ColumnIDs) > 0 {
+			continue
+		}
+		parsed, err := parser.ParseExpr(ck.Expr)
+		if err != nil {
+			// We do this on a best-effort basis.
+			continue
+		}
+		colIDsUsed = catalog.TableColSet{}
+		if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
+			// We do this on a best-effort basis.
+			continue
+		}
+		if !colIDsUsed.Empty() {
+			ck.ColumnIDs = colIDsUsed.Ordered()
+			hasChanged = true
+		}
+	}
+	return hasChanged
 }
 
 // maybeSetCreateAsOfTime ensures that the CreateAsOfTime field is set.

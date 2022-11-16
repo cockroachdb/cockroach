@@ -353,14 +353,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			case *tree.CheckConstraintTableDef:
 				var err error
 				params.p.runWithOptions(resolveFlags{contextDatabaseID: n.tableDesc.ParentID}, func() {
-					info, infoErr := n.tableDesc.GetConstraintInfo()
-					if infoErr != nil {
-						err = infoErr
-						return
-					}
 					ckBuilder := schemaexpr.MakeCheckConstraintBuilder(params.ctx, *tn, n.tableDesc, &params.p.semaCtx)
-					for k := range info {
-						ckBuilder.MarkNameInUse(k)
+					for _, c := range n.tableDesc.AllConstraints() {
+						ckBuilder.MarkNameInUse(c.GetName())
 					}
 					ck, buildErr := ckBuilder.Build(d)
 					if buildErr != nil {
@@ -508,25 +503,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			droppedViews = append(droppedViews, colDroppedViews...)
 		case *tree.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo()
-			if err != nil {
-				return err
-			}
 			name := string(t.Constraint)
-			details, ok := info[name]
-			if !ok {
+			c, _ := n.tableDesc.FindConstraintWithName(name)
+			if c == nil {
 				if t.IfExists {
 					continue
 				}
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
 			}
-			if err := n.tableDesc.DropConstraint(
-				params.ctx,
-				name, details,
-				func(desc *tabledesc.Mutable, ref *descpb.ForeignKeyConstraint) error {
-					return params.p.removeFKBackReference(params.ctx, desc, ref)
-				}, params.ExecCfg().Settings); err != nil {
+			if err := n.tableDesc.DropConstraint(c, func(backRef catalog.ForeignKeyConstraint) error {
+				return params.p.removeFKBackReference(params.ctx, n.tableDesc, backRef.ForeignKeyDesc())
+			}); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -535,101 +523,52 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo()
-			if err != nil {
-				return err
-			}
 			name := string(t.Constraint)
-			constraint, ok := info[name]
-			if !ok {
+			c, _ := n.tableDesc.FindConstraintWithName(name)
+			if c == nil || !c.IsEnforced() {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
 			}
-			if !constraint.Unvalidated {
+			switch c.GetConstraintValidity() {
+			case descpb.ConstraintValidity_Validated:
+				// Nothing to do.
 				continue
+			case descpb.ConstraintValidity_Validating:
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint %q in the middle of being added, try again later", t.Constraint)
+			case descpb.ConstraintValidity_Dropping:
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint %q in the middle of being dropped", t.Constraint)
 			}
-			switch constraint.Kind {
-			case descpb.ConstraintTypeCheck:
-				found := false
-				var ck *descpb.TableDescriptor_CheckConstraint
-				for _, c := range n.tableDesc.Checks {
-					// If the constraint is still being validated, don't allow
-					// VALIDATE CONSTRAINT to run.
-					if c.Name == name && c.Validity != descpb.ConstraintValidity_Validating {
-						found = true
-						ck = c
-						break
-					}
-				}
-				if !found {
-					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-						"constraint %q in the middle of being added, try again later", t.Constraint)
-				}
+			if ck := c.AsCheck(); ck != nil {
 				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-					return validateCheckInTxn(ctx, &params.p.semaCtx, params.p.SessionData(), n.tableDesc, txn, ie, ck.Expr)
+					return validateCheckInTxn(ctx, &params.p.semaCtx, params.p.SessionData(), n.tableDesc, txn, ie, ck.GetExpr())
 				}); err != nil {
 					return err
 				}
-				ck.Validity = descpb.ConstraintValidity_Validated
-
-			case descpb.ConstraintTypeFK:
-				var foundFk *descpb.ForeignKeyConstraint
-				for i := range n.tableDesc.OutboundFKs {
-					fk := &n.tableDesc.OutboundFKs[i]
-					// If the constraint is still being validated, don't allow
-					// VALIDATE CONSTRAINT to run.
-					if fk.Name == name && fk.Validity != descpb.ConstraintValidity_Validating {
-						foundFk = fk
-						break
-					}
-				}
-				if foundFk == nil {
-					return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-						"constraint %q in the middle of being added, try again later", t.Constraint)
-				}
+				ck.CheckDesc().Validity = descpb.ConstraintValidity_Validated
+			} else if fk := c.AsForeignKey(); fk != nil {
 				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 					return validateFkInTxn(ctx, n.tableDesc, txn, ie, params.p.descCollection, name)
 				}); err != nil {
 					return err
 				}
-				foundFk.Validity = descpb.ConstraintValidity_Validated
-			case descpb.ConstraintTypeUnique:
-				if constraint.Index == nil {
-					var foundUnique *descpb.UniqueWithoutIndexConstraint
-					for i := range n.tableDesc.UniqueWithoutIndexConstraints {
-						uc := &n.tableDesc.UniqueWithoutIndexConstraints[i]
-						// If the constraint is still being validated, don't allow
-						// VALIDATE CONSTRAINT to run.
-						if uc.Name == name && uc.Validity != descpb.ConstraintValidity_Validating {
-							foundUnique = uc
-							break
-						}
-					}
-					if foundUnique == nil {
-						return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-							"constraint %q in the middle of being added, try again later", t.Constraint)
-					}
-					if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
-						return validateUniqueWithoutIndexConstraintInTxn(
-							params.ctx,
-							n.tableDesc,
-							txn,
-							ie,
-							params.p.User(),
-							name,
-						)
-					}); err != nil {
-						return err
-					}
-					foundUnique.Validity = descpb.ConstraintValidity_Validated
-					break
+				fk.ForeignKeyDesc().Validity = descpb.ConstraintValidity_Validated
+			} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
+				if err := params.p.WithInternalExecutor(params.ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
+					return validateUniqueWithoutIndexConstraintInTxn(
+						params.ctx,
+						n.tableDesc,
+						txn,
+						ie,
+						params.p.User(),
+						name,
+					)
+				}); err != nil {
+					return err
 				}
-
-				// This unique constraint is enforced by an index, so fall through to
-				// the error below.
-				fallthrough
-
-			default:
+				uwoi.UniqueWithoutIndexDesc().Validity = descpb.ConstraintValidity_Validated
+			} else {
 				return pgerror.Newf(pgcode.WrongObjectType,
 					"constraint %q of relation %q is not a foreign key, check, or unique without index"+
 						" constraint", tree.ErrString(&t.Constraint), tree.ErrString(n.n.Table))
@@ -810,12 +749,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descriptorChanged || descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			info, err := n.tableDesc.GetConstraintInfo()
-			if err != nil {
-				return err
-			}
-			details, ok := info[string(t.Constraint)]
-			if !ok {
+			constraint, _ := n.tableDesc.FindConstraintWithName(string(t.Constraint))
+			if constraint == nil || !constraint.IsEnforced() {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
 			}
@@ -823,16 +758,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				// Nothing to do.
 				break
 			}
-
-			if _, ok := info[string(t.NewName)]; ok {
+			if other, _ := n.tableDesc.FindConstraintWithName(string(t.NewName)); other != nil {
 				return pgerror.Newf(pgcode.DuplicateObject,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
 			// If this is a unique or primary constraint, renames of the constraint
 			// lead to renames of the underlying index. Ensure that no index with this
 			// new name exists. This is what postgres does.
-			switch details.Kind {
-			case descpb.ConstraintTypeUnique, descpb.ConstraintTypePK:
+			if constraint.AsUniqueWithIndex() != nil {
 				if catalog.FindNonDropIndex(n.tableDesc, func(idx catalog.Index) bool {
 					return idx.GetName() == string(t.NewName)
 				}) != nil {
@@ -851,10 +784,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				)
 			}
 
-			if err := n.tableDesc.RenameConstraint(
-				details, string(t.Constraint), string(t.NewName), depViewRenameError,
-				func(desc *tabledesc.Mutable, ref *descpb.ForeignKeyConstraint, newName string) error {
-					return params.p.updateFKBackReferenceName(params.ctx, desc, ref, newName)
+			if err := n.tableDesc.RenameConstraint(constraint, string(t.NewName), depViewRenameError,
+				func(desc *tabledesc.Mutable, ref catalog.ForeignKeyConstraint, newName string) error {
+					return params.p.updateFKBackReferenceName(params.ctx, desc, ref.ForeignKeyDesc(), newName)
 				}); err != nil {
 				return err
 			}
@@ -1064,19 +996,11 @@ func applyColumnMutation(
 					"constraint in the middle of being dropped")
 			}
 		}
-		info, err := tableDesc.GetConstraintInfo()
-		if err != nil {
-			return err
-		}
-		inuseNames := make(map[string]struct{}, len(info))
-		for k := range info {
-			inuseNames[k] = struct{}{}
-		}
 		col.ColumnDesc().Nullable = true
 
 		// Add a check constraint equivalent to the non-null constraint and drop
 		// it in the schema changer.
-		check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), tableDesc.GetNextConstraintID(), inuseNames, descpb.ConstraintValidity_Dropping)
+		check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col, descpb.ConstraintValidity_Dropping)
 		tableDesc.Checks = append(tableDesc.Checks, check)
 		tableDesc.NextConstraintID++
 		tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_DROP)
@@ -1096,15 +1020,7 @@ func applyColumnMutation(
 }
 
 func addNotNullConstraintMutationForCol(tableDesc *tabledesc.Mutable, col catalog.Column) error {
-	info, err := tableDesc.GetConstraintInfo()
-	if err != nil {
-		return err
-	}
-	inuseNames := make(map[string]struct{}, len(info))
-	for k := range info {
-		inuseNames[k] = struct{}{}
-	}
-	check := tabledesc.MakeNotNullCheckConstraint(col.GetName(), col.GetID(), tableDesc.GetNextConstraintID(), inuseNames, descpb.ConstraintValidity_Validating)
+	check := tabledesc.MakeNotNullCheckConstraint(tableDesc, col, descpb.ConstraintValidity_Validating)
 	tableDesc.AddNotNullMutation(check, descpb.DescriptorMutation_ADD)
 	tableDesc.NextConstraintID++
 	return nil
@@ -1465,7 +1381,7 @@ func validateConstraintNameIsNotUsed(
 			// ok with the conflict in this case.
 			defaultPKName := tabledesc.PrimaryKeyIndexName(tableDesc.GetName())
 			if tableDesc.HasPrimaryKey() && tableDesc.IsPrimaryIndexDefaultRowID() &&
-				tableDesc.PrimaryIndex.GetName() == defaultPKName &&
+				tableDesc.PrimaryIndex.Name == defaultPKName &&
 				name == tree.Name(defaultPKName) {
 				return false, nil
 			}
@@ -1501,28 +1417,20 @@ func validateConstraintNameIsNotUsed(
 	if name == "" {
 		return false, nil
 	}
-	info, err := tableDesc.GetConstraintInfo()
-	if err != nil {
-		// Unexpected error: table descriptor should be valid at this point.
-		return false, errors.WithAssertionFailure(err)
-	}
-	constraintInfo, isInUse := info[name.String()]
-	if !isInUse {
+	constraint, _ := tableDesc.FindConstraintWithName(string(name))
+	if constraint == nil {
 		return false, nil
 	}
 	// If the primary index is being replaced, then the name can be reused for
 	// another constraint.
-	if isInUse &&
-		constraintInfo.Index != nil &&
-		constraintInfo.Index.ID == tableDesc.PrimaryIndex.ID {
+	if u := constraint.AsUniqueWithIndex(); u != nil && u.GetID() == tableDesc.GetPrimaryIndexID() {
 		for _, mut := range tableDesc.GetMutations() {
 			if primaryKeySwap := mut.GetPrimaryKeySwap(); primaryKeySwap != nil &&
-				primaryKeySwap.OldPrimaryIndexId == tableDesc.PrimaryIndex.ID &&
+				primaryKeySwap.OldPrimaryIndexId == u.GetID() &&
 				primaryKeySwap.NewPrimaryIndexName != name.String() {
 				return false, nil
 			}
 		}
-
 	}
 	if hasIfNotExists {
 		return true, nil
@@ -1696,49 +1604,9 @@ func dropColumnImpl(
 	for _, idx := range tableDesc.NonDropIndexes() {
 		// We automatically drop indexes that reference the column
 		// being dropped.
-
-		// containsThisColumn becomes true if the index is defined
-		// over the column being dropped.
-		containsThisColumn := false
-
-		// Analyze the index.
-		for j := 0; j < idx.NumKeyColumns(); j++ {
-			if idx.GetKeyColumnID(j) == colToDrop.GetID() {
-				containsThisColumn = true
-				break
-			}
-		}
-		if !containsThisColumn {
-			for j := 0; j < idx.NumKeySuffixColumns(); j++ {
-				id := idx.GetKeySuffixColumnID(j)
-				if tableDesc.GetPrimaryIndex().CollectKeyColumnIDs().Contains(id) {
-					// All secondary indices necessary contain the PK
-					// columns, too. (See the comments on the definition of
-					// IndexDescriptor). The presence of a PK column in the
-					// secondary index should thus not be seen as a
-					// sufficient reason to reject the DROP.
-					continue
-				}
-				if id == colToDrop.GetID() {
-					containsThisColumn = true
-					break
-				}
-			}
-		}
-		if !containsThisColumn {
-			// The loop above this comment is for the old STORING encoding. The
-			// loop below is for the new encoding (where the STORING columns are
-			// always in the value part of a KV).
-			for j := 0; j < idx.NumSecondaryStoredColumns(); j++ {
-				if idx.GetStoredColumnID(j) == colToDrop.GetID() {
-					containsThisColumn = true
-					break
-				}
-			}
-		}
-
-		// If the column being dropped is referenced in the partial
-		// index predicate, then the index should be dropped.
+		containsThisColumn := idx.CollectKeyColumnIDs().Contains(colToDrop.GetID()) ||
+			idx.CollectKeySuffixColumnIDs().Contains(colToDrop.GetID()) ||
+			idx.CollectSecondaryStoredColumnIDs().Contains(colToDrop.GetID())
 		if !containsThisColumn && idx.IsPartial() {
 			expr, err := parser.ParseExpr(idx.GetPredicate())
 			if err != nil {
@@ -1754,7 +1622,6 @@ func dropColumnImpl(
 				containsThisColumn = true
 			}
 		}
-
 		// Perform the DROP.
 		if containsThisColumn {
 			idxNamesToDelete = append(idxNamesToDelete, idx.GetName())
@@ -1776,56 +1643,37 @@ func dropColumnImpl(
 		}
 	}
 
-	// Drop unique constraints that reference the column.
-	sliceIdx := 0
-	for i := range tableDesc.UniqueWithoutIndexConstraints {
-		constraint := &tableDesc.UniqueWithoutIndexConstraints[i]
-		tableDesc.UniqueWithoutIndexConstraints[sliceIdx] = *constraint
-		sliceIdx++
-		if descpb.ColumnIDs(constraint.ColumnIDs).Contains(colToDrop.GetID()) {
-			sliceIdx--
-
-			// If this unique constraint is used on the referencing side of any FK
-			// constraints, try to remove the references. Don't bother trying to find
-			// an alternate index or constraint, since all possible matches will
-			// be dropped when the column is dropped.
-			if err := params.p.tryRemoveFKBackReferences(
-				params.ctx, tableDesc, constraint, t.DropBehavior, nil,
-			); err != nil {
-				return nil, err
-			}
+	// Drop non-index-backed unique constraints which reference the column.
+	for _, uwoi := range tableDesc.EnforcedUniqueConstraintsWithoutIndex() {
+		if uwoi.Dropped() || !uwoi.CollectKeyColumnIDs().Contains(colToDrop.GetID()) {
+			continue
+		}
+		// If this unique constraint is used on the referencing side of any FK
+		// constraints, try to remove the references. Don't bother trying to find
+		// an alternate index or constraint, since all possible matches will
+		// be dropped when the column is dropped.
+		const withSearchForReplacement = false
+		if err := params.p.tryRemoveFKBackReferences(
+			params.ctx, tableDesc, uwoi, t.DropBehavior, withSearchForReplacement,
+		); err != nil {
+			return nil, err
+		}
+		if err := tableDesc.DropConstraint(uwoi, nil /* removeFKBackRef */); err != nil {
+			return nil, err
 		}
 	}
-	tableDesc.UniqueWithoutIndexConstraints = tableDesc.UniqueWithoutIndexConstraints[:sliceIdx]
 
 	// Drop check constraints which reference the column.
-	constraintsToDrop := make([]string, 0, len(tableDesc.Checks))
-	constraintInfo, err := tableDesc.GetConstraintInfo()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, check := range tableDesc.AllActiveAndInactiveChecks() {
-		if used, err := tableDesc.CheckConstraintUsesColumn(check, colToDrop.GetID()); err != nil {
-			return nil, err
-		} else if used {
-			if check.Validity == descpb.ConstraintValidity_Dropping {
-				// We don't need to drop this constraint, its already
-				// in the process.
-				continue
-			}
-			constraintsToDrop = append(constraintsToDrop, check.Name)
+	for _, check := range tableDesc.EnforcedCheckConstraints() {
+		if check.Dropped() {
+			continue
 		}
-	}
-
-	for _, constraintName := range constraintsToDrop {
-		err := tableDesc.DropConstraint(params.ctx, constraintName, constraintInfo[constraintName],
-			func(*tabledesc.Mutable, *descpb.ForeignKeyConstraint) error {
-				return nil
-			},
-			params.extendedEvalCtx.Settings,
-		)
-		if err != nil {
+		if used, err := tableDesc.CheckConstraintUsesColumn(check.CheckDesc(), colToDrop.GetID()); err != nil {
+			return nil, err
+		} else if !used {
+			continue
+		}
+		if err := tableDesc.DropConstraint(check, nil /* removeFKBackRef */); err != nil {
 			return nil, err
 		}
 	}
@@ -1838,7 +1686,7 @@ func dropColumnImpl(
 	// the drop index codepaths aren't going to remove dependent FKs, so we
 	// need to do that here.
 	// We update the FK's slice in place here.
-	sliceIdx = 0
+	sliceIdx := 0
 	for i := range tableDesc.OutboundFKs {
 		tableDesc.OutboundFKs[sliceIdx] = tableDesc.OutboundFKs[i]
 		sliceIdx++
@@ -2034,18 +1882,31 @@ func handleTTLStorageParamChange(
 func (p *planner) tryRemoveFKBackReferences(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	constraint descpb.UniqueConstraint,
+	uniqueConstraint catalog.UniqueConstraint,
 	behavior tree.DropBehavior,
-	candidateConstraints []descpb.UniqueConstraint,
+	withSearchForReplacement bool,
 ) error {
 	// uniqueConstraintHasReplacementCandidate runs
-	// IsValidReferencedUniqueConstraint on the candidateConstraints. Returns true
-	// if at least one constraint satisfies IsValidReferencedUniqueConstraint.
+	// IsValidReferencedUniqueConstraint on the set of public constraints.
+	// Returns true if at least one constraint satisfies
+	// IsValidReferencedUniqueConstraint.
+	uwis := tableDesc.UniqueConstraintsWithIndex()
+	uwois := tableDesc.UniqueConstraintsWithoutIndex()
 	uniqueConstraintHasReplacementCandidate := func(
-		referencedColumnIDs []descpb.ColumnID,
+		fk catalog.ForeignKeyConstraint,
 	) bool {
-		for _, uc := range candidateConstraints {
-			if uc.IsValidReferencedUniqueConstraint(referencedColumnIDs) {
+		if withSearchForReplacement {
+			return false
+		}
+		for _, uwi := range uwis {
+			if uwi.GetConstraintID() != uniqueConstraint.GetConstraintID() &&
+				!uwi.IsMutation() && uwi.IsValidReferencedUniqueConstraint(fk) {
+				return true
+			}
+		}
+		for _, uwoi := range uwois {
+			if uwoi.GetConstraintID() != uniqueConstraint.GetConstraintID() &&
+				!uwoi.IsMutation() && uwoi.IsValidReferencedUniqueConstraint(fk) {
 				return true
 			}
 		}
@@ -2054,17 +1915,20 @@ func (p *planner) tryRemoveFKBackReferences(
 
 	// Index for updating the FK slices in place when removing FKs.
 	sliceIdx := 0
-	for i := range tableDesc.InboundFKs {
+	for i, fk := range tableDesc.InboundForeignKeys() {
 		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
 		sliceIdx++
-		fk := &tableDesc.InboundFKs[i]
-		// The constraint being deleted could potentially be the referenced unique
-		// constraint for this fk.
-		if constraint.IsValidReferencedUniqueConstraint(fk.ReferencedColumnIDs) &&
-			!uniqueConstraintHasReplacementCandidate(fk.ReferencedColumnIDs) {
+		if !uniqueConstraint.IsValidReferencedUniqueConstraint(fk) {
+			continue
+		}
+		// At this point, the constraint being deleted could potentially be the
+		// referenced unique constraint for this foreign key. We need to check
+		// for alternatives, and if there are none, remove the foreign key.
+		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk) &&
+			!uniqueConstraintHasReplacementCandidate(fk) {
 			// If we found haven't found a replacement, then we check that the drop
 			// behavior is cascade.
-			if err := p.canRemoveFKBackreference(ctx, constraint.GetName(), fk, behavior); err != nil {
+			if err := p.canRemoveFKBackreference(ctx, uniqueConstraint.GetName(), fk, behavior); err != nil {
 				return err
 			}
 			sliceIdx--

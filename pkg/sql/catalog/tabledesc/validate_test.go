@@ -1175,7 +1175,7 @@ func TestValidateTableDesc(t *testing.T) {
 					},
 				},
 			}},
-		{`column-id "2" does not exist`,
+		{`unique without index constraint "bar_unique" contains unknown column "2"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -1339,7 +1339,7 @@ func TestValidateTableDesc(t *testing.T) {
 								KeyColumnDirections: []catpb.IndexColumn_Direction{catpb.IndexColumn_ASC},
 								Version:             descpb.LatestIndexDescriptorVersion,
 								EncodingType:        descpb.PrimaryIndexEncoding,
-								ConstraintID:        1,
+								ConstraintID:        2,
 							},
 						},
 						Direction: descpb.DescriptorMutation_ADD,
@@ -3010,7 +3010,7 @@ func TestValidateConstraintID(t *testing.T) {
 		err  string
 		desc descpb.TableDescriptor
 	}{
-		{`constraint ID was missing for constraint: PRIMARY KEY with name \"primary\"`,
+		{`constraint ID was missing for constraint \"primary\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -3033,7 +3033,7 @@ func TestValidateConstraintID(t *testing.T) {
 					privilege.List{},
 					username.RootUserName()),
 			}},
-		{`constraint ID was missing for constraint: UNIQUE with name \"secondary\"`,
+		{`constraint ID was missing for constraint \"secondary\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -3063,7 +3063,7 @@ func TestValidateConstraintID(t *testing.T) {
 					privilege.List{},
 					username.RootUserName()),
 			}},
-		{`constraint ID was missing for constraint: UNIQUE with name \"bad\"`,
+		{`constraint ID was missing for constraint \"bad\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
@@ -3089,7 +3089,7 @@ func TestValidateConstraintID(t *testing.T) {
 					privilege.List{},
 					username.RootUserName()),
 			}},
-		{`constraint ID was missing for constraint: CHECK with name \"bad\"`,
+		{`constraint ID was missing for constraint \"bad\"`,
 			descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,

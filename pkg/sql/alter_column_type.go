@@ -215,9 +215,9 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general for columns that have a
 	// UNIQUE WITHOUT INDEX constraint.
-	for _, uc := range tableDesc.AllActiveAndInactiveUniqueWithoutIndexConstraints() {
-		for _, id := range uc.ColumnIDs {
-			if col.GetID() == id {
+	for _, uc := range tableDesc.UniqueConstraintsWithoutIndex() {
+		for i, n := 0, uc.NumKeyColumns(); i < n; i++ {
+			if col.GetID() == uc.GetKeyColumnID(i) {
 				return colWithConstraintNotSupportedErr
 			}
 		}
@@ -225,17 +225,17 @@ func alterColumnTypeGeneral(
 
 	// Disallow ALTER COLUMN TYPE general for columns that have a foreign key
 	// constraint.
-	for _, fk := range tableDesc.AllActiveAndInactiveForeignKeys() {
-		if fk.OriginTableID == tableDesc.GetID() {
-			for _, id := range fk.OriginColumnIDs {
-				if col.GetID() == id {
+	for _, fk := range tableDesc.OutboundForeignKeys() {
+		if fk.GetOriginTableID() == tableDesc.GetID() {
+			for i, n := 0, fk.NumOriginColumns(); i < n; i++ {
+				if col.GetID() == fk.GetOriginColumnID(i) {
 					return colWithConstraintNotSupportedErr
 				}
 			}
 		}
-		if fk.ReferencedTableID == tableDesc.GetID() {
-			for _, id := range fk.ReferencedColumnIDs {
-				if col.GetID() == id {
+		if fk.GetReferencedTableID() == tableDesc.GetID() {
+			for i, n := 0, fk.NumReferencedColumns(); i < n; i++ {
+				if col.GetID() == fk.GetReferencedColumnID(i) {
 					return colWithConstraintNotSupportedErr
 				}
 			}

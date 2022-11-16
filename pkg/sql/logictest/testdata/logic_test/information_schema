@@ -2018,9 +2018,9 @@ ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
 table_catalog  table_schema  table_name  column_name  constraint_catalog  constraint_schema  constraint_name
 constraint_db  public        t1          a            constraint_db       public             c2
 constraint_db  public        t1          a            constraint_db       public             check_a
-constraint_db  public        t1          a            constraint_db       public             fk
 constraint_db  public        t1          a            constraint_db       public             t1_a_key
 constraint_db  public        t1          p            constraint_db       public             t1_pkey
+constraint_db  public        t2          a            constraint_db       public             fk
 constraint_db  public        t2          rowid        constraint_db       public             t2_pkey
 
 # Query issued by jOOQ in PostgresDatabase.loadCheckConstraints.
@@ -2660,10 +2660,10 @@ constraint_column   public             index_key        constraint_column  publi
 constraint_column   public             index_key        constraint_column  public        t1          c            2                 NULL
 constraint_column   public             t1_a_key         constraint_column  public        t1          a            1                 NULL
 constraint_column   public             t1_pkey          constraint_column  public        t1          p            1                 NULL
-constraint_column   public             fk               constraint_column  public        t2          t1_id        1                 1
+constraint_column   public             fk               constraint_column  public        t2          a            1                 1
 constraint_column   public             t2_pkey          constraint_column  public        t2          t1_id        1                 NULL
-constraint_column   public             fk2              constraint_column  public        t3          a            1                 1
-constraint_column   public             fk2              constraint_column  public        t3          b            2                 2
+constraint_column   public             fk2              constraint_column  public        t3          b            1                 1
+constraint_column   public             fk2              constraint_column  public        t3          c            2                 2
 constraint_column   public             t3_pkey          constraint_column  public        t3          rowid        1                 NULL
 constraint_column   public             t4_pkey          constraint_column  public        t4          rowid        1                 NULL
 constraint_column   public             unique_a         constraint_column  public        t4          a            1                 NULL
