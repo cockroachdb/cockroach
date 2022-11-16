@@ -13,7 +13,6 @@ package descs
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -137,9 +136,6 @@ func (ud *uncommittedDescriptors) ensureMutable(
 	}
 	mut := original.NewBuilder().BuildExistingMutable()
 	newBytes := mut.ByteSize()
-	if original.GetID() == keys.SystemDatabaseID {
-		return mut, nil
-	}
 	ud.mutable.Upsert(mut)
 	original = original.NewBuilder().BuildImmutable()
 	newBytes += original.ByteSize()

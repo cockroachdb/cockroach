@@ -31,6 +31,7 @@ go_test(
         "multiregion_system_table_test.go",
         "multiregion_test.go",
         "region_test.go",
+        "regional_by_row_system_database_test.go",
         "regional_by_row_test.go",
         "roundtrips_test.go",
         "show_test.go",
