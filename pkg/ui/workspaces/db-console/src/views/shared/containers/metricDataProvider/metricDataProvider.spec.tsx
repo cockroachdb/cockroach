@@ -74,7 +74,7 @@ function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
       {
         name: "test.metric.1",
         sources: sources,
-        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX,
         source_aggregator:
           protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
         derivative: protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
@@ -82,7 +82,7 @@ function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
       {
         name: "test.metric.2",
         sources: sources,
-        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX,
         source_aggregator:
           protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
         derivative: protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,
@@ -90,7 +90,7 @@ function makeMetricsRequest(timeInfo: QueryTimeInfo, sources?: string[]) {
       {
         name: "test.metric.3",
         sources: sources,
-        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG,
+        downsampler: protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX,
         source_aggregator:
           protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM,
         derivative: protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE,

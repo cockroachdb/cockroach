@@ -49,7 +49,7 @@ function queryFromProps(
 ): protos.cockroach.ts.tspb.IQuery {
   let derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE;
   let sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM;
-  let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
+  let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
 
   // Compute derivative function.
   if (!_.isNil(metricProps.derivative)) {
