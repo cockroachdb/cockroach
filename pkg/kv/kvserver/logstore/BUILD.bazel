@@ -1,0 +1,55 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "logstore",
+    srcs = [
+        "sideload.go",
+        "sideload_disk.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/raftentry",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/storage/fs",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+go_test(
+    name = "logstore_test",
+    srcs = ["sideload_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":logstore"],
+    deps = [
+        "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/raftentry",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/testutils",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_errors//oserror",
+        "@com_github_kr_pretty//:pretty",
+        "@com_github_stretchr_testify//require",
+        "@io_etcd_go_etcd_raft_v3//raftpb",
+        "@org_golang_x_time//rate",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
@@ -1292,7 +1293,7 @@ func NewStore(
 		s.renewableLeasesSignal = make(chan struct{}, 1)
 	}
 
-	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
+	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), kvserverbase.BulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func(ctx context.Context) {
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
 	})

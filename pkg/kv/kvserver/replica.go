@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -250,7 +251,7 @@ type Replica struct {
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
-		sideloaded SideloadStorage
+		sideloaded logstore.SideloadStorage
 		// stateMachine is used to apply committed raft entries.
 		stateMachine replicaStateMachine
 		// decoder is used to decode committed raft entries.

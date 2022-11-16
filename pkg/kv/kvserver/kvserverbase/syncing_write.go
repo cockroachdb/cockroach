@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package kvserverbase
 
 import (
 	"context"
@@ -19,24 +19,26 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/time/rate"
 )
 
-// bulkIOWriteBurst is the burst for the BulkIOWriteLimiter. It is also used as
-// the default value for the kv.bulk_sst.sync_size and kv.snapshot_sst.sync_size
-// cluster settings.
-const bulkIOWriteBurst = 512 << 10 // 512 KB
+const (
+	// BulkIOWriteBurst is the burst for the BulkIOWriteLimiter. Also used as the
+	// default value for the kv.bulk_sst.sync_size and kv.snapshot_sst.sync_size
+	// cluster settings.
+	BulkIOWriteBurst = 512 << 10 // 512 KB
 
-const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
+	bulkIOWriteLimiterLongWait = 500 * time.Millisecond
+)
 
-// limitBulkIOWrite blocks until the provided limiter permits the specified cost
+// LimitBulkIOWrite blocks until the provided limiter permits the specified cost
 // to happen. It returns an error if the Context is canceled or the expected
 // wait time exceeds the Context's Deadline.
-func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) error {
+func LimitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) error {
 	// The limiter disallows anything greater than its burst (set to
 	// BulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
 	//
@@ -45,8 +47,8 @@ func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) erro
 	// that didn't seem to be as smooth in practice (NB [dt]: that was when this
 	// limit was done before writing the whole file, rather than on individual
 	// chunks).
-	if cost > bulkIOWriteBurst {
-		cost = bulkIOWriteBurst
+	if cost > BulkIOWriteBurst {
+		cost = BulkIOWriteBurst
 	}
 
 	begin := timeutil.Now()
@@ -66,21 +68,21 @@ var sstWriteSyncRate = settings.RegisterByteSizeSetting(
 	settings.TenantWritable,
 	"kv.bulk_sst.sync_size",
 	"threshold after which non-Rocks SST writes must fsync (0 disables)",
-	bulkIOWriteBurst,
+	BulkIOWriteBurst,
 )
 
-// writeFileSyncing is essentially os.WriteFile -- writes data to a file
+// WriteFileSyncing is essentially os.WriteFile -- writes data to a file
 // named by filename -- but with rate limiting and periodic fsyncing controlled
 // by settings and the passed limiter (should be the store's limiter). Periodic
 // fsync provides smooths out disk IO, as mentioned in #20352 and #20279, and
 // provides back-pressure, along with the explicit rate limiting. If the file
 // does not exist, WriteFile creates it with permissions perm; otherwise
 // WriteFile truncates it before writing.
-func writeFileSyncing(
+func WriteFileSyncing(
 	ctx context.Context,
 	filename string,
 	data []byte,
-	eng storage.Engine,
+	fs fs.FS,
 	perm os.FileMode,
 	settings *cluster.Settings,
 	limiter *rate.Limiter,
@@ -88,11 +90,11 @@ func writeFileSyncing(
 	chunkSize := sstWriteSyncRate.Get(&settings.SV)
 	sync := true
 	if chunkSize == 0 {
-		chunkSize = bulkIOWriteBurst
+		chunkSize = BulkIOWriteBurst
 		sync = false
 	}
 
-	f, err := eng.Create(filename)
+	f, err := fs.Create(filename)
 	if err != nil {
 		if strings.Contains(err.Error(), "No such file or directory") {
 			return os.ErrNotExist
@@ -107,7 +109,7 @@ func writeFileSyncing(
 		}
 		chunk := data[i:end]
 
-		if err = limitBulkIOWrite(ctx, limiter, len(chunk)); err != nil {
+		if err = LimitBulkIOWrite(ctx, limiter, len(chunk)); err != nil {
 			break
 		}
 		if _, err = f.Write(chunk); err != nil {
