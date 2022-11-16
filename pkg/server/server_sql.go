@@ -340,6 +340,9 @@ type sqlServerArgs struct {
 	// Used to query valid regions on the server.
 	regionsServer serverpb.RegionsServer
 
+	// Used to query node locality information.
+	nodeLocalityServer serverpb.NodeLocalityServer
+
 	// Used to query status information useful for debugging on the server.
 	tenantStatusServer serverpb.TenantStatusServer
 
@@ -844,6 +847,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		NodesStatusServer:         cfg.nodesStatusServer,
 		SQLStatusServer:           cfg.sqlStatusServer,
 		RegionsServer:             cfg.regionsServer,
+		NodeLocalityServer:        cfg.nodeLocalityServer,
 		SessionRegistry:           cfg.sessionRegistry,
 		ClosedSessionCache:        cfg.closedSessionCache,
 		ContentionRegistry:        contentionRegistry,

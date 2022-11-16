@@ -121,6 +121,10 @@ var _ config.SystemConfigProvider = (*Connector)(nil)
 // multi-region primitives.
 var _ serverpb.RegionsServer = (*Connector)(nil)
 
+// Connector is capable of providing locality information on each of the KV
+// nodes in the cluster.
+var _ serverpb.NodeLocalityServer = (*Connector)(nil)
+
 // Connector is capable of finding debug information about the current
 // tenant within the cluster. This is necessary for things such as
 // debug zip and range reports.
@@ -426,6 +430,21 @@ func (c *Connector) Regions(
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		var err error
 		resp, err = c.Regions(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// NodeLocality implements the serverpb.NodeLocalityServer interface.
+func (c *Connector) NodeLocality(
+	ctx context.Context, req *serverpb.NodeLocalityRequest,
+) (resp *serverpb.NodeLocalityResponse, err error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.NodeLocality(ctx, req)
 		return err
 	}); err != nil {
 		return nil, err
