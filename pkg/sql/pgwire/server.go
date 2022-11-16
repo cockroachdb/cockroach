@@ -219,6 +219,10 @@ type Server struct {
 	SQLServer  *sql.Server
 	execCfg    *sql.ExecutorConfig
 
+	// preServeHandler is under Server for now, until this issue is addressed:
+	// https://github.com/cockroachdb/cockroach/issues/84585
+	preServeHandler PreServeConnHandler
+
 	tenantMetrics tenantSpecificMetrics
 
 	mu struct {
@@ -333,10 +337,15 @@ func MakeServer(
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
 	server := &Server{
-		AmbientCtx:    ambientCtx,
-		cfg:           cfg,
-		execCfg:       executorConfig,
+		AmbientCtx: ambientCtx,
+		cfg:        cfg,
+		execCfg:    executorConfig,
+
 		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+
+		// We are initializing preServeHandler here until the following issue is resolved:
+		// https://github.com/cockroachdb/cockroach/issues/84585
+		preServeHandler: MakePreServeConnHandler(&st.SV),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -426,7 +435,12 @@ func (s *Server) IsDraining() bool {
 
 // Metrics returns the set of metrics structs.
 func (s *Server) Metrics() (res []interface{}) {
-	return []interface{}{
+	// We declare the metrics from preServeHandler here
+	// until this issue is resolved:
+	// https://github.com/cockroachdb/cockroach/issues/84585
+	res = s.preServeHandler.Metrics()
+
+	return append(res, []interface{}{
 		&s.tenantMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
@@ -439,7 +453,7 @@ func (s *Server) Metrics() (res []interface{}) {
 		&s.SQLServer.ServerMetrics.StatsMetrics,
 		&s.SQLServer.ServerMetrics.ContentionSubsystemMetrics,
 		&s.SQLServer.ServerMetrics.InsightsMetrics,
-	}
+	}...)
 }
 
 // Drain prevents new connections from being served and waits the duration of
@@ -1386,18 +1400,7 @@ func (s *Server) readVersion(
 // sequence. Later error sends during/after authentication are handled
 // in conn.go.
 func (s *Server) sendErr(ctx context.Context, conn net.Conn, err error) error {
-	// NB: this errWriter definition will be removed in the next commit.
-	w := errWriter{
-		sv:         &s.execCfg.Settings.SV,
-		msgBuilder: newWriteBuffer(s.tenantMetrics.BytesOutCount),
-	}
-	// We could, but do not, report server-side network errors while
-	// trying to send the client error. This is because clients that
-	// receive error payload are highly correlated with clients
-	// disconnecting abruptly.
-	_ /* err */ = w.writeErr(ctx, err, conn)
-	_ = conn.Close()
-	return err
+	return s.preServeHandler.sendPreServeErr(ctx, conn, err)
 }
 
 func newAdminShutdownErr(msg string) error {
