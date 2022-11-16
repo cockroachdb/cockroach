@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -63,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -259,6 +261,7 @@ func restore(
 		highWaterMark     int
 		res               roachpb.RowCount
 		requestsCompleted []bool
+		spanFrontierSlice []jobspb.RestoreProgress_RestoreProgressFrontierEntry
 	}{
 		highWaterMark: -1,
 	}
@@ -281,8 +284,66 @@ func restore(
 	// which are grouped by keyrange.
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 
-	importSpans := makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests,
-		backupLocalityMap, introducedSpanFrontier, highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+	var importSpans []execinfrapb.RestoreSpanEntry
+	var checkpointingSpanFrontier *spanUtils.Frontier
+	if execCtx.ExecCfg().Settings.Version.IsActive(restoreCtx, clusterversion.V23_1Start) {
+		spanFrontierSlice := job.Progress().Details.(*jobspb.Progress_Restore).Restore.Frontier
+		var frontierCreationSlice []roachpb.Span
+		for _, frontierSpanEntry := range spanFrontierSlice {
+			frontierCreationSlice = append(frontierCreationSlice, frontierSpanEntry.Entry)
+		}
+		checkpointingSpanFrontier, err = spanUtils.MakeFrontier(frontierCreationSlice...)
+		for _, frontierSpanEntry := range spanFrontierSlice {
+			_, err = checkpointingSpanFrontier.Forward(frontierSpanEntry.Entry, frontierSpanEntry.Timestamp)
+			if err != nil {
+				return emptyRowCount, err
+			}
+		}
+		importSpans = makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests,
+			backupLocalityMap, introducedSpanFrontier, highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+		var modifiedImportSpans []execinfrapb.RestoreSpanEntry
+		for _, importSpan := range importSpans {
+			skip := false
+			checkpointingSpanFrontier.SpanEntries(importSpan.Span, func(s roachpb.Span,
+				ts hlc.Timestamp) (done spanUtils.OpResult) {
+				if ts.Equal(hlc.Timestamp{WallTime: 1}) {
+					skip = true
+					return spanUtils.ContinueMatch
+				}
+				skip = false
+				return spanUtils.StopMatch
+			})
+			if skip {
+				continue
+			}
+			modifiedImportSpans = append(modifiedImportSpans, importSpan)
+		}
+		importSpans = modifiedImportSpans
+		if len(spanFrontierSlice) == 0 {
+			// construct span frontier
+			var checkpointingFrontierImportSpans = make([]roachpb.Span, len(importSpans))
+			for i, span := range importSpans {
+				checkpointingFrontierImportSpans[i] = span.Span
+			}
+			checkpointingSpanFrontier, err = spanUtils.MakeFrontier(checkpointingFrontierImportSpans...)
+			if err != nil {
+				return emptyRowCount, err
+			}
+		} else {
+			var importSpansSlice = make([]roachpb.Span, len(importSpans))
+			for i, importSpanEntry := range importSpans {
+				importSpansSlice[i] = importSpanEntry.Span
+			}
+			err = checkpointingSpanFrontier.AddSpansAt(hlc.Timestamp{}, importSpansSlice...)
+			if err != nil {
+				return emptyRowCount, err
+			}
+			mu.spanFrontierSlice = spanFrontierSlice
+		}
+	} else {
+		importSpans = makeSimpleImportSpans(dataToRestore.getSpans(), backupManifests,
+			backupLocalityMap, introducedSpanFrontier, highWaterMark, targetRestoreSpanSize.Get(execCtx.ExecCfg().SV()))
+	}
 
 	if len(importSpans) == 0 {
 		// There are no files to restore.
@@ -335,6 +396,9 @@ func restore(
 					if mu.highWaterMark >= 0 {
 						d.Restore.HighWater = importSpans[mu.highWaterMark].Span.Key
 					}
+					if execCtx.ExecCfg().Settings.Version.IsActive(restoreCtx, clusterversion.V23_1Start) {
+						d.Restore.Frontier = mu.spanFrontierSlice
+					}
 					mu.Unlock()
 				default:
 					log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
@@ -355,24 +419,43 @@ func restore(
 		// to progCh.
 		for progress := range progCh {
 			mu.Lock()
-			var progDetails backuppb.RestoreProgress
-			if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
-				log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
-			}
+			if execCtx.ExecCfg().Settings.Version.IsActive(restoreCtx, clusterversion.V23_1Start) {
+				var progDetails backuppb.RestoreProgress
+				if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+					log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+				}
 
-			mu.res.Add(progDetails.Summary)
-			idx := progDetails.ProgressIdx
+				mu.res.Add(progDetails.Summary)
+				_, err = checkpointingSpanFrontier.Forward(progDetails.DataSpan, hlc.Timestamp{WallTime: 1})
+				if err != nil {
+					log.Errorf(ctx, "unable to forward timestamp: %+v", err)
+				}
 
-			// Assert that we're actually marking the correct span done. See #23977.
-			if !importSpans[progDetails.ProgressIdx].Span.Key.Equal(progDetails.DataSpan.Key) {
-				mu.Unlock()
-				return errors.Newf("request %d for span %v does not match import span for same idx: %v",
-					idx, progDetails.DataSpan, importSpans[idx],
-				)
-			}
-			mu.requestsCompleted[idx] = true
-			for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-				mu.highWaterMark = j
+				mu.spanFrontierSlice = append(mu.spanFrontierSlice,
+					jobspb.RestoreProgress_RestoreProgressFrontierEntry{
+						Entry:     progDetails.DataSpan,
+						Timestamp: hlc.Timestamp{WallTime: 1},
+					})
+			} else {
+				var progDetails backuppb.RestoreProgress
+				if err := pbtypes.UnmarshalAny(&progress.ProgressDetails, &progDetails); err != nil {
+					log.Errorf(ctx, "unable to unmarshal restore progress details: %+v", err)
+				}
+
+				mu.res.Add(progDetails.Summary)
+				idx := progDetails.ProgressIdx
+
+				// Assert that we're actually marking the correct span done. See #23977.
+				if !importSpans[progDetails.ProgressIdx].Span.Key.Equal(progDetails.DataSpan.Key) {
+					mu.Unlock()
+					return errors.Newf("request %d for span %v does not match import span for same idx: %v",
+						idx, progDetails.DataSpan, importSpans[idx],
+					)
+				}
+				mu.requestsCompleted[idx] = true
+				for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+					mu.highWaterMark = j
+				}
 			}
 			mu.Unlock()
 
@@ -380,6 +463,10 @@ func restore(
 			// progress.
 			requestFinishedCh <- struct{}{}
 		}
+		//if execCtx.ExecCfg().Settings.Version.IsActive(restoreCtx, clusterversion.V23_1TenantNames) {
+		//
+		//}
+
 		return nil
 	}
 	tasks = append(tasks, jobCheckpointLoop)

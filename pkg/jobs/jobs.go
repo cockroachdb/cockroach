@@ -369,6 +369,10 @@ func (j *Job) FractionProgressed(
 			FractionCompleted: fractionCompleted,
 		}
 		ju.UpdateProgress(md.Progress)
+		err := j.registry.CheckPausepoint("restore.load_first_dataspan")
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 }

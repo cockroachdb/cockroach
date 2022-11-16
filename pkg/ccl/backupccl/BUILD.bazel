@@ -169,6 +169,7 @@ go_test(
         "key_rewriter_test.go",
         "main_test.go",
         "partitioned_backup_test.go",
+        "restore_checkpointing_test.go",
         "restore_data_processor_test.go",
         "restore_mid_schema_change_test.go",
         "restore_old_sequences_test.go",
