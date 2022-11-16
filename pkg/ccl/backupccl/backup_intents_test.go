@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,7 +29,7 @@ import (
 func TestCleanupIntentsDuringBackupPerformanceRegression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()()
 
 	skip.UnderRace(t, "measures backup times not to regress, can't work under race")
 

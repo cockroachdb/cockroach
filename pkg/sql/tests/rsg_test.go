@@ -24,8 +24,7 @@ import (
 	"time"
 
 	// Enable CCL statements.
-	_ "github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -614,7 +613,7 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()()
 
 	var smither *sqlsmith.Smither
 
@@ -768,7 +767,7 @@ func testRandomSyntax(
 		skip.IgnoreLint(t, "enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
-	defer utilccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()()
 
 	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = databaseName

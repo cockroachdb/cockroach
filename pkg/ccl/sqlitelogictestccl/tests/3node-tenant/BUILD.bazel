@@ -15,7 +15,6 @@ go_test(
     deps = [
         "//pkg/build/bazel",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -78,6 +78,7 @@ go_test(
     embed = [":sqlproxyccl"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/ccl/sqlproxyccl/balancer",
         "//pkg/ccl/sqlproxyccl/denylist",
@@ -85,7 +86,6 @@ go_test(
         "//pkg/ccl/sqlproxyccl/tenant",
         "//pkg/ccl/sqlproxyccl/tenantdirsvr",
         "//pkg/ccl/sqlproxyccl/throttler",
-        "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/certnames",
         "//pkg/security/securityassets",

@@ -66,8 +66,7 @@ go_test(
     deps = [
         ":scbuild",
         "//pkg/base",
-        "//pkg/ccl/partitionccl",
-        "//pkg/ccl/utilccl",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

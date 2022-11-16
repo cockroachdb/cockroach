@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,7 +75,7 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 		},
 	}
 
-	defer utilccl.TestingDisableEnterprise()()
+	defer ccl.TestingDisableEnterprise()()
 	t.Run("disabled", func(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
@@ -87,7 +87,7 @@ func TestBoundedStalenessEnterpriseLicense(t *testing.T) {
 	})
 
 	t.Run("enabled", func(t *testing.T) {
-		defer utilccl.TestingEnableEnterprise()()
+		defer ccl.TestingEnableEnterprise()()
 		for _, testCase := range testCases {
 			t.Run(testCase.query, func(t *testing.T) {
 				r, err := tc.Conns[0].QueryContext(ctx, testCase.query, testCase.args...)
@@ -261,7 +261,7 @@ func TestBoundedStalenessDataDriven(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderStress(t, "1μs staleness reads may actually succeed due to the slow environment")
-	defer utilccl.TestingEnableEnterprise()()
+	defer ccl.TestingEnableEnterprise()()
 
 	ctx := context.Background()
 

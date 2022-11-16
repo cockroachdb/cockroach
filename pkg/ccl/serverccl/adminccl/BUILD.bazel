@@ -11,7 +11,6 @@ go_test(
     deps = [
         "//pkg/ccl",
         "//pkg/ccl/serverccl",
-        "//pkg/ccl/utilccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -49,12 +49,12 @@ go_test(
     embed = [":kvfeed"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/changefeedccl/kvevent",
         "//pkg/ccl/changefeedccl/schemafeed",
         "//pkg/ccl/changefeedccl/schemafeed/schematestutils",
         "//pkg/ccl/storageccl",
-        "//pkg/ccl/utilccl",
         "//pkg/gossip",
         "//pkg/jobs/jobspb",
         "//pkg/keys",

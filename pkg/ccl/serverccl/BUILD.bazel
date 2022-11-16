@@ -48,7 +48,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/kvccl",
-        "//pkg/ccl/utilccl",
         "//pkg/ccl/utilccl/licenseccl",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",

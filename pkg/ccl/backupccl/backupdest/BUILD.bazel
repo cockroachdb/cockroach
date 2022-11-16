@@ -42,11 +42,11 @@ go_test(
         "main_test.go",
     ],
     args = ["-test.timeout=295s"],
-    embed = [":backupdest"],
     deps = [
+        ":backupdest",
+        "//pkg/ccl",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backuputils",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs/jobspb",

@@ -36,11 +36,10 @@ go_test(
         "main_test.go",
     ],
     args = ["-test.timeout=55s"],
-    embed = [":workloadccl"],
     deps = [
+        ":workloadccl",
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

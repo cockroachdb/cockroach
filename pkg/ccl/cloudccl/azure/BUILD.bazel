@@ -12,7 +12,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud/azure",
         "//pkg/cloud/externalconn/providers",
         "//pkg/security/securityassets",

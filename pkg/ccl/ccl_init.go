@@ -12,7 +12,6 @@ package ccl
 // import of this package enables building a binary with CCL features.
 
 import (
-	// ccl init hooks.
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/buildccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
@@ -28,6 +27,21 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingest"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 )
+
+func init() {
+	// Let CheckEnterpriseEnabled know that all the ccl code is linked in.
+	utilccl.AllCCLCodeImported = true
+}
+
+// TestingEnableEnterprise allows overriding the license check in tests.
+func TestingEnableEnterprise() func() {
+	return utilccl.TestingEnableEnterprise()
+}
+
+// TestingDisableEnterprise allows re-enabling the license check in tests.
+func TestingDisableEnterprise() func() {
+	return utilccl.TestingDisableEnterprise()
+}
