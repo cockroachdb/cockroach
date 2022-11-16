@@ -29,14 +29,9 @@ type constraintToUpdateForTest struct {
 	desc *descpb.ConstraintToUpdate
 }
 
-// IsCheck returns true iff this is an update for a check constraint.
-func (c constraintToUpdateForTest) IsCheck() bool {
-	return c.desc.ConstraintType == descpb.ConstraintToUpdate_CHECK
-}
-
 // Check returns the underlying check constraint, if there is one.
-func (c constraintToUpdateForTest) Check() descpb.TableDescriptor_CheckConstraint {
-	return c.desc.Check
+func (c constraintToUpdateForTest) AsCheck() *descpb.TableDescriptor_CheckConstraint {
+	return &c.desc.Check
 }
 
 func TestShouldSkipConstraintValidation(t *testing.T) {
