@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -239,12 +240,13 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, cover)
 
-	coverSized := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, 2<<20)
-	require.Equal(t, []execinfrapb.RestoreSpanEntry{
+	expectedCoverSizedImportSpans := []execinfrapb.RestoreSpanEntry{
 		{Span: sp("a", "f"), Files: paths("1", "2", "4", "6")},
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
 		{Span: sp("l", "m"), Files: paths("9")},
-	}, coverSized)
+	}
+	coverSized := makeSimpleImportSpans(spans, backups, nil, emptySpanFrontier, nil, 2<<20)
+	require.Equal(t, expectedCoverSizedImportSpans, coverSized)
 
 	// check that introduced spans are properly elided
 	backups[2].IntroducedSpans = []roachpb.Span{sp("a", "f")}
@@ -258,6 +260,22 @@ func TestRestoreEntryCoverExample(t *testing.T) {
 		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
 		{Span: sp("l", "m"), Files: paths("9")},
 	}, coverIntroduced)
+
+	// Tests span filtering with no completed spans
+	frontierSpans := []roachpb.Span{sp("a", "f"), sp("f", "i"), sp("l", "m")}
+	expectedSpanFrontier, err := spanUtils.MakeFrontier(frontierSpans...)
+	require.NoError(t, err)
+	checkSpanFiltering(t, expectedSpanFrontier, expectedCoverSizedImportSpans, coverSized, nil)
+
+	// Tests span filtering with 1 completed span
+	_, err = expectedSpanFrontier.Forward(sp("a", "f"), hlc.Timestamp{WallTime: 1})
+	require.NoError(t, err)
+	expectedToDoSpans := []execinfrapb.RestoreSpanEntry{
+		{Span: sp("f", "i"), Files: paths("3", "5", "6", "8")},
+		{Span: sp("l", "m"), Files: paths("9")},
+	}
+	completedSpans := []jobspb.RestoreProgress_RestoreProgressFrontierEntry{{Entry: sp("a", "f"), Timestamp: hlc.Timestamp{WallTime: 1}}}
+	checkSpanFiltering(t, expectedSpanFrontier, expectedToDoSpans, coverSized, completedSpans)
 
 }
 
@@ -503,4 +521,35 @@ func TestRestoreEntryCover(t *testing.T) {
 			}
 		}
 	}
+}
+
+// checkSpanFiltering simulates and checks the filterCompletedImportSpans function by filtering the
+// completedSpans from the provided importSpans and checks the expected todoSpans and
+// the expected span frontier after filtering.
+func checkSpanFiltering(
+	t *testing.T,
+	expectedCheckpointingFrontier *spanUtils.Frontier,
+	expectedToDoSpans []execinfrapb.RestoreSpanEntry,
+	importSpans []execinfrapb.RestoreSpanEntry,
+	completedSpans []jobspb.RestoreProgress_RestoreProgressFrontierEntry,
+) {
+	// Tests that no completed spans returns a frontier with all empty timestamps and the original import span slice.
+	checkpointingFrontier, newImportSpans, err := filterCompletedImportSpans(completedSpans, importSpans)
+	require.NoError(t, err)
+	// Construct span slice in order to check that the filtered span frontier has correct spans' timestamps forwarded.
+	expectedCompletedFrontierSpans := make([]roachpb.Span, 0, len(importSpans))
+	for _, spanEntry := range completedSpans {
+		expectedCompletedFrontierSpans = append(expectedCompletedFrontierSpans, spanEntry.Entry)
+	}
+	checkpointingFrontier.Entries(func(s roachpb.Span,
+		ts hlc.Timestamp) (done spanUtils.OpResult) {
+		if !ts.IsEmpty() {
+			require.Contains(t, expectedCompletedFrontierSpans, s)
+		} else {
+			require.Equal(t, hlc.Timestamp{}, ts)
+		}
+		return spanUtils.ContinueMatch
+	})
+	require.Equal(t, expectedToDoSpans, newImportSpans)
+	require.Equal(t, expectedCheckpointingFrontier, checkpointingFrontier)
 }

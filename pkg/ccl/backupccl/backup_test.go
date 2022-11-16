@@ -1499,6 +1499,145 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 	checkInProgressBackupRestore(t, checkFraction, checkFraction)
 }
 
+// TestRestoreCheckpointing checks that progress is being persisted to the job record
+// when progress is made in the form of a span frontier.
+func TestRestoreCheckpointing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.TestingSetProgressThresholds()()
+
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+				RunAfterProcessingRestoreSpanEntry: func(_ context.Context) {
+					<-allowResponse
+				},
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+	testServerArgs := base.TestServerArgs{DisableDefaultTestTenant: true}
+	params.ServerArgs = testServerArgs
+	params.ServerArgs.Knobs = knobs
+
+	ctx := context.Background()
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, 1,
+		InitManualReplication, params)
+	conn := sqlDB.DB.(*gosql.DB)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `CREATE DATABASE r1`)
+	// We create these tables to ensure there are enough spans to restore and that we have partial progress
+	// when stopping the job.
+	var numTables = 7
+	for i := 1; i <= numTables; i++ {
+		tableName := fmt.Sprintf("r1.table%d", i)
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s (id INT PRIMARY KEY, s STRING)`, tableName))
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO %s VALUES (1, 'x'),(2,'y')`, tableName))
+	}
+	sqlDB.Exec(t, `BACKUP DATABASE r1 TO 'nodelocal://0/test-root'`)
+
+	var jobID jobspb.JobID
+	// The do function on a restore stops more progress from being persisted to the job record
+	// after some progress is made.
+	do := func(query string, check inProgressChecker) {
+		t.Logf("checking query %q", query)
+
+		jobDone := make(chan error)
+		allowResponse = make(chan struct{}, numTables)
+
+		go func() {
+			_, err := conn.Exec(query)
+			jobDone <- err
+		}()
+
+		// Allow one of the total expected responses to proceed.
+		allowResponse <- struct{}{}
+
+		backupTableID := sqlutils.QueryTableID(t, conn, "r1", "public", "table1")
+		err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+			return check(ctx, inProgressState{
+				DB:            conn,
+				backupTableID: backupTableID,
+				dir:           dir,
+				name:          "foo",
+			})
+		})
+
+		if err != nil {
+			close(allowResponse)
+			t.Fatalf("%q: %+v", query, err)
+		}
+
+		sqlDB.QueryRow(t, `SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobID)
+		// Close the channel to allow all remaining responses to proceed. We do this
+		// even if the above retry.ForDuration failed, otherwise the test will hang
+		// forever.
+		close(allowResponse)
+
+		if err := <-jobDone; err != nil {
+			t.Fatalf("%q: %+v", query, err)
+		}
+
+		if err != nil {
+			t.Log(err)
+		}
+	}
+
+	checkFraction := func(ctx context.Context, ip inProgressState) error {
+		latestJobID, err := ip.latestJobID()
+		if err != nil {
+			return err
+		}
+		var fractionCompleted float32
+		if err := ip.QueryRow(
+			`SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
+			latestJobID,
+		).Scan(&fractionCompleted); err != nil {
+			return err
+		}
+		if fractionCompleted < 0.01 || fractionCompleted > 0.99 {
+			return errors.Errorf(
+				"expected progress to be in range [0.01, 0.99] but got %f",
+				fractionCompleted,
+			)
+		}
+		return nil
+	}
+
+	restoreQuery := `RESTORE DATABASE r1 FROM 'nodelocal://0/test-root' WITH detached, new_db_name=r2`
+	do(restoreQuery, checkFraction)
+
+	sqlDB.QueryRow(t, `SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	jobProgress := jobutils.GetJobProgress(t, sqlDB, jobID)
+	require.NotNil(t, jobProgress)
+	require.NotEmpty(t, jobProgress.GetRestore().CompletedSpans)
+	require.Equal(t, hlc.Timestamp{WallTime: 1}, jobProgress.GetRestore().CompletedSpans[0].Timestamp)
+	require.NotEqual(t, numTables, len(jobProgress.GetRestore().CompletedSpans))
+
+	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobID)
+	// After a job is resumed we want to test if all the job progress has been persisted to the job record.
+	// Additionally, we also want to verify that each of the tables has the same row count as the tables backed up.
+	jobProgress = jobutils.GetJobProgress(t, sqlDB, jobID)
+	require.NotNil(t, jobProgress)
+	require.Equal(t, numTables, len(jobProgress.GetRestore().CompletedSpans))
+	for _, completedSpan := range jobProgress.GetRestore().CompletedSpans {
+		require.Equal(t, hlc.Timestamp{WallTime: 1}, completedSpan.Timestamp)
+	}
+	for i := 1; i <= 7; i++ {
+		tableName := fmt.Sprintf("r1.table%d", i)
+		var rowCount int
+		sqlDB.QueryRow(t, fmt.Sprintf(`SELECT count(*) AS row_count FROM %s`, tableName)).Scan(&rowCount)
+		// We expect 2 since each table was initialized with 2 rows.
+		require.Equal(t, 2, rowCount)
+	}
+}
+
 func createAndWaitForJob(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
