@@ -261,7 +261,11 @@ func updateTenantRecord(
 func (p *planner) CreateTenant(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (roachpb.TenantID, error) {
-	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
+	const op = "create tenant"
+	if err := p.RequireAdminRole(ctx, op); err != nil {
+		return roachpb.TenantID{}, err
+	}
+	if err := rejectIfCantCoordinateMultiTenancy(p.ExecCfg().Codec, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
 

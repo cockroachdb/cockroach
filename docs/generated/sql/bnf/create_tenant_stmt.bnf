@@ -1,2 +1,0 @@
-create_tenant_stmt ::=
-	'CREATE' 'TENANT' name
