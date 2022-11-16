@@ -30,6 +30,17 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+func startReplicationStreamJobByName(
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantName roachpb.TenantName,
+) (streampb.StreamID, error) {
+	tenant, err := sql.GetTenantRecordByName(ctx, evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig), txn, tenantName)
+	if err != nil {
+		return 0, err
+	}
+
+	return startReplicationStreamJob(ctx, evalCtx, txn, tenant.ID)
+}
+
 // startReplicationStreamJob initializes a replication stream producer job on the source cluster that
 // 1. Tracks the liveness of the replication stream consumption
 // 2. TODO(casper): Updates the protected timestamp for spans being replicated

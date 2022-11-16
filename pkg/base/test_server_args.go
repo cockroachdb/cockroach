@@ -228,6 +228,8 @@ func DefaultTestTempStorageConfigWithSize(
 // TestTenantArgs are the arguments used when creating a tenant from a
 // TestServer.
 type TestTenantArgs struct {
+	TenantName roachpb.TenantName
+
 	TenantID roachpb.TenantID
 
 	// Existing, if true, indicates an existing tenant, rather than a new tenant
