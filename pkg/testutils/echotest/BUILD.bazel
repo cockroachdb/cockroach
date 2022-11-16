@@ -1,12 +1,25 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "echotest",
     srcs = ["echotest.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/echotest",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
+    deps = [
+        "//pkg/testutils/skip",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "echotest_test",
+    srcs = ["echotest_test.go"],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    embed = [":echotest"],
+    deps = ["//pkg/testutils"],
 )
 
 get_x_data(name = "get_x_data")
