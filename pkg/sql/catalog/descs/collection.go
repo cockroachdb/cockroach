@@ -210,7 +210,7 @@ func (tc *Collection) HasUncommittedTypes() (has bool) {
 func (tc *Collection) AddUncommittedDescriptor(
 	ctx context.Context, desc catalog.MutableDescriptor,
 ) (err error) {
-	if desc.GetID() == keys.SystemDatabaseID || !desc.IsUncommittedVersion() {
+	if !desc.IsUncommittedVersion() {
 		return nil
 	}
 	defer func() {
