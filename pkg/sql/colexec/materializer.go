@@ -60,9 +60,6 @@ type Materializer struct {
 	// outputRow stores the returned results of next() to be passed through an
 	// adapter.
 	outputRow rowenc.EncDatumRow
-
-	// closers is a slice of Closers that should be Closed on termination.
-	closers colexecop.Closers
 }
 
 // drainHelper is a utility struct that wraps MetadataSources in a RowSource
@@ -207,7 +204,6 @@ func newMaterializerInternal(
 		typs:                  typs,
 		converter:             colconv.NewAllVecToDatumConverter(len(typs)),
 		row:                   make(rowenc.EncDatumRow, len(typs)),
-		closers:               input.ToClose,
 	}
 	m.drainHelper.allocator = allocator
 	m.drainHelper.statsCollectors = input.StatsCollectors
@@ -221,8 +217,9 @@ func newMaterializerInternal(
 		nil, /* output */
 		execinfra.ProcStateOpts{
 			// We append drainHelper to inputs to drain below in order to reuse
-			// the same underlying slice from the pooled materializer.
-			TrailingMetaCallback: m.trailingMetaCallback,
+			// the same underlying slice from the pooled materializer. The
+			// drainHelper is responsible for draining the metadata from the
+			// input tree.
 		},
 	)
 	m.AddInputToDrain(&m.drainHelper)
@@ -322,29 +319,6 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 	}
 	// Forward any metadata.
 	return nil, m.DrainHelper()
-}
-
-func (m *Materializer) trailingMetaCallback() []execinfrapb.ProducerMetadata {
-	// Note that we delegate draining all of the metadata sources to drainHelper
-	// which is added as an input to drain.
-	m.close()
-	return nil
-}
-
-func (m *Materializer) close() {
-	if m.Closed {
-		return
-	}
-	// Make sure to call InternalClose() only after closing the closers - this
-	// allows the closers to utilize the unfinished tracing span (if tracing is
-	// enabled).
-	m.closers.CloseAndLogOnErr(m.Ctx(), "materializer")
-	m.InternalClose()
-}
-
-// ConsumerClosed is part of the execinfra.RowSource interface.
-func (m *Materializer) ConsumerClosed() {
-	m.close()
 }
 
 // Release implements the execinfra.Releasable interface.

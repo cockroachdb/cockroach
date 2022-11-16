@@ -197,16 +197,6 @@ type vectorizedFlow struct {
 		path string
 	}
 
-	testingInfo struct {
-		// numClosers is the number of components in the flow that implement
-		// Close. This is used for testing assertions.
-		numClosers int32
-		// numClosed is a pointer to an int32 that is updated atomically when a
-		// component's Close method is called. This is used for testing
-		// assertions.
-		numClosed *int32
-	}
-
 	testingKnobs struct {
 		// onSetupFlow is a testing knob that is called before calling
 		// creator.setupFlow with the given creator.
@@ -288,8 +278,6 @@ func (f *vectorizedFlow) Setup(
 		return ctx, nil, err
 	}
 	f.batchFlowCoordinator = batchFlowCoordinator
-	f.testingInfo.numClosers = f.creator.numClosers
-	f.testingInfo.numClosed = &f.creator.numClosed
 	f.SetStartedGoroutines(f.creator.operatorConcurrency)
 	log.VEventf(ctx, 2, "vectorized flow setup succeeded")
 	if !f.IsLocal() {
@@ -381,20 +369,9 @@ func (f *vectorizedFlow) MemUsage() int64 {
 
 // Cleanup is part of the flowinfra.Flow interface.
 func (f *vectorizedFlow) Cleanup(ctx context.Context) {
-	// This cleans up all the memory and disk monitoring of the vectorized flow.
+	// This cleans up all the memory and disk monitoring of the vectorized flow
+	// as well as closes all the closers.
 	f.creator.cleanup(ctx)
-
-	if buildutil.CrdbTestBuild && f.FlowBase.Started() && !f.FlowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
-		// Check that all closers have been closed. Note that we don't check
-		// this in case the flow was never started in the first place (it is ok
-		// to not check this since closers haven't allocated any resources in
-		// such a case). We also don't check when the panic injection is
-		// enabled since then Close() might be legitimately not called (if a
-		// panic is injected in Init() of the wrapped operator).
-		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
-			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
-		}
-	}
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
@@ -627,6 +604,11 @@ type vectorizedFlowCreator struct {
 	opChains execopnode.OpChains
 	// operatorConcurrency is set if any operators are executed in parallel.
 	operatorConcurrency bool
+	// closers will be closed during the flow cleanup. It is safe to do so in
+	// the main flow goroutine since all other goroutines that might have used
+	// these objects must have exited by the time Cleanup() is called -
+	// Flow.Wait() ensures that.
+	closers colexecop.Closers
 	// releasables contains all components that should be released back to their
 	// pools during the flow cleanup.
 	releasables []execreleasable.Releasable
@@ -634,12 +616,6 @@ type vectorizedFlowCreator struct {
 	monitorRegistry colexecargs.MonitorRegistry
 	diskQueueCfg    colcontainer.DiskQueueCfg
 	fdSemaphore     semaphore.Semaphore
-
-	// numClosers and numClosed are used to assert during testing that the
-	// expected number of components are closed. The assertion only happens if
-	// the panic injection is not enabled.
-	numClosers int32
-	numClosed  int32
 }
 
 var _ execreleasable.Releasable = &vectorizedFlowCreator{}
@@ -696,6 +672,15 @@ func newVectorizedFlowCreator(
 }
 
 func (s *vectorizedFlowCreator) cleanup(ctx context.Context) {
+	if err := colexecerror.CatchVectorizedRuntimeError(func() {
+		for _, closer := range s.closers {
+			if err := closer.Close(ctx); err != nil && log.V(1) {
+				log.Infof(ctx, "error closing Closer: %v", err)
+			}
+		}
+	}); err != nil && log.V(1) {
+		log.Infof(ctx, "runtime error closing the closers: %v", err)
+	}
 	s.monitorRegistry.Close(ctx)
 }
 
@@ -717,6 +702,9 @@ func (s *vectorizedFlowCreator) Release() {
 	for i := range s.opChains {
 		s.opChains[i] = nil
 	}
+	for i := range s.closers {
+		s.closers[i] = nil
+	}
 	for i := range s.releasables {
 		s.releasables[i] = nil
 	}
@@ -732,6 +720,7 @@ func (s *vectorizedFlowCreator) Release() {
 		// prime it for reuse.
 		procIdxQueue:    s.procIdxQueue[:0],
 		opChains:        s.opChains[:0],
+		closers:         s.closers[:0],
 		releasables:     s.releasables[:0],
 		monitorRegistry: s.monitorRegistry,
 	}
@@ -823,6 +812,7 @@ func (s *vectorizedFlowCreator) setupRouter(
 
 	foundLocalOutput := false
 	for i, op := range outputs {
+		s.closers = append(s.closers, op)
 		if buildutil.CrdbTestBuild {
 			op = colexec.NewInvariantsChecker(op)
 		}
@@ -837,7 +827,6 @@ func (s *vectorizedFlowCreator) setupRouter(
 				ctx, flowCtx, colexecargs.OpWithMetaInfo{
 					Root:            op,
 					MetadataSources: colexecop.MetadataSources{op},
-					ToClose:         colexecop.Closers{op},
 				}, outputTyps, stream, factory, nil, /* getStats */
 			); err != nil {
 				return err
@@ -847,8 +836,6 @@ func (s *vectorizedFlowCreator) setupRouter(
 			opWithMetaInfo := colexecargs.OpWithMetaInfo{
 				Root:            op,
 				MetadataSources: colexecop.MetadataSources{op},
-				// input.ToClose will be closed by the hash router.
-				ToClose: colexecop.Closers{op},
 			}
 			if s.recordingStats {
 				mons := []*mon.BytesMonitor{hashRouterMemMonitor, diskMon}
@@ -967,15 +954,15 @@ func (s *vectorizedFlowCreator) setupInput(
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            os,
 				MetadataSources: colexecop.MetadataSources{os},
-				ToClose:         colexecop.Closers{os},
 			}
+			s.closers = append(s.closers, os)
 		} else if input.Type == execinfrapb.InputSyncSpec_SERIAL_UNORDERED || opt == flowinfra.FuseAggressively {
 			sync := colexec.NewSerialUnorderedSynchronizer(inputStreamOps)
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
-				ToClose:         colexecop.Closers{sync},
 			}
+			s.closers = append(s.closers, sync)
 		} else {
 			// Note that if we have opt == flowinfra.FuseAggressively, then we
 			// must use the serial unordered sync above in order to remove any
@@ -986,8 +973,8 @@ func (s *vectorizedFlowCreator) setupInput(
 			opWithMetaInfo = colexecargs.OpWithMetaInfo{
 				Root:            sync,
 				MetadataSources: colexecop.MetadataSources{sync},
-				ToClose:         colexecop.Closers{sync},
 			}
+			s.closers = append(s.closers, sync)
 			s.operatorConcurrency = true
 			// Don't use the unordered synchronizer's inputs for stats collection
 			// given that they run concurrently. The stall time will be collected
@@ -1079,14 +1066,8 @@ func (s *vectorizedFlowCreator) setupOutput(
 			s.releasables = append(s.releasables, s.batchFlowCoordinator)
 		} else {
 			// We need to use the row receiving output.
-			if input != nil {
-				// We successfully removed the columnarizer.
-				if buildutil.CrdbTestBuild {
-					// That columnarizer was added as a closer, so we need to
-					// decrement the number of expected closers.
-					s.numClosers--
-				}
-			} else {
+			if input == nil {
+				// We couldn't remove the columnarizer.
 				input = colexec.NewMaterializerNoEvalCtxCopy(
 					colmem.NewAllocator(ctx, s.monitorRegistry.NewStreamingMemAccount(flowCtx), factory),
 					flowCtx,
@@ -1116,19 +1097,6 @@ func (s *vectorizedFlowCreator) setupOutput(
 		return errors.Errorf("unsupported output stream type %s", outputStream.Type)
 	}
 	return nil
-}
-
-// callbackCloser is a utility struct that implements the Closer interface by
-// calling the provided callback.
-type callbackCloser struct {
-	closeCb func(context.Context) error
-}
-
-var _ colexecop.Closer = &callbackCloser{}
-
-// Close implements the Closer interface.
-func (c *callbackCloser) Close(ctx context.Context) error {
-	return c.closeCb(ctx)
 }
 
 func (s *vectorizedFlowCreator) setupFlow(
@@ -1210,23 +1178,9 @@ func (s *vectorizedFlowCreator) setupFlow(
 				err = errors.Wrapf(err, "unable to vectorize execution plan")
 				return
 			}
+			s.closers = append(s.closers, result.ToClose...)
 			if flowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
 				result.Root = newPanicInjector(result.Root)
-			} else if buildutil.CrdbTestBuild {
-				toCloseCopy := append(colexecop.Closers{}, result.ToClose...)
-				for i := range toCloseCopy {
-					func(idx int) {
-						closed := false
-						result.ToClose[idx] = &callbackCloser{closeCb: func(ctx context.Context) error {
-							if !closed {
-								closed = true
-								atomic.AddInt32(&s.numClosed, 1)
-							}
-							return toCloseCopy[idx].Close(ctx)
-						}}
-					}(i)
-				}
-				s.numClosers += int32(len(result.ToClose))
 			}
 
 			if s.recordingStats {

@@ -646,8 +646,6 @@ func (r *HashRouter) Run(ctx context.Context) {
 	// in DrainMeta.
 	r.waitForMetadata <- bufferedMeta
 	close(r.waitForMetadata)
-
-	r.inputMetaInfo.ToClose.CloseAndLogOnErr(ctx, "hash router")
 }
 
 // processNextBatch reads the next batch from its input, hashes it and adds

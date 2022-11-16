@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -162,22 +161,6 @@ type Closer interface {
 
 // Closers is a slice of Closers.
 type Closers []Closer
-
-// CloseAndLogOnErr closes all Closers and logs the error if the log verbosity
-// is 1 or higher. The given prefix is prepended to the log message.
-// Note: this method should *only* be used when returning an error doesn't make
-// sense.
-func (c Closers) CloseAndLogOnErr(ctx context.Context, prefix string) {
-	if err := colexecerror.CatchVectorizedRuntimeError(func() {
-		for _, closer := range c {
-			if err := closer.Close(ctx); err != nil && log.V(1) {
-				log.Infof(ctx, "%s: error closing Closer: %v", prefix, err)
-			}
-		}
-	}); err != nil && log.V(1) {
-		log.Infof(ctx, "%s: runtime error closing the closers: %v", prefix, err)
-	}
-}
 
 // Close closes all Closers and returns the last error (if any occurs).
 func (c Closers) Close(ctx context.Context) error {
