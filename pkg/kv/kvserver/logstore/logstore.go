@@ -67,15 +67,15 @@ type RaftState struct {
 	ByteSize  int64
 }
 
-// LogAppend adds the given entries to the raft log. Takes the previous log
+// logAppend adds the given entries to the raft log. Takes the previous log
 // state, and returns the updated state. It's the caller's responsibility to
 // maintain exclusive access to the raft log for the duration of the method
 // call.
 //
-// LogAppend is intentionally oblivious to the existence of sideloaded
+// logAppend is intentionally oblivious to the existence of sideloaded
 // proposals. They are managed by the caller, including cleaning up obsolete
 // on-disk payloads in case the log tail is replaced.
-func LogAppend(
+func logAppend(
 	ctx context.Context,
 	raftLogPrefix roachpb.Key,
 	rw storage.ReadWriter,
@@ -179,7 +179,7 @@ func (s *LogStore) StoreEntries(
 			return RaftState{}, errors.Wrap(err, expl)
 		}
 		state.ByteSize += sideLoadedEntriesSize
-		if state, err = LogAppend(
+		if state, err = logAppend(
 			ctx, s.StateLoader.RaftLogPrefix(), batch, state, thinEntries,
 		); err != nil {
 			const expl = "during append"
