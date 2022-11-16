@@ -43,7 +43,6 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { StatementTableCell } from "./statementsTableContent";
 import {
   statisticsTableTitles,
-  NodeNames,
   StatisticType,
 } from "../statsTableUtil/statsTableUtil";
 
@@ -53,11 +52,67 @@ import styles from "./statementsTable.module.scss";
 import { StatementDiagnosticsReport } from "../api";
 const cx = classNames.bind(styles);
 
-function makeCommonColumns(
+export interface AggregateStatistics {
+  aggregatedFingerprintID: string;
+  aggregatedFingerprintHexID: string;
+  // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
+  label: string;
+  // summary exists only for SELECT/INSERT/UPSERT/UPDATE statements, and is
+  // replaced with shortStatement otherwise.
+  summary: string;
+  aggregatedTs: number;
+  aggregationInterval: number;
+  implicitTxn: boolean;
+  fullScan: boolean;
+  database: string;
+  applicationName: string;
+  stats: StatementStatistics;
+  drawer?: boolean;
+  firstCellBordered?: boolean;
+  diagnosticsReports?: StatementDiagnosticsReport[];
+  // totalWorkload is the sum of service latency of all statements listed on the table.
+  totalWorkload?: Long;
+  regionNodes?: string[];
+}
+
+export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
+
+export function shortStatement(
+  summary: StatementSummary,
+  original: string,
+): string {
+  switch (summary.statement) {
+    case "update":
+      return "UPDATE " + summary.table;
+    case "insert":
+      return "INSERT INTO " + summary.table;
+    case "select":
+      return "SELECT FROM " + summary.table;
+    case "delete":
+      return "DELETE FROM " + summary.table;
+    case "create":
+      return "CREATE TABLE " + summary.table;
+    case "set":
+      return "SET " + summary.table;
+    default:
+      return original;
+  }
+}
+
+export function makeStatementsColumns(
   statements: AggregateStatistics[],
+  selectedApps: string[],
+  // totalWorkload is the sum of service latency of all statements listed on the table.
   totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
   statType: StatisticType,
+  isTenant: boolean,
+  hasViewActivityRedactedRole: boolean,
+  search?: string,
+  activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
+  onSelectDiagnosticsReportDropdownOption?: (
+    report: StatementDiagnosticsReport,
+  ) => void,
+  onStatementClick?: (statement: string) => void,
 ): ColumnDescriptor<AggregateStatistics>[] {
   const defaultBarChartOptions = {
     classes: {
@@ -89,7 +144,19 @@ function makeCommonColumns(
   );
   const retryBar = retryBarChart(statements, defaultBarChartOptions);
 
-  return [
+  const columns: ColumnDescriptor<AggregateStatistics>[] = [
+    {
+      name: "statements",
+      title: statisticsTableTitles.statements(statType),
+      className: cx("cl-table__col-query-text"),
+      cell: StatementTableCell.statements(
+        search,
+        selectedApps,
+        onStatementClick,
+      ),
+      sort: stmt => stmt.label,
+      alwaysShow: true,
+    },
     {
       name: "executionCount",
       title: statisticsTableTitles.executionCount(statType),
@@ -210,98 +277,6 @@ function makeCommonColumns(
       showByDefault: false,
     },
   ];
-}
-
-export interface AggregateStatistics {
-  aggregatedFingerprintID: string;
-  aggregatedFingerprintHexID: string;
-  // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
-  label: string;
-  // summary exists only for SELECT/INSERT/UPSERT/UPDATE statements, and is
-  // replaced with shortStatement otherwise.
-  summary: string;
-  aggregatedTs: number;
-  aggregationInterval: number;
-  implicitTxn: boolean;
-  fullScan: boolean;
-  database: string;
-  applicationName: string;
-  stats: StatementStatistics;
-  drawer?: boolean;
-  firstCellBordered?: boolean;
-  diagnosticsReports?: StatementDiagnosticsReport[];
-  // totalWorkload is the sum of service latency of all statements listed on the table.
-  totalWorkload?: Long;
-  regionNodes?: string[];
-}
-
-export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
-
-export function shortStatement(
-  summary: StatementSummary,
-  original: string,
-): string {
-  switch (summary.statement) {
-    case "update":
-      return "UPDATE " + summary.table;
-    case "insert":
-      return "INSERT INTO " + summary.table;
-    case "select":
-      return "SELECT FROM " + summary.table;
-    case "delete":
-      return "DELETE FROM " + summary.table;
-    case "create":
-      return "CREATE TABLE " + summary.table;
-    case "set":
-      return "SET " + summary.table;
-    default:
-      return original;
-  }
-}
-
-export function makeStatementFingerprintColumn(
-  statType: StatisticType,
-  selectedApps: string[],
-  search?: string,
-  onStatementClick?: (statement: string) => void,
-): ColumnDescriptor<AggregateStatistics> {
-  return {
-    name: "statements",
-    title: statisticsTableTitles.statements(statType),
-    className: cx("cl-table__col-query-text"),
-    cell: StatementTableCell.statements(search, selectedApps, onStatementClick),
-    sort: stmt => stmt.label,
-    alwaysShow: true,
-  };
-}
-
-export function makeStatementsColumns(
-  statements: AggregateStatistics[],
-  selectedApps: string[],
-  // totalWorkload is the sum of service latency of all statements listed on the table.
-  totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
-  statType: StatisticType,
-  isTenant: boolean,
-  hasViewActivityRedactedRole: boolean,
-  search?: string,
-  activateDiagnosticsRef?: React.RefObject<ActivateDiagnosticsModalRef>,
-  onSelectDiagnosticsReportDropdownOption?: (
-    report: StatementDiagnosticsReport,
-  ) => void,
-  onStatementClick?: (statement: string) => void,
-): ColumnDescriptor<AggregateStatistics>[] {
-  const columns: ColumnDescriptor<AggregateStatistics>[] = [
-    makeStatementFingerprintColumn(
-      statType,
-      selectedApps,
-      search,
-      onStatementClick,
-    ),
-  ];
-  columns.push(
-    ...makeCommonColumns(statements, totalWorkload, nodeRegions, statType),
-  );
 
   if (activateDiagnosticsRef && !isTenant && !hasViewActivityRedactedRole) {
     const diagnosticsColumn: ColumnDescriptor<AggregateStatistics> = {
@@ -325,25 +300,6 @@ export function makeStatementsColumns(
     columns.push(diagnosticsColumn);
   }
   return columns;
-}
-
-export function makeNodesColumns(
-  statements: AggregateStatistics[],
-  nodeNames: NodeNames,
-  totalWorkload: number,
-  nodeRegions: { [nodeId: string]: string },
-): ColumnDescriptor<AggregateStatistics>[] {
-  const original: ColumnDescriptor<AggregateStatistics>[] = [
-    {
-      name: "nodes",
-      title: null,
-      cell: StatementTableCell.nodeLink(nodeNames),
-    },
-  ];
-
-  return original.concat(
-    makeCommonColumns(statements, totalWorkload, nodeRegions, "statement"),
-  );
 }
 
 /**
