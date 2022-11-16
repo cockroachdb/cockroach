@@ -349,17 +349,17 @@ func (ag *aggregatorBase) start(ctx context.Context, procName string) {
 
 func (ag *hashAggregator) close() {
 	if ag.InternalClose() {
-		log.VEventf(ag.Ctx, 2, "exiting aggregator")
+		log.VEventf(ag.EnsureCtx(), 2, "exiting aggregator")
 		// If we have started emitting rows, bucketsIter will represent which
 		// buckets are still open, since buckets are closed once their results are
 		// emitted.
 		if ag.bucketsIter == nil {
 			for _, bucket := range ag.buckets {
-				bucket.close(ag.Ctx)
+				bucket.close(ag.EnsureCtx())
 			}
 		} else {
 			for _, bucket := range ag.bucketsIter {
-				ag.buckets[bucket].close(ag.Ctx)
+				ag.buckets[bucket].close(ag.EnsureCtx())
 			}
 		}
 		// Make sure to release any remaining memory under 'buckets'.
@@ -368,25 +368,25 @@ func (ag *hashAggregator) close() {
 		// buckets since the latter might be releasing some precisely tracked
 		// memory, and if we were to close the accounts first, there would be
 		// no memory to release for the buckets.
-		ag.bucketsAcc.Close(ag.Ctx)
-		ag.aggFuncsAcc.Close(ag.Ctx)
-		ag.MemMonitor.Stop(ag.Ctx)
+		ag.bucketsAcc.Close(ag.EnsureCtx())
+		ag.aggFuncsAcc.Close(ag.EnsureCtx())
+		ag.MemMonitor.Stop(ag.EnsureCtx())
 	}
 }
 
 func (ag *orderedAggregator) close() {
 	if ag.InternalClose() {
-		log.VEventf(ag.Ctx, 2, "exiting aggregator")
+		log.VEventf(ag.EnsureCtx(), 2, "exiting aggregator")
 		if ag.bucket != nil {
-			ag.bucket.close(ag.Ctx)
+			ag.bucket.close(ag.EnsureCtx())
 		}
 		// Note that we should be closing accounts only after closing the
 		// bucket since the latter might be releasing some precisely tracked
 		// memory, and if we were to close the accounts first, there would be
 		// no memory to release for the bucket.
-		ag.bucketsAcc.Close(ag.Ctx)
-		ag.aggFuncsAcc.Close(ag.Ctx)
-		ag.MemMonitor.Stop(ag.Ctx)
+		ag.bucketsAcc.Close(ag.EnsureCtx())
+		ag.aggFuncsAcc.Close(ag.EnsureCtx())
+		ag.MemMonitor.Stop(ag.EnsureCtx())
 	}
 }
 

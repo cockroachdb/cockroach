@@ -320,7 +320,7 @@ func (ps *projectSetProcessor) close() {
 	// InternalClose().
 	for i, gen := range ps.gens {
 		if gen != nil {
-			gen.Close(ps.Ctx)
+			gen.Close(ps.EnsureCtx())
 			ps.gens[i] = nil
 		}
 	}

@@ -252,8 +252,8 @@ func (m *mergeJoiner) nextRow() (rowenc.EncDatumRow, *execinfrapb.ProducerMetada
 
 func (m *mergeJoiner) close() {
 	if m.InternalClose() {
-		m.streamMerger.close(m.Ctx)
-		m.MemMonitor.Stop(m.Ctx)
+		m.streamMerger.close(m.EnsureCtx())
+		m.MemMonitor.Stop(m.EnsureCtx())
 	}
 }
 

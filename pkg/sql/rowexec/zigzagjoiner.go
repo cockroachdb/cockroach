@@ -496,9 +496,9 @@ func (z *zigzagJoiner) setupInfo(
 func (z *zigzagJoiner) close() {
 	if z.InternalClose() {
 		for i := range z.infos {
-			z.infos[i].fetcher.Close(z.Ctx)
+			z.infos[i].fetcher.Close(z.EnsureCtx())
 		}
-		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
+		log.VEventf(z.EnsureCtx(), 2, "exiting zigzag joiner run")
 	}
 }
 

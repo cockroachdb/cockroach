@@ -212,8 +212,8 @@ func (d *distinct) encode(appendTo []byte, row rowenc.EncDatumRow) ([]byte, erro
 
 func (d *distinct) close() {
 	if d.InternalClose() {
-		d.memAcc.Close(d.Ctx)
-		d.MemMonitor.Stop(d.Ctx)
+		d.memAcc.Close(d.EnsureCtx())
+		d.MemMonitor.Stop(d.EnsureCtx())
 	}
 }
 

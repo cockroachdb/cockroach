@@ -405,10 +405,10 @@ func (sip *streamIngestionProcessor) close() {
 	}
 
 	for _, client := range sip.streamPartitionClients {
-		_ = client.Close(sip.Ctx)
+		_ = client.Close(sip.EnsureCtx())
 	}
 	if sip.batcher != nil {
-		sip.batcher.Close(sip.Ctx)
+		sip.batcher.Close(sip.EnsureCtx())
 	}
 	if sip.maxFlushRateTimer != nil {
 		sip.maxFlushRateTimer.Stop()

@@ -356,6 +356,8 @@ type ProcessorBaseNoHelper struct {
 	// Ctx and span contain the tracing state while the processor is active
 	// (i.e. hasn't been closed). Initialized using flowCtx.Ctx (which should not be otherwise
 	// used).
+	// NOTE: if StartInternal() hasn't been called, this will be nil, so
+	// consider using EnsureCtx() instead.
 	Ctx  context.Context
 	span *tracing.Span
 	// origCtx is the context from which ctx was derived. InternalClose() resets
@@ -868,6 +870,15 @@ func (pb *ProcessorBaseNoHelper) StartInternal(ctx context.Context, name string)
 		}
 	}
 	pb.evalOrigCtx = pb.EvalCtx.SetDeprecatedContext(pb.Ctx)
+	return pb.Ctx
+}
+
+// EnsureCtx is an accessor method for Ctx which is guaranteed to return non-nil
+// context even if StartInternal() hasn't been called.
+func (pb *ProcessorBaseNoHelper) EnsureCtx() context.Context {
+	if pb.Ctx == nil {
+		return context.Background()
+	}
 	return pb.Ctx
 }
 

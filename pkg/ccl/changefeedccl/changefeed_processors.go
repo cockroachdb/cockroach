@@ -446,7 +446,7 @@ func (ca *changeAggregator) close() {
 	}
 	if ca.eventConsumer != nil {
 		if err := ca.eventConsumer.Close(); err != nil {
-			log.Warningf(ca.Ctx, "error closing event consumer: %s", err)
+			log.Warningf(ca.EnsureCtx(), "error closing event consumer: %s", err)
 		}
 	}
 
@@ -454,11 +454,11 @@ func (ca *changeAggregator) close() {
 		// Best effort: context is often cancel by now, so we expect to see an error
 		_ = ca.sink.Close()
 	}
-	ca.memAcc.Close(ca.Ctx)
+	ca.memAcc.Close(ca.EnsureCtx())
 	if ca.kvFeedMemMon != nil {
-		ca.kvFeedMemMon.Stop(ca.Ctx)
+		ca.kvFeedMemMon.Stop(ca.EnsureCtx())
 	}
-	ca.MemMonitor.Stop(ca.Ctx)
+	ca.MemMonitor.Stop(ca.EnsureCtx())
 	ca.InternalClose()
 }
 
@@ -996,8 +996,8 @@ func (cf *changeFrontier) close() {
 			// Best effort: context is often cancel by now, so we expect to see an error
 			_ = cf.sink.Close()
 		}
-		cf.memAcc.Close(cf.Ctx)
-		cf.MemMonitor.Stop(cf.Ctx)
+		cf.memAcc.Close(cf.EnsureCtx())
+		cf.MemMonitor.Stop(cf.EnsureCtx())
 	}
 }
 

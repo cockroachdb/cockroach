@@ -292,7 +292,7 @@ func (tr *tableReader) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 func (tr *tableReader) close() {
 	if tr.InternalClose() {
 		if tr.fetcher != nil {
-			tr.fetcher.Close(tr.Ctx)
+			tr.fetcher.Close(tr.EnsureCtx())
 		}
 	}
 }

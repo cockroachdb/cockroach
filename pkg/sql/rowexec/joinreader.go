@@ -1135,26 +1135,26 @@ func (jr *joinReader) ConsumerClosed() {
 func (jr *joinReader) close() {
 	if jr.InternalClose() {
 		if jr.fetcher != nil {
-			jr.fetcher.Close(jr.Ctx)
+			jr.fetcher.Close(jr.EnsureCtx())
 		}
 		if jr.usesStreamer {
-			jr.streamerInfo.budgetAcc.Close(jr.Ctx)
-			jr.streamerInfo.txnKVStreamerMemAcc.Close(jr.Ctx)
-			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.Ctx)
+			jr.streamerInfo.budgetAcc.Close(jr.EnsureCtx())
+			jr.streamerInfo.txnKVStreamerMemAcc.Close(jr.EnsureCtx())
+			jr.streamerInfo.unlimitedMemMonitor.Stop(jr.EnsureCtx())
 			if jr.streamerInfo.diskMonitor != nil {
-				jr.streamerInfo.diskMonitor.Stop(jr.Ctx)
+				jr.streamerInfo.diskMonitor.Stop(jr.EnsureCtx())
 			}
 		}
-		jr.strategy.close(jr.Ctx)
-		jr.memAcc.Close(jr.Ctx)
+		jr.strategy.close(jr.EnsureCtx())
+		jr.memAcc.Close(jr.EnsureCtx())
 		if jr.limitedMemMonitor != nil {
-			jr.limitedMemMonitor.Stop(jr.Ctx)
+			jr.limitedMemMonitor.Stop(jr.EnsureCtx())
 		}
 		if jr.MemMonitor != nil {
-			jr.MemMonitor.Stop(jr.Ctx)
+			jr.MemMonitor.Stop(jr.EnsureCtx())
 		}
 		if jr.diskMonitor != nil {
-			jr.diskMonitor.Stop(jr.Ctx)
+			jr.diskMonitor.Stop(jr.EnsureCtx())
 		}
 	}
 }

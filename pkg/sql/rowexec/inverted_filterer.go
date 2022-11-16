@@ -301,12 +301,12 @@ func (ifr *invertedFilterer) ConsumerClosed() {
 
 func (ifr *invertedFilterer) close() {
 	if ifr.InternalClose() {
-		ifr.rc.Close(ifr.Ctx)
+		ifr.rc.Close(ifr.EnsureCtx())
 		if ifr.MemMonitor != nil {
-			ifr.MemMonitor.Stop(ifr.Ctx)
+			ifr.MemMonitor.Stop(ifr.EnsureCtx())
 		}
 		if ifr.diskMonitor != nil {
-			ifr.diskMonitor.Stop(ifr.Ctx)
+			ifr.diskMonitor.Stop(ifr.EnsureCtx())
 		}
 	}
 }

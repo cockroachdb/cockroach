@@ -117,10 +117,10 @@ func (s *sorterBase) close() {
 		if s.i != nil {
 			s.i.Close()
 		}
-		s.rows.Close(s.Ctx)
-		s.MemMonitor.Stop(s.Ctx)
+		s.rows.Close(s.EnsureCtx())
+		s.MemMonitor.Stop(s.EnsureCtx())
 		if s.diskMonitor != nil {
-			s.diskMonitor.Stop(s.Ctx)
+			s.diskMonitor.Stop(s.EnsureCtx())
 		}
 	}
 }

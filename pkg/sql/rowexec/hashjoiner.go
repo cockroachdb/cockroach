@@ -449,16 +449,16 @@ func (h *hashJoiner) emitRightUnmatched() (
 
 func (h *hashJoiner) close() {
 	if h.InternalClose() {
-		h.hashTable.Close(h.Ctx)
+		h.hashTable.Close(h.EnsureCtx())
 		if h.probingRowState.iter != nil {
 			h.probingRowState.iter.Close()
 		}
 		if h.emittingRightUnmatchedState.iter != nil {
 			h.emittingRightUnmatchedState.iter.Close()
 		}
-		h.MemMonitor.Stop(h.Ctx)
+		h.MemMonitor.Stop(h.EnsureCtx())
 		if h.diskMonitor != nil {
-			h.diskMonitor.Stop(h.Ctx)
+			h.diskMonitor.Stop(h.EnsureCtx())
 		}
 	}
 }

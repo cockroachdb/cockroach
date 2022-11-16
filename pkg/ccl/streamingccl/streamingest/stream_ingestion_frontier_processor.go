@@ -326,7 +326,7 @@ func (sf *streamIngestionFrontier) Next() (
 
 func (sf *streamIngestionFrontier) close() {
 	if err := sf.heartbeatSender.stop(); err != nil {
-		log.Errorf(sf.Ctx, "heartbeat sender exited with error: %s", err)
+		log.Errorf(sf.EnsureCtx(), "heartbeat sender exited with error: %s", err)
 	}
 	if sf.InternalClose() {
 		sf.metrics.RunningCount.Dec(1)

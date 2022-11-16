@@ -247,16 +247,16 @@ func (w *windower) close() {
 		if w.allRowsIterator != nil {
 			w.allRowsIterator.Close()
 		}
-		w.allRowsPartitioned.Close(w.Ctx)
+		w.allRowsPartitioned.Close(w.EnsureCtx())
 		if w.partition != nil {
-			w.partition.Close(w.Ctx)
+			w.partition.Close(w.EnsureCtx())
 		}
 		for _, builtin := range w.builtins {
-			builtin.Close(w.Ctx, w.EvalCtx)
+			builtin.Close(w.EnsureCtx(), w.EvalCtx)
 		}
-		w.acc.Close(w.Ctx)
-		w.MemMonitor.Stop(w.Ctx)
-		w.diskMonitor.Stop(w.Ctx)
+		w.acc.Close(w.EnsureCtx())
+		w.MemMonitor.Stop(w.EnsureCtx())
+		w.diskMonitor.Stop(w.EnsureCtx())
 	}
 }
 

@@ -740,14 +740,14 @@ func (ij *invertedJoiner) ConsumerClosed() {
 func (ij *invertedJoiner) close() {
 	if ij.InternalClose() {
 		if ij.fetcher != nil {
-			ij.fetcher.Close(ij.Ctx)
+			ij.fetcher.Close(ij.EnsureCtx())
 		}
 		if ij.indexRows != nil {
-			ij.indexRows.Close(ij.Ctx)
+			ij.indexRows.Close(ij.EnsureCtx())
 		}
-		ij.MemMonitor.Stop(ij.Ctx)
+		ij.MemMonitor.Stop(ij.EnsureCtx())
 		if ij.diskMonitor != nil {
-			ij.diskMonitor.Stop(ij.Ctx)
+			ij.diskMonitor.Stop(ij.EnsureCtx())
 		}
 	}
 }
