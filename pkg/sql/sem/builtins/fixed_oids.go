@@ -493,6 +493,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.trim_tenant_prefix(key: bytes) -> bytes`:                                                                               1318,
 	`crdb_internal.trim_tenant_prefix(keys: bytes[]) -> bytes[]`:                                                                          1319,
 	`crdb_internal.unary_table() -> tuple`:                                                                                                329,
+	`crdb_internal.unsafe_optimize_system_database() -> bool`:                                                                             2057,
 	`crdb_internal.unsafe_clear_gossip_info(key: string) -> bool`:                                                                         1306,
 	`crdb_internal.unsafe_delete_descriptor(id: int) -> bool`:                                                                             1347,
 	`crdb_internal.unsafe_delete_descriptor(id: int, force: bool) -> bool`:                                                                1348,

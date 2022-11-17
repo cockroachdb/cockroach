@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -2445,4 +2448,173 @@ func (p *planner) GetMultiregionConfig(
 // IsANSIDML is part of the eval.Planner interface.
 func (p *planner) IsANSIDML() bool {
 	return p.stmt.IsANSIDML()
+}
+
+// OptimizeSystemDatabase is part of the eval.RegionOperator interface.
+func (p *planner) OptimizeSystemDatabase(ctx context.Context) error {
+	globalTables := []string{
+		"users",
+		"zones",
+		"privileges",
+		"comments",
+		"role_options",
+		"role_members",
+		"database_role_settings",
+		"settings",
+		"descriptor",
+		"namespace",
+		"table_statistics",
+		"web_sessions",
+	}
+
+	rbrTables := []string{
+		"sqlliveness",
+		"sql_instances",
+	}
+
+	if !systemschema.TestSupportMultiRegion() {
+		return errors.New("multi region system database is not supported")
+	}
+
+	// Retrieve the system database descriptor and ensure it supports
+	// multi-region
+	options := tree.CommonLookupFlags{
+		AvoidLeased: true,
+		Required:    true,
+	}
+	_, systemDB, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, keys.SystemDatabaseID, options)
+	if err != nil {
+		return err
+	}
+	regionEnumID, err := systemDB.MultiRegionEnumID()
+	if err != nil {
+		return errors.Wrap(err, "system database is not multi-region")
+	}
+	enumTypeDesc, err := p.Descriptors().GetMutableTypeByID(ctx, p.txn, regionEnumID, tree.ObjectLookupFlags{
+		CommonLookupFlags: options,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Convert the enum descriptor into a type
+	enumName := tree.MakeQualifiedTypeName(systemDB.GetName(), "public", enumTypeDesc.GetName())
+	enumType, err := enumTypeDesc.MakeTypesT(ctx, &enumName, nil)
+	if err != nil {
+		return err
+	}
+
+	getDescriptor := func(name string) (*tabledesc.Mutable, error) {
+		tableName := tree.MakeTableNameWithSchema(tree.Name("system"), tree.Name("public"), tree.Name(name))
+		required := true
+		_, desc, err := resolver.ResolveMutableExistingTableObject(
+			ctx, p, &tableName, required, tree.ResolveRequireTableDesc)
+		return desc, err
+	}
+
+	applyLocalityChange := func(desc *tabledesc.Mutable, locality string) error {
+		if err := p.ResetMultiRegionZoneConfigsForTable(ctx, int64(desc.GetID())); err != nil {
+			return err
+		}
+
+		jobName := fmt.Sprintf("convert system.%s to %s locality", desc.GetName(), locality)
+		return p.writeSchemaChange(ctx, desc, descpb.InvalidMutationID, jobName)
+	}
+
+	getMutableColumn := func(table *tabledesc.Mutable, name string) (*descpb.ColumnDescriptor, error) {
+		for i := range table.Columns {
+			if table.Columns[i].Name == name {
+				return &table.Columns[i], nil
+			}
+		}
+		return nil, errors.Newf("%s column not found", name)
+	}
+
+	partitionByRegion := func(table *tabledesc.Mutable) error {
+		regionConfig, err := SynthesizeRegionConfig(
+			ctx, p.txn, table.GetParentID(), p.Descriptors(),
+		)
+		if err != nil {
+			return err
+		}
+		partitionAllBy := partitionByForRegionalByRow(
+			regionConfig,
+			"crdb_region",
+		)
+
+		unexpectedColumns, partitioning, err := CreatePartitioning(
+			ctx,
+			p.ExecCfg().Settings,
+			p.EvalContext(),
+			table,
+			table.PrimaryIndex,
+			partitionAllBy,
+			nil, /*do not allow implicit columns, the existing crdb_region column must be used*/
+			true /*allow implicit partitioning */)
+		if err != nil {
+			return err
+		}
+		if 0 < len(unexpectedColumns) {
+			return errors.AssertionFailedf("unexpected implicit partitioning columns for table %s", table.GetName())
+		}
+		tabledesc.UpdateIndexPartitioning(&table.PrimaryIndex, true, nil, partitioning)
+		table.PartitionAllBy = true
+		return nil
+	}
+
+	// Configure global system tables
+	for _, tableName := range globalTables {
+		descriptor, err := getDescriptor(tableName)
+		if err != nil {
+			return err
+		}
+
+		descriptor.SetTableLocalityGlobal()
+
+		if err := applyLocalityChange(descriptor, "global"); err != nil {
+			return err
+		}
+	}
+
+	// Configure regional by row system tables
+	for _, tableName := range rbrTables {
+		descriptor, err := getDescriptor(tableName)
+		if err != nil {
+			return err
+		}
+
+		// Change crdb_region type to the multi-region enum
+		column, err := getMutableColumn(descriptor, "crdb_region")
+		if err != nil {
+			return err
+		}
+		column.Type = enumType
+
+		// Add a back reference to the table
+		backReferenceJob := fmt.Sprintf("add back ref on mr-enum for system table %s", tableName)
+		if err = p.addTypeBackReference(ctx, regionEnumID, descriptor.GetID(), backReferenceJob); err != nil {
+			return err
+		}
+
+		descriptor.SetTableLocalityRegionalByRow(tree.Name(column.Name))
+		if err := partitionByRegion(descriptor); err != nil {
+			return err
+		}
+
+		if err := applyLocalityChange(descriptor, "regional by row"); err != nil {
+			return err
+		}
+
+		// Delete statistics for the table because the statistics materialize
+		// the column type for `crdb_region` and the column type is changing
+		// from bytes to an enum.
+		if _, err := p.ExecCfg().InternalExecutor.Exec(ctx, "delete-stats", p.txn,
+			`DELETE FROM system.table_statistics WHERE "tableID" = $1;`,
+			descriptor.GetID(),
+		); err != nil {
+			return errors.Wrap(err, "unable to delete statistics")
+		}
+	}
+
+	return nil
 }
