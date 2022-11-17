@@ -703,9 +703,13 @@
 # As long as child.c_id = 10 and the matching row in parent are both located in
 # 'us-east1', the second plan will be much faster. But if they are located in
 # one of the other regions, the first plan would be slightly faster.
+# If the lookup join input is a Select from only remote region rows, as
+# indicated by IsSelectFromRemoteTableRowsOnly, there is little point planning
+# a locality-optimized join because reading remote rows cannot be avoided, so
+# the rewrite is skipped in this case.
 [GenerateLocalityOptimizedLookupJoin, Explore]
 (LookupJoin
-    $input:*
+    $input:* & ^(IsSelectFromRemoteTableRowsOnly $input)
     $on:*
     $private:* &
         ^(IsAntiJoin $private) &
@@ -727,4 +731,395 @@
         $remoteExpr
         $private
     )
+)
+
+# GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin converts a lookup join
+# with REGIONAL BY ROW tables as both inputs into a locality-optimized search of
+# a locality-optimized in the left branch and a normal lookup join in the right
+# branch. The left branch reads local rows from the input table and the right
+# branch reads remote rows from the input table.
+#
+# For example, suppose we have a multi-region database with regions
+# 'ca-central-1', 'us-east-1' and 'ap-southeast-2', and we have the following
+# tables and query, issued from region 'ap-southeast-2':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY,
+#     p_attr INT
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child INNER LOOKUP JOIN parent ON c_p_id = p_id LIMIT 3;
+#
+# Normally, this would produce the following plan:
+#
+# distribute
+#  ├── columns: c_id:1 c_p_id:2 p_id:6
+#  ├── cardinality: [0 - 3]
+#  ├── stats: [rows=3]
+#  ├── cost: 785.654
+#  ├── key: (1)
+#  ├── fd: (1)-->(2), (2)==(6), (6)==(2)
+#  ├── distribution: ap-southeast-2
+#  ├── input distribution: ap-southeast-2
+#  ├── prune: (1)
+#  └── limit
+#       ├── columns: c_id:1 c_p_id:2 p_id:6
+#       ├── cardinality: [0 - 3]
+#       ├── stats: [rows=3]
+#       ├── cost: 585.644
+#       ├── key: (1)
+#       ├── fd: (1)-->(2), (2)==(6), (6)==(2)
+#       ├── prune: (1)
+#       ├── project
+#       │    ├── columns: c_id:1 c_p_id:2 p_id:6
+#       │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(6)=99, null(6)=0]
+#       │    ├── cost: 585.604
+#       │    ├── key: (1)
+#       │    ├── fd: (1)-->(2), (2)==(6), (6)==(2)
+#       │    ├── limit hint: 3.00
+#       │    ├── prune: (1)
+#       │    └── inner-join (lookup parent)
+#       │         ├── columns: c_id:1 c_p_id:2 p_id:6 parent.crdb_region:7
+#       │         ├── flags: force lookup join (into right side)
+#       │         ├── lookup expression
+#       │         │    └── filters
+#       │         │         ├── parent.crdb_region:7 = 'ap-southeast-2' [outer=(7), immutable, constraints=(/7: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(7)]
+#       │         │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+#       │         ├── remote lookup expression
+#       │         │    └── filters
+#       │         │         ├── parent.crdb_region:7 IN ('ca-central-1', 'us-east-1') [outer=(7), constraints=(/7: [/'ca-central-1' - /'ca-central-1'] [/'us-east-1' - /'us-east-1']; tight)]
+#       │         │         └── c_p_id:2 = p_id:6 [outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+#       │         ├── lookup columns are key
+#       │         ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(6)=99, null(6)=0, distinct(7)=3, null(7)=0]
+#       │         ├── cost: 575.684
+#       │         ├── key: (1)
+#       │         ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#       │         ├── limit hint: 3.00
+#       │         ├── scan child
+#       │         │    ├── columns: c_id:1 c_p_id:2
+#       │         │    ├── check constraint expressions
+#       │         │    │    └── child.crdb_region:3 IN ('ap-southeast-2', 'ca-central-1', 'us-east-1') [outer=(3), constraints=(/3: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'ca-central-1'] [/'us-east-1' - /'us-east-1']; tight)]
+#       │         │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+#       │         │    ├── cost: 332.02
+#       │         │    ├── key: (1)
+#       │         │    ├── fd: (1)-->(2)
+#       │         │    ├── limit hint: 100.00
+#       │         │    ├── prune: (1,2)
+#       │         │    └── unfiltered-cols: (1-5)
+#       │         └── filters (true)
+#       └── 3
+#
+# but if the session setting locality_optimized_partitioned_index_scan is
+# enabled, the optimizer will produce this plan:
+#
+# limit
+#  ├── columns: c_id:1 c_p_id:2 p_id:6
+#  ├── cardinality: [0 - 3]
+#  ├── stats: [rows=3]
+#  ├── cost: 499.815
+#  ├── key: (1)
+#  ├── fd: (1)-->(2), (2)==(6), (6)==(2)
+#  ├── distribution: ap-southeast-2
+#  ├── prune: (1)
+#  ├── project
+#  │    ├── columns: c_id:1 c_p_id:2 p_id:6
+#  │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(6)=99, null(6)=0]
+#  │    ├── cost: 499.775
+#  │    ├── key: (1)
+#  │    ├── fd: (1)-->(2), (2)==(6), (6)==(2)
+#  │    ├── limit hint: 3.00
+#  │    ├── distribution: ap-southeast-2
+#  │    ├── prune: (1)
+#  │    └── locality-optimized-search
+#  │         ├── columns: c_id:1 c_p_id:2 p_id:6 parent.crdb_region:7
+#  │         ├── left columns: c_id:11 c_p_id:12 p_id:21 parent.crdb_region:22
+#  │         ├── right columns: c_id:16 c_p_id:17 p_id:25 parent.crdb_region:26
+#  │         ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(6)=99, null(6)=0, distinct(7)=3, null(7)=0]
+#  │         ├── cost: 489.855
+#  │         ├── key: (1)
+#  │         ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#  │         ├── limit hint: 3.00
+#  │         ├── distribution: ap-southeast-2
+#  │         ├── project
+#  │         │    ├── columns: c_id:11 c_p_id:12 p_id:21 parent.crdb_region:22
+#  │         │    ├── immutable
+#  │         │    ├── stats: [rows=110]
+#  │         │    ├── cost: 315.628
+#  │         │    ├── key: (11)
+#  │         │    ├── fd: ()-->(22), (11)-->(12), (12)==(21), (21)==(12)
+#  │         │    ├── limit hint: 3.00
+#  │         │    └── inner-join (lookup parent)
+#  │         │         ├── columns: c_id:11 c_p_id:12 child.crdb_region:13 p_id:21 parent.crdb_region:22
+#  │         │         ├── flags: force lookup join (into right side)
+#  │         │         ├── lookup expression
+#  │         │         │    └── filters
+#  │         │         │         ├── parent.crdb_region:22 = 'ap-southeast-2' [outer=(22), immutable, constraints=(/22: [/'ap-southeast-2' - /'ap-southeast-2']; tight), fd=()-->(22)]
+#  │         │         │         └── c_p_id:12 = p_id:21 [outer=(12,21), constraints=(/12: (/NULL - ]; /21: (/NULL - ]), fd=(12)==(21), (21)==(12)]
+#  │         │         ├── remote lookup expression
+#  │         │         │    └── filters
+#  │         │         │         ├── parent.crdb_region:22 IN ('ca-central-1', 'us-east-1') [outer=(22), constraints=(/22: [/'ca-central-1' - /'ca-central-1'] [/'us-east-1' - /'us-east-1']; tight)]
+#  │         │         │         └── c_p_id:12 = p_id:21 [outer=(12,21), constraints=(/12: (/NULL - ]; /21: (/NULL - ]), fd=(12)==(21), (21)==(12)]
+#  │         │         ├── lookup columns are key
+#  │         │         ├── immutable
+#  │         │         ├── stats: [rows=110, distinct(12)=97.2658, null(12)=0, distinct(21)=97.2658, null(21)=0, distinct(22)=1, null(22)=0]
+#  │         │         ├── cost: 314.508
+#  │         │         ├── key: (11)
+#  │         │         ├── fd: ()-->(13,22), (11)-->(12), (12)==(21), (21)==(12)
+#  │         │         ├── limit hint: 3.00
+#  │         │         ├── scan child
+#  │         │         │    ├── columns: c_id:11 c_p_id:12 child.crdb_region:13
+#  │         │         │    ├── constraint: /13/11: [/'ap-southeast-2' - /'ap-southeast-2']
+#  │         │         │    ├── immutable
+#  │         │         │    ├── stats: [rows=333.3333, distinct(11)=333.333, null(11)=0, distinct(12)=98.2658, null(12)=3.33333, distinct(13)=1, null(13)=0]
+#  │         │         │    ├── cost: 126.02
+#  │         │         │    ├── key: (11)
+#  │         │         │    ├── fd: ()-->(13), (11)-->(12)
+#  │         │         │    └── limit hint: 100.00
+#  │         │         └── filters (true)
+#  │         └── project
+#  │              ├── columns: c_id:16 c_p_id:17 p_id:25 parent.crdb_region:26
+#  │              ├── stats: [rows=660]
+#  │              ├── cost: 1741.77
+#  │              ├── key: (16)
+#  │              ├── fd: (16)-->(17,25,26), (25)-->(26), (17)==(25), (25)==(17)
+#  │              ├── limit hint: 3.00
+#  │              └── inner-join (lookup parent)
+#  │                   ├── columns: c_id:16 c_p_id:17 child.crdb_region:18 p_id:25 parent.crdb_region:26
+#  │                   ├── flags: force lookup join (into right side)
+#  │                   ├── lookup expression
+#  │                   │    └── filters
+#  │                   │         ├── parent.crdb_region:26 IN ('ap-southeast-2', 'ca-central-1', 'us-east-1') [outer=(26), constraints=(/26: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'ca-central-1'] [/'us-east-1' - /'us-east-1']; tight)]
+#  │                   │         └── c_p_id:17 = p_id:25 [outer=(17,25), constraints=(/17: (/NULL - ]; /25: (/NULL - ]), fd=(17)==(25), (25)==(17)]
+#  │                   ├── lookup columns are key
+#  │                   ├── stats: [rows=660, distinct(17)=98.9983, null(17)=0, distinct(25)=98.9983, null(25)=0, distinct(26)=3, null(26)=0]
+#  │                   ├── cost: 1735.15
+#  │                   ├── key: (16)
+#  │                   ├── fd: (16)-->(17,18), (25)-->(26), (17)==(25), (25)==(17)
+#  │                   ├── limit hint: 3.00
+#  │                   ├── scan child
+#  │                   │    ├── columns: c_id:16 c_p_id:17 child.crdb_region:18
+#  │                   │    ├── constraint: /18/16: [/'ca-central-1' - /'us-east-1']
+#  │                   │    ├── stats: [rows=666.6667, distinct(16)=666.667, null(16)=0, distinct(17)=99.9983, null(17)=6.66667, distinct(18)=2, null(18)=0]
+#  │                   │    ├── cost: 326.02
+#  │                   │    ├── key: (16)
+#  │                   │    ├── fd: (16)-->(17,18)
+#  │                   │    └── limit hint: 100.00
+#  │                   └── filters (true)
+#  └── 3
+[GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin, Explore]
+(LookupJoin
+    $input:* &
+        (IsRegionalByRowTableScanOrSelect $input) &
+        (LocalityOptimizedScanAboveMaxCardinality $input)
+    $on:*
+    $private:* &
+        ^(IsAntiJoin $private) &
+        (Let
+            (
+                $localExpr
+                $remoteExpr
+                $ok
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
+            $ok
+        ) &
+        (Let
+            (
+                $inputScan
+                $inputFilters
+                $ok2
+            ):(CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins
+                (Root)
+            )
+            $ok2
+        )
+)
+=>
+(GenerateLocalityOptimizedSearchOfLookupJoins
+    (Root)
+    $inputScan
+    $inputFilters
+    (CreateLocalityOptimizedLookupJoinPrivate
+        $localExpr
+        $remoteExpr
+        $private
+    )
+)
+
+# GenerateLocalityOptimizedSearchOfLOJs converts a lookup join with a REGIONAL
+# BY ROW table as the input relation into a locality-optimized search of two
+# lookup joins, with the left branch reading local rows from the input table and
+# the right branch reading remote rows from the input table.
+#
+# For example, suppose we have a multi-region database with regions
+# 'ca-central-1', 'us-east-1' and 'ap-southeast-2', and we have the following
+# tables and query, issued from region 'ap-southeast-2':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY,
+#     p_attr INT
+#   ) LOCALITY REGIONAL BY TABLE;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child INNER LOOKUP JOIN parent ON c_p_id = p_id LIMIT 3;
+#
+# Normally, this would produce the following plan:
+#
+# distribute
+#  ├── columns: c_id:1 c_p_id:2 p_id:6 p_attr:7
+#  ├── cardinality: [0 - 3]
+#  ├── stats: [rows=3]
+#  ├── cost: 1138.34
+#  ├── key: (1)
+#  ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#  ├── distribution: ap-southeast-2
+#  ├── input distribution: ap-southeast-2,ca-central-1,us-east-1
+#  ├── prune: (1,7)
+#  └── limit
+#       ├── columns: c_id:1 c_p_id:2 p_id:6 p_attr:7
+#       ├── cardinality: [0 - 3]
+#       ├── stats: [rows=3]
+#       ├── cost: 938.33
+#       ├── key: (1)
+#       ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#       ├── prune: (1,7)
+#       ├── inner-join (lookup parent)
+#       │    ├── columns: c_id:1 c_p_id:2 p_id:6 p_attr:7
+#       │    ├── flags: force lookup join (into right side)
+#       │    ├── key columns: [2] = [6]
+#       │    ├── lookup columns are key
+#       │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(6)=99, null(6)=0]
+#       │    ├── cost: 938.29
+#       │    ├── key: (1)
+#       │    ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#       │    ├── limit hint: 3.00
+#       │    ├── prune: (1,7)
+#       │    ├── scan child
+#       │    │    ├── columns: c_id:1 c_p_id:2
+#       │    │    ├── check constraint expressions
+#       │    │    │    └── crdb_region:3 IN ('ap-southeast-2', 'ca-central-1', 'us-east-1') [outer=(3), constraints=(/3: [/'ap-southeast-2' - /'ap-southeast-2'] [/'ca-central-1' - /'ca-central-1'] [/'us-east-1' - /'us-east-1']; tight)]
+#       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+#       │    │    ├── cost: 332.02
+#       │    │    ├── key: (1)
+#       │    │    ├── fd: (1)-->(2)
+#       │    │    ├── limit hint: 100.00
+#       │    │    ├── prune: (1,2)
+#       │    │    └── unfiltered-cols: (1-5)
+#       │    └── filters (true)
+#       └── 3
+#
+# but if the session setting locality_optimized_partitioned_index_scan is
+# enabled, the optimizer will produce this plan:
+#
+# limit
+#  ├── columns: c_id:1 c_p_id:2 p_id:6 p_attr:7
+#  ├── cardinality: [0 - 3]
+#  ├── stats: [rows=3]
+#  ├── cost: 0.257452
+#  ├── key: (1)
+#  ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#  ├── distribution: ap-southeast-2
+#  ├── prune: (1,7)
+#  ├── locality-optimized-search
+#  │    ├── columns: c_id:1 c_p_id:2 p_id:6 p_attr:7
+#  │    ├── left columns: c_id:11 c_p_id:12 p_id:21 p_attr:22
+#  │    ├── right columns: c_id:16 c_p_id:17 p_id:25 p_attr:26
+#  │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(6)=99, null(6)=0]
+#  │    ├── cost: 0.217452
+#  │    ├── key: (1)
+#  │    ├── fd: (1)-->(2), (6)-->(7), (2)==(6), (6)==(2)
+#  │    ├── limit hint: 3.00
+#  │    ├── distribution: ap-southeast-2
+#  │    ├── prune: (1,7)
+#  │    ├── project
+#  │    │    ├── columns: c_id:11 c_p_id:12 p_id:21 p_attr:22
+#  │    │    ├── immutable
+#  │    │    ├── stats: [rows=330]
+#  │    │    ├── cost: 735.61
+#  │    │    ├── key: (11)
+#  │    │    ├── fd: (11)-->(12), (21)-->(22), (12)==(21), (21)==(12)
+#  │    │    ├── limit hint: 3.00
+#  │    │    └── inner-join (lookup parent)
+#  │    │         ├── columns: c_id:11 c_p_id:12 crdb_region:13 p_id:21 p_attr:22
+#  │    │         ├── flags: force lookup join (into right side)
+#  │    │         ├── key columns: [12] = [21]
+#  │    │         ├── lookup columns are key
+#  │    │         ├── immutable
+#  │    │         ├── stats: [rows=330, distinct(12)=97.2658, null(12)=0, distinct(21)=97.2658, null(21)=0]
+#  │    │         ├── cost: 732.29
+#  │    │         ├── key: (11)
+#  │    │         ├── fd: ()-->(13), (11)-->(12), (21)-->(22), (12)==(21), (21)==(12)
+#  │    │         ├── limit hint: 3.00
+#  │    │         ├── scan child
+#  │    │         │    ├── columns: c_id:11 c_p_id:12 crdb_region:13
+#  │    │         │    ├── constraint: /13/11: [/'ap-southeast-2' - /'ap-southeast-2']
+#  │    │         │    ├── immutable
+#  │    │         │    ├── stats: [rows=333.3333, distinct(11)=333.333, null(11)=0, distinct(12)=98.2658, null(12)=3.33333, distinct(13)=1, null(13)=0]
+#  │    │         │    ├── cost: 126.02
+#  │    │         │    ├── key: (11)
+#  │    │         │    ├── fd: ()-->(13), (11)-->(12)
+#  │    │         │    └── limit hint: 100.00
+#  │    │         └── filters (true)
+#  │    └── project
+#  │         ├── columns: c_id:16 c_p_id:17 p_id:25 p_attr:26
+#  │         ├── stats: [rows=660]
+#  │         ├── cost: 938.91
+#  │         ├── key: (16)
+#  │         ├── fd: (16)-->(17,25,26), (25)-->(26), (17)==(25), (25)==(17)
+#  │         ├── limit hint: 3.00
+#  │         └── inner-join (lookup parent)
+#  │              ├── columns: c_id:16 c_p_id:17 crdb_region:18 p_id:25 p_attr:26
+#  │              ├── flags: force lookup join (into right side)
+#  │              ├── key columns: [17] = [25]
+#  │              ├── lookup columns are key
+#  │              ├── stats: [rows=660, distinct(17)=98.9983, null(17)=0, distinct(25)=98.9983, null(25)=0]
+#  │              ├── cost: 932.29
+#  │              ├── key: (16)
+#  │              ├── fd: (16)-->(17,18), (25)-->(26), (17)==(25), (25)==(17)
+#  │              ├── limit hint: 3.00
+#  │              ├── scan child
+#  │              │    ├── columns: c_id:16 c_p_id:17 crdb_region:18
+#  │              │    ├── constraint: /18/16: [/'ca-central-1' - /'us-east-1']
+#  │              │    ├── stats: [rows=666.6667, distinct(16)=666.667, null(16)=0, distinct(17)=99.9983, null(17)=6.66667, distinct(18)=2, null(18)=0]
+#  │              │    ├── cost: 326.02
+#  │              │    ├── key: (16)
+#  │              │    ├── fd: (16)-->(17,18)
+#  │              │    └── limit hint: 100.00
+#  │              └── filters (true)
+#  └── 3
+#
+[GenerateLocalityOptimizedSearchOfLOJs, Explore]
+(LookupJoin
+    $input:* &
+        (IsRegionalByRowTableScanOrSelect $input) &
+        (LocalityOptimizedScanAboveMaxCardinality $input) &
+        (LookupsAreLocal (Root))
+    *
+    $private:* &
+        ^(IsAntiJoin $private) &
+        ^(IsLocalityOptimizedJoin $private) &
+        (Let
+            (
+                $inputScan
+                $inputFilters
+                $ok
+            ):(CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins
+                (Root)
+            )
+            $ok
+        )
+)
+=>
+(GenerateLocalityOptimizedSearchLOJ
+    (Root)
+    $inputScan
+    $inputFilters
 )

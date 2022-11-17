@@ -578,7 +578,17 @@ func (o *Optimizer) optimizeGroupMember(
 			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
 
 			// Accumulate cost of children.
-			cost += childCost
+			if member.Op() == opt.LocalityOptimizedSearchOp {
+				// If the child ops are locality optimized, divide the cost by 3 in
+				// order to make the total cost of the two ops in the locality optimized
+				// plan less than the cost of the single scan in the non-locality
+				// optimized plan.
+				// TODO(msirek): This is hacky. We should really be making this
+				//               determination based on the latency between regions.
+				cost += childCost / 3
+			} else {
+				cost += childCost
+			}
 
 			// If any child expression is not fully optimized, then the parent
 			// expression is also not fully optimized.
