@@ -1429,13 +1429,13 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 				}
 			}
 			if constraint := m.AsConstraint(); constraint != nil && constraint.Adding() {
-				if fk := constraint.AsForeignKey(); fk != nil && fk.Validity == descpb.ConstraintValidity_Unvalidated {
+				if fk := constraint.ForeignKey(); fk != nil && fk.Validity == descpb.ConstraintValidity_Unvalidated {
 					// Add backreference on the referenced table (which could be the same table)
 					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk)
+					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKeyDeepCopy())
 					if backrefTable != scTable {
 						if err := descsCol.WriteDescToBatch(ctx, kvTrace, backrefTable, b); err != nil {
 							return err
@@ -2008,7 +2008,7 @@ func (sc *SchemaChanger) maybeReverseMutations(ctx context.Context, causingError
 					return err
 				}
 				// Get the foreign key backreferences to remove.
-				if fk := constraint.AsForeignKey(); fk != nil {
+				if fk := constraint.ForeignKey(); fk != nil {
 					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
 					if err != nil {
 						return err
@@ -2122,7 +2122,7 @@ func (sc *SchemaChanger) updateJobForRollback(
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
 	ctx context.Context, desc *tabledesc.Mutable, constraint catalog.Constraint,
 ) error {
-	if constraint.AsCheck() != nil {
+	if constraint.Check() != nil {
 		if constraint.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
 			return nil
 		}
@@ -2137,7 +2137,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
 			constraint.GetName(),
 		)
-	} else if constraint.AsForeignKey() != nil {
+	} else if constraint.ForeignKey() != nil {
 		for i, fk := range desc.OutboundFKs {
 			if fk.Name == constraint.GetName() {
 				desc.OutboundFKs = append(desc.OutboundFKs[:i], desc.OutboundFKs[i+1:]...)
@@ -2149,7 +2149,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			"attempted to drop constraint %s, but it hadn't been added to the table descriptor yet",
 			constraint.GetName(),
 		)
-	} else if constraint.AsUniqueWithoutIndex() != nil {
+	} else if constraint.UniqueWithoutIndex() != nil {
 		if constraint.GetConstraintValidity() == descpb.ConstraintValidity_Unvalidated {
 			return nil
 		}
@@ -3225,7 +3225,7 @@ func isCurrentMutationDiscarded(
 	if constraint := currentMutation.AsConstraint(); constraint != nil {
 		if colID := constraint.NotNullColumnID(); colID != 0 {
 			colToCheck = append(colToCheck, colID)
-		} else if ck := constraint.AsCheck(); ck != nil {
+		} else if ck := constraint.Check(); ck != nil {
 			colToCheck = ck.ColumnIDs
 		}
 	}

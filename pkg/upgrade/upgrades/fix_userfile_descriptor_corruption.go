@@ -140,7 +140,7 @@ func mutationsLookLikeuserfilePayloadCorruption(
 	mutation := tableDesc.AllMutations()[0]
 	if mutation.Adding() && mutation.DeleteOnly() {
 		if constraintMutation := mutation.AsConstraint(); constraintMutation != nil {
-			if fkConstraint := constraintMutation.AsForeignKey(); fkConstraint != nil {
+			if fkConstraint := constraintMutation.ForeignKey(); fkConstraint != nil {
 				targetTableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, fkConstraint.ReferencedTableID, tree.ObjectLookupFlags{
 					CommonLookupFlags: tree.CommonLookupFlags{
 						IncludeOffline: true,

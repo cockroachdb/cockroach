@@ -404,7 +404,7 @@ func (sc *SchemaChanger) runBackfill(ctx context.Context) error {
 func shouldSkipConstraintValidation(
 	tableDesc catalog.TableDescriptor, c catalog.Constraint,
 ) (bool, error) {
-	check := c.AsCheck()
+	check := c.Check()
 	if check == nil {
 		return false, nil
 	}
@@ -437,7 +437,7 @@ func (sc *SchemaChanger) dropConstraints(
 
 	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
-		if fk := c.AsForeignKey(); fk != nil {
+		if fk := c.ForeignKey(); fk != nil {
 			id := fk.ReferencedTableID
 			if id != sc.descID {
 				fksByBackrefTable[id] = append(fksByBackrefTable[id], c)
@@ -453,7 +453,7 @@ func (sc *SchemaChanger) dropConstraints(
 		}
 		b := txn.NewBatch()
 		for _, constraint := range constraints {
-			if constraint.AsCheck() != nil {
+			if constraint.Check() != nil {
 				found := false
 				for j, c := range scTable.Checks {
 					if c.Name == constraint.GetName() {
@@ -470,7 +470,7 @@ func (sc *SchemaChanger) dropConstraints(
 						constraint,
 					)
 				}
-			} else if fk := constraint.AsForeignKey(); fk != nil {
+			} else if fk := constraint.ForeignKey(); fk != nil {
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
@@ -503,7 +503,7 @@ func (sc *SchemaChanger) dropConstraints(
 						constraint,
 					)
 				}
-			} else if constraint.AsUniqueWithoutIndex() != nil {
+			} else if constraint.UniqueWithoutIndex() != nil {
 				found := false
 				for j, c := range scTable.UniqueWithoutIndexConstraints {
 					if c.Name == constraint.GetName() {
@@ -579,7 +579,7 @@ func (sc *SchemaChanger) addConstraints(
 
 	fksByBackrefTable := make(map[descpb.ID][]catalog.Constraint)
 	for _, c := range constraints {
-		if fk := c.AsForeignKey(); fk != nil {
+		if fk := c.ForeignKey(); fk != nil {
 			id := fk.ReferencedTableID
 			if id != sc.descID {
 				fksByBackrefTable[id] = append(fksByBackrefTable[id], c)
@@ -598,7 +598,7 @@ func (sc *SchemaChanger) addConstraints(
 
 		b := txn.NewBatch()
 		for _, constraint := range constraints {
-			if ck := constraint.AsCheck(); ck != nil {
+			if ck := constraint.Check(); ck != nil {
 				found := false
 				for _, c := range scTable.Checks {
 					if c.Name == constraint.GetName() {
@@ -618,7 +618,7 @@ func (sc *SchemaChanger) addConstraints(
 				if !found {
 					scTable.Checks = append(scTable.Checks, ck)
 				}
-			} else if fk := constraint.AsForeignKey(); fk != nil {
+			} else if fk := constraint.ForeignKey(); fk != nil {
 				var foundExisting bool
 				for j := range scTable.OutboundFKs {
 					def := &scTable.OutboundFKs[j]
@@ -639,8 +639,8 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !foundExisting {
-					scTable.OutboundFKs = append(scTable.OutboundFKs, *fk)
-					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, fk.ReferencedTableID, txn)
+					scTable.OutboundFKs = append(scTable.OutboundFKs, constraint.ForeignKeyDeepCopy())
+					backrefTable, err := descsCol.GetMutableTableVersionByID(ctx, constraint.ForeignKey().ReferencedTableID, txn)
 					if err != nil {
 						return err
 					}
@@ -657,7 +657,7 @@ func (sc *SchemaChanger) addConstraints(
 					if err != nil {
 						return err
 					}
-					backrefTable.InboundFKs = append(backrefTable.InboundFKs, *fk)
+					backrefTable.InboundFKs = append(backrefTable.InboundFKs, constraint.ForeignKeyDeepCopy())
 
 					// Note that this code may add the same descriptor to the batch
 					// multiple times if it is referenced multiple times. That's fine as
@@ -671,7 +671,7 @@ func (sc *SchemaChanger) addConstraints(
 						}
 					}
 				}
-			} else if uwi := constraint.AsUniqueWithoutIndex(); uwi != nil {
+			} else if uwi := constraint.UniqueWithoutIndex(); uwi != nil {
 				found := false
 				for _, c := range scTable.UniqueWithoutIndexConstraints {
 					if c.Name == constraint.GetName() {
@@ -689,7 +689,8 @@ func (sc *SchemaChanger) addConstraints(
 					}
 				}
 				if !found {
-					scTable.UniqueWithoutIndexConstraints = append(scTable.UniqueWithoutIndexConstraints, *uwi)
+					scTable.UniqueWithoutIndexConstraints = append(scTable.UniqueWithoutIndexConstraints,
+						constraint.UniqueWithoutIndexDeepCopy())
 				}
 			}
 		}
@@ -778,7 +779,7 @@ func (sc *SchemaChanger) validateConstraints(
 				// TODO (rohany): When to release this? As of now this is only going to get released
 				//  after the check is validated.
 				defer func() { collection.ReleaseAll(ctx) }()
-				if ck := c.AsCheck(); ck != nil {
+				if ck := c.Check(); ck != nil {
 					if err := validateCheckInTxn(
 						ctx, &semaCtx, evalCtx.SessionData(), desc, txn, ie, ck.Expr,
 					); err != nil {
@@ -790,11 +791,11 @@ func (sc *SchemaChanger) validateConstraints(
 						}
 						return err
 					}
-				} else if c.AsForeignKey() != nil {
+				} else if c.ForeignKey() != nil {
 					if err := validateFkInTxn(ctx, desc, txn, ie, collection, c.GetName()); err != nil {
 						return err
 					}
-				} else if c.AsUniqueWithoutIndex() != nil {
+				} else if c.UniqueWithoutIndex() != nil {
 					if err := validateUniqueWithoutIndexConstraintInTxn(ctx, desc, txn, ie, evalCtx.SessionData().User(), c.GetName()); err != nil {
 						return err
 					}
@@ -1523,7 +1524,7 @@ func ValidateCheckConstraint(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-	ck := constraint.AsCheck()
+	ck := constraint.Check()
 	if ck == nil {
 		return errors.AssertionFailedf("%v is not a check constraint", constraint.GetName())
 	}
@@ -2411,14 +2412,14 @@ func runSchemaChangesInTxn(
 					return err
 				}
 			} else if c := m.AsConstraint(); c != nil {
-				if c.AsCheck() != nil {
+				if c.Check() != nil {
 					for i := range tableDesc.Checks {
 						if tableDesc.Checks[i].Name == c.GetName() {
 							tableDesc.Checks = append(tableDesc.Checks[:i], tableDesc.Checks[i+1:]...)
 							break
 						}
 					}
-				} else if c.AsForeignKey() != nil {
+				} else if c.ForeignKey() != nil {
 					for i := range tableDesc.OutboundFKs {
 						fk := &tableDesc.OutboundFKs[i]
 						if fk.Name == c.GetName() {
@@ -2429,7 +2430,7 @@ func runSchemaChangesInTxn(
 							break
 						}
 					}
-				} else if c.AsUniqueWithoutIndex() != nil {
+				} else if c.UniqueWithoutIndex() != nil {
 					for i := range tableDesc.UniqueWithoutIndexConstraints {
 						if tableDesc.UniqueWithoutIndexConstraints[i].Name == c.GetName() {
 							tableDesc.UniqueWithoutIndexConstraints = append(
@@ -2455,17 +2456,17 @@ func runSchemaChangesInTxn(
 		ctu := &descpb.ConstraintToUpdate{
 			Name: c.GetName(),
 		}
-		if ck := c.AsCheck(); ck != nil {
+		if ck := c.Check(); ck != nil {
 			ctu.ConstraintType = descpb.ConstraintToUpdate_CHECK
 			ctu.Check = *ck
 			if c.NotNullColumnID() != 0 {
 				ctu.ConstraintType = descpb.ConstraintToUpdate_NOT_NULL
 				ctu.NotNullColumn = c.NotNullColumnID()
 			}
-		} else if fk := c.AsForeignKey(); fk != nil {
+		} else if fk := c.ForeignKey(); fk != nil {
 			ctu.ConstraintType = descpb.ConstraintToUpdate_FOREIGN_KEY
 			ctu.ForeignKey = *fk
-		} else if uwi := c.AsUniqueWithoutIndex(); uwi != nil {
+		} else if uwi := c.UniqueWithoutIndex(); uwi != nil {
 			ctu.ConstraintType = descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
 			ctu.UniqueWithoutIndexConstraint = *uwi
 		} else {
@@ -2486,7 +2487,7 @@ func runSchemaChangesInTxn(
 	// Now that the table descriptor is in a valid state with all column and index
 	// mutations applied, it can be used for validating check/FK constraints.
 	for _, c := range constraintAdditionMutations {
-		if check := c.AsCheck(); check != nil {
+		if check := c.Check(); check != nil {
 			if check.Validity == descpb.ConstraintValidity_Validating {
 				if err := planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 					return validateCheckInTxn(ctx, &planner.semaCtx, planner.SessionData(), tableDesc, txn, ie, check.Expr)
@@ -2495,7 +2496,7 @@ func runSchemaChangesInTxn(
 				}
 				check.Validity = descpb.ConstraintValidity_Validated
 			}
-		} else if fk := c.AsForeignKey(); fk != nil {
+		} else if fk := c.ForeignKey(); fk != nil {
 			// We can't support adding a validated foreign key constraint in the same
 			// transaction as the CREATE TABLE statement. This would require adding
 			// the backreference to the other table and then validating the constraint
@@ -2509,7 +2510,7 @@ func runSchemaChangesInTxn(
 			//
 			// For now, just always add the FK as unvalidated.
 			fk.Validity = descpb.ConstraintValidity_Unvalidated
-		} else if uwi := c.AsUniqueWithoutIndex(); uwi != nil {
+		} else if uwi := c.UniqueWithoutIndex(); uwi != nil {
 			if uwi.Validity == descpb.ConstraintValidity_Validating {
 				if err := planner.WithInternalExecutor(ctx, func(ctx context.Context, txn *kv.Txn, ie sqlutil.InternalExecutor) error {
 					return validateUniqueWithoutIndexConstraintInTxn(
@@ -2535,9 +2536,9 @@ func runSchemaChangesInTxn(
 	// certain assumptions about the state in the usual schema changer) and just
 	// update the table descriptor directly.
 	for _, c := range constraintAdditionMutations {
-		if ck := c.AsCheck(); ck != nil {
+		if ck := c.Check(); ck != nil {
 			tableDesc.Checks = append(tableDesc.Checks, ck)
-		} else if fk := c.AsForeignKey(); fk != nil {
+		} else if fk := c.ForeignKey(); fk != nil {
 			var referencedTableDesc *tabledesc.Mutable
 			// We don't want to lookup/edit a second copy of the same table.
 			selfReference := tableDesc.ID == fk.ReferencedTableID
@@ -2564,7 +2565,7 @@ func runSchemaChangesInTxn(
 					return err
 				}
 			}
-		} else if uwi := c.AsUniqueWithoutIndex(); uwi != nil {
+		} else if uwi := c.UniqueWithoutIndex(); uwi != nil {
 			tableDesc.UniqueWithoutIndexConstraints = append(tableDesc.UniqueWithoutIndexConstraints, *uwi)
 		} else {
 			return errors.AssertionFailedf("unsupported constraint type: %s", c)

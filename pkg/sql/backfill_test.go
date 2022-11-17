@@ -22,16 +22,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// constraintToUpdateForTest implements the catalog.Constraint interface.
+// constraintForTest implements the catalog.Constraint interface.
 // It's only used for testing
-type constraintToUpdateForTest struct {
+type constraintForTest struct {
 	catalog.Constraint
-	desc *descpb.ConstraintToUpdate
+	//desc *descpb.ConstraintToUpdate
+	detail descpb.ConstraintDetail
+}
+
+// IsCheck returns true iff this is an update for a check constraint.
+func (c constraintForTest) IsCheck() bool {
+	return c.detail.CheckConstraint != nil
 }
 
 // Check returns the underlying check constraint, if there is one.
-func (c constraintToUpdateForTest) AsCheck() *descpb.TableDescriptor_CheckConstraint {
-	return &c.desc.Check
+func (c constraintForTest) Check() *descpb.TableDescriptor_CheckConstraint {
+	return c.detail.CheckConstraint
 }
 
 func TestShouldSkipConstraintValidation(t *testing.T) {
@@ -103,17 +109,17 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 
 	type testCase struct {
 		name           string
-		constraint     constraintToUpdateForTest
+		constraint     constraintForTest
 		expectedResult bool
 	}
 
 	tcs := []testCase{
 		{
 			name: "test_adding_shard_col_check_constraint",
-			constraint: constraintToUpdateForTest{
-				desc: &descpb.ConstraintToUpdate{
-					ConstraintType: descpb.ConstraintToUpdate_CHECK,
-					Check: descpb.TableDescriptor_CheckConstraint{
+			constraint: constraintForTest{
+				detail: descpb.ConstraintDetail{
+					Kind: descpb.ConstraintTypeCheck,
+					CheckConstraint: &descpb.TableDescriptor_CheckConstraint{
 						Expr:                  "some fake expr",
 						Name:                  "some fake name",
 						Validity:              descpb.ConstraintValidity_Validating,
@@ -126,10 +132,10 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 		},
 		{
 			name: "test_adding_non_shard_col_check_constraint",
-			constraint: constraintToUpdateForTest{
-				desc: &descpb.ConstraintToUpdate{
-					ConstraintType: descpb.ConstraintToUpdate_CHECK,
-					Check: descpb.TableDescriptor_CheckConstraint{
+			constraint: constraintForTest{
+				detail: descpb.ConstraintDetail{
+					Kind: descpb.ConstraintTypeCheck,
+					CheckConstraint: &descpb.TableDescriptor_CheckConstraint{
 						Expr:                  "some fake expr",
 						Name:                  "some fake name",
 						Validity:              descpb.ConstraintValidity_Validating,
@@ -142,10 +148,10 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 		},
 		{
 			name: "test_adding_multi_col_check_constraint",
-			constraint: constraintToUpdateForTest{
-				desc: &descpb.ConstraintToUpdate{
-					ConstraintType: descpb.ConstraintToUpdate_CHECK,
-					Check: descpb.TableDescriptor_CheckConstraint{
+			constraint: constraintForTest{
+				detail: descpb.ConstraintDetail{
+					Kind: descpb.ConstraintTypeCheck,
+					CheckConstraint: &descpb.TableDescriptor_CheckConstraint{
 						Expr:                  "some fake expr",
 						Name:                  "some fake name",
 						Validity:              descpb.ConstraintValidity_Validating,
@@ -158,9 +164,10 @@ func TestShouldSkipConstraintValidation(t *testing.T) {
 		},
 		{
 			name: "test_adding_non_check_constraint",
-			constraint: constraintToUpdateForTest{
-				desc: &descpb.ConstraintToUpdate{
-					ConstraintType: descpb.ConstraintToUpdate_FOREIGN_KEY,
+			constraint: constraintForTest{
+				detail: descpb.ConstraintDetail{
+					Kind: descpb.ConstraintTypeFK,
+					FK:   &descpb.ForeignKeyConstraint{},
 				},
 			},
 			expectedResult: false,

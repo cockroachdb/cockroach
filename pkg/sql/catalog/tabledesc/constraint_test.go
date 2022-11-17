@@ -29,7 +29,7 @@ func TestConstraintRetrieval(t *testing.T) {
 	//  - Indexes: [a non-unique index, ID_4:validated]
 	//  - Checks: [ID_2:validated], [ID_3:unvalidated]
 	//  - OutboundFKs: [ID_6:validated]
-	//  - InboundFKs: [ID_5:validated]
+	//  - InboundFKs: [ID_5:validated]  -- This should not be included in the result though bc when we say "FK constraints in table, we implicitly mean *outbound* FK constraints from this table".
 	//  - UniqueWithoutIndexConstraints: [ID_7:dropping]
 	//  - mutation slice: [ID_7:dropping:UniqueWithoutIndex, ID_8:validating:Check, ID_9:validating:UniqueIndex, a non-unique index]
 	primaryIndex := descpb.IndexDescriptor{
@@ -132,16 +132,15 @@ func TestConstraintRetrieval(t *testing.T) {
 		sort.Slice(all, func(i, j int) bool {
 			return all[i].GetConstraintID() < all[j].GetConstraintID()
 		})
-		require.Equal(t, len(all), 9)
+		require.Equal(t, len(all), 8)
 		checkIndexBackedConstraint(t, all[0], 1, descpb.ConstraintValidity_Validated, descpb.PrimaryIndexEncoding)
 		checkNonIndexBackedConstraint(t, all[1], 2, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_CHECK)
 		checkNonIndexBackedConstraint(t, all[2], 3, descpb.ConstraintValidity_Unvalidated, descpb.ConstraintToUpdate_CHECK)
 		checkIndexBackedConstraint(t, all[3], 4, descpb.ConstraintValidity_Validated, descpb.SecondaryIndexEncoding)
-		checkNonIndexBackedConstraint(t, all[4], 5, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
-		checkNonIndexBackedConstraint(t, all[5], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
-		checkNonIndexBackedConstraint(t, all[6], 7, descpb.ConstraintValidity_Dropping, descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX)
-		checkNonIndexBackedConstraint(t, all[7], 8, descpb.ConstraintValidity_Validating, descpb.ConstraintToUpdate_CHECK)
-		checkIndexBackedConstraint(t, all[8], 9, descpb.ConstraintValidity_Validating, descpb.SecondaryIndexEncoding)
+		checkNonIndexBackedConstraint(t, all[4], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
+		checkNonIndexBackedConstraint(t, all[5], 7, descpb.ConstraintValidity_Dropping, descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX)
+		checkNonIndexBackedConstraint(t, all[6], 8, descpb.ConstraintValidity_Validating, descpb.ConstraintToUpdate_CHECK)
+		checkIndexBackedConstraint(t, all[7], 9, descpb.ConstraintValidity_Validating, descpb.SecondaryIndexEncoding)
 	})
 
 	t.Run("test-AllActiveAndInactiveConstraints", func(t *testing.T) {
@@ -149,15 +148,14 @@ func TestConstraintRetrieval(t *testing.T) {
 		sort.Slice(allActiveAndInactive, func(i, j int) bool {
 			return allActiveAndInactive[i].GetConstraintID() < allActiveAndInactive[j].GetConstraintID()
 		})
-		require.Equal(t, len(allActiveAndInactive), 8)
+		require.Equal(t, len(allActiveAndInactive), 7)
 		checkIndexBackedConstraint(t, allActiveAndInactive[0], 1, descpb.ConstraintValidity_Validated, descpb.PrimaryIndexEncoding)
 		checkNonIndexBackedConstraint(t, allActiveAndInactive[1], 2, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_CHECK)
 		checkNonIndexBackedConstraint(t, allActiveAndInactive[2], 3, descpb.ConstraintValidity_Unvalidated, descpb.ConstraintToUpdate_CHECK)
 		checkIndexBackedConstraint(t, allActiveAndInactive[3], 4, descpb.ConstraintValidity_Validated, descpb.SecondaryIndexEncoding)
-		checkNonIndexBackedConstraint(t, allActiveAndInactive[4], 5, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
-		checkNonIndexBackedConstraint(t, allActiveAndInactive[5], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
-		checkNonIndexBackedConstraint(t, allActiveAndInactive[6], 8, descpb.ConstraintValidity_Validating, descpb.ConstraintToUpdate_CHECK)
-		checkIndexBackedConstraint(t, allActiveAndInactive[7], 9, descpb.ConstraintValidity_Validating, descpb.SecondaryIndexEncoding)
+		checkNonIndexBackedConstraint(t, allActiveAndInactive[4], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
+		checkNonIndexBackedConstraint(t, allActiveAndInactive[5], 8, descpb.ConstraintValidity_Validating, descpb.ConstraintToUpdate_CHECK)
+		checkIndexBackedConstraint(t, allActiveAndInactive[6], 9, descpb.ConstraintValidity_Validating, descpb.SecondaryIndexEncoding)
 	})
 
 	t.Run("test-AllActiveConstraints", func(t *testing.T) {
@@ -165,12 +163,11 @@ func TestConstraintRetrieval(t *testing.T) {
 		sort.Slice(allActive, func(i, j int) bool {
 			return allActive[i].GetConstraintID() < allActive[j].GetConstraintID()
 		})
-		require.Equal(t, len(allActive), 5)
+		require.Equal(t, len(allActive), 4)
 		checkIndexBackedConstraint(t, allActive[0], 1, descpb.ConstraintValidity_Validated, descpb.PrimaryIndexEncoding)
 		checkNonIndexBackedConstraint(t, allActive[1], 2, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_CHECK)
 		checkIndexBackedConstraint(t, allActive[2], 4, descpb.ConstraintValidity_Validated, descpb.SecondaryIndexEncoding)
-		checkNonIndexBackedConstraint(t, allActive[3], 5, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
-		checkNonIndexBackedConstraint(t, allActive[4], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
+		checkNonIndexBackedConstraint(t, allActive[3], 6, descpb.ConstraintValidity_Validated, descpb.ConstraintToUpdate_FOREIGN_KEY)
 	})
 }
 
@@ -188,14 +185,14 @@ func checkIndexBackedConstraint(
 ) {
 	require.Equal(t, expectedID, c.GetConstraintID())
 	require.Equal(t, expectedValidity, c.GetConstraintValidity())
-	idx := c.AsUnique()
+	idx := c.Unique()
 	if idx != nil {
-		idx = c.AsPrimaryKey()
+		idx = c.PrimaryKey()
 	}
 	require.NotNil(t, idx)
-	require.Equal(t, expectedEncodingType, idx.IndexDesc().EncodingType)
+	require.Equal(t, expectedEncodingType, idx.EncodingType)
 	if expectedEncodingType == descpb.SecondaryIndexEncoding {
-		require.Equal(t, true, idx.IndexDesc().Unique)
+		require.Equal(t, true, idx.Unique)
 	}
 }
 
@@ -212,25 +209,25 @@ func checkNonIndexBackedConstraint(
 	require.Equal(t, expectedValidity, c.GetConstraintValidity())
 	switch expectedType {
 	case descpb.ConstraintToUpdate_CHECK:
-		require.NotNil(t, c.AsCheck())
+		require.NotNil(t, c.Check())
 		require.Zero(t, c.NotNullColumnID())
-		require.Nil(t, c.AsForeignKey())
-		require.Nil(t, c.AsUniqueWithoutIndex())
+		require.Nil(t, c.ForeignKey())
+		require.Nil(t, c.UniqueWithoutIndex())
 	case descpb.ConstraintToUpdate_NOT_NULL:
-		require.NotNil(t, c.AsCheck())
+		require.NotNil(t, c.Check())
 		require.NotZero(t, c.NotNullColumnID())
-		require.Nil(t, c.AsForeignKey())
-		require.Nil(t, c.AsUniqueWithoutIndex())
+		require.Nil(t, c.ForeignKey())
+		require.Nil(t, c.UniqueWithoutIndex())
 	case descpb.ConstraintToUpdate_FOREIGN_KEY:
-		require.Nil(t, c.AsCheck())
+		require.Nil(t, c.Check())
 		require.Zero(t, c.NotNullColumnID())
-		require.NotNil(t, c.AsForeignKey())
-		require.Nil(t, c.AsUniqueWithoutIndex())
+		require.NotNil(t, c.ForeignKey())
+		require.Nil(t, c.UniqueWithoutIndex())
 	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-		require.Nil(t, c.AsCheck())
+		require.Nil(t, c.Check())
 		require.Zero(t, c.NotNullColumnID())
-		require.Nil(t, c.AsForeignKey())
-		require.NotNil(t, c.AsUniqueWithoutIndex())
+		require.Nil(t, c.ForeignKey())
+		require.NotNil(t, c.UniqueWithoutIndex())
 	default:
 		t.Fatalf("unexpected constraint type %d", expectedType)
 	}

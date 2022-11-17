@@ -45,7 +45,9 @@ type constraintCache struct {
 
 // newConstraintCache returns a fresh fully-populated constraintCache struct for the
 // TableDescriptor.
-func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) *constraintCache {
+func newConstraintCache(
+	desc *descpb.TableDescriptor, columns *columnCache, mutations *mutationCache,
+) *constraintCache {
 	c := constraintCache{}
 
 	// addIfNotExists is a function that adds constraint `c` to slice `dest` if this
@@ -98,47 +100,70 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 	var allConstraints []catalog.Constraint
 	constraintIDs := make(map[descpb.ConstraintID]bool)
 	for _, cst := range []descpb.IndexDescriptor{desc.PrimaryIndex} {
-		backingStruct := index{
-			desc:                 &cst,
-			validityIfConstraint: descpb.ConstraintValidity_Validated,
+		backingStruct := constraint{
+			detail: descpb.ConstraintDetail{
+				Kind:                            descpb.ConstraintTypePK,
+				ConstraintID:                    cst.ConstraintID,
+				Columns:                         cst.KeyColumnNames,
+				Index:                           &cst,
+				ValidityIfIndexBackedConstraint: descpb.ConstraintValidity_Validated,
+			},
 		}
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 	}
 	for _, cst := range desc.Indexes {
 		if cst.Unique {
-			backingStruct := index{
-				desc:                 &cst,
-				validityIfConstraint: descpb.ConstraintValidity_Validated,
+			backingStruct := constraint{
+				detail: descpb.ConstraintDetail{
+					Kind:                            descpb.ConstraintTypeUnique,
+					ConstraintID:                    cst.ConstraintID,
+					Columns:                         cst.KeyColumnNames,
+					Index:                           &cst,
+					ValidityIfIndexBackedConstraint: descpb.ConstraintValidity_Validated,
+				},
 			}
 			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 		}
 	}
 	for _, cst := range desc.Checks {
 		backingStruct := constraint{
-			desc: &descpb.ConstraintToUpdate{
-				ConstraintType: descpb.ConstraintToUpdate_CHECK,
-				Name:           cst.Name,
-				Check:          *cst,
+			detail: descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypeCheck,
+				ConstraintID: cst.ConstraintID,
+				Columns:      columnNamesForColumnIDs(desc, columns, cst.ColumnIDs),
+				Details:      cst.Expr,
+				// Constraints in the Validating state are considered Unvalidated for this
+				// purpose.
+				Unvalidated:     cst.Validity != descpb.ConstraintValidity_Validated,
+				CheckConstraint: cst,
 			},
 		}
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 	}
-	for _, cst := range append(desc.OutboundFKs, desc.InboundFKs...) {
+	for _, cst := range desc.OutboundFKs {
 		backingStruct := constraint{
-			desc: &descpb.ConstraintToUpdate{
-				ConstraintType: descpb.ConstraintToUpdate_FOREIGN_KEY,
-				Name:           cst.Name,
-				ForeignKey:     cst,
+			detail: descpb.ConstraintDetail{
+				Kind:         descpb.ConstraintTypeFK,
+				ConstraintID: cst.ConstraintID,
+				Columns:      columnNamesForColumnIDs(desc, columns, cst.OriginColumnIDs),
+				Details:      "", // TODO (xiang): populate this field; it requires TableLookupFn
+				// Constraints in the Validating state are considered Unvalidated for this
+				// purpose.
+				Unvalidated:     cst.Validity != descpb.ConstraintValidity_Validated,
+				FK:              &cst,
+				ReferencedTable: nil, // TODO (xiang): populate this field; it requires TableLookupFn
 			},
 		}
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 	}
 	for _, cst := range desc.UniqueWithoutIndexConstraints {
 		backingStruct := constraint{
-			desc: &descpb.ConstraintToUpdate{
-				ConstraintType:               descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX,
-				Name:                         cst.Name,
-				UniqueWithoutIndexConstraint: cst,
+			detail: descpb.ConstraintDetail{
+				Kind:                         descpb.ConstraintTypeUnique,
+				ConstraintID:                 cst.ConstraintID,
+				Columns:                      columnNamesForColumnIDs(desc, columns, cst.ColumnIDs),
+				Unvalidated:                  cst.Validity != descpb.ConstraintValidity_Validated,
+				UniqueWithoutIndexConstraint: &cst,
 			},
 		}
 		allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
@@ -152,35 +177,46 @@ func newConstraintCache(desc *descpb.TableDescriptor, mutations *mutationCache) 
 					mutationState:      mutationState(cstMutation),
 					mutationIsRollback: cstMutation.IsRollback(),
 				},
+				detail: descpb.ConstraintDetail{
+					Kind:         getConstraintDetailTypeFromConstraint(cst),
+					ConstraintID: cst.GetConstraintID(),
+					Unvalidated:  cst.GetConstraintValidity() != descpb.ConstraintValidity_Validated,
+				},
 			}
-			if cc, ok := cst.(*constraint); ok {
-				backingStruct.desc = cc.desc
+			if cst.IsCheck() || cst.IsNotNull() {
+				backingStruct.detail.Columns = columnNamesForColumnIDs(desc, columns, cst.Check().ColumnIDs)
+				backingStruct.detail.Details = cst.Check().Expr
+				backingStruct.detail.CheckConstraint = cst.Check()
+			} else if cst.IsForeignKey() {
+				backingStruct.detail.Columns = columnNamesForColumnIDs(desc, columns, cst.ForeignKey().OriginColumnIDs)
+				backingStruct.detail.Details = "" // TODO (xiang): populate this field; it requires TableLookupFn
+				backingStruct.detail.FK = cst.ForeignKey()
+				backingStruct.detail.ReferencedTable = nil // TODO (xiang): populate this field; it requires TableLookupFn
+			} else if cst.IsUniqueWithoutIndex() {
+				backingStruct.detail.Columns = columnNamesForColumnIDs(desc, columns, cst.UniqueWithoutIndex().ColumnIDs)
+				backingStruct.detail.UniqueWithoutIndexConstraint = cst.UniqueWithoutIndex()
+			} else {
+				panic(errors.AssertionFailedf("unknown mutation constraint type"))
 			}
 			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 		}
-		if cst := cstMutation.AsIndex(); cst != nil {
-			validity := descpb.ConstraintValidity_Validating
-			if !cstMutation.Adding() {
-				validity = descpb.ConstraintValidity_Dropping
+		if cst := cstMutation.AsIndex(); cst != nil && cst.IsUnique() {
+			backingStruct := constraint{
+				maybeMutation: maybeMutation{
+					mutationID:         cstMutation.MutationID(),
+					mutationDirection:  mutationDirection(cstMutation),
+					mutationState:      mutationState(cstMutation),
+					mutationIsRollback: cstMutation.IsRollback(),
+				},
+				detail: descpb.ConstraintDetail{
+					Kind:                            getConstraintDetailTypeFromEncodingType(cst.GetEncodingType()),
+					ConstraintID:                    cst.GetConstraintID(),
+					Columns:                         cst.IndexDesc().KeyColumnNames,
+					Index:                           cst.IndexDesc(),
+					ValidityIfIndexBackedConstraint: getIndexBackedConstraintMutationValidityFromDirection(cstMutation),
+				},
 			}
-			switch cst.GetEncodingType() {
-			case descpb.PrimaryIndexEncoding:
-				backingStruct := index{
-					desc:                 cst.IndexDesc(),
-					validityIfConstraint: validity,
-				}
-				allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-			case descpb.SecondaryIndexEncoding:
-				if cst.IsUnique() {
-					backingStruct := index{
-						desc:                 cst.IndexDesc(),
-						validityIfConstraint: validity,
-					}
-					allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
-				}
-			default:
-				panic("unknown index encoding type")
-			}
+			allConstraints = addIfNotExists(backingStruct, allConstraints, constraintIDs)
 		}
 	}
 
@@ -222,4 +258,109 @@ func mutationDirection(mutation catalog.Mutation) descpb.DescriptorMutation_Dire
 	} else {
 		return descpb.DescriptorMutation_DROP
 	}
+}
+
+func columnNamesForColumnIDs(
+	tbl *descpb.TableDescriptor, columns *columnCache, columnIDs []descpb.ColumnID,
+) []string {
+	desc := wrapper{TableDescriptor: *tbl, columnCache: columns}
+	ret, err := desc.NamesForColumnIDs(columnIDs)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
+func getConstraintDetailTypeFromConstraint(c catalog.Constraint) descpb.ConstraintType {
+	if c.IsPrimaryKey() {
+		return descpb.ConstraintTypePK
+	} else if c.IsForeignKey() {
+		return descpb.ConstraintTypeFK
+	} else if c.IsUniqueConstraint() || c.IsUniqueWithoutIndex() {
+		return descpb.ConstraintTypeUnique
+	} else if c.IsCheck() || c.IsNotNull() {
+		return descpb.ConstraintTypeCheck
+	} else {
+		panic(errors.AssertionFailedf("unknown constraint type"))
+	}
+}
+
+func getConstraintToUpdateTypeFromConstraint(
+	c catalog.Constraint,
+) descpb.ConstraintToUpdate_ConstraintType {
+	if c.IsForeignKey() {
+		return descpb.ConstraintToUpdate_FOREIGN_KEY
+	} else if c.IsUniqueWithoutIndex() {
+		return descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
+	} else if c.IsCheck() || c.IsNotNull() {
+		return descpb.ConstraintToUpdate_CHECK
+	} else {
+		panic(errors.AssertionFailedf("unknown constraint type"))
+	}
+}
+
+func getConstraintDetailTypeFromConstraintToUpdate(
+	c *descpb.ConstraintToUpdate,
+) descpb.ConstraintType {
+	switch c.ConstraintType {
+	case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+		return descpb.ConstraintTypeCheck
+	case descpb.ConstraintToUpdate_FOREIGN_KEY:
+		return descpb.ConstraintTypeFK
+	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+		return descpb.ConstraintTypeUnique
+	default:
+		panic(errors.AssertionFailedf("unknown ConstraintToUpdate type"))
+	}
+}
+
+func getConstraintIDFromConstraintToUpdate(c *descpb.ConstraintToUpdate) descpb.ConstraintID {
+	switch c.ConstraintType {
+	case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+		return c.Check.ConstraintID
+	case descpb.ConstraintToUpdate_FOREIGN_KEY:
+		return c.ForeignKey.ConstraintID
+	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+		return c.UniqueWithoutIndexConstraint.ConstraintID
+	default:
+		panic(errors.AssertionFailedf("unknown ConstraintToUpdate type"))
+	}
+}
+
+func getConstraintValidityFromConstraintToUpdate(
+	c *descpb.ConstraintToUpdate,
+) descpb.ConstraintValidity {
+	switch c.ConstraintType {
+	case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+		return c.Check.Validity
+	case descpb.ConstraintToUpdate_FOREIGN_KEY:
+		return c.ForeignKey.Validity
+	case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+		return c.UniqueWithoutIndexConstraint.Validity
+	default:
+		panic(errors.AssertionFailedf("unknown ConstraintToUpdate type"))
+	}
+}
+
+func getConstraintDetailTypeFromEncodingType(
+	et descpb.IndexDescriptorEncodingType,
+) descpb.ConstraintType {
+	switch et {
+	case descpb.PrimaryIndexEncoding:
+		return descpb.ConstraintTypePK
+	case descpb.SecondaryIndexEncoding:
+		return descpb.ConstraintTypeUnique
+	default:
+		panic(errors.AssertionFailedf("unknown index encoding type"))
+	}
+}
+
+func getIndexBackedConstraintMutationValidityFromDirection(
+	cstMutation catalog.Mutation,
+) descpb.ConstraintValidity {
+	validity := descpb.ConstraintValidity_Validating
+	if !cstMutation.Adding() {
+		validity = descpb.ConstraintValidity_Dropping
+	}
+	return validity
 }

@@ -27,18 +27,13 @@ import (
 )
 
 var _ catalog.Index = (*index)(nil)
-var _ catalog.Constraint = (*index)(nil)
 
 // index implements the catalog.Index interface by wrapping the protobuf index
 // descriptor along with some metadata from its parent table descriptor.
-//
-// index also implements the catalog.Constraint interface for index-backed-constraints
-// (i.e. PRIMARY KEY or UNIQUE).
 type index struct {
 	maybeMutation
-	desc                 *descpb.IndexDescriptor
-	ordinal              int
-	validityIfConstraint descpb.ConstraintValidity // validity of this index-backed-constraint if is.
+	desc    *descpb.IndexDescriptor
+	ordinal int
 }
 
 // IndexDesc returns the underlying protobuf descriptor.
@@ -425,50 +420,9 @@ func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
 
-// NotNullColumnID implements the catalog.Constraint interface.
-func (w index) NotNullColumnID() descpb.ColumnID {
-	return 0
-}
-
-// AsCheck implements the catalog.Constraint interface.
-func (w index) AsCheck() *descpb.TableDescriptor_CheckConstraint {
-	return nil
-}
-
-// AsForeignKey implements the catalog.Constraint interface.
-func (w index) AsForeignKey() *descpb.ForeignKeyConstraint {
-	return nil
-}
-
-// AsUniqueWithoutIndex implements the catalog.Constraint interface.
-func (w index) AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint {
-	return nil
-}
-
-// AsPrimaryKey implements the catalog.Constraint interface.
-func (w index) AsPrimaryKey() catalog.Index {
-	if w.GetEncodingType() != descpb.PrimaryIndexEncoding {
-		return nil
-	}
-	return w
-}
-
-// AsUnique implements the catalog.Constraint interface.
-func (w index) AsUnique() catalog.Index {
-	if !w.desc.Unique {
-		return nil
-	}
-	return w
-}
-
 // String implements the catalog.Constraint interface.
 func (w index) String() string {
 	return fmt.Sprintf("%v", w.desc)
-}
-
-// GetConstraintValidity implements catalog.Constraint interface.
-func (w index) GetConstraintValidity() descpb.ConstraintValidity {
-	return w.validityIfConstraint
 }
 
 // partitioning is the backing struct for a catalog.Partitioning interface.

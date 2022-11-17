@@ -91,10 +91,16 @@ type ConstraintDetail struct {
 	ConstraintID ConstraintID
 	Columns      []string
 	Details      string
-	Unvalidated  bool
+	// Unvalidated is true iff the constraint's validity is VALIDATED, which means if the validity is VALIDATING,
+	// it's considered here as unvalidated. This field is a result of legacy code.
+	// The actual validity (VALIDATED, VALIDATING, UNVALIDATED, DROPPING) can be found in
+	// - `ValidityIfIndexBackedConstraint`, for index-backed-constraints
+	// - specificConstraintPointer.validity, for non-index-backed-constraints
+	Unvalidated bool
 
 	// Only populated for PK and Unique Constraints with an index.
-	Index *IndexDescriptor
+	Index                           *IndexDescriptor
+	ValidityIfIndexBackedConstraint ConstraintValidity // validity of this index-backed-constraint if is.
 
 	// Only populated for Unique Constraints without an index.
 	UniqueWithoutIndexConstraint *UniqueWithoutIndexConstraint

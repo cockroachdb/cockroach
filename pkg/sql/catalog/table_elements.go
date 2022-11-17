@@ -402,6 +402,66 @@ type Constraint interface {
 	TableElementMaybeMutation
 	fmt.Stringer
 
+	// ConstraintToUpdateDesc returns the underlying protobuf descriptor
+	// for non-index-backed-constraints (CHECK, FK, or UNIQUE_WITHOUT_INDEX).
+	// Deprecated; exists only for legacy code
+	ConstraintToUpdateDesc() *descpb.ConstraintToUpdate
+
+	// Check returns the underlying check constraint, if there is one.
+	Check() *descpb.TableDescriptor_CheckConstraint
+
+	// CheckDeepCopy returns a copy of the underlying check constraint, if there is one.
+	CheckDeepCopy() descpb.TableDescriptor_CheckConstraint
+
+	// ForeignKey returns the underlying fk constraint, if there is one.
+	ForeignKey() *descpb.ForeignKeyConstraint
+
+	// ForeignKeyDeepCopy returns a copy of the underlying fk constraint, if there is one.
+	ForeignKeyDeepCopy() descpb.ForeignKeyConstraint
+
+	// UniqueWithoutIndex returns the underlying unique without index constraint, if
+	// there is one.
+	UniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint
+
+	// UniqueWithoutIndexDeepCopy returns a copy of the underlying unique without index constraint, if
+	// there is one.
+	UniqueWithoutIndexDeepCopy() descpb.UniqueWithoutIndexConstraint
+
+	// PrimaryKey returns the underlying index descriptor backing the PRIMARY KEY constraint,
+	// if there is one.
+	PrimaryKey() *descpb.IndexDescriptor
+
+	// PrimaryKeyDeepCopy returns a copy of the underlying index descriptor backing the PRIMARY KEY constraint,
+	// if there is one.
+	PrimaryKeyDeepCopy() descpb.IndexDescriptor
+
+	// Unique returns the underlying index descriptor backing the UNIQUE constraint,
+	// if there is one.
+	Unique() *descpb.IndexDescriptor
+
+	// UniqueDeepCopy returns a copy of the underlying index descriptor backing the UNIQUE constraint,
+	// if there is one.
+	UniqueDeepCopy() descpb.IndexDescriptor
+
+	// IsCheck returns true iff this is an update for a check constraint.
+	IsCheck() bool
+
+	// IsForeignKey returns true iff this is an update for a fk constraint.
+	IsForeignKey() bool
+
+	// IsNotNull returns true iff this is an update for a not-null constraint.
+	IsNotNull() bool
+
+	// IsUniqueWithoutIndex returns true iff this is an update for a unique
+	// without index constraint.
+	IsUniqueWithoutIndex() bool
+
+	// IsPrimaryKey returns true iff this is an index-backed PRIMARY KEY constraint.
+	IsPrimaryKey() bool
+
+	// IsUniqueConstraint returns true iff this is an index-backed UNIQUE constraint.
+	IsUniqueConstraint() bool
+
 	// GetConstraintID returns the ID for the constraint.
 	GetConstraintID() descpb.ConstraintID
 
@@ -413,25 +473,6 @@ type Constraint interface {
 
 	// NotNullColumnID returns the underlying not-null column ID, if there is one.
 	NotNullColumnID() descpb.ColumnID
-
-	// AsCheck returns the underlying check constraint, if there is one.
-	AsCheck() *descpb.TableDescriptor_CheckConstraint
-
-	// AsForeignKey returns the underlying foreign key constraint, if there is
-	// one.
-	AsForeignKey() *descpb.ForeignKeyConstraint
-
-	// AsUniqueWithoutIndex returns the underlying unique without index
-	// constraint, if there is one.
-	AsUniqueWithoutIndex() *descpb.UniqueWithoutIndexConstraint
-
-	// AsPrimaryKey returns the index descriptor backing the PRIMARY KEY
-	// constraint, if there is one.
-	AsPrimaryKey() Index
-
-	// AsUnique returns the index descriptor backing the UNIQUE constraint,
-	// if there is one.
-	AsUnique() Index
 }
 
 // PrimaryKeySwap is an interface around a primary key swap mutation.

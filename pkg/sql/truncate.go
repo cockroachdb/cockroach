@@ -356,14 +356,14 @@ func checkTableForDisallowedMutationsWithTruncate(desc *tabledesc.Mutable) error
 			}
 		} else if c := m.AsConstraint(); c != nil {
 			var constraintType descpb.ConstraintToUpdate_ConstraintType
-			if ck := c.AsCheck(); ck != nil {
+			if ck := c.Check(); ck != nil {
 				constraintType = descpb.ConstraintToUpdate_CHECK
 				if c.NotNullColumnID() != 0 {
 					constraintType = descpb.ConstraintToUpdate_NOT_NULL
 				}
-			} else if c.AsForeignKey() != nil {
+			} else if c.ForeignKey() != nil {
 				constraintType = descpb.ConstraintToUpdate_FOREIGN_KEY
-			} else if c.AsUniqueWithoutIndex() != nil {
+			} else if c.UniqueWithoutIndex() != nil {
 				constraintType = descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX
 			} else {
 				return errors.AssertionFailedf("cannot perform TRUNCATE due to "+

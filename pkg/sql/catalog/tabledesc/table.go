@@ -320,7 +320,7 @@ func (desc *wrapper) getExistingOrNewConstraintCache() *constraintCache {
 	if desc.constraintCache != nil {
 		return desc.constraintCache
 	}
-	return newConstraintCache(desc.TableDesc(), desc.getExistingOrNewMutationCache())
+	return newConstraintCache(desc.TableDesc(), desc.getExistingOrNewColumnCache(), desc.getExistingOrNewMutationCache())
 }
 
 // GetConstraintInfo implements the TableDescriptor interface.
