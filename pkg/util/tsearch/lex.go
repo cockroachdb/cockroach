@@ -61,6 +61,19 @@ func (p *tsVectorLexer) advance() rune {
 	return r
 }
 
+const (
+	// The maximum number of bytes in a TSVector.
+	maxTSVectorLen = (1 << 20) - 1
+	// The maximum number of positions in a TSVector position list.
+	maxTSVectorPositions = 256
+	// The maximum number within a <> followed-by declaration.
+	maxTSVectorFollowedBy = 1 << 14
+	// The maximum size of a TSVector lexeme.
+	maxTSVectorLexemeLen = (1 << 14) - 1
+	// The maximum position within a TSVector position list.
+	maxTSVectorPosition = (1 << 14) - 1
+)
+
 // lex lexes the input in the receiver according to the TSVector "grammar", or
 // according the TSQuery "grammar" if tsQuery is set to true.
 //
@@ -105,6 +118,16 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 	termBuf := make([]rune, 0, 32)
 	ret := TSVector{}
 
+	if len(p.input) >= maxTSVectorLen {
+		typ := "tsvector"
+		if p.tsQuery {
+			typ = "tsquery"
+		}
+		return nil, pgerror.Newf(pgcode.ProgramLimitExceeded,
+			"string is too long for %s (%d bytes, max %d bytes)",
+			typ, len(p.input), maxTSVectorLen)
+	}
+
 	for p.pos < len(p.input) {
 		r := p.advance()
 		switch p.state {
@@ -148,6 +171,10 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 						}
 						var err error
 						n, err = strconv.Atoi(string(termBuf))
+						if n > maxTSVectorFollowedBy || n < 0 {
+							return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+								"distance in phrase operator must be an integer value between zero and %d inclusive", maxTSVectorFollowedBy)
+						}
 						termBuf = termBuf[:0]
 						if err != nil {
 							return p.syntaxError()
@@ -156,7 +183,7 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 					if r != '>' {
 						return p.syntaxError()
 					}
-					ret = append(ret, tsTerm{operator: followedby, followedN: n})
+					ret = append(ret, tsTerm{operator: followedby, followedN: uint16(n)})
 					continue
 				}
 			}
@@ -174,7 +201,11 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				termBuf = append(termBuf, r)
 				continue
 			case '\'':
-				ret = append(ret, tsTerm{lexeme: string(termBuf)})
+				term, err := newLexemeTerm(string(termBuf))
+				if err != nil {
+					return nil, err
+				}
+				ret = append(ret, term)
 				termBuf = termBuf[:0]
 				p.state = finishedQuoteTerm
 				continue
@@ -204,7 +235,11 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				case '&', '!', '|', '<', '(', ')':
 					// These are all "operators" in the TSQuery language. End the current
 					// term and start a new one.
-					ret = append(ret, tsTerm{lexeme: string(termBuf)})
+					term, err := newLexemeTerm(string(termBuf))
+					if err != nil {
+						return nil, err
+					}
+					ret = append(ret, term)
 					termBuf = termBuf[:0]
 					p.state = expectingTerm
 					p.back()
@@ -217,7 +252,10 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 			if space || r == ':' && len(termBuf) > 0 {
 				// Found a terminator.
 				// Copy the termBuf into the vector, resize the termBuf, continue on.
-				term := tsTerm{lexeme: string(termBuf)}
+				term, err := newLexemeTerm(string(termBuf))
+				if err != nil {
+					return nil, err
+				}
 				if r == ':' {
 					term.positions = append(term.positions, tsPosition{})
 				}
@@ -252,12 +290,15 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 				}
 				if pos == 0 {
 					return ret, pgerror.Newf(pgcode.Syntax, "wrong position info in TSVector", p.input)
+				} else if pos > maxTSVectorPosition {
+					// Postgres silently truncates positions larger than 16383 to 16383.
+					pos = maxTSVectorPosition
 				}
 				termBuf = termBuf[:0]
 			}
 			lastTerm := &ret[len(ret)-1]
 			lastTermPos := len(lastTerm.positions) - 1
-			lastTerm.positions[lastTermPos].position = pos
+			lastTerm.positions[lastTermPos].position = uint16(pos)
 			if unicode.IsSpace(r) {
 				// Done with our term. Advance to next term!
 				p.state = expectingTerm
@@ -328,7 +369,11 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 		return p.syntaxError()
 	case insideNormalTerm:
 		// Finish normal term.
-		ret = append(ret, tsTerm{lexeme: string(termBuf)})
+		term, err := newLexemeTerm(string(termBuf))
+		if err != nil {
+			return nil, err
+		}
+		ret = append(ret, term)
 	case expectingPosList:
 		// Finish number.
 		if !p.tsQuery {
@@ -341,9 +386,12 @@ func (p tsVectorLexer) lex() (TSVector, error) {
 			}
 			if pos == 0 {
 				return ret, pgerror.Newf(pgcode.Syntax, "wrong position info in TSVector", p.input)
+			} else if pos > maxTSVectorPosition {
+				// Postgres silently truncates positions larger than 16383 to 16383.
+				pos = maxTSVectorPosition
 			}
 			lastTerm := &ret[len(ret)-1]
-			lastTerm.positions[len(lastTerm.positions)-1].position = pos
+			lastTerm.positions[len(lastTerm.positions)-1].position = uint16(pos)
 		}
 	case expectingTerm, finishedQuoteTerm:
 		// We are good to go, we just finished a term and nothing needs to be cleaned up.

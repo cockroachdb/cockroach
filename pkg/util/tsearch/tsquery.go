@@ -75,7 +75,8 @@ type tsNode struct {
 	// set only when op is followedby. Indicates the number n within the <n>
 	// operator, which means the number of terms separating the left and the right
 	// argument.
-	followedN int
+	// At most 16384.
+	followedN uint16
 
 	// l is the left child of the node if op is set, or the only child if
 	// op is set to "not".

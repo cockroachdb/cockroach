@@ -15,6 +15,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // This file defines the TSVector data structure, which is used to implement
@@ -87,20 +90,29 @@ func (w tsWeight) String() string {
 
 // tsPosition is a position within a document, along with an optional weight.
 type tsPosition struct {
-	position int
+	position uint16
 	weight   tsWeight
 }
 
 // tsTerm is either a lexeme and position list, or an operator (when parsing a
 // a TSQuery).
 type tsTerm struct {
+	// lexeme is at most 2046 characters.
 	lexeme    string
 	positions []tsPosition
 
 	// The operator and followedN fields are only used when parsing a TSQuery.
 	operator tsOperator
 	// Set only when operator = followedby
-	followedN int
+	// At most 16384.
+	followedN uint16
+}
+
+func newLexemeTerm(lexeme string) (tsTerm, error) {
+	if len(lexeme) > 2046 {
+		return tsTerm{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "word is too long (%d bytes, max 2046 bytes)", len(lexeme))
+	}
+	return tsTerm{lexeme: lexeme}, nil
 }
 
 func (t tsTerm) String() string {
@@ -142,7 +154,7 @@ func (t tsTerm) String() string {
 			buf.WriteByte(':')
 		}
 		if pos.position > 0 {
-			buf.WriteString(strconv.Itoa(pos.position))
+			buf.WriteString(strconv.Itoa(int(pos.position)))
 		}
 		buf.WriteString(pos.weight.String())
 	}
