@@ -352,7 +352,6 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 		default:
 			return nil, false, nil
 		}
-
 	case oid.T_regclass:
 		switch inputFamily {
 		case types.StringFamily:
@@ -369,6 +368,31 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 
 			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
 			dOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
+		default:
+			return nil, false, nil
+		}
+	case oid.T_regtype:
+		switch inputFamily {
+		case types.StringFamily:
+			s := tree.MustBeDString(datum)
+			typRef, err := parser.GetTypeFromValidSQLSyntax(string(s))
+			if err != nil {
+				return nil, true, err
+			}
+
+			// Check for array being cast to regtype
+			if arrRef, ok := typRef.(*tree.ArrayTypeReference); ok {
+				dOid, err = oidForUserOrPredefinedTypes(c, arrRef.ElementType.(*tree.UnresolvedObjectName))
+				if err != nil {
+					return nil, true, err
+				}
+			} else {
+				dOid, err = oidForUserOrPredefinedTypes(c, typRef)
+				if err != nil {
+					return nil, true, err
+				}
+			}
+
 		default:
 			return nil, false, nil
 		}
@@ -671,4 +695,20 @@ func (c *CustomFuncs) FoldFunction(
 		return nil, false
 	}
 	return c.f.ConstructConstVal(result, private.Typ), true
+}
+
+func oidForUserOrPredefinedTypes(
+	c *CustomFuncs, typRef tree.ResolvableTypeReference,
+) (*tree.DOid, error) {
+	if typname, ok := typRef.(*tree.UnresolvedObjectName); ok {
+		ds, err := c.f.catalog.ResolveType(c.f.ctx, typname)
+		if err != nil {
+			return nil, err
+		}
+
+		return tree.NewDOidWithName(ds.Oid(), types.RegType, ds.Name()), nil
+	}
+
+	resolvedTyp := typRef.(*types.T)
+	return tree.NewDOidWithName(resolvedTyp.Oid(), types.RegType, resolvedTyp.PGName()), nil
 }
