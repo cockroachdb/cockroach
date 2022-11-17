@@ -100,8 +100,9 @@ func setupS3URI(
 	t *testing.T, db *sqlutils.SQLRunner, bucket string, prefix string, creds credentials.Value,
 ) url.URL {
 	t.Helper()
-	endpoint := os.Getenv("AWS_ENDPOINT")
+	endpoint := os.Getenv(amazon.NightlyEnvVarS3Params[amazon.AWSEndpointParam])
 	customCACert := os.Getenv("AWS_CUSTOM_CA_CERT")
+	region := os.Getenv(amazon.NightlyEnvVarS3Params[amazon.S3RegionParam])
 	if customCACert != "" {
 		db.Exec(t, fmt.Sprintf("SET CLUSTER SETTING cloudstorage.http.custom_ca='%s'", customCACert))
 	}
@@ -112,6 +113,9 @@ func setupS3URI(
 	values.Add(amazon.AWSSecretParam, creds.SecretAccessKey)
 	if endpoint != "" {
 		values.Add(amazon.AWSEndpointParam, endpoint)
+	}
+	if region != "" {
+		values.Add(amazon.S3RegionParam, region)
 	}
 	uri.RawQuery = values.Encode()
 	return uri
