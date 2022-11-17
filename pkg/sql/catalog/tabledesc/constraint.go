@@ -87,6 +87,11 @@ func (c checkConstraint) IsHashShardingConstraint() bool {
 	return c.desc.FromHashShardedColumn
 }
 
+// GetIndexIDForValidation implements the catalog.CheckConstraint interface.
+func (c checkConstraint) GetIndexIDForValidation() descpb.IndexID {
+	return c.desc.IndexIDForValidation
+}
+
 // GetConstraintID implements the catalog.Constraint interface.
 func (c checkConstraint) GetConstraintID() descpb.ConstraintID {
 	return c.desc.ConstraintID

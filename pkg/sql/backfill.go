@@ -1546,7 +1546,7 @@ func ValidateCheckConstraint(
 
 		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
 			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, checkConstraint.GetExpr(),
-				tableDesc.(*tabledesc.Mutable), ie)
+				tableDesc.(*tabledesc.Mutable), ie, checkConstraint.GetIndexIDForValidation())
 		})
 	})
 }
@@ -2604,7 +2604,7 @@ func validateCheckInTxn(
 	return ie.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			return validateCheckExpr(ctx, semaCtx, txn, sessionData, checkExpr, tableDesc, ie)
+			return validateCheckExpr(ctx, semaCtx, txn, sessionData, checkExpr, tableDesc, ie, 0)
 		})
 }
 

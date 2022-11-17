@@ -27,6 +27,7 @@ func init() {
 						ColumnIDs:             this.ColumnIDs,
 						Expression:            this.Expression,
 						FromHashShardedColumn: this.FromHashShardedColumn,
+						IndexIDForValidation:  this.IndexIDForValidation,
 					}
 				}),
 				emit(func(this *scpb.CheckConstraint) *scop.UpdateTableBackReferencesInTypes {
