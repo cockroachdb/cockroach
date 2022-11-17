@@ -295,7 +295,7 @@ func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 // IndexPartitioningDescriptor implements the scbuildstmt.TableHelpers
 // interface.
 func (b *builderState) IndexPartitioningDescriptor(
-	index *scpb.Index, partBy *tree.PartitionBy,
+	indexName string, index *scpb.Index, columns []*scpb.IndexColumn, partBy *tree.PartitionBy,
 ) catpb.PartitioningDescriptor {
 	b.ensureDescriptor(index.TableID)
 	bd := b.descCache[index.TableID]
@@ -314,12 +314,13 @@ func (b *builderState) IndexPartitioningDescriptor(
 		oldNumImplicitColumns = int(p.PartitioningDescriptor.NumImplicitColumns)
 	})
 
-	var keyColumns []*scpb.IndexColumn
-	scpb.ForEachIndexColumn(bd.ers, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
-		if e.IndexID == index.IndexID && e.Kind == scpb.IndexColumn_KEY {
-			keyColumns = append(keyColumns, e)
+	keyColumns := make([]*scpb.IndexColumn, 0, len(columns))
+	for _, column := range columns {
+		if column.Kind != scpb.IndexColumn_KEY {
+			continue
 		}
-	})
+		keyColumns = append(keyColumns, column)
+	}
 	sort.Slice(keyColumns, func(i, j int) bool {
 		return keyColumns[i].OrdinalInKind < keyColumns[j].OrdinalInKind
 	})
@@ -338,6 +339,8 @@ func (b *builderState) IndexPartitioningDescriptor(
 			allowedNewColumnNames = append(allowedNewColumnNames, tree.Name(cn.Name))
 		}
 	})
+	allowImplicitPartitioning := b.evalCtx.SessionData().ImplicitColumnPartitioningEnabled ||
+		tbl.IsLocalityRegionalByRow()
 	_, ret, err := b.createPartCCL(
 		b.ctx,
 		b.clusterSettings,
@@ -347,10 +350,26 @@ func (b *builderState) IndexPartitioningDescriptor(
 		oldKeyColumnNames,
 		partBy,
 		allowedNewColumnNames,
-		true, /* allowImplicitPartitioning */
+		allowImplicitPartitioning, /* allowImplicitPartitioning */
 	)
 	if err != nil {
 		panic(err)
+	}
+	// Validate the index partitioning descriptor.
+	partitionNames := make(map[string]struct{})
+	for _, rangePart := range ret.Range {
+		if _, ok := partitionNames[rangePart.Name]; ok {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition, "PARTITION %s: name must be unique (used twice in index %q)",
+				rangePart.Name, indexName))
+		}
+		partitionNames[rangePart.Name] = struct{}{}
+	}
+	for _, listPart := range ret.List {
+		if _, ok := partitionNames[listPart.Name]; ok {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition, "PARTITION %s: name must be unique (used twice in index %q)",
+				listPart.Name, indexName))
+		}
+		partitionNames[listPart.Name] = struct{}{}
 	}
 	return ret
 }
