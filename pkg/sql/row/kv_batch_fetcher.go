@@ -509,7 +509,7 @@ func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
 }
 
 // nextBatch implements the KVBatchFetcher interface.
-func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherResponse, err error) {
+func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp kvBatchFetcherResponse, err error) {
 	// The purpose of this loop is to unpack the two-level batch structure that is
 	// returned from the KV layer.
 	//
@@ -633,7 +633,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 		return kvBatchFetcherResponse{}, err
 	}
 	// We've got more data to process, recurse and process it.
-	return f.nextBatch(ctx)
+	return f.NextBatch(ctx)
 }
 
 func (f *txnKVFetcher) reset(ctx context.Context) {
@@ -651,7 +651,7 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 }
 
 // close releases the resources of this txnKVFetcher.
-func (f *txnKVFetcher) close(ctx context.Context) {
+func (f *txnKVFetcher) Close(ctx context.Context) {
 	f.reset(ctx)
 }
 

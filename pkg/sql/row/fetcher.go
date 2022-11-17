@@ -58,7 +58,7 @@ type kvBatchFetcherResponse struct {
 	// fetch.
 	//
 	// If true, then the fetch might (or might not) be complete at this point -
-	// another call to nextBatch() is needed to find out. If false, then the
+	// another call to NextBatch() is needed to find out. If false, then the
 	// fetch has already been completed and this response doesn't have any
 	// fetched data.
 	moreKVs bool
@@ -88,11 +88,11 @@ type KVBatchFetcher interface {
 		firstBatchKeyLimit rowinfra.KeyLimit,
 	) error
 
-	// nextBatch returns the next batch of rows. See kvBatchFetcherResponse for
+	// NextBatch returns the next batch of rows. See kvBatchFetcherResponse for
 	// details on what is returned.
-	nextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
+	NextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
 
-	close(ctx context.Context)
+	Close(ctx context.Context)
 }
 
 type tableInfo struct {

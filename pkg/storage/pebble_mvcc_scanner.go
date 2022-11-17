@@ -33,6 +33,10 @@ import (
 // Key value lengths take up 8 bytes (2 x Uint32).
 const kvLenSize = 8
 
+func pebbleSizeOf(lenKey, lenValue int) int {
+	return kvLenSize + lenKey + lenValue
+}
+
 var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
 	"mvcc-max-iters-before-seek",
 	10, /* defaultValue */
@@ -109,7 +113,7 @@ func (p *pebbleResults) put(
 	// needs capacity greater than maxSize, we allocate exactly the size needed.
 	lenKey := len(key)
 	lenValue := len(value)
-	lenToAdd := p.sizeOf(lenKey, lenValue)
+	lenToAdd := pebbleSizeOf(lenKey, lenValue)
 	if len(p.repr)+lenToAdd > cap(p.repr) {
 		// Exponential increase by default, while ensuring that we respect
 		// - a hard lower bound of lenToAdd
@@ -174,10 +178,6 @@ func (p *pebbleResults) put(
 	}
 
 	return nil
-}
-
-func (p *pebbleResults) sizeOf(lenKey, lenValue int) int {
-	return kvLenSize + lenKey + lenValue
 }
 
 // continuesFirstRow returns true if the given key belongs to the same SQL row
@@ -1130,9 +1130,9 @@ func (p *pebbleMVCCScanner) add(
 	}
 
 	// Check if adding the key would exceed a limit.
-	if p.targetBytes > 0 && p.results.bytes+int64(p.results.sizeOf(len(rawKey), len(rawValue))) > p.targetBytes {
+	if p.targetBytes > 0 && p.results.bytes+int64(pebbleSizeOf(len(rawKey), len(rawValue))) > p.targetBytes {
 		p.resumeReason = roachpb.RESUME_BYTE_LIMIT
-		p.resumeNextBytes = int64(p.results.sizeOf(len(rawKey), len(rawValue)))
+		p.resumeNextBytes = int64(pebbleSizeOf(len(rawKey), len(rawValue)))
 
 	} else if p.maxKeys > 0 && p.results.count >= p.maxKeys {
 		p.resumeReason = roachpb.RESUME_KEY_LIMIT
