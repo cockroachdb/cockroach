@@ -10,7 +10,13 @@
 
 package catalog
 
-import "github.com/cockroachdb/cockroach/pkg/config/zonepb"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+)
 
 // ZoneConfig encapsulates zone config and raw bytes read from storage.
 type ZoneConfig interface {
@@ -25,4 +31,14 @@ type ZoneConfig interface {
 
 	// Clone returns a deep copy of the object.
 	Clone() ZoneConfig
+}
+
+// ZoneConfigHydrationHelper is a helper interface for zone config hydration.
+type ZoneConfigHydrationHelper interface {
+	// MaybeGetTable either return a table descriptor if exists or a nil if not
+	// exists.
+	MaybeGetTable(ctx context.Context, txn *kv.Txn, id descpb.ID) (TableDescriptor, error)
+	// MaybeGetZoneConfig either return a zone config if exists or a nil if not
+	// exists.
+	MaybeGetZoneConfig(ctx context.Context, txn *kv.Txn, id descpb.ID) (ZoneConfig, error)
 }
