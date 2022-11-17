@@ -3750,4 +3750,16 @@ var charts = []sectionDescription{
 			},
 		},
 	},
+	{
+		Organization: [][]string{{ReplicationLayer, "Batches"}},
+		Charts: []chartDescription{
+			{
+				Title: "Total number of attempts to evaluate read-only batches",
+				Metrics: []string{
+					"kv.replica_read_batch_evaluate.dropped_latches_before_eval",
+					"kv.replica_read_batch_evaluate.without_interleaving_iter",
+				},
+			},
+		},
+	},
 }
