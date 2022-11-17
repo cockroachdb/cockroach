@@ -327,7 +327,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: KEY
     ordinalInKind: 0
     tableId: 105
@@ -335,7 +337,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: STORED
     ordinalInKind: 0
     tableId: 105
@@ -589,7 +593,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: KEY
     ordinalInKind: 0
     tableId: 105
@@ -597,7 +603,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: 0
     kind: STORED
     ordinalInKind: 0
     tableId: 105
