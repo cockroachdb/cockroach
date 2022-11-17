@@ -37,6 +37,9 @@ message TenantInfo {
   optional string name = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+  optional string dropped_name = 4 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 }
 
 // TenantInfoAndUsage contains the information for a tenant in a multi-tenant
@@ -53,7 +56,7 @@ message TenantInfoWithUsage {
     optional double ru_burst_limit = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUBurstLimit"];
     optional double ru_refill_rate = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "RURefillRate"];
     optional double ru_current = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RUCurrent"];
-  
+
     // All-time consumption for this tenant. Each field has a corresponding column
     // in system.tenant_usage.
     optional roachpb.TenantConsumption consumption = 4 [(gogoproto.nullable) = false];
