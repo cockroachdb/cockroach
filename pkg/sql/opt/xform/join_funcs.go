@@ -722,9 +722,6 @@ func (c *CustomFuncs) mapLookupJoin(
 	tabID := lookupJoin.Table
 	newTabID := newScanPrivate.Table
 
-	// Get the new index columns.
-	newIndexCols := c.e.mem.Metadata().TableMeta(newTabID).IndexColumns(lookupJoin.Index)
-
 	// Create a map from the source columns to the destination columns.
 	var srcColsToDstCols opt.ColMap
 	for srcCol, ok := indexCols.Next(0); ok; srcCol, ok = indexCols.Next(srcCol + 1) {
@@ -743,11 +740,12 @@ func (c *CustomFuncs) mapLookupJoin(
 		remoteLookupExpr := c.e.f.RemapCols(&lookupJoin.RemoteLookupExpr, srcColsToDstCols).(*memo.FiltersExpr)
 		lookupJoin.RemoteLookupExpr = *remoteLookupExpr
 	})
-	lookupJoin.Cols = lookupJoin.Cols.Difference(indexCols).Union(newIndexCols)
+	lookupJoin.Cols = lookupJoin.Cols.CopyAndMaybeRemap(srcColsToDstCols)
 	constFilters := c.e.f.RemapCols(&lookupJoin.ConstFilters, srcColsToDstCols).(*memo.FiltersExpr)
 	lookupJoin.ConstFilters = *constFilters
 	on := c.e.f.RemapCols(&lookupJoin.On, srcColsToDstCols).(*memo.FiltersExpr)
 	lookupJoin.On = *on
+	lookupJoin.DerivedEquivCols = lookupJoin.DerivedEquivCols.CopyAndMaybeRemap(srcColsToDstCols)
 }
 
 // GenerateInvertedJoins is similar to GenerateLookupJoins, but instead
@@ -1246,6 +1244,12 @@ func (c *CustomFuncs) MakeProjectionsForOuterJoin(
 // IsAntiJoin returns true if the given lookup join is an anti join.
 func (c *CustomFuncs) IsAntiJoin(private *memo.LookupJoinPrivate) bool {
 	return private.JoinType == opt.AntiJoinOp
+}
+
+// IsLocalityOptimizedJoin returns true if the given lookup join is a locality
+// optimized join
+func (c *CustomFuncs) IsLocalityOptimizedJoin(private *memo.LookupJoinPrivate) bool {
+	return private.LocalityOptimized
 }
 
 // EmptyFiltersExpr returns an empty FiltersExpr.

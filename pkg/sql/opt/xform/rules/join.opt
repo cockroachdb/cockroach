@@ -703,9 +703,13 @@
 # As long as child.c_id = 10 and the matching row in parent are both located in
 # 'us-east1', the second plan will be much faster. But if they are located in
 # one of the other regions, the first plan would be slightly faster.
+# If the lookup join input is a Select from only remote region rows, as
+# indicated by IsSelectFromRemoteTableRowsOnly, there is little point planning
+# a locality-optimized join because reading remote rows cannot be avoided, so
+# the rewrite is skipped in this case.
 [GenerateLocalityOptimizedLookupJoin, Explore]
 (LookupJoin
-    $input:*
+    $input:* & ^(IsSelectFromRemoteTableRowsOnly $input)
     $on:*
     $private:* &
         ^(IsAntiJoin $private) &
@@ -727,4 +731,210 @@
         $remoteExpr
         $private
     )
+)
+
+# GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin converts a lookup join
+# with REGIONAL BY ROW tables as both inputs into a locality-optimized search of
+# a locality-optimized in the left branch and a normal lookup join in the right
+# branch. The left branch reads local rows from the input table and the right
+# branch reads remote rows from the input table.
+#
+# For example, suppose we have a multi-region database with regions
+# 'ca-central-1', 'us-east-1' and 'ap-southeast-2', and we have the following
+# tables and query, issued from region 'ap-southeast-2':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child INNER LOOKUP JOIN parent ON c_p_id = p_id LIMIT 3;
+#
+# Normally, this would produce the following plan:
+#
+# distribution: local
+# vectorized: true
+# ·
+# • limit
+# │ count: 3
+# │
+# └── • lookup join
+#     │ table: parent@parent_pkey
+#     │ equality cols are key
+#     │ lookup condition: (crdb_region = 'ap-southeast-2') AND (c_p_id = p_id)
+#     │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+#     │
+#     └── • scan
+#           missing stats
+#           table: child@child_pkey
+#           spans: FULL SCAN (SOFT LIMIT)
+#
+# but if the session setting locality_optimized_partitioned_index_scan is
+# enabled, the optimizer will produce this plan:
+#
+# distribution: local
+# vectorized: true
+# ·
+# • limit
+# │ count: 3
+# │
+# └── • union all
+#     │ limit: 4294967295
+#     │
+#     ├── • lookup join
+#     │   │ table: parent@parent_pkey
+#     │   │ equality cols are key
+#     │   │ lookup condition: (crdb_region = 'ap-southeast-2') AND (c_p_id = p_id)
+#     │   │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+#     │   │
+#     │   └── • scan
+#     │         missing stats
+#     │         table: child@child_pkey
+#     │         spans: [/'ap-southeast-2' - /'ap-southeast-2']
+#     │
+#     └── • lookup join
+#         │ table: parent@parent_pkey
+#         │ equality cols are key
+#         │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (c_p_id = p_id)
+#         │
+#         └── • scan
+#               missing stats
+#               table: child@child_pkey
+#               spans: [/'ca-central-1' - /'us-east-1']
+#
+[GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin, Explore]
+(LookupJoin
+    $input:* &
+        (IsRegionalByRowTableScanOrSelect $input) &
+        (LocalityOptimizedScanAboveMaxCardinality $input)
+    $on:*
+    $private:* &
+        ^(IsAntiJoin $private) &
+        (Let
+            (
+                $localExpr
+                $remoteExpr
+                $ok
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
+            $ok
+        ) &
+        (Let
+            (
+                $inputScan
+                $inputFilters
+                $ok2
+            ):(CanMaybeGenerateLocalityOptimizedSearch (Root))
+            $ok2
+        )
+)
+=>
+(GenerateLocalityOptimizedSearch
+    (Root)
+    $inputScan
+    $inputFilters
+    (CreateLocalityOptimizedLookupJoinPrivate
+        $localExpr
+        $remoteExpr
+        $private
+    )
+)
+
+# GenerateLocalityOptimizedSearchOfLOJs converts a lookup join with a REGIONAL
+# BY ROW table as the input relation into a locality-optimized search of two
+# lookup joins, with the left branch reading local rows from the input table and
+# the right branch reading remote rows from the input table.
+#
+# For example, suppose we have a multi-region database with regions
+# 'ca-central-1', 'us-east-1' and 'ap-southeast-2', and we have the following
+# tables and query, issued from region 'ap-southeast-2':
+#
+#   CREATE TABLE parent (
+#     p_id INT PRIMARY KEY
+#   ) LOCALITY REGIONAL BY TABLE;
+#
+#   CREATE TABLE child (
+#     c_id INT PRIMARY KEY,
+#     c_p_id INT REFERENCES parent (p_id)
+#   ) LOCALITY REGIONAL BY ROW;
+#
+#   SELECT * FROM child INNER LOOKUP JOIN parent ON c_p_id = p_id LIMIT 3;
+#
+# Normally, this would produce the following plan:
+#
+# distribution: full
+# vectorized: true
+# ·
+# • limit
+# │ count: 3
+# │
+# └── • lookup join
+#     │ table: parent2@parent2_pkey
+#     │ equality: (c_p_id) = (p_id)
+#     │ equality cols are key
+#     │
+#     └── • scan
+#           missing stats
+#           table: child2@child2_pkey
+#           spans: FULL SCAN (SOFT LIMIT)
+#
+# but if the session setting locality_optimized_partitioned_index_scan is
+# enabled, the optimizer will produce this plan:
+#
+# distribution: local
+# vectorized: true
+# ·
+# • limit
+# │ count: 3
+# │
+# └── • union all
+#     │ limit: 4294967295
+#     │
+#     ├── • lookup join
+#     │   │ table: parent2@parent2_pkey
+#     │   │ equality: (c_p_id) = (p_id)
+#     │   │ equality cols are key
+#     │   │
+#     │   └── • scan
+#     │         missing stats
+#     │         table: child2@child2_pkey
+#     │         spans: [/'ap-southeast-2' - /'ap-southeast-2']
+#     │
+#     └── • lookup join
+#         │ table: parent2@parent2_pkey
+#         │ equality: (c_p_id) = (p_id)
+#         │ equality cols are key
+#         │
+#         └── • scan
+#               missing stats
+#               table: child2@child2_pkey
+#               spans: [/'ca-central-1' - /'us-east-1']
+#
+[GenerateLocalityOptimizedSearchOfLOJs, Explore]
+(LookupJoin
+    $input:* &
+        (IsRegionalByRowTableScanOrSelect $input) &
+        (LocalityOptimizedScanAboveMaxCardinality $input) &
+        (LookupsAreLocal (Root))
+    *
+    $private:* &
+        ^(IsAntiJoin $private) &
+        ^(IsLocalityOptimizedJoin $private) &
+        (Let
+            (
+                $inputScan
+                $inputFilters
+                $ok
+            ):(CanMaybeGenerateLocalityOptimizedSearch (Root))
+            $ok
+        )
+)
+=>
+(GenerateLocalityOptimizedSearchLOJ
+    (Root)
+    $inputScan
+    $inputFilters
 )
