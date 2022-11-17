@@ -140,11 +140,14 @@ import (
 //	 RangeMetaKey(desc.StartKey) and only allow meta2 split boundaries at
 //	 RangeMetaKey(existingSplitBoundary)
 //
-// Lookups for range metadata keys usually want to perform reads at the
-// READ_UNCOMMITTED read consistency level read in order to observe intents as
-// well. However, some callers need a consistent result; both are supported be
-// specifying the ReadConsistencyType. If the lookup is consistent, the Sender
-// provided should be a TxnCoordSender.
+// Lookups for range metadata keys may perform reads at the
+// READ_UNCOMMITTED or the INCONSISTENT ReadConsistencyType. The former will be
+// routed to the leaseholder, and the latter will be routed to any replica,
+// meaning it may return arbitrarily stale results. READ_UNCOMMITTED will
+// return intents whereas INCONSISTENT will not. Some callers need
+// a consistent result; both are supported be specifying the
+// ReadConsistencyType. If the lookup is consistent, the Sender provided
+// should be a TxnCoordSender.
 //
 // This method has an important optimization if the prefetchNum arg is larger
 // than 0: instead of just returning the request RangeDescriptor, it also
@@ -154,6 +157,11 @@ import (
 // likely to be desired by their current workload. The prefetchReverse flag
 // specifies whether descriptors are prefetched in descending or ascending
 // order.
+//
+// TODO(ajwerner): Rationalize the consistency, isolation, and routing policy
+// arguments in KV to make it such that the requests which want to opt into
+// stale reads and to be routed to followers can still get intents, if they
+// exist.
 func RangeLookup(
 	ctx context.Context,
 	sender Sender,
@@ -239,7 +247,12 @@ func RangeLookup(
 		if len(matchingRanges) > 0 {
 			return matchingRanges, prefetchedRanges, nil
 		}
-
+		// If we're doing an inconsistent scan and do not find any matching
+		// descriptors, return to the caller so that it can retry by reading
+		// from the leaseholder.
+		if rc == roachpb.INCONSISTENT {
+			return nil, nil, nil
+		}
 		log.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
 			key, prefetchedRanges)
 	}
@@ -277,6 +290,11 @@ func lookupRangeFwdScan(
 
 	ba := &roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
+	// If the caller is asking for a potentially stale result, we want to route
+	// the request to the nearest replica rather than the leaseholder.
+	if rc == roachpb.INCONSISTENT {
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+	}
 	if prefetchReverse {
 		// Even if we're prefetching in the reverse direction, we still scan
 		// forward first to get the first range. There are two cases, which we
@@ -370,6 +388,11 @@ func lookupRangeRevScan(
 
 	ba := &roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
+	// If the caller is asking for a potentially stale result, we want to route
+	// the request to the nearest replica rather than the leaseholder.
+	if rc == roachpb.INCONSISTENT {
+		ba.RoutingPolicy = roachpb.RoutingPolicy_NEAREST
+	}
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
 		RequestHeader: roachpb.RequestHeaderFromSpan(revBounds.AsRawSpanWithNoLocals()),

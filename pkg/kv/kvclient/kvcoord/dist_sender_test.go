@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -434,7 +435,7 @@ func TestSendRPCOrder(t *testing.T) {
 type MockRangeDescriptorDB func(roachpb.RKey, bool) (rs, preRs []roachpb.RangeDescriptor, err error)
 
 func (mdb MockRangeDescriptorDB) RangeLookup(
-	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, _ roachpb.ReadConsistencyType, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	return mdb(key, useReverseScan)
 }
@@ -1523,9 +1524,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 	rAnyKey := keys.MustAddr(anyKey)
 
 	call := func() {
-		if _, err := ds.rangeCache.LookupWithEvictionToken(
-			context.Background(), rAnyKey, rangecache.EvictionToken{}, false,
-		); err != nil {
+		if _, err := ds.rangeCache.Lookup(context.Background(), rAnyKey); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -5087,7 +5086,7 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 	}
 	var desc2 = roachpb.RangeDescriptor{
 		RangeID:    roachpb.RangeID(1),
-		Generation: 1,
+		Generation: 2,
 		StartKey:   roachpb.RKeyMin,
 		EndKey:     roachpb.RKeyMax,
 		InternalReplicas: []roachpb.ReplicaDescriptor{
@@ -5370,3 +5369,290 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 			require.Equal(t, 1, rangeLookups)
 		})
 }
+
+// TestOptimisticRangeDescriptorLookups tests the integration of optimistic
+// range descriptor lookups with the DistSender. It uses rather low-level
+// dependency injection to validate the combined behavior of the DistSender,
+// the RangeCache, and kv.RangeLookup.
+func TestOptimisticRangeDescriptorLookups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type batchResponse struct {
+		br  *roachpb.BatchResponse
+		err error
+	}
+	type batchRequest struct {
+		ba   *roachpb.BatchRequest
+		resp chan batchResponse
+	}
+
+	firstRange := roachpb.NewRangeDescriptor(
+		1,
+		keys.MustAddr(keys.MinKey),
+		keys.MustAddr(keys.Meta2Prefix),
+		roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+		}),
+	)
+	setup := func() (chan batchRequest, *DistSender, *stop.Stopper) {
+		stopper := stop.NewStopper()
+		manualC := timeutil.NewManualTime(timeutil.Unix(0, 1))
+		clock := hlc.NewClock(manualC, time.Microsecond)
+		rpcContext := rpc.NewInsecureTestingContext(context.Background(), clock, stopper)
+
+		ns := &mockNodeStore{nodes: []roachpb.NodeDescriptor{
+			{NodeID: 1, Address: util.UnresolvedAddr{}},
+			{NodeID: 2, Address: util.UnresolvedAddr{}},
+			{NodeID: 3, Address: util.UnresolvedAddr{}},
+			{NodeID: 4, Address: util.UnresolvedAddr{}},
+			{NodeID: 5, Address: util.UnresolvedAddr{}},
+			{NodeID: 6, Address: util.UnresolvedAddr{}},
+		}}
+
+		fr := mockFirstRangeProvider{d: firstRange}
+
+		sendCh := make(chan batchRequest)
+		transportFn := func(ctx context.Context, ba *roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+			r := batchRequest{ba: ba, resp: make(chan batchResponse, 1)}
+			select {
+			case sendCh <- r:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			select {
+			case resp := <-r.resp:
+				return resp.br, resp.err
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		cfg := DistSenderConfig{
+			AmbientCtx:         log.MakeTestingAmbientCtxWithNewTracer(),
+			Clock:              clock,
+			NodeDescs:          ns,
+			RPCContext:         rpcContext,
+			FirstRangeProvider: fr,
+			TestingKnobs: ClientTestingKnobs{
+				TransportFactory:    adaptSimpleTransport(transportFn),
+				DontReorderReplicas: true,
+			},
+			Settings: cluster.MakeTestingClusterSettings(),
+		}
+		ds := NewDistSender(cfg)
+		return sendCh, ds, stopper
+	}
+
+	send := func(ctx context.Context, ds *DistSender, ba *roachpb.BatchRequest) func() batchResponse {
+		var (
+			br   *roachpb.BatchResponse
+			pErr *roachpb.Error
+		)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			br, pErr = ds.Send(ctx, ba)
+		}()
+		return func() batchResponse {
+			wg.Wait()
+			return batchResponse{br: br, err: pErr.GoError()}
+		}
+	}
+	mkKey := func(i uint32) roachpb.Key {
+		return keys.SystemSQLCodec.TablePrefix(i)
+	}
+	mkGet := func(k roachpb.Key) *roachpb.BatchRequest {
+		ba := roachpb.BatchRequest{}
+		ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: k}})
+		return &ba
+	}
+
+	expectSingleScan := func(t *testing.T, ba *roachpb.BatchRequest) *roachpb.ScanRequest {
+		require.Len(t, ba.Requests, 1)
+		scanReq, ok := ba.GetArg(roachpb.Scan)
+		require.True(t, ok)
+		scan := scanReq.(*roachpb.ScanRequest)
+		return scan
+	}
+	expectSingleGet := func(t *testing.T, ba *roachpb.BatchRequest) *roachpb.GetRequest {
+		require.Len(t, ba.Requests, 1)
+		getReq, ok := ba.GetArg(roachpb.Get)
+		require.True(t, ok)
+		get := getReq.(*roachpb.GetRequest)
+		return get
+	}
+
+	makeMeta2Ranges := func() (initial, nextGen *roachpb.RangeDescriptor) {
+		meta2RangeDesc := roachpb.NewRangeDescriptor(
+			2,
+			keys.MustAddr(keys.Meta2Prefix),
+			keys.MustAddr(keys.MetaMax),
+			roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3, ReplicaID: 3},
+			}),
+		)
+		meta2RangeDesc.Generation = 1
+		next := *meta2RangeDesc
+		next.Generation++
+		next.SetReplicas(roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
+			{NodeID: 4, StoreID: 4, ReplicaID: 45},
+		}))
+		return meta2RangeDesc, &next
+	}
+	mkBatchResponseWithResponses := func(resps ...roachpb.Response) *roachpb.BatchResponse {
+		var br roachpb.BatchResponse
+		for _, resp := range resps {
+			br.Add(resp)
+		}
+		return &br
+	}
+	mkBatchResponseWithRangeDescriptor := func(
+		t *testing.T, k roachpb.Key, d *roachpb.RangeDescriptor,
+	) *roachpb.BatchResponse {
+		var retKV roachpb.KeyValue
+		retKV.Key = k
+		require.NoError(t, retKV.Value.SetProto(d))
+		return mkBatchResponseWithResponses(
+			&roachpb.ScanResponse{Rows: []roachpb.KeyValue{retKV}},
+		)
+	}
+	checkBatch := func(
+		t *testing.T, ba *roachpb.BatchRequest, expDesc *roachpb.RangeDescriptor,
+		consistency roachpb.ReadConsistencyType) {
+		require.Equal(t, expDesc.RangeID, ba.RangeID)
+		require.Equal(t, expDesc.Replicas().Descriptors()[0], ba.Replica)
+		require.Equal(t, consistency, ba.ReadConsistency)
+	}
+	checkScan := func(
+		expDesc *roachpb.RangeDescriptor,
+		consistency roachpb.ReadConsistencyType, key roachpb.Key,
+	) func(*testing.T, *roachpb.BatchRequest) {
+		return func(t *testing.T, ba *roachpb.BatchRequest) {
+			checkBatch(t, ba, expDesc, consistency)
+			scan := expectSingleScan(t, ba)
+			require.Equal(t, key, scan.Key)
+		}
+	}
+
+	checkGet := func(
+		expDesc *roachpb.RangeDescriptor,
+		consistency roachpb.ReadConsistencyType, key roachpb.Key,
+	) func(*testing.T, *roachpb.BatchRequest) {
+		return func(t *testing.T, ba *roachpb.BatchRequest) {
+			get := expectSingleGet(t, ba)
+			require.Equal(t, key, get.Key)
+			checkBatch(t, ba, expDesc, consistency)
+		}
+	}
+	t.Run("basic lookup", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		sendCh, ds, stopper := setup()
+		defer stopper.Stop(context.Background())
+		defer cancel()
+		k := mkKey(1)
+		ba := mkGet(k)
+		res := send(ctx, ds, ba)
+
+		meta2Key := keys.RangeMetaKey(keys.MustAddr(k))
+		meta1Key := keys.RangeMetaKey(meta2Key)
+
+		meta2Initial, meta2NextGen := makeMeta2Ranges()
+		tableDataRange := roachpb.NewRangeDescriptor(
+			3, keys.MustAddr(keys.TableDataMin), keys.MustAddr(keys.TableDataMax),
+			roachpb.MakeReplicaSet([]roachpb.ReplicaDescriptor{
+				{NodeID: 3, StoreID: 3, ReplicaID: 1},
+			}),
+		)
+		for _, step := range []struct {
+			check func(*testing.T, *roachpb.BatchRequest)
+			next  batchResponse
+		}{
+			// The first request we expect is a scan to meta1 to find the meta2 for our
+			// key. Note that when scanning meta2, we'll attempt to scan forward for
+			// k.Next(), so when scanning meta1, we'll be at k.Next().Next().
+			{ // 0
+				checkScan(
+					firstRange, roachpb.INCONSISTENT,
+					meta1Key.Next().Next().AsRawKey(),
+				),
+				batchResponse{br: mkBatchResponseWithRangeDescriptor(
+					t, keys.MetaMax, meta2Initial,
+				)},
+			},
+			// At this point, if we send a RangeNotFound error, then the code
+			// should attempt another lookup of the meta2 descriptor with another
+			// inconsistent scan. If we send back the same bogus descriptor with
+			// the same generation number, then we should get a consistent scan.
+			{ // 1
+				checkScan(
+					meta2Initial, roachpb.INCONSISTENT, meta2Key.Next().AsRawKey(),
+				),
+				batchResponse{err: roachpb.NewRangeNotFoundError(2, 3)},
+			},
+			// Now we should get another scan to meta1 to look up the meta2 range again.
+			// Send the same response as the first time around.
+			{ // 2
+				checkScan(
+					firstRange, roachpb.INCONSISTENT,
+					meta1Key.Next().Next().AsRawKey(),
+				),
+				batchResponse{br: mkBatchResponseWithRangeDescriptor(
+					t, keys.MetaMax, meta2Initial,
+				)},
+			},
+			// Now expect another scan of meta1, but this time with a READ_UNCOMMITTED
+			// scan.
+			{ // 3
+				checkScan(
+					firstRange, roachpb.READ_UNCOMMITTED,
+					meta1Key.Next().Next().AsRawKey(),
+				),
+				batchResponse{br: mkBatchResponseWithRangeDescriptor(
+					t, keys.MetaMax, meta2NextGen,
+				)},
+			},
+			// Now we should get a fresh request to scan meta2 at the next generation
+			// location.
+			{ // 4
+				checkScan(
+					meta2NextGen, roachpb.INCONSISTENT,
+					meta2Key.Next().AsRawKey(),
+				),
+				batchResponse{
+					br: mkBatchResponseWithRangeDescriptor(
+						t, keys.TableDataMax, tableDataRange,
+					),
+				},
+			},
+			// Finally the request gets where it needs to go.
+			{ // 5
+				checkGet(tableDataRange, roachpb.CONSISTENT, k),
+				batchResponse{
+					br: mkBatchResponseWithResponses(&roachpb.GetResponse{}),
+				},
+			},
+		} {
+			if !t.Run("", func(t *testing.T) {
+				s := <-sendCh
+				step.check(t, s.ba)
+				s.resp <- step.next
+			}) {
+				return
+			}
+		}
+		finish := res()
+		require.NoError(t, finish.err)
+	})
+}
+
+type mockFirstRangeProvider struct {
+	d *roachpb.RangeDescriptor
+}
+
+func (m mockFirstRangeProvider) GetFirstRangeDescriptor() (*roachpb.RangeDescriptor, error) {
+	return m.d, nil
+}
+
+func (m mockFirstRangeProvider) OnFirstRangeChanged(f func(*roachpb.RangeDescriptor)) {}
+
+var _ FirstRangeProvider = (*mockFirstRangeProvider)(nil)
