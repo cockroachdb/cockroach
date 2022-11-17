@@ -552,10 +552,7 @@ func (dsp *DistSQLPlanner) setupFlows(
 		// DistSQLReceiver by the listener goroutine below.
 		cancelRunnerCtx()
 	})
-	// Now the responsibility of calling runnerCleanup is passed on to the new
-	// goroutine.
-	listenerGoroutineWillCleanup = true
-	_ = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
+	err = dsp.stopper.RunAsyncTask(origCtx, "distsql-remote-flows-setup-listener", func(ctx context.Context) {
 		defer runnerCleanup()
 		var seenError bool
 		for i := 0; i < len(flows)-1; i++ {
@@ -582,6 +579,12 @@ func (dsp *DistSQLPlanner) setupFlows(
 			}
 		}
 	})
+	if err != nil {
+		return ctx, flow, err
+	}
+	// Now the responsibility of calling runnerCleanup is passed on to the new
+	// goroutine.
+	listenerGoroutineWillCleanup = true
 	return ctx, flow, nil
 }
 
