@@ -1189,10 +1189,18 @@ func createImportingDescriptors(
 			}
 
 			if len(details.Tenants) > 0 {
-				initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, txn)
+				// Creating a new collection with system codec the purpose of resolving
+				// zone config for tenants range. It won't query any table descriptor
+				// from collection since it's only hydrating zone configs for tenant
+				// ranges which doesn't have corresponding descriptor. But, it's still
+				// to release everything after.
+				cf := descs.NewBareBonesCollectionFactory(r.settings, keys.SystemSQLCodec)
+				descriptors := cf.NewCollection(ctx)
+				initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, txn, descriptors)
 				if err != nil {
 					return err
 				}
+				descriptors.ReleaseAll(ctx)
 				for _, tenant := range details.Tenants {
 					switch tenant.State {
 					case descpb.TenantInfo_ACTIVE:

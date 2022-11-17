@@ -263,6 +263,7 @@ go_library(
         "zero.go",
         "zigzag_join.go",
         "zone_config.go",
+        "zone_config_helper.go",
         ":gen-advancecode-stringer",  # keep
         ":gen-nodestatus-stringer",  # keep
         ":gen-txneventtype-stringer",  # keep
