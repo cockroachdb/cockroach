@@ -228,15 +228,45 @@ func (p *planner) canRemoveOwnedSequencesImpl(
 // is a view, it drops the views.
 // This is called when the DropBehavior is DropCascade.
 func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc.Mutable) error {
-	for len(seqDesc.DependedOnBy) > 0 {
-		dependent := seqDesc.DependedOnBy[0]
+	// numDependedOnByTablesToSkip is a hack to skip tables that reference `seqDesc` in a constraint.
+	// This function will now only handle cases where `seqDesc` is referenced in a view or in a default
+	// expr of a column of a table, in which case we drop the view or the default expr. However, if
+	// this seq is referenced in a constraint of a table, we will only drop the sequence without
+	// dropping the constraint.
+	// This hack can be removed once we support dropping the depending constraint as well.
+	numDependedOnByTablesToSkip := 0
+	for len(seqDesc.DependedOnBy) > numDependedOnByTablesToSkip {
+		dependent := seqDesc.DependedOnBy[numDependedOnByTablesToSkip]
 		desc, err := p.Descriptors().GetMutableDescriptorByID(ctx, p.txn, dependent.ID)
 		if err != nil {
 			return err
 		}
 		switch t := desc.(type) {
 		case *tabledesc.Mutable:
-			err = dropDepTableOnSequence(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)
+			// If the table that uses the sequence has been dropped already,
+			// no need to update, so skip.
+			if t.Dropped() {
+				numDependedOnByTablesToSkip++
+				continue
+			}
+
+			// If the dependent object is a view, drop the view.
+			if t.IsView() {
+				_, err = p.dropViewImpl(ctx, t, false /* queueJob */, "", tree.DropCascade)
+				if err != nil {
+					return err
+				}
+				continue
+			}
+
+			if dependent.ColumnIDs != nil && len(dependent.ColumnIDs) > 0 {
+				// If we reach here, it means this sequence is depended on by a column in `t`
+				// in its default expression. Remove that column's default expression.
+				err = dropDefaultExprInDepColsOnSeq(ctx, p, t, seqDesc.Name, dependent.ColumnIDs)
+			} else {
+				// Otherwise, it means this sequence is depended on by a constraint in `t`.
+				numDependedOnByTablesToSkip++
+			}
 		case *funcdesc.Mutable:
 			err = p.dropFunctionImpl(ctx, t)
 		default:
@@ -252,39 +282,17 @@ func dropDependentOnSequence(ctx context.Context, p *planner, seqDesc *tabledesc
 	return nil
 }
 
-func dropDepTableOnSequence(
+// dropDefaultExprInDepColsOnSeq drops the default expression of columns `depColIDs`
+// in table `tblDesc` because those columns depend on sequence `seqName`.
+// This function is called when the sequence is being dropped as cascade, so we need
+// to drop those default expressions as well.
+func dropDefaultExprInDepColsOnSeq(
 	ctx context.Context,
 	p *planner,
 	tblDesc *tabledesc.Mutable,
 	seqName string,
 	depColIDs []descpb.ColumnID,
 ) error {
-	tblDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, tblDesc.ID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				IncludeOffline: true,
-				IncludeDropped: true,
-			},
-		})
-	if err != nil {
-		return err
-	}
-
-	// If the table that uses the sequence has been dropped already,
-	// no need to update, so skip.
-	if tblDesc.Dropped() {
-		return nil
-	}
-
-	// If the dependent object is a view, drop the view.
-	if tblDesc.IsView() {
-		_, err = p.dropViewImpl(ctx, tblDesc, false /* queueJob */, "", tree.DropCascade)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-
 	// Set of column IDs which will have their default values dropped.
 	colsToDropDefault := make(map[descpb.ColumnID]struct{})
 	for _, colID := range depColIDs {

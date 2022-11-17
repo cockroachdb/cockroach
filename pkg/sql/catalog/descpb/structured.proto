@@ -940,6 +940,10 @@ message TableDescriptor {
     // constraints.
     optional uint32 constraint_id = 8 [(gogoproto.customname) = "ConstraintID",
       (gogoproto.casttype) = "ConstraintID", (gogoproto.nullable) = false];
+    // IndexIDToValidate is the index id to hint to the check constraint validation SQL query. It is used
+    // exclusively by sql.validateCheckExpr).
+    optional uint32 index_id_to_validate = 9 [(gogoproto.customname) = "IndexIDToValidate",
+      (gogoproto.casttype) = "IndexID", (gogoproto.nullable) = false];
   }
 
   repeated CheckConstraint checks = 20;

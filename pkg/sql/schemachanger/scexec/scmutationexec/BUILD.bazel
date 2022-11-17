@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "column.go",
         "comment.go",
+        "constraint.go",
         "dependencies.go",
         "drop.go",
         "eventlog.go",
