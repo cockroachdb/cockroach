@@ -336,7 +336,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		return nil, errors.AssertionFailedf("unknown named zone config %s", name)
 	}
 
-	zoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(ctx, txn, s.codec, name)
+	zoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(ctx, txn, s.txnBundle.descsCol, name)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +368,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		return nil, nil
 	}
 
-	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.codec, table.GetID())
+	zone, err := sql.GetHydratedZoneConfigForTable(ctx, txn, s.txnBundle.descsCol, table.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -670,7 +670,7 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 		//      emulate. As for what config to apply over said range -- we do as
 		//      the system config span does, applying the config for the system
 		//      database.
-		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.SystemDatabaseID)
+		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.txnBundle.descsCol, keys.SystemDatabaseID)
 		if err != nil {
 			return nil, err
 		}
@@ -707,7 +707,7 @@ func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 			continue // nothing to do
 		}
 
-		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.codec, keys.RootNamespaceID)
+		zone, err := sql.GetHydratedZoneConfigForDatabase(ctx, txn, s.txnBundle.descsCol, keys.RootNamespaceID)
 		if err != nil {
 			return spanconfig.Record{}, err
 		}

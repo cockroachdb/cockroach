@@ -1043,8 +1043,13 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 					TestingRequestFilter: rf.filter,
 				},
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					BeforeExecute: func(ctx context.Context, stmt string) {
+					BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 						if strings.Contains(stmt, "DROP INDEX") {
+							// Force release all cached descriptors to force a kv fetch with
+							// the table ID so that we can guarantee the DynamicRequestFilter
+							// would see such relevant request and inject the error we want at
+							// the right time.
+							descriptors.ReleaseAll(ctx)
 							close(dropIndexPlanningDoneCh)
 						}
 					},

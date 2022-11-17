@@ -92,6 +92,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgwirebase",

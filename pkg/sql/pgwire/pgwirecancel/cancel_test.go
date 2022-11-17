@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -41,7 +42,7 @@ func TestCancelQuery(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
-				BeforeExecute: func(ctx context.Context, stmt string) {
+				BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 					if strings.Contains(stmt, "pg_sleep") {
 						cancel()
 					}
@@ -76,7 +77,7 @@ func TestCancelQueryOtherNode(t *testing.T) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
-				BeforeExecute: func(ctx context.Context, stmt string) {
+				BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 					if strings.Contains(stmt, "pg_sleep") {
 						cancel()
 					}
