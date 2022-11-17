@@ -174,7 +174,8 @@ func reqAllowed(r roachpb.Request, tenID roachpb.TenantID) bool {
 		*roachpb.AddSSTableRequest,
 		*roachpb.RefreshRequest,
 		*roachpb.RefreshRangeRequest,
-		*roachpb.IsSpanEmptyRequest:
+		*roachpb.IsSpanEmptyRequest,
+		*roachpb.LeaseInfoRequest, *roachpb.RangeStatsRequest:
 		return true
 	case *roachpb.AdminScatterRequest:
 		return t.Class != roachpb.AdminScatterRequest_ARBITRARY || tenID.IsSystem()
