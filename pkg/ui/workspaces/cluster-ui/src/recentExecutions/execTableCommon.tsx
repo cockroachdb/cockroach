@@ -10,7 +10,7 @@
 
 import React from "react";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import { ExecutionType, ActiveExecution } from "./types";
+import { ExecutionType, RecentExecution } from "./types";
 import { ColumnDescriptor } from "src/sortedtable";
 import { Link } from "react-router-dom";
 import { capitalize, DATE_FORMAT, Duration } from "src/util";
@@ -146,70 +146,70 @@ export const executionsTableTitles: ExecutionsTableTitleType = {
   ),
 };
 
-function getID(item: ActiveExecution, execType: ExecutionType) {
+function getID(item: RecentExecution, execType: ExecutionType) {
   return execType === "transaction" ? item.transactionID : item.statementID;
 }
 
-function makeActiveExecutionColumns(
+function makeRecentExecutionColumns(
   execType: ExecutionType,
-): Partial<Record<ExecutionsColumn, ColumnDescriptor<ActiveExecution>>> {
+): Partial<Record<ExecutionsColumn, ColumnDescriptor<RecentExecution>>> {
   return {
     executionID: {
       name: "executionID",
       title: executionsTableTitles.executionID(execType),
-      cell: (item: ActiveExecution) => (
+      cell: (item: RecentExecution) => (
         <Link
           to={`/execution/${execType.toLowerCase()}/${getID(item, execType)}`}
         >
           {getID(item, execType)}
         </Link>
       ),
-      sort: (item: ActiveExecution) => item.statementID,
+      sort: (item: RecentExecution) => item.statementID,
       alwaysShow: true,
     },
     status: {
       name: "status",
       title: executionsTableTitles.status(execType),
-      cell: (item: ActiveExecution) => (
+      cell: (item: RecentExecution) => (
         <span>
           <StatusIcon status={item.status} />
           {item.status}
         </span>
       ),
-      sort: (item: ActiveExecution) => item.status,
+      sort: (item: RecentExecution) => item.status,
     },
     startTime: {
       name: "startTime",
       title: executionsTableTitles.startTime(execType),
-      cell: (item: ActiveExecution) => item.start.format(DATE_FORMAT),
-      sort: (item: ActiveExecution) => item.start.unix(),
+      cell: (item: RecentExecution) => item.start.format(DATE_FORMAT),
+      sort: (item: RecentExecution) => item.start.unix(),
     },
     elapsedTime: {
       name: "elapsedTime",
       title: executionsTableTitles.elapsedTime(execType),
-      cell: (item: ActiveExecution) =>
+      cell: (item: RecentExecution) =>
         Duration(item.elapsedTime.asMilliseconds() * 1e6),
-      sort: (item: ActiveExecution) => item.elapsedTime.asMilliseconds(),
+      sort: (item: RecentExecution) => item.elapsedTime.asMilliseconds(),
     },
     timeSpentWaiting: {
       name: "timeSpentWaiting",
       title: executionsTableTitles.timeSpentWaiting(execType),
-      cell: (item: ActiveExecution) =>
+      cell: (item: RecentExecution) =>
         Duration((item.timeSpentWaiting?.asMilliseconds() ?? 0) * 1e6),
-      sort: (item: ActiveExecution) =>
+      sort: (item: RecentExecution) =>
         item.timeSpentWaiting?.asMilliseconds() || 0,
     },
     applicationName: {
       name: "applicationName",
       title: executionsTableTitles.applicationName(execType),
-      cell: (item: ActiveExecution) => item.application,
-      sort: (item: ActiveExecution) => item.application,
+      cell: (item: RecentExecution) => item.application,
+      sort: (item: RecentExecution) => item.application,
     },
   };
 }
 
-export const activeTransactionColumnsFromCommon =
-  makeActiveExecutionColumns("transaction");
+export const recentTransactionColumnsFromCommon =
+  makeRecentExecutionColumns("transaction");
 
-export const activeStatementColumnsFromCommon =
-  makeActiveExecutionColumns("statement");
+export const recentStatementColumnsFromCommon =
+  makeRecentExecutionColumns("statement");

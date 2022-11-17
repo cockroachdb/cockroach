@@ -55,7 +55,7 @@ func TestingSetRangeQPS(s State, rangeID RangeID, qps float64) bool {
 // for configuration.
 func NewStorePool(
 	nodeCountFn storepool.NodeCountFunc, nodeLivenessFn storepool.NodeLivenessFunc, hlc *hlc.Clock,
-) *storepool.StorePool {
+) (*storepool.StorePool, *cluster.Settings) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -73,7 +73,7 @@ func NewStorePool(
 		nodeLivenessFn,
 		/* deterministic */ true,
 	)
-	return sp
+	return sp, st
 }
 
 // OffsetTick offsets start time by adding tick number of seconds to it.

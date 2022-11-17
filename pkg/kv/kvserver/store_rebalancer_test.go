@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
@@ -766,7 +767,8 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			sr.getRaftStatusFn = func(r CandidateReplica) *raft.Status {
 				return TestingRaftStatusFn(r)
 			}
-			a.StorePool.IsStoreReadyForRoutineReplicaTransfer = func(_ context.Context, this roachpb.StoreID) bool {
+			storePool := a.StorePool.(*storepool.StorePool)
+			storePool.OverrideIsStoreReadyForRoutineReplicaTransferFn = func(_ context.Context, this roachpb.StoreID) bool {
 				for _, deadStore := range deadStores {
 					// NodeID match StoreIDs here, so this comparison is valid.
 					if deadStore.StoreID == this {
@@ -1185,7 +1187,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 	localDesc := *noLocalityStores[len(noLocalityStores)-1]
 	cfg := TestStoreConfig(nil)
 	cfg.Gossip = g
-	cfg.StorePool = a.StorePool
+	cfg.StorePool = a.StorePool.(*storepool.StorePool)
 	cfg.DefaultSpanConfig.NumVoters = 1
 	cfg.DefaultSpanConfig.NumReplicas = 1
 	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
@@ -1421,7 +1423,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 	localDesc := *noLocalityStores[0]
 	cfg := TestStoreConfig(nil)
 	cfg.Gossip = g
-	cfg.StorePool = a.StorePool
+	cfg.StorePool = a.StorePool.(*storepool.StorePool)
 	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
@@ -1601,7 +1603,7 @@ func TestStoreRebalancerReadAmpCheck(t *testing.T) {
 			localDesc := *noLocalityStores[0]
 			cfg := TestStoreConfig(nil)
 			cfg.Gossip = g
-			cfg.StorePool = a.StorePool
+			cfg.StorePool = a.StorePool.(*storepool.StorePool)
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(test.stores, t)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}

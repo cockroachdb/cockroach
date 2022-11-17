@@ -71,6 +71,7 @@ func (m *MockNodeLiveness) NodeLivenessFunc(
 // tests. Stopper must be stopped by the caller.
 func CreateTestStorePool(
 	ctx context.Context,
+	st *cluster.Settings,
 	timeUntilStoreDeadValue time.Duration,
 	deterministic bool,
 	nodeCount NodeCountFunc,
@@ -79,7 +80,6 @@ func CreateTestStorePool(
 	stopper := stop.NewStopper()
 	mc := timeutil.NewManualTime(timeutil.Unix(0, 123))
 	clock := hlc.NewClock(mc, time.Nanosecond /* maxOffset */)
-	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 	rpcContext := rpc.NewContext(ctx,
 		rpc.ContextOptions{

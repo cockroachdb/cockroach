@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -85,22 +86,24 @@ func Test_handleRaftReadyStats_SafeFormat(t *testing.T) {
 			numEmptyEntries:       5,
 			numConfChangeEntries:  6,
 		},
-		tAppendBegin:            ts(2),
-		tAppendEnd:              ts(3),
-		appendedRegularCount:    7,
-		appendedSideloadedCount: 3,
-		appendedSideloadedBytes: 5 * (1 << 20),
-		appendedRegularBytes:    1024,
-		tPebbleCommitBegin:      ts(3),
-		pebbleBatchBytes:        1024 * 5,
-		tPebbleCommitEnd:        ts(4),
-		tSnapBegin:              ts(4),
-		tSnapEnd:                ts(5),
+		append: logstore.AppendStats{
+			Begin:             ts(2),
+			End:               ts(3),
+			RegularEntries:    7,
+			RegularBytes:      1024,
+			SideloadedEntries: 3,
+			SideloadedBytes:   5 * (1 << 20),
+			PebbleBegin:       ts(3),
+			PebbleEnd:         ts(4),
+			PebbleBytes:       1024 * 5,
+			Sync:              true,
+		},
+		tSnapBegin: ts(4),
+		tSnapEnd:   ts(5),
 		snap: handleSnapshotStats{
 			offered: true,
 			applied: true,
 		},
-		sync: true,
 	}
 
 	echotest.Require(t, string(redact.Sprint(stats)),

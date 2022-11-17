@@ -24,10 +24,8 @@ fi
 artifacts=$PWD/artifacts/$(date +"%%Y%%m%%d")-${TC_BUILD_ID}
 mkdir -p "$artifacts"
 
-bucket="${BUCKET-cockroach-builds}"
-
 release_version=$(echo $TC_BUILD_BRANCH | sed -e 's/provisional_[[:digit:]]*_//')
-curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${release_version}.linux-amd64.tgz" | tar ixfz - --strip-components 1
+curl -f -s -S -o- "https://storage.googleapis.com/cockroach-builds-artifacts-prod/cockroach-${release_version}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 chmod +x cockroach
 
 run_bazel <<'EOF'

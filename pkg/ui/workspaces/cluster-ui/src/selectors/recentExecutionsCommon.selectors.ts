@@ -8,25 +8,26 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import { ActiveExecutions, SessionsResponse } from "src/activeExecutions/types";
+import { RouteComponentProps } from "react-router";
+import { RecentExecutions, SessionsResponse } from "src/recentExecutions/types";
 import { ClusterLocksResponse } from "src/api";
 import {
-  getActiveExecutionsFromSessions,
+  getRecentExecutionsFromSessions,
   getWaitTimeByTxnIDFromLocks,
-} from "../activeExecutions";
+} from "../recentExecutions";
 
 // The functions in this file are agnostic to the different shape of each
 // state in db-console and cluster-ui. This file contains selector functions
 // and combiners that can be reused across both packages.
 
-export const selectActiveExecutionsCombiner = (
+export const selectRecentExecutionsCombiner = (
   sessions: SessionsResponse | null,
   clusterLocks: ClusterLocksResponse | null,
-): ActiveExecutions => {
+): RecentExecutions => {
   if (!sessions) return { statements: [], transactions: [] };
 
   const waitTimeByTxnID = getWaitTimeByTxnIDFromLocks(clusterLocks);
-  const execs = getActiveExecutionsFromSessions(sessions);
+  const execs = getRecentExecutionsFromSessions(sessions);
 
   return {
     statements: execs.statements.map(s => ({
