@@ -2181,13 +2181,6 @@ func (node *CreateExternalConnection) Format(ctx *FmtCtx) {
 // CreateTenant represents a CREATE TENANT statement.
 type CreateTenant struct {
 	Name Name
-
-	// ReplicationSourceTenantName is the name of the tenant that we are
-	// replicating into the newly created tenant.
-	ReplicationSourceTenantName Name
-	// ReplicationSourceAddress is the address of the source cluster that we are
-	// replicating data from.
-	ReplicationSourceAddress Expr
 }
 
 // Format implements the NodeFormatter interface.

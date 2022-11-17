@@ -47,6 +47,7 @@ func makeProducerJobRecord(
 		Details: jobspb.StreamReplicationDetails{
 			ProtectedTimestampRecordID: ptsID,
 			Spans:                      []*roachpb.Span{makeTenantSpan(tenantID)},
+			TenantID:                   roachpb.MustMakeTenantID(tenantID),
 		},
 		Progress: jobspb.StreamReplicationProgress{
 			Expiration: timeutil.Now().Add(timeout),

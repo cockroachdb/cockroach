@@ -161,32 +161,6 @@ var replicationBuiltins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{"tenant_id", types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				mgr, err := evalCtx.StreamManagerFactory.GetReplicationStreamManager(ctx)
-				if err != nil {
-					return nil, err
-				}
-				tenantID, err := mustBeDIntInTenantRange(args[0])
-				if err != nil {
-					return nil, err
-				}
-				jobID, err := mgr.StartReplicationStream(ctx, uint64(tenantID))
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDInt(tree.DInt(jobID)), err
-			},
-			Info: "This function can be used on the producer side to start a replication stream for " +
-				"the specified tenant. The returned stream ID uniquely identifies created stream. " +
-				"The caller must periodically invoke crdb_internal.heartbeat_stream() function to " +
-				"notify that the replication is still ongoing.",
-			Volatility: volatility.Volatile,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
 				{"tenant_name", types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Int),
@@ -195,8 +169,8 @@ var replicationBuiltins = map[string]builtinDefinition{
 				if err != nil {
 					return nil, err
 				}
-				tenantName := tree.MustBeDString(args[0])
-				jobID, err := mgr.StartReplicationStreamByName(ctx, roachpb.TenantName(tenantName))
+				tenantName := string(tree.MustBeDString(args[0]))
+				jobID, err := mgr.StartReplicationStream(ctx, roachpb.TenantName(tenantName))
 				if err != nil {
 					return nil, err
 				}

@@ -181,6 +181,7 @@ var _ CCLOnlyStatement = &Import{}
 var _ CCLOnlyStatement = &Export{}
 var _ CCLOnlyStatement = &ScheduledBackup{}
 var _ CCLOnlyStatement = &StreamIngestion{}
+var _ CCLOnlyStatement = &CreateTenantFromReplication{}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterChangefeed) StatementReturnType() StatementReturnType { return Rows }
@@ -750,6 +751,8 @@ func (*CreateTenantFromReplication) StatementType() StatementType { return TypeD
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateTenantFromReplication) StatementTag() string { return "CREATE TENANT FROM REPLICATION" }
+
+func (*CreateTenantFromReplication) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*DropExternalConnection) StatementReturnType() StatementReturnType { return Ack }
