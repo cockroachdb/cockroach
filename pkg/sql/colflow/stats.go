@@ -36,11 +36,11 @@ type childStatsCollector interface {
 
 // batchInfoCollector is a helper used by collector implementations.
 //
-// It wraps an Operator and keeps track of how much time was spent while calling
-// Next on the underlying Operator and how many batches and tuples were
-// returned.
+// It wraps a colexecop.Operator (inside of the colexecop.OneInputNode) and
+// keeps track of how much time was spent while calling Next on the underlying
+// Operator and how many batches and tuples were returned.
 type batchInfoCollector struct {
-	colexecop.Operator
+	colexecop.OneInputNode
 	colexecop.NonExplainable
 	componentID execinfrapb.ComponentID
 
@@ -81,7 +81,7 @@ func makeBatchInfoCollector(
 		colexecerror.InternalError(errors.AssertionFailedf("input watch is nil"))
 	}
 	return batchInfoCollector{
-		Operator:             op,
+		OneInputNode:         colexecop.NewOneInputNode(op),
 		componentID:          id,
 		stopwatch:            inputWatch,
 		childStatsCollectors: childStatsCollectors,
@@ -89,7 +89,7 @@ func makeBatchInfoCollector(
 }
 
 func (bic *batchInfoCollector) init() {
-	bic.Operator.Init(bic.ctx)
+	bic.Input.Init(bic.ctx)
 }
 
 // Init is part of the colexecop.Operator interface.
@@ -113,7 +113,7 @@ func (bic *batchInfoCollector) Init(ctx context.Context) {
 }
 
 func (bic *batchInfoCollector) next() {
-	bic.batch = bic.Operator.Next()
+	bic.batch = bic.Input.Next()
 }
 
 // Next is part of the colexecop.Operator interface.
