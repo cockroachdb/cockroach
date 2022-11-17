@@ -64,6 +64,19 @@ func Scan(
 			return result.Result{}, err
 		}
 		reply.BatchResponses = scanRes.KVData
+	case roachpb.COL_BATCH_RESPONSE:
+		scanRes, err = storage.MVCCScanToCols(
+			ctx, reader, cArgs.Header.IndexFetchSpec, args.Key, args.EndKey, h.Timestamp, opts,
+		)
+		if err != nil {
+			return result.Result{}, err
+		}
+		if scanRes.ColBatches != nil {
+			reply.ColBatches.ColBatches = make([]interface{}, len(scanRes.ColBatches))
+			for i := range scanRes.ColBatches {
+				reply.ColBatches.ColBatches[i] = scanRes.ColBatches[i]
+			}
+		}
 	case roachpb.KEY_VALUES:
 		scanRes, err = storage.MVCCScan(
 			ctx, reader, args.Key, args.EndKey, h.Timestamp, opts)
