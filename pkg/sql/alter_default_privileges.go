@@ -13,6 +13,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -61,6 +62,9 @@ func (p *planner) alterDefaultPrivileges(
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
+	}
+	if dbDesc.GetID() == keys.SystemDatabaseID {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot alter system database")
 	}
 
 	objectType := n.Grant.Target
