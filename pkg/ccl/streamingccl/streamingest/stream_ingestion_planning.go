@@ -32,7 +32,7 @@ import (
 )
 
 func streamIngestionJobDescription(
-	p sql.PlanHookState, streamIngestion *tree.StreamIngestion,
+	p sql.PlanHookState, streamIngestion *tree.CreateTenantFromReplication,
 ) (string, error) {
 	ann := p.ExtendedEvalContext().Annotations
 	return tree.AsStringWithFQNames(streamIngestion, ann), nil
@@ -46,14 +46,12 @@ var resultColumns = colinfo.ResultColumns{
 func ingestionTypeCheck(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (matched bool, header colinfo.ResultColumns, _ error) {
-	ingestionStmt, ok := stmt.(*tree.StreamIngestion)
+	ingestionStmt, ok := stmt.(*tree.CreateTenantFromReplication)
 	if !ok {
 		return false, nil, nil
 	}
-	if err := exprutil.TypeCheck(
-		ctx, "INGESTION", p.SemaCtx(),
-		exprutil.StringArrays{tree.Exprs(ingestionStmt.From)},
-	); err != nil {
+	if err := exprutil.TypeCheck(ctx, "INGESTION", p.SemaCtx(),
+		exprutil.Strings{ingestionStmt.ReplicationSourceAddress}); err != nil {
 		return false, nil, err
 	}
 	return true, resultColumns, nil
@@ -62,7 +60,7 @@ func ingestionTypeCheck(
 func ingestionPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (sql.PlanHookRowFn, colinfo.ResultColumns, []sql.PlanNode, bool, error) {
-	ingestionStmt, ok := stmt.(*tree.StreamIngestion)
+	ingestionStmt, ok := stmt.(*tree.CreateTenantFromReplication)
 	if !ok {
 		return nil, nil, nil, false, nil
 	}
@@ -83,7 +81,7 @@ func ingestionPlanHook(
 
 	exprEval := p.ExprEvaluator("INGESTION")
 
-	from, err := exprEval.StringArray(ctx, tree.Exprs(ingestionStmt.From))
+	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceAddress)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
@@ -94,17 +92,12 @@ func ingestionPlanHook(
 
 		if err := utilccl.CheckEnterpriseEnabled(
 			p.ExecCfg().Settings, p.ExecCfg().NodeInfo.LogicalClusterID(),
-			"RESTORE FROM REPLICATION STREAM",
+			"CREATE TENANT FROM REPLICATION",
 		); err != nil {
 			return err
 		}
 
-		// We only support a TENANT target, so error out if that is nil.
-		if !ingestionStmt.Targets.TenantID.IsSet() {
-			return errors.Newf("no tenant specified in ingestion query: %s", ingestionStmt.String())
-		}
-
-		streamAddress := streamingccl.StreamAddress(from[0])
+		streamAddress := streamingccl.StreamAddress(from)
 		streamURL, err := streamAddress.URL()
 		if err != nil {
 			return err
@@ -120,32 +113,26 @@ func ingestionPlanHook(
 		}
 
 		streamAddress = streamingccl.StreamAddress(streamURL.String())
-		if ingestionStmt.Targets.Databases != nil ||
-			ingestionStmt.Targets.Tables.TablePatterns != nil || ingestionStmt.Targets.Schemas != nil {
-			return errors.Newf("unsupported target in ingestion query, "+
-				"only tenant ingestion is supported: %s", ingestionStmt.String())
-		}
+		sourceTenant := ingestionStmt.ReplicationSourceTenantName
+		destinationTenant := ingestionStmt.Name
 
 		// TODO(adityamaru): Add privileges checks. Probably the same as RESTORE.
-		// TODO(casper): make target to be tenant-only.
-		oldTenantID := roachpb.MustMakeTenantID(ingestionStmt.Targets.TenantID.ID)
-		newTenantID := oldTenantID
-		if ingestionStmt.AsTenant.Specified {
-			newTenantID = roachpb.MustMakeTenantID(ingestionStmt.AsTenant.ID)
-		}
-		if oldTenantID == roachpb.SystemTenantID || newTenantID == roachpb.SystemTenantID {
-			return errors.Newf("either old tenant ID %d or the new tenant ID %d cannot be system tenant",
-				oldTenantID.ToUint64(), newTenantID.ToUint64())
+		if roachpb.IsSystemTenantName(roachpb.TenantName(sourceTenant)) ||
+			roachpb.IsSystemTenantName(roachpb.TenantName(destinationTenant)) {
+			return errors.Newf("neither the source tenant %q nor the destination tenant %q can be the system tenant",
+				sourceTenant, destinationTenant)
 		}
 
 		// Create a new tenant for the replication stream
-		if _, err := sql.GetTenantRecordByID(ctx, p.ExecCfg(), p.Txn(), newTenantID); err == nil {
-			return errors.Newf("tenant with id %s already exists", newTenantID)
+		if _, err := sql.GetTenantRecordByName(ctx, p.ExecCfg(), p.Txn(), roachpb.TenantName(destinationTenant)); err == nil {
+			return errors.Newf("tenant with name %q already exists", destinationTenant)
 		}
 		tenantInfo := &descpb.TenantInfoWithUsage{
 			TenantInfo: descpb.TenantInfo{
-				ID:    newTenantID.ToUint64(),
+				// We leave the ID field unset so that the tenant is assigned the next
+				// available tenant ID.
 				State: descpb.TenantInfo_ADD,
+				Name:  roachpb.TenantName(destinationTenant),
 			},
 		}
 
@@ -153,7 +140,8 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
-		if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig); err != nil {
+		destinationTenantID, err := sql.CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), tenantInfo, initialTenantZoneConfig)
+		if err != nil {
 			return err
 		}
 
@@ -164,7 +152,7 @@ func ingestionPlanHook(
 		}
 		// Create the producer job first for the purpose of observability,
 		// user is able to know the producer job id immediately after executing the RESTORE.
-		streamID, err := client.Create(ctx, oldTenantID)
+		streamID, err := client.Create(ctx, roachpb.TenantName(sourceTenant))
 		if err != nil {
 			return err
 		}
@@ -172,13 +160,14 @@ func ingestionPlanHook(
 			return err
 		}
 
-		prefix := keys.MakeTenantPrefix(newTenantID)
+		prefix := keys.MakeTenantPrefix(destinationTenantID)
 		streamIngestionDetails := jobspb.StreamIngestionDetails{
-			StreamAddress: string(streamAddress),
-			StreamID:      uint64(streamID),
-			TenantID:      oldTenantID,
-			Span:          roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
-			NewTenantID:   newTenantID,
+			StreamAddress:         string(streamAddress),
+			StreamID:              uint64(streamID),
+			Span:                  roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()},
+			DestinationTenantID:   destinationTenantID,
+			SourceTenantName:      roachpb.TenantName(sourceTenant),
+			DestinationTenantName: roachpb.TenantName(destinationTenant),
 		}
 
 		jobDescription, err := streamIngestionJobDescription(p, ingestionStmt)

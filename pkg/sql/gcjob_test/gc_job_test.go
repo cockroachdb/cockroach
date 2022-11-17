@@ -421,14 +421,14 @@ func TestGCTenant(t *testing.T) {
 		dropTenID        = 11
 		nonexistentTenID = 12
 	)
-	require.NoError(t, sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
+	_, err := sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
 		TenantInfo: descpb.TenantInfo{ID: activeTenID},
-	}, execCfg.DefaultZoneConfig),
-	)
-	require.NoError(t, sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
+	}, execCfg.DefaultZoneConfig)
+	require.NoError(t, err)
+	_, err = sql.CreateTenantRecord(ctx, &execCfg, nil, &descpb.TenantInfoWithUsage{
 		TenantInfo: descpb.TenantInfo{ID: dropTenID, State: descpb.TenantInfo_DROP},
-	}, execCfg.DefaultZoneConfig),
-	)
+	}, execCfg.DefaultZoneConfig)
+	require.NoError(t, err)
 
 	t.Run("unexpected progress state", func(t *testing.T) {
 		progress := &jobspb.SchemaChangeGCProgress{

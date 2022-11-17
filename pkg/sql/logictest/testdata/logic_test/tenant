@@ -21,11 +21,11 @@ SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantI
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name          crdb_internal.pb_to_json
-1   true    system        {"id": "1", "name": "system", "state": "ACTIVE"}
-2   true    "tenant-one"  {"id": "2", "name": "\"tenant-one\"", "state": "ACTIVE"}
-3   true    two           {"id": "3", "name": "two", "state": "ACTIVE"}
-4   true    three         {"id": "4", "name": "three", "state": "ACTIVE"}
+id  active  name        crdb_internal.pb_to_json
+1   true    system      {"id": "1", "name": "system", "state": "ACTIVE"}
+2   true    tenant-one  {"id": "2", "name": "tenant-one", "state": "ACTIVE"}
+3   true    two         {"id": "3", "name": "two", "state": "ACTIVE"}
+4   true    three       {"id": "4", "name": "three", "state": "ACTIVE"}
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
 # ID.

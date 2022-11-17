@@ -137,5 +137,13 @@ func (n TenantName) Equal(o TenantName) bool {
 	return string(n) == string(o)
 }
 
+// IsSystemTenantName returns true if the provided tenantName corresponds to
+// that of the system tenant.
+//
+// NB: The system tenant cannot be renamed.
+func IsSystemTenantName(tenantName TenantName) bool {
+	return tenantName == "system"
+}
+
 // Silence unused warning.
 var _ = TenantFromContext

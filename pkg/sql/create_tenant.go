@@ -23,7 +23,7 @@ type createTenantNode struct {
 
 func (p *planner) CreateTenantNode(_ context.Context, n *tree.CreateTenant) (planNode, error) {
 	return &createTenantNode{
-		name: roachpb.TenantName(n.Name.String()),
+		name: roachpb.TenantName(n.Name),
 	}, nil
 }
 

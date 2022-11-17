@@ -26,7 +26,7 @@ type dropTenantNode struct {
 
 func (p *planner) DropTenant(_ context.Context, n *tree.DropTenant) (planNode, error) {
 	return &dropTenantNode{
-		name:     roachpb.TenantName(n.Name.String()),
+		name:     roachpb.TenantName(n.Name),
 		ifExists: n.IfExists,
 	}, nil
 }
