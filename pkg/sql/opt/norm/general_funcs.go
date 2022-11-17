@@ -477,6 +477,23 @@ func (c *CustomFuncs) CanHaveZeroRows(input memo.RelExpr) bool {
 	return input.Relational().Cardinality.CanBeZero()
 }
 
+// HasBoundedCardinality returns true if the input expression returns a bounded
+// number of rows.
+func (c *CustomFuncs) HasBoundedCardinality(input memo.RelExpr) bool {
+	return !input.Relational().Cardinality.IsUnbounded()
+}
+
+// GetLimitFromCardinality returns a ConstExpr equal to the upper bound on the
+// input expression's cardinality. It panics if the expression is unbounded.
+func (c *CustomFuncs) GetLimitFromCardinality(input memo.RelExpr) opt.ScalarExpr {
+	if input.Relational().Cardinality.IsUnbounded() {
+		panic(errors.AssertionFailedf("called GetLimitFromCardinality on unbounded expression"))
+	}
+	return c.f.ConstructConstVal(
+		tree.NewDInt(tree.DInt(input.Relational().Cardinality.Max)), types.Int,
+	)
+}
+
 // ----------------------------------------------------------------------
 //
 // Key functions
