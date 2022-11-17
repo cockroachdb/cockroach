@@ -533,6 +533,8 @@ func destroyTenantInternal(
 	// TODO(ssd): We may want to implement a job that waits out
 	// any running sql pods before enqueing the GC job.
 	info.State = descpb.TenantInfo_DROP
+	info.DroppedName = info.Name
+	info.Name = ""
 	if err := updateTenantRecord(ctx, execCfg, txn, info); err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}

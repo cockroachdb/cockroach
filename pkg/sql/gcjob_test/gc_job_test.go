@@ -463,7 +463,7 @@ func TestGCTenant(t *testing.T) {
 		require.EqualError(
 			t,
 			gcClosure(dropTenID, progress),
-			`GC state for tenant id:11 state:DROP name:"" is DELETED yet the tenant row still exists`,
+			`GC state for tenant id:11 state:DROP name:"" dropped_name:"" is DELETED yet the tenant row still exists`,
 		)
 	})
 
