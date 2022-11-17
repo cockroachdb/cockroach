@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package kvfeed
+package kvfeed_test
 
 import (
 	"os"
