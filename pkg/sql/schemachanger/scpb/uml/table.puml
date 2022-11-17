@@ -215,6 +215,12 @@ object IndexData
 IndexData :  TableID
 IndexData :  IndexID
 
+object IndexGeoConfig
+
+IndexGeoConfig :  TableID
+IndexGeoConfig :  IndexID
+IndexGeoConfig :  Config
+
 object ConstraintName
 
 ConstraintName :  TableID
@@ -333,6 +339,9 @@ Column <|-- IndexColumn
 PrimaryIndex <|-- IndexData
 SecondaryIndex <|-- IndexData
 TemporaryIndex <|-- IndexData
+PrimaryIndex <|-- IndexGeoConfig
+SecondaryIndex <|-- IndexGeoConfig
+TemporaryIndex <|-- IndexGeoConfig
 UniqueWithoutIndexConstraint <|-- ConstraintName
 CheckConstraint <|-- ConstraintName
 ForeignKeyConstraint <|-- ConstraintName

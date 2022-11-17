@@ -361,7 +361,7 @@ func isColumnTypeDependent(e scpb.Element) bool {
 
 func isIndexDependent(e scpb.Element) bool {
 	switch e.(type) {
-	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn:
+	case *scpb.IndexName, *scpb.IndexComment, *scpb.IndexColumn, *scpb.IndexGeoConfig:
 		return true
 	case *scpb.IndexPartitioning, *scpb.SecondaryIndexPartial:
 		return true

@@ -11,6 +11,7 @@
 package scop
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -634,4 +635,12 @@ type RemoveColumnFromIndex struct {
 	Kind         scpb.IndexColumn_Kind
 	Ordinal      uint32
 	InvertedKind scpb.IndexColumn_InvertedKind
+}
+
+// SetGeoConfigOnIndex mutates an index to set a geoconfig.
+type SetGeoConfigOnIndex struct {
+	mutationOp
+	TableID   descpb.ID
+	IndexID   descpb.IndexID
+	GeoConfig geoindex.Config
 }

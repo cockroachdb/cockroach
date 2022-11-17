@@ -406,6 +406,7 @@ type indexSpec struct {
 	idxComment    *scpb.IndexComment
 	constrComment *scpb.ConstraintComment
 	data          *scpb.IndexData
+	geoconfig     *scpb.IndexGeoConfig
 }
 
 // apply makes it possible to conveniently define build targets for all
@@ -440,6 +441,9 @@ func (s indexSpec) apply(fn func(e scpb.Element)) {
 	}
 	if s.data != nil {
 		fn(s.data)
+	}
+	if s.geoconfig != nil {
+		fn(s.geoconfig)
 	}
 }
 

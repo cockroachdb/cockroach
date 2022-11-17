@@ -699,6 +699,37 @@ func FindIndexData(b ElementStatusIterator) (current Status, target TargetStatus
 	return current, target, element
 }
 
+func (e IndexGeoConfig) element() {}
+
+// ForEachIndexGeoConfig iterates over elements of type IndexGeoConfig.
+func ForEachIndexGeoConfig(
+	b ElementStatusIterator, fn func(current Status, target TargetStatus, e *IndexGeoConfig),
+) {
+  if b == nil {
+    return
+  }
+	b.ForEachElementStatus(func(current Status, target TargetStatus, e Element) {
+		if elt, ok := e.(*IndexGeoConfig); ok {
+			fn(current, target, elt)
+		}
+	})
+}
+
+// FindIndexGeoConfig finds the first element of type IndexGeoConfig.
+func FindIndexGeoConfig(b ElementStatusIterator) (current Status, target TargetStatus, element *IndexGeoConfig) {
+  if b == nil {
+    return current, target, element
+  }
+	b.ForEachElementStatus(func(c Status, t TargetStatus, e Element) {
+		if elt, ok := e.(*IndexGeoConfig); ok {
+			element = elt
+			current = c
+			target = t
+		}
+	})
+	return current, target, element
+}
+
 func (e IndexName) element() {}
 
 // ForEachIndexName iterates over elements of type IndexName.
