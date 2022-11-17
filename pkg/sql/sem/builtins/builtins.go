@@ -4926,6 +4926,22 @@ value if you rely on the HLC for accuracy.`,
 		},
 	),
 
+	"crdb_internal.unsafe_optimize_system_database": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryMultiRegion,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.MakeDBool(tree.DBool(true)), evalCtx.Regions.OptimizeSystemDatabase(ctx)
+			},
+			Info:       "Configures the sytem database to reduce latency during start up",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"crdb_internal.destroy_tenant": makeBuiltin(
 		tree.FunctionProperties{
 			Category:     builtinconstants.CategoryMultiTenancy,
