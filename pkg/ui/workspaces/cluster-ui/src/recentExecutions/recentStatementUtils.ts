@@ -11,19 +11,22 @@
 import moment from "moment";
 import { byteArrayToUuid } from "src/sessions";
 import { TimestampToMoment, unset } from "src/util";
-import { RecentTransaction } from ".";
 import {
-  SessionsResponse,
+  ActiveQuery,
+  ActiveQueryPhase,
   ActiveStatementPhase,
-  ExecutionStatus,
-  RecentTransactionFilters,
-  SessionStatusType,
   ContendedExecution,
-  RecentExecutions,
   ExecutionContentionDetails,
+  ExecutionStatus,
   RecentExecution,
+  RecentExecutions,
+  RecentStatement,
+  RecentStatementFilters,
+  RecentTransaction,
+  RecentTransactionFilters,
+  Session,
+  SessionsResponse,
 } from "./types";
-import { RecentStatement, RecentStatementFilters } from "./types";
 import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { DurationToMomentDuration } from "src/util/convert";
 
@@ -75,6 +78,46 @@ export function filterRecentStatements(
   return filteredStatements;
 }
 
+function queryPhaseToExecutionStatus(phase: ActiveQueryPhase): ExecutionStatus {
+  switch (phase) {
+    case ActiveStatementPhase.EXECUTING:
+      return "Executing";
+    case ActiveStatementPhase.PREPARING:
+      return "Preparing";
+    case ActiveStatementPhase.CANCELED:
+      return "Canceled";
+    case ActiveStatementPhase.TIMED_OUT:
+      return "Timed Out";
+    case ActiveStatementPhase.COMPLETED:
+      return "Completed";
+    case ActiveStatementPhase.FAILED:
+      return "Failed";
+  }
+}
+
+function activeQueryToRecentStatement(
+  query: ActiveQuery,
+  session: Session,
+): RecentStatement {
+  return {
+    statementID: query.id,
+    stmtNoConstants: query.sql_no_constants,
+    transactionID: byteArrayToUuid(query.txn_id),
+    sessionID: byteArrayToUuid(session.id),
+    // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
+    query: query.sql?.length > 0 ? query.sql : query.sql_no_constants,
+    status: queryPhaseToExecutionStatus(query.phase),
+    start: TimestampToMoment(query.start),
+    elapsedTime: DurationToMomentDuration(query.elapsed_time),
+    application: session.application_name,
+    database: query.database,
+    user: session.username,
+    clientAddress: session.client_address,
+    isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
+    planGist: query.plan_gist,
+  };
+}
+
 /**
  * getRecentExecutionsFromSessions returns recent statements and
  * transactions from the array of sessions provided.
@@ -93,8 +136,9 @@ export function getRecentExecutionsFromSessions(
   sessionsResponse.sessions
     .filter(
       session =>
-        session.status !== SessionStatusType.CLOSED &&
-        (session.active_txn || session.active_queries?.length !== 0),
+        session.active_txn ||
+        session.active_queries?.length !== 0 ||
+        session.recent_statements.length != 0,
     )
     .forEach(session => {
       const sessionID = byteArrayToUuid(session.id);
@@ -103,30 +147,13 @@ export function getRecentExecutionsFromSessions(
       if (session.active_queries.length) {
         // There will only ever be one query in this array.
         const query = session.active_queries[0];
-        const queryTxnID = byteArrayToUuid(query.txn_id);
-        activeStmt = {
-          statementID: query.id,
-          stmtNoConstants: query.sql_no_constants,
-          transactionID: queryTxnID,
-          sessionID,
-          // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
-          query: query.sql?.length > 0 ? query.sql : query.sql_no_constants,
-          status:
-            query.phase === ActiveStatementPhase.EXECUTING
-              ? "Executing"
-              : "Preparing",
-          start: TimestampToMoment(query.start),
-          elapsedTime: DurationToMomentDuration(query.elapsed_time),
-          application: session.application_name,
-          database: query.database,
-          user: session.username,
-          clientAddress: session.client_address,
-          isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
-          planGist: query.plan_gist,
-        };
-
+        activeStmt = activeQueryToRecentStatement(query, session);
         statements.push(activeStmt);
       }
+
+      session.recent_statements.forEach(query => {
+        statements.push(activeQueryToRecentStatement(query, session));
+      });
 
       const activeTxn = session.active_txn;
       if (!activeTxn) return;
@@ -216,7 +243,7 @@ export function filterRecentTransactions(
   return filteredTxns;
 }
 
-export function getContendedExecutionsForTxn(
+function getContendedExecutionsForTxn(
   transactions: RecentTransaction[],
   locks: ClusterLockState[],
   txnExecID: string, // Txn we are returning contention info for.

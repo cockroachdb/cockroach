@@ -10,7 +10,6 @@
 
 export {
   getRecentExecutionsFromSessions,
-  getContendedExecutionsForTxn,
   getWaitTimeByTxnIDFromLocks,
   getRecentTransaction,
   getRecentStatement,

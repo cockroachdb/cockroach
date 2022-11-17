@@ -14,9 +14,19 @@ import { Filters } from "src/queryFilter";
 
 export type SessionsResponse =
   protos.cockroach.server.serverpb.ListSessionsResponse;
-export type ActiveStatementResponse =
-  protos.cockroach.server.serverpb.ActiveQuery;
-export type ExecutionStatus = "Waiting" | "Executing" | "Preparing";
+export type ActiveQuery = protos.cockroach.server.serverpb.IActiveQuery;
+export type ActiveQueryPhase =
+  protos.cockroach.server.serverpb.ActiveQuery.Phase;
+export type Session = protos.cockroach.server.serverpb.ISession;
+
+export type ExecutionStatus =
+  | "Waiting"
+  | "Executing"
+  | "Preparing"
+  | "Timed Out"
+  | "Canceled"
+  | "Completed"
+  | "Failed";
 export type ExecutionType = "statement" | "transaction";
 
 export const ActiveStatementPhase =
