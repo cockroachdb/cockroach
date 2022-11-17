@@ -170,21 +170,21 @@ RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/full3' WITH new_db_name='d4', k
 
 query-sql
 USE d2;
-SELECT * FROM [SHOW TABLES] ORDER BY table_name;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;
 ----
-public baz table root <nil> <nil>
-public foo table root <nil> <nil>
+baz
+foo
 
 query-sql
 USE d3;
-SELECT * FROM [SHOW TABLES] ORDER BY table_name;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;
 ----
-public baz table root <nil> <nil>
-public foo table root <nil> <nil>
+baz
+foo
 
 query-sql
 USE d4;
-SELECT * FROM [SHOW TABLES] ORDER BY table_name;
+SELECT table_name FROM [SHOW TABLES] ORDER BY table_name;
 ----
-public baz table root <nil> <nil>
-public foo table root <nil> <nil>
+baz
+foo
