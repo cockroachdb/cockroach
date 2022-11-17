@@ -7,15 +7,15 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
 ----
 StatementPhase stage 1 of 1 with 8 MutationType ops
   transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAbsentIndexBackfilling
       Index:
@@ -24,6 +24,20 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         TableID: 104
         TemporaryIndexID: 3
       IsSecondaryIndex: true
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 2
+      TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 2
+      IndexID: 2
+      Ordinal: 1
+      TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 3
+      IndexID: 2
+      Kind: 2
+      TableID: 104
     *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         IndexID: 3
@@ -42,20 +56,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
     *scop.AddColumnToIndex
       ColumnID: 3
       IndexID: 3
-      Kind: 2
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 1
-      IndexID: 2
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 2
-      IndexID: 2
-      Ordinal: 1
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 3
-      IndexID: 2
       Kind: 2
       TableID: 104
 PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -149,6 +149,9 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -198,6 +201,14 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -206,6 +217,14 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -214,6 +233,14 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
@@ -312,19 +339,17 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   rule: TemporaryIndex transitions to TRANSIENT_ABSENT uphold 2-version invariant: WRITE_ONLY->TRANSIENT_DELETE_ONLY
 
 ops
-CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING (money)
+CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
 ----
-StatementPhase stage 1 of 1 with 8 MutationType ops
+StatementPhase stage 1 of 1 with 6 MutationType ops
   transitions:
+    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
-    [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], ABSENT] -> BACKFILL_ONLY
     [[IndexData:{DescID: 104, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], ABSENT] -> DELETE_ONLY
-    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
-    [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.MakeAbsentIndexBackfilling
       Index:
@@ -335,6 +360,15 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
         TableID: 104
         TemporaryIndexID: 3
       IsSecondaryIndex: true
+    *scop.AddColumnToIndex
+      ColumnID: 1
+      IndexID: 2
+      TableID: 104
+    *scop.AddColumnToIndex
+      ColumnID: 2
+      IndexID: 2
+      Ordinal: 1
+      TableID: 104
     *scop.MakeAbsentTempIndexDeleteOnly
       Index:
         IndexID: 3
@@ -352,25 +386,6 @@ StatementPhase stage 1 of 1 with 8 MutationType ops
       IndexID: 3
       Ordinal: 1
       TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 3
-      IndexID: 3
-      Kind: 2
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 1
-      IndexID: 2
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 2
-      IndexID: 2
-      Ordinal: 1
-      TableID: 104
-    *scop.AddColumnToIndex
-      ColumnID: 3
-      IndexID: 2
-      Kind: 2
-      TableID: 104
 PreCommitPhase stage 1 of 1 with 2 MutationType ops
   transitions:
   ops:
@@ -385,10 +400,9 @@ PreCommitPhase stage 1 of 1 with 2 MutationType ops
       JobID: 1
       RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
       Statements:
-      - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name) STORING
-          (money)
+      - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
         redactedstatement: CREATE INVERTED INDEX CONCURRENTLY ‹id1› ON ‹defaultdb›.public.‹t1›
-          (‹id›, ‹name›) STORING (‹money›)
+          (‹id›, ‹name› gin_trgm_ops)
         statementtag: CREATE INDEX
 PostCommitPhase stage 1 of 7 with 3 MutationType ops
   transitions:
@@ -463,6 +477,8 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops
     [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC], VALIDATED] -> PUBLIC
     [[IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC], ABSENT] -> PUBLIC
     [[TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT], WRITE_ONLY] -> TRANSIENT_DELETE_ONLY
+    [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
+    [[IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.SetIndexName
       IndexID: 2
@@ -490,8 +506,8 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops
     *scop.CreateGCJobForIndex
       IndexID: 3
       StatementForDropJob:
-        Statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.public.t1 (id, name)
-          STORING (money)
+        Statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.public.t1 (id, name
+          gin_trgm_ops)
       TableID: 104
     *scop.RemoveJobStateFromDescriptor
       DescriptorID: 104
@@ -513,6 +529,14 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -521,6 +545,14 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, BACKFILLED]
   kind: Precedence
@@ -529,6 +561,14 @@ CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: Precedence
   rule: index dependents exist before index becomes public
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, PUBLIC]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, WRITE_ONLY]
+  kind: Precedence
+  rule: index-column added to index before temp index receives writes
+- from: [IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT]
+  to:   [TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}, TRANSIENT_ABSENT]
+  kind: Precedence
+  rule: dependents removed before index
 - from: [IndexName:{DescID: 104, Name: id1, IndexID: 2}, PUBLIC]
   to:   [SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
