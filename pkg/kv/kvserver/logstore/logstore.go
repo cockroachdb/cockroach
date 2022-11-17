@@ -161,6 +161,11 @@ func (s *LogStore) StoreEntries(
 	// uncommitted log entries, and even if they did include log entries that
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
+	//
+	// TODO(pavelkalinnikov): revisit the comment above (written in 82cbb49). It
+	// communicates an important invariant, but is hard to grok now and can be
+	// outdated. Raft invariants are in the responsibility of the layer above
+	// (Replica), so this comment might need to move.
 	stats.PebbleBegin = timeutil.Now()
 	stats.PebbleBytes = int64(batch.Len())
 	sync := rd.MustSync && !disableSyncRaftLog.Get(&s.Settings.SV)
