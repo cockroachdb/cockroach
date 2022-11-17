@@ -1,0 +1,23 @@
+parse
+DROP TENANT foo
+----
+DROP TENANT foo
+DROP TENANT foo -- fully parenthesized
+DROP TENANT foo -- literals removed
+DROP TENANT _ -- identifiers removed
+
+parse
+DROP TENANT "foo-with-hyphen"
+----
+DROP TENANT "foo-with-hyphen"
+DROP TENANT "foo-with-hyphen" -- fully parenthesized
+DROP TENANT "foo-with-hyphen" -- literals removed
+DROP TENANT _ -- identifiers removed
+
+parse
+DROP TENANT IF EXISTS foo
+----
+DROP TENANT IF EXISTS foo
+DROP TENANT IF EXISTS foo -- fully parenthesized
+DROP TENANT IF EXISTS foo -- literals removed
+DROP TENANT IF EXISTS _ -- identifiers removed
