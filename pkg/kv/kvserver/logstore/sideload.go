@@ -238,10 +238,10 @@ func AssertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 	}
 }
 
-// MaybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
+// maybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
 // and returns the total number of bytes removed. Nonexistent entries are
 // silently skipped over.
-func MaybePurgeSideloaded(
+func maybePurgeSideloaded(
 	ctx context.Context, ss SideloadStorage, firstIndex, lastIndex uint64, term uint64,
 ) (int64, error) {
 	var totalSize int64

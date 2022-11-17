@@ -110,6 +110,7 @@ func (s *LogStore) StoreEntries(
 	batch := s.Engine.NewUnindexedBatch(false /* writeOnly */)
 	defer batch.Close()
 
+	prevLastIndex := state.LastIndex
 	if len(rd.Entries) > 0 {
 		stats.Begin = timeutil.Now()
 		// All of the entries are appended to distinct keys, returning a new
@@ -172,6 +173,28 @@ func (s *LogStore) StoreEntries(
 	if rd.MustSync {
 		s.Metrics.RaftLogCommitLatency.RecordValue(stats.PebbleEnd.Sub(stats.PebbleBegin).Nanoseconds())
 	}
+
+	if len(rd.Entries) > 0 {
+		// We may have just overwritten parts of the log which contain
+		// sideloaded SSTables from a previous term (and perhaps discarded some
+		// entries that we didn't overwrite). Remove any such leftover on-disk
+		// payloads (we can do that now because we've committed the deletion
+		// just above).
+		firstPurge := rd.Entries[0].Index // first new entry written
+		purgeTerm := rd.Entries[0].Term - 1
+		lastPurge := prevLastIndex // old end of the log, include in deletion
+		purgedSize, err := maybePurgeSideloaded(ctx, s.Sideload, firstPurge, lastPurge, purgeTerm)
+		if err != nil {
+			const expl = "while purging sideloaded storage"
+			return RaftState{}, errors.Wrap(err, expl)
+		}
+		state.ByteSize -= purgedSize
+		if state.ByteSize < 0 {
+			// Might have gone negative if node was recently restarted.
+			state.ByteSize = 0
+		}
+	}
+
 	return state, nil
 }
 

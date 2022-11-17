@@ -916,8 +916,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessagesRaftMuLocked(ctx, msgApps, pausedFollowers)
 
-	prevLastIndex := state.LastIndex
-
 	// TODO(pavelkalinnikov): find a way to move it to storeEntries.
 	if !raft.IsEmptyHardState(rd.HardState) {
 		if !r.IsInitialized() && rd.HardState.Commit != 0 {
@@ -936,26 +934,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	}
 	if state, err = s.StoreEntries(ctx, state, logstore.MakeReady(rd), &stats.append); err != nil {
 		return stats, errors.Wrap(err, "while storing log entries")
-	}
-
-	if len(rd.Entries) > 0 {
-		// We may have just overwritten parts of the log which contain
-		// sideloaded SSTables from a previous term (and perhaps discarded some
-		// entries that we didn't overwrite). Remove any such leftover on-disk
-		// payloads (we can do that now because we've committed the deletion
-		// just above).
-		firstPurge := rd.Entries[0].Index // first new entry written
-		purgeTerm := rd.Entries[0].Term - 1
-		lastPurge := prevLastIndex // old end of the log, include in deletion
-		purgedSize, err := logstore.MaybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
-		if err != nil {
-			return stats, errors.Wrap(err, "while purging sideloaded storage")
-		}
-		state.ByteSize -= purgedSize
-		if state.ByteSize < 0 {
-			// Might have gone negative if node was recently restarted.
-			state.ByteSize = 0
-		}
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
