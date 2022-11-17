@@ -22,10 +22,10 @@ import { SqlBox, SqlBoxSize } from "src/sql/box";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 
 import {
-  ActiveTransaction,
+  RecentTransaction,
   ExecutionContentionDetails,
-} from "src/activeExecutions";
-import { StatusIcon } from "src/activeExecutions/statusIcon";
+} from "src/recentExecutions";
+import { StatusIcon } from "src/recentExecutions/statusIcon";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { getMatchParamByName } from "src/util/query";
 import { executionIdAttr } from "../util";
@@ -36,20 +36,20 @@ import { capitalize, Duration } from "../util/format";
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 
-export type ActiveTransactionDetailsStateProps = {
-  transaction: ActiveTransaction;
+export type RecentTransactionDetailsStateProps = {
+  transaction: RecentTransaction;
   contentionDetails?: ExecutionContentionDetails;
   match: match;
 };
 
-export type ActiveTransactionDetailsDispatchProps = {
+export type RecentTransactionDetailsDispatchProps = {
   refreshLiveWorkload: () => void;
 };
 
-const BACK_TO_ACTIVE_TXNS_BUTTON_LABEL = "Active Transactions";
+const BACK_TO_RECENT_TXNS_BUTTON_LABEL = "Recent Transactions";
 const TXN_EXECUTION_ID_LABEL = "Transaction Execution ID";
 
-export const ActiveTxnInsightsLabels = {
+export const RecentTxnInsightsLabels = {
   START_TIME: "Start Time (UTC)",
   ELAPSED_TIME: "Elapsed Time",
   STATUS: "Status",
@@ -65,11 +65,11 @@ export const ActiveTxnInsightsLabels = {
 export const RECENT_STATEMENT_NOT_FOUND_MESSAGE =
   "Most recent statement not found.";
 
-export type ActiveTransactionDetailsProps = ActiveTransactionDetailsStateProps &
-  ActiveTransactionDetailsDispatchProps;
+export type RecentTransactionDetailsProps = RecentTransactionDetailsStateProps &
+  RecentTransactionDetailsDispatchProps;
 
-export const ActiveTransactionDetails: React.FC<
-  ActiveTransactionDetailsProps
+export const RecentTransactionDetails: React.FC<
+  RecentTransactionDetailsProps
 > = ({ transaction, contentionDetails, match, refreshLiveWorkload }) => {
   const history = useHistory();
   const executionID = getMatchParamByName(match, executionIdAttr);
@@ -81,7 +81,7 @@ export const ActiveTransactionDetails: React.FC<
     }
   }, [refreshLiveWorkload, transaction]);
 
-  const returnToActiveTransactions = () => {
+  const returnToRecentTransactions = () => {
     history.push("/sql-activity?tab=Transactions&view=active");
   };
 
@@ -90,14 +90,14 @@ export const ActiveTransactionDetails: React.FC<
       <Helmet title={`Details`} />
       <div className={cx("section", "page--header")}>
         <Button
-          onClick={returnToActiveTransactions}
+          onClick={returnToRecentTransactions}
           type="unstyled-link"
           size="small"
           icon={<ArrowLeft fontSize={"10px"} />}
           iconPosition="left"
           className="small-margin"
         >
-          {BACK_TO_ACTIVE_TXNS_BUTTON_LABEL}
+          {BACK_TO_RECENT_TXNS_BUTTON_LABEL}
         </Button>
         <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
           {TXN_EXECUTION_ID_LABEL}:{" "}
@@ -120,19 +120,19 @@ export const ActiveTransactionDetails: React.FC<
                 <Row>
                   <Col>
                     <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.START_TIME}
+                      label={RecentTxnInsightsLabels.START_TIME}
                       value={transaction.start.format(
                         "MMM D, YYYY [at] H:mm (UTC)",
                       )}
                     />
                     <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.ELAPSED_TIME}
+                      label={RecentTxnInsightsLabels.ELAPSED_TIME}
                       value={Duration(
                         transaction.elapsedTime.asMilliseconds() * 1e6,
                       )}
                     />
                     <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.STATUS}
+                      label={RecentTxnInsightsLabels.STATUS}
                       value={
                         <>
                           <StatusIcon status={transaction.status} />
@@ -141,7 +141,7 @@ export const ActiveTransactionDetails: React.FC<
                       }
                     />
                     <SummaryCardItem
-                      label={ActiveTxnInsightsLabels.PRIORITY}
+                      label={RecentTxnInsightsLabels.PRIORITY}
                       value={capitalize(transaction.priority)}
                     />
                   </Col>
@@ -151,25 +151,25 @@ export const ActiveTransactionDetails: React.FC<
             <Col className="gutter-row" span={12}>
               <SummaryCard className={cx("summary-card")}>
                 <SummaryCardItem
-                  label={ActiveTxnInsightsLabels.RETRY_COUNT}
+                  label={RecentTxnInsightsLabels.RETRY_COUNT}
                   value={transaction.retries}
                 />
                 <SummaryCardItem
-                  label={ActiveTxnInsightsLabels.RETRY_REASON}
+                  label={RecentTxnInsightsLabels.RETRY_REASON}
                   value={transaction.lastAutoRetryReason || "N/A"}
                 />
                 <SummaryCardItem
-                  label={ActiveTxnInsightsLabels.STATEMENT_COUNT}
+                  label={RecentTxnInsightsLabels.STATEMENT_COUNT}
                   value={transaction.statementCount}
                 />
                 <SummaryCardItem
-                  label={ActiveTxnInsightsLabels.APPLICATION_NAME}
+                  label={RecentTxnInsightsLabels.APPLICATION_NAME}
                   value={transaction.application}
                 />
                 <p className={summaryCardStylesCx("summary--card__divider")} />
                 {transaction.statementID && (
                   <SummaryCardItem
-                    label={ActiveTxnInsightsLabels.LAST_STATEMENT_EXEC_ID}
+                    label={RecentTxnInsightsLabels.LAST_STATEMENT_EXEC_ID}
                     value={
                       <Link
                         className={cx("text-link")}
@@ -182,7 +182,7 @@ export const ActiveTransactionDetails: React.FC<
                 )}
 
                 <SummaryCardItem
-                  label={ActiveTxnInsightsLabels.SESSION_ID}
+                  label={RecentTxnInsightsLabels.SESSION_ID}
                   value={
                     <Link
                       className={cx("text-link")}

@@ -1008,6 +1008,54 @@ vectorized: true
   spans: [/t - /t]
 
 query T
+EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  estimated row count: 10 (missing stats)
+  table: pg_class@pg_class_oid_idx
+  spans: [/t - /t]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = '3'::OID
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  estimated row count: 10 (missing stats)
+  table: pg_class@pg_class_oid_idx
+  spans: [/3 - /3]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 't'::regclass::oid
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  estimated row count: 10 (missing stats)
+  table: pg_class@pg_class_oid_idx
+  spans: [/106 - /106]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_class WHERE oid = 101::oid
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence, relistemp, relkind, relnatts, relchecks, relhasoids, relhaspkey, relhasrules, relhastriggers, relhassubclass, relfrozenxid, relacl, reloptions, relforcerowsecurity, relispartition, relispopulated, relreplident, relrewrite, relrowsecurity, relpartbound, relminmxid)
+  estimated row count: 10 (missing stats)
+  table: pg_class@pg_class_oid_idx
+  spans: [/101 - /101]
+
+query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
 ----
 distribution: local

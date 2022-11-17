@@ -1220,10 +1220,14 @@ func NewStore(
 		ioThresholds: &iot,
 	}
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
+	var allocatorStorePool storepool.AllocatorStorePool
+	if cfg.StorePool != nil {
+		allocatorStorePool = cfg.StorePool
+	}
 	if cfg.RPCContext != nil {
-		s.allocator = allocatorimpl.MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency, cfg.TestingKnobs.AllocatorKnobs)
+		s.allocator = allocatorimpl.MakeAllocator(cfg.Settings, allocatorStorePool, cfg.RPCContext.RemoteClocks.Latency, cfg.TestingKnobs.AllocatorKnobs)
 	} else {
-		s.allocator = allocatorimpl.MakeAllocator(cfg.StorePool, func(string) (time.Duration, bool) {
+		s.allocator = allocatorimpl.MakeAllocator(cfg.Settings, allocatorStorePool, func(string) (time.Duration, bool) {
 			return 0, false
 		}, cfg.TestingKnobs.AllocatorKnobs)
 	}

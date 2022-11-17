@@ -11,61 +11,62 @@
 import React, { useMemo } from "react";
 import classNames from "classnames/bind";
 import {
-  ActiveStatementFilters,
-  ActiveTransaction,
-} from "src/activeExecutions/types";
+  RecentStatement,
+  RecentStatementFilters,
+} from "src/recentExecutions/types";
 import ColumnsSelector, {
   SelectOption,
 } from "src/columnsSelector/columnsSelector";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { EmptyTransactionsPlaceholder } from "src/transactionsPage/emptyTransactionsPlaceholder";
+import { EmptyStatementsPlaceholder } from "src/statementsPage/emptyStatementsPlaceholder";
 import { TableStatistics } from "src/tableStatistics";
 import {
   ISortedTablePagination,
+  SortedTable,
   SortSetting,
 } from "../sortedtable/sortedtable";
 import {
-  makeActiveTransactionsColumns,
   getColumnOptions,
-} from "./activeTransactionsTable";
-import { TransactionViewType } from "src/transactionsPage/transactionsPageTypes";
+  makeRecentStatementsColumns,
+} from "./recentStatementsTable";
+import { StatementViewType } from "src/statementsPage/statementPageTypes";
 import { calculateActiveFilters } from "src/queryFilter/filter";
 import { isSelectedColumn } from "src/columnsSelector/utils";
-import { SortedTable } from "src/sortedtable";
 
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
-type ActiveTransactionsSectionProps = {
-  filters: ActiveStatementFilters;
-  isTenant?: boolean;
+type RecentStatementsSectionProps = {
+  filters: RecentStatementFilters;
   pagination: ISortedTablePagination;
   search: string;
-  transactions: ActiveTransaction[];
+  statements: RecentStatement[];
   selectedColumns?: string[];
   sortSetting: SortSetting;
+  isTenant?: boolean;
+  onChangeSortSetting: (sortSetting: SortSetting) => void;
   onClearFilters: () => void;
-  onChangeSortSetting: (ss: SortSetting) => void;
   onColumnsSelect: (columns: string[]) => void;
 };
 
-export const ActiveTransactionsSection: React.FC<
-  ActiveTransactionsSectionProps
+export const RecentStatementsSection: React.FC<
+  RecentStatementsSectionProps
 > = ({
   filters,
   isTenant,
   pagination,
   search,
-  transactions,
+  statements,
   selectedColumns,
   sortSetting,
-  onChangeSortSetting,
   onClearFilters,
+  onChangeSortSetting,
   onColumnsSelect,
 }) => {
   const columns = useMemo(
-    () => makeActiveTransactionsColumns(isTenant),
+    () => makeRecentStatementsColumns(isTenant),
     [isTenant],
   );
+
   const shownColumns = columns.filter(col =>
     isSelectedColumn(selectedColumns, col),
   );
@@ -74,7 +75,6 @@ export const ActiveTransactionsSection: React.FC<
     columns,
     selectedColumns,
   );
-
   const activeFilters = calculateActiveFilters(filters);
 
   return (
@@ -87,21 +87,22 @@ export const ActiveTransactionsSection: React.FC<
         <TableStatistics
           pagination={pagination}
           search={search}
-          totalCount={transactions.length}
-          arrayItemName="transactions"
+          totalCount={statements.length}
+          arrayItemName="statements"
           activeFilters={activeFilters}
           onClearFilters={onClearFilters}
         />
       </div>
       <SortedTable
-        data={transactions}
+        className="statements-table"
+        data={statements}
         columns={shownColumns}
         sortSetting={sortSetting}
         onChangeSortSetting={onChangeSortSetting}
         renderNoResult={
-          <EmptyTransactionsPlaceholder
-            isEmptySearchResults={search?.length > 0 && transactions.length > 0}
-            transactionView={TransactionViewType.ACTIVE}
+          <EmptyStatementsPlaceholder
+            isEmptySearchResults={search?.length > 0 && statements.length > 0}
+            statementView={StatementViewType.ACTIVE}
           />
         }
         pagination={pagination}

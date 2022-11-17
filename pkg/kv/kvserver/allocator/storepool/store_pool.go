@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -330,24 +331,100 @@ type localityWithString struct {
 	str      string
 }
 
+// AllocatorStorePool provides an interface for use by the allocator to a list
+// of all known stores in the cluster and information on their health.
+type AllocatorStorePool interface {
+	// ClusterNodeCount returns the number of nodes that are possible allocation
+	// targets.
+	// See comment on StorePool.ClusterNodeCount().
+	ClusterNodeCount() int
+
+	// IsDeterministic returns true iff the pool is configured to be deterministic.
+	IsDeterministic() bool
+
+	// IsStoreReadyForRoutineReplicaTransfer returns true iff the store's node is
+	// live (as indicated by its `NodeLivenessStatus`) and thus a legal candidate
+	// to receive a replica.
+	// See comment on StorePool.IsStoreReadyForRoutineReplicaTransfer(..).
+	IsStoreReadyForRoutineReplicaTransfer(ctx context.Context, targetStoreID roachpb.StoreID) bool
+
+	// Clock returns the store pool's clock.
+	// TODO(sarkesian): If possible, this should be removed.
+	Clock() *hlc.Clock
+
+	// DecommissioningReplicas selects the replicas on decommissioning
+	// node/stores from the provided list.
+	DecommissioningReplicas(repls []roachpb.ReplicaDescriptor) []roachpb.ReplicaDescriptor
+
+	// GetLocalitiesByNode returns the localities for the provided replicas by NodeID.
+	// See comment on StorePool.GetLocalitiesByNode(..).
+	GetLocalitiesByNode(replicas []roachpb.ReplicaDescriptor) map[roachpb.NodeID]roachpb.Locality
+
+	// GetLocalitiesByStore returns the localities for the provided replicas by StoreID.
+	// See comment on StorePool.GetLocalitiesByStore(..).
+	GetLocalitiesByStore(replicas []roachpb.ReplicaDescriptor) map[roachpb.StoreID]roachpb.Locality
+
+	// GetStores returns information on all the stores with descriptor in the pool.
+	// See comment on StorePool.GetStores().
+	GetStores() map[roachpb.StoreID]roachpb.StoreDescriptor
+
+	// GetStoreDescriptor returns the latest store descriptor for the given
+	// storeID.
+	GetStoreDescriptor(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool)
+
+	// GetStoreList returns a storeList of active stores based on a filter.
+	// See comment on StorePool.GetStoreList(..).
+	GetStoreList(filter StoreFilter) (StoreList, int, ThrottledStoreReasons)
+
+	// GetStoreListFromIDs is the same function as GetStoreList but only returns stores
+	// from the subset of passed in store IDs.
+	GetStoreListFromIDs(
+		storeIDs roachpb.StoreIDSlice,
+		filter StoreFilter,
+	) (StoreList, int, ThrottledStoreReasons)
+
+	// GossipNodeIDAddress looks up the RPC address for the given node via gossip.
+	GossipNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error)
+
+	// LiveAndDeadReplicas divides the provided repls slice into two slices: the
+	// first for live replicas, and the second for dead replicas.
+	// See comment on StorePool.LiveAndDeadReplicas(..).
+	LiveAndDeadReplicas(
+		repls []roachpb.ReplicaDescriptor,
+		includeSuspectAndDrainingStores bool,
+	) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor)
+
+	// UpdateLocalStoreAfterRebalance is used to update the local copy of the
+	// target store immediately after a replica addition or removal.
+	UpdateLocalStoreAfterRebalance(
+		storeID roachpb.StoreID,
+		rangeUsageInfo allocator.RangeUsageInfo,
+		changeType roachpb.ReplicaChangeType,
+	)
+
+	// UpdateLocalStoresAfterLeaseTransfer is used to update the local copies of the
+	// involved store descriptors immediately after a lease transfer.
+	UpdateLocalStoresAfterLeaseTransfer(from roachpb.StoreID, to roachpb.StoreID, rangeQPS float64)
+}
+
 // StorePool maintains a list of all known stores in the cluster and
 // information on their health.
-//
-// TODO(irfansharif): Mediate access through a thin interface.
 type StorePool struct {
 	log.AmbientContext
-	St *cluster.Settings // TODO(irfansharif): Shouldn't need to be exported.
+	st *cluster.Settings
 
-	Clock          *hlc.Clock
-	Gossip         *gossip.Gossip // TODO(irfansharif): Shouldn't need to be exported.
+	clock          *hlc.Clock
+	gossip         *gossip.Gossip
 	nodeCountFn    NodeCountFunc
 	NodeLivenessFn NodeLivenessFunc
 	startTime      time.Time
-	Deterministic  bool
+	deterministic  bool
+
 	// We use separate mutexes for storeDetails and nodeLocalities because the
 	// nodeLocalities map is used in the critical code path of Replica.Send()
 	// and we'd rather not block that on something less important accessing
 	// storeDetails.
+	// NB: Exported for use in tests and allocator simulator.
 	DetailsMu struct {
 		syncutil.RWMutex
 		StoreDetails map[roachpb.StoreID]*StoreDetail
@@ -357,21 +434,14 @@ type StorePool struct {
 		nodeLocalities map[roachpb.NodeID]localityWithString
 	}
 
-	// IsStoreReadyForRoutineReplicaTransfer returns true iff the store's node is
-	// live (as indicated by its `NodeLivenessStatus`) and thus a legal candidate
-	// to receive a replica. This is defined as a closure reference here instead
+	// OverrideIsStoreReadyForRoutineReplicaTransferFn, if set, is used in
+	// IsStoreReadyForRoutineReplicaTransfer. This is defined as a closure reference here instead
 	// of a regular method so it can be overridden in tests.
-	//
-	// NB: What this method aims to capture is distinct from "dead" nodes. Nodes
-	// are classified as "dead" if they haven't successfully heartbeat their
-	// liveness record in the last `server.time_until_store_dead` seconds.
-	//
-	// Functionally, the distinction is that we simply avoid transferring replicas
-	// to "non-ready" nodes (i.e. nodes that _currently_ have a non-live
-	// `NodeLivenessStatus`), whereas we _actively move replicas off of "dead"
-	// nodes_.
-	IsStoreReadyForRoutineReplicaTransfer func(context.Context, roachpb.StoreID) bool
+	// TODO(sarkesian): Consider moving to a TestingKnobs struct.
+	OverrideIsStoreReadyForRoutineReplicaTransferFn func(context.Context, roachpb.StoreID) bool
 }
+
+var _ AllocatorStorePool = &StorePool{}
 
 // NewStorePool creates a StorePool and registers the store updating callback
 // with gossip.
@@ -386,15 +456,14 @@ func NewStorePool(
 ) *StorePool {
 	sp := &StorePool{
 		AmbientContext: ambient,
-		St:             st,
-		Clock:          clock,
-		Gossip:         g,
+		st:             st,
+		clock:          clock,
+		gossip:         g,
 		nodeCountFn:    nodeCountFn,
 		NodeLivenessFn: nodeLivenessFn,
 		startTime:      clock.PhysicalTime(),
-		Deterministic:  deterministic,
+		deterministic:  deterministic,
 	}
-	sp.IsStoreReadyForRoutineReplicaTransfer = sp.isStoreReadyForRoutineReplicaTransferInternal
 	sp.DetailsMu.StoreDetails = make(map[roachpb.StoreID]*StoreDetail)
 	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
 
@@ -418,9 +487,9 @@ func (sp *StorePool) String() string {
 	sort.Sort(ids)
 
 	var buf bytes.Buffer
-	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.St.SV)
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, id := range ids {
 		detail := sp.DetailsMu.StoreDetails[id]
@@ -454,7 +523,7 @@ func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
 	sp.DetailsMu.Lock()
 	detail := sp.GetStoreDetailLocked(storeDesc.StoreID)
 	detail.Desc = &storeDesc
-	detail.LastUpdatedTime = sp.Clock.PhysicalTime()
+	detail.LastUpdatedTime = sp.clock.PhysicalTime()
 	sp.DetailsMu.Unlock()
 
 	sp.localitiesMu.Lock()
@@ -590,9 +659,9 @@ func (sp *StorePool) DecommissioningReplicas(
 
 	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
-	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.St.SV)
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, repl := range repls {
 		detail := sp.GetStoreDetailLocked(repl.StoreID)
@@ -611,6 +680,16 @@ func (sp *StorePool) ClusterNodeCount() int {
 	return sp.nodeCountFn()
 }
 
+// Clock returns the store pool's clock.
+func (sp *StorePool) Clock() *hlc.Clock {
+	return sp.clock
+}
+
+// IsDeterministic returns true iff the pool is configured to be deterministic.
+func (sp *StorePool) IsDeterministic() bool {
+	return sp.deterministic
+}
+
 // IsDead determines if a store is dead. It will return an error if the store is
 // not found in the store pool or the status is unknown. If the store is not dead,
 // it returns the time to death.
@@ -624,8 +703,8 @@ func (sp *StorePool) IsDead(storeID roachpb.StoreID) (bool, time.Duration, error
 	}
 	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
-	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	deadAsOf := sd.LastUpdatedTime.Add(timeUntilStoreDead)
 	if now.After(deadAsOf) {
@@ -681,9 +760,9 @@ func (sp *StorePool) storeStatus(storeID roachpb.StoreID) (storeStatus, error) {
 	}
 	// NB: We use clock.Now().GoTime() instead of clock.PhysicalTime() is order to
 	// take clock signals from remote nodes into consideration.
-	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.St.SV)
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 	return sd.status(now, timeUntilStoreDead, sp.NodeLivenessFn, timeAfterStoreSuspect), nil
 }
 
@@ -705,9 +784,9 @@ func (sp *StorePool) LiveAndDeadReplicas(
 	sp.DetailsMu.Lock()
 	defer sp.DetailsMu.Unlock()
 
-	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.St.SV)
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, repl := range repls {
 		detail := sp.GetStoreDetailLocked(repl.StoreID)
@@ -902,7 +981,7 @@ func (sp *StorePool) GetStoreListFromIDs(
 func (sp *StorePool) getStoreListFromIDsLocked(
 	storeIDs roachpb.StoreIDSlice, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	if sp.Deterministic {
+	if sp.deterministic {
 		sort.Sort(storeIDs)
 	} else {
 		shuffle.Shuffle(storeIDs)
@@ -912,9 +991,9 @@ func (sp *StorePool) getStoreListFromIDsLocked(
 	var throttled ThrottledStoreReasons
 	var storeDescriptors []roachpb.StoreDescriptor
 
-	now := sp.Clock.Now().GoTime()
-	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.St.SV)
-	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.St.SV)
+	now := sp.clock.Now().GoTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+	timeAfterStoreSuspect := TimeAfterStoreSuspect.Get(&sp.st.SV)
 
 	for _, storeID := range storeIDs {
 		detail, ok := sp.DetailsMu.StoreDetails[storeID]
@@ -975,8 +1054,8 @@ func (sp *StorePool) Throttle(reason ThrottleReason, why string, storeID roachpb
 	// configured timeout period has passed.
 	switch reason {
 	case ThrottleFailed:
-		timeout := FailedReservationsTimeout.Get(&sp.St.SV)
-		detail.ThrottledUntil = sp.Clock.PhysicalTime().Add(timeout)
+		timeout := FailedReservationsTimeout.Get(&sp.st.SV)
+		detail.ThrottledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
 			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
@@ -1030,6 +1109,11 @@ func (sp *StorePool) GetLocalitiesByNode(
 	return localities
 }
 
+// GossipNodeIDAddress looks up the RPC address for the given node via gossip.
+func (sp *StorePool) GossipNodeIDAddress(nodeID roachpb.NodeID) (*util.UnresolvedAddr, error) {
+	return sp.gossip.GetNodeIDAddress(nodeID)
+}
+
 // GetNodeLocalityString returns the locality information for the given node
 // in its string format.
 func (sp *StorePool) GetNodeLocalityString(nodeID roachpb.NodeID) string {
@@ -1040,6 +1124,27 @@ func (sp *StorePool) GetNodeLocalityString(nodeID roachpb.NodeID) string {
 		return ""
 	}
 	return locality.str
+}
+
+// IsStoreReadyForRoutineReplicaTransfer returns true iff the store's node is
+// live (as indicated by its `NodeLivenessStatus`) and thus a legal candidate
+// to receive a replica.
+//
+// NB: What this method aims to capture is distinct from "dead" nodes. Nodes
+// are classified as "dead" if they haven't successfully heartbeat their
+// liveness record in the last `server.time_until_store_dead` seconds.
+//
+// Functionally, the distinction is that we simply avoid transferring replicas
+// to "non-ready" nodes (i.e. nodes that _currently_ have a non-live
+// `NodeLivenessStatus`), whereas we _actively move replicas off of "dead"
+// nodes_.
+func (sp *StorePool) IsStoreReadyForRoutineReplicaTransfer(
+	ctx context.Context, targetStoreID roachpb.StoreID,
+) bool {
+	if sp.OverrideIsStoreReadyForRoutineReplicaTransferFn != nil {
+		return sp.OverrideIsStoreReadyForRoutineReplicaTransferFn(ctx, targetStoreID)
+	}
+	return sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID)
 }
 
 func (sp *StorePool) isStoreReadyForRoutineReplicaTransferInternal(

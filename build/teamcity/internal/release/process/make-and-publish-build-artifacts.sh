@@ -33,6 +33,7 @@ else
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
 fi
+download_prefix="https://storage.googleapis.com/$gcs_bucket"
 
 cat << EOF
 
@@ -88,7 +89,7 @@ for platform_name in "${platform_names[@]}"; do
     --silent \
     --show-error \
     --output /dev/stdout \
-    --url "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
+    --url "${download_prefix}/cockroach-${build_name}.${linux_platform}-${tarball_arch}.tgz" \
     | tar \
     --directory="build/deploy-${docker_arch}" \
     --extract \

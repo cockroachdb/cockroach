@@ -11,16 +11,16 @@
 import { Dispatch } from "redux";
 import { createSelector } from "reselect";
 import {
-  ActiveStatementFilters,
-  ActiveStatementsViewDispatchProps,
-  ActiveStatementsViewStateProps,
+  RecentStatementFilters,
+  RecentStatementsViewDispatchProps,
+  RecentStatementsViewStateProps,
   AppState,
   SortSetting,
 } from "src";
 import {
-  selectActiveStatements,
+  selectRecentStatements,
   selectAppName,
-} from "src/selectors/activeExecutions.selectors";
+} from "src/selectors/recentExecutions.selectors";
 import { actions as localStorageActions } from "src/store/localStorage";
 import { actions as sessionsActions } from "src/store/sessions";
 import { selectIsTenant } from "src/store/uiConfig";
@@ -29,7 +29,7 @@ import { localStorageSelector } from "../store/utils/selectors";
 export const selectSortSetting = (state: AppState): SortSetting =>
   localStorageSelector(state)["sortSetting/ActiveStatementsPage"];
 
-export const selectFilters = (state: AppState): ActiveStatementFilters =>
+export const selectFilters = (state: AppState): RecentStatementFilters =>
   localStorageSelector(state)["filters/ActiveStatementsPage"];
 
 const selectLocalStorageColumns = (state: AppState) => {
@@ -46,10 +46,10 @@ export const selectColumns = createSelector(
   },
 );
 
-export const mapStateToActiveStatementsPageProps = (
+export const mapStateToRecentStatementsPageProps = (
   state: AppState,
-): ActiveStatementsViewStateProps => ({
-  statements: selectActiveStatements(state),
+): RecentStatementsViewStateProps => ({
+  statements: selectRecentStatements(state),
   sessionsError: state.adminUI.sessions.lastError,
   selectedColumns: selectColumns(state),
   sortSetting: selectSortSetting(state),
@@ -58,9 +58,9 @@ export const mapStateToActiveStatementsPageProps = (
   isTenant: selectIsTenant(state),
 });
 
-export const mapDispatchToActiveStatementsPageProps = (
+export const mapDispatchToRecentStatementsPageProps = (
   dispatch: Dispatch,
-): ActiveStatementsViewDispatchProps => ({
+): RecentStatementsViewDispatchProps => ({
   refreshLiveWorkload: () => dispatch(sessionsActions.refresh()),
   onColumnsSelect: columns => {
     dispatch(
@@ -70,7 +70,7 @@ export const mapDispatchToActiveStatementsPageProps = (
       }),
     );
   },
-  onFiltersChange: (filters: ActiveStatementFilters) =>
+  onFiltersChange: (filters: RecentStatementFilters) =>
     dispatch(
       localStorageActions.update({
         key: "filters/ActiveStatementsPage",

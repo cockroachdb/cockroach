@@ -18,76 +18,73 @@ import {
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Search } from "src/search/search";
-import {
-  ActiveTransaction,
-  ActiveStatementFilters,
-  ActiveTransactionFilters,
-} from "src/activeExecutions";
+import { RecentStatement, RecentStatementFilters } from "src/recentExecutions";
+import { Filter } from "src/queryFilter";
 import LoadingError from "src/sqlActivity/errorComponent";
 import {
+  RECENT_STATEMENT_SEARCH_PARAM,
+  getAppsFromRecentExecutions,
+  filterRecentStatements,
+} from "../recentExecutions/recentStatementUtils";
+import {
   calculateActiveFilters,
-  Filter,
   getFullFiltersAsStringRecord,
 } from "../queryFilter/filter";
-import { getAppsFromActiveExecutions } from "../activeExecutions/activeStatementUtils";
+import { RecentStatementsSection } from "../recentExecutions/recentStatementsSection";
 import { inactiveFiltersState } from "../queryFilter/filter";
-import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
-
-import styles from "../statementsPage/statementsPage.module.scss";
 import { queryByName, syncHistory } from "src/util/query";
-import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
-import { filterActiveTransactions } from "../activeExecutions/activeStatementUtils";
+import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
+import { getRecentStatementFiltersFromURL } from "src/queryFilter/utils";
+
+import styles from "./statementsPage.module.scss";
+
 const cx = classNames.bind(styles);
 
-export type ActiveTransactionsViewDispatchProps = {
+export type RecentStatementsViewDispatchProps = {
   onColumnsSelect: (columns: string[]) => void;
-  onFiltersChange: (filters: ActiveTransactionFilters) => void;
+  onFiltersChange: (filters: RecentStatementFilters) => void;
   onSortChange: (ss: SortSetting) => void;
   refreshLiveWorkload: () => void;
 };
 
-export type ActiveTransactionsViewStateProps = {
+export type RecentStatementsViewStateProps = {
   selectedColumns: string[];
-  transactions: ActiveTransaction[];
-  sessionsError: Error | null;
-  filters: ActiveTransactionFilters;
+  statements: RecentStatement[];
   sortSetting: SortSetting;
+  sessionsError: Error | null;
+  filters: RecentStatementFilters;
   internalAppNamePrefix: string;
   isTenant?: boolean;
 };
 
-export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
-  ActiveTransactionsViewDispatchProps;
+export type RecentStatementsViewProps = RecentStatementsViewStateProps &
+  RecentStatementsViewDispatchProps;
 
-const ACTIVE_TXN_SEARCH_PARAM = "q";
-
-export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
+export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
   onColumnsSelect,
   refreshLiveWorkload,
   onFiltersChange,
   onSortChange,
-  isTenant,
   selectedColumns,
   sortSetting,
-  transactions,
+  statements,
   sessionsError,
   filters,
   internalAppNamePrefix,
-}: ActiveTransactionsViewProps) => {
+  isTenant,
+}: RecentStatementsViewProps) => {
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     current: 1,
     pageSize: 20,
   });
   const history = useHistory();
   const [search, setSearch] = useState<string>(
-    queryByName(history.location, ACTIVE_TXN_SEARCH_PARAM),
+    queryByName(history.location, RECENT_STATEMENT_SEARCH_PARAM),
   );
 
   useEffect(() => {
-    // Refresh  every 10 seconds.
+    // Refresh every 10 seconds.
     refreshLiveWorkload();
-
     const interval = setInterval(refreshLiveWorkload, 10 * 1000);
     return () => {
       clearInterval(interval);
@@ -101,11 +98,12 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     // Note that the desired behaviour is currently that the user is unable to
     // clear filters via the URL, and must do so with page controls.
     const sortSettingURL = getTableSortFromURL(history.location);
-    const filtersFromURL = getActiveTransactionFiltersFromURL(history.location);
+    const filtersFromURL = getRecentStatementFiltersFromURL(history.location);
 
     if (sortSettingURL) {
       onSortChange(sortSettingURL);
     }
+
     if (filtersFromURL) {
       onFiltersChange(filtersFromURL);
     }
@@ -118,10 +116,11 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
       {
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
+        [RECENT_STATEMENT_SEARCH_PARAM]: search,
         ...getFullFiltersAsStringRecord(filters),
-        [ACTIVE_TXN_SEARCH_PARAM]: search,
       },
       history,
+      true,
     );
   }, [
     history,
@@ -138,18 +137,18 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
     });
   };
 
-  const onChangeSortSetting = (ss: SortSetting): void => {
+  const onSortClick = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
   };
 
-  const onSubmitSearch = (newSearch: string) => {
+  const onSubmitSearch = (newSearch: string): void => {
     if (newSearch === search) return;
     setSearch(newSearch);
     resetPagination();
   };
 
-  const onSubmitFilters = (selectedFilters: ActiveStatementFilters) => {
+  const onSubmitFilters = (selectedFilters: RecentStatementFilters) => {
     onFiltersChange(selectedFilters);
     resetPagination();
   };
@@ -157,21 +156,21 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
   const clearFilters = () => onSubmitFilters({ app: inactiveFiltersState.app });
 
-  const apps = getAppsFromActiveExecutions(transactions, internalAppNamePrefix);
+  const apps = getAppsFromRecentExecutions(statements, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
 
-  const filteredTransactions = filterActiveTransactions(
-    transactions,
+  const filteredStatements = filterRecentStatements(
+    statements,
     filters,
     internalAppNamePrefix,
     search,
   );
+
   return (
     <div className={cx("root")}>
       <PageConfig>
         <PageConfigItem>
           <Search
-            placeholder="Search Transactions"
             onSubmit={onSubmitSearch}
             onClear={clearSearch}
             defaultValue={search}
@@ -188,24 +187,24 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions == null}
-          page="active transactions"
+          loading={statements == null}
+          page="active statements"
           error={sessionsError}
           renderError={() =>
             LoadingError({
-              statsType: "transactions",
+              statsType: "statements",
             })
           }
         >
-          <ActiveTransactionsSection
+          <RecentStatementsSection
             filters={filters}
             pagination={pagination}
             search={search}
-            transactions={filteredTransactions}
+            statements={filteredStatements}
             selectedColumns={selectedColumns}
             sortSetting={sortSetting}
             onClearFilters={clearFilters}
-            onChangeSortSetting={onChangeSortSetting}
+            onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
             isTenant={isTenant}
           />

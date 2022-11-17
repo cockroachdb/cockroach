@@ -11,23 +11,23 @@
 import {
   ActiveStatementPhase,
   SessionsResponse,
-  ActiveTransaction,
-  ActiveStatement,
+  RecentTransaction,
+  RecentStatement,
   SessionStatusType,
-  ActiveStatementFilters,
-  ActiveTransactionFilters,
+  RecentStatementFilters,
+  RecentTransactionFilters,
 } from "./types";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment";
 import { TimestampToMoment } from "../util";
 import Long from "long";
 import {
-  getActiveExecutionsFromSessions,
-  getAppsFromActiveExecutions,
-  filterActiveStatements,
-  filterActiveTransactions,
+  getRecentExecutionsFromSessions,
+  getAppsFromRecentExecutions,
+  filterRecentStatements,
+  filterRecentTransactions,
   INTERNAL_APP_NAME_PREFIX,
-} from "./activeStatementUtils";
+} from "./recentStatementUtils";
 
 type ActiveQuery = protos.cockroach.server.serverpb.ActiveQuery;
 const Timestamp = protos.google.protobuf.Timestamp;
@@ -45,7 +45,7 @@ const defaultActiveQuery = {
   }),
 };
 
-const defaultActiveStatement: ActiveStatement = {
+const defaultActiveStatement: RecentStatement = {
   statementID: defaultActiveQuery.id,
   transactionID: "transactionID",
   sessionID: "sessionID",
@@ -63,8 +63,8 @@ const defaultActiveStatement: ActiveStatement = {
 // makeActiveStatement creates an ActiveStatement object with the default active statement above
 // used as the base.
 function makeActiveStatement(
-  statementProperties: Partial<ActiveStatement> = {},
-): ActiveStatement {
+  statementProperties: Partial<RecentStatement> = {},
+): RecentStatement {
   return {
     ...defaultActiveStatement,
     ...statementProperties,
@@ -73,8 +73,8 @@ function makeActiveStatement(
 
 // makeActiveTxn creates an ActiveTransaction object with the provided props.
 function makeActiveTxn(
-  props: Partial<ActiveTransaction> = {},
-): ActiveTransaction {
+  props: Partial<RecentTransaction> = {},
+): RecentTransaction {
   return {
     transactionID: "txn",
     sessionID: "sessionID",
@@ -106,15 +106,15 @@ function makeActiveQuery(
 describe("test activeStatementUtils", () => {
   describe("filterActiveStatements", () => {
     it("should filter out statements that do not match filters", () => {
-      const statements: ActiveStatement[] = [
+      const statements: RecentStatement[] = [
         makeActiveStatement({ statementID: "1", application: "app1" }),
         makeActiveStatement({ statementID: "2", application: "app2" }),
         makeActiveStatement({ statementID: "3", application: "app3" }),
         makeActiveStatement({ statementID: "4", application: "app1" }),
       ];
 
-      const filters: ActiveStatementFilters = { app: "app1" };
-      const filtered = filterActiveStatements(
+      const filters: RecentStatementFilters = { app: "app1" };
+      const filtered = filterRecentStatements(
         statements,
         filters,
         INTERNAL_APP_NAME_PREFIX,
@@ -125,7 +125,7 @@ describe("test activeStatementUtils", () => {
     });
 
     it("should filter out statements that do not match search query", () => {
-      const statements: ActiveStatement[] = [
+      const statements: RecentStatement[] = [
         makeActiveStatement({
           statementID: "1",
           application: "app1",
@@ -148,9 +148,9 @@ describe("test activeStatementUtils", () => {
         }),
       ];
 
-      const filters: ActiveStatementFilters = { app: "app1" };
+      const filters: RecentStatementFilters = { app: "app1" };
       const search = "SELECT 1";
-      const filtered = filterActiveStatements(
+      const filtered = filterRecentStatements(
         statements,
         filters,
         INTERNAL_APP_NAME_PREFIX,
@@ -163,7 +163,7 @@ describe("test activeStatementUtils", () => {
     });
 
     it("should return all statements on empty filters and search", () => {
-      const statements: ActiveStatement[] = [
+      const statements: RecentStatement[] = [
         makeActiveStatement(),
         makeActiveStatement(),
         makeActiveStatement(),
@@ -171,8 +171,8 @@ describe("test activeStatementUtils", () => {
         makeActiveStatement(),
       ];
 
-      const filters: ActiveStatementFilters = {};
-      const filtered = filterActiveStatements(
+      const filters: RecentStatementFilters = {};
+      const filtered = filterRecentStatements(
         statements,
         filters,
         INTERNAL_APP_NAME_PREFIX,
@@ -216,7 +216,7 @@ describe("test activeStatementUtils", () => {
       };
 
       const statements =
-        getActiveExecutionsFromSessions(sessionsResponse).statements;
+        getRecentExecutionsFromSessions(sessionsResponse).statements;
 
       expect(statements.length).toBe(2);
 
@@ -293,12 +293,12 @@ describe("test activeStatementUtils", () => {
       };
 
       const activeTransactions =
-        getActiveExecutionsFromSessions(sessionsResponse).transactions;
+        getRecentExecutionsFromSessions(sessionsResponse).transactions;
 
       // Should filter out the txn from closed  session.
       expect(activeTransactions.length).toBe(2);
 
-      activeTransactions.forEach((txn: ActiveTransaction, i) => {
+      activeTransactions.forEach((txn: RecentTransaction, i) => {
         expect(txn.application).toBe(
           sessionsResponse.sessions[i].application_name,
         );
@@ -346,7 +346,7 @@ describe("test activeStatementUtils", () => {
         toJSON: () => ({}),
       };
 
-      const activeExecs = getActiveExecutionsFromSessions(sessionsResponse);
+      const activeExecs = getRecentExecutionsFromSessions(sessionsResponse);
 
       expect(activeExecs.transactions[0].query).toBe(lastActiveQueryText);
       expect(activeExecs.transactions[1].query).toBeFalsy();
@@ -360,7 +360,7 @@ describe("test activeStatementUtils", () => {
       makeActiveStatement({ application: "app3" }),
       makeActiveStatement({ application: "app4" }),
     ];
-    const apps = getAppsFromActiveExecutions(
+    const apps = getAppsFromRecentExecutions(
       activeStatements,
       INTERNAL_APP_NAME_PREFIX,
     );
@@ -369,15 +369,15 @@ describe("test activeStatementUtils", () => {
 
   describe("filterActiveTransactions", () => {
     it("should filter out txns that do not match filters", () => {
-      const txns: ActiveTransaction[] = [
+      const txns: RecentTransaction[] = [
         makeActiveTxn({ transactionID: "1", application: "app1" }),
         makeActiveTxn({ transactionID: "2", application: "app2" }),
         makeActiveTxn({ transactionID: "3", application: "app3" }),
         makeActiveTxn({ transactionID: "4", application: "app1" }),
       ];
 
-      const filters: ActiveTransactionFilters = { app: "app1" };
-      const filtered = filterActiveTransactions(
+      const filters: RecentTransactionFilters = { app: "app1" };
+      const filtered = filterRecentTransactions(
         txns,
         filters,
         INTERNAL_APP_NAME_PREFIX,
@@ -389,7 +389,7 @@ describe("test activeStatementUtils", () => {
     });
 
     it("should filter out txns that do not match search query", () => {
-      const txns: ActiveTransaction[] = [
+      const txns: RecentTransaction[] = [
         makeActiveTxn({
           transactionID: "1",
           application: "app1",
@@ -412,9 +412,9 @@ describe("test activeStatementUtils", () => {
         }),
       ];
 
-      const filters: ActiveTransactionFilters = { app: "app1" };
+      const filters: RecentTransactionFilters = { app: "app1" };
       const search = "SELECT 1";
-      const filtered = filterActiveTransactions(
+      const filtered = filterRecentTransactions(
         txns,
         filters,
         INTERNAL_APP_NAME_PREFIX,
@@ -427,7 +427,7 @@ describe("test activeStatementUtils", () => {
     });
 
     it("should return all statements on empty filters and search", () => {
-      const txns: ActiveTransaction[] = [
+      const txns: RecentTransaction[] = [
         makeActiveTxn(),
         makeActiveTxn(),
         makeActiveTxn(),
@@ -435,8 +435,8 @@ describe("test activeStatementUtils", () => {
         makeActiveTxn(),
       ];
 
-      const filters: ActiveTransactionFilters = {};
-      const filtered = filterActiveTransactions(
+      const filters: RecentTransactionFilters = {};
+      const filtered = filterRecentTransactions(
         txns,
         filters,
         INTERNAL_APP_NAME_PREFIX,

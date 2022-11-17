@@ -11,9 +11,9 @@
 import { Filters, defaultFilters } from ".";
 import { Location } from "history";
 import {
-  ActiveStatementFilters,
-  ActiveTransactionFilters,
-} from "src/activeExecutions/types";
+  RecentStatementFilters,
+  RecentTransactionFilters,
+} from "src/recentExecutions/types";
 import {
   WorkloadInsightEventFilters,
   SchemaInsightEventFilters,
@@ -39,9 +39,9 @@ export function getFiltersFromURL(location: Location): Partial<Filters> | null {
   return filters;
 }
 
-export function getActiveStatementFiltersFromURL(
+export function getRecentStatementFiltersFromURL(
   location: Location,
-): Partial<ActiveStatementFilters> | null {
+): Partial<RecentStatementFilters> | null {
   const filters = getFiltersFromURL(location);
   if (!filters) return null;
 
@@ -55,9 +55,9 @@ export function getActiveStatementFiltersFromURL(
   return appFilters;
 }
 
-export function getActiveTransactionFiltersFromURL(
+export function getRecentTransactionFiltersFromURL(
   location: Location,
-): Partial<ActiveTransactionFilters> | null {
+): Partial<RecentTransactionFilters> | null {
   const filters = getFiltersFromURL(location);
   if (!filters) return null;
 

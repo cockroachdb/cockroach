@@ -258,7 +258,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 func (sr *StoreRebalancer) scorerOptions(ctx context.Context) *allocatorimpl.QPSScorerOptions {
 	return &allocatorimpl.QPSScorerOptions{
 		StoreHealthOptions:    sr.allocator.StoreHealthOptions(ctx),
-		Deterministic:         sr.allocator.StorePool.Deterministic,
+		Deterministic:         sr.allocator.StorePool.IsDeterministic(),
 		QPSRebalanceThreshold: allocator.QPSRebalanceThreshold.Get(&sr.st.SV),
 		MinRequiredQPSDiff:    allocator.MinQPSDifferenceForTransfers.Get(&sr.st.SV),
 	}
@@ -616,7 +616,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context, rctx *RebalanceContext,
 ) (CandidateReplica, roachpb.ReplicaDescriptor, []CandidateReplica) {
 	var considerForRebalance []CandidateReplica
-	now := sr.allocator.StorePool.Clock.NowAsClockTimestamp()
+	now := sr.allocator.StorePool.Clock().NowAsClockTimestamp()
 	for {
 		if len(rctx.hottestRanges) == 0 {
 			return nil, roachpb.ReplicaDescriptor{}, considerForRebalance
@@ -728,7 +728,7 @@ type rangeRebalanceContext struct {
 func (sr *StoreRebalancer) chooseRangeToRebalance(
 	ctx context.Context, rctx *RebalanceContext,
 ) (candidateReplica CandidateReplica, voterTargets, nonVoterTargets []roachpb.ReplicationTarget) {
-	now := sr.allocator.StorePool.Clock.NowAsClockTimestamp()
+	now := sr.allocator.StorePool.Clock().NowAsClockTimestamp()
 	if len(rctx.rebalanceCandidates) == 0 && len(rctx.hottestRanges) >= 0 {
 		// NB: In practice, the rebalanceCandidates will be populated with
 		// hottest ranges by the preceeding function call, rebalance leases.
