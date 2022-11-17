@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-package kvserver
+package logstore
 
 import (
 	"context"
@@ -39,10 +39,9 @@ import (
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
-// replicaRaftStorage implements the raft.Storage interface.
-type replicaRaftStorage Replica
-
-var _ raft.Storage = (*replicaRaftStorage)(nil)
+// RaftLogStore implements the log storage part of raft.Storage interface.
+type RaftLogStore struct {
+}
 
 const (
 	// clearRangeThresholdPointKeys is the threshold (as number of point keys)
@@ -83,7 +82,7 @@ const (
 // InitialState implements the raft.Storage interface.
 // InitialState requires that r.mu is held for writing because it requires
 // exclusive access to r.mu.stateLoader.
-func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (r *RaftLogStore) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
 	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.Engine())
 	// For uninitialized ranges, membership is unknown at this point.
@@ -99,7 +98,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
 // Entries requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
-func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
+func (r *RaftLogStore) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
@@ -112,7 +111,7 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 
 // raftEntriesLocked requires that r.mu is held for writing.
 func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	return (*replicaRaftStorage)(r).Entries(lo, hi, maxBytes)
+	return (*RaftLogStore)(r).Entries(lo, hi, maxBytes)
 }
 
 // entries retrieves entries from the engine. To accommodate loading the term,
@@ -295,7 +294,7 @@ const invalidLastTerm = 0
 // Term implements the raft.Storage interface.
 // Term requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
-func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
+func (r *RaftLogStore) Term(i uint64) (uint64, error) {
 	// TODO(nvanbenschoten): should we set r.mu.lastTerm when
 	//   r.mu.lastIndex == i && r.mu.lastTerm == invalidLastTerm?
 	if r.mu.lastIndex == i && r.mu.lastTerm != invalidLastTerm {
@@ -313,7 +312,7 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 
 // raftTermLocked requires that r.mu is locked for writing.
 func (r *Replica) raftTermLocked(i uint64) (uint64, error) {
-	return (*replicaRaftStorage)(r).Term(i)
+	return (*RaftLogStore)(r).Term(i)
 }
 
 // GetTerm returns the term of the given index in the raft log. It requires that
@@ -360,7 +359,7 @@ func (r *Replica) raftLastIndexRLocked() uint64 {
 
 // LastIndex implements the raft.Storage interface.
 // LastIndex requires that r.mu is held for reading.
-func (r *replicaRaftStorage) LastIndex() (uint64, error) {
+func (r *RaftLogStore) LastIndex() (uint64, error) {
 	return (*Replica)(r).raftLastIndexRLocked(), nil
 }
 
@@ -379,7 +378,7 @@ func (r *Replica) raftFirstIndexRLocked() uint64 {
 
 // FirstIndex implements the raft.Storage interface.
 // FirstIndex requires that r.mu is held for reading.
-func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
+func (r *RaftLogStore) FirstIndex() (uint64, error) {
 	return (*Replica)(r).raftFirstIndexRLocked(), nil
 }
 
@@ -413,7 +412,7 @@ func (r *Replica) GetLeaseAppliedIndex() uint64 {
 // and when its turn comes we look at the raft state for followers that want a
 // snapshot, and then send one. That actual sending path does not call this
 // Snapshot method.
-func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
+func (r *RaftLogStore) Snapshot() (raftpb.Snapshot, error) {
 	r.mu.AssertHeld()
 	return raftpb.Snapshot{
 		Metadata: raftpb.SnapshotMetadata{
@@ -425,7 +424,7 @@ func (r *replicaRaftStorage) Snapshot() (raftpb.Snapshot, error) {
 
 // raftSnapshotLocked requires that r.mu is held for writing.
 func (r *Replica) raftSnapshotLocked() (raftpb.Snapshot, error) {
-	return (*replicaRaftStorage)(r).Snapshot()
+	return (*RaftLogStore)(r).Snapshot()
 }
 
 // GetSnapshot returns a snapshot of the replica appropriate for sending to a
