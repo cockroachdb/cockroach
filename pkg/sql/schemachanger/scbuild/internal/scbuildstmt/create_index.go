@@ -156,10 +156,25 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	}
 	idxSpec.primary = nil
 	idxSpec.apply(b.Add)
+	// Apply the name once everything else has been created, since we need
+	// elements to resolve things.
+	indexName := string(n.Name)
+	if indexName == "" {
+		_, _, tbl := scpb.FindTable(relationElements)
+		numImplicitColumns := 0
+		if idxSpec.partitioning != nil {
+			numImplicitColumns = int(idxSpec.partitioning.NumImplicitColumns)
+		}
+		indexName = getImplicitSecondaryIndexName(b,
+			tbl,
+			idxSpec.secondary.IndexID,
+			numImplicitColumns,
+		)
+	}
 	b.Add(&scpb.IndexName{
 		TableID: idxSpec.secondary.TableID,
 		IndexID: idxSpec.secondary.IndexID,
-		Name:    n.Name.String(),
+		Name:    indexName,
 	})
 	// Construct the temporary objects from the index spec, since these will
 	// be transient.
