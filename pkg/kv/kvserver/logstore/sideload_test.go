@@ -349,20 +349,20 @@ func testSideloadingSideloadedStorage(t *testing.T, eng storage.Engine) {
 
 	// Term too high and too low, respectively. Shouldn't delete anything.
 	for _, term := range []uint64{9, 11} {
-		if size, err := MaybePurgeSideloaded(ctx, ss, 1, 10, term); err != nil || size != 0 {
+		if size, err := maybePurgeSideloaded(ctx, ss, 1, 10, term); err != nil || size != 0 {
 			t.Fatalf("expected noop for term %d, got (%d, %v)", term, size, err)
 		}
 	}
 	// This should delete 2 and 4. Index == size+1, so expect 6.
-	if size, err := MaybePurgeSideloaded(ctx, ss, 2, 4, 10); err != nil || size != 8 {
+	if size, err := maybePurgeSideloaded(ctx, ss, 2, 4, 10); err != nil || size != 8 {
 		t.Fatalf("unexpectedly got (%d, %v)", size, err)
 	}
 	// This should delete 1 (the lone survivor).
-	if size, err := MaybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 2 {
+	if size, err := maybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 2 {
 		t.Fatalf("unexpectedly got (%d, %v)", size, err)
 	}
 	// Nothing left.
-	if size, err := MaybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 0 {
+	if size, err := maybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 0 {
 		t.Fatalf("expected noop, got (%d, %v)", size, err)
 	}
 }
