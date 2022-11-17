@@ -13,10 +13,12 @@ package kvserver
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -153,7 +155,7 @@ func evaluateBatch(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
-	readOnly bool,
+	evalPath batchEvalPath,
 ) (_ *roachpb.BatchResponse, _ result.Result, retErr *roachpb.Error) {
 	defer func() {
 		// Ensure that errors don't carry the WriteTooOld flag set. The client
@@ -176,7 +178,7 @@ func evaluateBatch(
 	br := ba.CreateReply()
 
 	// Optimize any contiguous sequences of put and conditional put ops.
-	if len(baReqs) >= optimizePutThreshold && !readOnly {
+	if len(baReqs) >= optimizePutThreshold && evalPath == readWrite {
 		baReqs = optimizePuts(readWriter, baReqs, baHeader.DistinctSpans)
 	}
 
@@ -271,7 +273,8 @@ func evaluateBatch(
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
 		curResult, err := evaluateCommand(
-			ctx, readWriter, rec, ms, baHeader, args, reply, g, st, ui)
+			ctx, readWriter, rec, ms, baHeader, args, reply, g, st, ui, evalPath,
+		)
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{
@@ -481,6 +484,7 @@ func evaluateCommand(
 	g *concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
+	evalPath batchEvalPath,
 ) (result.Result, error) {
 	var err error
 	var pd result.Result
@@ -491,13 +495,14 @@ func evaluateCommand(
 			now = st.Now
 		}
 		cArgs := batcheval.CommandArgs{
-			EvalCtx:     rec,
-			Header:      h,
-			Args:        args,
-			Now:         now,
-			Stats:       ms,
-			Concurrency: g,
-			Uncertainty: ui,
+			EvalCtx:               rec,
+			Header:                h,
+			Args:                  args,
+			Now:                   now,
+			Stats:                 ms,
+			Concurrency:           g,
+			Uncertainty:           ui,
+			DontInterleaveIntents: evalPath == readOnlyWithoutInterleavedIntents,
 		}
 
 		if cmd.EvalRW != nil {
@@ -607,4 +612,68 @@ func canDoServersideRetry(
 		return false
 	}
 	return tryBumpBatchTimestamp(ctx, ba, g, newTimestamp)
+}
+
+// canReadOnlyRequestDropLatchesBeforeEval determines whether the batch request
+// can potentially resolve its conflicts upfront (by scanning just the lock
+// table first), bump the ts cache, release latches and then proceed with
+// evaluation. Only non-locking read requests that aren't being evaluated under
+// the `OptimisticEval` path are eligible for this optimization.
+func canReadOnlyRequestDropLatchesBeforeEval(ba *roachpb.BatchRequest, g *concurrency.Guard) bool {
+	if g == nil {
+		// NB: A nil guard indicates that the caller is not holding latches.
+		return false
+	}
+	switch ba.Header.ReadConsistency {
+	case roachpb.CONSISTENT:
+	// TODO(aayush): INCONSISTENT and READ_UNCOMMITTED reads do not care about
+	// resolving lock conflicts at all. Yet, they can still drop latches early and
+	// evaluate once they've pinned their pebble engine state. We should consider
+	// supporting this by letting these kinds of requests drop latches early while
+	// also skipping the initial validation step of scanning the lock table.
+	case roachpb.INCONSISTENT, roachpb.READ_UNCOMMITTED:
+		return false
+	default:
+		panic(fmt.Sprintf("unexpected ReadConsistency: %s", ba.Header.ReadConsistency))
+	}
+	switch g.EvalKind {
+	case concurrency.PessimisticEval, concurrency.PessimisticAfterFailedOptimisticEval:
+	case concurrency.OptimisticEval:
+		// Requests going through the optimistic path are not allowed to drop their
+		// latches before evaluation since we do not know upfront the extent to
+		// which they will end up reading, and thus we cannot determine how much of
+		// the timestamp cache to update.
+		return false
+	default:
+		panic(fmt.Sprintf("unexpected EvalKind: %v", g.EvalKind))
+	}
+	// Only non-locking reads are eligible. This is because requests that need to
+	// lock the keys that they end up reading need to be isolated against other
+	// conflicting requests during their execution. Thus, they cannot release
+	// their latches before evaluation.
+	if ba.IsLocking() {
+		return false
+	}
+	switch ba.WaitPolicy {
+	case lock.WaitPolicy_Block, lock.WaitPolicy_Error:
+	case lock.WaitPolicy_SkipLocked:
+		// SkipLocked requests should only bump the timestamp cache over the keys
+		// that they actually ended up reading, and not the keys they ended up
+		// skipping over. Thus, they are not allowed to drop their latches before
+		// evaluation.
+		return false
+	default:
+		panic(fmt.Sprintf("unexpected WaitPolicy: %s", ba.WaitPolicy))
+	}
+	// We allow all non-locking, pessimistically evaluating read requests to try
+	// and resolve their conflicts upfront.
+	for _, req := range ba.Requests {
+		inner := req.GetInner()
+		switch inner.(type) {
+		case *roachpb.ExportRequest, *roachpb.GetRequest, *roachpb.ScanRequest, *roachpb.ReverseScanRequest:
+		default:
+			return false
+		}
+	}
+	return true
 }

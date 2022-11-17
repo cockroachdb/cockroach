@@ -677,7 +677,7 @@ func (r *Replica) evaluateWriteBatchWrapper(
 ) (storage.Batch, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	batch, opLogger := r.newBatchedEngine(ba, g)
 	now := timeutil.Now()
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, false /* readOnly */)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 	if pErr == nil {
 		if opLogger != nil {

@@ -1651,7 +1651,6 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-
 	metaPopularKeyCount = metric.Metadata{
 		Name:        "kv.loadsplitter.popularkey",
 		Help:        "Load-based splitter could not find a split key and the most popular sampled split key occurs in >= 25% of the samples.",
@@ -1678,6 +1677,18 @@ Note that the measurement does not include the duration for replicating the eval
 		Help:        "The write ahead log fsync latency",
 		Measurement: "Fsync Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
+		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
+		Help:        `Number of times read-only batches dropped latches before evaluation.`,
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaReplicaReadBatchWithoutInterleavingIter = metric.Metadata{
+		Name:        "kv.replica_read_batch_evaluate.without_interleaving_iter",
+		Help:        `Number of read-only batches evaluated without an intent interleaving iter.`,
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
 	}
 )
 
@@ -1974,6 +1985,9 @@ type StoreMetrics struct {
 	// Replica batch evaluation metrics.
 	ReplicaReadBatchEvaluationLatency  *metric.Histogram
 	ReplicaWriteBatchEvaluationLatency *metric.Histogram
+
+	ReplicaReadBatchDroppedLatchesBeforeEval *metric.Counter
+	ReplicaReadBatchWithoutInterleavingIter  *metric.Counter
 
 	FlushUtilization *metric.GaugeFloat64
 	FsyncLatency     *metric.ManualWindowHistogram
@@ -2517,6 +2531,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		),
 		FlushUtilization: metric.NewGaugeFloat64(metaStorageFlushUtilization),
 		FsyncLatency:     metric.NewManualWindowHistogram(metaStorageFsyncLatency, pebble.FsyncLatencyBuckets),
+
+		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
+		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
 	}
 
 	{

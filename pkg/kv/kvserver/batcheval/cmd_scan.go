@@ -40,19 +40,20 @@ func Scan(
 	var err error
 
 	opts := storage.MVCCScanOptions{
-		Inconsistent:     h.ReadConsistency != roachpb.CONSISTENT,
-		SkipLocked:       h.WaitPolicy == lock.WaitPolicy_SkipLocked,
-		Txn:              h.Txn,
-		Uncertainty:      cArgs.Uncertainty,
-		MaxKeys:          h.MaxSpanRequestKeys,
-		MaxIntents:       storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
-		TargetBytes:      h.TargetBytes,
-		AllowEmpty:       h.AllowEmpty,
-		WholeRowsOfSize:  h.WholeRowsOfSize,
-		FailOnMoreRecent: args.KeyLocking != lock.None,
-		Reverse:          false,
-		MemoryAccount:    cArgs.EvalCtx.GetResponseMemoryAccount(),
-		LockTable:        cArgs.Concurrency,
+		Inconsistent:          h.ReadConsistency != roachpb.CONSISTENT,
+		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
+		Txn:                   h.Txn,
+		Uncertainty:           cArgs.Uncertainty,
+		MaxKeys:               h.MaxSpanRequestKeys,
+		MaxIntents:            storage.MaxIntentsPerWriteIntentError.Get(&cArgs.EvalCtx.ClusterSettings().SV),
+		TargetBytes:           h.TargetBytes,
+		AllowEmpty:            h.AllowEmpty,
+		WholeRowsOfSize:       h.WholeRowsOfSize,
+		FailOnMoreRecent:      args.KeyLocking != lock.None,
+		Reverse:               false,
+		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
+		LockTable:             cArgs.Concurrency,
+		DontInterleaveIntents: cArgs.DontInterleaveIntents,
 	}
 
 	switch args.ScanFormat {
