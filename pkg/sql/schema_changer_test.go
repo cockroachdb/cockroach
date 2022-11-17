@@ -1383,6 +1383,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1392,6 +1393,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	// Adding an index means we will have 2 times of kv pairs (one for the primary index
+	// and one for the newly added secondary index).
 	addIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2, nil)
 
 	currChunk = 0
@@ -5713,6 +5716,7 @@ CREATE TABLE t.test (
     k INT PRIMARY KEY NOT NULL,
     v INT NOT NULL
 );
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -5808,6 +5812,7 @@ CREATE TABLE t.test (
     k INT PRIMARY KEY NOT NULL,
     v INT NOT NULL
 );
+SET use_declarative_schema_changer = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -7328,6 +7333,7 @@ func TestCheckConstraintDropAndColumn(t *testing.T) {
 	conn1.Exec(t, `
 CREATE TABLE t (i INT8 PRIMARY KEY, j INT8);
 INSERT INTO t VALUES (1, 1);
+SET use_declarative_schema_changer = off;
 `)
 
 	// Issue #61749 uncovered that checks would be incorrectly
@@ -7473,6 +7479,7 @@ func TestShardColumnConstraintSkipValidation(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT NOT NULL);
 INSERT INTO t.test VALUES (1, 2);
+SET use_declarative_schema_changer = off;
 `,
 	)
 

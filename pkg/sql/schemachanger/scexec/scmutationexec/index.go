@@ -350,29 +350,6 @@ func (m *visitor) SetIndexName(ctx context.Context, op scop.SetIndexName) error 
 	return nil
 }
 
-func (m *visitor) SetConstraintName(ctx context.Context, op scop.SetConstraintName) error {
-	tbl, err := m.checkOutTable(ctx, op.TableID)
-	if err != nil {
-		return err
-	}
-	constraint, err := tbl.FindConstraintWithID(op.ConstraintID)
-	if err != nil {
-		return err
-	}
-	if constraint.AsUniqueWithIndex() != nil {
-		constraint.AsUniqueWithIndex().IndexDesc().Name = op.Name
-	} else if constraint.AsUniqueWithoutIndex() != nil {
-		constraint.AsUniqueWithoutIndex().UniqueWithoutIndexDesc().Name = op.Name
-	} else if constraint.AsCheck() != nil {
-		constraint.AsCheck().CheckDesc().Name = op.Name
-	} else if constraint.AsForeignKey() != nil {
-		constraint.AsForeignKey().ForeignKeyDesc().Name = op.Name
-	} else {
-		return errors.AssertionFailedf("unknown constraint type")
-	}
-	return nil
-}
-
 func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex) error {
 	tbl, err := m.checkOutTable(ctx, op.TableID)
 	if err != nil {

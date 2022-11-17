@@ -31,8 +31,9 @@ type ValidateIndex struct {
 // ValidateCheckConstraint validates a check constraint on a table's columns.
 type ValidateCheckConstraint struct {
 	validationOp
-	TableID      descpb.ID
-	ConstraintID descpb.ConstraintID
+	TableID              descpb.ID
+	ConstraintID         descpb.ConstraintID
+	IndexIDForValidation descpb.IndexID
 }
 
 // Make sure baseOp is used for linter.

@@ -144,7 +144,7 @@ func checkIsColumnDependent(e scpb.Element) error {
 // element.
 func checkIsIndexDependent(e scpb.Element) error {
 	// Exclude indexes themselves and their data.
-	if isIndex(e) || isData(e) {
+	if isIndex(e) || isData(e) || isSupportedNonIndexBackedConstraint(e) {
 		return nil
 	}
 	// An index dependent should have an IndexID attribute.

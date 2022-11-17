@@ -40,6 +40,8 @@ import (
 
 // validateCheckExpr verifies that the given CHECK expression returns true
 // for all the rows in the table.
+// `indexIDForValidation`, if non-zero, is used to explicit hint the
+// validation query to validate against a specific index.
 //
 // It operates entirely on the current goroutine and is thus able to
 // reuse an existing client.Txn safely.
@@ -51,6 +53,7 @@ func validateCheckExpr(
 	exprStr string,
 	tableDesc *tabledesc.Mutable,
 	ie sqlutil.InternalExecutor,
+	indexIDForValidation descpb.IndexID,
 ) error {
 	expr, err := schemaexpr.FormatExprForDisplay(ctx, tableDesc, exprStr, semaCtx, sessionData, tree.FmtParsable)
 	if err != nil {
@@ -59,6 +62,9 @@ func validateCheckExpr(
 	colSelectors := tabledesc.ColumnsSelectors(tableDesc.AccessibleColumns())
 	columns := tree.AsStringWithFlags(&colSelectors, tree.FmtSerializable)
 	queryStr := fmt.Sprintf(`SELECT %s FROM [%d AS t] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), exprStr)
+	if indexIDForValidation != 0 {
+		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
+	}
 	log.Infof(ctx, "validating check constraint %q with query %q", expr, queryStr)
 	rows, err := ie.QueryRowEx(
 		ctx,
