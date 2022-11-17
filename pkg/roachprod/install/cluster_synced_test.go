@@ -97,7 +97,7 @@ func TestRunWithMaybeRetry(t *testing.T) {
 	attempt := 0
 	cases := []struct {
 		f                func() (*RunResultDetails, error)
-		shouldRetryFn    func(res *RunResultDetails) bool
+		shouldRetryFn    func(*RunResultDetails) bool
 		expectedAttempts int
 		shouldError      bool
 	}{
