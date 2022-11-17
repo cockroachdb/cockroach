@@ -47,7 +47,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                 "columnIds": [
                     2
                 ],
-                "constraintId": 2,
+                "constraintId": 4,
                 "expr": "b != '_':::STRING",
                 "name": "check_b"
             }
@@ -67,6 +67,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
                 "id": 2,
                 "name": "b",
                 "nullable": true,
+                "pgAttributeNum": 2,
                 "type": {
                     "family": "StringFamily",
                     "oid": 25
@@ -95,21 +96,21 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
         "modificationTime": {},
         "name": "collate_partition",
         "nextColumnId": 3,
-        "nextConstraintId": 3,
+        "nextConstraintId": 5,
         "nextFamilyId": 1,
-        "nextIndexId": 2,
-        "nextMutationId": 2,
+        "nextIndexId": 4,
+        "nextMutationId": 1,
         "parentId": 104,
         "primaryIndex": {
             "compositeColumnIds": [
                 1
             ],
-            "constraintId": 1,
-            "createdAtNanos": "0",
+            "constraintId": 2,
+            "createdExplicitly": true,
             "encodingType": 1,
             "foreignKey": {},
             "geoConfig": {},
-            "id": 1,
+            "id": 2,
             "interleave": {},
             "keyColumnDirections": [
                 "ASC"
@@ -161,7 +162,7 @@ SELECT descriptor from redacted_descriptors where id = 'collate_partition'::REGC
             "time": {}
         },
         "unexposedParentSchemaId": 105,
-        "version": "5"
+        "version": "9"
     }
 }
 

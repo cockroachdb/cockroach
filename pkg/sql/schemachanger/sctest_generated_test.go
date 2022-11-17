@@ -120,6 +120,56 @@ func TestRollback_add_column_no_default(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/add_column_no_default", sctest.SingleNodeCluster)
 }
+func TestEndToEndSideEffects_alter_table_add_check_vanilla(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_alter_table_add_check_vanilla(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_alter_table_add_check_vanilla(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", sctest.SingleNodeCluster)
+}
+func TestPause_alter_table_add_check_vanilla(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", sctest.SingleNodeCluster)
+}
+func TestRollback_alter_table_add_check_vanilla(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_vanilla", sctest.SingleNodeCluster)
+}
+func TestEndToEndSideEffects_alter_table_add_check_with_seq_and_udt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.EndToEndSideEffects(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", sctest.SingleNodeCluster)
+}
+func TestExecuteWithDMLInjection_alter_table_add_check_with_seq_and_udt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.ExecuteWithDMLInjection(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", sctest.SingleNodeCluster)
+}
+func TestGenerateSchemaChangeCorpus_alter_table_add_check_with_seq_and_udt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.GenerateSchemaChangeCorpus(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", sctest.SingleNodeCluster)
+}
+func TestPause_alter_table_add_check_with_seq_and_udt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Pause(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", sctest.SingleNodeCluster)
+}
+func TestRollback_alter_table_add_check_with_seq_and_udt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	sctest.Rollback(t, "pkg/sql/schemachanger/testdata/end_to_end/alter_table_add_check_with_seq_and_udt", sctest.SingleNodeCluster)
+}
 func TestEndToEndSideEffects_alter_table_add_primary_key_drop_rowid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

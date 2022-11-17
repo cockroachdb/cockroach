@@ -19,15 +19,28 @@ import (
 // These rules ensure that constraint-dependent elements, like a constraint's
 // name, etc. appear once the constraint reaches a suitable state.
 func init() {
-
 	registerDepRule(
-		"constraint dependent public right before constraint",
-		scgraph.SameStagePrecedence,
+		"constraint exists precedes dependents",
+		scgraph.Precedence,
 		"constraint", "dependent",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraint),
+				from.typeFilter(isSupportedNonIndexBackedConstraint),
 				to.typeFilter(isConstraintDependent),
+				joinOnConstraintID(from, to, "table-id", "constraint-id"),
+				statusesToPublicOrTransient(from, scpb.Status_WRITE_ONLY, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	registerDepRule(
+		"constraint dependents exist before constraint becomes public",
+		scgraph.Precedence,
+		"dependent", "constraint",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.typeFilter(isConstraintDependent),
+				to.typeFilter(isSupportedNonIndexBackedConstraint),
 				joinOnConstraintID(from, to, "table-id", "constraint-id"),
 				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
 			}
