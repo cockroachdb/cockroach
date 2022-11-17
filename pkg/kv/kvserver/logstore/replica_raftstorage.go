@@ -15,7 +15,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3"
@@ -31,6 +31,17 @@ import (
 
 // RaftLogStore implements the log storage part of raft.Storage interface.
 type RaftLogStore struct {
+	// The AmbientContext includes the log tags from the parent node and store.
+	log.AmbientContext
+
+	rangeID        roachpb.RangeID
+	stateLoader    stateloader.StateLoader
+	engine         storage.Engine
+	raftEntryCache *raftentry.Cache
+	sideloaded     SideloadStorage
+
+	state   raftLogState
+	trState roachpb.RaftTruncatedState
 }
 
 // All calls to raft.RawNode require that both Replica.raftMu and
@@ -49,18 +60,12 @@ type RaftLogStore struct {
 // database, and not the replica's in-memory state or via a reference
 // to Replica.store.Engine().
 
-// InitialState implements the raft.Storage interface.
+// InitialState implements the log "half" of the raft.Storage interface.
 // InitialState requires that r.mu is held for writing because it requires
 // exclusive access to r.mu.stateLoader.
-func (r *RaftLogStore) InitialState() (raftpb.HardState, raftpb.ConfState, error) {
+func (r *RaftLogStore) InitialState() (raftpb.HardState, error) {
 	ctx := r.AnnotateCtx(context.TODO())
-	hs, err := r.mu.stateLoader.LoadHardState(ctx, r.store.Engine())
-	// For uninitialized ranges, membership is unknown at this point.
-	if raft.IsEmptyHardState(hs) || err != nil {
-		return raftpb.HardState{}, raftpb.ConfState{}, err
-	}
-	cs := r.mu.state.Desc.Replicas().ConfState()
-	return hs, cs, nil
+	return r.stateLoader.LoadHardState(ctx, r.engine)
 }
 
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
@@ -69,14 +74,14 @@ func (r *RaftLogStore) InitialState() (raftpb.HardState, raftpb.ConfState, error
 // Entries requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
 func (r *RaftLogStore) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
+	readonly := r.engine.NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	if r.raftMu.sideloaded == nil {
+	if r.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return entries(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache,
-		r.raftMu.sideloaded, lo, hi, maxBytes)
+	return entries(ctx, r.stateLoader, readonly, r.rangeID, r.raftEntryCache,
+		r.sideloaded, lo, hi, maxBytes)
 }
 
 // entries retrieves entries from the engine. To accommodate loading the term,
@@ -89,7 +94,7 @@ func entries(
 	reader storage.Reader,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
-	sideloaded logstore.SideloadStorage,
+	sideloaded SideloadStorage,
 	lo, hi, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	if lo > hi {
@@ -125,10 +130,10 @@ func entries(
 		}
 		expectedIndex++
 
-		if logstore.SniffSideloadedRaftCommand(ent.Data) {
+		if SniffSideloadedRaftCommand(ent.Data) {
 			canCache = canCache && sideloaded != nil
 			if sideloaded != nil {
-				newEnt, err := logstore.MaybeInlineSideloadedRaftCommand(
+				newEnt, err := MaybeInlineSideloadedRaftCommand(
 					ctx, rangeID, ent, sideloaded, eCache,
 				)
 				if err != nil {
@@ -262,17 +267,17 @@ const invalidLastTerm = 0
 func (r *RaftLogStore) Term(i uint64) (uint64, error) {
 	// TODO(nvanbenschoten): should we set r.mu.lastTerm when
 	//   r.mu.lastIndex == i && r.mu.lastTerm == invalidLastTerm?
-	if r.mu.lastIndex == i && r.mu.lastTerm != invalidLastTerm {
-		return r.mu.lastTerm, nil
+	if r.state.lastIndex == i && r.state.lastTerm != invalidLastTerm {
+		return r.state.lastTerm, nil
 	}
 	// Try to retrieve the term for the desired entry from the entry cache.
-	if e, ok := r.store.raftEntryCache.Get(r.RangeID, i); ok {
+	if e, ok := r.raftEntryCache.Get(r.rangeID, i); ok {
 		return e.Term, nil
 	}
-	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
+	readonly := r.engine.NewReadOnly(storage.StandardDurability)
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, r.stateLoader, readonly, r.rangeID, r.raftEntryCache, i)
 }
 
 func term(
@@ -307,13 +312,13 @@ func term(
 // LastIndex implements the raft.Storage interface.
 // LastIndex requires that r.mu is held for reading.
 func (r *RaftLogStore) LastIndex() (uint64, error) {
-	return r.mu.lastIndex, nil
+	return r.state.lastIndex, nil
 }
 
 // FirstIndex implements the raft.Storage interface.
 // FirstIndex requires that r.mu is held for reading.
 func (r *RaftLogStore) FirstIndex() (uint64, error) {
-	return r.mu.state.TruncatedState.Index + 1
+	return r.trState.Index + 1, nil
 }
 
 // raftLogState stores information about the last entry and the size of the log.
