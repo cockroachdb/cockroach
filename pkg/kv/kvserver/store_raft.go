@@ -405,7 +405,6 @@ func (s *Store) processRaftSnapshotRequest(
 			log.Fatalf(ctx, "expected snapshot: %+v", snapHeader.RaftMessageRequest)
 		}
 
-		var stats handleRaftReadyStats
 		typ := removePlaceholderFailed
 		defer func() {
 			// In the typical case, handleRaftReadyRaftMuLocked calls through to
@@ -457,10 +456,8 @@ func (s *Store) processRaftSnapshotRequest(
 		// be there based on `stats.snap.applied`	but it is a questionable use of
 		// stats and more susceptible to bugs.
 		typ = removePlaceholderDropped
-		var expl string
-		var err error
-		stats, expl, err = r.handleRaftReadyRaftMuLocked(ctx, inSnap)
-		maybeFatalOnRaftReadyErr(ctx, expl, err)
+		stats, err := r.handleRaftReadyRaftMuLocked(ctx, inSnap)
+		maybeFatalOnRaftReadyErr(ctx, err)
 		if !stats.snap.applied {
 			// This line would be hit if a snapshot was sent when it isn't necessary
 			// (i.e. follower was able to catch up via the log in the interim) or when
@@ -635,8 +632,8 @@ func (s *Store) processReady(rangeID roachpb.RangeID) {
 	}
 
 	ctx := r.raftCtx
-	stats, expl, err := r.handleRaftReady(ctx, noSnap)
-	maybeFatalOnRaftReadyErr(ctx, expl, err)
+	stats, err := r.handleRaftReady(ctx, noSnap)
+	maybeFatalOnRaftReadyErr(ctx, err)
 	elapsed := stats.tEnd.Sub(stats.tBegin)
 	s.metrics.RaftWorkingDurationNanos.Inc(elapsed.Nanoseconds())
 	s.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())

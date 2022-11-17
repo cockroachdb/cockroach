@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/errors"
 	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
@@ -54,7 +55,7 @@ func (c *ReplicatedCmd) Decode(e *raftpb.Entry) error {
 	var err error
 	c.Entry, err = NewEntry(*e)
 	if err != nil {
-		return kvserverbase.NonDeterministicErrorWrapf(err, "while decoding raft entry")
+		return errors.Wrapf(err, "while decoding raft entry")
 	}
 	return nil
 }

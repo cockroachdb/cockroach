@@ -7095,11 +7095,11 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 		}
 	}()
 
-	if _, _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
+	if _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
+	if _, err := repl.handleRaftReady(ctx, noSnap); err != nil {
 		t.Fatal(err)
 	}
 }

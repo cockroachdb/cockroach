@@ -219,12 +219,12 @@ func (b *replicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 	if cmd.Index() == 0 {
-		return nil, kvserverbase.NonDeterministicErrorf("processRaftCommand requires a non-zero index")
+		return nil, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
 	}
 	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
 		// If we have an out of order index, there's corruption. No sense in
 		// trying to update anything or running the command. Simply return.
-		return nil, kvserverbase.NonDeterministicErrorf("applied index jumped from %d to %d", applied, idx)
+		return nil, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
 	}
 	if log.V(4) {
 		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
@@ -262,9 +262,9 @@ func (b *replicaAppBatch) Stage(
 	// way, it would become less of a one-off.
 	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
 		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
-			err = kvserverbase.NonDeterministicErrorWrapf(err, "unable to acquire split lock")
+			err = errors.Wrap(err, "unable to acquire split lock")
 		} else {
-			err = kvserverbase.NonDeterministicErrorWrapf(err, "unable to acquire merge lock")
+			err = errors.Wrap(err, "unable to acquire merge lock")
 		}
 		return nil, err
 	} else if splitMergeUnlock != nil {
@@ -348,7 +348,7 @@ func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCm
 		b.mutations += mutations
 	}
 	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
-		return kvserverbase.NonDeterministicErrorWrapf(err, "unable to apply WriteBatch")
+		return errors.Wrapf(err, "unable to apply WriteBatch")
 	}
 	return nil
 }
@@ -463,7 +463,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		// An initialized replica is always contained in its descriptor.
 		rhsRepl, err := b.r.store.GetReplica(merge.RightDesc.RangeID)
 		if err != nil {
-			return kvserverbase.NonDeterministicErrorWrapf(err, "unable to get replica for merge")
+			return errors.Wrapf(err, "unable to get replica for merge")
 		}
 		// We should already have acquired the raftMu for the rhsRepl and now hold
 		// its unlock method in cmd.splitMergeUnlock.
@@ -490,7 +490,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 		if err := rhsRepl.preDestroyRaftMuLocked(
 			ctx, b.batch, b.batch, mergedTombstoneReplicaID, clearRangeIDLocalOnly, mustClearRange,
 		); err != nil {
-			return kvserverbase.NonDeterministicErrorWrapf(err, "unable to destroy replica before merge")
+			return errors.Wrapf(err, "unable to destroy replica before merge")
 		}
 
 		// Shut down rangefeed processors on either side of the merge.
@@ -563,7 +563,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			if apply, err = handleTruncatedStateBelowRaftPreApply(
 				ctx, b.state.TruncatedState, res.State.TruncatedState, b.r.raftMu.stateLoader, b.batch,
 			); err != nil {
-				return kvserverbase.NonDeterministicErrorWrapf(err, "unable to handle truncated state")
+				return errors.Wrap(err, "unable to handle truncated state")
 			}
 		} else {
 			b.r.store.raftTruncator.addPendingTruncation(
@@ -633,7 +633,7 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 			false, /* clearRangeIDLocalOnly */
 			false, /* mustUseClearRange */
 		); err != nil {
-			return kvserverbase.NonDeterministicErrorWrapf(err, "unable to destroy replica before removal")
+			return errors.Wrapf(err, "unable to destroy replica before removal")
 		}
 	}
 
@@ -717,7 +717,7 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// See handleChangeReplicasResult().
 	sync := b.changeRemovesReplica
 	if err := b.batch.Commit(sync); err != nil {
-		return kvserverbase.NonDeterministicErrorWrapf(err, "unable to commit Raft entry batch")
+		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
 	b.batch.Close()
 	b.batch = nil
@@ -843,15 +843,14 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 		} else {
 			req.SafeString("request unknown; not leaseholder")
 		}
-		return kvserverbase.NonDeterministicErrorWrapf(errors.AssertionFailedf(
+		return errors.AssertionFailedf(
 			"command writing below closed timestamp; cmd: %x, write ts: %s, "+
 				"batch state closed: %s, command closed: %s, request: %s, lease: %s.\n"+
 				"This assertion will fire again on restart; to ignore run with env var\n"+
 				"COCKROACH_RAFT_CLOSEDTS_ASSERTIONS_ENABLED=false",
 			cmd.ID, wts,
 			b.state.RaftClosedTimestamp, cmd.Cmd.ClosedTimestamp,
-			req, b.state.Lease),
-			"command writing below closed timestamp")
+			req, b.state.Lease)
 	}
 	return nil
 }
@@ -984,7 +983,7 @@ func (sm *replicaStateMachine) ApplySideEffects(
 
 	// On ConfChange entries, inform the raft.RawNode.
 	if err := sm.maybeApplyConfChange(ctx, cmd); err != nil {
-		return nil, kvserverbase.NonDeterministicErrorWrapf(err, "unable to apply conf change")
+		return nil, errors.Wrapf(err, "unable to apply conf change")
 	}
 
 	// Mark the command as applied and return it as an apply.AppliedCommand.
