@@ -396,6 +396,14 @@ func (m *visitor) AddColumnToIndex(ctx context.Context, op scop.AddColumnToIndex
 		insertIntoIDs(&indexDesc.StoreColumnIDs)
 		insertIntoNames(&indexDesc.StoreColumnNames)
 	}
+	// Only the last column can be inverted, so there is only one spot
+	// to place this.
+	switch op.InvertedKind {
+	case scpb.IndexColumn_INVERTED:
+		indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_DEFAULT}
+	case scpb.IndexColumn_INVERTED_TRIGRAM:
+		indexDesc.InvertedColumnKinds = []catpb.InvertedIndexColumnKind{catpb.InvertedIndexColumnKind_TRIGRAM}
+	}
 	// If this is a composite column, note that.
 	if colinfo.CanHaveCompositeKeyEncoding(column.GetType()) &&
 		// We don't need to track the composite column IDs for stored columns.
@@ -465,6 +473,14 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 			idx.StoreColumnNames = idx.StoreColumnNames[:i]
 			idx.StoreColumnIDs = idx.StoreColumnIDs[:i]
 		}
+	}
+	// Only the last column can be inverted, so there is only one spot
+	// to unset this.
+	switch op.InvertedKind {
+	case scpb.IndexColumn_INVERTED:
+		fallthrough
+	case scpb.IndexColumn_INVERTED_TRIGRAM:
+		idx.InvertedColumnKinds = nil
 	}
 	// If this is a composite column, remove it from the list.
 	if colinfo.CanHaveCompositeKeyEncoding(column.GetType()) &&
