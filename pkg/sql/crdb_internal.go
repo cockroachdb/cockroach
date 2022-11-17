@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -3648,40 +3647,26 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		if !hasPermission {
 			return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege, "only users with the ZONECONFIG privilege or the admin role can read crdb_internal.ranges_no_leases")
 		}
-		ranges, err := kvclient.ScanMetaKVs(ctx, p.txn, roachpb.Span{
-			Key:    keys.MinKey,
-			EndKey: keys.MaxKey,
-		})
+
+		ri := kvcoord.MakeRangeIterator(p.execCfg.DistSender)
+		ri.Seek(ctx, roachpb.RKey(p.EvalContext().Codec.TenantPrefix()), kvcoord.Ascending)
+		if !ri.Valid() {
+			return nil, nil, ri.Error()
+		}
+
+		resp, err := p.ExecCfg().NodeLocalityServer.NodeLocality(ctx, &serverpb.NodeLocalityRequest{})
 		if err != nil {
 			return nil, nil, err
 		}
-
-		// Map node descriptors to localities
-		descriptors, err := getAllNodeDescriptors(p)
-		if err != nil {
-			return nil, nil, err
-		}
-		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
-		for _, desc := range descriptors {
-			nodeIDToLocality[desc.NodeID] = desc.Locality
-		}
-
-		var desc roachpb.RangeDescriptor
-
-		i := 0
+		nodeIDToLocality := resp.NodeLocalities
+		var desc *roachpb.RangeDescriptor
 
 		return func() (tree.Datums, error) {
-			if i >= len(ranges) {
+			if !ri.Valid() {
 				return nil, nil
 			}
-
-			r := ranges[i]
-			i++
-
-			if err := r.ValueProto(&desc); err != nil {
-				return nil, err
-			}
-
+			defer ri.Next(ctx)
+			desc = ri.Desc()
 			votersAndNonVoters := append([]roachpb.ReplicaDescriptor(nil),
 				desc.Replicas().VoterAndNonVoterDescriptors()...)
 			var learnerReplicaStoreIDs []int
