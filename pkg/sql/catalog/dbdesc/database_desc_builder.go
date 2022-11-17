@@ -107,6 +107,19 @@ func (ddb *databaseDescriptorBuilder) RunPostDeserializationChanges() (err error
 		ddb.changes.Add(catalog.SetModTimeToMVCCTimestamp)
 	}
 
+	// This should only every happen to the system database. Unlike many other
+	// post-deserialization changes, this does not need to last forever to
+	// support restores. It can be removed after a migration performing such a
+	// migration occurs.
+	//
+	// TODO(ajwerner): Write or piggy-back off some other migration to rewrite
+	// the descriptor, and then remove this in a release that is no longer
+	// compatible with the predecessor of the version with the migration.
+	if ddb.maybeModified.Version == 0 {
+		ddb.maybeModified.Version = 1
+		ddb.changes.Add(catalog.SetSystemDatabaseDescriptorVersion)
+	}
+
 	createdDefaultPrivileges := false
 	removedIncompatibleDatabasePrivs := false
 	// Skip converting incompatible privileges to default privileges on the
