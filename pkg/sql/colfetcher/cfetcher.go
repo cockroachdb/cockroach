@@ -326,7 +326,7 @@ func (cf *cFetcher) resetBatch() {
 // Init sets up the cFetcher based on the table args. Only columns present in
 // tableArgs.cols will be fetched.
 func (cf *cFetcher) Init(
-	allocator *colmem.Allocator, kvFetcher *row.KVFetcher, tableArgs *cFetcherTableArgs,
+	allocator *colmem.Allocator, nextKVer storage.NextKVer, tableArgs *cFetcherTableArgs,
 ) error {
 	if tableArgs.spec.Version != fetchpb.IndexFetchSpecVersionInitial {
 		return errors.Newf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
@@ -460,8 +460,10 @@ func (cf *cFetcher) Init(
 	}
 
 	cf.table = table
-	cf.nextKVer = kvFetcher
-	cf.fetcher = kvFetcher
+	cf.nextKVer = nextKVer
+	if kvFetcher, ok := nextKVer.(*row.KVFetcher); ok {
+		cf.fetcher = kvFetcher
+	}
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
 
 	return nil

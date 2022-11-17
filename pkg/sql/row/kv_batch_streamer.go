@@ -195,7 +195,7 @@ func (f *txnKVStreamer) nextBatch(ctx context.Context) (resp KVBatchFetcherRespo
 	if len(f.results) == 0 || err != nil {
 		return KVBatchFetcherResponse{MoreKVs: false}, err
 	}
-	return f.nextBatch(ctx)
+	return f.NextBatch(ctx)
 }
 
 // reset releases all of the results from the last fetch.

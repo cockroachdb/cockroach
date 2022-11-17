@@ -637,7 +637,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		return KVBatchFetcherResponse{}, err
 	}
 	// We've got more data to process, recurse and process it.
-	return f.nextBatch(ctx)
+	return f.NextBatch(ctx)
 }
 
 func (f *txnKVFetcher) reset(ctx context.Context) {
