@@ -619,14 +619,13 @@ func (am *authenticationMux) getSession(
 	ctx := req.Context()
 	// Validate the returned cookie.
 	cookies := req.Cookies()
-	found := false
-	var cookie *serverpb.SessionCookie
 	var err error
+	authFailed := false
 	for _, c := range cookies {
 		if c.Name != SessionCookieName {
 			continue
 		}
-		found = true
+		var cookie *serverpb.SessionCookie
 		cookie, err = decodeSessionCookie(c)
 		if err != nil {
 			// Multiple cookies with the same name may be included in the
@@ -635,23 +634,22 @@ func (am *authenticationMux) getSession(
 			log.Infof(ctx, "found a matching cookie that failed decoding: %v", err)
 			continue
 		}
-		break
+		valid, username, err := am.server.verifySession(req.Context(), cookie)
+		if err != nil {
+			log.Infof(ctx, "found a matching cookie that failed verification: %v", err)
+			continue
+		}
+		if !valid {
+			authFailed = true
+			err = errors.New("the provided authentication session could not be validated")
+			continue
+		}
+		return username, cookie, nil
 	}
-	if err != nil || !found {
-		return "", nil, http.ErrNoCookie
-	}
-
-	valid, username, err := am.server.verifySession(req.Context(), cookie)
-	if err != nil {
-		err := apiInternalError(req.Context(), err)
+	if authFailed {
 		return "", nil, err
 	}
-	if !valid {
-		err := errors.New("the provided authentication session could not be validated")
-		return "", nil, err
-	}
-
-	return username, cookie, nil
+	return "", nil, http.ErrNoCookie
 }
 
 func decodeSessionCookie(encodedCookie *http.Cookie) (*serverpb.SessionCookie, error) {
