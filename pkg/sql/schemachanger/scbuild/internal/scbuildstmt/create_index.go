@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -60,7 +61,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		))
 	}
 
-	// Inverted indexes do not support hash sharing or unique.
+	// Inverted indexes do not support hash sharding or unique.
 	if n.Inverted {
 		if n.Sharded != nil {
 			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
@@ -640,6 +641,28 @@ func addColumnsForSecondaryIndex(
 			ShardBuckets: buckets,
 			ColumnNames:  keyColNames,
 		}
+		colElts := b.ResolveColumn(tableID, tree.Name(shardColName), ResolveParams{
+			RequiredPrivilege: privilege.CREATE,
+		})
+		_, _, column := scpb.FindColumn(colElts)
+		indexColumn := &scpb.IndexColumn{
+			IndexID:       idxSpec.secondary.IndexID,
+			TableID:       column.TableID,
+			ColumnID:      column.ColumnID,
+			OrdinalInKind: 0,
+			Kind:          scpb.IndexColumn_KEY,
+			Direction:     catpb.IndexColumn_ASC,
+		}
+		// Remove the sharded column if it's there in the primary
+		// index already, before adding it.
+		for pos, ic := range idxSpec.columns {
+			if ic.ColumnID == column.ColumnID {
+				idxSpec.columns = append(idxSpec.columns[:pos], idxSpec.columns[pos+1:]...)
+				break
+			}
+		}
+		idxSpec.columns = append([]*scpb.IndexColumn{indexColumn}, idxSpec.columns...)
+		panic(scerrors.NotImplementedErrorf(n.Sharded, "split and scatter support are missing"))
 	}
 }
 
@@ -693,10 +716,12 @@ func maybeCreateAndAddShardCol(
 		colType: &scpb.ColumnType{
 			TableID:     tbl.TableID,
 			ColumnID:    shardColID,
-			TypeT:       scpb.TypeT{Type: types.Int4},
+			TypeT:       scpb.TypeT{Type: types.Int},
 			ComputeExpr: b.WrapExpression(tbl.TableID, parsedExpr),
 			IsVirtual:   true,
+			IsNullable:  false,
 		},
+		//TODO(fqazi): Add a check constraint for the hash sharded column.
 	}
 	addColumn(b, spec, n)
 	return shardColName
