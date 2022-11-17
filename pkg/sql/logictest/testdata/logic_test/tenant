@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    12      system
+1   true    14      system
 
 # Create a few tenants.
 
@@ -21,11 +21,11 @@ SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantI
 FROM system.tenants
 ORDER BY id
 ----
-id  active  name          crdb_internal.pb_to_json
-1   true    system        {"id": "1", "name": "system", "state": "ACTIVE"}
-2   true    "tenant-one"  {"id": "2", "name": "\"tenant-one\"", "state": "ACTIVE"}
-3   true    two           {"id": "3", "name": "two", "state": "ACTIVE"}
-4   true    three         {"id": "4", "name": "three", "state": "ACTIVE"}
+id  active  name        crdb_internal.pb_to_json
+1   true    system      {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}
+2   true    tenant-one  {"droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE"}
+3   true    two         {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE"}
+4   true    three       {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE"}
 
 # Test creating a tenant with the same name as an existing tenant, but a unique
 # ID.
@@ -63,8 +63,8 @@ SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantI
 FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
-id  active  name          crdb_internal.pb_to_json
-5   true    four         {"id": "5", "name": "four", "state": "ACTIVE"}
+id  active  name  crdb_internal.pb_to_json
+5   true    four  {"droppedName": "", "id": "5", "name": "four", "state": "ACTIVE"}
 
 statement ok
 DROP TENANT four
@@ -74,8 +74,7 @@ SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantI
 FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
-id  active  name          crdb_internal.pb_to_json
-5   false    four         {"id": "5", "name": "four", "state": "DROP"}
+id  active  name  crdb_internal.pb_to_json
 
 statement ok
 CREATE TENANT "five-requiring-quotes"
@@ -96,3 +95,31 @@ user testuser
 
 statement error only users with the admin role are allowed to destroy tenant
 DROP TENANT "not-allowed"
+
+user root
+
+subtest reclaim_name
+
+statement ok
+CREATE TENANT "to-be-reclaimed"
+
+statement ok
+DROP TENANT "to-be-reclaimed"
+
+statement ok
+CREATE TENANT "to-be-reclaimed"
+
+query IBTT colnames
+SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true)
+FROM system.tenants
+ORDER BY id
+----
+id  active  name             crdb_internal.pb_to_json
+1   true    system           {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}
+2   true    tenant-one       {"droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE"}
+3   true    two              {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE"}
+4   true    three            {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE"}
+5   false   NULL             {"droppedName": "four", "id": "5", "name": "", "state": "DROP"}
+6   false   NULL             {"droppedName": "five-requiring-quotes", "id": "6", "name": "", "state": "DROP"}
+7   false   NULL             {"droppedName": "to-be-reclaimed", "id": "7", "name": "", "state": "DROP"}
+8   true    to-be-reclaimed  {"droppedName": "", "id": "8", "name": "to-be-reclaimed", "state": "ACTIVE"}
