@@ -147,7 +147,10 @@ var retiredSettings = map[string]struct{}{
 	"sql.defaults.intervalstyle.enabled":                        {},
 
 	// removed as of 22.2.1
-	"sql.ttl.default_range_concurrency": {},
+	"sql.ttl.default_range_concurrency":                {},
+	"server.web_session.purge.period":                  {},
+	"server.web_session.purge.max_deletions_per_cycle": {},
+	"server.web_session.auto_logout.timeout":           {},
 
 	// removed as of 23.1.
 	"sql.catalog.descs.validate_on_write.enabled": {},

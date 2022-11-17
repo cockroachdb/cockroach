@@ -1638,15 +1638,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		}
 	}
 	// Start garbage collecting system events.
-	//
-	// NB: As written, this falls awkwardly between SQL and KV. KV is used only
-	// to make sure this runs only on one node. SQL is used to actually GC. We
-	// count it as a KV operation since it grooms cluster-wide data, not
-	// something associated to SQL tenants.
-	s.startSystemLogsGC(workersCtx)
-
-	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err = startPurgeOldSessions(workersCtx, s.authentication); err != nil {
+	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
 		return err
 	}
 

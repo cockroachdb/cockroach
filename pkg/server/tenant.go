@@ -552,11 +552,8 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 
 	log.Event(ctx, "accepting connections")
 
-	// TODO(knz): Missing call here to startSystemLogsGC().
-	// See: https://github.com/cockroachdb/cockroach/issues/90521
-
-	// Begin an async task to periodically purge old sessions in the system.web_sessions table.
-	if err := startPurgeOldSessions(workersCtx, s.authentication); err != nil {
+	// Start garbage collecting system events.
+	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
 		return err
 	}
 
