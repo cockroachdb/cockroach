@@ -15,6 +15,16 @@ ALTER DEFAULT PRIVILEGES FOR ROLE testuser GRANT SELECT ON TABLES to testuser, w
 statement error pq: invalid privilege type USAGE for table
 ALTER DEFAULT PRIVILEGES GRANT USAGE ON TABLES to testuser
 
+# Should not be able to alter system database.
+statement ok
+USE system
+
+statement error cannot alter system database
+ALTER DEFAULT PRIVILEGES FOR ROLE testuser REVOKE ALL ON TABLES FROM testuser
+
+statement ok
+RESET database
+
 # For Tables.
 statement ok
 CREATE DATABASE d;
