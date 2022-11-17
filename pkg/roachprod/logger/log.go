@@ -38,11 +38,9 @@ type loggerOption interface {
 	apply(*Config)
 }
 
-type logPrefix string
+type LogPrefix string
 
-var _ logPrefix // silence unused lint
-
-func (p logPrefix) apply(cfg *Config) {
+func (p LogPrefix) apply(cfg *Config) {
 	cfg.Prefix = string(p)
 }
 

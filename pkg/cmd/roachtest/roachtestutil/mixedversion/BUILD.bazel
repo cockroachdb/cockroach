@@ -1,0 +1,41 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "mixedversion",
+    srcs = [
+        "mixedversion.go",
+        "planner.go",
+        "runner.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachtest/cluster",
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
+        "//pkg/cmd/roachtest/test",
+        "//pkg/roachpb",
+        "//pkg/roachprod/logger",
+        "//pkg/util/randutil",
+        "//pkg/util/timeutil",
+        "//pkg/util/version",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "mixedversion_test",
+    srcs = ["planner_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":mixedversion"],
+    deps = [
+        "//pkg/cmd/roachtest/option",
+        "//pkg/cmd/roachtest/roachtestutil/clusterupgrade",
+        "//pkg/roachprod/logger",
+        "//pkg/util/version",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
