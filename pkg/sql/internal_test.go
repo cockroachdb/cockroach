@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -363,7 +364,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	// sem will be fired every time pg_sleep(1337666) is called.
 	sem := make(chan struct{})
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeExecute: func(ctx context.Context, stmt string) {
+		BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 			if strings.Contains(stmt, "(1.337666") {
 				sem <- struct{}{}
 			}

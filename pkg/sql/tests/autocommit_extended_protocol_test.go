@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -89,7 +90,7 @@ func TestErrorDuringExtendedProtocolCommit(t *testing.T) {
 	params, _ := CreateTestServerParams()
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 		DisableAutoCommitDuringExec: true,
-		BeforeExecute: func(ctx context.Context, stmt string) {
+		BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 			if strings.Contains(stmt, "SELECT 'cat'") {
 				shouldErrorOnAutoCommit.Set(true)
 			}

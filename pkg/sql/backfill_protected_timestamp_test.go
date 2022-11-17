@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -74,7 +75,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 				DisableDefaultTestTenant: true,
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						BeforeExecute: func(ctx context.Context, sql string) {
+						BeforeExecute: func(ctx context.Context, sql string, descriptors *descs.Collection) {
 							if indexScanQuery.MatchString(sql) {
 								indexValidationQueryWait <- struct{}{}
 								<-indexValidationQueryResume
