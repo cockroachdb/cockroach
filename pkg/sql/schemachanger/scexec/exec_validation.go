@@ -79,7 +79,7 @@ func executeValidateCheckConstraint(
 	execOverride := sessiondata.InternalExecutorOverride{
 		User: username.RootUserName(),
 	}
-	err = deps.Validator().ValidateCheckConstraint(ctx, table, check, execOverride)
+	err = deps.Validator().ValidateCheckConstraint(ctx, table, check, op.IndexIDForValidation, execOverride)
 	if err != nil {
 		return scerrors.SchemaChangerUserError(err)
 	}

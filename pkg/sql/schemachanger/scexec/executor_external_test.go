@@ -487,6 +487,7 @@ func (noopValidator) ValidateCheckConstraint(
 	ctx context.Context,
 	tbl catalog.TableDescriptor,
 	constraint catalog.CheckConstraint,
+	indexIDForValidation descpb.IndexID,
 	override sessiondata.InternalExecutorOverride,
 ) error {
 	return nil

@@ -83,6 +83,7 @@ CheckConstraint :  ConstraintID
 CheckConstraint : []ColumnIDs
 CheckConstraint :  Expression
 CheckConstraint :  FromHashShardedColumn
+CheckConstraint :  IndexIDForValidation
 
 object ForeignKeyConstraint
 

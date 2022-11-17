@@ -1518,11 +1518,12 @@ func (e InvalidIndexesError) Error() string {
 }
 
 // ValidateCheckConstraint validates the check constraint against all rows
-// in the table.
+// in index `indexIDForValidation` in table `tableDesc`.
 func ValidateCheckConstraint(
 	ctx context.Context,
 	tableDesc catalog.TableDescriptor,
 	checkConstraint catalog.CheckConstraint,
+	indexIDForValidation descpb.IndexID,
 	sessionData *sessiondata.SessionData,
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
@@ -1546,7 +1547,7 @@ func ValidateCheckConstraint(
 
 		return ie.WithSyntheticDescriptors([]catalog.Descriptor{tableDesc}, func() error {
 			return validateCheckExpr(ctx, &semaCtx, txn, sessionData, checkConstraint.GetExpr(),
-				tableDesc.(*tabledesc.Mutable), ie)
+				tableDesc.(*tabledesc.Mutable), ie, indexIDForValidation)
 		})
 	})
 }
@@ -2604,7 +2605,7 @@ func validateCheckInTxn(
 	return ie.WithSyntheticDescriptors(
 		syntheticDescs,
 		func() error {
-			return validateCheckExpr(ctx, semaCtx, txn, sessionData, checkExpr, tableDesc, ie)
+			return validateCheckExpr(ctx, semaCtx, txn, sessionData, checkExpr, tableDesc, ie, 0 /* indexIDForValidation */)
 		})
 }
 
