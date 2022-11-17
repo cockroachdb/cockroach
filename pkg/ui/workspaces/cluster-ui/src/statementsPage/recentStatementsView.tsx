@@ -116,6 +116,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
       {
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
+        page: pagination.current.toString(),
         [RECENT_STATEMENT_SEARCH_PARAM]: search,
         ...getFullFiltersAsStringRecord(filters),
       },
@@ -128,11 +129,19 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
     sortSetting.ascending,
     sortSetting.columnTitle,
     search,
+    pagination,
   ]);
 
   const resetPagination = () => {
     setPagination({
       current: 1,
+      pageSize: 20,
+    });
+  };
+
+  const onPaginationChange = (page: number): void => {
+    setPagination({
+      current: page,
       pageSize: 20,
     });
   };
@@ -206,6 +215,7 @@ export const RecentStatementsView: React.FC<RecentStatementsViewProps> = ({
             onClearFilters={clearFilters}
             onChangeSortSetting={onSortClick}
             onColumnsSelect={onColumnsSelect}
+            onChangePagination={onPaginationChange}
             isTenant={isTenant}
           />
         </Loading>

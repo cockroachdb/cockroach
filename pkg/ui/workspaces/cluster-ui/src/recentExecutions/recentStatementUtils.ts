@@ -11,19 +11,19 @@
 import moment from "moment";
 import { byteArrayToUuid } from "src/sessions";
 import { TimestampToMoment, unset } from "src/util";
-import { RecentTransaction } from ".";
 import {
   SessionsResponse,
   ActiveStatementPhase,
   ExecutionStatus,
   RecentTransactionFilters,
-  SessionStatusType,
   ContendedExecution,
   RecentExecutions,
   ExecutionContentionDetails,
   RecentExecution,
+  RecentStatement,
+  RecentTransaction,
+  RecentStatementFilters,
 } from "./types";
-import { RecentStatement, RecentStatementFilters } from "./types";
 import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { DurationToMomentDuration } from "src/util/convert";
 
@@ -93,8 +93,9 @@ export function getRecentExecutionsFromSessions(
   sessionsResponse.sessions
     .filter(
       session =>
-        session.status !== SessionStatusType.CLOSED &&
-        (session.active_txn || session.active_queries?.length !== 0),
+        session.active_txn ||
+        session.active_queries?.length !== 0 ||
+        session.recent_statements.length != 0,
     )
     .forEach(session => {
       const sessionID = byteArrayToUuid(session.id);
@@ -124,9 +125,48 @@ export function getRecentExecutionsFromSessions(
           isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
           planGist: query.plan_gist,
         };
-
         statements.push(activeStmt);
       }
+
+      session.recent_statements.forEach(query => {
+        const queryTxnID = byteArrayToUuid(query.txn_id);
+        let status: ExecutionStatus;
+        switch (query.phase) {
+          case ActiveStatementPhase.EXECUTING:
+            status = "Executing";
+            break;
+          case ActiveStatementPhase.PREPARING:
+            status = "Preparing";
+            break;
+          case ActiveStatementPhase.CANCELED:
+            status = "Canceled";
+            break;
+          case ActiveStatementPhase.TIMED_OUT:
+            status = "Timed Out";
+            break;
+          case ActiveStatementPhase.COMPLETED:
+            status = "Completed";
+            break;
+          case ActiveStatementPhase.FAILED:
+            status = "Failed";
+            break;
+        }
+        const stmt: RecentStatement = {
+          statementID: query.id,
+          transactionID: queryTxnID,
+          sessionID,
+          // VIEWACTIVITYREDACTED users will not have access to the full SQL query.
+          query: query.sql?.length > 0 ? query.sql : query.sql_no_constants,
+          status: status,
+          start: TimestampToMoment(query.start),
+          elapsedTime: DurationToMomentDuration(query.elapsed_time),
+          application: session.application_name,
+          user: session.username,
+          clientAddress: session.client_address,
+          isFullScan: query.is_full_scan || false, // Or here is for conversion in case the field is null.
+        };
+        statements.push(stmt);
+      });
 
       const activeTxn = session.active_txn;
       if (!activeTxn) return;

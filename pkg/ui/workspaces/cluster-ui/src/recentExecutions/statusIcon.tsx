@@ -21,6 +21,6 @@ export type StatusIconProps = {
 };
 
 export const StatusIcon: React.FC<StatusIconProps> = ({ status }) => {
-  const statusClassName = status !== "Waiting" ? "executing" : "waiting";
+  const statusClassName = status.toLowerCase().replace(/\s/g, "_");
   return <CircleFilled className={cx("status-icon", statusClassName)} />;
 };
