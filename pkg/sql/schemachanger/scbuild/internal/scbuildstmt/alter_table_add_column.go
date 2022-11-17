@@ -491,6 +491,10 @@ func getImplicitSecondaryIndexName(
 			exprCount++
 		} else {
 			_, _, colName := scpb.FindColumnName(colElts)
+			if idx.Sharding != nil &&
+				colName.Name == idx.Sharding.Name {
+				continue
+			}
 			segmentName = colName.Name
 		}
 		segments = append(segments, segmentName)
