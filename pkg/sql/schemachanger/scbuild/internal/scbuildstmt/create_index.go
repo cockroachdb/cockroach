@@ -14,6 +14,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -356,13 +357,27 @@ func addColumnsForSecondaryIndex(
 
 	// Check that the index creation spec is sane.
 	columnRefs := map[string]struct{}{}
+	columnExprRefs := map[string]struct{}{}
 	for _, columnNode := range n.Columns {
-		colName := columnNode.Column.String()
-		if _, found := columnRefs[colName]; found {
-			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
-				"index %q contains duplicate column %q", n.Name, colName))
+		// Detect if either the same column or expression repeats twice in this
+		// index definition. For example:
+		// 1) CREATE INDEX idx ON t(i, i)
+		// 2) CREATE INDEX idx ON t(lower(i), j, lower(i)).
+		if columnNode.Expr == nil {
+			colName := columnNode.Column.Normalize()
+			if _, found := columnRefs[colName]; found {
+				panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+					"index %q contains duplicate column %q", n.Name, colName))
+			}
+			columnRefs[colName] = struct{}{}
+		} else {
+			colExpr := columnNode.Expr.String()
+			if _, found := columnExprRefs[colExpr]; found {
+				panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+					"index %q contains duplicate expression", n.Name))
+			}
+			columnExprRefs[colExpr] = struct{}{}
 		}
-		columnRefs[colName] = struct{}{}
 	}
 	for _, storingNode := range n.Storing {
 		colName := storingNode.String()
@@ -379,14 +394,9 @@ func addColumnsForSecondaryIndex(
 	for i, columnNode := range n.Columns {
 		colName := columnNode.Column
 		if columnNode.Expr != nil {
-			tbl, ok := relation.(*scpb.Table)
-			if !ok {
-				panic(scerrors.NotImplementedErrorf(n,
-					"indexing virtual column expressions in materialized views is not supported"))
-			}
-			colNameStr := createVirtualColumnForIndex(b, &n.Table, tbl, columnNode.Expr)
+			tbl := relation.(*scpb.Table)
+			colNameStr := maybeCreateVirtualColumnForIndex(b, &n.Table, tbl, columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
 			colName = tree.Name(colNameStr)
-			relationElements = b.QueryByID(idxSpec.secondary.TableID)
 		}
 		colElts := b.ResolveColumn(tableID, colName, ResolveParams{
 			RequiredPrivilege: privilege.CREATE,
@@ -394,6 +404,10 @@ func addColumnsForSecondaryIndex(
 		_, _, column := scpb.FindColumn(colElts)
 		_, _, columnType := scpb.FindColumnType(colElts)
 		processColNodeType(b, n, idxSpec, string(colName), columnNode, columnType, i == lastColumnIdx)
+		// Column should be accessible.
+		if columnNode.Expr == nil {
+			checkColumnAccessibilityForIndex(string(colName), colElts, false)
+		}
 		keyColNames[i] = string(colName)
 		direction := catpb.IndexColumn_ASC
 		if columnNode.Direction == tree.Descending {
@@ -426,16 +440,12 @@ func addColumnsForSecondaryIndex(
 		// columns in the primary index, which  are not covered by the key columns
 		// within the index. We checked against the key columns vs the storing ones,
 		// earlier so this covers any extra columns.
-		scpb.ForEachColumnName(relationElements, func(current scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
-			if cn.ColumnID == e.ColumnID &&
-				cn.TableID == e.TableID {
-				if _, found := columnRefs[cn.Name]; found {
-					panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
-						"index %q already contains column %q", n.Name, cn.Name))
-				}
-				columnRefs[cn.Name] = struct{}{}
-			}
-		})
+		columnName := mustRetrieveColumnNameElem(b, e.TableID, e.ColumnID)
+		if _, found := columnRefs[columnName.Name]; found {
+			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
+				"index %q already contains column %q", n.Name, columnName.Name))
+		}
+		columnRefs[columnName.Name] = struct{}{}
 		keySuffixColumns = append(keySuffixColumns, e)
 	})
 	sort.Slice(keySuffixColumns, func(i, j int) bool {
@@ -544,11 +554,80 @@ func maybeCreateAndAddShardCol(
 	return shardColName
 }
 
-func createVirtualColumnForIndex(
-	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, expr tree.Expr,
+func maybeCreateVirtualColumnForIndex(
+	b BuildCtx, tn *tree.TableName, tbl *scpb.Table, expr tree.Expr, inverted bool, lastColumn bool,
 ) string {
+	validateColumnIndexableType := func(t *types.T) {
+		if t.IsAmbiguous() {
+			panic(errors.WithHint(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"type of index element %s is ambiguous",
+					expr.String(),
+				),
+				"consider adding a type cast to the expression",
+			))
+		}
+		// Check if the column type is indexable,
+		// non-inverted types.
+		if !inverted &&
+			!colinfo.ColumnTypeIsIndexable(t) {
+			panic(pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"index element %s of type %s is not indexable",
+				expr,
+				t.Name()))
+		}
+		// Check if inverted columns are invertible.
+		if inverted &&
+			!lastColumn &&
+			!colinfo.ColumnTypeIsIndexable(t) {
+			panic(errors.WithHint(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"index element %s of type %s is not allowed as a prefix column in an inverted index",
+					expr.String(),
+					t.Name(),
+				),
+				"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+			))
+		}
+		if inverted &&
+			lastColumn &&
+			!colinfo.ColumnTypeIsInvertedIndexable(t) {
+			panic(errors.WithHint(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"index element %s of type %s is not allowed as the last column in an inverted index",
+					expr,
+					t.Name(),
+				),
+				"see the documentation for more information about inverted indexes: "+docs.URL("inverted-indexes.html"),
+			))
+		}
+	}
 	elts := b.QueryByID(tbl.TableID)
-	colName := tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) (found bool) {
+	colName := ""
+	// Check if any existing columns can satisfy this expression already, only
+	// if it's a virtual column created for an index expression.
+	scpb.ForEachColumnType(elts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnType) {
+		column := mustRetrieveColumnElem(b, e.TableID, e.ColumnID)
+		if target == scpb.ToPublic && e.ComputeExpr != nil && e.IsVirtual && column.IsInaccessible {
+			otherExpr, err := parser.ParseExpr(string(e.ComputeExpr.Expr))
+			if err != nil {
+				panic(err)
+			}
+			if otherExpr.String() == expr.String() {
+				// We will let the type validation happen like normal, instead of checking here.
+				colName = mustRetrieveColumnNameElem(b, e.TableID, e.ColumnID).Name
+			}
+		}
+	})
+	if colName != "" {
+		return colName
+	}
+	// Otherwise, we need to create a new column.
+	colName = tabledesc.GenerateUniqueName("crdb_internal_idx_expr", func(name string) (found bool) {
 		scpb.ForEachColumnName(elts, func(_ scpb.Status, target scpb.TargetStatus, cn *scpb.ColumnName) {
 			if target == scpb.ToPublic && cn.Name == name {
 				found = true
@@ -558,8 +637,7 @@ func createVirtualColumnForIndex(
 	})
 	// TODO(postamar): call addColumn instead of building AST.
 	d := &tree.ColumnTableDef{
-		Name:   tree.Name(colName),
-		Hidden: true,
+		Name: tree.Name(colName),
 	}
 	d.Computed.Computed = true
 	d.Computed.Virtual = true
@@ -598,7 +676,18 @@ func createVirtualColumnForIndex(
 			panic(err)
 		}
 		d.Type = typedExpr.ResolvedType()
+		validateColumnIndexableType(typedExpr.ResolvedType())
 	}
 	alterTableAddColumn(b, tn, tbl, &tree.AlterTableAddColumn{ColumnDef: d})
+	// When a virtual column for an index expression gets added for CREATE INDEX
+	// it must be inaccessible, so we will manipulate the newly added element to
+	// be inaccessible after going through the normal add column code path.
+	{
+		ers := b.ResolveColumn(tbl.TableID, d.Name, ResolveParams{
+			RequiredPrivilege: privilege.CREATE,
+		})
+		_, _, col := scpb.FindColumn(ers)
+		col.IsInaccessible = true
+	}
 	return colName
 }
