@@ -1189,7 +1189,7 @@ func createImportingDescriptors(
 			}
 
 			if len(details.Tenants) > 0 {
-				initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, txn)
+				initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, txn, descsCol)
 				if err != nil {
 					return err
 				}
