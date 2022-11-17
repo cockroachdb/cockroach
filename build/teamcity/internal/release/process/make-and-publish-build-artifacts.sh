@@ -33,6 +33,7 @@ else
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
 fi
+download_prefix="https://storage.googleapis.com/$gcs_bucket"
 
 cat << EOF
 
@@ -72,7 +73,7 @@ docker_login_with_google
 # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem
 # NB: tar usually stops reading as soon as it sees an empty block but that makes
 # curl unhappy, so passing `i` will cause it to read to the end.
-curl -f -s -S -o- "https://${bucket}.s3.amazonaws.com/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
+curl -f -s -S -o- "${download_prefix}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 cp -r licenses build/deploy/
 
