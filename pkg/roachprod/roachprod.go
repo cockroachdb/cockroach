@@ -11,7 +11,9 @@
 package roachprod
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -19,10 +21,12 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/local"
+	"github.com/cockroachdb/cockroach/pkg/server/debug/replay"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1502,6 +1507,161 @@ func PrometheusSnapshot(
 	if err := prometheus.Snapshot(ctx, c, l, promNode, dumpDir); err != nil {
 		l.Printf("failed to get prometheus snapshot: %v", err)
 		return err
+	}
+	return nil
+}
+
+func genMountCommands(devicePath, mountDir string) string {
+	return strings.Join([]string{
+		"sudo mkfs.ext4 -m 0 -E lazy_itable_init=0,lazy_journal_init=0,discard " + devicePath,
+		"sudo mkdir -p " + mountDir,
+		"sudo mount -o discard,defaults " + devicePath + " " + mountDir,
+		"sudo chmod 0777 " + mountDir,
+		"test $? && echo Successful",
+	}, " && ")
+}
+
+func StorageCollection(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	action string,
+	opts vm.VolumeCreateOpts,
+) error {
+	if err := LoadClusters(); err != nil {
+		return err
+	}
+	c, err := newCluster(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	mountDir := "/mnt/capture/"
+	err = createAttachMountVolumes(ctx, l, c, opts, mountDir)
+	if err != nil {
+		return err
+	}
+
+	return sendCaptureCommand(ctx, l, c, action, mountDir)
+}
+
+func sendCaptureCommand(
+	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, action string, captureDir string,
+) error {
+	nodes := c.TargetNodes()
+	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
+	_, err := c.ParallelE(l,
+		fmt.Sprintf("Performing workload capture %s", action),
+		len(nodes),
+		0,
+		func(i int) (*install.RunResultDetails, error) {
+			node := nodes[i]
+			res := &install.RunResultDetails{Node: node}
+			host := c.Host(node)
+			port := c.NodeUIPort(node)
+			scheme := "http"
+			if c.Secure {
+				scheme = "https"
+			}
+
+			debugUrl := fmt.Sprintf("%s://%s:%d/%s", scheme, host, port, "debug/workload_capture")
+			r, err := httpClient.Get(ctx, debugUrl)
+			if err != nil {
+				res.Err = errors.New("Failed to retrieve current store workload collection state")
+				return res, res.Err
+			}
+			storeState := replay.ResponseType{}
+			err = replay.ReadJSON(r.Body, &storeState)
+			if err != nil {
+				res.Err = errors.New("Failed to decode response from node")
+				return res, res.Err
+			}
+
+			for _, info := range storeState.Data {
+				wpa := replay.WorkloadCollectorPerformAction{
+					StoreId: info.StoreId,
+					Action:  action,
+				}
+				if captureDir != "" {
+					wpa.CaptureDirectory = path.Join(captureDir, "store_"+strconv.Itoa(info.StoreId))
+				}
+
+				jsonValue, err := json.Marshal(wpa)
+				if err != nil {
+					res.Err = err
+					return res, res.Err
+				}
+
+				response, err := httpClient.Post(ctx, debugUrl, httputil.JSONContentType, bytes.NewBuffer(jsonValue))
+				if err != nil {
+					res.Err = err
+					return res, res.Err
+				}
+
+				l.Printf("Sent request to %s to node %s got status %s", action, info.StoreId, response.Status)
+
+				if response.StatusCode != http.StatusOK {
+					serverErrorMessage, err := io.ReadAll(response.Body)
+					if err != nil {
+						res.Err = err
+						return res, res.Err
+					}
+					res.Err = errors.New(string(serverErrorMessage))
+					return res, res.Err
+				}
+			}
+			return res, res.Err
+		})
+	return err
+}
+
+func createAttachMountVolumes(
+	ctx context.Context,
+	l *logger.Logger,
+	c *install.SyncedCluster,
+	opts vm.VolumeCreateOpts,
+	mountDir string,
+) error {
+	nodes := c.TargetNodes()
+	var buf bytes.Buffer
+	for idx, n := range nodes {
+		curNode := nodes[idx : idx+1]
+
+		cVM := c.VMs[n-1]
+		err := vm.ForProvider(cVM.Provider, func(provider vm.Provider) error {
+			opts.Name = fmt.Sprintf("%s-node-id-%d", c.Name, n)
+			opts.Zone = cVM.Zone
+
+			volume, fpErr := provider.CreateVolume(opts)
+			if fpErr != nil {
+				return fpErr
+			}
+			l.Printf("Created Volume %s", volume.ProviderResourceId)
+			device, fpErr := cVM.AttachVolume(volume)
+			if fpErr != nil {
+				return fpErr
+			}
+			l.Printf("Attached Volume %s to %s", volume.ProviderResourceId, cVM.ProviderID)
+			buf.Reset()
+			fpErr = c.Run(ctx, l, &buf, &buf, curNode,
+				"Mounting volume", genMountCommands(device, mountDir))
+			return fpErr
+		})
+
+		if err != nil {
+			return err
+		}
+		output := strings.TrimSpace(buf.String())
+		outputLines := strings.Split(output, "\n")
+		if outputLines[len(outputLines)-1] == "Successful" {
+			l.Printf("Successfully mounted volume %s", cVM.ProviderID)
+		} else {
+			return errors.Newf("Failed to mount volume:\n%s", output)
+		}
+
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
