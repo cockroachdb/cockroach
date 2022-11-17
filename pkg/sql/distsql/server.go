@@ -406,17 +406,18 @@ func (ds *ServerImpl) setupFlow(
 		opt = flowinfra.FuseAggressively
 	}
 
+	if !f.IsLocal() {
+		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
+		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
+		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
+	}
+
 	var opChains execinfra.OpChains
 	var err error
 	ctx, opChains, err = f.Setup(ctx, &req.Flow, opt)
 	if err != nil {
 		log.Errorf(ctx, "error setting up flow: %s", err)
 		return ctx, nil, nil, err
-	}
-	if !f.IsLocal() {
-		flowCtx.AmbientContext.AddLogTag("f", f.GetFlowCtx().ID.Short())
-		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
-		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
 	if f.IsVectorized() {
 		telemetry.Inc(sqltelemetry.VecExecCounter)
