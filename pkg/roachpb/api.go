@@ -368,6 +368,7 @@ func (sr *ScanResponse) combine(c combinable) error {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
 		sr.BatchResponses = append(sr.BatchResponses, otherSR.BatchResponses...)
+		sr.ColBatches.ColBatches = append(sr.ColBatches.ColBatches, otherSR.ColBatches.ColBatches...)
 		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
 			return err
 		}
