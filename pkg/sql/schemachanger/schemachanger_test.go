@@ -137,7 +137,9 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		// Start job 1: An index schema change, which does not use the new schema
 		// changer.
 		g.GoCtx(func(ctx context.Context) error {
-			_, err := sqlDB.ExecContext(ctx, `CREATE INDEX idx ON db.t(a)`)
+			_, err := sqlDB.ExecContext(ctx, `SET use_declarative_schema_changer='off'`)
+			assert.NoError(t, err)
+			_, err = sqlDB.ExecContext(ctx, `CREATE INDEX idx ON db.t(a)`)
 			assert.NoError(t, err)
 			return nil
 		})
@@ -163,7 +165,9 @@ func TestSchemaChangeWaitsForOtherSchemaChanges(t *testing.T) {
 		// Start job 2: Another index schema change which does not use the new
 		// schema changer.
 		g.GoCtx(func(ctx context.Context) error {
-			_, err := sqlDB.ExecContext(ctx, `CREATE INDEX idx2 ON db.t(a)`)
+			_, err := sqlDB.ExecContext(ctx, `SET use_declarative_schema_changer='off'`)
+			assert.NoError(t, err)
+			_, err = sqlDB.ExecContext(ctx, `CREATE INDEX idx2 ON db.t(a)`)
 			assert.NoError(t, err)
 			return nil
 		})
