@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -26,11 +27,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -172,6 +174,9 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	maybeAddPartitionDescriptorForIndex(b, n, &idxSpec)
 	// If necessary setup a partial predicate
 	maybeAddIndexPredicate(b, n, &idxSpec)
+	// Picks up any geoconfig parameters, hash sharded one are
+	// picked independently.
+	maybeApplyStorageParameters(b, n, &idxSpec)
 	keyIdx := 0
 	keySuffixIdx := 0
 	for _, ic := range idxSpec.columns {
@@ -329,12 +334,19 @@ func processColNodeType(
 			if columnNode.OpClass != "" {
 				panic(newUndefinedOpclassError(columnNode.OpClass))
 			}
-			panic(scerrors.NotImplementedErrorf(n, "geometry type"))
+			config, err := geoindex.GeometryIndexConfigForSRID(columnType.Type.GeoSRIDOrZero())
+			if err != nil {
+				panic(err)
+			}
+			indexSpec.secondary.GeoConfig = *config
 		case types.GeographyFamily:
 			if columnNode.OpClass != "" {
 				panic(newUndefinedOpclassError(columnNode.OpClass))
 			}
-			panic(scerrors.NotImplementedErrorf(n, "geography type"))
+			if columnNode.OpClass != "" {
+				panic(newUndefinedOpclassError(columnNode.OpClass))
+			}
+			indexSpec.secondary.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
 		case types.StringFamily:
 			// Check the opclass of the last column in the list, which is the column
 			// we're going to inverted index.
@@ -388,7 +400,7 @@ func processColNodeType(
 	return invertedKind
 }
 
-// maybeAddPartitionDescriptorForIndex adds a parititioning descriptor and
+// maybeAddPartitionDescriptorForIndex adds a partitioning descriptor and
 // any implicit columns needed to support it.
 func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec) {
 	tableID := idxSpec.primary.TableID
@@ -838,4 +850,22 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 		IndexID:    idxSpec.secondary.IndexID,
 		Expression: *expr,
 	}
+}
+
+// maybeApplyStorageParameters apply any storage parameters into the index spec,
+// this is only used for GeoConfig today.
+func maybeApplyStorageParameters(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec) {
+	if len(n.StorageParams) == 0 {
+		return
+	}
+	dummyIndexDesc := &descpb.IndexDescriptor{}
+	dummyIndexDesc.GeoConfig = idxSpec.secondary.GeoConfig
+	storageParamSetter := &indexstorageparam.Setter{
+		IndexDesc: dummyIndexDesc,
+	}
+	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), n.StorageParams, storageParamSetter)
+	if err != nil {
+		panic(err)
+	}
+	idxSpec.secondary.GeoConfig = dummyIndexDesc.GeoConfig
 }

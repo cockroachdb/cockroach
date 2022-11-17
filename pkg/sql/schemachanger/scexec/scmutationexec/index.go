@@ -89,6 +89,7 @@ func addNewIndexMutation(
 		EncodingType:                encodingType,
 		ConstraintID:                opIndex.ConstraintID,
 		UseDeletePreservingEncoding: isDeletePreserving,
+		GeoConfig:                   opIndex.GeoConfig,
 		StoreColumnNames:            []string{},
 	}
 	if isSecondary && !isDeletePreserving {
