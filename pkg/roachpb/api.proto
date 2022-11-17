@@ -20,6 +20,7 @@ import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
 import "roachpb/span_config.proto";
 import "settings/encoding.proto";
+import "sql/catalog/fetchpb/index_fetch.proto";
 import "storage/enginepb/mvcc.proto";
 import "storage/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
@@ -557,6 +558,8 @@ enum ScanFormat {
   // The batch_response format: a byte slice of alternating keys and values,
   // each prefixed by their length as a varint.
   BATCH_RESPONSE = 1;
+  // TODO: comment.
+  COL_BATCH_RESPONSE = 2;
 }
 
 
@@ -608,6 +611,18 @@ message ScanResponse {
   // entry. There are num_keys total pairs across all entries, as defined by the
   // ResponseHeader. If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
+
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
+}
+
+message ColBatches {
+  option (gogoproto.gostring) = false;
+  option (gogoproto.equal) = false;
+  option (gogoproto.stringer) = false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.sizer) = false;
+  option (gogoproto.unmarshaler) = false;
+  repeated bytes col_batches = 1 [(gogoproto.customtype) = "interface{}", (gogoproto.nullable) = false];
 }
 
 // A ReverseScanRequest is the argument to the ReverseScan() method. It specifies the
@@ -637,6 +652,7 @@ message ReverseScanRequest {
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
+// TODO: support ColBatches.
 message ReverseScanResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
@@ -2612,6 +2628,9 @@ message Header {
   BoundedStalenessHeader bounded_staleness = 22;
 
   util.tracing.tracingpb.TraceInfo trace_info = 25;
+
+  // TODO: comment.
+  sql.sqlbase.IndexFetchSpec index_fetch_spec = 29;
 
   reserved 7, 10, 12, 14, 20;
 }
