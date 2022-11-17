@@ -97,6 +97,7 @@ go_library(
         "drop_schema.go",
         "drop_sequence.go",
         "drop_table.go",
+        "drop_tenant.go",
         "drop_type.go",
         "drop_view.go",
         "error_if_rows.go",
