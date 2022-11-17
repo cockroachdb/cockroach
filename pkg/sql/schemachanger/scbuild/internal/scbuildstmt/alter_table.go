@@ -53,8 +53,17 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
 	) bool {
-		d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
-		return ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault
+		// Support ALTER TABLE ... ADD PRIMARY KEY
+		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		// Support ALTER TABLE ... ADD CONSTRAINT CHECK
+		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		return false
 	}, minSupportedClusterVersion: clusterversion.V22_2Start},
 }
 

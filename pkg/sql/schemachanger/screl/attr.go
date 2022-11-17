@@ -85,6 +85,10 @@ const (
 	// referenced by an element.
 	ReferencedSequenceIDs
 
+	// IndexIDToValidate is the index ID of the index that a newly created constraint
+	// needs to validate against.
+	IndexIDToValidate
+
 	// AttrMax is the largest possible Attr value.
 	// Note: add any new enum values before TargetStatus, leave these at the end.
 	AttrMax = iota - 1
@@ -172,6 +176,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(IndexIDToValidate, "IndexIDToValidate"),
 	),
 	rel.EntityMapping(t((*scpb.ForeignKeyConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),

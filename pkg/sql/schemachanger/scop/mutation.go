@@ -301,6 +301,7 @@ type MakeAbsentCheckConstraintWriteOnly struct {
 	ColumnIDs    []descpb.ColumnID
 	scpb.Expression
 	FromHashShardedColumn bool
+	IndexIDToValidate     descpb.IndexID
 }
 
 // MakePublicCheckConstraintValidated moves a public

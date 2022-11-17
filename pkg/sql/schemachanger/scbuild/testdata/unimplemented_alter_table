@@ -13,19 +13,11 @@ CREATE TABLE defaultdb.foo (
 ----
 
 unimplemented
-ALTER TABLE defaultdb.foo ADD COLUMN j INT CHECK (j > 0)
-----
-
-unimplemented
 ALTER TABLE defaultdb.foo ADD COLUMN j INT REFERENCES defaultdb.foo(i)
 ----
 
 unimplemented
 ALTER TABLE defaultdb.foo ADD COLUMN j SERIAL
-----
-
-unimplemented
-ALTER TABLE defaultdb.foo ADD CONSTRAINT j CHECK (i > 0)
 ----
 
 unimplemented

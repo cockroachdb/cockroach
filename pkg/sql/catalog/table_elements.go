@@ -523,6 +523,9 @@ type CheckConstraint interface {
 	// IsHashShardingConstraint returns true iff this check constraint is
 	// associated with a hash-sharding column in this table.
 	IsHashShardingConstraint() bool
+
+	// GetIndexIDToValidate returns the index ID this constraint is supposed to check against.
+	GetIndexIDToValidate() descpb.IndexID
 }
 
 // ForeignKeyConstraint is an interface around a check constraint.
