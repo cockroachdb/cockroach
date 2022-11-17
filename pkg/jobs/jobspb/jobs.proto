@@ -86,11 +86,18 @@ message StreamIngestionDetails {
   // this span.
   roachpb.Span span = 2 [(gogoproto.nullable) = false];
   
-  reserved 5;
-  roachpb.TenantID tenant_id = 6 [(gogoproto.customname) = "TenantID", (gogoproto.nullable) = false];
-
   // Stream of tenant data will be ingested as a new tenant with 'new_tenant_id'.
-  roachpb.TenantID new_tenant_id = 7 [(gogoproto.customname) = "NewTenantID", (gogoproto.nullable) = false];
+  roachpb.TenantID destination_tenant_id = 7 [(gogoproto.customname) = "DestinationTenantID", (gogoproto.nullable) = false];
+
+  string source_tenant_name = 8 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  string destination_tenant_name = 9 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  reserved 5, 6;
 }
 
 message StreamIngestionCheckpoint {
@@ -141,6 +148,9 @@ message StreamReplicationDetails {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.nullable) = false
   ];
+
+  // TenantID is the ID of the source tenant being streamed.
+  roachpb.TenantID tenant_id = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
 }
 
 message StreamReplicationProgress {

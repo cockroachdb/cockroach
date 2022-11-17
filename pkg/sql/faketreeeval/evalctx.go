@@ -562,21 +562,21 @@ var errEvalTenant = pgerror.New(pgcode.ScalarOperationCannotRunWithoutFullSessio
 
 // CreateTenantWithID is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) CreateTenantWithID(
-	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
+	_ context.Context, _ uint64, _ roachpb.TenantName,
 ) error {
 	return errors.WithStack(errEvalTenant)
 }
 
 // CreateTenant is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) CreateTenant(
-	ctx context.Context, tenantName roachpb.TenantName,
+	_ context.Context, _ roachpb.TenantName,
 ) (roachpb.TenantID, error) {
 	return roachpb.TenantID{}, errors.WithStack(errEvalTenant)
 }
 
 // RenameTenant is part of the tree.TenantOperator interface.
 func (c *DummyTenantOperator) RenameTenant(
-	ctx context.Context, tenantID uint64, tenantName roachpb.TenantName,
+	_ context.Context, _ uint64, _ roachpb.TenantName,
 ) error {
 	return errors.WithStack(errEvalTenant)
 }

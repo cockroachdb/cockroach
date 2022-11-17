@@ -63,7 +63,7 @@ var _ Client = &partitionedStreamClient{}
 
 // Create implements Client interface.
 func (p *partitionedStreamClient) Create(
-	ctx context.Context, tenantID roachpb.TenantID,
+	ctx context.Context, tenantName roachpb.TenantName,
 ) (streampb.StreamID, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "streamclient.Client.Create")
 	defer sp.Finish()
@@ -71,12 +71,11 @@ func (p *partitionedStreamClient) Create(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	var streamID streampb.StreamID
-	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1::INT)`,
-		tenantID.ToUint64())
+	row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.start_replication_stream($1)`, tenantName)
 	err := row.Scan(&streamID)
 	if err != nil {
 		return streampb.InvalidStreamID,
-			errors.Wrapf(err, "error creating replication stream for tenant %s", tenantID.String())
+			errors.Wrapf(err, "error creating replication stream for tenant %s", tenantName)
 	}
 
 	return streamID, err
@@ -136,24 +135,26 @@ func (p *partitionedStreamClient) Plan(
 		row := p.mu.srcConn.QueryRow(ctx, `SELECT crdb_internal.replication_stream_spec($1)`, streamID)
 		var rawSpec []byte
 		if err := row.Scan(&rawSpec); err != nil {
-			return nil, errors.Wrapf(err, "error planning replication stream %d", streamID)
+			return Topology{}, errors.Wrapf(err, "error planning replication stream %d", streamID)
 		}
 		if err := protoutil.Unmarshal(rawSpec, &spec); err != nil {
-			return nil, err
+			return Topology{}, err
 		}
 	}
 
-	topology := Topology{}
+	topology := Topology{
+		SourceTenantID: spec.SourceTenantID,
+	}
 	for _, sp := range spec.Partitions {
 		pgURL, err := p.postgresURL(sp.SQLAddress.String())
 		if err != nil {
-			return nil, err
+			return Topology{}, err
 		}
 		rawSpec, err := protoutil.Marshal(sp.PartitionSpec)
 		if err != nil {
-			return nil, err
+			return Topology{}, err
 		}
-		topology = append(topology, PartitionInfo{
+		topology.Partitions = append(topology.Partitions, PartitionInfo{
 			ID:                sp.NodeID.String(),
 			SubscriptionToken: SubscriptionToken(rawSpec),
 			SrcInstanceID:     int(sp.NodeID),

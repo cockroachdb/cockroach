@@ -211,22 +211,24 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			topology := streamclient.Topology{
-				{
-					ID:                pa1,
-					SubscriptionToken: []byte(pa1),
-					SrcAddr:           streamingccl.PartitionAddress(pa1),
-					Spans:             []roachpb.Span{pa1Span},
-				},
-				{
-					ID:                pa2,
-					SubscriptionToken: []byte(pa2),
-					SrcAddr:           streamingccl.PartitionAddress(pa2),
-					Spans:             []roachpb.Span{pa2Span},
+				Partitions: []streamclient.PartitionInfo{
+					{
+						ID:                pa1,
+						SubscriptionToken: []byte(pa1),
+						SrcAddr:           streamingccl.PartitionAddress(pa1),
+						Spans:             []roachpb.Span{pa1Span},
+					},
+					{
+						ID:                pa2,
+						SubscriptionToken: []byte(pa2),
+						SrcAddr:           streamingccl.PartitionAddress(pa2),
+						Spans:             []roachpb.Span{pa2Span},
+					},
 				},
 			}
 
 			spec.PartitionSpecs = map[string]execinfrapb.StreamIngestionPartitionSpec{}
-			for _, partition := range topology {
+			for _, partition := range topology.Partitions {
 				spec.PartitionSpecs[partition.ID] = execinfrapb.StreamIngestionPartitionSpec{
 					PartitionID:       partition.ID,
 					SubscriptionToken: string(partition.SubscriptionToken),

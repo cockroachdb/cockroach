@@ -30,23 +30,20 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func startReplicationStreamJobByName(
+// startReplicationStreamJob initializes a replication stream producer job on
+// the source cluster that:
+//
+// 1. Tracks the liveness of the replication stream consumption.
+// 2. Updates the protected timestamp for spans being replicated.
+func startReplicationStreamJob(
 	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantName roachpb.TenantName,
 ) (streampb.StreamID, error) {
-	tenant, err := sql.GetTenantRecordByName(ctx, evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig), txn, tenantName)
+	tenantRecord, err := sql.GetTenantRecordByName(ctx, evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig), txn, tenantName)
 	if err != nil {
 		return 0, err
 	}
+	tenantID := tenantRecord.ID
 
-	return startReplicationStreamJob(ctx, evalCtx, txn, tenant.ID)
-}
-
-// startReplicationStreamJob initializes a replication stream producer job on the source cluster that
-// 1. Tracks the liveness of the replication stream consumption
-// 2. TODO(casper): Updates the protected timestamp for spans being replicated
-func startReplicationStreamJob(
-	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, tenantID uint64,
-) (streampb.StreamID, error) {
 	execConfig := evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig)
 	hasAdminRole, err := evalCtx.SessionAccessor.HasAdminRole(ctx)
 
@@ -61,6 +58,7 @@ func startReplicationStreamJob(
 	registry := execConfig.JobRegistry
 	timeout := streamingccl.StreamReplicationJobLivenessTimeout.Get(&evalCtx.Settings.SV)
 	ptsID := uuid.MakeV4()
+
 	jr := makeProducerJobRecord(registry, tenantID, timeout, evalCtx.SessionData().User(), ptsID)
 	if _, err := registry.CreateAdoptableJobWithTxn(ctx, jr, jr.JobID, txn); err != nil {
 		return streampb.InvalidStreamID, err
@@ -241,7 +239,8 @@ func getReplicationStreamSpec(
 	}
 
 	res := &streampb.ReplicationStreamSpec{
-		Partitions: make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
+		Partitions:     make([]streampb.ReplicationStreamSpec_Partition, 0, len(spanPartitions)),
+		SourceTenantID: details.TenantID,
 	}
 	for _, sp := range spanPartitions {
 		nodeInfo, err := dsp.GetSQLInstanceInfo(sp.SQLInstanceID)
