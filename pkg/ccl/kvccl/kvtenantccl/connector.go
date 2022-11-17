@@ -374,7 +374,7 @@ func (c *Connector) RegisterSystemConfigChannel() (_ <-chan struct{}, unregister
 
 // RangeLookup implements the kvcoord.RangeDescriptorDB interface.
 func (c *Connector) RangeLookup(
-	ctx context.Context, key roachpb.RKey, useReverseScan bool,
+	ctx context.Context, key roachpb.RKey, rc rangecache.RangeLookupConsistency, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Proxy range lookup requests through the Internal service.
 	ctx = c.AnnotateCtx(ctx)
@@ -385,15 +385,10 @@ func (c *Connector) RangeLookup(
 		}
 		resp, err := client.RangeLookup(ctx, &roachpb.RangeLookupRequest{
 			Key: key,
-			// We perform the range lookup scan with a READ_UNCOMMITTED consistency
-			// level because we want the scan to return intents as well as committed
-			// values. The reason for this is because it's not clear whether the
-			// intent or the previous value points to the correct location of the
-			// Range. It gets even more complicated when there are split-related
-			// intents or a txn record co-located with a replica involved in the
-			// split. Since we cannot know the correct answer, we lookup both the
-			// pre- and post- transaction values.
-			ReadConsistency: roachpb.READ_UNCOMMITTED,
+			// See the comment on (*kvcoord.DistSender).RangeLookup or kv.RangeLookup
+			// for more discussion on the choice of ReadConsistency and its
+			// implications.
+			ReadConsistency: rc,
 			// Until we add protection in the Internal service implementation to
 			// prevent prefetching from traversing into RangeDescriptors owned by
 			// other tenants, we must disable prefetching.
