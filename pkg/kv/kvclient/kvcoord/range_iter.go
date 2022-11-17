@@ -196,6 +196,8 @@ func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir Sca
 	// deals with retryable range descriptor lookups.
 	var err error
 	for r := retry.StartWithCtx(ctx, ri.ds.rpcRetryOptions); r.Next(); {
+		// Note that we pass an empty eviction token here because ri.token
+		// corresponds to the previous range.
 		var rngInfo rangecache.EvictionToken
 		rngInfo, err = ri.ds.getRoutingInfo(
 			ctx, ri.key, rangecache.EvictionToken{}, ri.scanDir == Descending,
