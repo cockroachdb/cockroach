@@ -547,6 +547,10 @@ func checkSupportForPlanNode(node planNode) (distRecommendation, error) {
 		return checkSupportForPlanNode(n.plan)
 
 	case *lookupJoinNode:
+		if n.remoteLookupExpr != nil {
+			// This is a locality optimized join.
+			return cannotDistribute, nil
+		}
 		if n.table.lockingStrength != descpb.ScanLockingStrength_FOR_NONE {
 			// Lookup joins that are performing row-level locking cannot
 			// currently be distributed because their locks would not be
