@@ -6728,11 +6728,14 @@ func convertContentionEventsToJSON(
 
 	eventWithNames := make([]sqlstatsutil.ContentionEventWithNames, len(contentionEvents))
 	for i, contentionEvent := range contentionEvents {
-		_, rawTableID, rawIndexID, err := keys.DecodeTableIDIndexID(contentionEvent.Key)
+		_, tableID, err := p.ExecCfg().Codec.DecodeTablePrefix(contentionEvent.Key)
 		if err != nil {
 			return nil, err
 		}
-		tableID := int64(rawTableID)
+		_, _, indexID, err := p.ExecCfg().Codec.DecodeIndexPrefix(contentionEvent.Key)
+		if err != nil {
+			return nil, err
+		}
 
 		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
 			Required: true,
@@ -6745,7 +6748,7 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		idxDesc, err := tableDesc.FindIndexWithID(descpb.IndexID(rawIndexID))
+		idxDesc, err := tableDesc.FindIndexWithID(descpb.IndexID(indexID))
 		if err != nil {
 			return nil, err
 		}
