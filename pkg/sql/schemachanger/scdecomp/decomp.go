@@ -268,6 +268,11 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		ObjectID:       tbl.GetID(),
 		ParentSchemaID: tbl.GetParentSchemaID(),
 	})
+	if tbl.IsPartitionAllBy() {
+		w.ev(descriptorStatus(tbl), &scpb.TablePartitionAllBy{
+			TableID: tbl.GetID(),
+		})
+	}
 	if l := tbl.GetLocalityConfig(); l != nil {
 		w.walkLocality(tbl, l)
 	}
@@ -488,6 +493,20 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			IsNotVisible:        idx.IsNotVisible(),
 		}
 		for i, c := range cpy.KeyColumnIDs {
+			implicitColumn := false
+			if i < idx.ImplicitPartitioningColumnCount() {
+				implicitColumn = true
+			}
+			invertedKind := scpb.IndexColumn_NOT_INVERTED
+			if index.IsInverted && c == idx.InvertedColumnID() {
+				invertedKind = scpb.IndexColumn_INVERTED
+				switch idx.InvertedColumnKind() {
+				case catpb.InvertedIndexColumnKind_DEFAULT:
+					invertedKind = scpb.IndexColumn_INVERTED
+				case catpb.InvertedIndexColumnKind_TRIGRAM:
+					invertedKind = scpb.IndexColumn_INVERTED_TRIGRAM
+				}
+			}
 			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{
 				TableID:       tbl.GetID(),
 				IndexID:       idx.GetID(),
@@ -495,6 +514,8 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 				OrdinalInKind: uint32(i),
 				Kind:          scpb.IndexColumn_KEY,
 				Direction:     cpy.KeyColumnDirections[i],
+				Implicit:      implicitColumn,
+				InvertedKind:  invertedKind,
 			})
 		}
 		for i, c := range cpy.KeySuffixColumnIDs {
