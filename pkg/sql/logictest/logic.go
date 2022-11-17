@@ -1231,6 +1231,7 @@ func (t *logicTest) newCluster(
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := supportsMVCCRangeTombstones &&
 		(globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes)
+	useSmallEngineBlocks := smallEngineBlocks && !serverArgs.DisableSmallEngineBlocks
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
@@ -1249,7 +1250,7 @@ func (t *logicTest) newCluster(
 						UseRangeTombstonesForPointDeletes: supportsMVCCRangeTombstones &&
 							shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
-					SmallEngineBlocks: smallEngineBlocks,
+					SmallEngineBlocks: useSmallEngineBlocks,
 				},
 				SQLEvalContext: &eval.TestingKnobs{
 					AssertBinaryExprReturnTypes:     true,
@@ -3847,6 +3848,9 @@ type TestServerArgs struct {
 	// If set, then we will disable the metamorphic randomization of
 	// useMVCCRangeTombstonesForPointDeletes variable.
 	DisableUseMVCCRangeTombstonesForPointDeletes bool
+	// If set, then we will disable the metamorphic randomization of
+	// smallEngineBlocks variable.
+	DisableSmallEngineBlocks bool
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
