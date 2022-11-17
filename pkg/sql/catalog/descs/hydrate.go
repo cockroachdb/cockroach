@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -120,6 +121,19 @@ func makeMutableTypeLookupFunc(
 		mut.UpsertDescriptorEntry(desc)
 	}
 	mutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
+		// This special case exists to deal with the desire to use enums in the
+		// system database, and the fact that the hydration contract is such that
+		// when we resolve types mutably, we resolve the mutable type descriptors
+		// they reference, which may have in-memory changes. The problem with this
+		// is that one is not permitted to mutably resolve the public schema
+		// descriptor for the system database. We only want it for the name, so
+		// let the caller have the immutable copy.
+		if id == catconstants.PublicSchemaID {
+			return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
+				Required:    true,
+				AvoidLeased: true,
+			})
+		}
 		return tc.GetMutableDescriptorByID(ctx, txn, id)
 	}
 	return hydrateddesc.MakeTypeLookupFuncForHydration(mut.Catalog, mutableLookupFunc)
