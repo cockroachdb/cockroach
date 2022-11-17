@@ -147,6 +147,7 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     constraintId: 1
+    geoConfig: null
     indexId: 1
     isConcurrently: false
     isCreatedExplicitly: false
@@ -435,6 +436,7 @@ ElementState:
   Status: PUBLIC
 - PrimaryIndex:
     constraintId: 1
+    geoConfig: null
     indexId: 1
     isConcurrently: false
     isCreatedExplicitly: false

@@ -97,6 +97,9 @@ func addNewIndexMutation(
 	if opIndex.Sharding != nil {
 		idx.Sharded = *opIndex.Sharding
 	}
+	if opIndex.GeoConfig != nil {
+		idx.GeoConfig = *opIndex.GeoConfig
+	}
 	return enqueueAddIndexMutation(tbl, idx, state)
 }
 

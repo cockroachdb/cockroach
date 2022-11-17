@@ -16,6 +16,7 @@ import "sql/catalog/catpb/catalog.proto";
 import "sql/catalog/catpb/index.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
+import "geo/geoindex/config.proto";
 
 option (gogoproto.equal_all) = true;
 
@@ -215,6 +216,8 @@ message Index {
 
   // IsNotVisible specifies whether this index is not visible.
   bool is_not_visible = 23;
+
+  cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];
   reserved 3, 4, 5, 6, 7;
 }
 
