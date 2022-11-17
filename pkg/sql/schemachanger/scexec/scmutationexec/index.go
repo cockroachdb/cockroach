@@ -496,3 +496,16 @@ func (m *visitor) RemoveColumnFromIndex(ctx context.Context, op scop.RemoveColum
 	}
 	return nil
 }
+
+func (m *visitor) SetGeoConfigOnIndex(ctx context.Context, op scop.SetGeoConfigOnIndex) error {
+	tbl, err := m.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	index, err := tbl.FindIndexWithID(op.IndexID)
+	if err != nil {
+		return err
+	}
+	index.IndexDesc().GeoConfig = op.GeoConfig
+	return nil
+}

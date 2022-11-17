@@ -592,6 +592,13 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 		TableID: tbl.GetID(),
 		IndexID: idx.GetID(),
 	})
+	if !idx.GetGeoConfig().IsEmpty() {
+		w.ev(scpb.Status_PUBLIC, &scpb.IndexGeoConfig{
+			TableID: tbl.GetID(),
+			IndexID: idx.GetID(),
+			Config:  idx.GetGeoConfig(),
+		})
+	}
 }
 
 func (w *walkCtx) walkUniqueWithoutIndexConstraint(
