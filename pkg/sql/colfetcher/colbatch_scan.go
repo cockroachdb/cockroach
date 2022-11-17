@@ -11,12 +11,15 @@
 package colfetcher
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -28,10 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TODO(yuzefovich): reading the data through a pair of ColBatchScan and
@@ -173,6 +178,100 @@ func (s *ColBatchScan) GetContentionInfo() (time.Duration, []roachpb.ContentionE
 // GetScanStats is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetScanStats() execstats.ScanStats {
 	return execstats.GetScanStats(s.Ctx, nil /* recording */)
+}
+
+type cFetcherWrapper struct {
+	fetcher    *cFetcher
+	converter  *colserde.ArrowBatchConverter
+	serializer *colserde.RecordBatchSerializer
+	buf        bytes.Buffer
+}
+
+var _ storage.CFetcherWrapper = &cFetcherWrapper{}
+
+func init() {
+	storage.GetCFetcherWrapper = newCFetcherWrapper
+}
+
+func (c *cFetcherWrapper) NextBatch(
+	ctx context.Context, serialize bool,
+) ([]byte, coldata.Batch, error) {
+	batch, err := c.fetcher.NextBatch(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	if batch.Length() == 0 {
+		return nil, nil, nil
+	}
+	if !serialize {
+		return nil, batch, nil
+	}
+	data, err := c.converter.BatchToArrow(batch)
+	if err != nil {
+		return nil, nil, err
+	}
+	c.buf.Reset()
+	_, _, err = c.serializer.Serialize(&c.buf, data, batch.Length())
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.buf.Bytes(), nil, nil
+}
+
+func (c *cFetcherWrapper) Close(ctx context.Context) {
+	if c.fetcher != nil {
+		c.fetcher.Close(ctx)
+		c.fetcher.Release()
+		c.fetcher = nil
+	}
+}
+
+func newCFetcherWrapper(
+	ctx context.Context,
+	acc *mon.BoundAccount,
+	indexFetchSpec proto.Message,
+	nextKVer storage.NextKVer,
+) (_ storage.CFetcherWrapper, retErr error) {
+	fetchSpec, ok := indexFetchSpec.(*descpb.IndexFetchSpec)
+	if !ok {
+		return nil, errors.AssertionFailedf("expected an IndexFetchSpec, but found a %T", indexFetchSpec)
+	}
+	// TODO: typeResolver.
+	tableArgs, err := populateTableArgs(ctx, fetchSpec, nil /* typeResolver */)
+	if err != nil {
+		return nil, err
+	}
+
+	fetcher := cFetcherPool.Get().(*cFetcher)
+	defer func() {
+		if retErr != nil {
+			fetcher.Release()
+		}
+	}()
+	// TODO: args.
+	fetcher.cFetcherArgs = cFetcherArgs{
+		execinfra.DefaultMemoryLimit,
+		0,     /* estimatedRowCount */
+		false, /* traceKV */
+		true,  /* singleUse */
+	}
+
+	// TODO: column factory.
+	allocator := colmem.NewAllocator(ctx, acc, coldata.StandardColumnFactory)
+	if err = fetcher.Init(allocator, nextKVer, tableArgs); err != nil {
+		return nil, err
+	}
+	wrapper := cFetcherWrapper{}
+	wrapper.fetcher = fetcher
+	wrapper.converter, err = colserde.NewArrowBatchConverter(tableArgs.typs)
+	if err != nil {
+		return nil, err
+	}
+	wrapper.serializer, err = colserde.NewRecordBatchSerializer(tableArgs.typs)
+	if err != nil {
+		return nil, err
+	}
+	return &wrapper, nil
 }
 
 var colBatchScanPool = sync.Pool{

@@ -150,7 +150,7 @@ func (f *txnKVStreamer) releaseLastResult(ctx context.Context) {
 }
 
 // nextBatch implements the KVBatchFetcher interface.
-func (f *txnKVStreamer) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
+func (f *txnKVStreamer) NextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
 		ret := kvBatchFetcherResponse{
@@ -190,7 +190,7 @@ func (f *txnKVStreamer) nextBatch(ctx context.Context) (kvBatchFetcherResponse, 
 	if len(f.results) == 0 || err != nil {
 		return kvBatchFetcherResponse{moreKVs: false}, err
 	}
-	return f.nextBatch(ctx)
+	return f.NextBatch(ctx)
 }
 
 // reset releases all of the results from the last fetch.
@@ -202,7 +202,7 @@ func (f *txnKVStreamer) reset(ctx context.Context) {
 }
 
 // close releases the resources of this txnKVStreamer.
-func (f *txnKVStreamer) close(ctx context.Context) {
+func (f *txnKVStreamer) Close(ctx context.Context) {
 	f.reset(ctx)
 	f.streamer.Close(ctx)
 	*f = txnKVStreamer{}

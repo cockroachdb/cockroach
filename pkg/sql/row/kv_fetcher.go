@@ -238,7 +238,7 @@ func (f *KVFetcher) nextKV(
 			}, f.spanID, lastKey, nil
 		}
 
-		resp, err := f.nextBatch(ctx)
+		resp, err := f.NextBatch(ctx)
 		if err != nil || !resp.moreKVs {
 			return resp.moreKVs, roachpb.KeyValue{}, 0, false, err
 		}
@@ -297,7 +297,7 @@ func (f *KVFetcher) SetupNextFetch(
 // at the end of execution if the fetcher was provisioned with a memory
 // monitor.
 func (f *KVFetcher) Close(ctx context.Context) {
-	f.KVBatchFetcher.close(ctx)
+	f.KVBatchFetcher.Close(ctx)
 }
 
 // KVProvider is a KVBatchFetcher that returns a set slice of kvs.
@@ -307,8 +307,8 @@ type KVProvider struct {
 
 var _ KVBatchFetcher = &KVProvider{}
 
-// nextBatch implements the KVBatchFetcher interface.
-func (f *KVProvider) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
+// NextBatch implements the KVBatchFetcher interface.
+func (f *KVProvider) NextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
 	if len(f.KVs) == 0 {
 		return kvBatchFetcherResponse{moreKVs: false}, nil
 	}
@@ -327,4 +327,4 @@ func (f *KVProvider) SetupNextFetch(
 	return nil
 }
 
-func (f *KVProvider) close(context.Context) {}
+func (f *KVProvider) Close(context.Context) {}
