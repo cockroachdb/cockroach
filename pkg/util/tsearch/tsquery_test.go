@@ -74,6 +74,7 @@ bar   `, `'foo' 'bar'`},
 		{`foo<0>bar`, `'foo' <0> 'bar'`},
 		{`foo<20>bar`, `'foo' <20> 'bar'`},
 		{`foo<020>bar`, `'foo' <20> 'bar'`},
+		{`foo<16384>bar`, `'foo' <16384> 'bar'`},
 
 		{`()`, `( )`},
 		{`f(a)b`, `'f' ( 'a' ) 'b'`},
@@ -122,6 +123,7 @@ func TestScanTSQueryError(t *testing.T) {
 		`a<01b`,
 		`a<01-`,
 		`a<>`,
+		`a <16385> b`,
 	} {
 		t.Log(tc)
 		_, err := lexTSQuery(tc)
@@ -243,6 +245,7 @@ func TestParseTSQueryAssociativity(t *testing.T) {
 }
 
 func TestParseTSQueryError(t *testing.T) {
+	longLexeme := strings.Repeat("a", 2047)
 	for _, tc := range []string{
 		``,
 		`       `,
@@ -269,6 +272,7 @@ func TestParseTSQueryError(t *testing.T) {
 		`()`,
 		`(foo bar)`,
 		`f(a)b`,
+		longLexeme,
 	} {
 		t.Log(tc)
 		_, err := ParseTSQuery(tc)
