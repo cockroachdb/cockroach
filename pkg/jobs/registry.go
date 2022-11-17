@@ -1524,6 +1524,10 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.Errorf("job %d: node liveness error: restarting in background", job.ID())
 		}
 
+		if pauseOnErrErr := r.CheckPausepoint("after_exec_error"); pauseOnErrErr != nil {
+			err = errors.WithSecondaryError(pauseOnErrErr, err)
+		}
+
 		if errors.Is(err, errPauseSelfSentinel) {
 			if err := r.PauseRequested(ctx, nil, job.ID(), err.Error()); err != nil {
 				return err
