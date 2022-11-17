@@ -74,6 +74,11 @@ func (c constraintToUpdateForTest) IsNotNullColumnConstraint() bool {
 	return c.desc.NotNullColumn != 0
 }
 
+// GetIndexIDToValidate implements the catalog.CheckConstraint interface.
+func (c constraintToUpdateForTest) GetIndexIDToValidate() descpb.IndexID {
+	return c.desc.Check.IndexIDToValidate
+}
+
 func TestShouldSkipConstraintValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

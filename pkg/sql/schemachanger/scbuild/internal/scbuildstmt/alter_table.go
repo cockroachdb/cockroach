@@ -51,8 +51,17 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 	reflect.TypeOf((*tree.AlterTableAddConstraint)(nil)): {fn: alterTableAddConstraint, on: true, extraChecks: func(
 		t *tree.AlterTableAddConstraint,
 	) bool {
-		d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
-		return ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault
+		// Support ALTER TABLE ... ADD PRIMARY KEY
+		if d, ok := t.ConstraintDef.(*tree.UniqueConstraintTableDef); ok && d.PrimaryKey && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		// Support ALTER TABLE ... ADD CONSTRAINT CHECK
+		if _, ok := t.ConstraintDef.(*tree.CheckConstraintTableDef); ok && t.ValidationBehavior == tree.ValidationDefault {
+			return true
+		}
+
+		return false
 	}},
 }
 
@@ -62,6 +71,7 @@ var supportedAlterTableStatements = map[reflect.Type]supportedAlterTableCommand{
 // E.g. "ADD_PRIMARY_KEY_DEFAULT", "ADD_CHECK_SKIP", "ADD_FOREIGN_KEY_DEFAULT", etc.
 var alterTableAddConstraintMinSupportedClusterVersion = map[string]clusterversion.Key{
 	"ADD_PRIMARY_KEY_DEFAULT": clusterversion.V22_2Start,
+	"ADD_CHECK_DEFAULT":       clusterversion.V23_1Start,
 }
 
 func init() {
@@ -153,6 +163,8 @@ func alterTableAddConstraintSupportedInCurrentClusterVersion(
 		} else {
 			panic(errors.AssertionFailedf("previously checked guardrail violated: Unsupported add constraint command type"))
 		}
+	case *tree.CheckConstraintTableDef:
+		cmdKey = "ADD_CHECK"
 	default:
 		panic(errors.AssertionFailedf("previously checked guardrail violated: Unknown add constraint command type"))
 	}

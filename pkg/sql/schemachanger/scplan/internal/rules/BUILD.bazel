@@ -5,6 +5,7 @@ go_library(
     name = "rules",
     srcs = [
         "dep_add_column.go",
+        "dep_add_column_and_constraint.go",
         "dep_add_constraint.go",
         "dep_add_index.go",
         "dep_add_index_and_column.go",

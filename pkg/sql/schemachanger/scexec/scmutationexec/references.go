@@ -111,6 +111,7 @@ func (m *visitor) MakeAbsentCheckConstraintWriteOnly(
 		ColumnIDs:             op.ColumnIDs,
 		FromHashShardedColumn: op.FromHashShardedColumn,
 		ConstraintID:          op.ConstraintID,
+		IndexIDToValidate:     op.IndexIDToValidate,
 	}
 	if err = enqueueAddCheckConstraintMutation(tbl, ck); err != nil {
 		return err
@@ -400,12 +401,16 @@ func updateBackReferencesInSequences(
 		return nil
 	})
 	if forwardRefs.Contains(seqID) {
+		// Add `colID` to `updated`, if not exists.
 		if current.Contains(colID) {
 			return nil
 		}
 		updated.UnionWith(current)
-		updated.Add(colID)
+		if colID != 0 {
+			updated.Add(colID)
+		}
 	} else {
+		// Remove `colID` from `updated`, if exists.
 		if !current.Contains(colID) {
 			return nil
 		}
