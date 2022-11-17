@@ -14,21 +14,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 )
 
-// These rules ensure that constraint-dependent elements, like a constraint's
-// name, etc. appear once the constraint reaches a suitable state.
+// These rules ensure that indexes and constraints on those indexes come
+// to existence in the appropriate order.
 func init() {
 	registerDepRule(
-		"constraint dependent public right before constraint",
-		scgraph.SameStagePrecedence,
-		"dependent", "constraint",
+		"index is ready to be validated before we validate constraint on it",
+		scgraph.Precedence,
+		"index", "constraint",
 		func(from, to nodeVars) rel.Clauses {
 			return rel.Clauses{
-				from.typeFilter(isConstraintDependent),
-				to.typeFilter(isConstraint),
-				joinOnConstraintID(from, to, "table-id", "constraint-id"),
-				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+				from.Type((*scpb.PrimaryIndex)(nil)),
+				to.typeFilter(isSupportedNonIndexBackedConstraint),
+				joinOnDescID(from, to, "table-id"),
+				joinOn(
+					from, screl.IndexID,
+					to, screl.IndexID,
+					"index-id-for-validation",
+				),
+				statusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_VALIDATED),
 			}
 		},
 	)

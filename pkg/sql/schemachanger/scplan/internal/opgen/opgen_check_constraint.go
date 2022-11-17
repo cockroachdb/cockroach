@@ -51,8 +51,9 @@ func init() {
 			to(scpb.Status_VALIDATED,
 				emit(func(this *scpb.CheckConstraint) *scop.ValidateCheckConstraint {
 					return &scop.ValidateCheckConstraint{
-						TableID:      this.TableID,
-						ConstraintID: this.ConstraintID,
+						TableID:              this.TableID,
+						ConstraintID:         this.ConstraintID,
+						IndexIDForValidation: this.IndexIDForValidation,
 					}
 				}),
 			),
