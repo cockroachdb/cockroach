@@ -48,6 +48,18 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	if _, _, tbl := scpb.FindTable(relationElements); tbl != nil {
 		fallBackIfZoneConfigExists(b, n, tbl.TableID)
 	}
+	// Inverted indexes do not support hash sharing or unique.
+	if n.Inverted {
+		if n.Sharded != nil {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support hash sharding"))
+		}
+		if len(n.Storing) > 0 {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes don't support stored columns"))
+		}
+		if n.Unique {
+			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
+		}
+	}
 	var tempIdxSpec indexSpec
 	var idxSpec indexSpec
 
@@ -252,7 +264,8 @@ func processColNodeType(
 	columnNode tree.IndexElem,
 	columnType *scpb.ColumnType,
 	lastColIdx bool,
-) {
+) scpb.IndexColumn_InvertedKind {
+	invertedKind := scpb.IndexColumn_NOT_INVERTED
 	// OpClass are only allowed for the last column of an inverted index.
 	if columnNode.OpClass != "" && (!lastColIdx || !n.Inverted) {
 		panic(pgerror.New(pgcode.DatatypeMismatch,
@@ -264,6 +277,7 @@ func processColNodeType(
 			"the last column in an inverted index cannot have the DESC option"))
 	}
 	if n.Inverted && lastColIdx {
+		invertedKind = scpb.IndexColumn_INVERTED
 		switch columnType.Type.Family() {
 		case types.ArrayFamily:
 			switch columnNode.OpClass {
@@ -306,7 +320,7 @@ func processColNodeType(
 			default:
 				panic(newUndefinedOpclassError(columnNode.OpClass))
 			}
-			panic(scerrors.NotImplementedErrorf(n, "inverted column"))
+			invertedKind = scpb.IndexColumn_INVERTED_TRIGRAM
 		}
 		relationElts := b.QueryByID(indexSpec.primary.TableID)
 		scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
@@ -339,6 +353,7 @@ func processColNodeType(
 			colName,
 			columnType.Type))
 	}
+	return invertedKind
 }
 
 // addColumnsForSecondaryIndex updates the index spec to add columns needed
@@ -393,7 +408,7 @@ func addColumnsForSecondaryIndex(
 		})
 		_, _, column := scpb.FindColumn(colElts)
 		_, _, columnType := scpb.FindColumnType(colElts)
-		processColNodeType(b, n, idxSpec, string(colName), columnNode, columnType, i == lastColumnIdx)
+		invertedKind := processColNodeType(b, n, idxSpec, string(colName), columnNode, columnType, i == lastColumnIdx)
 		// Column should be accessible.
 		if columnNode.Expr == nil {
 			checkColumnAccessibilityForIndex(string(colName), colElts, false)
@@ -410,6 +425,7 @@ func addColumnsForSecondaryIndex(
 			OrdinalInKind: uint32(i),
 			Kind:          scpb.IndexColumn_KEY,
 			Direction:     direction,
+			InvertedKind:  invertedKind,
 		}
 		idxSpec.columns = append(idxSpec.columns, ic)
 		keyColIDs.Add(column.ColumnID)
