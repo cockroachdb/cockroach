@@ -13,6 +13,7 @@ package scdecomp
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -482,6 +484,7 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 	}
 	{
 		cpy := idx.IndexDescDeepCopy()
+
 		index := scpb.Index{
 			TableID:             tbl.GetID(),
 			IndexID:             idx.GetID(),
@@ -490,6 +493,9 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
 			ConstraintID:        idx.GetConstraintID(),
 			IsNotVisible:        idx.IsNotVisible(),
+		}
+		if geoConfig := idx.GetGeoConfig(); !geoConfig.IsEmpty() {
+			index.GeoConfig = protoutil.Clone(&geoConfig).(*geoindex.Config)
 		}
 		for i, c := range cpy.KeyColumnIDs {
 			invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
