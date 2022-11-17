@@ -467,6 +467,12 @@ define LookupJoinPrivate {
     # this lookup join.
     LocalityOptimized bool
 
+    # LocalityOptimizedSearch is true if this join is nested under a
+    # LocalityOptimizedSearchExpr, which is similarly to the above flag used to
+    # hint to the coster to reduce the cost of this lookup join. It is also used
+    # to avoid infinite rewrite rule recursion.
+    LocalityOptimizedSearch bool
+
     # ConstFilters contains the constant filters that are represented as equality
     # conditions on the KeyCols. These filters are needed by the statistics code to
     # correctly estimate selectivity.

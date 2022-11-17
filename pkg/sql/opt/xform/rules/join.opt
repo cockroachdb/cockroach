@@ -703,9 +703,13 @@
 # As long as child.c_id = 10 and the matching row in parent are both located in
 # 'us-east1', the second plan will be much faster. But if they are located in
 # one of the other regions, the first plan would be slightly faster.
+# If the lookup join input is a Select from only remote region rows, as
+# indicated by SelectFromRemoteTableRowsOnly, there is little point planning a
+# locality-optimized join because reading remote rows cannot be avoided, so
+# the rewrite is skipped in this case.
 [GenerateLocalityOptimizedLookupJoin, Explore]
 (LookupJoin
-    $input:*
+    $input:* & ^(SelectFromRemoteTableRowsOnly $input)
     $on:*
     $private:* &
         ^(IsAntiJoin $private) &
@@ -727,4 +731,51 @@
         $remoteExpr
         $private
     )
+)
+
+# GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin converts a lookup join
+# with REGIONAL BY ROW tables as both inputs into a locality-optimized search of
+# a locality-optimized in the left branch and a normal lookup join in the right
+# branch. The left branch reads local rows from the input table and the right
+# branch reads remote rows from the input table.
+[GenerateLocalityOptimizedSearchOfLocalityOptimizedJoin, Explore]
+(LookupJoin
+    $input:* & (IsRegionalByRowTableScanOrSelect $input)
+    $on:*
+    $private:* &
+        ^(IsAntiJoin $private) &
+        (Let
+            (
+                $localExpr
+                $remoteExpr
+                $ok
+            ):(GetLocalityOptimizedLookupJoinExprs $on $private)
+            $ok
+        )
+)
+=>
+(GenerateLocalityOptimizedSearch
+    (Root)
+    (CreateLocalityOptimizedLookupJoinPrivate
+        $localExpr
+        $remoteExpr
+        $private
+    )
+)
+
+# GenerateLocalityOptimizedSearchOfLOJs converts a lookup join with a REGIONAL
+# BY ROW table as the input relation into a locality-optimized search of two
+# lookup joins, with the left branch reading local rows from the input table and
+# the right branch reading remote rows from the input table.
+[GenerateLocalityOptimizedSearchOfLOJs, Explore]
+(LookupJoin
+    $input:* & (IsRegionalByRowTableScanOrSelect $input)
+    *
+    $private:* &
+        ^(IsAntiJoin $private) &
+        ^(IsLocalityOptimizedJoin $private)
+)
+=>
+(GenerateLocalityOptimizedSearchLOJ
+    (Root)
 )

@@ -263,6 +263,402 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
 }
 
+func (c *CustomFuncs) makeColMap(src, dst *memo.ScanPrivate) (colMap opt.ColMap) {
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		ord := src.Table.ColumnOrdinal(srcCol)
+		dstCol := dst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	return colMap
+}
+
+// getLocalAndRemoteFilters returns the filters on the `crdb_region` column
+// which target only local partitions, and those which target only remote
+// partitions. It is expected that `firstIndexCol` is the ColumnID of the
+// `crdb_region` column.
+func (c *CustomFuncs) getLocalAndRemoteFilters(
+	filters memo.FiltersExpr, ps partition.PrefixSorter, firstIndexCol opt.ColumnID,
+) (localFilters memo.FiltersExpr, remoteFilters memo.FiltersExpr, ok bool) {
+	localFilters = make(memo.FiltersExpr, 1)
+	remoteFilters = make(memo.FiltersExpr, 1)
+	for _, filter := range filters {
+		var inExpr *memo.InExpr
+		inExpr, ok = filter.Condition.(*memo.InExpr)
+		if !ok {
+			var eqExpr *memo.EqExpr
+			if eqExpr, ok = filter.Condition.(*memo.EqExpr); ok {
+				varExpr, ok := eqExpr.Left.(*memo.VariableExpr)
+				if !ok {
+					continue
+				}
+				if varExpr.Col != firstIndexCol {
+					continue
+				}
+				constExpr, ok := eqExpr.Right.(*memo.ConstExpr)
+				if !ok {
+					continue
+				}
+				match, ok := constraint.FindMatchOnSingleColumn(constExpr.Value, ps)
+				if ok && match.IsLocal {
+					localFilters[0] =
+						c.e.f.ConstructFiltersItem(
+							c.e.f.ConstructEq(varExpr, constExpr))
+					remoteFilters = remoteFilters[:0]
+				} else {
+					remoteFilters[0] =
+						c.e.f.ConstructFiltersItem(
+							c.e.f.ConstructEq(varExpr, constExpr))
+					localFilters = localFilters[:0]
+				}
+				return localFilters, remoteFilters, true
+			}
+			continue
+		}
+		variableExpr, ok := inExpr.Left.(*memo.VariableExpr)
+		if !ok {
+			continue
+		}
+		if variableExpr.Col != firstIndexCol {
+			continue
+		}
+		tupleExpr, ok := inExpr.Right.(*memo.TupleExpr)
+		if !ok {
+			continue
+		}
+		localRegions := make(memo.ScalarListExpr, 0, 1)
+		remoteRegions := make(memo.ScalarListExpr, 0, len(tupleExpr.Elems)-1)
+
+		for _, tuple := range tupleExpr.Elems {
+			constExpr, ok := tuple.(*memo.ConstExpr)
+			if !ok {
+				localRegions = nil
+				remoteRegions = nil
+				break
+			}
+
+			match, ok := constraint.FindMatchOnSingleColumn(constExpr.Value, ps)
+			if ok && match.IsLocal {
+				localRegions = append(localRegions, constExpr)
+			} else {
+				remoteRegions = append(remoteRegions, constExpr)
+			}
+		}
+		if len(localRegions) > 0 || len(remoteRegions) > 0 {
+			if len(localRegions) > 0 {
+				localFilters[0] =
+					c.e.f.ConstructFiltersItem(
+						c.e.f.ConstructIn(variableExpr,
+							c.e.f.ConstructTuple(localRegions, tupleExpr.Typ)))
+			} else {
+				localFilters = localFilters[:0]
+			}
+			if len(remoteRegions) > 0 {
+				remoteFilters[0] =
+					c.e.f.ConstructFiltersItem(
+						c.e.f.ConstructIn(variableExpr,
+							c.e.f.ConstructTuple(remoteRegions, tupleExpr.Typ)))
+			} else {
+				remoteFilters = remoteFilters[:0]
+			}
+			return localFilters, remoteFilters, true
+		}
+	}
+	return memo.FiltersExpr{}, memo.FiltersExpr{}, false
+}
+
+// GenerateLocalityOptimizedSearch generates a locality-optimized search on top
+// of a `root` lookup join when the input relation to the lookup join is a
+// REGIONAL BY ROW table. The left branch reads local rows from the input table
+// and the right branch reads remote rows from the input table. If
+// localityOptimizedLookupJoinPrivate is non-nil, then the local branch of the
+// locality-optimized search uses this version of `root`, which has been
+// converted into a locality-optimized `LookupJoinPrivate` by the caller.
+func (c *CustomFuncs) GenerateLocalityOptimizedSearch(
+	grp memo.RelExpr, root memo.RelExpr, localityOptimizedLookupJoinPrivate *memo.LookupJoinPrivate,
+) {
+	// Respect the session setting LocalityOptimizedSearch.
+	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
+		return
+	}
+	lookupJoinExpr, ok := root.(*memo.LookupJoinExpr)
+	if !ok {
+		return
+	}
+	if lookupJoinExpr.LocalityOptimized || lookupJoinExpr.LocalityOptimizedSearch {
+		// Already locality optimized. Bail out.
+		return
+	}
+	// Don't try to handle paired joins for now.
+	if lookupJoinExpr.IsFirstJoinInPairedJoiner || lookupJoinExpr.IsSecondJoinInPairedJoiner {
+		return
+	}
+	// This rewrite is only designed for inner join, left join and semijoin.
+	if lookupJoinExpr.JoinType != opt.InnerJoinOp &&
+		lookupJoinExpr.JoinType != opt.SemiJoinOp &&
+		lookupJoinExpr.JoinType != opt.LeftJoinOp {
+		return
+	}
+
+	maybeInputScan := lookupJoinExpr.Input
+	inputIsSelect := false
+	var inputSelect *memo.SelectExpr
+	var localSelectFilters, remoteSelectFilters memo.FiltersExpr
+	if inputSelect, inputIsSelect = maybeInputScan.(*memo.SelectExpr); inputIsSelect {
+		maybeInputScan = inputSelect.Input
+		localSelectFilters = inputSelect.Filters
+		remoteSelectFilters = inputSelect.Filters
+	}
+	inputScan, ok := maybeInputScan.(*memo.ScanExpr)
+	if !ok {
+		return
+	}
+	if !c.IsCanonicalScan(&inputScan.ScanPrivate) {
+		// Only rewrite canonical scans, which also means they are not
+		// locality-optimized.
+		return
+	}
+	// Don't try to handle inverted constraints for now. Should `IsCanonicalScan`
+	// also be checking for a nil InvertedConstraint?
+	if inputScan.InvertedConstraint != nil {
+		return
+	}
+	tabMeta := c.e.mem.Metadata().TableMeta(inputScan.Table)
+	table := c.e.mem.Metadata().Table(inputScan.Table)
+	lookupTable := c.e.mem.Metadata().Table(lookupJoinExpr.Table)
+	duplicateLookupTableFirst := lookupJoinExpr.Table.ColumnID(0) < inputScan.Table.ColumnID(0)
+
+	index := table.Index(inputScan.Index)
+	ps := tabMeta.IndexPartitionLocality(inputScan.Index)
+	if ps.Empty() {
+		return
+	}
+	// Build optional filters from check constraint and computed column filters.
+	// This should include the `crdb_region` IN (_region1_, _region2_, ...)
+	// predicate.
+	optionalFilters, _ :=
+		c.GetOptionalFiltersAndFilterColumns(localSelectFilters, &inputScan.ScanPrivate)
+	if len(optionalFilters) == 0 {
+		return
+	}
+
+	// The `crdb_region` ColumnID
+	firstIndexCol := inputScan.ScanPrivate.Table.IndexColumnID(index, 0)
+	localFilters, remoteFilters, ok := c.getLocalAndRemoteFilters(optionalFilters, ps, firstIndexCol)
+	if !ok {
+		return
+	}
+	// Must have local and remote filters to proceed.
+	if len(localFilters) == 0 || len(remoteFilters) == 0 {
+		return
+	}
+	// Add the region-distinguishing filters to the original filters, for each
+	// branch of the UNION ALL.
+	localSelectFilters = append(localSelectFilters, localFilters...)
+	remoteSelectFilters = append(remoteSelectFilters, remoteFilters...)
+
+	localLookupJoin := lookupJoinExpr
+	// If the caller specified to create locality-optimized join, use that
+	// specification.
+	if localityOptimizedLookupJoinPrivate != nil {
+		localLookupJoin = &memo.LookupJoinExpr{
+			Input:             lookupJoinExpr.Input,
+			On:                lookupJoinExpr.On,
+			LookupJoinPrivate: *localityOptimizedLookupJoinPrivate,
+		}
+	}
+
+	var lookupJoinLookupSideCols opt.ColSet
+	for i := 0; i < lookupTable.ColumnCount(); i++ {
+		lookupJoinLookupSideCols.Add(lookupJoinExpr.Table.ColumnID(i))
+	}
+	lookupTableSP := &memo.ScanPrivate{
+		Table:   lookupJoinExpr.Table,
+		Index:   lookupJoinExpr.Index,
+		Cols:    lookupJoinLookupSideCols,
+		Locking: lookupJoinExpr.Locking,
+	}
+	var newLocalLookupTableSP, newRemoteLookupTableSP *memo.ScanPrivate
+
+	// Similar to DuplicateScanPrivate, but for the lookup table of lookup join
+	duplicateLookupSide := func() *memo.ScanPrivate {
+		tableID, cols := c.DuplicateColumnIDs(lookupJoinExpr.Table, lookupJoinLookupSideCols)
+		newLookupTableSP := &memo.ScanPrivate{
+			Table:   tableID,
+			Index:   lookupJoinExpr.Index,
+			Cols:    cols,
+			Locking: lookupJoinExpr.Locking,
+		}
+		return newLookupTableSP
+	}
+
+	// A new ScanPrivate, solely used for remapping columns.
+	inputScanPrivateWithCRDBRegionCol :=
+		&memo.ScanPrivate{
+			Table:   inputScan.Table,
+			Index:   inputScan.Index,
+			Cols:    inputScan.Cols.Copy(),
+			Flags:   inputScan.Flags,
+			Locking: inputScan.Locking,
+		}
+	// Make sure the crdb_region column is included in the ScanPrivate and the
+	// remapping.
+	inputScanPrivateWithCRDBRegionCol.Cols.Add(firstIndexCol)
+
+	var localInputSP, remoteInputSP *memo.ScanPrivate
+	// Column IDs of the mapped tables must be in the same order as in the
+	// original tables.
+	if duplicateLookupTableFirst {
+		newLocalLookupTableSP = duplicateLookupSide()
+		newRemoteLookupTableSP = duplicateLookupSide()
+		localInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+		remoteInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+	} else {
+		localInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+		remoteInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+		newLocalLookupTableSP = duplicateLookupSide()
+		newRemoteLookupTableSP = duplicateLookupSide()
+	}
+	localScan := c.e.f.ConstructScan(localInputSP).(*memo.ScanExpr)
+	remoteScan := c.e.f.ConstructScan(remoteInputSP).(*memo.ScanExpr)
+
+	localSelectFilters =
+		c.RemapScanColsInFilter(localSelectFilters, inputScanPrivateWithCRDBRegionCol, &localScan.ScanPrivate)
+	remoteSelectFilters =
+		c.RemapScanColsInFilter(remoteSelectFilters, inputScanPrivateWithCRDBRegionCol, &remoteScan.ScanPrivate)
+
+	localInput :=
+		c.e.f.ConstructSelect(
+			localScan,
+			localSelectFilters,
+		)
+	remoteInput :=
+		c.e.f.ConstructSelect(
+			remoteScan,
+			remoteSelectFilters,
+		)
+
+	// Map referenced column ids coming from the lookup table.
+	lookupJoinWithLocalInput := c.mapInputSideOfLookupJoin(localLookupJoin, localScan, localInput)
+	lookupJoinWithRemoteInput := c.mapInputSideOfLookupJoin(lookupJoinExpr, remoteScan, remoteInput)
+	// For costing and enforce_home_region, indicate these joins lie under a
+	// locality-optimized search.
+	lookupJoinWithLocalInput.LocalityOptimizedSearch = true
+	lookupJoinWithRemoteInput.LocalityOptimizedSearch = true
+
+	// Map referenced column ids coming from the input table.
+	c.mapLookupJoin(lookupJoinWithLocalInput, lookupJoinLookupSideCols, newLocalLookupTableSP)
+	c.mapLookupJoin(lookupJoinWithRemoteInput, lookupJoinLookupSideCols, newRemoteLookupTableSP)
+
+	// Map the left and right output columns.
+	leftColMap := c.makeColMap(inputScanPrivateWithCRDBRegionCol, &localScan.ScanPrivate)
+	rightColMap := c.makeColMap(inputScanPrivateWithCRDBRegionCol, &remoteScan.ScanPrivate)
+	leftJoinOutputCols := grp.Relational().OutputCols.CopyAndMaybeRemap(leftColMap)
+	rightJoinOutputCols := grp.Relational().OutputCols.CopyAndMaybeRemap(rightColMap)
+
+	localLookupTableColMap := c.makeColMap(lookupTableSP, newLocalLookupTableSP)
+	remoteLookupTableColMap := c.makeColMap(lookupTableSP, newRemoteLookupTableSP)
+	leftJoinOutputCols = leftJoinOutputCols.CopyAndMaybeRemap(localLookupTableColMap)
+	rightJoinOutputCols = rightJoinOutputCols.CopyAndMaybeRemap(remoteLookupTableColMap)
+
+	localBranch := c.e.f.ConstructLookupJoin(lookupJoinWithLocalInput.Input,
+		lookupJoinWithLocalInput.On,
+		&lookupJoinWithLocalInput.LookupJoinPrivate,
+	)
+	remoteBranch := c.e.f.ConstructLookupJoin(lookupJoinWithRemoteInput.Input,
+		lookupJoinWithRemoteInput.On,
+		&lookupJoinWithRemoteInput.LookupJoinPrivate,
+	)
+
+	// Project away columns which weren't in the original output columns.
+	if !leftJoinOutputCols.Equals(localBranch.Relational().OutputCols) {
+		localBranch = c.e.f.ConstructProject(localBranch, memo.ProjectionsExpr{}, leftJoinOutputCols)
+		if !leftJoinOutputCols.Equals(leftJoinOutputCols.Copy().Difference(grp.Relational().OutputCols)) {
+			panic(errors.AssertionFailedf("unexpected output columns in local side of locality-optimized search"))
+		}
+	}
+	if !rightJoinOutputCols.Equals(remoteBranch.Relational().OutputCols) {
+		remoteBranch = c.e.f.ConstructProject(remoteBranch, memo.ProjectionsExpr{}, rightJoinOutputCols)
+		if !rightJoinOutputCols.Equals(rightJoinOutputCols.Copy().Difference(grp.Relational().OutputCols)) {
+			panic(errors.AssertionFailedf("unexpected output columns in remote side of locality-optimized search"))
+		}
+	}
+
+	sp :=
+		c.e.funcs.MakeSetPrivate(
+			localBranch.Relational().OutputCols,
+			remoteBranch.Relational().OutputCols,
+			grp.Relational().OutputCols,
+		)
+	// Add the LocalityOptimizedSearchExpr to the same group as the original join.
+	locOptSearch := memo.LocalityOptimizedSearchExpr{
+		Local:      localBranch,
+		Remote:     remoteBranch,
+		SetPrivate: *sp,
+	}
+	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
+}
+
+// GenerateLocalityOptimizedSearchLOJ generates a locality optimized search on
+// top of a lookup join, `root`, when the input relation to the lookup join is a
+// REGIONAL BY ROW table.
+func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(grp memo.RelExpr, root memo.RelExpr) {
+	c.GenerateLocalityOptimizedSearch(grp, root, nil)
+}
+
+// mapInputSideOfLookupJoin copies a lookupJoinExpr having a `ScanExpr` as input
+// or a Select from a `ScanExpr` and replaces that input with `newInputRel`.
+// `newInputScan` is expected to be duplicated from the original input scan. All
+// references to column IDs in the lookup join expression belonging to the
+// original scan are mapped to column IDs of the duplicated scan.
+func (c *CustomFuncs) mapInputSideOfLookupJoin(
+	lookupJoinExpr *memo.LookupJoinExpr, newInputScan *memo.ScanExpr, newInputRel memo.RelExpr,
+) (mappedLookupJoinExpr *memo.LookupJoinExpr) {
+	origInputRel := lookupJoinExpr.Input
+	if origSelectExpr, ok := origInputRel.(*memo.SelectExpr); ok {
+		origInputRel = origSelectExpr.Input
+	}
+	inputScan, ok := origInputRel.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("expected input of lookup join to be a scan"))
+	}
+	colMap := c.makeColMap(&inputScan.ScanPrivate, &newInputScan.ScanPrivate)
+	newJP := c.DuplicateJoinPrivate(&lookupJoinExpr.JoinPrivate)
+	mappedLookupJoinExpr =
+		&memo.LookupJoinExpr{
+			Input: newInputRel,
+		}
+	mappedLookupJoinExpr.JoinType = lookupJoinExpr.JoinType
+	on := c.e.f.RemapCols(&lookupJoinExpr.On, colMap).(*memo.FiltersExpr)
+	mappedLookupJoinExpr.On = *on
+	mappedLookupJoinExpr.JoinPrivate = *newJP
+	mappedLookupJoinExpr.JoinType = lookupJoinExpr.JoinType
+	mappedLookupJoinExpr.Table = lookupJoinExpr.Table
+	mappedLookupJoinExpr.Index = lookupJoinExpr.Index
+	mappedLookupJoinExpr.KeyCols = lookupJoinExpr.KeyCols.CopyAndMaybeRemapColumns(colMap)
+	mappedLookupJoinExpr.DerivedEquivCols = lookupJoinExpr.DerivedEquivCols.CopyAndMaybeRemap(colMap)
+
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when remapping the lookup expressions so
+		// that they do not get normalized into non-canonical lookup
+		// expressions.
+		lookupExpr := c.e.f.RemapCols(&lookupJoinExpr.LookupExpr, colMap).(*memo.FiltersExpr)
+		mappedLookupJoinExpr.LookupExpr = *lookupExpr
+		remoteLookupExpr := c.e.f.RemapCols(&lookupJoinExpr.RemoteLookupExpr, colMap).(*memo.FiltersExpr)
+		mappedLookupJoinExpr.RemoteLookupExpr = *remoteLookupExpr
+	})
+	mappedLookupJoinExpr.Cols = lookupJoinExpr.Cols.Copy().Difference(inputScan.Cols).Union(newInputScan.Cols)
+	mappedLookupJoinExpr.LookupColsAreTableKey = lookupJoinExpr.LookupColsAreTableKey
+	mappedLookupJoinExpr.IsFirstJoinInPairedJoiner = lookupJoinExpr.IsFirstJoinInPairedJoiner
+	mappedLookupJoinExpr.IsSecondJoinInPairedJoiner = lookupJoinExpr.IsSecondJoinInPairedJoiner
+	mappedLookupJoinExpr.ContinuationCol = lookupJoinExpr.ContinuationCol
+	mappedLookupJoinExpr.LocalityOptimized = lookupJoinExpr.LocalityOptimized
+	mappedLookupJoinExpr.LocalityOptimizedSearch = lookupJoinExpr.LocalityOptimizedSearch
+	constFilters := c.e.f.RemapCols(&lookupJoinExpr.ConstFilters, colMap).(*memo.FiltersExpr)
+	mappedLookupJoinExpr.ConstFilters = *constFilters
+	mappedLookupJoinExpr.Locking = lookupJoinExpr.Locking
+	return mappedLookupJoinExpr
+}
+
 // buildAllPartitionsConstraint retrieves the partition filters and in between
 // filters for the "index" belonging to the table described by "tabMeta", and
 // builds the full set of spans covering both defined partitions and rows
@@ -403,4 +799,65 @@ func (c *CustomFuncs) splitSpans(
 // ScanPrivateCols returns the ColSet of a ScanPrivate.
 func (c *CustomFuncs) ScanPrivateCols(sp *memo.ScanPrivate) opt.ColSet {
 	return sp.Cols
+}
+
+// IsRegionalByRowTableScanOrSelect returns true if `input` is a scan or select
+// from a REGIONAL BY ROW table.
+func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool {
+	if selectExpr, ok := input.(*memo.SelectExpr); ok {
+		input = selectExpr.Input
+	}
+	scanExpr, ok := input.(*memo.ScanExpr)
+	if !ok {
+		return false
+	}
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
+	return table.IsRegionalByRow()
+}
+
+// SelectFromRemoteTableRowsOnly returns true if `input` is a select from a
+// REGIONAL BY TABLE or REGIONAL BY ROW table which only reads rows in a remote
+// region without bounded staleness. Bounded staleness would allow local
+// replicas to be used for the scan.
+func (c *CustomFuncs) SelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
+	selectExpr, ok := input.(*memo.SelectExpr)
+	if !ok {
+		return false
+	}
+	scanExpr, ok := selectExpr.Input.(*memo.ScanExpr)
+	if !ok {
+		return false
+	}
+	if c.e.evalCtx.BoundedStaleness() {
+		return false
+	}
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
+	if table.IsRegionalByRow() {
+		tabMeta := c.e.mem.Metadata().TableMeta(scanExpr.Table)
+		index := table.Index(scanExpr.Index)
+		ps := tabMeta.IndexPartitionLocality(scanExpr.Index)
+		if ps.Empty() {
+			// Can't tell if anything is local; treat all rows as remote
+			return true
+		}
+		firstIndexCol := scanExpr.ScanPrivate.Table.IndexColumnID(index, 0)
+		localFilters, _, ok :=
+			c.getLocalAndRemoteFilters(selectExpr.Filters, ps, firstIndexCol)
+		if !ok {
+			// There is no filter on crdb_region, so all regions may be read.
+			return false
+		}
+		if len(localFilters) == 0 {
+			return true
+		}
+		return false
+	} else if tableHomeRegion, ok := table.HomeRegion(); ok {
+		gatewayRegion, foundLocalRegion := c.e.evalCtx.Locality.Find("region")
+		if !foundLocalRegion {
+			// Found no gateway region, so can't tell if only remote rows are read.
+			return false
+		}
+		return gatewayRegion != tableHomeRegion
+	}
+	return false
 }
