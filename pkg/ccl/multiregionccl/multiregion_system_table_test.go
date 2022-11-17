@@ -17,22 +17,13 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -43,84 +34,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
-
-// alterCrdbRegionType converts the crdb_region []byte column in a system
-// database table into the system database's enum type.
-func alterCrdbRegionType(
-	ctx context.Context, tableID descpb.ID, db *kv.DB, executor descs.TxnManager,
-) error {
-	flags := tree.CommonLookupFlags{
-		Required:    true,
-		AvoidLeased: true,
-	}
-	objFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: flags,
-	}
-
-	getRegionEnum := func(systemDB catalog.DatabaseDescriptor, txn *kv.Txn, collection *descs.Collection) (*typedesc.Mutable, *types.T, error) {
-		enumID, err := systemDB.MultiRegionEnumID()
-		if err != nil {
-			return nil, nil, err
-		}
-		enumTypeDesc, err := collection.GetMutableTypeByID(ctx, txn, enumID, objFlags)
-		if err != nil {
-			return nil, nil, err
-		}
-		schema, err := collection.GetImmutableSchemaByID(ctx, txn, enumTypeDesc.GetParentSchemaID(), flags)
-		if err != nil {
-			return nil, nil, err
-		}
-		enumName := tree.MakeQualifiedTypeName(systemDB.GetName(), schema.GetName(), enumTypeDesc.GetName())
-		enumType, err := enumTypeDesc.MakeTypesT(ctx, &enumName, nil)
-		if err != nil {
-			return nil, nil, err
-		}
-		return enumTypeDesc, enumType, nil
-	}
-
-	getMutableColumn := func(table *tabledesc.Mutable, name string) (*descpb.ColumnDescriptor, error) {
-		for i := range table.Columns {
-			if table.Columns[i].Name == name {
-				return &table.Columns[i], nil
-			}
-		}
-		return nil, errors.New("crdb_region column not found")
-	}
-
-	err := executor.DescsTxn(ctx, db, func(ctx context.Context, txn *kv.Txn, collection *descs.Collection) error {
-		_, systemDB, err := collection.GetImmutableDatabaseByID(ctx, txn, keys.SystemDatabaseID, flags)
-		if err != nil {
-			return err
-		}
-
-		enumTypeDesc, enumType, err := getRegionEnum(systemDB, txn, collection)
-		if err != nil {
-			return err
-		}
-
-		// Change the crdb_region column's type to the enum
-		tableDesc, err := collection.GetMutableTableByID(ctx, txn, tableID, objFlags)
-		if err != nil {
-			return err
-		}
-		column, err := getMutableColumn(tableDesc, "crdb_region")
-		if err != nil {
-			return err
-		}
-		column.Type = enumType
-		if err := collection.WriteDesc(ctx, false, tableDesc, txn); err != nil {
-			return err
-		}
-
-		// Add a back reference to the enum
-		enumTypeDesc.AddReferencingDescriptorID(tableID)
-		return collection.WriteDesc(ctx, false, enumTypeDesc, txn)
-	})
-	if err != nil {
-		return errors.Wrapf(err, "unable to change crdb_region from []byte to the multi-region enum for table %d", tableID)
-	}
-	return err
-}
 
 func TestMrSystemDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -146,29 +59,25 @@ func TestMrSystemDatabase(t *testing.T) {
 		TenantID: id,
 		Locality: *cluster.Servers[0].Locality(),
 	}
-	tenantServer, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
+	_, tenantSQL := serverutils.StartTenant(t, cluster.Servers[0], tenantArgs)
 
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
+
+	// Generate stats for system.sqlinstances. See the "QueryByEnum" test for
+	// details.
+	tDB.Exec(t, `ANALYZE system.sqlliveness;`)
 
 	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	tDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 
-	executor := tenantServer.ExecutorConfig().(sql.ExecutorConfig)
-
-	// Changing the type of the crdb_region field is required to modify the
-	// types with SET LOCALITY REGIONAL BY ROW.
-	require.NoError(t, alterCrdbRegionType(ctx, keys.SqllivenessID, executor.DB, executor.InternalExecutorFactory))
-	require.NoError(t, alterCrdbRegionType(ctx, keys.SQLInstancesTableID, executor.DB, executor.InternalExecutorFactory))
+	tDB.Exec(t, `SELECT crdb_internal.unsafe_optimize_system_database()`)
 
 	// Run schema validations to ensure the manual descriptor modifications are
 	// okay.
 	tDB.CheckQueryResults(t, `SELECT * FROM crdb_internal.invalid_objects`, [][]string{})
 
 	t.Run("Sqlliveness", func(t *testing.T) {
-		// TODO(jeffswenson): Setting the locality does not work because it causes the schema
-		// changer to rewrite the primary key index.
-		// tDB.Exec(t, `ALTER TABLE system.sqlliveness SET LOCALITY REGIONAL BY ROW`)
 		row := tDB.QueryRow(t, `SELECT crdb_region, session_uuid, expiration FROM system.sqlliveness LIMIT 1`)
 		var sessionUUID string
 		var crdbRegion string
@@ -178,10 +87,6 @@ func TestMrSystemDatabase(t *testing.T) {
 	})
 
 	t.Run("Sqlinstances", func(t *testing.T) {
-		// TODO(jeffswenson): Setting the locality does not work because it causes the schema
-		// changer to rewrite the primary key index.
-		// tDB.Exec(t, `ALTER TABLE system.sql_instances SET LOCALITY REGIONAL BY ROW`)
-
 		t.Run("InUse", func(t *testing.T) {
 			query := `
                 SELECT id, addr, session_id, locality, crdb_region
@@ -301,6 +206,48 @@ func TestMrSystemDatabase(t *testing.T) {
 				return nil
 			})
 		})
+	})
+
+	t.Run("GlobalTables", func(t *testing.T) {
+		query := `
+		    SELECT target
+			FROM [SHOW ALL ZONE CONFIGURATIONS]
+			WHERE target LIKE 'TABLE system.public.%'
+			    AND raw_config_sql LIKE '%global_reads = true%'
+			ORDER BY target;
+		`
+		tDB.CheckQueryResults(t, query, [][]string{
+			{"TABLE system.public.comments"},
+			{"TABLE system.public.database_role_settings"},
+			{"TABLE system.public.descriptor"},
+			{"TABLE system.public.namespace"},
+			{"TABLE system.public.privileges"},
+			{"TABLE system.public.role_members"},
+			{"TABLE system.public.role_options"},
+			{"TABLE system.public.settings"},
+			{"TABLE system.public.table_statistics"},
+			{"TABLE system.public.users"},
+			{"TABLE system.public.web_sessions"},
+			{"TABLE system.public.zones"},
+		})
+	})
+
+	t.Run("QueryByEnum", func(t *testing.T) {
+		// This is a regression test for a bug triggered by
+		// unsafe_optimize_system_database. If usnafe_optimize_system_database
+		// does not clear table statistics, this query will fail in the
+		// optimizer, because the stats will have the wrong type for the
+		// crdb_column.
+		row := tDB.QueryRow(t, `
+			SELECT crdb_region, session_uuid, expiration 
+			FROM system.sqlliveness 
+			WHERE crdb_region = 'us-east1'
+			LIMIT 1;`)
+		var sessionUUID string
+		var crdbRegion string
+		var rawExpiration apd.Decimal
+		row.Scan(&crdbRegion, &sessionUUID, &rawExpiration)
+		require.Equal(t, "us-east1", crdbRegion)
 	})
 }
 
