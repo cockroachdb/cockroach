@@ -12,3 +12,55 @@
 )
 =>
 (InlineWith $binding $input $withPrivate)
+
+# ApplyLimitToRecursiveCTEScan updates the properties of the recursive with
+# scans in the input of a recursive CTE to reflect a limit that applies to
+# all iterations.
+[ApplyLimitToRecursiveCTEScan, Normalize]
+(RecursiveCTE
+    $binding:* & ^(HasBoundedCardinality $binding)
+    $initial:* & (HasBoundedCardinality $initial)
+    $recursive:* & (HasBoundedCardinality $recursive)
+    $private:*
+)
+=>
+(ApplyLimitToRecursiveCTEScan
+    $binding
+    $initial
+    $recursive
+    $private
+)
+
+# TryAddLimitToRecursiveBranch attempts to infer a limit that applies to the
+# (unbounded) recursive branch of the CTE. This is accomplished by taking the
+# upper bound of the initial branch, and checking whether applying that limit
+# to the recursive WithScans would allow the same bound to be inferred for the
+# recursive branch. This is useful because it can allow
+# ApplyLimitToRecursiveCTEScan to fire. See the CanAddRecursiveLimit comment
+# for details on when it is possible to make this transformation.
+#
+# The added limit doesn't need an ordering because it will never actually limit
+# the number of rows returned.
+[TryAddLimitToRecursiveBranch, Normalize]
+(RecursiveCTE
+    $binding:* & ^(HasBoundedCardinality $binding)
+    $initial:* & (HasBoundedCardinality $initial)
+    $recursive:* & ^(HasBoundedCardinality $recursive)
+    $private:* &
+        (CanAddRecursiveLimit
+            $recursive
+            (GetRecursiveWithID $private)
+            (MakeEmptyColSet)
+        )
+)
+=>
+(RecursiveCTE
+    $binding
+    $initial
+    (Limit
+        $recursive
+        (GetLimitFromCardinality $initial)
+        (EmptyOrdering)
+    )
+    $private
+)

@@ -1,3 +1,15 @@
+exec-ddl
+CREATE TABLE ints (n BIGINT, INDEX (n));
+----
+
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT);
+----
+
+# --------------------------------------------------
+# InlineWith
+# --------------------------------------------------
+
 build format=show-all
 WITH foo AS (SELECT 1) (SELECT * FROM foo) UNION ALL (SELECT * FROM foo)
 ----
@@ -775,7 +787,7 @@ union-all
 norm expect-not=InlineWith
 WITH RECURSIVE t(n) AS MATERIALIZED (VALUES (1) UNION ALL SELECT n+1 FROM t WHERE n < 100 ) SELECT sum(n) FROM t;
 ----
-with &2 (t)
+with &3 (t)
  ├── columns: sum:6
  ├── materialized
  ├── cardinality: [1 - 1]
@@ -784,14 +796,16 @@ with &2 (t)
  ├── fd: ()-->(6)
  ├── recursive-c-t-e
  │    ├── columns: n:2
- │    ├── working table binding: &1
+ │    ├── working table binding: &2
  │    ├── initial columns: column1:1
  │    ├── recursive columns: "?column?":4
  │    ├── cardinality: [1 - ]
  │    ├── immutable
  │    ├── fake-rel
  │    │    ├── columns: n:2
- │    │    └── cardinality: [1 - ]
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
  │    ├── values
  │    │    ├── columns: column1:1!null
  │    │    ├── cardinality: [1 - 1]
@@ -800,14 +814,22 @@ with &2 (t)
  │    │    └── (1,)
  │    └── project
  │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 1]
  │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(4)
  │         ├── select
  │         │    ├── columns: n:3!null
- │         │    ├── with-scan &1 (t)
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── with-scan &2 (t)
  │         │    │    ├── columns: n:3
  │         │    │    ├── mapping:
  │         │    │    │    └──  n:2 => n:3
- │         │    │    └── cardinality: [1 - ]
+ │         │    │    ├── cardinality: [1 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3)
  │         │    └── filters
  │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
  │         └── projections
@@ -817,7 +839,7 @@ with &2 (t)
       ├── cardinality: [1 - 1]
       ├── key: ()
       ├── fd: ()-->(6)
-      ├── with-scan &2 (t)
+      ├── with-scan &3 (t)
       │    ├── columns: n:5
       │    ├── mapping:
       │    │    └──  n:2 => n:5
@@ -842,14 +864,16 @@ scalar-group-by
  │    ├── immutable
  │    ├── recursive-c-t-e
  │    │    ├── columns: n:2
- │    │    ├── working table binding: &1
+ │    │    ├── working table binding: &2
  │    │    ├── initial columns: column1:1
  │    │    ├── recursive columns: "?column?":4
  │    │    ├── cardinality: [1 - ]
  │    │    ├── immutable
  │    │    ├── fake-rel
  │    │    │    ├── columns: n:2
- │    │    │    └── cardinality: [1 - ]
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── key: ()
+ │    │    │    └── fd: ()-->(2)
  │    │    ├── values
  │    │    │    ├── columns: column1:1!null
  │    │    │    ├── cardinality: [1 - 1]
@@ -858,14 +882,22 @@ scalar-group-by
  │    │    │    └── (1,)
  │    │    └── project
  │    │         ├── columns: "?column?":4!null
+ │    │         ├── cardinality: [0 - 1]
  │    │         ├── immutable
+ │    │         ├── key: ()
+ │    │         ├── fd: ()-->(4)
  │    │         ├── select
  │    │         │    ├── columns: n:3!null
- │    │         │    ├── with-scan &1 (t)
+ │    │         │    ├── cardinality: [0 - 1]
+ │    │         │    ├── key: ()
+ │    │         │    ├── fd: ()-->(3)
+ │    │         │    ├── with-scan &2 (t)
  │    │         │    │    ├── columns: n:3
  │    │         │    │    ├── mapping:
  │    │         │    │    │    └──  n:2 => n:3
- │    │         │    │    └── cardinality: [1 - ]
+ │    │         │    │    ├── cardinality: [1 - 1]
+ │    │         │    │    ├── key: ()
+ │    │         │    │    └── fd: ()-->(3)
  │    │         │    └── filters
  │    │         │         └── n:3 < 100 [outer=(3), constraints=(/3: (/NULL - /99]; tight)]
  │    │         └── projections
@@ -1052,3 +1084,1821 @@ union-all
       │         └── j:12 = 2 [outer=(12), constraints=(/12: [/2 - /2]; tight), fd=()-->(12)]
       └── projections
            └── 1 [as="?column?":18]
+
+# --------------------------------------------------
+# ApplyLimitToRecursiveCTEScan
+# --------------------------------------------------
+
+# Simple iterative case. Note that the limit is not explicit on the anchor
+# branch, but its cardinality is bounded anyway.
+norm expect=ApplyLimitToRecursiveCTEScan expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10 LIMIT 1)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(4)
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── with-scan &2 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    ├── cardinality: [1 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3)
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# Case with different (but bounded) cardinalities for the anchor and
+# recursive branches. The max cardinality of the two is used for the
+# recursive scan.
+norm expect=ApplyLimitToRecursiveCTEScan expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10 LIMIT 5)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    └── cardinality: [1 - 5]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 5]
+ │         ├── immutable
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 5]
+ │         │    ├── with-scan &2 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    └── cardinality: [1 - 5]
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# Example from postgres blog with limit added to the recursive branch.
+# https://malisper.me/the-missing-postgres-scan-the-loose-index-scan
+norm expect=ApplyLimitToRecursiveCTEScan expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub LIMIT 1
+  )
+)
+SELECT count(*) FROM temp;
+----
+scalar-group-by
+ ├── columns: count:13!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(13)
+ ├── recursive-c-t-e
+ │    ├── columns: i:5
+ │    ├── working table binding: &2
+ │    ├── initial columns: n:1
+ │    ├── recursive columns: n:7
+ │    ├── fake-rel
+ │    │    ├── columns: i:5
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(5)
+ │    ├── limit
+ │    │    ├── columns: n:1
+ │    │    ├── internal-ordering: +1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── sort
+ │    │    │    ├── columns: n:1
+ │    │    │    ├── ordering: +1
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── scan ints
+ │    │    │         └── columns: n:1
+ │    │    └── 1
+ │    └── project
+ │         ├── columns: n:7!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(7)
+ │         └── limit
+ │              ├── columns: i:6!null n:7!null rownum:11!null
+ │              ├── internal-ordering: +7 opt(6,11)
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              ├── fd: ()-->(6,7,11)
+ │              ├── sort
+ │              │    ├── columns: i:6!null n:7!null rownum:11!null
+ │              │    ├── fd: ()-->(6,11)
+ │              │    ├── ordering: +7 opt(6,11) [actual: +7]
+ │              │    ├── limit hint: 1.00
+ │              │    └── inner-join (cross)
+ │              │         ├── columns: i:6!null n:7!null rownum:11!null
+ │              │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │              │         ├── fd: ()-->(6,11)
+ │              │         ├── ordinality
+ │              │         │    ├── columns: i:6 rownum:11!null
+ │              │         │    ├── cardinality: [1 - 1]
+ │              │         │    ├── key: ()
+ │              │         │    ├── fd: ()-->(6,11)
+ │              │         │    └── with-scan &2 (temp)
+ │              │         │         ├── columns: i:6
+ │              │         │         ├── mapping:
+ │              │         │         │    └──  i:5 => i:6
+ │              │         │         ├── cardinality: [1 - 1]
+ │              │         │         ├── key: ()
+ │              │         │         └── fd: ()-->(6)
+ │              │         ├── scan ints
+ │              │         │    └── columns: n:7
+ │              │         └── filters
+ │              │              └── n:7 > i:6 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+ │              └── 1
+ └── aggregations
+      └── count-rows [as=count_rows:13]
+
+# No-op because the optimizer cannot prove that the recursive branch has a
+# limit without performing induction from the fact that the anchor branch
+# has one row. TryAddLimitToRecursiveBranch is disabled to exercise the case.
+norm expect-not=ApplyLimitToRecursiveCTEScan disable=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    └── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── immutable
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    └── cardinality: [1 - ]
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# No-op for the same reason as above.
+norm expect-not=ApplyLimitToRecursiveCTEScan disable=TryAddLimitToRecursiveBranch
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub
+  )
+)
+SELECT count(*) FROM temp;
+----
+scalar-group-by
+ ├── columns: count:13!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(13)
+ ├── recursive-c-t-e
+ │    ├── columns: i:5
+ │    ├── working table binding: &1
+ │    ├── initial columns: n:1
+ │    ├── recursive columns: n:7
+ │    ├── fake-rel
+ │    │    ├── columns: i:5
+ │    │    └── cardinality: [1 - ]
+ │    ├── limit
+ │    │    ├── columns: n:1
+ │    │    ├── internal-ordering: +1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── sort
+ │    │    │    ├── columns: n:1
+ │    │    │    ├── ordering: +1
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── scan ints
+ │    │    │         └── columns: n:1
+ │    │    └── 1
+ │    └── project
+ │         ├── columns: n:7!null
+ │         └── distinct-on
+ │              ├── columns: n:7!null rownum:11!null
+ │              ├── grouping columns: rownum:11!null
+ │              ├── internal-ordering: +7
+ │              ├── key: (11)
+ │              ├── fd: (11)-->(7)
+ │              ├── sort
+ │              │    ├── columns: i:6!null n:7!null rownum:11!null
+ │              │    ├── fd: (11)-->(6)
+ │              │    ├── ordering: +7
+ │              │    └── inner-join (cross)
+ │              │         ├── columns: i:6!null n:7!null rownum:11!null
+ │              │         ├── fd: (11)-->(6)
+ │              │         ├── ordinality
+ │              │         │    ├── columns: i:6 rownum:11!null
+ │              │         │    ├── cardinality: [1 - ]
+ │              │         │    ├── key: (11)
+ │              │         │    ├── fd: (11)-->(6)
+ │              │         │    └── with-scan &1 (temp)
+ │              │         │         ├── columns: i:6
+ │              │         │         ├── mapping:
+ │              │         │         │    └──  i:5 => i:6
+ │              │         │         └── cardinality: [1 - ]
+ │              │         ├── scan ints
+ │              │         │    └── columns: n:7
+ │              │         └── filters
+ │              │              └── n:7 > i:6 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+ │              └── aggregations
+ │                   └── first-agg [as=n:7, outer=(7)]
+ │                        └── n:7
+ └── aggregations
+      └── count-rows [as=count_rows:13]
+
+# No-op because the anchor branch is unbounded.
+norm expect-not=ApplyLimitToRecursiveCTEScan expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT n FROM ints)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:8
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:5
+ │    ├── working table binding: &1
+ │    ├── initial columns: n:1
+ │    ├── recursive columns: "?column?":7
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:5
+ │    │    └── cardinality: [1 - ]
+ │    ├── scan ints
+ │    │    └── columns: n:1
+ │    └── project
+ │         ├── columns: "?column?":7!null
+ │         ├── immutable
+ │         ├── select
+ │         │    ├── columns: i:6!null
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: i:6
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:5 => i:6
+ │         │    │    └── cardinality: [1 - ]
+ │         │    └── filters
+ │         │         └── i:6 <= 10 [outer=(6), constraints=(/6: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:6 + 1 [as="?column?":7, outer=(6), immutable]
+ └── projections
+      └── i:5 [as=i:8, outer=(5)]
+
+# No-op because the recursive branch is unbounded.
+norm expect-not=ApplyLimitToRecursiveCTEScan expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT n FROM cte INNER JOIN ints ON n > i)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:8
+ ├── cardinality: [1 - ]
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: n:4
+ │    ├── cardinality: [1 - ]
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    └── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: n:4!null
+ │         └── inner-join (cross)
+ │              ├── columns: i:3!null n:4!null
+ │              ├── with-scan &1 (cte)
+ │              │    ├── columns: i:3
+ │              │    ├── mapping:
+ │              │    │    └──  i:2 => i:3
+ │              │    └── cardinality: [1 - ]
+ │              ├── scan ints
+ │              │    └── columns: n:4
+ │              └── filters
+ │                   └── n:4 > i:3 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+ └── projections
+      └── i:2 [as=i:8, outer=(2)]
+
+# Case with Union instead of UnionAll.
+norm
+WITH RECURSIVE cte (i) AS (
+  (VALUES (0), (1), (2))
+  UNION
+  (SELECT (i + 1) % 4 FROM cte)
+)
+SELECT * FROM cte
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [3 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── deduplicate
+ │    ├── working table binding: &2
+ │    ├── initial columns: column1:1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [3 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    └── cardinality: [1 - 3]
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (0,)
+ │    │    ├── (1,)
+ │    │    └── (2,)
+ │    └── project
+ │         ├── columns: "?column?":4
+ │         ├── cardinality: [1 - 3]
+ │         ├── immutable
+ │         ├── with-scan &2 (cte)
+ │         │    ├── columns: i:3
+ │         │    ├── mapping:
+ │         │    │    └──  i:2 => i:3
+ │         │    └── cardinality: [1 - 3]
+ │         └── projections
+ │              └── (i:3 + 1) % 4 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# --------------------------------------------------
+# TryAddLimitToRecursiveBranch
+# --------------------------------------------------
+
+# Example from postgres blog (no changes made).
+# https://malisper.me/the-missing-postgres-scan-the-loose-index-scan
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE temp (i) AS (
+  (SELECT n FROM ints ORDER BY n ASC LIMIT 1)
+UNION ALL (
+  SELECT n FROM temp,
+    LATERAL (
+      SELECT n
+      FROM ints
+      WHERE n > i
+      ORDER BY n ASC
+      LIMIT 1
+    ) sub
+  )
+)
+SELECT count(*) FROM temp;
+----
+scalar-group-by
+ ├── columns: count:13!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(13)
+ ├── recursive-c-t-e
+ │    ├── columns: i:5
+ │    ├── working table binding: &2
+ │    ├── initial columns: n:1
+ │    ├── recursive columns: n:7
+ │    ├── fake-rel
+ │    │    ├── columns: i:5
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(5)
+ │    ├── limit
+ │    │    ├── columns: n:1
+ │    │    ├── internal-ordering: +1
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    ├── sort
+ │    │    │    ├── columns: n:1
+ │    │    │    ├── ordering: +1
+ │    │    │    ├── limit hint: 1.00
+ │    │    │    └── scan ints
+ │    │    │         └── columns: n:1
+ │    │    └── 1
+ │    └── project
+ │         ├── columns: n:7!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(7)
+ │         └── limit
+ │              ├── columns: i:6!null n:7!null rownum:11!null
+ │              ├── internal-ordering: +7 opt(6,11)
+ │              ├── cardinality: [0 - 1]
+ │              ├── key: ()
+ │              ├── fd: ()-->(6,7,11)
+ │              ├── sort
+ │              │    ├── columns: i:6!null n:7!null rownum:11!null
+ │              │    ├── fd: ()-->(6,11)
+ │              │    ├── ordering: +7 opt(6,11) [actual: +7]
+ │              │    ├── limit hint: 1.00
+ │              │    └── inner-join (cross)
+ │              │         ├── columns: i:6!null n:7!null rownum:11!null
+ │              │         ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │              │         ├── fd: ()-->(6,11)
+ │              │         ├── ordinality
+ │              │         │    ├── columns: i:6 rownum:11!null
+ │              │         │    ├── cardinality: [1 - 1]
+ │              │         │    ├── key: ()
+ │              │         │    ├── fd: ()-->(6,11)
+ │              │         │    └── with-scan &2 (temp)
+ │              │         │         ├── columns: i:6
+ │              │         │         ├── mapping:
+ │              │         │         │    └──  i:5 => i:6
+ │              │         │         ├── cardinality: [1 - 1]
+ │              │         │         ├── key: ()
+ │              │         │         └── fd: ()-->(6)
+ │              │         ├── scan ints
+ │              │         │    └── columns: n:7
+ │              │         └── filters
+ │              │              └── n:7 > i:6 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
+ │              └── 1
+ └── aggregations
+      └── count-rows [as=count_rows:13]
+
+# Simple case with a Project and Select.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(4)
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── with-scan &2 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    ├── cardinality: [1 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3)
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# Case with an ordinality operator.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, ordinality FROM (SELECT i FROM cte WHERE i <= 10) WITH ORDINALITY)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:9 j:10
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":8 ordinality:7
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":8!null ordinality:7!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(7,8)
+ │         ├── ordinality
+ │         │    ├── columns: i:5!null ordinality:7!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5,7)
+ │         │    └── select
+ │         │         ├── columns: i:5!null
+ │         │         ├── cardinality: [0 - 1]
+ │         │         ├── key: ()
+ │         │         ├── fd: ()-->(5)
+ │         │         ├── with-scan &2 (cte)
+ │         │         │    ├── columns: i:5
+ │         │         │    ├── mapping:
+ │         │         │    │    └──  i:3 => i:5
+ │         │         │    ├── cardinality: [1 - 1]
+ │         │         │    ├── key: ()
+ │         │         │    └── fd: ()-->(5)
+ │         │         └── filters
+ │         │              └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:9, outer=(3)]
+      └── j:4 [as=j:10, outer=(4)]
+
+# Case with a window function.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, sum(i) OVER (ORDER BY j) FROM cte WHERE i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:10 j:11
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":9
+ │    ├── recursive columns: "?column?":8 sum:7
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":9!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,9)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":8!null sum:7
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(7,8)
+ │         ├── window partition=()
+ │         │    ├── columns: i:5!null sum:7
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5)
+ │         │    ├── select
+ │         │    │    ├── columns: i:5!null
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(5)
+ │         │    │    ├── with-scan &2 (cte)
+ │         │    │    │    ├── columns: i:5
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    └──  i:3 => i:5
+ │         │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    └── fd: ()-->(5)
+ │         │    │    └── filters
+ │         │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    └── windows
+ │         │         └── sum [as=sum:7, outer=(5)]
+ │         │              └── i:5
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:10, outer=(3)]
+      └── j:4 [as=j:11, outer=(4)]
+
+# Case with DistinctOn.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT DISTINCT i+1 FROM cte WHERE i <= 10)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(4)
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── with-scan &2 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    ├── cardinality: [1 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3)
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# Case with GroupBy.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, sum(j) FROM cte WHERE i <= 10 GROUP BY i)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:10 j:11
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":9
+ │    ├── recursive columns: "?column?":8 sum:7
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":9!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,9)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":8!null sum:7
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(7,8)
+ │         ├── group-by (streaming)
+ │         │    ├── columns: i:5!null sum:7
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5,7)
+ │         │    ├── select
+ │         │    │    ├── columns: i:5!null j:6
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(5,6)
+ │         │    │    ├── with-scan &2 (cte)
+ │         │    │    │    ├── columns: i:5 j:6
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  i:3 => i:5
+ │         │    │    │    │    └──  j:4 => j:6
+ │         │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    └── fd: ()-->(5,6)
+ │         │    │    └── filters
+ │         │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    └── aggregations
+ │         │         ├── sum [as=sum:7, outer=(6)]
+ │         │         │    └── j:6
+ │         │         └── const-agg [as=i:5, outer=(5)]
+ │         │              └── i:5
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":8, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:10, outer=(3)]
+      └── j:4 [as=j:11, outer=(4)]
+
+# Case with InnerJoin.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, y FROM cte INNER JOIN xy ON j = x WHERE i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 y:8
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":11!null y:8
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(8,11)
+ │         ├── inner-join (hash)
+ │         │    ├── columns: i:5!null j:6!null x:7!null y:8
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5-8), (7)==(6), (6)==(7)
+ │         │    ├── select
+ │         │    │    ├── columns: i:5!null j:6
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(5,6)
+ │         │    │    ├── with-scan &2 (cte)
+ │         │    │    │    ├── columns: i:5 j:6
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  i:3 => i:5
+ │         │    │    │    │    └──  j:4 => j:6
+ │         │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    └── fd: ()-->(5,6)
+ │         │    │    └── filters
+ │         │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    ├── scan xy
+ │         │    │    ├── columns: x:7!null y:8
+ │         │    │    ├── key: (7)
+ │         │    │    └── fd: (7)-->(8)
+ │         │    └── filters
+ │         │         └── j:6 = x:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":11, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# Case with LeftJoin.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, y FROM cte LEFT JOIN xy ON j = x WHERE i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 y:8
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":11!null y:8
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(8,11)
+ │         ├── left-join (hash)
+ │         │    ├── columns: i:5!null j:6 x:7 y:8
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5-8)
+ │         │    ├── select
+ │         │    │    ├── columns: i:5!null j:6
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(5,6)
+ │         │    │    ├── with-scan &2 (cte)
+ │         │    │    │    ├── columns: i:5 j:6
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  i:3 => i:5
+ │         │    │    │    │    └──  j:4 => j:6
+ │         │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    └── fd: ()-->(5,6)
+ │         │    │    └── filters
+ │         │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    ├── scan xy
+ │         │    │    ├── columns: x:7!null y:8
+ │         │    │    ├── key: (7)
+ │         │    │    └── fd: (7)-->(8)
+ │         │    └── filters
+ │         │         └── j:6 = x:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":11, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# Case with SemiJoin.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10 AND EXISTS (SELECT * FROM xy WHERE i = x))
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:9
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":8
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":8!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(8)
+ │         ├── semi-join (hash)
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── select
+ │         │    │    ├── columns: i:3!null
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(3)
+ │         │    │    ├── with-scan &2 (cte)
+ │         │    │    │    ├── columns: i:3
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    └──  i:2 => i:3
+ │         │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    └── fd: ()-->(3)
+ │         │    │    └── filters
+ │         │    │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         │    ├── select
+ │         │    │    ├── columns: x:4!null
+ │         │    │    ├── key: (4)
+ │         │    │    ├── scan xy
+ │         │    │    │    ├── columns: x:4!null
+ │         │    │    │    └── key: (4)
+ │         │    │    └── filters
+ │         │    │         └── x:4 <= 10 [outer=(4), constraints=(/4: (/NULL - /10]; tight)]
+ │         │    └── filters
+ │         │         └── i:3 = x:4 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":8, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:9, outer=(2)]
+
+# Case with AntiJoin.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10 AND NOT EXISTS (SELECT * FROM xy WHERE i = x))
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:9
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":8
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":8!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(8)
+ │         ├── anti-join (hash)
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── select
+ │         │    │    ├── columns: i:3!null
+ │         │    │    ├── cardinality: [0 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    ├── fd: ()-->(3)
+ │         │    │    ├── with-scan &2 (cte)
+ │         │    │    │    ├── columns: i:3
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    └──  i:2 => i:3
+ │         │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    └── fd: ()-->(3)
+ │         │    │    └── filters
+ │         │    │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         │    ├── select
+ │         │    │    ├── columns: x:4!null
+ │         │    │    ├── key: (4)
+ │         │    │    ├── scan xy
+ │         │    │    │    ├── columns: x:4!null
+ │         │    │    │    └── key: (4)
+ │         │    │    └── filters
+ │         │    │         └── x:4 <= 10 [outer=(4), constraints=(/4: (/NULL - /10]; tight)]
+ │         │    └── filters
+ │         │         └── i:3 = x:4 [outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":8, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:9, outer=(2)]
+
+# Case with child CTE.
+norm expect=TryAddLimitToRecursiveBranch disable=InlineWith
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (
+    SELECT i+1 FROM (
+      WITH nested (x) AS (SELECT x FROM xy)
+      SELECT i FROM cte INNER JOIN nested ON i = x
+    )
+    WHERE i <= 10
+  )
+)
+SELECT i FROM cte;
+----
+with &2 (nested)
+ ├── columns: i:10
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── scan xy
+ │    ├── columns: xy.x:3!null
+ │    └── key: (3)
+ └── with &4 (cte)
+      ├── columns: i:10
+      ├── cardinality: [1 - ]
+      ├── immutable
+      ├── recursive-c-t-e
+      │    ├── columns: i:2
+      │    ├── working table binding: &3
+      │    ├── initial columns: "?column?":1
+      │    ├── recursive columns: "?column?":9
+      │    ├── cardinality: [1 - ]
+      │    ├── immutable
+      │    ├── fake-rel
+      │    │    ├── columns: i:2
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(2)
+      │    ├── values
+      │    │    ├── columns: "?column?":1!null
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1)
+      │    │    └── (1,)
+      │    └── project
+      │         ├── columns: "?column?":9!null
+      │         ├── cardinality: [0 - 1]
+      │         ├── immutable
+      │         ├── key: ()
+      │         ├── fd: ()-->(9)
+      │         ├── inner-join (hash)
+      │         │    ├── columns: i:7!null x:8!null
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(7,8), (8)==(7), (7)==(8)
+      │         │    ├── select
+      │         │    │    ├── columns: i:7!null
+      │         │    │    ├── cardinality: [0 - 1]
+      │         │    │    ├── key: ()
+      │         │    │    ├── fd: ()-->(7)
+      │         │    │    ├── with-scan &3 (cte)
+      │         │    │    │    ├── columns: i:7
+      │         │    │    │    ├── mapping:
+      │         │    │    │    │    └──  i:2 => i:7
+      │         │    │    │    ├── cardinality: [1 - 1]
+      │         │    │    │    ├── key: ()
+      │         │    │    │    └── fd: ()-->(7)
+      │         │    │    └── filters
+      │         │    │         └── i:7 <= 10 [outer=(7), constraints=(/7: (/NULL - /10]; tight)]
+      │         │    ├── select
+      │         │    │    ├── columns: x:8!null
+      │         │    │    ├── key: (8)
+      │         │    │    ├── with-scan &2 (nested)
+      │         │    │    │    ├── columns: x:8!null
+      │         │    │    │    ├── mapping:
+      │         │    │    │    │    └──  xy.x:3 => x:8
+      │         │    │    │    └── key: (8)
+      │         │    │    └── filters
+      │         │    │         └── x:8 <= 10 [outer=(8), constraints=(/8: (/NULL - /10]; tight)]
+      │         │    └── filters
+      │         │         └── i:7 = x:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+      │         └── projections
+      │              └── i:7 + 1 [as="?column?":9, outer=(7), immutable]
+      └── with-scan &4 (cte)
+           ├── columns: i:10
+           ├── mapping:
+           │    └──  i:2 => i:10
+           └── cardinality: [1 - ]
+
+# Case with parent CTE.
+norm expect=TryAddLimitToRecursiveBranch disable=InlineWith
+WITH parent (x) AS (SELECT x FROM xy)
+SELECT * FROM (
+  WITH RECURSIVE cte (i) AS (
+    (SELECT 1)
+    UNION ALL
+    (
+      SELECT i+1 FROM cte
+      INNER JOIN parent ON i = x
+      WHERE i <= 10
+    )
+  )
+  SELECT i FROM cte
+)
+----
+with &1 (parent)
+ ├── columns: i:10
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── scan xy
+ │    ├── columns: xy.x:1!null
+ │    └── key: (1)
+ └── with &4 (cte)
+      ├── columns: i:10
+      ├── cardinality: [1 - ]
+      ├── immutable
+      ├── recursive-c-t-e
+      │    ├── columns: i:6
+      │    ├── working table binding: &3
+      │    ├── initial columns: "?column?":5
+      │    ├── recursive columns: "?column?":9
+      │    ├── cardinality: [1 - ]
+      │    ├── immutable
+      │    ├── fake-rel
+      │    │    ├── columns: i:6
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(6)
+      │    ├── values
+      │    │    ├── columns: "?column?":5!null
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    └── (1,)
+      │    └── project
+      │         ├── columns: "?column?":9!null
+      │         ├── cardinality: [0 - 1]
+      │         ├── immutable
+      │         ├── key: ()
+      │         ├── fd: ()-->(9)
+      │         ├── inner-join (hash)
+      │         │    ├── columns: i:7!null x:8!null
+      │         │    ├── cardinality: [0 - 1]
+      │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │         │    ├── key: ()
+      │         │    ├── fd: ()-->(7,8), (8)==(7), (7)==(8)
+      │         │    ├── select
+      │         │    │    ├── columns: i:7!null
+      │         │    │    ├── cardinality: [0 - 1]
+      │         │    │    ├── key: ()
+      │         │    │    ├── fd: ()-->(7)
+      │         │    │    ├── with-scan &3 (cte)
+      │         │    │    │    ├── columns: i:7
+      │         │    │    │    ├── mapping:
+      │         │    │    │    │    └──  i:6 => i:7
+      │         │    │    │    ├── cardinality: [1 - 1]
+      │         │    │    │    ├── key: ()
+      │         │    │    │    └── fd: ()-->(7)
+      │         │    │    └── filters
+      │         │    │         └── i:7 <= 10 [outer=(7), constraints=(/7: (/NULL - /10]; tight)]
+      │         │    ├── select
+      │         │    │    ├── columns: x:8!null
+      │         │    │    ├── key: (8)
+      │         │    │    ├── with-scan &1 (parent)
+      │         │    │    │    ├── columns: x:8!null
+      │         │    │    │    ├── mapping:
+      │         │    │    │    │    └──  xy.x:1 => x:8
+      │         │    │    │    └── key: (8)
+      │         │    │    └── filters
+      │         │    │         └── x:8 <= 10 [outer=(8), constraints=(/8: (/NULL - /10]; tight)]
+      │         │    └── filters
+      │         │         └── i:7 = x:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+      │         └── projections
+      │              └── i:7 + 1 [as="?column?":9, outer=(7), immutable]
+      └── with-scan &4 (cte)
+           ├── columns: i:10
+           ├── mapping:
+           │    └──  i:6 => i:10
+           └── cardinality: [1 - ]
+
+# Case where the DistinctOn de-duplicates the output of the join.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT DISTINCT ON (i) i+1, x FROM cte INNER JOIN xy ON j = y WHERE i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 x:7
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":11!null x:7!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(7,11)
+ │         ├── limit
+ │         │    ├── columns: i:5!null j:6!null x:7!null y:8!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5-8), (8)==(6), (6)==(8)
+ │         │    ├── inner-join (hash)
+ │         │    │    ├── columns: i:5!null j:6!null x:7!null y:8!null
+ │         │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │         │    │    ├── key: (7)
+ │         │    │    ├── fd: ()-->(5,6,8), (6)==(8), (8)==(6)
+ │         │    │    ├── limit hint: 1.00
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: i:5!null j:6
+ │         │    │    │    ├── cardinality: [0 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    ├── fd: ()-->(5,6)
+ │         │    │    │    ├── with-scan &2 (cte)
+ │         │    │    │    │    ├── columns: i:5 j:6
+ │         │    │    │    │    ├── mapping:
+ │         │    │    │    │    │    ├──  i:3 => i:5
+ │         │    │    │    │    │    └──  j:4 => j:6
+ │         │    │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    │    ├── key: ()
+ │         │    │    │    │    └── fd: ()-->(5,6)
+ │         │    │    │    └── filters
+ │         │    │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    │    ├── scan xy
+ │         │    │    │    ├── columns: x:7!null y:8
+ │         │    │    │    ├── key: (7)
+ │         │    │    │    └── fd: (7)-->(8)
+ │         │    │    └── filters
+ │         │    │         └── j:6 = y:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │         │    └── 1
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":11, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# Case where the GroupBy de-duplicates the output of the join.
+norm expect=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, sum(x) FROM cte INNER JOIN xy ON j = y WHERE i <= 10 GROUP BY i)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:14 j:15
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1 "?column?":13
+ │    ├── recursive columns: "?column?":12 sum:11
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(3,4)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":13!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,13)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":12!null sum:11!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(11,12)
+ │         ├── group-by (streaming)
+ │         │    ├── columns: i:5!null sum:11!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(5,11)
+ │         │    ├── inner-join (hash)
+ │         │    │    ├── columns: i:5!null j:6!null x:7!null y:8!null
+ │         │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │         │    │    ├── key: (7)
+ │         │    │    ├── fd: ()-->(5,6,8), (6)==(8), (8)==(6)
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: i:5!null j:6
+ │         │    │    │    ├── cardinality: [0 - 1]
+ │         │    │    │    ├── key: ()
+ │         │    │    │    ├── fd: ()-->(5,6)
+ │         │    │    │    ├── with-scan &2 (cte)
+ │         │    │    │    │    ├── columns: i:5 j:6
+ │         │    │    │    │    ├── mapping:
+ │         │    │    │    │    │    ├──  i:3 => i:5
+ │         │    │    │    │    │    └──  j:4 => j:6
+ │         │    │    │    │    ├── cardinality: [1 - 1]
+ │         │    │    │    │    ├── key: ()
+ │         │    │    │    │    └── fd: ()-->(5,6)
+ │         │    │    │    └── filters
+ │         │    │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    │    ├── scan xy
+ │         │    │    │    ├── columns: x:7!null y:8
+ │         │    │    │    ├── key: (7)
+ │         │    │    │    └── fd: (7)-->(8)
+ │         │    │    └── filters
+ │         │    │         └── j:6 = y:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │         │    └── aggregations
+ │         │         ├── sum [as=sum:11, outer=(7)]
+ │         │         │    └── x:7
+ │         │         └── const-agg [as=i:5, outer=(5)]
+ │         │              └── i:5
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":12, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:14, outer=(3)]
+      └── j:4 [as=j:15, outer=(4)]
+
+# No-op because the recursive branch already has a limit.
+norm expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10 LIMIT 1)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    └── fd: ()-->(2)
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 1]
+ │         ├── immutable
+ │         ├── key: ()
+ │         ├── fd: ()-->(4)
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── with-scan &2 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    ├── cardinality: [1 - 1]
+ │         │    │    ├── key: ()
+ │         │    │    └── fd: ()-->(3)
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
+
+# No-op case where the join can duplicate rows.
+norm expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, y FROM cte INNER JOIN xy ON j = y WHERE i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 y:8
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    └── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":11!null y:8!null
+ │         ├── immutable
+ │         ├── inner-join (hash)
+ │         │    ├── columns: i:5!null j:6!null y:8!null
+ │         │    ├── fd: (6)==(8), (8)==(6)
+ │         │    ├── select
+ │         │    │    ├── columns: i:5!null j:6
+ │         │    │    ├── with-scan &1 (cte)
+ │         │    │    │    ├── columns: i:5 j:6
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  i:3 => i:5
+ │         │    │    │    │    └──  j:4 => j:6
+ │         │    │    │    └── cardinality: [1 - ]
+ │         │    │    └── filters
+ │         │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         │    ├── scan xy
+ │         │    │    └── columns: y:8
+ │         │    └── filters
+ │         │         └── j:6 = y:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":11, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# No-op case where the join can duplicate rows and the DistinctOn does not
+# de-duplicate the output of the join.
+norm expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT DISTINCT ON (y) i+1, x FROM cte INNER JOIN xy ON j = y WHERE i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 x:7
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    └── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: x:7!null "?column?":11!null
+ │         ├── immutable
+ │         ├── key: (7)
+ │         ├── fd: (7)-->(11)
+ │         └── distinct-on
+ │              ├── columns: x:7!null y:8!null "?column?":11!null
+ │              ├── grouping columns: y:8!null
+ │              ├── immutable
+ │              ├── key: (8)
+ │              ├── fd: (7)-->(8), (8)-->(7,11)
+ │              ├── project
+ │              │    ├── columns: "?column?":11!null x:7!null y:8!null
+ │              │    ├── immutable
+ │              │    ├── fd: (7)-->(8)
+ │              │    ├── inner-join (hash)
+ │              │    │    ├── columns: i:5!null j:6!null x:7!null y:8!null
+ │              │    │    ├── fd: (7)-->(8), (6)==(8), (8)==(6)
+ │              │    │    ├── select
+ │              │    │    │    ├── columns: i:5!null j:6
+ │              │    │    │    ├── with-scan &1 (cte)
+ │              │    │    │    │    ├── columns: i:5 j:6
+ │              │    │    │    │    ├── mapping:
+ │              │    │    │    │    │    ├──  i:3 => i:5
+ │              │    │    │    │    │    └──  j:4 => j:6
+ │              │    │    │    │    └── cardinality: [1 - ]
+ │              │    │    │    └── filters
+ │              │    │    │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │              │    │    ├── scan xy
+ │              │    │    │    ├── columns: x:7!null y:8
+ │              │    │    │    ├── key: (7)
+ │              │    │    │    └── fd: (7)-->(8)
+ │              │    │    └── filters
+ │              │    │         └── j:6 = y:8 [outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
+ │              │    └── projections
+ │              │         └── i:5 + 1 [as="?column?":11, outer=(5), immutable]
+ │              └── aggregations
+ │                   ├── first-agg [as="?column?":11, outer=(11)]
+ │                   │    └── "?column?":11
+ │                   └── first-agg [as=x:7, outer=(7)]
+ │                        └── x:7
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# No-op case with the recursive scan in the right input of a LeftJoin.
+norm expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, y FROM xy LEFT JOIN cte ON j = x AND i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 y:6
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    └── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":11 y:6
+ │         ├── immutable
+ │         ├── left-join (hash)
+ │         │    ├── columns: x:5!null y:6 i:9 j:10
+ │         │    ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
+ │         │    ├── fd: (5)-->(6)
+ │         │    ├── scan xy
+ │         │    │    ├── columns: x:5!null y:6
+ │         │    │    ├── key: (5)
+ │         │    │    └── fd: (5)-->(6)
+ │         │    ├── select
+ │         │    │    ├── columns: i:9!null j:10
+ │         │    │    ├── with-scan &1 (cte)
+ │         │    │    │    ├── columns: i:9 j:10
+ │         │    │    │    ├── mapping:
+ │         │    │    │    │    ├──  i:3 => i:9
+ │         │    │    │    │    └──  j:4 => j:10
+ │         │    │    │    └── cardinality: [1 - ]
+ │         │    │    └── filters
+ │         │    │         └── i:9 <= 10 [outer=(9), constraints=(/9: (/NULL - /10]; tight)]
+ │         │    └── filters
+ │         │         └── j:10 = x:5 [outer=(5,10), constraints=(/5: (/NULL - ]; /10: (/NULL - ]), fd=(5)==(10), (10)==(5)]
+ │         └── projections
+ │              └── i:9 + 1 [as="?column?":11, outer=(9), immutable]
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# No-op case with a FullJoin.
+norm expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i, j) AS (
+  (SELECT 1, 2)
+  UNION ALL
+  (SELECT i+1, y FROM cte FULL JOIN xy ON j = x AND i <= 10)
+)
+SELECT i, j FROM cte;
+----
+project
+ ├── columns: i:12 j:13
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:3 j:4
+ │    ├── working table binding: &1
+ │    ├── initial columns: "?column?":1 "?column?":2
+ │    ├── recursive columns: "?column?":11 y:8
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:3 j:4
+ │    │    └── cardinality: [1 - ]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null "?column?":2!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1,2)
+ │    │    └── (1, 2)
+ │    └── project
+ │         ├── columns: "?column?":11 y:8
+ │         ├── cardinality: [1 - ]
+ │         ├── immutable
+ │         ├── full-join (hash)
+ │         │    ├── columns: i:5 j:6 x:7 y:8
+ │         │    ├── cardinality: [1 - ]
+ │         │    ├── multiplicity: left-rows(exactly-one), right-rows(one-or-more)
+ │         │    ├── fd: (7)-->(8)
+ │         │    ├── with-scan &1 (cte)
+ │         │    │    ├── columns: i:5 j:6
+ │         │    │    ├── mapping:
+ │         │    │    │    ├──  i:3 => i:5
+ │         │    │    │    └──  j:4 => j:6
+ │         │    │    └── cardinality: [1 - ]
+ │         │    ├── scan xy
+ │         │    │    ├── columns: x:7!null y:8
+ │         │    │    ├── key: (7)
+ │         │    │    └── fd: (7)-->(8)
+ │         │    └── filters
+ │         │         ├── j:6 = x:7 [outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ │         │         └── i:5 <= 10 [outer=(5), constraints=(/5: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:5 + 1 [as="?column?":11, outer=(5), immutable]
+ └── projections
+      ├── i:3 [as=i:12, outer=(3)]
+      └── j:4 [as=j:13, outer=(4)]
+
+# Case with a limit. No-op because the limit causes the recursive branch to
+# have an upper bound. Note that we could get a better upper bound by
+# matching TryAddLimitToRecursiveBranch if the anchor limit is smaller than
+# the recursive branch limit, but it doesn't seem useful enough to justify
+# the added complexity.
+norm expect-not=TryAddLimitToRecursiveBranch
+WITH RECURSIVE cte (i) AS (
+  (SELECT 1)
+  UNION ALL
+  (SELECT i+1 FROM cte WHERE i <= 10 ORDER BY i LIMIT 5)
+)
+SELECT i FROM cte;
+----
+project
+ ├── columns: i:5
+ ├── cardinality: [1 - ]
+ ├── immutable
+ ├── recursive-c-t-e
+ │    ├── columns: i:2
+ │    ├── working table binding: &2
+ │    ├── initial columns: "?column?":1
+ │    ├── recursive columns: "?column?":4
+ │    ├── cardinality: [1 - ]
+ │    ├── immutable
+ │    ├── fake-rel
+ │    │    ├── columns: i:2
+ │    │    └── cardinality: [1 - 5]
+ │    ├── values
+ │    │    ├── columns: "?column?":1!null
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(1)
+ │    │    └── (1,)
+ │    └── project
+ │         ├── columns: "?column?":4!null
+ │         ├── cardinality: [0 - 5]
+ │         ├── immutable
+ │         ├── select
+ │         │    ├── columns: i:3!null
+ │         │    ├── cardinality: [0 - 5]
+ │         │    ├── with-scan &2 (cte)
+ │         │    │    ├── columns: i:3
+ │         │    │    ├── mapping:
+ │         │    │    │    └──  i:2 => i:3
+ │         │    │    └── cardinality: [1 - 5]
+ │         │    └── filters
+ │         │         └── i:3 <= 10 [outer=(3), constraints=(/3: (/NULL - /10]; tight)]
+ │         └── projections
+ │              └── i:3 + 1 [as="?column?":4, outer=(3), immutable]
+ └── projections
+      └── i:2 [as=i:5, outer=(2)]
