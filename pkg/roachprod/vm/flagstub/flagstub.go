@@ -32,6 +32,14 @@ type provider struct {
 	unimplemented string
 }
 
+func (p *provider) CreateVolume(vm.VolumeCreateOpts) (vol vm.Volume, err error) {
+	return vol, errors.Newf("%s", p.unimplemented)
+}
+
+func (p *provider) AttachVolumeToVM(vm.Volume, *vm.VM) (string, error) {
+	return "", errors.Newf("%s", p.unimplemented)
+}
+
 // CleanSSH implements vm.Provider and is a no-op.
 func (p *provider) CleanSSH() error {
 	return nil

@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"os"
 	"runtime"
 	"strconv"
 	"strings"
@@ -788,7 +787,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			if len(spec.RocksDBOptions) > 0 {
 				return nil, errors.Errorf("store %d: using Pebble storage engine but StoreSpec provides RocksDB options", i)
 			}
-			if val := os.Getenv("DEBUG_STORAGE_WORKLOAD_COLLECTOR"); val == "true" || val == "1" {
+			if base.StorageWorkloadCollectorEnabled {
 				cfg.StoreToWorkloadCollector[i].Attach(pebbleConfig.Opts)
 			}
 			eng, err := storage.NewPebble(ctx, pebbleConfig)

@@ -944,6 +944,27 @@ var grafanaURLCmd = &cobra.Command{
 	}),
 }
 
+var rootStorageCmd = &cobra.Command{
+	Use:   `storage`,
+	Short: "storage is a sub command that enables administering storage related commands and configurations",
+	Args:  cobra.MinimumNArgs(1),
+}
+
+var storageCollectionCmd = &cobra.Command{
+	Use: `collection {start|stop} <cluster>`,
+	Short: "the collection command allows for enable or disabling the workload" +
+		"collector for a provided cluster (including a subset of nodes)",
+	Args: cobra.ExactArgs(2),
+	Run: wrap(func(cmd *cobra.Command, args []string) error {
+		action := args[0]
+		if action != "start" && action != "stop" {
+			return errors.New("One of `start` or `stop` must be provided")
+		}
+		cluster := args[1]
+		return roachprod.StorageCollection(context.Background(), roachprodLibraryLogger, cluster, action, volumeCreateOpts)
+	}),
+}
+
 func main() {
 	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
 	var loggerError error
@@ -998,6 +1019,7 @@ func main() {
 		grafanaStopCmd,
 		grafanaDumpCmd,
 		grafanaURLCmd,
+		rootStorageCmd,
 	)
 	setBashCompletionFunction()
 
