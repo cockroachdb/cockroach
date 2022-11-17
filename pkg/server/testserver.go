@@ -1418,20 +1418,6 @@ func (ts *TestServer) Tracer() *tracing.Tracer {
 	return ts.node.storeCfg.AmbientCtx.Tracer
 }
 
-// GCSystemLog deletes entries in the given system log table between
-// timestamp and timestampUpperBound if the server is the lease holder
-// for range 1.
-// Leaseholder constraint is present so that only one node in the cluster
-// performs gc.
-// The system log table is expected to have a "timestamp" column.
-// It returns the timestampLowerBound to be used in the next iteration, number
-// of rows affected and error (if any).
-func (ts *TestServer) GCSystemLog(
-	ctx context.Context, table string, timestampLowerBound, timestampUpperBound time.Time,
-) (time.Time, int64, error) {
-	return ts.gcSystemLog(ctx, table, timestampLowerBound, timestampUpperBound)
-}
-
 // ForceTableGC is part of TestServerInterface.
 func (ts *TestServer) ForceTableGC(
 	ctx context.Context, database, table string, timestamp hlc.Timestamp,
