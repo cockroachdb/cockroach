@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -573,7 +572,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// These zones are only used for validations. The merged zone is will
 		// not be written.
 		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
-			params.ctx, params.p.txn, params.ExecCfg().Codec, targetID, index, partition, n.setDefault,
+			params.ctx, params.p.txn, params.ExecCfg().Codec, params.p.Descriptors(), targetID, index, partition, n.setDefault,
 		)
 
 		if errors.Is(err, errNoZoneConfigApplies) {
@@ -592,13 +591,11 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We need to inherit zone configuration information from the correct zone,
 		// not completeZone.
 		{
-			// Function for getting the zone config within the current transaction.
-			getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-				kv, err := params.p.txn.Get(params.ctx, key)
-				if err != nil {
-					return nil, err
-				}
-				return kv.Value, nil
+			helper := &collectionZoneConfigHelper{
+				ctx:         params.ctx,
+				codec:       params.p.ExecCfg().Codec,
+				txn:         params.p.Txn(),
+				descriptors: params.p.Descriptors(),
 			}
 			if index == nil {
 				// If we are operating on a zone, get all fields that the zone would
@@ -606,7 +603,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
 				if err := completeZoneConfig(
-					&zoneInheritedFields, params.ExecCfg().Codec, targetID, getKey,
+					&zoneInheritedFields, helper, targetID,
 				); err != nil {
 					return err
 				}
@@ -616,7 +613,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
 				if err := completeZoneConfig(
-					&zoneInheritedFields, params.ExecCfg().Codec, targetID, getKey,
+					&zoneInheritedFields, helper, targetID,
 				); err != nil {
 					return err
 				}

@@ -149,7 +149,7 @@ func ingestionPlanHook(
 			},
 		}
 
-		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn())
+		initialTenantZoneConfig, err := sql.GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.ExtendedEvalContext().Descs)
 		if err != nil {
 			return err
 		}

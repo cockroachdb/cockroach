@@ -3842,12 +3842,11 @@ CREATE TABLE crdb_internal.zones (
 				"object with ID %d does not exist", errors.Safe(id))
 		}
 
-		getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-			kv, err := p.txn.Get(ctx, key)
-			if err != nil {
-				return nil, err
-			}
-			return kv.Value, nil
+		helper := &collectionZoneConfigHelper{
+			ctx:         ctx,
+			codec:       p.ExecCfg().Codec,
+			txn:         p.Txn(),
+			descriptors: p.Descriptors(),
 		}
 
 		// For some reason, if we use the iterator API here, "concurrent txn use
@@ -3882,7 +3881,7 @@ CREATE TABLE crdb_internal.zones (
 			// Inherit full information about this zone.
 			fullZone := configProto
 			if err := completeZoneConfig(
-				&fullZone, p.ExecCfg().Codec, descpb.ID(tree.MustBeDInt(r[0])), getKey,
+				&fullZone, helper, descpb.ID(tree.MustBeDInt(r[0])),
 			); err != nil {
 				return err
 			}
@@ -4452,7 +4451,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, p.ExecCfg().Codec, table.GetID(), index, name, false /* getInheritedDefault */)
+			ctx, p.txn, p.ExecCfg().Codec, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -4508,7 +4507,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, p.ExecCfg().Codec, table.GetID(), index, name, false /* getInheritedDefault */)
+			ctx, p.txn, p.ExecCfg().Codec, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}

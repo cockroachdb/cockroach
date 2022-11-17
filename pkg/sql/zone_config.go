@@ -19,10 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -57,31 +54,21 @@ var errNoZoneConfigApplies = errors.New("no zone config applies")
 // descriptor in order to find its parent. If false, we'll assume that this
 // already is a parent and we'll not decode a descriptor.
 func getZoneConfig(
-	codec keys.SQLCodec,
-	id descpb.ID,
-	getKey func(roachpb.Key) (*roachpb.Value, error),
-	getInheritedDefault bool,
-	mayBeTable bool,
+	id descpb.ID, zcHelper zoneConfigHelper, getInheritedDefault bool, mayBeTable bool,
 ) (descpb.ID, *zonepb.ZoneConfig, descpb.ID, *zonepb.ZoneConfig, error) {
 	var placeholder *zonepb.ZoneConfig
 	var placeholderID descpb.ID
 	if !getInheritedDefault {
 		// Look in the zones table.
-		if zoneVal, err := getKey(config.MakeZoneKey(codec, id)); err != nil {
+		zone, err := zcHelper.maybeGetZoneConfig(id)
+		if err != nil {
 			return 0, nil, 0, nil, err
-		} else if zoneVal != nil {
-			// We found a matching entry.
-			var zone zonepb.ZoneConfig
-			if err := zoneVal.GetProto(&zone); err != nil {
-				return 0, nil, 0, nil, err
-			}
-			// If the zone isn't a subzone placeholder, we're done.
+		}
+		if zone != nil {
 			if !zone.IsSubzonePlaceholder() {
-				return id, &zone, 0, nil, nil
+				return id, zone, 0, nil, nil
 			}
-			// If the zone is just a placeholder for subzones, keep recursing
-			// up the hierarchy.
-			placeholder = &zone
+			placeholder = zone
 			placeholderID = id
 		}
 	}
@@ -89,27 +76,21 @@ func getZoneConfig(
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
 	if mayBeTable {
-		if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(codec, id)); err != nil {
+		tbl, err := zcHelper.maybeGetTable(id)
+		if err != nil {
 			return 0, nil, 0, nil, err
-		} else if descVal != nil {
-			b, err := descbuilder.FromSerializedValue(descVal)
+		}
+		if tbl != nil {
+			dbID, zone, _, _, err := getZoneConfig(
+				tbl.GetParentID(),
+				zcHelper,
+				false, /* getInheritedDefault */
+				false, /* mayBeTable */
+			)
 			if err != nil {
 				return 0, nil, 0, nil, err
 			}
-			if b != nil && b.DescriptorType() == catalog.Table {
-				tableDesc := b.BuildImmutable()
-				// This is a table descriptor. Look up its parent database zone config.
-				dbID, zone, _, _, err := getZoneConfig(
-					codec,
-					tableDesc.GetParentID(),
-					getKey,
-					false, /* getInheritedDefault */
-					false /* mayBeTable */)
-				if err != nil {
-					return 0, nil, 0, nil, err
-				}
-				return dbID, zone, placeholderID, placeholder, nil
-			}
+			return dbID, zone, placeholderID, placeholder, nil
 		}
 	}
 
@@ -117,9 +98,8 @@ func getZoneConfig(
 	// we were trying to retrieve (avoid infinite recursion).
 	if id != keys.RootNamespaceID {
 		rootID, zone, _, _, err := getZoneConfig(
-			codec,
 			keys.RootNamespaceID,
-			getKey,
+			zcHelper,
 			false, /* getInheritedDefault */
 			false /* mayBeTable */)
 		if err != nil {
@@ -137,44 +117,33 @@ func getZoneConfig(
 // In the worst case, will have to inherit from the default zone config.
 // NOTE: This will not work for subzones. To complete subzones, find a complete
 // parent zone (index or table) and apply InheritFromParent to it.
-func completeZoneConfig(
-	cfg *zonepb.ZoneConfig,
-	codec keys.SQLCodec,
-	id descpb.ID,
-	getKey func(roachpb.Key) (*roachpb.Value, error),
-) error {
-	if cfg.IsComplete() {
+func completeZoneConfig(zone *zonepb.ZoneConfig, zcHelper zoneConfigHelper, id descpb.ID) error {
+	if zone.IsComplete() {
 		return nil
 	}
-	// Check to see if its a table. If so, inherit from the database.
+	// Check to see if it's a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	if descVal, err := getKey(catalogkeys.MakeDescMetadataKey(codec, id)); err != nil {
+	if tbl, err := zcHelper.maybeGetTable(id); err != nil {
 		return err
-	} else if descVal != nil {
-		b, err := descbuilder.FromSerializedValue(descVal)
+	} else if tbl != nil {
+		_, dbzone, _, _, err := getZoneConfig(
+			tbl.GetParentID(), zcHelper, false /* getInheritedDefault */, false, /* mayBeTable */
+		)
 		if err != nil {
 			return err
 		}
-		if b != nil && b.DescriptorType() == catalog.Table {
-			tableDesc := b.BuildImmutable()
-			_, dbzone, _, _, err := getZoneConfig(
-				codec, tableDesc.GetParentID(), getKey, false /* getInheritedDefault */, false /* mayBeTable */)
-			if err != nil {
-				return err
-			}
-			cfg.InheritFromParent(dbzone)
-		}
+		zone.InheritFromParent(dbzone)
 	}
 
 	// Check if zone is complete. If not, inherit from the default zone config
-	if cfg.IsComplete() {
+	if zone.IsComplete() {
 		return nil
 	}
-	_, defaultZone, _, _, err := getZoneConfig(codec, keys.RootNamespaceID, getKey, false /* getInheritedDefault */, false /* mayBeTable */)
+	_, defaultZone, _, _, err := getZoneConfig(keys.RootNamespaceID, zcHelper, false /* getInheritedDefault */, false /* mayBeTable */)
 	if err != nil {
 		return err
 	}
-	cfg.InheritFromParent(defaultZone)
+	zone.InheritFromParent(defaultZone)
 	return nil
 }
 
@@ -188,18 +157,21 @@ func completeZoneConfig(
 func zoneConfigHook(
 	cfg *config.SystemConfig, codec keys.SQLCodec, id config.ObjectID,
 ) (*zonepb.ZoneConfig, *zonepb.ZoneConfig, bool, error) {
-	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-		return cfg.GetValue(key), nil
-	}
+	helper := &systemZoneConfigHelper{cfg: cfg, codec: codec}
+
 	const mayBeTable = true
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		codec, descpb.ID(id), getKey, false /* getInheritedDefault */, mayBeTable)
+		descpb.ID(id),
+		&systemZoneConfigHelper{cfg: cfg, codec: codec},
+		false, /* getInheritedDefault */
+		mayBeTable,
+	)
 	if errors.Is(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {
 		return nil, nil, false, err
 	}
-	if err = completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+	if err = completeZoneConfig(zone, helper, zoneID); err != nil {
 		return nil, nil, false, err
 	}
 	return zone, placeholder, true, nil
@@ -216,24 +188,25 @@ func GetZoneConfigInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
 	codec keys.SQLCodec,
+	descriptors *descs.Collection,
 	id descpb.ID,
 	index catalog.Index,
 	partition string,
 	getInheritedDefault bool,
 ) (descpb.ID, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
-	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-		kv, err := txn.Get(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		return kv.Value, nil
+	helper := &collectionZoneConfigHelper{
+		ctx:         ctx,
+		codec:       codec,
+		txn:         txn,
+		descriptors: descriptors,
 	}
 	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
-		codec, id, getKey, getInheritedDefault, true /* mayBeTable */)
+		id, helper, getInheritedDefault, true, /* mayBeTable */
+	)
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	if err = completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+	if err = completeZoneConfig(zone, helper, zoneID); err != nil {
 		return 0, nil, nil, err
 	}
 	var subzone *zonepb.Subzone
@@ -262,12 +235,13 @@ func GetZoneConfigInTxn(
 // GetHydratedZoneConfigForTenantsRange returns the zone config for RANGE
 // TENANTS.
 func GetHydratedZoneConfigForTenantsRange(
-	ctx context.Context, txn *kv.Txn,
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 ) (*zonepb.ZoneConfig, error) {
 	return GetHydratedZoneConfigForNamedZone(
 		ctx,
 		txn,
 		keys.SystemSQLCodec,
+		descriptors,
 		zonepb.TenantsZoneName,
 	)
 }
@@ -275,26 +249,29 @@ func GetHydratedZoneConfigForTenantsRange(
 // GetHydratedZoneConfigForNamedZone returns a zone config for the given named
 // zone. Any missing fields are filled through the RANGE DEFAULT zone config.
 func GetHydratedZoneConfigForNamedZone(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, zoneName zonepb.NamedZone,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	descriptors *descs.Collection,
+	zoneName zonepb.NamedZone,
 ) (*zonepb.ZoneConfig, error) {
-	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-		kv, err := txn.Get(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		return kv.Value, nil
+	helper := &collectionZoneConfigHelper{
+		ctx:         ctx,
+		codec:       codec,
+		txn:         txn,
+		descriptors: descriptors,
 	}
 	id, found := zonepb.NamedZones[zoneName]
 	if !found {
 		return nil, errors.AssertionFailedf("id %d does not belong to a named zone", id)
 	}
 	zoneID, zone, _, _, err := getZoneConfig(
-		codec, descpb.ID(id), getKey, false /* getInheritedDefault */, false, /* mayBeTable */
+		descpb.ID(id), helper, false /* getInheritedDefault */, false, /* mayBeTable */
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+	if err := completeZoneConfig(zone, helper, zoneID); err != nil {
 		return nil, err
 	}
 	return zone, nil
@@ -303,24 +280,25 @@ func GetHydratedZoneConfigForNamedZone(
 // GetHydratedZoneConfigForTable returns a fully hydrated zone config for a
 // given table ID.
 func GetHydratedZoneConfigForTable(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	descriptors *descs.Collection,
+	id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-		kv, err := txn.Get(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		return kv.Value, nil
+	helper := &collectionZoneConfigHelper{
+		ctx:         ctx,
+		codec:       codec,
+		txn:         txn,
+		descriptors: descriptors,
 	}
-	// TODO(arul): Teach `getZoneConfig` to use a descriptor collection instead of
-	// using this getKey function above to do descriptor lookups.
 	zoneID, zone, _, placeholder, err := getZoneConfig(
-		codec, id, getKey, false /* getInheritedDefault */, true, /* mayBeTable */
+		id, helper, false /* getInheritedDefault */, true, /* mayBeTable */
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+	if err := completeZoneConfig(zone, helper, zoneID); err != nil {
 		return nil, err
 	}
 
@@ -368,22 +346,25 @@ func GetHydratedZoneConfigForTable(
 // GetHydratedZoneConfigForDatabase returns a fully hydrated zone config for a
 // given database ID.
 func GetHydratedZoneConfigForDatabase(
-	ctx context.Context, txn *kv.Txn, codec keys.SQLCodec, id descpb.ID,
+	ctx context.Context,
+	txn *kv.Txn,
+	codec keys.SQLCodec,
+	descriptors *descs.Collection,
+	id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
-		kv, err := txn.Get(ctx, key)
-		if err != nil {
-			return nil, err
-		}
-		return kv.Value, nil
+	helper := &collectionZoneConfigHelper{
+		ctx:         ctx,
+		codec:       codec,
+		txn:         txn,
+		descriptors: descriptors,
 	}
 	zoneID, zone, _, _, err := getZoneConfig(
-		codec, id, getKey, false /* getInheritedDefault */, false, /* mayBeTable */
+		id, helper, false /* getInheritedDefault */, false, /* mayBeTable */
 	)
 	if err != nil {
 		return nil, err
 	}
-	if err := completeZoneConfig(zone, codec, zoneID, getKey); err != nil {
+	if err := completeZoneConfig(zone, helper, zoneID); err != nil {
 		return nil, err
 	}
 

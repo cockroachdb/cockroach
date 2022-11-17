@@ -1397,7 +1397,7 @@ type ExecutorTestingKnobs struct {
 
 	// BeforeExecute is called by the Executor before plan execution. It is useful
 	// for synchronizing statement execution.
-	BeforeExecute func(ctx context.Context, stmt string)
+	BeforeExecute func(ctx context.Context, stmt string, descriptors *descs.Collection)
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
 	// statement.

@@ -339,7 +339,7 @@ func testMigrationWithFailures(
 						},
 						JobsTestingKnobs: jobsKnobs,
 						SQLExecutor: &sql.ExecutorTestingKnobs{
-							BeforeExecute: func(ctx context.Context, stmt string) {
+							BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 								if stmt == upgrades.WaitForJobStatement {
 									select {
 									case migrationWaitCh <- struct{}{}:

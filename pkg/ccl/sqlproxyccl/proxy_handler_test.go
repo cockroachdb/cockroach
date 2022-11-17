@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -921,7 +922,7 @@ func TestCancelQuery(t *testing.T) {
 	var cancelFn func()
 	tenantKnobs := base.TestingKnobs{}
 	tenantKnobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeExecute: func(ctx context.Context, stmt string) {
+		BeforeExecute: func(ctx context.Context, stmt string, descriptors *descs.Collection) {
 			if strings.Contains(stmt, "cancel_me") {
 				cancelFn()
 			}
