@@ -39,6 +39,9 @@ import (
 
 func TestKVFeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	codec := keys.SystemSQLCodec
+
 	// We want to inject fake table events and data into the buffer
 	// and use that to assert that there are proper calls to the kvScanner and
 	// what not.
@@ -46,23 +49,23 @@ func TestKVFeed(t *testing.T) {
 		return hlc.Timestamp{WallTime: (time.Duration(seconds) * time.Second).Nanoseconds()}
 	}
 
-	mkKey := func(tableID uint32, k string) roachpb.Key {
+	mkKey := func(codec keys.SQLCodec, tableID uint32, k string) roachpb.Key {
 		vDatum := tree.DString(k)
-		key, err := keyside.Encode(keys.SystemSQLCodec.TablePrefix(tableID), &vDatum, encoding.Ascending)
+		key, err := keyside.Encode(codec.TablePrefix(tableID), &vDatum, encoding.Ascending)
 		require.NoError(t, err)
 		return key
 	}
-	kv := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
+	kv := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) roachpb.KeyValue {
 		return roachpb.KeyValue{
-			Key: mkKey(tableID, k),
+			Key: mkKey(codec, tableID, k),
 			Value: roachpb.Value{
 				RawBytes:  []byte(v),
 				Timestamp: ts,
 			},
 		}
 	}
-	kvEvent := func(tableID uint32, k, v string, ts hlc.Timestamp) roachpb.RangeFeedEvent {
-		keyVal := kv(tableID, k, v, ts)
+	kvEvent := func(codec keys.SQLCodec, tableID uint32, k, v string, ts hlc.Timestamp) roachpb.RangeFeedEvent {
+		keyVal := kv(codec, tableID, k, v, ts)
 		return roachpb.RangeFeedEvent{
 			Val: &roachpb.RangeFeedValue{
 				Key:   keyVal.Key,
@@ -125,7 +128,7 @@ func TestKVFeed(t *testing.T) {
 			tc.schemaChangeEvents, tc.schemaChangePolicy,
 			tc.needsInitialScan, tc.withDiff,
 			tc.initialHighWater, tc.endTime,
-			keys.SystemSQLCodec,
+			codec,
 			tf, sf, rangefeedFactory(ref.run), bufferFactory,
 			util.ConstantWithMetamorphicTestBool("use_mux", true),
 			changefeedbase.Targets{},
@@ -171,9 +174,9 @@ func TestKVFeed(t *testing.T) {
 	makeTableDesc := schematestutils.MakeTableDesc
 	addColumnDropBackfillMutation := schematestutils.AddColumnDropBackfillMutation
 
-	makeSpan := func(tableID uint32, start, end string) (s roachpb.Span) {
-		s.Key = mkKey(tableID, start)
-		s.EndKey = mkKey(tableID, end)
+	makeSpan := func(codec keys.SQLCodec, tableID uint32, start, end string) (s roachpb.Span) {
+		s.Key = mkKey(codec, tableID, start)
+		s.EndKey = mkKey(codec, tableID, end)
 		return s
 	}
 
@@ -185,10 +188,10 @@ func TestKVFeed(t *testing.T) {
 			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "b", ts(3)),
+				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
@@ -202,13 +205,13 @@ func TestKVFeed(t *testing.T) {
 			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			checkpoint: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "b", ts(3)),
+				kvEvent(codec, 42, "a", "b", ts(3)),
 			},
 			expScans:  []hlc.Timestamp{},
 			expEvents: 1,
@@ -220,14 +223,14 @@ func TestKVFeed(t *testing.T) {
 			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			checkpoint: []roachpb.Span{
-				makeSpan(42, "a", "q"),
+				makeSpan(codec, 42, "a", "q"),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "val", ts(3)),
-				kvEvent(42, "d", "val", ts(3)),
+				kvEvent(codec, 42, "a", "val", ts(3)),
+				kvEvent(codec, 42, "d", "val", ts(3)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
@@ -241,14 +244,14 @@ func TestKVFeed(t *testing.T) {
 			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "b", ts(3)),
-				checkpointEvent(tableSpan(42), ts(4)),
-				kvEvent(42, "a", "b", ts(5)),
-				checkpointEvent(tableSpan(42), ts(2)), // ensure that events are filtered
-				checkpointEvent(tableSpan(42), ts(5)),
+				kvEvent(codec, 42, "a", "b", ts(3)),
+				checkpointEvent(tableSpan(codec, 42), ts(4)),
+				kvEvent(codec, 42, "a", "b", ts(5)),
+				checkpointEvent(tableSpan(codec, 42), ts(2)), // ensure that events are filtered
+				checkpointEvent(tableSpan(codec, 42), ts(5)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
@@ -267,13 +270,13 @@ func TestKVFeed(t *testing.T) {
 			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "b", ts(3).Next()),
-				checkpointEvent(tableSpan(42), ts(4)),
-				kvEvent(42, "a", "b", ts(5)),
-				checkpointEvent(tableSpan(42), ts(6)),
+				kvEvent(codec, 42, "a", "b", ts(3).Next()),
+				checkpointEvent(tableSpan(codec, 42), ts(4)),
+				kvEvent(codec, 42, "a", "b", ts(5)),
+				checkpointEvent(tableSpan(codec, 42), ts(6)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
@@ -291,14 +294,14 @@ func TestKVFeed(t *testing.T) {
 			needsInitialScan:   true,
 			initialHighWater:   ts(2),
 			spans: []roachpb.Span{
-				tableSpan(42),
+				tableSpan(codec, 42),
 			},
 			events: []roachpb.RangeFeedEvent{
-				kvEvent(42, "a", "b", ts(3)),
-				checkpointEvent(tableSpan(42), ts(4)),
-				kvEvent(42, "a", "b", ts(5)),
-				checkpointEvent(tableSpan(42), ts(2)), // ensure that events are filtered
-				checkpointEvent(tableSpan(42), ts(5)),
+				kvEvent(codec, 42, "a", "b", ts(3)),
+				checkpointEvent(tableSpan(codec, 42), ts(4)),
+				kvEvent(codec, 42, "a", "b", ts(5)),
+				checkpointEvent(tableSpan(codec, 42), ts(2)), // ensure that events are filtered
+				checkpointEvent(tableSpan(codec, 42), ts(5)),
 			},
 			expScans: []hlc.Timestamp{
 				ts(2),
@@ -429,9 +432,9 @@ func (f rawEventFeed) run(
 
 var _ schemafeed.SchemaFeed = (*rawTableFeed)(nil)
 
-func tableSpan(tableID uint32) roachpb.Span {
+func tableSpan(codec keys.SQLCodec, tableID uint32) roachpb.Span {
 	return roachpb.Span{
-		Key:    keys.SystemSQLCodec.TablePrefix(tableID),
-		EndKey: keys.SystemSQLCodec.TablePrefix(tableID).PrefixEnd(),
+		Key:    codec.TablePrefix(tableID),
+		EndKey: codec.TablePrefix(tableID).PrefixEnd(),
 	}
 }
