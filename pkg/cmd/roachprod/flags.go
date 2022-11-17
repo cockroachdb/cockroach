@@ -69,6 +69,7 @@ var (
 	logsFrom              time.Time
 	logsTo                time.Time
 	logsInterval          time.Duration
+	volumeCreateOpts      vm.VolumeCreateOpts
 
 	monitorOpts        install.MonitorOpts
 	cachedHostsCluster string
@@ -255,6 +256,29 @@ Default is "RECURRING '*/15 * * * *' FULL BACKUP '@hourly' WITH SCHEDULE OPTIONS
 
 	initCmd.Flags().IntVar(&startOpts.InitTarget,
 		"init-target", startOpts.InitTarget, "node on which to run initialization")
+
+	rootStorageCmd.AddCommand(storageCollectionCmd)
+	storageCollectionCmd.Flags().IntVarP(&volumeCreateOpts.Size,
+		"volume-size", "s", 10,
+		"the size of the volume in Gigabytes (GB) to create for each store")
+
+	storageCollectionCmd.Flags().BoolVar(&volumeCreateOpts.Encrypted,
+		"volume-encrypted", false,
+		"determines if the the volume be encrypted")
+
+	storageCollectionCmd.Flags().StringVar(&volumeCreateOpts.Architecture,
+		"volume-arch", "",
+		"the architecture the volume should target only relevant for [gcp, azure] discarded "+
+			"if supplied to other providers")
+
+	storageCollectionCmd.Flags().IntVarP(&volumeCreateOpts.IOPS,
+		"volume-iops", "i", 0,
+		"the iops to provision for the volume")
+
+	storageCollectionCmd.Flags().StringVarP(&volumeCreateOpts.Type,
+		"volume-type", "t", "",
+		"the volume type that should be created provide a volume type relevant to"+
+			" the provider if none is provided the provider default will be used")
 
 	for _, cmd := range []*cobra.Command{createCmd, destroyCmd, extendCmd, logsCmd} {
 		cmd.Flags().StringVarP(&username, "username", "u", os.Getenv("ROACHPROD_USER"),

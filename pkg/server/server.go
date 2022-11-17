@@ -240,7 +240,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	}
 	cfg.SoftSlotGranter = ssg
 
-	if val := os.Getenv("DEBUG_STORAGE_WORKLOAD_COLLECTOR"); val == "true" || val == "1" {
+	if base.StorageWorkloadCollectorEnabled {
 		for _, spec := range cfg.Stores.Specs {
 			cfg.StoreToWorkloadCollector = append(cfg.StoreToWorkloadCollector, replay.NewWorkloadCollector(spec.Path))
 		}
@@ -1742,7 +1742,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 		return errors.Wrapf(err, "failed to register engines for the disk stats map")
 	}
 
-	if val := os.Getenv("DEBUG_STORAGE_WORKLOAD_COLLECTOR"); val == "true" || val == "1" {
+	if base.StorageWorkloadCollectorEnabled {
 		if err := s.debug.RegisterWorkloadCollector(s.engines, s.node.stores); err != nil {
 			return errors.Wrapf(err, "failed to register workload collector with debug server")
 		}

@@ -1,8 +1,19 @@
+// Copyright 2022 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
 package replay
 
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -13,16 +24,16 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-type responseType struct {
-	Data []workloadCollectorResponse `json:"data"`
+type ResponseType struct {
+	Data []WorkloadCollectorResponse `json:"data"`
 }
 
-type workloadCollectorResponse struct {
+type WorkloadCollectorResponse struct {
 	StoreId   int  `json:"store_id"`
 	IsRunning bool `json:"is_running"`
 }
 
-type workloadCollectorPerformAction struct {
+type WorkloadCollectorPerformAction struct {
 	StoreId          int    `json:"store_id"`
 	Action           string `json:"action"`
 	CaptureDirectory string `json:"capture_directory"`
@@ -65,36 +76,43 @@ func (h *HTTPHandler) SetupStoreMap(engines []storage.Engine, stores *kvserver.S
 func (h *HTTPHandler) HandleRequest(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case "POST":
-		var actionJSON workloadCollectorPerformAction
-		if err := readJSON(req, &actionJSON); err != nil {
+		var actionJSON WorkloadCollectorPerformAction
+		if err := ReadJSON(req.Body, &actionJSON); err != nil {
 			apiError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		if actionJSON.Action == "enable" {
+		if actionJSON.Action == "start" {
 			fs := vfs.Default
 			swc := h.idToCollector[actionJSON.StoreId]
-			swc.workloadCollector.StartCollectorFileListener(fs, actionJSON.CaptureDirectory)
-			err := swc.store.Engine().CreateCheckpoint(fs.PathJoin(actionJSON.CaptureDirectory, "checkpoint"))
+			err := fs.MkdirAll(actionJSON.CaptureDirectory, 0755)
 			if err != nil {
 				apiError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-		} else if actionJSON.Action == "disable" {
-			h.idToCollector[actionJSON.StoreId].workloadCollector.StopCollectorFileListener()
+			if !swc.workloadCollector.IsRunning() {
+				swc.workloadCollector.Start(fs, actionJSON.CaptureDirectory)
+				err = swc.store.Engine().CreateCheckpoint(fs.PathJoin(actionJSON.CaptureDirectory, "checkpoint"))
+			}
+			if err != nil {
+				apiError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+		} else if actionJSON.Action == "stop" {
+			h.idToCollector[actionJSON.StoreId].workloadCollector.Stop()
 		} else {
-			apiError(w, http.StatusBadRequest, "Action must be one of enable or disable")
+			apiError(w, http.StatusBadRequest, "Action must be one of start or stop")
 			return
 		}
 		fallthrough
 	case "GET":
-		var response []workloadCollectorResponse
+		var response []WorkloadCollectorResponse
 		for id, v := range h.idToCollector {
-			response = append(response, workloadCollectorResponse{
+			response = append(response, WorkloadCollectorResponse{
 				StoreId:   id,
 				IsRunning: v.workloadCollector.IsRunning(),
 			})
 		}
-		writeJSONResponse(w, http.StatusOK, responseType{Data: response})
+		writeJSONResponse(w, http.StatusOK, ResponseType{Data: response})
 	}
 }
 
@@ -113,9 +131,8 @@ func writeJSONResponse(w http.ResponseWriter, code int, payload interface{}) {
 	_, _ = w.Write(res)
 }
 
-func readJSON(req *http.Request, jsonOut any) error {
-	rc := req.Body
-	decoder := json.NewDecoder(rc)
+func ReadJSON(closer io.ReadCloser, jsonOut any) error {
+	decoder := json.NewDecoder(closer)
 	err := decoder.Decode(jsonOut)
 	if err != nil {
 		return err
