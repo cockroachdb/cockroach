@@ -15,9 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partition"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -150,6 +153,20 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 	return true
 }
 
+// LocalityOptimizedScanBelowMaxCardinality returns true if the cardinality of
+// `relExpr` is above the upper limit allowed for generation of a
+// locality-optimized scan.
+func (c *CustomFuncs) LocalityOptimizedScanAboveMaxCardinality(relExpr memo.RelExpr) bool {
+	// We can only generate a locality optimized scan if we know there is a hard
+	// upper bound on the number of rows produced by the local spans. We use the
+	// kv batch size as the limit, since it's probably better to use DistSQL once
+	// we're scanning multiple batches.
+	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
+	// distribution.
+	maxRows := rowinfra.KeyLimit(relExpr.Relational().Cardinality.Max)
+	return maxRows > rowinfra.ProductionKVBatchSize
+}
+
 // GenerateLocalityOptimizedScan generates a locality optimized scan if possible
 // from the given scan private. This function should only be called if
 // CanMaybeGenerateLocalityOptimizedScan returns true. See the comment above the
@@ -157,14 +174,7 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedScan(scanPrivate *memo.Sc
 func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 	grp memo.RelExpr, scanPrivate *memo.ScanPrivate,
 ) {
-	// We can only generate a locality optimized scan if we know there is a hard
-	// upper bound on the number of rows produced by the local spans. We use the
-	// kv batch size as the limit, since it's probably better to use DistSQL once
-	// we're scanning multiple batches.
-	// TODO(rytaft): Revisit this when we have a more accurate cost model for data
-	// distribution.
-	maxRows := rowinfra.KeyLimit(grp.Relational().Cardinality.Max)
-	if maxRows > rowinfra.ProductionKVBatchSize {
+	if c.LocalityOptimizedScanAboveMaxCardinality(grp) {
 		return
 	}
 
@@ -261,6 +271,395 @@ func (c *CustomFuncs) GenerateLocalityOptimizedScan(
 		},
 	}
 	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
+}
+
+// makeColMap builds a map used to remap column IDs that are in the OutputCols
+// of `src` to refer to corresponding column IDs in `dst`. `src` and `dst` must
+// refer to the same underlying table.
+func (c *CustomFuncs) makeColMap(src, dst *memo.ScanPrivate) (colMap opt.ColMap) {
+	for srcCol, ok := src.Cols.Next(0); ok; srcCol, ok = src.Cols.Next(srcCol + 1) {
+		ord := src.Table.ColumnOrdinal(srcCol)
+		dstCol := dst.Table.ColumnID(ord)
+		colMap.Set(int(srcCol), int(dstCol))
+	}
+	return colMap
+}
+
+// getLocalAndRemoteFilters returns the filters on the `crdb_region` column
+// which target only local partitions, and those which target only remote
+// partitions. It is expected that `firstIndexCol` is the ColumnID of the
+// `crdb_region` column.
+func (c *CustomFuncs) getLocalAndRemoteFilters(
+	filters memo.FiltersExpr, ps partition.PrefixSorter, firstIndexCol opt.ColumnID,
+) (localFilters opt.ScalarExpr, remoteFilters opt.ScalarExpr, ok bool) {
+	var localFiltersItem, remoteFiltersItem memo.FiltersItem
+	for _, filter := range filters {
+		constraints := filter.ScalarProps().Constraints
+		if constraints == nil || constraints.Length() == 0 {
+			continue
+		}
+		if constraints.Length() != 1 || !filter.ScalarProps().TightConstraints {
+			continue
+		}
+		if constraints.Constraint(0).IsContradiction() ||
+			constraints.Constraint(0).IsUnconstrained() {
+			continue
+		}
+		if constraints.Constraint(0).Columns.Get(0).ID() != firstIndexCol {
+			continue
+		}
+		numSpans := constraints.Constraint(0).Spans.Count()
+		if numSpans < 1 {
+			continue
+		}
+		// We expect there to be a single local region.
+		localRegions := make(tree.Datums, 0, 1)
+		// We expect all other IN list items to be remote regions.
+		remoteRegions := make(tree.Datums, 0, numSpans)
+
+		for i := 0; i < numSpans; i++ {
+			val := constraints.Constraint(0).Spans.Get(i).StartKey().Value(0)
+			match, ok := constraint.FindMatchOnSingleColumn(val, ps)
+			if ok && match.IsLocal {
+				// Found a match and it is local.
+				localRegions = append(localRegions, val)
+			} else {
+				// Either found a match and it is not local, or we didn't find a match,
+				// in which case we categorize it as non-local.
+				remoteRegions = append(remoteRegions, val)
+			}
+		}
+		if len(localRegions) > 0 || len(remoteRegions) > 0 {
+			if len(localRegions) > 0 {
+				// Found a match and it is local.
+				localFiltersItem = c.e.f.ConstructConstFilter(firstIndexCol, localRegions)
+				localFilters = &localFiltersItem
+			}
+			if len(remoteRegions) > 0 {
+				remoteFiltersItem = c.e.f.ConstructConstFilter(firstIndexCol, remoteRegions)
+				remoteFilters = &remoteFiltersItem
+			}
+			// localFilters is an equality expression matching the local region
+			// (should be only one) and remoteFilters is an IN list with values which
+			// do not match the local region. For example:
+			// localFilters:  crdb_region = 'us-west1'
+			// remoteFilters: crdb_region IN ('us-east1', 'eu-west1', 'ap-southeast1')
+			return localFilters, remoteFilters, true
+		}
+	}
+	return nil, nil, false
+}
+
+// CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins performs precondition
+// checks to see if generating a locality-optimized search of lookup joins is
+// legal, and returns the input scan if the join input is a canonical scan or
+// select from a canonical scan. It also returns the input filters, if any, and
+// ok=true if all checks passed.
+func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
+	lookupJoinExpr *memo.LookupJoinExpr,
+) (inputScan *memo.ScanExpr, inputFilters memo.FiltersExpr, ok bool) {
+	// Respect the session setting LocalityOptimizedSearch.
+	if !c.e.evalCtx.SessionData().LocalityOptimizedSearch {
+		return nil, memo.FiltersExpr{}, false
+	}
+	if lookupJoinExpr.LocalityOptimized || lookupJoinExpr.ChildOfLocalityOptimizedSearch {
+		// Already locality optimized. Bail out.
+		return nil, memo.FiltersExpr{}, false
+	}
+	// Don't try to handle paired joins for now.
+	if lookupJoinExpr.IsFirstJoinInPairedJoiner || lookupJoinExpr.IsSecondJoinInPairedJoiner {
+		return nil, memo.FiltersExpr{}, false
+	}
+	// This rewrite is only designed for inner join, left join and semijoin.
+	if lookupJoinExpr.JoinType != opt.InnerJoinOp &&
+		lookupJoinExpr.JoinType != opt.SemiJoinOp &&
+		lookupJoinExpr.JoinType != opt.LeftJoinOp {
+		return nil, memo.FiltersExpr{}, false
+	}
+	// Only rewrite canonical scans or selects from canonical scans, which also
+	// means they are not locality-optimized.
+	inputScan, inputFilters, ok = c.getfilteredCanonicalScan(lookupJoinExpr.Input)
+	if !ok {
+		return nil, memo.FiltersExpr{}, false
+	}
+	return inputScan, inputFilters, true
+}
+
+// LookupsAreLocal returns true if the lookups done by the given lookup join
+// are done in the local region.
+func (c *CustomFuncs) LookupsAreLocal(lookupJoinExpr *memo.LookupJoinExpr) bool {
+	provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr)
+	if provided.Any() || len(provided.Regions) != 1 {
+		return false
+	}
+	var localDist physical.Distribution
+	localDist.FromLocality(c.e.f.EvalContext().Locality)
+	return localDist.Equals(provided)
+}
+
+// GenerateLocalityOptimizedSearchOfLookupJoins generates a locality-optimized
+// search on top of a `root` lookup join when the input relation to the lookup
+// join is a REGIONAL BY ROW table. The left branch reads local rows from the
+// input table and the right branch reads remote rows from the input table. If
+// localityOptimizedLookupJoinPrivate is non-nil, then the local branch of the
+// locality-optimized search uses this version of `root`, which has been
+// converted into a locality-optimized `LookupJoinPrivate` by the caller.
+func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
+	grp memo.RelExpr,
+	lookupJoinExpr *memo.LookupJoinExpr,
+	inputScan *memo.ScanExpr,
+	inputFilters memo.FiltersExpr,
+	localityOptimizedLookupJoinPrivate *memo.LookupJoinPrivate,
+) {
+	var localSelectFilters, remoteSelectFilters memo.FiltersExpr
+	if len(inputFilters) > 0 {
+		// Both local and remote branches must evaluate the original filters.
+		localSelectFilters = inputFilters
+		remoteSelectFilters = inputFilters
+	}
+	tabMeta := c.e.mem.Metadata().TableMeta(inputScan.Table)
+	table := c.e.mem.Metadata().Table(inputScan.Table)
+	lookupTable := c.e.mem.Metadata().Table(lookupJoinExpr.Table)
+	duplicateLookupTableFirst := lookupJoinExpr.Table.ColumnID(0) < inputScan.Table.ColumnID(0)
+
+	index := table.Index(inputScan.Index)
+	ps := tabMeta.IndexPartitionLocality(inputScan.Index)
+	if ps.Empty() {
+		return
+	}
+	// Build optional filters from check constraint and computed column filters.
+	// This should include the `crdb_region` IN (_region1_, _region2_, ...)
+	// predicate.
+	optionalFilters, _ :=
+		c.GetOptionalFiltersAndFilterColumns(localSelectFilters, &inputScan.ScanPrivate)
+	if len(optionalFilters) == 0 {
+		return
+	}
+
+	// The `crdb_region` ColumnID
+	firstIndexCol := inputScan.ScanPrivate.Table.IndexColumnID(index, 0)
+	localFiltersItem, remoteFiltersItem, ok := c.getLocalAndRemoteFilters(optionalFilters, ps, firstIndexCol)
+	if !ok {
+		return
+	}
+	// Must have local and remote filters to proceed.
+	if localFiltersItem == nil || remoteFiltersItem == nil {
+		return
+	}
+	// Add the region-distinguishing filters to the original filters, for each
+	// branch of the UNION ALL.
+	localSelectFilters = append(localSelectFilters, *localFiltersItem.(*memo.FiltersItem))
+	remoteSelectFilters = append(remoteSelectFilters, *remoteFiltersItem.(*memo.FiltersItem))
+
+	localLookupJoin := lookupJoinExpr
+	// If the caller specified to create locality-optimized join, use that
+	// specification for the local branch. For the remote branch, there is no
+	// point using locality-optimized join, because that would force a fetch of
+	// remote rows to the local region followed by an attempt to join to local
+	// rows first. In a properly designed schema, matching rows should be in the
+	// same region in both tables, so it is likely cheaper to join the remote rows
+	// with all regions in a single operation instead of 2 serial UNION ALL
+	// branches.
+	if localityOptimizedLookupJoinPrivate != nil {
+		localLookupJoin = &memo.LookupJoinExpr{
+			Input:             lookupJoinExpr.Input,
+			On:                lookupJoinExpr.On,
+			LookupJoinPrivate: *localityOptimizedLookupJoinPrivate,
+		}
+	}
+
+	var lookupJoinLookupSideCols opt.ColSet
+	for i := 0; i < lookupTable.ColumnCount(); i++ {
+		lookupJoinLookupSideCols.Add(lookupJoinExpr.Table.ColumnID(i))
+	}
+	lookupTableSP := &memo.ScanPrivate{
+		Table:   lookupJoinExpr.Table,
+		Index:   lookupJoinExpr.Index,
+		Cols:    lookupJoinLookupSideCols,
+		Locking: lookupJoinExpr.Locking,
+	}
+	var newLocalLookupTableSP, newRemoteLookupTableSP *memo.ScanPrivate
+
+	// Similar to DuplicateScanPrivate, but for the lookup table of lookup join.
+	duplicateLookupSide := func() *memo.ScanPrivate {
+		tableID, cols := c.DuplicateColumnIDs(lookupJoinExpr.Table, lookupJoinLookupSideCols)
+		newLookupTableSP := &memo.ScanPrivate{
+			Table:   tableID,
+			Index:   lookupJoinExpr.Index,
+			Cols:    cols,
+			Locking: lookupJoinExpr.Locking,
+		}
+		return newLookupTableSP
+	}
+
+	// A new ScanPrivate, solely used for remapping columns.
+	inputScanPrivateWithCRDBRegionCol :=
+		&memo.ScanPrivate{
+			Table:   inputScan.Table,
+			Index:   inputScan.Index,
+			Cols:    inputScan.Cols.Copy(),
+			Flags:   inputScan.Flags,
+			Locking: inputScan.Locking,
+		}
+	// Make sure the crdb_region column is included in the ScanPrivate and the
+	// remapping.
+	inputScanPrivateWithCRDBRegionCol.Cols.Add(firstIndexCol)
+
+	var localInputSP, remoteInputSP *memo.ScanPrivate
+	// Column IDs of the mapped tables must be in the same order as in the
+	// original tables.
+	if duplicateLookupTableFirst {
+		newLocalLookupTableSP = duplicateLookupSide()
+		newRemoteLookupTableSP = duplicateLookupSide()
+		localInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+		remoteInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+	} else {
+		localInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+		remoteInputSP = c.DuplicateScanPrivate(inputScanPrivateWithCRDBRegionCol)
+		newLocalLookupTableSP = duplicateLookupSide()
+		newRemoteLookupTableSP = duplicateLookupSide()
+	}
+	localScan := c.e.f.ConstructScan(localInputSP).(*memo.ScanExpr)
+	remoteScan := c.e.f.ConstructScan(remoteInputSP).(*memo.ScanExpr)
+
+	localSelectFilters =
+		c.RemapScanColsInFilter(localSelectFilters, inputScanPrivateWithCRDBRegionCol, &localScan.ScanPrivate)
+	remoteSelectFilters =
+		c.RemapScanColsInFilter(remoteSelectFilters, inputScanPrivateWithCRDBRegionCol, &remoteScan.ScanPrivate)
+
+	localInput :=
+		c.e.f.ConstructSelect(
+			localScan,
+			localSelectFilters,
+		)
+	remoteInput :=
+		c.e.f.ConstructSelect(
+			remoteScan,
+			remoteSelectFilters,
+		)
+
+	// Map referenced column ids coming from the lookup table.
+	lookupJoinWithLocalInput := c.mapInputSideOfLookupJoin(localLookupJoin, localScan, localInput)
+	// The remote branch already incurs a latency penalty, so don't use
+	// locality-optimized join for this branch. See the definition of
+	// localLookupJoin for more details.
+	lookupJoinWithRemoteInput := c.mapInputSideOfLookupJoin(lookupJoinExpr, remoteScan, remoteInput)
+	// For costing and enforce_home_region, indicate these joins lie under a
+	// locality-optimized search.
+	lookupJoinWithLocalInput.ChildOfLocalityOptimizedSearch = true
+	lookupJoinWithRemoteInput.ChildOfLocalityOptimizedSearch = true
+
+	// Map referenced column ids coming from the input table.
+	c.mapLookupJoin(lookupJoinWithLocalInput, lookupJoinLookupSideCols, newLocalLookupTableSP)
+	c.mapLookupJoin(lookupJoinWithRemoteInput, lookupJoinLookupSideCols, newRemoteLookupTableSP)
+
+	// Map the local and remote output columns.
+	localColMap := c.makeColMap(inputScanPrivateWithCRDBRegionCol, &localScan.ScanPrivate)
+	remoteColMap := c.makeColMap(inputScanPrivateWithCRDBRegionCol, &remoteScan.ScanPrivate)
+	localJoinOutputCols := grp.Relational().OutputCols.CopyAndMaybeRemap(localColMap)
+	remoteJoinOutputCols := grp.Relational().OutputCols.CopyAndMaybeRemap(remoteColMap)
+
+	localLookupTableColMap := c.makeColMap(lookupTableSP, newLocalLookupTableSP)
+	remoteLookupTableColMap := c.makeColMap(lookupTableSP, newRemoteLookupTableSP)
+	localJoinOutputCols = localJoinOutputCols.CopyAndMaybeRemap(localLookupTableColMap)
+	remoteJoinOutputCols = remoteJoinOutputCols.CopyAndMaybeRemap(remoteLookupTableColMap)
+
+	localBranch := c.e.f.ConstructLookupJoin(lookupJoinWithLocalInput.Input,
+		lookupJoinWithLocalInput.On,
+		&lookupJoinWithLocalInput.LookupJoinPrivate,
+	)
+	remoteBranch := c.e.f.ConstructLookupJoin(lookupJoinWithRemoteInput.Input,
+		lookupJoinWithRemoteInput.On,
+		&lookupJoinWithRemoteInput.LookupJoinPrivate,
+	)
+
+	// Project away columns which weren't in the original output columns.
+	if !localJoinOutputCols.Equals(localBranch.Relational().OutputCols) {
+		localBranch = c.e.f.ConstructProject(localBranch, memo.ProjectionsExpr{}, localJoinOutputCols)
+	}
+	if !remoteJoinOutputCols.Equals(remoteBranch.Relational().OutputCols) {
+		remoteBranch = c.e.f.ConstructProject(remoteBranch, memo.ProjectionsExpr{}, remoteJoinOutputCols)
+	}
+
+	sp :=
+		c.e.funcs.MakeSetPrivate(
+			localBranch.Relational().OutputCols,
+			remoteBranch.Relational().OutputCols,
+			grp.Relational().OutputCols,
+		)
+	// Add the LocalityOptimizedSearchExpr to the same group as the original join.
+	locOptSearch := memo.LocalityOptimizedSearchExpr{
+		Local:      localBranch,
+		Remote:     remoteBranch,
+		SetPrivate: *sp,
+	}
+	c.e.mem.AddLocalityOptimizedSearchToGroup(&locOptSearch, grp)
+}
+
+// GenerateLocalityOptimizedSearchLOJ generates a locality optimized search on
+// top of a lookup join, `root`, when the input relation to the lookup join is a
+// REGIONAL BY ROW table.
+func (c *CustomFuncs) GenerateLocalityOptimizedSearchLOJ(
+	grp memo.RelExpr,
+	lookupJoinExpr *memo.LookupJoinExpr,
+	inputScan *memo.ScanExpr,
+	inputFilters memo.FiltersExpr,
+) {
+	c.GenerateLocalityOptimizedSearchOfLookupJoins(grp, lookupJoinExpr, inputScan, inputFilters, nil)
+}
+
+// mapInputSideOfLookupJoin copies a lookupJoinExpr having a `ScanExpr` as input
+// or a Select from a `ScanExpr` and replaces that input with `newInputRel`.
+// `newInputScan` is expected to be duplicated from the original input scan. All
+// references to column IDs in the lookup join expression belonging to the
+// original scan are mapped to column IDs of the duplicated scan.
+func (c *CustomFuncs) mapInputSideOfLookupJoin(
+	lookupJoinExpr *memo.LookupJoinExpr, newInputScan *memo.ScanExpr, newInputRel memo.RelExpr,
+) (mappedLookupJoinExpr *memo.LookupJoinExpr) {
+	origInputRel := lookupJoinExpr.Input
+	if origSelectExpr, ok := origInputRel.(*memo.SelectExpr); ok {
+		origInputRel = origSelectExpr.Input
+	}
+	inputScan, ok := origInputRel.(*memo.ScanExpr)
+	if !ok {
+		panic(errors.AssertionFailedf("expected input of lookup join to be a scan"))
+	}
+	colMap := c.makeColMap(&inputScan.ScanPrivate, &newInputScan.ScanPrivate)
+	newJP := c.DuplicateJoinPrivate(&lookupJoinExpr.JoinPrivate)
+	mappedLookupJoinExpr =
+		&memo.LookupJoinExpr{
+			Input: newInputRel,
+		}
+	mappedLookupJoinExpr.JoinType = lookupJoinExpr.JoinType
+	on := c.e.f.RemapCols(&lookupJoinExpr.On, colMap).(*memo.FiltersExpr)
+	mappedLookupJoinExpr.On = *on
+	mappedLookupJoinExpr.JoinPrivate = *newJP
+	mappedLookupJoinExpr.JoinType = lookupJoinExpr.JoinType
+	mappedLookupJoinExpr.Table = lookupJoinExpr.Table
+	mappedLookupJoinExpr.Index = lookupJoinExpr.Index
+	mappedLookupJoinExpr.KeyCols = lookupJoinExpr.KeyCols.CopyAndMaybeRemapColumns(colMap)
+	mappedLookupJoinExpr.DerivedEquivCols = lookupJoinExpr.DerivedEquivCols.CopyAndMaybeRemap(colMap)
+
+	c.e.f.DisableOptimizationsTemporarily(func() {
+		// Disable normalization rules when remapping the lookup expressions so
+		// that they do not get normalized into non-canonical lookup
+		// expressions.
+		lookupExpr := c.e.f.RemapCols(&lookupJoinExpr.LookupExpr, colMap).(*memo.FiltersExpr)
+		mappedLookupJoinExpr.LookupExpr = *lookupExpr
+		remoteLookupExpr := c.e.f.RemapCols(&lookupJoinExpr.RemoteLookupExpr, colMap).(*memo.FiltersExpr)
+		mappedLookupJoinExpr.RemoteLookupExpr = *remoteLookupExpr
+	})
+	mappedLookupJoinExpr.Cols = lookupJoinExpr.Cols.Copy().Difference(inputScan.Cols).Union(newInputScan.Cols)
+	mappedLookupJoinExpr.LookupColsAreTableKey = lookupJoinExpr.LookupColsAreTableKey
+	mappedLookupJoinExpr.IsFirstJoinInPairedJoiner = lookupJoinExpr.IsFirstJoinInPairedJoiner
+	mappedLookupJoinExpr.IsSecondJoinInPairedJoiner = lookupJoinExpr.IsSecondJoinInPairedJoiner
+	mappedLookupJoinExpr.ContinuationCol = lookupJoinExpr.ContinuationCol
+	mappedLookupJoinExpr.LocalityOptimized = lookupJoinExpr.LocalityOptimized
+	mappedLookupJoinExpr.ChildOfLocalityOptimizedSearch = lookupJoinExpr.ChildOfLocalityOptimizedSearch
+	constFilters := c.e.f.RemapCols(&lookupJoinExpr.ConstFilters, colMap).(*memo.FiltersExpr)
+	mappedLookupJoinExpr.ConstFilters = *constFilters
+	mappedLookupJoinExpr.Locking = lookupJoinExpr.Locking
+	return mappedLookupJoinExpr
 }
 
 // buildAllPartitionsConstraint retrieves the partition filters and in between
@@ -403,4 +802,64 @@ func (c *CustomFuncs) splitSpans(
 // ScanPrivateCols returns the ColSet of a ScanPrivate.
 func (c *CustomFuncs) ScanPrivateCols(sp *memo.ScanPrivate) opt.ColSet {
 	return sp.Cols
+}
+
+// IsRegionalByRowTableScanOrSelect returns true if `input` is a scan or select
+// from a REGIONAL BY ROW table.
+func (c *CustomFuncs) IsRegionalByRowTableScanOrSelect(input memo.RelExpr) bool {
+	if selectExpr, ok := input.(*memo.SelectExpr); ok {
+		input = selectExpr.Input
+	}
+	scanExpr, ok := input.(*memo.ScanExpr)
+	if !ok {
+		return false
+	}
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
+	return table.IsRegionalByRow()
+}
+
+// IsSelectFromRemoteTableRowsOnly returns true if `input` is a select from a
+// REGIONAL BY TABLE or REGIONAL BY ROW table which only reads rows in a remote
+// region without bounded staleness. Bounded staleness would allow local
+// replicas to be used for the scan.
+func (c *CustomFuncs) IsSelectFromRemoteTableRowsOnly(input memo.RelExpr) bool {
+	scanExpr, inputFilters, ok := c.getfilteredCanonicalScan(input)
+	if !ok {
+		return false
+	}
+	if !ok {
+		return false
+	}
+	if c.e.evalCtx.BoundedStaleness() {
+		return false
+	}
+	table := scanExpr.Memo().Metadata().Table(scanExpr.Table)
+	if table.IsRegionalByRow() {
+		tabMeta := c.e.mem.Metadata().TableMeta(scanExpr.Table)
+		index := table.Index(scanExpr.Index)
+		ps := tabMeta.IndexPartitionLocality(scanExpr.Index)
+		if ps.Empty() {
+			// Can't tell if anything is local; treat all rows as remote
+			return true
+		}
+		firstIndexCol := scanExpr.ScanPrivate.Table.IndexColumnID(index, 0)
+		localFiltersItem, _, ok :=
+			c.getLocalAndRemoteFilters(inputFilters, ps, firstIndexCol)
+		if !ok {
+			// There is no filter on crdb_region, so all regions may be read.
+			return false
+		}
+		if localFiltersItem == nil {
+			return true
+		}
+		return false
+	} else if tableHomeRegion, ok := table.HomeRegion(); ok {
+		gatewayRegion, foundLocalRegion := c.e.evalCtx.Locality.Find("region")
+		if !foundLocalRegion {
+			// Found no gateway region, so can't tell if only remote rows are read.
+			return false
+		}
+		return gatewayRegion != tableHomeRegion
+	}
+	return false
 }
