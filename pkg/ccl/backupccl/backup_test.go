@@ -8395,6 +8395,10 @@ func TestBackupOnlyPublicIndexes(t *testing.T) {
 	//  7. Drop index
 	//  8. Inc 4
 
+	// Disable declarative schema changer for this test, until the knobs are updated.
+	sqlDB.Exec(t, "SET use_declarative_schema_changer='off';")
+	sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';")
+
 	// First take a full backup.
 	fullBackup := localFoo + "/full"
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, fullBackup)

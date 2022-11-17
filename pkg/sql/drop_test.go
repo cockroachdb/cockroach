@@ -642,7 +642,7 @@ func TestDropTable(t *testing.T) {
 
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1,
 		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:      username.RootUserName(),
 			Description:   `DROP TABLE t.public.kv`,

@@ -97,8 +97,16 @@ CREATE TABLE privs (a INT PRIMARY KEY, b INT)
 
 user testuser
 
+skipif config local-legacy-schema-changer
+skipif config local-mixed-22.2-23.1
+statement error must be owner of table privs or have CREATE privilege on table privs
+CREATE INDEX foo ON privs (b)
+
+onlyif config local-legacy-schema-changer
+onlyif config local-mixed-22.2-23.1
 statement error user testuser does not have CREATE privilege on relation privs
 CREATE INDEX foo ON privs (b)
+
 
 user root
 
