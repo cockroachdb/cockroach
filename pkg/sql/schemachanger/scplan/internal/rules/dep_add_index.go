@@ -71,7 +71,7 @@ func init() {
 func init() {
 
 	registerDepRule(
-		"index named right before index becomes public",
+		"primary index named right before index becomes public",
 		scgraph.SameStagePrecedence,
 		"index-name", "index",
 		func(from, to nodeVars) rel.Clauses {
@@ -79,10 +79,25 @@ func init() {
 				from.Type((*scpb.IndexName)(nil)),
 				to.Type(
 					(*scpb.PrimaryIndex)(nil),
-					(*scpb.SecondaryIndex)(nil),
 				),
 				joinOnIndexID(from, to, "table-id", "index-id"),
 				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_PUBLIC),
+			}
+		},
+	)
+
+	registerDepRule(
+		"secondary index named before validation",
+		scgraph.Precedence,
+		"index-name", "index",
+		func(from, to nodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.IndexName)(nil)),
+				to.Type(
+					(*scpb.SecondaryIndex)(nil),
+				),
+				joinOnIndexID(from, to, "table-id", "index-id"),
+				statusesToPublicOrTransient(from, scpb.Status_PUBLIC, to, scpb.Status_VALIDATED),
 			}
 		},
 	)
