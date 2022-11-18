@@ -471,7 +471,7 @@ func runTPCCMixedHeadroom(
 			// to get a better idea of what errors come back here, if any.
 			// This will block until the long-running migrations have run.
 			allowAutoUpgradeStep(randomCRDBNode()),
-			setClusterSettingVersionStep,
+			waitForUpgradeStep(crdbNodes),
 			// Wait until TPCC background run terminates
 			// and fail if it reports an error.
 			tpccWorkload.wait,
