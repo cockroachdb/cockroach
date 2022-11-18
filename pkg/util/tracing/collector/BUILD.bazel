@@ -31,7 +31,6 @@ go_test(
     deps = [
         ":collector",
         "//pkg/base",
-        "//pkg/ccl/utilccl",
         "//pkg/kv/kvserver/liveness",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
