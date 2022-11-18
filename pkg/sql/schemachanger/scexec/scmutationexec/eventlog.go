@@ -110,8 +110,9 @@ func asEventPayload(
 		}
 		switch targetStatus {
 		case scpb.Status_PUBLIC:
-			return &eventpb.AlterTable{
+			return &eventpb.CreateIndex{
 				TableName:  fullName,
+				IndexName:  mutation.AsIndex().GetName(),
 				MutationID: uint32(mutation.MutationID()),
 			}, nil
 		case scpb.Status_ABSENT:

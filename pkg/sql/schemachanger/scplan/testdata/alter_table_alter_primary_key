@@ -682,7 +682,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [index dependents exist before index becomes public; index named right before index becomes public]
+  rules: [index dependents exist before index becomes public; primary index named right before index becomes public]
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}, TRANSIENT_ABSENT]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}, TRANSIENT_ABSENT]
   kind: Precedence
@@ -690,7 +690,7 @@ ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (k);
 - from: [IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}, PUBLIC]
   to:   [PrimaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 4, TemporaryIndexID: 5, SourceIndexID: 2}, PUBLIC]
   kind: SameStagePrecedence
-  rules: [index dependents exist before index becomes public; index named right before index becomes public]
+  rules: [index dependents exist before index becomes public; primary index named right before index becomes public]
 - from: [PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT]
   to:   [Column:{DescID: 104, ColumnID: 3}, ABSENT]
   kind: Precedence
