@@ -1313,8 +1313,9 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We expect 5 certificates: CA, node, and client certs for root, testuser, testuser2.
-	if a, e := len(response.Certificates), 5; a != e {
+	// We expect 6 certificates: CA, node, SQL and client certs for
+	// root, testuser, testuser2.
+	if a, e := len(response.Certificates), 6; a != e {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 
@@ -1328,6 +1329,13 @@ func TestCertificatesResponse(t *testing.T) {
 
 	cert = response.Certificates[1]
 	if a, e := cert.Type, serverpb.CertificateDetails_NODE; a != e {
+		t.Errorf("wrong type %s, expected %s", a, e)
+	} else if cert.ErrorMessage != "" {
+		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)
+	}
+
+	cert = response.Certificates[2]
+	if a, e := cert.Type, serverpb.CertificateDetails_SQL_SERVER; a != e {
 		t.Errorf("wrong type %s, expected %s", a, e)
 	} else if cert.ErrorMessage != "" {
 		t.Errorf("expected cert without error, got %v", cert.ErrorMessage)

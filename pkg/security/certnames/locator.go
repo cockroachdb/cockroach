@@ -105,6 +105,16 @@ func (cl Locator) NodeKeyPath() string {
 	return filepath.Join(cl.certsDir, NodeKeyFilename())
 }
 
+// SQLServerCertPath returns the expected file path for the SQL server certificate.
+func (cl Locator) SQLServerCertPath() string {
+	return filepath.Join(cl.certsDir, SQLServerCertFilename())
+}
+
+// SQLServerKeyPath returns the expected file path for the SQL server key.
+func (cl Locator) SQLServerKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServerKeyFilename())
+}
+
 // UICertPath returns the expected file path for the UI certificate.
 func (cl Locator) UICertPath() string {
 	return filepath.Join(cl.certsDir, UIServerCertFilename())
