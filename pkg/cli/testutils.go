@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -104,12 +103,6 @@ const testUserfileUploadTempDirPrefix = "test-userfile-upload-temp-dir-"
 func (c *TestCLI) fail(err error) {
 	if c.t != nil {
 		defer c.logScope.Close(c.t)
-		if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
-			if c.TestServer != nil {
-				c.TestServer.Stopper().Stop(context.Background())
-			}
-			skip.IgnoreLint(c.t, serverutils.TenantSkipCCLBinaryMessage)
-		}
 		c.t.Fatal(err)
 	} else {
 		panic(err)
