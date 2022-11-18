@@ -530,7 +530,7 @@ func (p *Provider) Create(
 	var g errgroup.Group
 
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
-	zoneHostNames := make([][]string, len(zones))
+	zoneHostNames := make([][]string, len(names))
 	for i, name := range names {
 		zone := nodeZones[i]
 		zoneHostNames[zone] = append(zoneHostNames[zone], name)
