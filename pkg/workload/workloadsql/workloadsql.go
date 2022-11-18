@@ -118,6 +118,18 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 	if table.Splits.NumBatches <= 0 {
 		return nil
 	}
+
+	// Test that we can actually perform a scatter.
+	if _, err := db.Exec("ALTER TABLE system.jobs SCATTER"); err != nil {
+		if strings.Contains(err.Error(), "not fully contained in tenant") ||
+			strings.Contains(err.Error(), "request [1 AdmScatter] not permitted") {
+			log.Infof(ctx, `skipping workload splits; can't scatter on tenants'`)
+			//nolint:returnerrcheck
+			return nil
+		}
+		return err
+	}
+
 	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
 	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
 		splitPoints = append(splitPoints, table.Splits.BatchRows(splitIdx)...)
