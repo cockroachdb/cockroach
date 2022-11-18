@@ -1373,8 +1373,8 @@ subtest array_indexes
 statement ok
 DROP TABLE IF EXISTS t
 
-statement error column x is of type int\[\] and thus is not indexable
-CREATE TABLE t (x INT[] PRIMARY KEY)
+statement ok
+CREATE TABLE t_indexed (x INT[] PRIMARY KEY)
 
 statement ok
 CREATE TABLE t (x INT[])
@@ -1455,20 +1455,18 @@ SELECT x FROM t WHERE x > ARRAY[NULL, NULL]:::INT[] ORDER BY x
 {5}
 
 # Test some operations on a descending index.
-statement error column x is of type int\[\] and thus is not indexable
+statement ok
 CREATE INDEX i ON t(x DESC)
 
-# Add "t@i" index annotation once #50659 is fixed.
 query T
-SELECT x FROM t WHERE x <= ARRAY[1] ORDER BY x DESC
+SELECT x FROM t@i WHERE x <= ARRAY[1] ORDER BY x DESC
 ----
 {1}
 {NULL,NULL,NULL}
 {NULL}
 
-# Add "t@i" index annotation once #50659 is fixed.
 query T
-SELECT x FROM t WHERE x > ARRAY[1] ORDER BY x
+SELECT x FROM t@i WHERE x > ARRAY[1] ORDER BY x
 ----
 {1,NULL,10}
 {1,4,5}
@@ -1478,10 +1476,10 @@ SELECT x FROM t WHERE x > ARRAY[1] ORDER BY x
 
 # Ensure that we can order by the arrays without any indexes.
 statement ok
-DROP TABLE t;
+DROP TABLE t
 
 statement ok
-CREATE TABLE t (x INT[]);
+CREATE TABLE t (x INT[])
 
 statement ok
 INSERT INTO t VALUES
@@ -1518,9 +1516,36 @@ SELECT x FROM t ORDER BY x DESC
 {NULL,NULL,NULL}
 {NULL}
 
-# Enable index creation once #50659 is fixed.
 statement ok
---CREATE INDEX i ON t (x);
+CREATE INDEX i ON t (x);
+
+# Ensure selecting works fine on the index.
+
+query T
+SELECT x FROM t@i ORDER BY x
+----
+{NULL}
+{NULL,NULL,NULL}
+{1}
+{1,NULL,10}
+{1,4,5}
+{1,4,6}
+{4}
+{5}
+
+query T
+SELECT x FROM t@i ORDER BY x DESC
+----
+{5}
+{4}
+{1,4,6}
+{1,4,5}
+{1,NULL,10}
+{1}
+{NULL,NULL,NULL}
+{NULL}
+
+statement ok
 INSERT INTO t VALUES (NULL), (NULL)
 
 # Test that NULL's are differentiated from {NULL}.
@@ -1536,6 +1561,22 @@ SELECT x FROM t WHERE x IS NOT NULL ORDER BY x
 {1,4,6}
 {4}
 {5}
+
+# Ensure that unique indexes on array columns work okay.
+statement ok
+CREATE TABLE unique_array (a INT[] UNIQUE, b INT[])
+
+statement ok
+INSERT INTO unique_array VALUES (ARRAY[1], ARRAY[2, 3])
+
+statement error duplicate key value violates unique constraint
+INSERT INTO unique_array VALUES (ARRAY[1], ARRAY[2, 3])
+
+statement ok
+INSERT INTO unique_array VALUES (ARRAY[2], ARRAY[2, 3])
+
+statement error duplicate key value violates unique constraint
+CREATE UNIQUE INDEX ON unique_array(b)
 
 # Create an indexes on a bad type.
 statement error pq: unimplemented: column x is of type geography\[\] and thus is not indexable

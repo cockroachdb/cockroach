@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
@@ -202,6 +203,10 @@ func createPartitioningImpl(
 			return partDesc, pgerror.Newf(pgcode.Syntax,
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(newIdxColumnNames[:n], ", "))
+		}
+		if col.GetType().Family() == types.ArrayFamily {
+			return partDesc, unimplemented.NewWithIssuef(91766, "partitioning by array column (%s) not supported",
+				col.GetName())
 		}
 	}
 
