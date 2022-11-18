@@ -72,6 +72,9 @@ type TestingKnobs struct {
 	// DisableAdoptions disables job adoptions.
 	DisableAdoptions bool
 
+	// DisableRegistryLifecycleManagement
+	DisableRegistryLifecycleManagent bool
+
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
 	BeforeWaitForJobsQuery func()
