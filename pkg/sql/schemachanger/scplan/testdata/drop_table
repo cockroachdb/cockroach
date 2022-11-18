@@ -54,7 +54,7 @@ StatementPhase stage 1 of 1 with 3 MutationType ops
       DescriptorID: 110
     *scop.MarkDescriptorAsSyntheticallyDropped
       DescriptorID: 111
-PreCommitPhase stage 1 of 1 with 43 MutationType ops
+PreCommitPhase stage 1 of 1 with 42 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -159,11 +159,6 @@ PreCommitPhase stage 1 of 1 with 43 MutationType ops
     *scop.RemoveDroppedIndexPartialPredicate
       IndexID: 2
       TableID: 109
-    *scop.UpdateTableBackReferencesInTypes
-      BackReferencedTableID: 109
-      TypeIDs:
-      - 107
-      - 108
     *scop.RemoveForeignKeyBackReference
       OriginConstraintID: 2
       OriginTableID: 109

@@ -392,7 +392,6 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 10 MutationType ops
       Element:
         SecondaryIndex:
           constraintId: 1
-          geoConfig: {}
           indexId: 2
           isUnique: true
           tableId: 107
@@ -1352,7 +1351,6 @@ PostCommitNonRevertiblePhase stage 2 of 3 with 11 MutationType ops
       Element:
         SecondaryIndex:
           constraintId: 1
-          geoConfig: {}
           indexId: 2
           isUnique: true
           tableId: 107

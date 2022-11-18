@@ -21,13 +21,14 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── MarkDescriptorAsSyntheticallyDropped {"DescriptorID":108}
  ├── PreCommitPhase
  │    └── Stage 1 of 1 in PreCommitPhase
- │         ├── 26 elements transitioning toward ABSENT
+ │         ├── 27 elements transitioning toward ABSENT
  │         │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
  │         │    ├── PUBLIC      → ABSENT  Owner:{DescID: 108}
  │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
  │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 108, Name: root}
  │         │    ├── TXN_DROPPED → DROPPED Table:{DescID: 108}
  │         │    ├── PUBLIC      → ABSENT  ObjectParent:{DescID: 108, ReferencedDescID: 106}
+ │         │    ├── PUBLIC      → ABSENT  TablePartitioning:{DescID: 108}
  │         │    ├── PUBLIC      → ABSENT  TableLocalityRegionalByRow:{DescID: 108}
  │         │    ├── PUBLIC      → ABSENT  ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
  │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 1}

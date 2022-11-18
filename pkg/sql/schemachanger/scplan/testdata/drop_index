@@ -67,7 +67,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          geoConfig: {}
           indexId: 2
           isCreatedExplicitly: true
           tableId: 104
@@ -231,7 +230,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 7 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          geoConfig: {}
           indexId: 4
           isCreatedExplicitly: true
           tableId: 104
@@ -466,7 +464,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
     *scop.LogEvent
       Element:
         SecondaryIndex:
-          geoConfig: {}
           indexId: 6
           isCreatedExplicitly: true
           sharding:
@@ -778,7 +775,6 @@ PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops
       Element:
         SecondaryIndex:
           constraintId: 3
-          geoConfig: {}
           indexId: 8
           isCreatedExplicitly: true
           isUnique: true

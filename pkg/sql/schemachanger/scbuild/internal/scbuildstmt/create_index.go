@@ -322,7 +322,7 @@ func processColNodeType(
 			if err != nil {
 				panic(err)
 			}
-			indexSpec.secondary.GeoConfig = *config
+			indexSpec.secondary.GeoConfig = config
 			b.IncrementSchemaChangeIndexCounter("geometry_inverted")
 		case types.GeographyFamily:
 			if columnNode.OpClass != "" {
@@ -331,7 +331,7 @@ func processColNodeType(
 			if columnNode.OpClass != "" {
 				panic(newUndefinedOpclassError(columnNode.OpClass))
 			}
-			indexSpec.secondary.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+			indexSpec.secondary.GeoConfig = geoindex.DefaultGeographyIndexConfig()
 			b.IncrementSchemaChangeIndexCounter("geography_inverted")
 		case types.StringFamily:
 			// Check the opclass of the last column in the list, which is the column
@@ -885,7 +885,7 @@ func maybeApplyStorageParameters(b BuildCtx, n *tree.CreateIndex, idxSpec *index
 	}
 	dummyIndexDesc := &descpb.IndexDescriptor{}
 	if idxSpec.secondary.GeoConfig != nil {
-		dummyIndexDesc.GeoConfig = idxSpec.secondary.GeoConfig
+		dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
@@ -895,7 +895,7 @@ func maybeApplyStorageParameters(b BuildCtx, n *tree.CreateIndex, idxSpec *index
 		panic(err)
 	}
 	if !dummyIndexDesc.GeoConfig.IsEmpty() {
-		idxSpec.secondary.GeoConfig = dummyIndexDesc.GeoConfig
+		idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
 	} else {
 		idxSpec.secondary.GeoConfig = nil
 	}

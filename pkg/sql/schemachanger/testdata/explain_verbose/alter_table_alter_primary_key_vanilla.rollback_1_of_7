@@ -11,7 +11,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
     │
     └── • Stage 1 of 1 in PostCommitNonRevertiblePhase
         │
-        ├── • 14 elements transitioning toward ABSENT
+        ├── • 15 elements transitioning toward ABSENT
         │   │
         │   ├── • PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
         │   │   │ BACKFILL_ONLY → ABSENT
@@ -124,13 +124,21 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 1 of 7;
         │   │   └── • skip PUBLIC → ABSENT operations
         │   │         rule: "skip index-column removal ops on index removal"
         │   │
-        │   └── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
-        │       │ PUBLIC → ABSENT
-        │       │
-        │       └── • skip PUBLIC → ABSENT operations
-        │             rule: "skip index-column removal ops on index removal"
+        │   ├── • IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
+        │   │   │ PUBLIC → ABSENT
+        │   │   │
+        │   │   └── • skip PUBLIC → ABSENT operations
+        │   │         rule: "skip index-column removal ops on index removal"
+        │   │
+        │   └── • IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
+        │         PUBLIC → ABSENT
         │
-        └── • 9 Mutation operations
+        └── • 10 Mutation operations
+            │
+            ├── • SetIndexName
+            │     IndexID: 4
+            │     Name: crdb_internal_index_4_name_placeholder
+            │     TableID: 104
             │
             ├── • MakeIndexAbsent
             │     EventBase:

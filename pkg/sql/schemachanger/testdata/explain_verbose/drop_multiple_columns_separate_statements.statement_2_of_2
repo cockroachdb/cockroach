@@ -260,7 +260,7 @@ EXPLAIN (ddl, verbose) ALTER TABLE t DROP COLUMN k CASCADE;
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
     │   │   │         rule: "index dependents exist before index becomes public"
-    │   │   │         rule: "index named right before index becomes public"
+    │   │   │         rule: "primary index named right before index becomes public"
     │   │   │
     │   │   └── • IndexName:{DescID: 104, Name: t_pkey, IndexID: 3}
     │   │       │ ABSENT → PUBLIC
