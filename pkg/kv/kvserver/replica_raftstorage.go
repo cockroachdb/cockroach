@@ -487,18 +487,11 @@ func (r *Replica) GetSnapshot(
 	// Delegate to a static function to make sure that we do not depend
 	// on any indirect calls to r.store.Engine() (or other in-memory
 	// state of the Replica). Everything must come from the snapshot.
-	withSideloaded := func(fn func(logstore.SideloadStorage) error) error {
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		return fn(r.raftMu.sideloaded)
-	}
+	//
 	// NB: We have Replica.mu read-locked, but we need it write-locked in order
 	// to use Replica.mu.stateLoader. This call is not performance sensitive, so
 	// create a new state loader.
-	snapData, err := snapshot(
-		ctx, snapUUID, stateloader.Make(rangeID), snapType,
-		snap, rangeID, r.store.raftEntryCache, withSideloaded, startKey,
-	)
+	snapData, err := snapshot(ctx, snapUUID, stateloader.Make(rangeID), snapType, snap, startKey)
 	if err != nil {
 		log.Errorf(ctx, "error generating snapshot: %+v", err)
 		return nil, err
@@ -517,15 +510,9 @@ type OutgoingSnapshot struct {
 	// The Pebble snapshot that will be streamed from.
 	EngineSnap storage.Reader
 	// The replica state within the snapshot.
-	State kvserverpb.ReplicaState
-	// Allows access the original Replica's sideloaded storage. Note that
-	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
-	// or RaftSnap -- a log truncation could have removed files from the
-	// sideloaded storage in the meantime.
-	WithSideloaded func(func(logstore.SideloadStorage) error) error
-	RaftEntryCache *raftentry.Cache
-	snapType       kvserverpb.SnapshotRequest_Type
-	onClose        func()
+	State    kvserverpb.ReplicaState
+	snapType kvserverpb.SnapshotRequest_Type
+	onClose  func()
 }
 
 func (s OutgoingSnapshot) String() string {
@@ -578,9 +565,6 @@ func snapshot(
 	rsl stateloader.StateLoader,
 	snapType kvserverpb.SnapshotRequest_Type,
 	snap storage.Reader,
-	rangeID roachpb.RangeID,
-	eCache *raftentry.Cache,
-	withSideloaded func(func(logstore.SideloadStorage) error) error,
 	startKey roachpb.RKey,
 ) (OutgoingSnapshot, error) {
 	var desc roachpb.RangeDescriptor
@@ -602,11 +586,9 @@ func snapshot(
 	}
 
 	return OutgoingSnapshot{
-		RaftEntryCache: eCache,
-		WithSideloaded: withSideloaded,
-		EngineSnap:     snap,
-		State:          state,
-		SnapUUID:       snapUUID,
+		EngineSnap: snap,
+		State:      state,
+		SnapUUID:   snapUUID,
 		RaftSnap: raftpb.Snapshot{
 			Data: snapUUID.GetBytes(),
 			Metadata: raftpb.SnapshotMetadata{
