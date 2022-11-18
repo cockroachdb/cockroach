@@ -1014,13 +1014,10 @@ func (rq *replicateQueue) PlanOneChange(
 		return change, pErr.GoError()
 	}
 
-	// TODO(aayush): The fact that we're calling `repl.DescAndZone()` here once to
-	// pass to `ComputeAction()` to use for deciding which action to take to
-	// repair a range, and then calling it again inside methods like
-	// `addOrReplace{Non}Voters()` or `remove{Dead,Decommissioning}` to execute
-	// upon that decision is a bit unfortunate. It means that we could
-	// successfully execute a decision that was based on the state of a stale
-	// range descriptor.
+	// NB: We attempt to use the range descriptor and span config obtained here
+	// throughout the planning stage, however there may be some remaining
+	// other usages of `repl.Desc()` or `repl.DescAndSpanConfig()` in the
+	// application stage or elsewhere, which could introduce discrepancies.
 	desc, conf := repl.DescAndSpanConfig()
 
 	voterReplicas := desc.Replicas().VoterDescriptors()
@@ -1049,19 +1046,21 @@ func (rq *replicateQueue) PlanOneChange(
 
 	// Add replicas.
 	case allocatorimpl.AllocatorAddVoter:
-		op, err = rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio,
+		op, err = rq.planAddOrReplaceVoters(
+			ctx, repl, desc, conf, liveVoterReplicas, liveNonVoterReplicas, -1, /* removeIdx */
+			allocatorimpl.Alive, allocatorPrio,
 		)
 	case allocatorimpl.AllocatorAddNonVoter:
-		op, err = rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, -1 /* removeIdx */, allocatorimpl.Alive, allocatorPrio,
+		op, err = rq.planAddOrReplaceNonVoters(
+			ctx, repl, desc, conf, liveVoterReplicas, liveNonVoterReplicas, -1, /* removeIdx */
+			allocatorimpl.Alive, allocatorPrio,
 		)
 
 	// Remove replicas.
 	case allocatorimpl.AllocatorRemoveVoter:
-		op, err = rq.removeVoter(ctx, repl, voterReplicas, nonVoterReplicas)
+		op, err = rq.planRemoveVoter(ctx, repl, desc, conf, voterReplicas, nonVoterReplicas)
 	case allocatorimpl.AllocatorRemoveNonVoter:
-		op, err = rq.removeNonVoter(ctx, repl, voterReplicas, nonVoterReplicas)
+		op, err = rq.planRemoveNonVoter(ctx, repl, conf, voterReplicas, nonVoterReplicas)
 
 	// Replace dead replicas.
 	case allocatorimpl.AllocatorReplaceDeadVoter:
@@ -1076,8 +1075,9 @@ func (rq *replicateQueue) PlanOneChange(
 				deadVoterReplicas[0], voterReplicas)
 			break
 		}
-		op, err = rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio)
+		op, err = rq.planAddOrReplaceVoters(
+			ctx, repl, desc, conf, liveVoterReplicas, liveNonVoterReplicas, removeIdx,
+			allocatorimpl.Dead, allocatorPrio)
 	case allocatorimpl.AllocatorReplaceDeadNonVoter:
 		if len(deadNonVoterReplicas) == 0 {
 			// Nothing to do.
@@ -1090,8 +1090,9 @@ func (rq *replicateQueue) PlanOneChange(
 				deadNonVoterReplicas[0], nonVoterReplicas)
 			break
 		}
-		op, err = rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Dead, allocatorPrio)
+		op, err = rq.planAddOrReplaceNonVoters(
+			ctx, repl, desc, conf, liveVoterReplicas, liveNonVoterReplicas, removeIdx,
+			allocatorimpl.Dead, allocatorPrio)
 	// Replace decommissioning replicas.
 	case allocatorimpl.AllocatorReplaceDecommissioningVoter:
 		decommissioningVoterReplicas := rq.store.cfg.StorePool.DecommissioningReplicas(voterReplicas)
@@ -1106,8 +1107,9 @@ func (rq *replicateQueue) PlanOneChange(
 				decommissioningVoterReplicas[0], voterReplicas)
 			break
 		}
-		op, err = rq.addOrReplaceVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio)
+		op, err = rq.planAddOrReplaceVoters(
+			ctx, repl, desc, conf, liveVoterReplicas, liveNonVoterReplicas, removeIdx,
+			allocatorimpl.Decommissioning, allocatorPrio)
 	case allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
 		decommissioningNonVoterReplicas := rq.store.cfg.StorePool.DecommissioningReplicas(nonVoterReplicas)
 		if len(decommissioningNonVoterReplicas) == 0 {
@@ -1121,8 +1123,9 @@ func (rq *replicateQueue) PlanOneChange(
 				decommissioningNonVoterReplicas[0], nonVoterReplicas)
 			break
 		}
-		op, err = rq.addOrReplaceNonVoters(
-			ctx, repl, liveVoterReplicas, liveNonVoterReplicas, removeIdx, allocatorimpl.Decommissioning, allocatorPrio)
+		op, err = rq.planAddOrReplaceNonVoters(
+			ctx, repl, desc, conf, liveVoterReplicas, liveNonVoterReplicas, removeIdx,
+			allocatorimpl.Decommissioning, allocatorPrio)
 
 	// Remove decommissioning replicas.
 	//
@@ -1130,9 +1133,9 @@ func (rq *replicateQueue) PlanOneChange(
 	// has decommissioning replicas; in the common case we'll hit
 	// AllocatorReplaceDecommissioning{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDecommissioningVoter:
-		op, err = rq.removeDecommissioning(ctx, repl, allocatorimpl.VoterTarget)
+		op, err = rq.planRemoveDecommissioning(ctx, repl, desc, conf, allocatorimpl.VoterTarget)
 	case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
-		op, err = rq.removeDecommissioning(ctx, repl, allocatorimpl.NonVoterTarget)
+		op, err = rq.planRemoveDecommissioning(ctx, repl, desc, conf, allocatorimpl.NonVoterTarget)
 
 	// Remove dead replicas.
 	//
@@ -1140,9 +1143,9 @@ func (rq *replicateQueue) PlanOneChange(
 	// over-replicated and has dead replicas; in the common case we'll hit
 	// AllocatorReplaceDead{Non}Voter above.
 	case allocatorimpl.AllocatorRemoveDeadVoter:
-		op, err = rq.removeDead(ctx, repl, deadVoterReplicas, allocatorimpl.VoterTarget)
+		op, err = rq.planRemoveDead(ctx, repl, deadVoterReplicas, allocatorimpl.VoterTarget)
 	case allocatorimpl.AllocatorRemoveDeadNonVoter:
-		op, err = rq.removeDead(ctx, repl, deadNonVoterReplicas, allocatorimpl.NonVoterTarget)
+		op, err = rq.planRemoveDead(ctx, repl, deadNonVoterReplicas, allocatorimpl.NonVoterTarget)
 
 	// Rebalance replicas.
 	//
@@ -1156,6 +1159,8 @@ func (rq *replicateQueue) PlanOneChange(
 		op, err = rq.considerRebalance(
 			ctx,
 			repl,
+			desc,
+			conf,
 			voterReplicas,
 			nonVoterReplicas,
 			allocatorPrio,
@@ -1207,24 +1212,26 @@ func isDecommissionAction(action allocatorimpl.AllocatorAction) bool {
 		action == allocatorimpl.AllocatorReplaceDecommissioningNonVoter
 }
 
-// addOrReplaceVoters adds or replaces a voting replica. If removeIdx is -1, an
-// addition is carried out. Otherwise, removeIdx must be a valid index into
-// existingVoters and specifies which voter to replace with a new one.
+// planAddOrReplaceVoters plans a change to add or replace a voting replica.
+// If removeIdx is -1, an addition is carried out. Otherwise, removeIdx must be
+// a valid index into existingVoters and specifies which voter to replace with
+// a new one.
 //
-// The method preferably issues an atomic replica swap, but may not be able to
+// The method preferably plans an atomic replica swap, but may not be able to
 // do this in all cases, such as when the range consists of a single replica. As
 // a fall back, only the addition is carried out; the removal is then a
 // follow-up step for the next scanner cycle.
-func (rq *replicateQueue) addOrReplaceVoters(
+func (rq *replicateQueue) planAddOrReplaceVoters(
 	ctx context.Context,
 	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
 	allocatorPriority float64,
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
-	desc, conf := repl.DescAndSpanConfig()
 	existingVoters := desc.Replicas().VoterDescriptors()
 	if len(existingVoters) == 1 {
 		// If only one replica remains, that replica is the leaseholder and
@@ -1324,7 +1331,7 @@ func (rq *replicateQueue) addOrReplaceVoters(
 			removeVoter, newVoter, rangeRaftProgress(repl.RaftStatus(), existingVoters))
 		// NB: We may have performed a promotion of a non-voter above, but we will
 		// not perform a demotion here and instead just remove the existing replica
-		// entirely. This is because we know that the `removeVoter` is either dead
+		// entirely. This is because we know that the `planRemoveVoter` is either dead
 		// or decommissioning (see `Allocator.computeAction`). This means that after
 		// this allocation is executed, we could be one non-voter short. This will
 		// be handled by the replicateQueue's next attempt at this range.
@@ -1349,16 +1356,18 @@ func (rq *replicateQueue) addOrReplaceVoters(
 	return op, nil
 }
 
-// addOrReplaceNonVoters adds a non-voting replica to `repl`s range.
-func (rq *replicateQueue) addOrReplaceNonVoters(
+// planAddOrReplaceNonVoters plans a change to add a non-voting replica to
+// `repl`s range.
+func (rq *replicateQueue) planAddOrReplaceNonVoters(
 	ctx context.Context,
 	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
 	liveVoterReplicas, liveNonVoterReplicas []roachpb.ReplicaDescriptor,
 	removeIdx int,
 	replicaStatus allocatorimpl.ReplicaStatus,
 	allocatorPrio float64,
 ) (op AllocationOp, _ error) {
-	desc, conf := repl.DescAndSpanConfig()
 	existingNonVoters := desc.Replicas().NonVoterDescriptors()
 	effects := effectBuilder{}
 
@@ -1417,9 +1426,9 @@ func (rq *replicateQueue) findRemoveVoter(
 		LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 		RaftStatus() *raft.Status
 	},
+	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (roachpb.ReplicationTarget, string, error) {
-	_, zone := repl.DescAndSpanConfig()
 	// This retry loop involves quick operations on local state, so a
 	// small MaxBackoff is good (but those local variables change on
 	// network time scales as raft receives responses).
@@ -1485,7 +1494,7 @@ func (rq *replicateQueue) findRemoveVoter(
 
 	return rq.allocator.RemoveVoter(
 		ctx,
-		zone,
+		conf,
 		candidates,
 		existingVoters,
 		existingNonVoters,
@@ -1505,6 +1514,8 @@ func (rq *replicateQueue) findRemoveVoter(
 func (rq *replicateQueue) maybeTransferLeaseAwayTarget(
 	ctx context.Context,
 	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
 	removeStoreID roachpb.StoreID,
 	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
 ) (op AllocationOp, _ error) {
@@ -1514,7 +1525,6 @@ func (rq *replicateQueue) maybeTransferLeaseAwayTarget(
 	if canTransferLeaseFrom != nil && !canTransferLeaseFrom(ctx, repl) {
 		return nil, errors.Errorf("cannot transfer lease")
 	}
-	desc, conf := repl.DescAndSpanConfig()
 	// The local replica was selected as the removal target, but that replica
 	// is the leaseholder, so transfer the lease instead. We don't check that
 	// the current store has too many leases in this case under the
@@ -1555,17 +1565,22 @@ func (rq *replicateQueue) maybeTransferLeaseAwayTarget(
 	return op, nil
 }
 
-func (rq *replicateQueue) removeVoter(
-	ctx context.Context, repl *Replica, existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+// planRemoveVoter plans a change to remove a voting replica from the range.
+func (rq *replicateQueue) planRemoveVoter(
+	ctx context.Context,
+	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
-	removeVoter, details, err := rq.findRemoveVoter(ctx, repl, existingVoters, existingNonVoters)
+	removeVoter, details, err := rq.findRemoveVoter(ctx, repl, conf, existingVoters, existingNonVoters)
 	if err != nil {
 		return nil, err
 	}
 
 	transferOp, err := rq.maybeTransferLeaseAwayTarget(
-		ctx, repl, removeVoter.StoreID, nil /* canTransferLeaseFrom */)
+		ctx, repl, desc, conf, removeVoter.StoreID, nil /* canTransferLeaseFrom */)
 	if err != nil {
 		return nil, err
 	}
@@ -1598,12 +1613,15 @@ func (rq *replicateQueue) removeVoter(
 	return op, nil
 }
 
-func (rq *replicateQueue) removeNonVoter(
-	ctx context.Context, repl *Replica, existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
+// planRemoveNonVoter plans a change to remove a non-voting replica from the range.
+func (rq *replicateQueue) planRemoveNonVoter(
+	ctx context.Context,
+	repl *Replica,
+	conf roachpb.SpanConfig,
+	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 ) (op AllocationOp, _ error) {
 	effects := effectBuilder{}
 
-	_, conf := repl.DescAndSpanConfig()
 	removeNonVoter, details, err := rq.allocator.RemoveNonVoter(
 		ctx,
 		conf,
@@ -1639,10 +1657,15 @@ func (rq *replicateQueue) removeNonVoter(
 	return op, nil
 }
 
-func (rq *replicateQueue) removeDecommissioning(
-	ctx context.Context, repl *Replica, targetType allocatorimpl.TargetReplicaType,
+// planRemoveDecommissioning plans a change to remove a decommissioning replica
+// from the range.
+func (rq *replicateQueue) planRemoveDecommissioning(
+	ctx context.Context,
+	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
+	targetType allocatorimpl.TargetReplicaType,
 ) (op AllocationOp, _ error) {
-	desc := repl.Desc()
 	effects := effectBuilder{}
 	var decommissioningReplicas []roachpb.ReplicaDescriptor
 	switch targetType {
@@ -1665,7 +1688,7 @@ func (rq *replicateQueue) removeDecommissioning(
 	decommissioningReplica := decommissioningReplicas[0]
 
 	transferOp, err := rq.maybeTransferLeaseAwayTarget(
-		ctx, repl, decommissioningReplica.StoreID, nil /* canTransferLeaseFrom */)
+		ctx, repl, desc, conf, decommissioningReplica.StoreID, nil /* canTransferLeaseFrom */)
 	if err != nil {
 		return nil, err
 	}
@@ -1697,7 +1720,8 @@ func (rq *replicateQueue) removeDecommissioning(
 	return op, nil
 }
 
-func (rq *replicateQueue) removeDead(
+// planRemoveDead plans a change to remove a dead replica from the range.
+func (rq *replicateQueue) planRemoveDead(
 	ctx context.Context,
 	repl *Replica,
 	deadReplicas []roachpb.ReplicaDescriptor,
@@ -1744,6 +1768,8 @@ func (rq *replicateQueue) removeDead(
 func (rq *replicateQueue) considerRebalance(
 	ctx context.Context,
 	repl *Replica,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
 	existingVoters, existingNonVoters []roachpb.ReplicaDescriptor,
 	allocatorPrio float64,
 	canTransferLeaseFrom func(ctx context.Context, repl *Replica) bool,
@@ -1755,7 +1781,6 @@ func (rq *replicateQueue) considerRebalance(
 	}
 	effects := effectBuilder{}
 
-	desc, conf := repl.DescAndSpanConfig()
 	rebalanceTargetType := allocatorimpl.VoterTarget
 
 	scorerOpts := allocatorimpl.ScorerOptions(rq.allocator.ScorerOptions(ctx))
@@ -1798,7 +1823,7 @@ func (rq *replicateQueue) considerRebalance(
 		log.KvDistribution.Infof(ctx, "no suitable rebalance target for non-voters")
 	} else if !lhRemovalAllowed {
 		if transferOp, err := rq.maybeTransferLeaseAwayTarget(
-			ctx, repl, removeTarget.StoreID, canTransferLeaseFrom,
+			ctx, repl, desc, conf, removeTarget.StoreID, canTransferLeaseFrom,
 		); err != nil {
 			// No transfer possible.
 			ok = false
