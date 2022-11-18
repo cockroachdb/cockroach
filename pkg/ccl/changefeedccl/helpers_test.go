@@ -514,12 +514,13 @@ type updateArgsFn func(args *base.TestServerArgs)
 type updateKnobsFn func(knobs *base.TestingKnobs)
 
 type feedTestOptions struct {
-	useTenant         bool
-	argsFn            updateArgsFn
-	knobsFn           updateKnobsFn
-	externalIODir     string
-	allowedSinkTypes  []string
-	disabledSinkTypes []string
+	useTenant                  bool
+	argsFn                     updateArgsFn
+	knobsFn                    updateKnobsFn
+	externalIODir              string
+	allowedSinkTypes           []string
+	disabledSinkTypes          []string
+	disableSyntheticTimestamps bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -527,6 +528,12 @@ type feedTestOption func(opts *feedTestOptions)
 // feedTestNoTenants is a feedTestOption that will prohibit this tests
 // from randomly running on a tenant.
 var feedTestNoTenants = func(opts *feedTestOptions) { opts.useTenant = false }
+
+// feedTestNoForcedSyntheticTimestamps is a feedTestOption that will prevent
+// the test from randomly forcing timestamps to be synthetic and offset five seconds into the future from
+// what they would otherwise be. It doesn't prevent synthetic timestamps but they're otherwise unlikely to
+// occur in tests.
+var feedTestNoForcedSyntheticTimestamps = func(opts *feedTestOptions) { opts.disableSyntheticTimestamps = true }
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -582,6 +589,23 @@ func makeOptions(opts ...feedTestOption) feedTestOptions {
 	options := newTestOptions()
 	for _, o := range opts {
 		o(&options)
+	}
+	if !options.disableSyntheticTimestamps && rand.Intn(2) == 0 {
+		// Offset all timestamps a random (but consistent per test) amount into the
+		// future to ensure we can handle that. Always chooses an integer number of
+		// seconds for easier debugging and so that 0 is a possibility.
+		offset := int64(rand.Intn(6)) * time.Second.Nanoseconds()
+		oldKnobsFn := options.knobsFn
+		options.knobsFn = func(knobs *base.TestingKnobs) {
+			if oldKnobsFn != nil {
+				oldKnobsFn(knobs)
+			}
+			knobs.DistSQL.(*execinfra.TestingKnobs).
+				Changefeed.(*TestingKnobs).FeedKnobs.ModifyTimestamps = func(t *hlc.Timestamp) {
+				t.Add(offset, 0)
+				t.Synthetic = true
+			}
+		}
 	}
 	return options
 }

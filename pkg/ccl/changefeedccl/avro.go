@@ -1008,7 +1008,7 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`updated`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+			native[`updated`] = goavro.Union(avroUnionKey(avroSchemaString), timestampToString(ts))
 		}
 	}
 	if r.opts.resolvedField {
@@ -1020,7 +1020,7 @@ func (r *avroEnvelopeRecord) BinaryFromRow(
 				return nil, changefeedbase.WithTerminalError(
 					errors.Errorf(`unknown metadata timestamp type: %T`, u))
 			}
-			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), ts.AsOfSystemTime())
+			native[`resolved`] = goavro.Union(avroUnionKey(avroSchemaString), timestampToString(ts))
 		}
 	}
 	for k := range meta {
