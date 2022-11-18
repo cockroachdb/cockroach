@@ -238,6 +238,7 @@ DIAGRAMS_SRCS = [
   "//docs/generated/sql/bnf:show_stats.html",
   "//docs/generated/sql/bnf:show_survival_goal.html",
   "//docs/generated/sql/bnf:show_tables.html",
+  "//docs/generated/sql/bnf:show_tenant.html",
   "//docs/generated/sql/bnf:show_trace.html",
   "//docs/generated/sql/bnf:show_transactions.html",
   "//docs/generated/sql/bnf:show_transfer.html",

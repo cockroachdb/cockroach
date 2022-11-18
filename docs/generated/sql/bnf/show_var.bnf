@@ -29,6 +29,7 @@ show_stmt ::=
 	| show_sessions_stmt
 	| show_stats_stmt
 	| show_tables_stmt
+	| show_tenant_stmt
 	| show_trace_stmt
 	| show_transactions_stmt
 	| show_transfer_stmt

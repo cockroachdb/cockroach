@@ -257,3 +257,9 @@ var ExportColumns = ResultColumns{
 	{Name: "rows", Typ: types.Int},
 	{Name: "bytes", Typ: types.Int},
 }
+
+var TenantColumns = ResultColumns{
+	{Name: "id", Typ: types.Int},
+	{Name: "name", Typ: types.String},
+	{Name: "status", Typ: types.String},
+}

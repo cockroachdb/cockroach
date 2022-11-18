@@ -241,6 +241,7 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:show_stats.bnf",
   "//docs/generated/sql/bnf:show_survival_goal_stmt.bnf",
   "//docs/generated/sql/bnf:show_tables.bnf",
+  "//docs/generated/sql/bnf:show_tenant_stmt.bnf",
   "//docs/generated/sql/bnf:show_trace.bnf",
   "//docs/generated/sql/bnf:show_transactions_stmt.bnf",
   "//docs/generated/sql/bnf:show_transfer_stmt.bnf",
