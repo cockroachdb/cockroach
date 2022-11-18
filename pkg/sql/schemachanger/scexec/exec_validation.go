@@ -99,11 +99,17 @@ func executeValidationOp(ctx context.Context, deps Dependencies, op scop.Op) (er
 	switch op := op.(type) {
 	case *scop.ValidateIndex:
 		if err = executeValidateUniqueIndex(ctx, deps, op); err != nil {
-			return errors.Wrapf(err, "%T: %v", op, op)
+			if !scerrors.HasSchemaChangerUserError(err) {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
+			return err
 		}
 	case *scop.ValidateCheckConstraint:
 		if err = executeValidateCheckConstraint(ctx, deps, op); err != nil {
-			return errors.Wrapf(err, "%T: %v", op, op)
+			if !scerrors.HasSchemaChangerUserError(err) {
+				return errors.Wrapf(err, "%T: %v", op, op)
+			}
+			return err
 		}
 	default:
 		panic("unimplemented")

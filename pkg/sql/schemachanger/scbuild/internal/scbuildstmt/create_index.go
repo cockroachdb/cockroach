@@ -140,7 +140,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	})
 	if idxSpec.secondary.TableID == catid.InvalidDescID || sourceIndex == nil {
 		panic(pgerror.Newf(pgcode.WrongObjectType,
-			"%q is not an indexable table or a materialized view", n.Table.ObjectName))
+			"%q is not a table or materialized view", n.Table.ObjectName))
 	}
 	if n.Unique {
 		idxSpec.secondary.IsUnique = true
@@ -510,7 +510,7 @@ func addColumnsForSecondaryIndex(
 		colName := storingNode.String()
 		if _, found := columnRefs[colName]; found {
 			panic(pgerror.Newf(pgcode.InvalidObjectDefinition,
-				"index %q contains column %q", n.Name, colName))
+				"index %q already contains column %q", n.Name, colName))
 		}
 		columnRefs[colName] = struct{}{}
 	}
