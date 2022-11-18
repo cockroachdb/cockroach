@@ -97,6 +97,12 @@ func loadTPCHDataset(
 	}
 
 	t.L().Printf("restoring tpch scale factor %d\n", sf)
+	// Lower the target size for the restore spans so that we get more ranges.
+	// This is useful to exercise the parallelism across ranges within a single
+	// query.
+	if _, err := db.ExecContext(ctx, "SET CLUSTER SETTING backup.restore_span.target_size = '64MiB';"); err != nil {
+		return err
+	}
 	tpchURL := fmt.Sprintf("gs://cockroach-fixtures/workload/tpch/scalefactor=%d/backup?AUTH=implicit", sf)
 	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS tpch;`); err != nil {
 		return err
