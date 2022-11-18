@@ -104,7 +104,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[IndexColumn:{DescID: 107, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 107}
 - [[PrimaryIndex:{DescID: 107, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 107}
+  {constraintId: 1, geoConfig: {}, indexId: 1, isUnique: true, tableId: 107}
 - [[IndexName:{DescID: 107, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t1_pkey, tableId: 107}
 - [[IndexComment:{DescID: 107, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]

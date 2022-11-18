@@ -114,7 +114,7 @@ DROP TABLE defaultdb.shipments CASCADE;
 - [[IndexColumn:{DescID: 109, ColumnID: 6, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 6, indexId: 1, kind: STORED, ordinalInKind: 4, tableId: 109}
 - [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 109}
+  {constraintId: 1, geoConfig: {}, indexId: 1, isUnique: true, tableId: 109}
 - [[IndexName:{DescID: 109, Name: shipments_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: shipments_pkey, tableId: 109}
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: pkey is good}, ABSENT], PUBLIC]

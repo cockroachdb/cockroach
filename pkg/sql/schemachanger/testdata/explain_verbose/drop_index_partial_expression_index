@@ -228,6 +228,7 @@ EXPLAIN (ddl, verbose) DROP INDEX idx CASCADE;
             ├── • LogEvent
             │     Element:
             │       SecondaryIndex:
+            │         geoConfig: {}
             │         indexId: 2
             │         isCreatedExplicitly: true
             │         tableId: 104

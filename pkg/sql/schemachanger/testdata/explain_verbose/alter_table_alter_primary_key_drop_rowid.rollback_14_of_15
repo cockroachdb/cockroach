@@ -48,7 +48,7 @@ EXPLAIN (ddl, verbose) rollback at post-commit stage 14 of 15;
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 1}
     │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │     rule: "index named right before index becomes public"
+    │   │   │   │     rule: "primary index named right before index becomes public"
     │   │   │   │
     │   │   │   └── • SameStagePrecedence dependency from VALIDATED PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
     │   │   │         rule: "primary index swap"

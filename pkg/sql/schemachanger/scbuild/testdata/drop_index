@@ -18,7 +18,7 @@ DROP INDEX idx1 CASCADE
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 2, kind: KEY_SUFFIX, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 2, isCreatedExplicitly: true, tableId: 104}
+  {geoConfig: {}, indexId: 2, isCreatedExplicitly: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx1, IndexID: 2}, ABSENT], PUBLIC]
   {indexId: 2, name: idx1, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 2}, ABSENT], PUBLIC]
@@ -38,9 +38,9 @@ DROP INDEX idx2 CASCADE
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 4}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 4, kind: KEY_SUFFIX, tableId: 104}
 - [[SecondaryIndexPartial:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]
-  {expr: 'i > 0:::INT8', indexId: 4, referencedColumnIds: [1], tableId: 104}
+  {expr: i > 0, indexId: 4, referencedColumnIds: [1], tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 4, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 4, isCreatedExplicitly: true, tableId: 104}
+  {geoConfig: {}, indexId: 4, isCreatedExplicitly: true, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx2, IndexID: 4}, ABSENT], PUBLIC]
   {indexId: 4, name: idx2, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 4}, ABSENT], PUBLIC]
@@ -62,7 +62,7 @@ DROP INDEX idx3 CASCADE
 - [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 6}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 6, kind: KEY_SUFFIX, tableId: 104}
 - [[SecondaryIndex:{DescID: 104, IndexID: 6, ConstraintID: 0}, ABSENT], PUBLIC]
-  {indexId: 6, isCreatedExplicitly: true, sharding: {columnNames: [i], isSharded: true, name: crdb_internal_i_shard_16, shardBuckets: 16}, tableId: 104}
+  {geoConfig: {}, indexId: 6, isCreatedExplicitly: true, sharding: {columnNames: [i], isSharded: true, name: crdb_internal_i_shard_16, shardBuckets: 16}, tableId: 104}
 - [[IndexName:{DescID: 104, Name: idx3, IndexID: 6}, ABSENT], PUBLIC]
   {indexId: 6, name: idx3, tableId: 104}
 - [[IndexData:{DescID: 104, IndexID: 6}, ABSENT], PUBLIC]

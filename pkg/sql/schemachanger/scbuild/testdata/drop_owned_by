@@ -101,7 +101,7 @@ DROP OWNED BY r
 - [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 109}
 - [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 109}
+  {constraintId: 1, geoConfig: {}, indexId: 1, isUnique: true, tableId: 109}
 - [[IndexName:{DescID: 109, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t_pkey, tableId: 109}
 - [[IndexData:{DescID: 109, IndexID: 1}, ABSENT], PUBLIC]
@@ -175,7 +175,7 @@ DROP OWNED BY r
 - [[IndexColumn:{DescID: 108, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 108}
 - [[PrimaryIndex:{DescID: 108, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 108}
+  {constraintId: 1, geoConfig: {}, indexId: 1, isUnique: true, tableId: 108}
 - [[IndexName:{DescID: 108, Name: t_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t_pkey, tableId: 108}
 - [[IndexData:{DescID: 108, IndexID: 1}, ABSENT], PUBLIC]

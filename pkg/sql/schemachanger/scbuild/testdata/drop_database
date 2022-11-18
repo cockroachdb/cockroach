@@ -134,7 +134,7 @@ DROP DATABASE db1 CASCADE
 - [[IndexColumn:{DescID: 110, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 110}
 - [[PrimaryIndex:{DescID: 110, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 110}
+  {constraintId: 1, geoConfig: {}, indexId: 1, isUnique: true, tableId: 110}
 - [[IndexName:{DescID: 110, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t1_pkey, tableId: 110}
 - [[IndexData:{DescID: 110, IndexID: 1}, ABSENT], PUBLIC]
@@ -212,7 +212,7 @@ DROP DATABASE db1 CASCADE
 - [[IndexColumn:{DescID: 109, ColumnID: 3, IndexID: 1}, ABSENT], PUBLIC]
   {columnId: 3, indexId: 1, kind: STORED, ordinalInKind: 1, tableId: 109}
 - [[PrimaryIndex:{DescID: 109, IndexID: 1, ConstraintID: 1}, ABSENT], PUBLIC]
-  {constraintId: 1, indexId: 1, isUnique: true, tableId: 109}
+  {constraintId: 1, geoConfig: {}, indexId: 1, isUnique: true, tableId: 109}
 - [[IndexName:{DescID: 109, Name: t1_pkey, IndexID: 1}, ABSENT], PUBLIC]
   {indexId: 1, name: t1_pkey, tableId: 109}
 - [[IndexComment:{DescID: 109, IndexID: 1, Comment: t1_pkey is good}, ABSENT], PUBLIC]
