@@ -327,6 +327,16 @@ func TestCreateChangefeedScheduleIfNotExists(t *testing.T) {
 
 	const selectQuery = "SELECT label FROM [SHOW SCHEDULES FOR CHANGEFEED]"
 
+	if th.cfg == nil {
+		t.Log("cfg")
+		t.FailNow()
+	}
+
+	if th.cfg.InternalExecutor == nil {
+		t.Log("InternalExecutor")
+		t.FailNow()
+	}
+
 	rows, err := th.cfg.InternalExecutor.QueryBufferedEx(
 		context.Background(), "check-sched", nil,
 		sessiondata.RootUserSessionDataOverride,
