@@ -8,7 +8,7 @@ EXPLAIN (ddl) rollback at post-commit stage 1 of 7;
 Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›); 
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 14 elements transitioning toward ABSENT
+           ├── 15 elements transitioning toward ABSENT
            │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
@@ -22,8 +22,10 @@ Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› A
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}
            │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 4}
-           │    └── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
-           └── 9 Mutation operations
+           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 5}
+           │    └── PUBLIC        → ABSENT IndexName:{DescID: 104, Name: t_i_key, IndexID: 4}
+           └── 10 Mutation operations
+                ├── SetIndexName {"IndexID":4,"Name":"crdb_internal_in...","TableID":104}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
                 ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
                 ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
