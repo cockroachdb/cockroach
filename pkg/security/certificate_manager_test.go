@@ -51,26 +51,31 @@ func TestManagerWithEmbedded(t *testing.T) {
 	}
 
 	// Verify that we can build tls.Config objects.
-	if _, err := cm.GetServerTLSConfig(); err != nil {
-		t.Error(err)
-	}
-	if _, err := cm.GetClientTLSConfig(username.NodeUserName()); err != nil {
-		t.Error(err)
-	}
-	if _, err := cm.GetClientTLSConfig(username.RootUserName()); err != nil {
-		t.Error(err)
-	}
-	if _, err := cm.GetClientTLSConfig(username.TestUserName()); err != nil {
-		t.Error(err)
-	}
-	if _, err := cm.GetClientTLSConfig(
-		username.MakeSQLUsernameFromPreNormalizedString("testuser2")); err != nil {
-		t.Error(err)
-	}
-	if _, err := cm.GetClientTLSConfig(
-		username.MakeSQLUsernameFromPreNormalizedString("my-random-user")); err == nil {
-		t.Error("unexpected success")
-	}
+	_, err = cm.GetServerTLSConfig()
+	require.NoError(t, err)
+	_, err = cm.GetRPCClientTLSConfig(username.NodeUserName())
+	require.NoError(t, err)
+	_, err = cm.GetRPCClientTLSConfig(username.RootUserName())
+	require.NoError(t, err)
+	_, err = cm.GetRPCClientTLSConfig(username.TestUserName())
+	require.NoError(t, err)
+	_, err = cm.GetRPCClientTLSConfig(
+		username.MakeSQLUsernameFromPreNormalizedString("testuser2"))
+	require.NoError(t, err)
+	_, err = cm.GetRPCClientTLSConfig(
+		username.MakeSQLUsernameFromPreNormalizedString("my-random-user"))
+	_, err = cm.GetSQLClientTLSConfig(username.NodeUserName())
+	require.NoError(t, err)
+	_, err = cm.GetSQLClientTLSConfig(username.RootUserName())
+	require.NoError(t, err)
+	_, err = cm.GetSQLClientTLSConfig(username.TestUserName())
+	require.NoError(t, err)
+	_, err = cm.GetSQLClientTLSConfig(
+		username.MakeSQLUsernameFromPreNormalizedString("testuser2"))
+	require.NoError(t, err)
+	_, err = cm.GetSQLClientTLSConfig(
+		username.MakeSQLUsernameFromPreNormalizedString("my-random-user"))
+	require.NoError(t, err)
 }
 
 func TestManagerWithPrincipalMap(t *testing.T) {

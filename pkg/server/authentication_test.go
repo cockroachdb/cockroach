@@ -817,7 +817,7 @@ func TestGRPCAuthentication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tlsConfig, err := certManager.GetClientTLSConfig(username.TestUserName())
+	tlsConfig, err := certManager.GetRPCClientTLSConfig(username.TestUserName())
 	if err != nil {
 		t.Fatal(err)
 	}
