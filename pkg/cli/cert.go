@@ -141,6 +141,48 @@ func runCreateNodeCert(cmd *cobra.Command, args []string) error {
 		"failed to generate node certificate and key")
 }
 
+// A createSQLServerCert command generates a SQL server certificate and stores it
+// in the cert directory.
+var createSQLServerCertCmd = &cobra.Command{
+	Use:   "create-sql-server --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-ca-key> <host 1> <host 2> ... <host N>",
+	Short: "create SQL server certificate and key",
+	Long: `
+Generate a SQL server certificate "<certs-dir>/sql-server.crt" and key "<certs-dir>/sql-server.key".
+
+If --overwrite is true, any existing files are overwritten.
+
+At least one host should be passed in (either IP address or dns name).
+
+Requires a CA cert in "<certs-dir>/ca.crt" and matching key in "--ca-key".
+If "ca.crt" contains more than one certificate, the first is used.
+Creation fails if the CA expiration time is before the desired certificate expiration.
+`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return errors.Errorf("create-sql-server requires at least one host name or address, none was specified")
+		}
+		return nil
+	},
+	RunE: clierrorplus.MaybeDecorateError(runCreateSQLServerCert),
+}
+
+// runCreateSQLServerCert generates key pair and CA certificate and writes them
+// to their corresponding files.
+// TODO(marc): there is currently no way to specify which CA cert to use if more
+// than one is present. We should try to load each certificate along with the key
+// and pick the one that works. That way, the key specifies the certificate.
+func runCreateSQLServerCert(cmd *cobra.Command, args []string) error {
+	return errors.Wrap(
+		security.CreateSQLServerPair(
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.certificateLifetime,
+			certCtx.overwriteFiles,
+			args),
+		"failed to generate SQL server certificate and key")
+}
+
 // A createClientCert command generates a client certificate and stores it
 // in the cert directory under <username>.crt and key under <username>.key.
 var createClientCertCmd = &cobra.Command{
@@ -307,6 +349,7 @@ var certCmds = []*cobra.Command{
 	createClientCACertCmd,
 	mtCreateTenantCACertCmd,
 	createNodeCertCmd,
+	createSQLServerCertCmd,
 	createClientCertCmd,
 	mtCreateTenantCertCmd,
 	mtCreateTenantSigningCertCmd,
@@ -316,7 +359,7 @@ var certCmds = []*cobra.Command{
 var certCmd = func() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cert",
-		Short: "create ca, node, and client certs",
+		Short: "create ca, node, SQL and client certs",
 		RunE:  UsageAndErr,
 	}
 	cmd.AddCommand(certCmds...)
