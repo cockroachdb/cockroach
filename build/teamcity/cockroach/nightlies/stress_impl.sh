@@ -31,6 +31,11 @@ do
         echo "Skipping test $test as it is broken in bazel"
         continue
     fi
+    if [[ ! -z $(bazel query "attr(tags, \"integration\", $test)") ]]
+    then
+        echo "Skipping test $test as it is an integration test"
+        continue
+    fi
     exit_status=0
     $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci "$test" \
                                           --test_env=COCKROACH_NIGHTLY_STRESS=true \
