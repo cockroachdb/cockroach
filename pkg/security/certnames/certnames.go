@@ -45,13 +45,24 @@ func TenantClientCACertFilename() string {
 }
 
 // ClientCACertFilename returns the expected file name for the client CA certificate.
+// This is the CA used to sign the certs used by clients.
 func ClientCACertFilename() string { return "ca-client" + certExtension }
 
 // ClientCAKeyFilename returns the expected file name for the client CA key.
 func ClientCAKeyFilename() string { return "ca-client" + keyExtension }
 
 // UICACertFilename returns the expected file name for the HTTP CA certificate.
+// This is the CA used to sign the server HTTP cert.
 func UICACertFilename() string { return "ca-ui" + certExtension }
+
+// SQLServerCAKeyFilename returns the expected file name for the SQL
+// server CA key.
+func SQLServerCAKeyFilename() string { return "ca-sql" + keyExtension }
+
+// SQLServerCACertFilename returns the expected file name for the SQL
+// server CA certificate. This is the CA used to signed the SQL
+// server cert (sql-server.crt).
+func SQLServerCACertFilename() string { return "ca-sql" + certExtension }
 
 // UICAKeyFilename returns the expected file name for the HTTP CA key.
 func UICAKeyFilename() string { return "ca-ui" + keyExtension }

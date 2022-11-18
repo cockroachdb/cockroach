@@ -114,6 +114,17 @@ func CreateClientCAPair(
 	return createCACertAndKey(certsDir, caKeyPath, ClientCAPem, keySize, lifetime, allowKeyReuse, overwrite)
 }
 
+// CreateSQLServerCAPair creates a SQL server CA certificate and associated key.
+func CreateSQLServerCAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, SQLServerCAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
 // CreateUICAPair creates a UI CA certificate and associated key.
 func CreateUICAPair(
 	certsDir, caKeyPath string,
@@ -152,10 +163,11 @@ func createCACertAndKey(
 	if caType != CAPem &&
 		caType != TenantCAPem &&
 		caType != ClientCAPem &&
+		caType != SQLServerCAPem &&
 		caType != UICAPem {
 
-		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), or UICAPem (%d), got: %d",
-			CAPem, ClientCAPem, UICAPem, caType)
+		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), SQLServerCAPem (%d) or UICAPem (%d), got: %d",
+			CAPem, ClientCAPem, SQLServerCAPem, UICAPem, caType)
 	}
 
 	// Create a certificate manager with "create dir if not exist".
@@ -215,6 +227,8 @@ func createCACertAndKey(
 		certPath = cm.TenantCACertPath()
 	case ClientCAPem:
 		certPath = cm.ClientCACertPath()
+	case SQLServerCAPem:
+		certPath = cm.SQLServerCACertPath()
 	case UICAPem:
 		certPath = cm.UICACertPath()
 	default:
@@ -329,8 +343,17 @@ func CreateSQLServerPair(
 		return err
 	}
 
+	var caCertPath string
+	// Check to see if we are using a separate SQL server CA.
+	// We only check for its presence, not whether it has errors.
+	if cm.SQLServerCACert() != nil {
+		caCertPath = cm.SQLServerCACertPath()
+	} else {
+		caCertPath = cm.CACertPath()
+	}
+
 	// Load the CA pair.
-	caCert, caPrivateKey, err := loadCACertAndKey(cm.CACertPath(), caKeyPath)
+	caCert, caPrivateKey, err := loadCACertAndKey(caCertPath, caKeyPath)
 	if err != nil {
 		return err
 	}
