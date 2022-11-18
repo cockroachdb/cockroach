@@ -52,6 +52,12 @@ var (
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
+	metaSQLServerExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.sql-server",
+		Help:        "Expiration for the SQL server certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 	metaNodeClientExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.node-client",
 		Help:        "Expiration for the node's client certificate. 0 means no certificate or error.",
@@ -119,7 +125,8 @@ type CertificateManager struct {
 	caCert         *CertInfo // default CA certificate
 	clientCACert   *CertInfo // optional: certificate to verify client certificates
 	uiCACert       *CertInfo // optional: certificate to verify UI certificates
-	nodeCert       *CertInfo // certificate for nodes (always server cert, sometimes client cert)
+	nodeCert       *CertInfo // certificate for RPC service (always server cert, sometimes client cert)
+	sqlServerCert  *CertInfo // optional: certificate for SQL service
 	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
 	uiCert         *CertInfo // optional: server certificate for the admin UI.
 	clientCerts    map[username.SQLUsername]*CertInfo
@@ -130,6 +137,8 @@ type CertificateManager struct {
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config for inbound RPC connections.
 	rpcServerConfig *tls.Config
+	// Server-side config for inbound SQL connections.
+	sqlServerConfig *tls.Config
 	// Server-side config for the Admin UI.
 	uiServerConfig *tls.Config
 	// Client-side config for the cockroach node.
@@ -151,6 +160,7 @@ type CertificateMetrics struct {
 	ClientCAExpiration   *metric.Gauge
 	UICAExpiration       *metric.Gauge
 	NodeExpiration       *metric.Gauge
+	SQLServerExpiration  *metric.Gauge
 	NodeClientExpiration *metric.Gauge
 	UIExpiration         *metric.Gauge
 	TenantCAExpiration   *metric.Gauge
@@ -174,6 +184,7 @@ func makeCertificateManager(
 			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
 			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
 			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
+			SQLServerExpiration:  metric.NewGauge(metaSQLServerExpiration),
 			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
 			UIExpiration:         metric.NewGauge(metaUIExpiration),
 			TenantCAExpiration:   metric.NewGauge(metaTenantCAExpiration),
@@ -305,6 +316,14 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 	return cm.nodeCert
 }
 
+// SQLServerCert returns the SQL server cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) SQLServerCert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.sqlServerCert
+}
+
 // ClientCerts returns the Client certs.
 // Callers should check for internal Error fields.
 func (cm *CertificateManager) ClientCerts() map[username.SQLUsername]*CertInfo {
@@ -344,7 +363,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 		return makeErrorf(err, "problem loading certs directory %s", cm.CertsDir())
 	}
 
-	var caCert, clientCACert, uiCACert, nodeCert, uiCert, nodeClientCert *CertInfo
+	var caCert, clientCACert, uiCACert, nodeCert, sqlServerCert, uiCert, nodeClientCert *CertInfo
 	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[username.SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
@@ -357,6 +376,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 			uiCACert = ci
 		case NodePem:
 			nodeCert = ci
+		case SQLServerPem:
+			sqlServerCert = ci
 		case TenantPem:
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
@@ -404,6 +425,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 		if err := checkCertIsValid(nodeCert); checkCertIsValid(cm.nodeCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid node cert")
 		}
+		if err := checkCertIsValid(sqlServerCert); checkCertIsValid(cm.sqlServerCert) == nil && err != nil {
+			return makeError(err, "reload would lose valid SQL server cert")
+		}
 		if err := checkCertIsValid(nodeClientCert); checkCertIsValid(cm.nodeClientCert) == nil && err != nil {
 			return makeErrorf(err, "reload would lose valid client cert for '%s'", username.NodeUser)
 		}
@@ -443,6 +467,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.uiCACert = uiCACert
 
 	cm.nodeCert = nodeCert
+	cm.sqlServerCert = sqlServerCert
 	cm.nodeClientCert = nodeClientCert
 	cm.uiCert = uiCert
 	cm.clientCerts = clientCerts
@@ -450,6 +475,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.initialized = true
 
 	cm.rpcServerConfig = nil
+	cm.sqlServerConfig = nil
 	cm.uiServerConfig = nil
 	cm.clientConfig = nil
 
@@ -493,6 +519,9 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	// used to sign the node cert expires sooner, then that is the expiration time to report.
 	maybeSetMetric(cm.certMetrics.NodeExpiration, cm.nodeCert)
 
+	// SQL Server certificate expiration.
+	maybeSetMetric(cm.certMetrics.SQLServerExpiration, cm.sqlServerCert)
+
 	// Node client certificate expiration.
 	maybeSetMetric(cm.certMetrics.NodeClientExpiration, cm.nodeClientCert)
 
@@ -503,18 +532,29 @@ func (cm *CertificateManager) updateMetricsLocked() {
 // GetSQLServerTLSConfig returns a SQL server TLS config.
 // TODO(knz): change this to use a separate cert wherever releavant.
 func (cm *CertificateManager) GetSQLServerTLSConfig() (*tls.Config, error) {
-	return cm.GetRPCServerTLSConfig()
+	if _, err := cm.getEmbeddedSQLServerTLSConfig(nil); err != nil {
+		return nil, err
+	}
+	return &tls.Config{
+		GetConfigForClient: cm.getEmbeddedSQLServerTLSConfig,
+		// We populate GetCertificate for symmetry with GetRPCServerTLSConfig,
+		// which seemingly needs it.
+		// TODO(knz): investigate whether this is truly needed.
+		GetCertificate: func(hi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			return nil, nil
+		},
+	}, nil
 }
 
 // GetRPCServerTLSConfig returns a RPC server TLS config with a callback to fetch the
 // latest TLS config. We still attempt to get the config to make sure
 // the initial call has a valid config loaded.
 func (cm *CertificateManager) GetRPCServerTLSConfig() (*tls.Config, error) {
-	if _, err := cm.getEmbeddedServerTLSConfig(nil); err != nil {
+	if _, err := cm.getEmbeddedRPCServerTLSConfig(nil); err != nil {
 		return nil, err
 	}
 	return &tls.Config{
-		GetConfigForClient: cm.getEmbeddedServerTLSConfig,
+		GetConfigForClient: cm.getEmbeddedRPCServerTLSConfig,
 		// NB: this is needed to use (*http.Server).ServeTLS, which tries to load
 		// a certificate eagerly from the supplied strings (which are empty in
 		// our case) unless:
@@ -529,10 +569,83 @@ func (cm *CertificateManager) GetRPCServerTLSConfig() (*tls.Config, error) {
 	}, nil
 }
 
-// getEmbeddedServerTLSConfig returns the most up-to-date server tls.Config.
+// getEmbeddedSQLServerTLSConfig returns the most up-to-date server tls.Config
+// for the SQL service.
 // This is the callback set in tls.Config.GetConfigForClient. We currently
 // ignore the ClientHelloInfo object.
-func (cm *CertificateManager) getEmbeddedServerTLSConfig(
+func (cm *CertificateManager) getEmbeddedSQLServerTLSConfig(
+	_ *tls.ClientHelloInfo,
+) (*tls.Config, error) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	if cm.sqlServerConfig != nil {
+		return cm.sqlServerConfig, nil
+	}
+
+	ca, err := cm.getCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	var serverCert *CertInfo
+	if !cm.IsForTenant() {
+		// Storage cluster.
+		if cm.sqlServerCert != nil {
+			serverCert, err = cm.getSQLServerCertLocked()
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// No sql-server.crt. Fall back to node.crt for
+			// backward-compatibility with previous versions of CockroachDB.
+			serverCert, err = cm.getNodeCertLocked()
+			if err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		// Tenant server.
+		// TODO(knz): also use sql-server.crt for tenant servers.
+		serverCert, err = cm.getTenantCertLocked()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// In any case, also add all the related CAs in the bundle.
+
+	clientCA, err := cm.getClientCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	tenantCA, err := cm.getTenantCACertLocked()
+	if err != nil {
+		return nil, err
+	}
+
+	cfg, err := newServerTLSConfig(
+		cm.tlsSettings,
+		serverCert.FileContents,
+		serverCert.KeyFileContents,
+		ca.FileContents,
+		clientCA.FileContents,
+		tenantCA.FileContents,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	cm.sqlServerConfig = cfg
+	return cfg, nil
+}
+
+// getEmbeddedRPCServerTLSConfig returns the most up-to-date server tls.Config
+// for the RPC service.
+// This is the callback set in tls.Config.GetConfigForClient. We currently
+// ignore the ClientHelloInfo object.
+func (cm *CertificateManager) getEmbeddedRPCServerTLSConfig(
 	_ *tls.ClientHelloInfo,
 ) (*tls.Config, error) {
 	cm.mu.Lock()
@@ -561,6 +674,8 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 			return nil, err
 		}
 	}
+
+	// In any case, also add all the related CAs in the bundle.
 
 	clientCA, err := cm.getClientCACertLocked()
 	if err != nil {
@@ -676,6 +791,15 @@ func (cm *CertificateManager) getNodeCertLocked() (*CertInfo, error) {
 		return nil, makeError(err, "problem with node certificate")
 	}
 	return cm.nodeCert, nil
+}
+
+// getSQLServerCertLocked returns the SQL server certificate.
+// cm.mu must be held.
+func (cm *CertificateManager) getSQLServerCertLocked() (*CertInfo, error) {
+	if err := checkCertIsValid(cm.sqlServerCert); err != nil {
+		return nil, makeError(err, "problem with SQL server certificate")
+	}
+	return cm.sqlServerCert, nil
 }
 
 // getUICertLocked returns the UI certificate if present, otherwise returns
@@ -943,6 +1067,9 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	}
 	if cm.nodeCert != nil {
 		ret = append(ret, cm.nodeCert)
+	}
+	if cm.sqlServerCert != nil {
+		ret = append(ret, cm.sqlServerCert)
 	}
 	if cm.uiCert != nil {
 		ret = append(ret, cm.uiCert)

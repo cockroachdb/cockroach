@@ -310,6 +310,64 @@ func CreateNodePair(
 	return nil
 }
 
+// CreateSQLServerPair creates a SQL Server key and certificate.
+// The CA cert and key must load properly. If multiple certificates
+// exist in the CA cert, the first one is used.
+func CreateSQLServerPair(
+	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
+) error {
+	if len(caKeyPath) == 0 {
+		return errors.New("the path to the CA key is required")
+	}
+	if len(certsDir) == 0 {
+		return errors.New("the path to the certs directory is required")
+	}
+
+	// Create a certificate manager with "create dir if not exist".
+	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
+	if err != nil {
+		return err
+	}
+
+	// Load the CA pair.
+	caCert, caPrivateKey, err := loadCACertAndKey(cm.CACertPath(), caKeyPath)
+	if err != nil {
+		return err
+	}
+
+	// Generate certificates and keys.
+	serverKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	if err != nil {
+		return errors.Wrap(err, "could not generate new node key")
+	}
+
+	// Allow control of the principal to place in the cert via an env var. This
+	// is intended for testing purposes only.
+	serverUser, _ := username.MakeSQLUsernameFromUserInput(
+		envutil.EnvOrDefaultString("COCKROACH_CERT_SQL_SERVER_USER", username.NodeUser),
+		username.PurposeValidation)
+
+	serverCert, err := GenerateServerCert(caCert, caPrivateKey,
+		serverKey.Public(), lifetime, serverUser, hosts)
+	if err != nil {
+		return errors.Wrap(err, "error creating SQL server certificate and key")
+	}
+
+	certPath := cm.SQLServerCertPath()
+	if err := writeCertificateToFile(certPath, serverCert, overwrite); err != nil {
+		return errors.Wrapf(err, "error writing SQL server certificate to %s", certPath)
+	}
+	log.Infof(context.Background(), "generated SQL server certificate: %s", certPath)
+
+	keyPath := cm.SQLServerKeyPath()
+	if err := writeKeyToFile(keyPath, serverKey, overwrite); err != nil {
+		return errors.Wrapf(err, "error writing SQL server key to %s", keyPath)
+	}
+	log.Infof(context.Background(), "generated SQL server key: %s", keyPath)
+
+	return nil
+}
+
 // CreateUIPair creates a UI certificate and key using the UI CA.
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.

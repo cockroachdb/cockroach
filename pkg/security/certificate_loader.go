@@ -56,9 +56,12 @@ const (
 	ClientCAPem
 	// UICAPem describes the CA certificate used to verify the Admin UI server certificate.
 	UICAPem
-	// NodePem describes the server certificate for the node, possibly a combined server/client
-	// certificate for user Node if a separate 'client.node.crt' is not present.
+	// NodePem describes the server certificate for the RPC service,
+	// possibly a combined server/client certificate for user Node if a
+	// separate 'client.node.crt' is not present.
 	NodePem
+	// SQLServerPem describes the server certificate for the SQL service.
+	SQLServerPem
 	// UIPem describes the server certificate for the admin UI.
 	UIPem
 	// ClientPem describes a client certificate.
@@ -94,6 +97,8 @@ func (p PemUsage) String() string {
 		return "UI CA"
 	case NodePem:
 		return "Node"
+	case SQLServerPem:
+		return "SQL Server"
 	case UIPem:
 		return "UI"
 	case ClientPem:
@@ -179,6 +184,11 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		fileUsage = NodePem
 		if numParts != 2 {
 			return nil, errors.Errorf("node certificate filename should match %s", certnames.NodeCertFilename())
+		}
+	case `sql-server`:
+		fileUsage = SQLServerPem
+		if numParts != 2 {
+			return nil, errors.Errorf("SQL server certificate filename should match %s", certnames.SQLServerCertFilename())
 		}
 	case `ui`:
 		fileUsage = UIPem

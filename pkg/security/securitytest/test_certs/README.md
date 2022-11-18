@@ -4,8 +4,10 @@ Contains the following files:
 
 * ca.crt: CA certificate
 * ca.key: CA private key
-* node.crt: node client/server certificate
-* node.key: node client/server private key
+* node.crt: RPC client/server certificate
+* node.key: RPC client/server private key
+* sql-server.crt: SQL server certificate
+* sql-server.key: SQL server private key
 * client.root.crt: admin client certificate
 * client.root.key: admin client private key
 * client.testuser.crt: testing user certificate
