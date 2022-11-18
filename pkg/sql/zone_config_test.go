@@ -140,7 +140,7 @@ func TestGetZoneConfig(t *testing.T) {
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := sql.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
-					ctx, txn, keys.SystemSQLCodec, col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
+					ctx, txn, col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
 					return err
@@ -376,7 +376,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			dummyIndex := systemschema.CommentsTable.GetPrimaryIndex()
 			if err := sql.TestingDescsTxn(context.Background(), s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(
-					ctx, txn, keys.SystemSQLCodec, col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
+					ctx, txn, col, descpb.ID(tc.objectID), dummyIndex, tc.partitionName, false,
 				)
 				if err != nil {
 					return err

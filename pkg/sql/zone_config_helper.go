@@ -68,9 +68,18 @@ func (h *systemZoneConfigHelper) maybeGetZoneConfig(id descpb.ID) (*zonepb.ZoneC
 
 type collectionZoneConfigHelper struct {
 	ctx         context.Context
-	codec       keys.SQLCodec
 	txn         *kv.Txn
 	descriptors *descs.Collection
+}
+
+func newCollectionZoneConfigHelper(
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
+) *collectionZoneConfigHelper {
+	return &collectionZoneConfigHelper{
+		ctx:         ctx,
+		txn:         txn,
+		descriptors: descriptors,
+	}
 }
 
 func (h *collectionZoneConfigHelper) maybeGetTable(id descpb.ID) (catalog.TableDescriptor, error) {
@@ -97,20 +106,6 @@ func (h *collectionZoneConfigHelper) maybeGetTable(id descpb.ID) (catalog.TableD
 }
 
 func (h *collectionZoneConfigHelper) maybeGetZoneConfig(id descpb.ID) (*zonepb.ZoneConfig, error) {
-	if h.descriptors == nil {
-		keyVal, err := h.txn.Get(h.ctx, config.MakeZoneKey(h.codec, id))
-		if err != nil {
-			return nil, err
-		}
-		if keyVal.Value != nil {
-			var zone zonepb.ZoneConfig
-			if err := keyVal.Value.GetProto(&zone); err != nil {
-				return nil, err
-			}
-			return &zone, nil
-		}
-		return nil, nil
-	}
 	zone, err := h.descriptors.GetZoneConfigWithRawByte(h.ctx, h.txn, id)
 	if err != nil {
 		return nil, err

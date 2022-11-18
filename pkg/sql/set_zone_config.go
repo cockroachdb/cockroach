@@ -572,7 +572,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// These zones are only used for validations. The merged zone is will
 		// not be written.
 		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
-			params.ctx, params.p.txn, params.ExecCfg().Codec, params.p.Descriptors(), targetID, index, partition, n.setDefault,
+			params.ctx, params.p.txn, params.p.Descriptors(), targetID, index, partition, n.setDefault,
 		)
 
 		if errors.Is(err, errNoZoneConfigApplies) {
@@ -591,12 +591,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// We need to inherit zone configuration information from the correct zone,
 		// not completeZone.
 		{
-			helper := &collectionZoneConfigHelper{
-				ctx:         params.ctx,
-				codec:       params.p.ExecCfg().Codec,
-				txn:         params.p.Txn(),
-				descriptors: params.p.Descriptors(),
-			}
+			helper := newCollectionZoneConfigHelper(params.ctx, params.p.Txn(), params.p.Descriptors())
 			if index == nil {
 				// If we are operating on a zone, get all fields that the zone would
 				// inherit from its parent. We do this by using an empty zoneConfig

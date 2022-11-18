@@ -187,19 +187,13 @@ func zoneConfigHook(
 func GetZoneConfigInTxn(
 	ctx context.Context,
 	txn *kv.Txn,
-	codec keys.SQLCodec,
 	descriptors *descs.Collection,
 	id descpb.ID,
 	index catalog.Index,
 	partition string,
 	getInheritedDefault bool,
 ) (descpb.ID, *zonepb.ZoneConfig, *zonepb.Subzone, error) {
-	helper := &collectionZoneConfigHelper{
-		ctx:         ctx,
-		codec:       codec,
-		txn:         txn,
-		descriptors: descriptors,
-	}
+	helper := newCollectionZoneConfigHelper(ctx, txn, descriptors)
 	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
 		id, helper, getInheritedDefault, true, /* mayBeTable */
 	)
@@ -240,7 +234,6 @@ func GetHydratedZoneConfigForTenantsRange(
 	return GetHydratedZoneConfigForNamedZone(
 		ctx,
 		txn,
-		keys.SystemSQLCodec,
 		descriptors,
 		zonepb.TenantsZoneName,
 	)
@@ -249,18 +242,9 @@ func GetHydratedZoneConfigForTenantsRange(
 // GetHydratedZoneConfigForNamedZone returns a zone config for the given named
 // zone. Any missing fields are filled through the RANGE DEFAULT zone config.
 func GetHydratedZoneConfigForNamedZone(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	descriptors *descs.Collection,
-	zoneName zonepb.NamedZone,
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, zoneName zonepb.NamedZone,
 ) (*zonepb.ZoneConfig, error) {
-	helper := &collectionZoneConfigHelper{
-		ctx:         ctx,
-		codec:       codec,
-		txn:         txn,
-		descriptors: descriptors,
-	}
+	helper := newCollectionZoneConfigHelper(ctx, txn, descriptors)
 	id, found := zonepb.NamedZones[zoneName]
 	if !found {
 		return nil, errors.AssertionFailedf("id %d does not belong to a named zone", id)
@@ -280,18 +264,9 @@ func GetHydratedZoneConfigForNamedZone(
 // GetHydratedZoneConfigForTable returns a fully hydrated zone config for a
 // given table ID.
 func GetHydratedZoneConfigForTable(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	descriptors *descs.Collection,
-	id descpb.ID,
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	helper := &collectionZoneConfigHelper{
-		ctx:         ctx,
-		codec:       codec,
-		txn:         txn,
-		descriptors: descriptors,
-	}
+	helper := newCollectionZoneConfigHelper(ctx, txn, descriptors)
 	zoneID, zone, _, placeholder, err := getZoneConfig(
 		id, helper, false /* getInheritedDefault */, true, /* mayBeTable */
 	)
@@ -346,18 +321,9 @@ func GetHydratedZoneConfigForTable(
 // GetHydratedZoneConfigForDatabase returns a fully hydrated zone config for a
 // given database ID.
 func GetHydratedZoneConfigForDatabase(
-	ctx context.Context,
-	txn *kv.Txn,
-	codec keys.SQLCodec,
-	descriptors *descs.Collection,
-	id descpb.ID,
+	ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, id descpb.ID,
 ) (*zonepb.ZoneConfig, error) {
-	helper := &collectionZoneConfigHelper{
-		ctx:         ctx,
-		codec:       codec,
-		txn:         txn,
-		descriptors: descriptors,
-	}
+	helper := newCollectionZoneConfigHelper(ctx, txn, descriptors)
 	zoneID, zone, _, _, err := getZoneConfig(
 		id, helper, false /* getInheritedDefault */, false, /* mayBeTable */
 	)

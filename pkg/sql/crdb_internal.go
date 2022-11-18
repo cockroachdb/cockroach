@@ -3842,12 +3842,7 @@ CREATE TABLE crdb_internal.zones (
 				"object with ID %d does not exist", errors.Safe(id))
 		}
 
-		helper := &collectionZoneConfigHelper{
-			ctx:         ctx,
-			codec:       p.ExecCfg().Codec,
-			txn:         p.Txn(),
-			descriptors: p.Descriptors(),
-		}
+		helper := newCollectionZoneConfigHelper(ctx, p.Txn(), p.Descriptors())
 
 		// For some reason, if we use the iterator API here, "concurrent txn use
 		// detected" error might occur, so we buffer up all zones first.
@@ -4451,7 +4446,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, p.ExecCfg().Codec, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
+			ctx, p.txn, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
@@ -4507,7 +4502,7 @@ func addPartitioningRows(
 
 		// Figure out which zone and subzone this partition should correspond to.
 		zoneID, zone, subzone, err := GetZoneConfigInTxn(
-			ctx, p.txn, p.ExecCfg().Codec, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
+			ctx, p.txn, p.Descriptors(), table.GetID(), index, name, false /* getInheritedDefault */)
 		if err != nil {
 			return err
 		}
