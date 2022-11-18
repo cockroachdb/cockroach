@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -46,21 +47,10 @@ type KVFetcher struct {
 	}
 }
 
+var _ storage.NextKVer = &KVFetcher{}
+
 // NewKVFetcher creates a new KVFetcher.
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
-//
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly (if acc is non-nil). The
-// caller can only reuse the spans slice after the fetcher has been closed, and
-// if the caller does, it becomes responsible for the memory accounting.
-//
-// The fetcher also takes ownership of the spanIDs slice - it can modify the
-// slice, but it will **not** perform the memory accounting. It is the caller's
-// responsibility to track the memory under the spanIDs slice, and the slice
-// can only be reused once the fetcher has been closed. Notably, the capacity of
-// the slice will not be increased by the fetcher.
-//
-// If spanIDs is non-nil, then it must be of the same length as spans.
 func NewKVFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
@@ -192,18 +182,7 @@ func (f *KVFetcher) GetBatchRequestsIssued() int64 {
 	return atomic.LoadInt64(f.atomics.batchRequestsIssued)
 }
 
-// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
-// timestamps from returned KV's.
-type MVCCDecodingStrategy int
-
-const (
-	// MVCCDecodingNotRequired is used when timestamps aren't needed.
-	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
-	// MVCCDecodingRequired is used when timestamps are needed.
-	MVCCDecodingRequired
-)
-
-// NextKV returns the next kv from this fetcher. Returns false if there are no
+// nextKV returns the next kv from this fetcher. Returns false if there are no
 // more kvs to fetch, the kv that was fetched, the ID associated with the span
 // that generated this kv (0 if nil spanIDs were provided when constructing the
 // fetcher), and any errors that may have occurred.
@@ -215,8 +194,8 @@ const (
 // of new memory, so the returned KeyValue should be copied into a small slice
 // that the caller owns to avoid retaining two large backing byte slices at once
 // unexpectedly.
-func (f *KVFetcher) NextKV(
-	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
+func (f *KVFetcher) nextKV(
+	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
 ) (ok bool, kv roachpb.KeyValue, spanID int, finalReferenceToBatch bool, err error) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
@@ -236,9 +215,9 @@ func (f *KVFetcher) NextKV(
 			var err error
 			var ts hlc.Timestamp
 			switch mvccDecodeStrategy {
-			case MVCCDecodingRequired:
+			case storage.MVCCDecodingRequired:
 				key, ts, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
-			case MVCCDecodingNotRequired:
+			case storage.MVCCDecodingNotRequired:
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}
 			if err != nil {
@@ -275,8 +254,30 @@ func (f *KVFetcher) NextKV(
 	}
 }
 
+// NextKV implements the storage.NextKVer interface.
+// gcassert:inline
+func (f *KVFetcher) NextKV(
+	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
+) (ok bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
+	ok, kv, _, finalReferenceToBatch, err = f.nextKV(ctx, mvccDecodeStrategy)
+	return ok, kv, finalReferenceToBatch, err
+}
+
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in
 // order to reset this KVFetcher.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if acc is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
+//
+// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// slice, but it will **not** perform the memory accounting. It is the caller's
+// responsibility to track the memory under the spanIDs slice, and the slice
+// can only be reused once the fetcher has been closed. Notably, the capacity of
+// the slice will not be increased by the fetcher.
+//
+// If spanIDs is non-nil, then it must be of the same length as spans.
 func (f *KVFetcher) SetupNextFetch(
 	ctx context.Context,
 	spans roachpb.Spans,

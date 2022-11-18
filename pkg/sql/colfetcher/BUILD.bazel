@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/types",
+        "//pkg/storage",
         "//pkg/util",
         "//pkg/util/encoding",
         "//pkg/util/hlc",

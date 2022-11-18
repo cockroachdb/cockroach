@@ -63,6 +63,7 @@ go_library(
         "//pkg/sql/span",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/storage",
         "//pkg/storage/enginepb",
         "//pkg/util",
         "//pkg/util/admission",

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -169,7 +170,7 @@ type Fetcher struct {
 
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched.
-	mvccDecodeStrategy MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
 	// -- Fields updated during a scan --
 
@@ -298,7 +299,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				rf.mvccDecodeStrategy = MVCCDecodingRequired
+				rf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
@@ -651,7 +652,7 @@ func (rf *Fetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 // nextKey retrieves the next key/value and sets kv/kvEnd. Returns whether the
 // key indicates a new row (as opposed to another family for the current row).
 func (rf *Fetcher) nextKey(ctx context.Context) (newRow bool, spanID int, _ error) {
-	ok, kv, spanID, finalReferenceToBatch, err := rf.kvFetcher.NextKV(ctx, rf.mvccDecodeStrategy)
+	ok, kv, spanID, finalReferenceToBatch, err := rf.kvFetcher.nextKV(ctx, rf.mvccDecodeStrategy)
 	if err != nil {
 		return false, 0, ConvertFetchError(&rf.table.spec, err)
 	}
