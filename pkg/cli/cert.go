@@ -99,6 +99,38 @@ func runCreateClientCACert(cmd *cobra.Command, args []string) error {
 		"failed to generate client CA cert and key")
 }
 
+// A createSQLServerCACert command generates a client CA certificate and stores it
+// in the cert directory.
+var createSQLServerCACertCmd = &cobra.Command{
+	Use:   "create-sql-server-ca --certs-dir=<path to cockroach certs dir> --ca-key=<path-to-sql-server-ca-key>",
+	Short: "create SQL server CA certificate and key",
+	Long: `
+Generate a SQL server CA certificate "<certs-dir>/ca-sql.crt" and CA key "<sql-server-ca-key>".
+The certs directory is created if it does not exist.
+
+If the CA key exists and --allow-ca-key-reuse is true, the key is used.
+If the CA certificate exists and --overwrite is true, the new CA certificate is prepended to it.
+
+The SQL server CA is optional and should only be used when separate CAs are desired for RPC and SQL server certificates.
+`,
+	Args: cobra.NoArgs,
+	RunE: clierrorplus.MaybeDecorateError(runCreateSQLServerCACert),
+}
+
+// runCreateSQLServerCACert generates a key and CA certificate and writes them
+// to their corresponding files.
+func runCreateSQLServerCACert(cmd *cobra.Command, args []string) error {
+	return errors.Wrap(
+		security.CreateSQLServerCAPair(
+			certCtx.certsDir,
+			certCtx.caKey,
+			certCtx.keySize,
+			certCtx.caCertificateLifetime,
+			certCtx.allowCAKeyReuse,
+			certCtx.overwriteFiles),
+		"failed to generate SQL server CA cert and key")
+}
+
 // A createNodeCert command generates a node certificate and stores it
 // in the cert directory.
 var createNodeCertCmd = &cobra.Command{
@@ -347,6 +379,7 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 var certCmds = []*cobra.Command{
 	createCACertCmd,
 	createClientCACertCmd,
+	createSQLServerCACertCmd,
 	mtCreateTenantCACertCmd,
 	createNodeCertCmd,
 	createSQLServerCertCmd,
