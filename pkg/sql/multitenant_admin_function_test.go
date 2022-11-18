@@ -67,91 +67,98 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	// TODO(ewall): When moving tenant capability check to KV,
+	//  merge test w/ SkipSQLSystemTenantCheck variant into single test case if
+	//  1) test case has expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage
+	//  and
+	//  2) SkipSQLSystemTenantCheck variant has no error message
 	testCases := []struct {
 		desc                     string
 		setup                    string
 		setups                   []string
 		query                    string
-		errorMessage             string
+		expectedErrorMessage     string
 		allowSplitAndScatter     bool
 		skipSQLSystemTenantCheck bool
 	}{
 		{
-			desc:  "ALTER RANGE x RELOCATE LEASE",
-			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
+			desc:                 "ALTER RANGE x RELOCATE LEASE",
+			query:                "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE x RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE LEASE TO 1;",
-			errorMessage:             rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER RANGE RELOCATE LEASE",
-			query: "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			desc:                 "ALTER RANGE RELOCATE LEASE",
+			query:                "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE LEASE TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			errorMessage:             rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER RANGE x RELOCATE VOTERS",
-			query: "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM 1 TO 1;",
+			desc:                 "ALTER RANGE x RELOCATE VOTERS",
+			query:                "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM 1 TO 1;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE x RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]) RELOCATE VOTERS FROM 1 TO 1;",
-			errorMessage:             rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER RANGE RELOCATE VOTERS",
-			query: "ALTER RANGE RELOCATE VOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			desc:                 "ALTER RANGE RELOCATE VOTERS",
+			query:                "ALTER RANGE RELOCATE VOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER RANGE RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER RANGE RELOCATE VOTERS FROM 1 TO 1 FOR (SELECT min(range_id) FROM [SHOW RANGES FROM TABLE t]);",
-			errorMessage:             rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
-			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
+			desc:                 "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE",
+			query:                "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER TABLE x EXPERIMENTAL_RELOCATE LEASE SkipSQLSystemTenantCheck",
 			query:                    "ALTER TABLE t EXPERIMENTAL_RELOCATE LEASE SELECT 1, 1;",
-			errorMessage:             rangeErrorMessage,
+			expectedErrorMessage:     rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
-			query: "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
+			desc:                 "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS",
+			query:                "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER TABLE x EXPERIMENTAL_RELOCATE VOTERS SkipSQLSystemTenantCheck",
 			query:                    "ALTER TABLE t EXPERIMENTAL_RELOCATE VOTERS SELECT ARRAY[1], 1;",
-			errorMessage:             rangeErrorMessage,
+			expectedErrorMessage:     rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:         "ALTER TABLE x SPLIT AT",
-			query:        "ALTER TABLE t SPLIT AT VALUES (1);",
-			errorMessage: "request [1 AdmSplit] not permitted",
+			desc:                 "ALTER TABLE x SPLIT AT",
+			query:                "ALTER TABLE t SPLIT AT VALUES (1);",
+			expectedErrorMessage: "request [1 AdmSplit] not permitted",
 		},
 		{
-			desc:         "ALTER INDEX x SPLIT AT",
-			setup:        "CREATE INDEX idx on t(i);",
-			query:        "ALTER INDEX t@idx SPLIT AT VALUES (1);",
-			errorMessage: "request [1 AdmSplit] not permitted",
+			desc:                 "ALTER INDEX x SPLIT AT",
+			setup:                "CREATE INDEX idx on t(i);",
+			query:                "ALTER INDEX t@idx SPLIT AT VALUES (1);",
+			expectedErrorMessage: "request [1 AdmSplit] not permitted",
 		},
 		{
 			desc:                 "ALTER TABLE x UNSPLIT AT",
 			setup:                "ALTER TABLE t SPLIT AT VALUES (1);",
 			query:                "ALTER TABLE t UNSPLIT AT VALUES (1);",
-			errorMessage:         "request [1 AdmUnsplit] not permitted",
+			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
 			allowSplitAndScatter: true,
 		},
 		{
@@ -162,45 +169,46 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				"ALTER INDEX t@idx SPLIT AT VALUES (1);",
 			},
 			query:                "ALTER INDEX t@idx UNSPLIT AT VALUES (1);",
-			errorMessage:         "request [1 AdmUnsplit] not permitted",
+			expectedErrorMessage: "request [1 AdmUnsplit] not permitted",
 			allowSplitAndScatter: true,
 		},
 		{
-			desc:  "ALTER TABLE x UNSPLIT ALL",
-			query: "ALTER TABLE t UNSPLIT ALL;",
+			desc:                 "ALTER TABLE x UNSPLIT ALL",
+			query:                "ALTER TABLE t UNSPLIT ALL;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER TABLE x UNSPLIT ALL SkipSQLSystemTenantCheck",
 			query:                    "ALTER TABLE t UNSPLIT ALL;",
-			errorMessage:             rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:  "ALTER INDEX x UNSPLIT ALL",
-			setup: "CREATE INDEX idx on t(i);",
-			query: "ALTER INDEX t@idx UNSPLIT ALL;",
+			desc:                 "ALTER INDEX x UNSPLIT ALL",
+			setup:                "CREATE INDEX idx on t(i);",
+			query:                "ALTER INDEX t@idx UNSPLIT ALL;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 		{
 			desc:                     "ALTER INDEX x UNSPLIT ALL SkipSQLSystemTenantCheck",
 			setup:                    "CREATE INDEX idx on t(i);",
 			query:                    "ALTER INDEX t@idx UNSPLIT ALL;",
-			errorMessage:             rangeErrorMessage,
 			skipSQLSystemTenantCheck: true,
 		},
 		{
-			desc:         "ALTER TABLE x SCATTER",
-			query:        "ALTER TABLE t SCATTER;",
-			errorMessage: "request [1 AdmScatter] not permitted",
+			desc:                 "ALTER TABLE x SCATTER",
+			query:                "ALTER TABLE t SCATTER;",
+			expectedErrorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
-			desc:         "ALTER INDEX x SCATTER",
-			setup:        "CREATE INDEX idx on t(i);",
-			query:        "ALTER INDEX t@idx SCATTER;",
-			errorMessage: "request [1 AdmScatter] not permitted",
+			desc:                 "ALTER INDEX x SCATTER",
+			setup:                "CREATE INDEX idx on t(i);",
+			query:                "ALTER INDEX t@idx SCATTER;",
+			expectedErrorMessage: "request [1 AdmScatter] not permitted",
 		},
 		{
-			desc:  "CONFIGURE ZONE",
-			query: "ALTER TABLE t CONFIGURE ZONE DISCARD;",
+			desc:                 "CONFIGURE ZONE",
+			query:                "ALTER TABLE t CONFIGURE ZONE DISCARD;",
+			expectedErrorMessage: errorutil.UnsupportedWithMultiTenancyMessage,
 		},
 	}
 
@@ -239,12 +247,13 @@ func TestMultiTenantAdminFunction(t *testing.T) {
 				defer cleanup()
 				db := createSecondaryTenantDB(t, testServer, tc.allowSplitAndScatter, tc.skipSQLSystemTenantCheck)
 				err := execQueries(db)
-				require.Error(t, err)
-				errorMessage := tc.errorMessage
-				if errorMessage == "" {
-					errorMessage = errorutil.UnsupportedWithMultiTenancyMessage
+				expectedErrorMessage := tc.expectedErrorMessage
+				if expectedErrorMessage == "" {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.Contains(t, err.Error(), expectedErrorMessage)
 				}
-				require.Contains(t, err.Error(), errorMessage)
 			}()
 		})
 	}
@@ -263,6 +272,7 @@ func TestTruncateTable(t *testing.T) {
 		_, err = db.ExecContext(ctx, "TRUNCATE TABLE t;")
 		require.NoError(t, err)
 		_, err = db.QueryContext(ctx, "SHOW RANGES FROM TABLE t;")
+		require.NoError(t, err)
 		// TODO(ewall): Verify splits are not retained after `SHOW RANGES` is supported by secondary tenants.
 		return err
 	}

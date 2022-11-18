@@ -46,7 +46,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	//Split some ranges within tenant2 that we'll scan over.
+	// Split some ranges within tenant2 that we'll scan over.
 	ten2Codec := keys.MakeSQLCodec(ten2ID)
 	ten2Split1 := append(ten2Codec.TenantPrefix(), 'a')
 	ten2Split2 := append(ten2Codec.TenantPrefix(), 'b')
@@ -57,10 +57,7 @@ func TestScanRangeDescriptors(t *testing.T) {
 	}
 
 	iteratorFactory := tenant2.RangeDescIteratorFactory().(rangedesc.IteratorFactory)
-	iter, err := iteratorFactory.NewIterator(ctx, roachpb.Span{
-		Key:    ten2Codec.TenantPrefix(),
-		EndKey: ten2Codec.TenantPrefix().PrefixEnd(),
-	})
+	iter, err := iteratorFactory.NewIterator(ctx, ten2Codec.TenantSpan())
 	require.NoError(t, err)
 
 	var rangeDescs []roachpb.RangeDescriptor
