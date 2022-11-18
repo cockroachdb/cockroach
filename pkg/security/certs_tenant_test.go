@@ -117,7 +117,7 @@ func testTenantCertificatesInner(t *testing.T, embedded bool) {
 
 	// The client in turn trusts the server CA and presents its tenant certs to the
 	// server (which will validate them using the tenant CA).
-	clientTLSConfig, err := cm.GetTenantTLSConfig()
+	clientTLSConfig, err := cm.GetTenantRPCClientTLSConfig()
 	require.NoError(t, err)
 	require.NotNil(t, clientTLSConfig)
 

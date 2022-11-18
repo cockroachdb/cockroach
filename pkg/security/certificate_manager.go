@@ -134,6 +134,10 @@ type CertificateManager struct {
 	uiServerConfig *tls.Config
 	// Client-side config for the cockroach node.
 	// All other client tls.Config objects are built as requested and not cached.
+	// Currently applies to both RPC and SQL client connections.
+	//
+	// TODO(knz): Split them so we can use separate client certs for RPC
+	// and SQL client conns.
 	clientConfig *tls.Config
 	// Client config for the tenant (if running in a SQL tenant server).
 	tenantConfig *tls.Config
@@ -746,9 +750,9 @@ func (cm *CertificateManager) getTenantCertLocked() (*CertInfo, error) {
 	return c, nil
 }
 
-// GetTenantTLSConfig returns the most up-to-date tenant client
+// GetTenantTLSConfig returns the most up-to-date tenant RPC client
 // tls.Config.
-func (cm *CertificateManager) GetTenantTLSConfig() (*tls.Config, error) {
+func (cm *CertificateManager) GetTenantRPCClientTLSConfig() (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
@@ -803,10 +807,22 @@ func (cm *CertificateManager) GetTenantSigningCert() (*CertInfo, error) {
 	return c, nil
 }
 
-// GetClientTLSConfig returns the most up-to-date client tls.Config.
+// GetSQLClientTLSConfig returns the most up-to-date client tls.Config for SQL clients.
 // Returns the dual-purpose node certs if user == NodeUser and there is no
 // separate client cert for 'node'.
-func (cm *CertificateManager) GetClientTLSConfig(user username.SQLUsername) (*tls.Config, error) {
+// TODO(knz): change this to use a separate cert wherever relevant.
+func (cm *CertificateManager) GetSQLClientTLSConfig(
+	user username.SQLUsername,
+) (*tls.Config, error) {
+	return cm.GetRPCClientTLSConfig(user)
+}
+
+// GetRPCClientTLSConfig returns the most up-to-date client tls.Config for RPC clients.
+// Returns the dual-purpose node certs if user == NodeUser and there is no
+// separate client cert for 'node'.
+func (cm *CertificateManager) GetRPCClientTLSConfig(
+	user username.SQLUsername,
+) (*tls.Config, error) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 

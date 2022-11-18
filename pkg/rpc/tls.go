@@ -135,11 +135,15 @@ func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 	return tlsCfg, nil
 }
 
-// GetClientTLSConfig returns the client TLS config, initializing it if needed.
+// GetSQLClientTLSConfig returns the SQL client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config using certs for the config.User.
-// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
-func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
+// This TLSConfig might **NOT** be suitable to talk to the Admin UI,
+// use GetUIClientTLSConfig instead.
+//
+// TODO(knz): This method should not be hosted in the 'rpc' package;
+// it has nothing to do with the RPC configuration / infrastructure.
+func (ctx *SecurityContext) GetSQLClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
 		return nil, nil
@@ -150,20 +154,18 @@ func (ctx *SecurityContext) GetClientTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetClientTLSConfig(ctx.config.User)
+	tlsCfg, err := cm.GetSQLClientTLSConfig(ctx.config.User)
 	if err != nil {
 		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
 
-// GetTenantTLSConfig returns the client TLS config for the tenant, provided
-// the SecurityContext operates on behalf of a secondary tenant (i.e. not the
-// system tenant).
-//
-// If Insecure is true, return a nil config, otherwise retrieves the client
-// certificate for the configured tenant from the cert manager.
-func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
+// GetRPCClientTLSConfig returns the RPC client TLS config, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a TLS config using certs for the config.User.
+// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
+func (ctx *SecurityContext) GetRPCClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
 		return nil, nil
@@ -174,7 +176,31 @@ func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetTenantTLSConfig()
+	tlsCfg, err := cm.GetRPCClientTLSConfig(ctx.config.User)
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetTenantRPCClientTLSConfig returns the RPC client TLS config for the tenant, provided
+// the SecurityContext operates on behalf of a secondary tenant (i.e. not the
+// system tenant).
+//
+// If Insecure is true, return a nil config, otherwise retrieves the client
+// certificate for the configured tenant from the cert manager.
+func (ctx *SecurityContext) GetTenantRPCClientTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if ctx.config.Insecure {
+		return nil, nil
+	}
+
+	cm, err := ctx.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetTenantRPCClientTLSConfig()
 	if err != nil {
 		return nil, wrapError(err)
 	}
@@ -184,7 +210,8 @@ func (ctx *SecurityContext) GetTenantTLSConfig() (*tls.Config, error) {
 // getUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config configured to talk to the Admin UI.
-// This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
+// This TLSConfig is **NOT** suitable to talk to the GRPC or SQL
+// servers, use Get{SQL/RPC}ClientTLSConfig instead.
 func (ctx *SecurityContext) getUIClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
