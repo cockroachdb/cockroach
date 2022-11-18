@@ -914,6 +914,7 @@ func makeTenantSQLServerArgs(
 		protectedtsProvider:      protectedTSProvider,
 		rangeFeedFactory:         rangeFeedFactory,
 		regionsServer:            tenantConnect,
+		nodeLocalityServer:       tenantConnect,
 		tenantStatusServer:       tenantConnect,
 		costController:           costController,
 		monitorAndMetrics:        monitorAndMetrics,

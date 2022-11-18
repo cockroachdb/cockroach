@@ -2817,7 +2817,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 				tree.NewDInt(tree.DInt(fnIDToScID[fnDesc.GetID()])), // schema_id
 				tree.NewDString(fnIDToScName[fnDesc.GetID()]),       // schema_name
 				tree.NewDInt(tree.DInt(fnDesc.GetID())),             // function_id
-				tree.NewDString(fnDesc.GetName()),                   //function_name
+				tree.NewDString(fnDesc.GetName()),                   // function_name
 				tree.NewDString(tree.AsString(treeNode)),            // create_statement
 			)
 			if err != nil {
@@ -3660,15 +3660,11 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 
-		// Map node descriptors to localities
-		descriptors, err := getAllNodeDescriptors(p)
+		resp, err := p.ExecCfg().NodeLocalityServer.NodeLocality(ctx, &serverpb.NodeLocalityRequest{})
 		if err != nil {
 			return nil, nil, err
 		}
-		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
-		for _, desc := range descriptors {
-			nodeIDToLocality[desc.NodeID] = desc.Locality
-		}
+		nodeIDToLocality := resp.NodeLocalities
 
 		var desc roachpb.RangeDescriptor
 
