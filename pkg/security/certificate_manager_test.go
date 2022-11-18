@@ -51,7 +51,7 @@ func TestManagerWithEmbedded(t *testing.T) {
 	}
 
 	// Verify that we can build tls.Config objects.
-	_, err = cm.GetServerTLSConfig()
+	_, err = cm.GetRPCServerTLSConfig()
 	require.NoError(t, err)
 	_, err = cm.GetRPCClientTLSConfig(username.NodeUserName())
 	require.NoError(t, err)
@@ -66,6 +66,8 @@ func TestManagerWithEmbedded(t *testing.T) {
 		username.MakeSQLUsernameFromPreNormalizedString("my-random-user"))
 	require.Error(t, err)
 
+	_, err = cm.GetSQLServerTLSConfig()
+	require.NoError(t, err)
 	_, err = cm.GetSQLClientTLSConfig(username.NodeUserName())
 	require.NoError(t, err)
 	_, err = cm.GetSQLClientTLSConfig(username.RootUserName())

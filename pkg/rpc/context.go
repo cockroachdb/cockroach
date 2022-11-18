@@ -210,7 +210,7 @@ func NewServerEx(rpcCtx *Context, opts ...ServerOption) (*grpc.Server, ServerInt
 		grpc.KeepaliveEnforcementPolicy(serverEnforcement),
 	}
 	if !rpcCtx.Config.Insecure {
-		tlsConfig, err := rpcCtx.GetServerTLSConfig()
+		tlsConfig, err := rpcCtx.GetRPCServerTLSConfig()
 		if err != nil {
 			panic(err)
 		}
