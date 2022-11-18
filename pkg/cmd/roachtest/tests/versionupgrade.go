@@ -522,19 +522,6 @@ func waitForUpgradeStep(nodes option.NodeListOption) versionStep {
 	}
 }
 
-func setClusterSettingVersionStep(ctx context.Context, t test.Test, u *versionUpgradeTest) {
-	db := u.conn(ctx, t, 1)
-	t.L().Printf("bumping cluster version")
-	// TODO(tbg): once this is using a job, poll and periodically print the job status
-	// instead of blocking.
-	if _, err := db.ExecContext(
-		ctx, `SET CLUSTER SETTING version = crdb_internal.node_executable_version()`,
-	); err != nil {
-		t.Fatal(err)
-	}
-	t.L().Printf("cluster version bumped")
-}
-
 type versionFeatureTest struct {
 	name string
 	fn   func(context.Context, test.Test, *versionUpgradeTest, option.NodeListOption) (skipped bool)
