@@ -530,26 +530,33 @@ func (p *Provider) Create(
 	var g errgroup.Group
 
 	nodeZones := vm.ZonePlacement(len(zones), len(names))
-	zoneHostNames := make([][]string, len(zones))
+	zoneHostNames := make([][]string, min(len(zones), len(names)))
 	for i, name := range names {
-		zone := nodeZones[i]
-		zoneHostNames[zone] = append(zoneHostNames[zone], name)
+		zoneIdx := nodeZones[i]
+		zoneHostNames[zoneIdx] = append(zoneHostNames[zoneIdx], name)
 	}
-	for i, zoneHosts := range zoneHostNames {
-		argsWithZone := append(args[:len(args):len(args)], "--zone", zones[i])
+	for zoneIdx, zoneHosts := range zoneHostNames {
+		argsWithZone := append(args[:len(args):len(args)], "--zone", zones[zoneIdx])
 		argsWithZone = append(argsWithZone, zoneHosts...)
 		g.Go(func() error {
 			cmd := exec.Command("gcloud", argsWithZone...)
 
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+				return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", argsWithZone, output)
 			}
 			return nil
 		})
 
 	}
 	return g.Wait()
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // Delete TODO(peter): document

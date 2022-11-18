@@ -519,8 +519,7 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 	if serverArgs.JoinAddr == "" && len(tc.Servers) > 0 {
 		serverArgs.JoinAddr = tc.Servers[0].ServingRPCAddr()
 	}
-	_, err := tc.AddServer(serverArgs)
-	if err != nil {
+	if _, err := tc.AddServer(serverArgs); err != nil {
 		return err
 	}
 
@@ -529,8 +528,9 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 			tc.Stopper().Stop(context.TODO())
 			skip.IgnoreLint(tc.t, serverutils.TenantSkipCCLBinaryMessage)
 		}
+		return err
 	}
-	return err
+	return nil
 }
 
 // AddServer is like AddAndStartServer, except it does not start it.
