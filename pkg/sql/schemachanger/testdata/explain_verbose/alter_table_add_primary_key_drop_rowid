@@ -371,7 +371,7 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
 │   │   │   │   │
 │   │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 2}
 │   │   │   │   │     rule: "index dependents exist before index becomes public"
-│   │   │   │   │     rule: "index named right before index becomes public"
+│   │   │   │   │     rule: "primary index named right before index becomes public"
 │   │   │   │   │
 │   │   │   │   ├── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
 │   │   │   │   │     rule: "index dependents exist before index becomes public"
@@ -737,7 +737,7 @@ EXPLAIN (ddl, verbose) alter table t add primary key (a);
     │   │   │   │
     │   │   │   ├── • SameStagePrecedence dependency from PUBLIC IndexName:{DescID: 104, Name: t_pkey, IndexID: 4}
     │   │   │   │     rule: "index dependents exist before index becomes public"
-    │   │   │   │     rule: "index named right before index becomes public"
+    │   │   │   │     rule: "primary index named right before index becomes public"
     │   │   │   │
     │   │   │   └── • Precedence dependency from PUBLIC IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 4}
     │   │   │         rule: "index dependents exist before index becomes public"
