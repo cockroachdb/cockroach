@@ -13,21 +13,23 @@ package certnames
 // EmbeddedCertsDir is the certs directory inside embedded assets.
 // Embedded*{Cert,Key} are the filenames for embedded certs.
 const (
-	EmbeddedCertsDir      = "test_certs"
-	EmbeddedCACert        = "ca.crt"
-	EmbeddedCAKey         = "ca.key"
-	EmbeddedClientCACert  = "ca-client.crt"
-	EmbeddedClientCAKey   = "ca-client.key"
-	EmbeddedUICACert      = "ca-ui.crt"
-	EmbeddedUICAKey       = "ca-ui.key"
-	EmbeddedNodeCert      = "node.crt"
-	EmbeddedNodeKey       = "node.key"
-	EmbeddedSQLServerCert = "sql-server.crt"
-	EmbeddedSQLServerKey  = "sql-server.key"
-	EmbeddedRootCert      = "client.root.crt"
-	EmbeddedRootKey       = "client.root.key"
-	EmbeddedTestUserCert  = "client.testuser.crt"
-	EmbeddedTestUserKey   = "client.testuser.key"
+	EmbeddedCertsDir        = "test_certs"
+	EmbeddedCACert          = "ca.crt"
+	EmbeddedCAKey           = "ca.key"
+	EmbeddedClientCACert    = "ca-client.crt"
+	EmbeddedClientCAKey     = "ca-client.key"
+	EmbeddedSQLServerCACert = "ca-sql-server.crt"
+	EmbeddedSQLServerCAKey  = "ca-sql-server.key"
+	EmbeddedUICACert        = "ca-ui.crt"
+	EmbeddedUICAKey         = "ca-ui.key"
+	EmbeddedNodeCert        = "node.crt"
+	EmbeddedNodeKey         = "node.key"
+	EmbeddedSQLServerCert   = "sql-server.crt"
+	EmbeddedSQLServerKey    = "sql-server.key"
+	EmbeddedRootCert        = "client.root.crt"
+	EmbeddedRootKey         = "client.root.key"
+	EmbeddedTestUserCert    = "client.testuser.crt"
+	EmbeddedTestUserKey     = "client.testuser.key"
 )
 
 // Embedded certificates specific to multi-tenancy testing.

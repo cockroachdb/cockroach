@@ -53,6 +53,14 @@ func ClientCAKeyFilename() string { return "ca-client" + keyExtension }
 // UICACertFilename returns the expected file name for the HTTP CA certificate.
 func UICACertFilename() string { return "ca-ui" + certExtension }
 
+// SQLServerCAKeyFilename returns the expected file name for the SQL
+// server CA key.
+func SQLServerCAKeyFilename() string { return "ca-sql-server" + keyExtension }
+
+// SQLServerCACertFilename returns the expected file name for the SQL
+// server CA certificate.
+func SQLServerCACertFilename() string { return "ca-sql-server" + certExtension }
+
 // UICAKeyFilename returns the expected file name for the HTTP CA key.
 func UICAKeyFilename() string { return "ca-ui" + keyExtension }
 

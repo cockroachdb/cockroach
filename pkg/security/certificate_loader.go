@@ -54,6 +54,9 @@ const (
 	TenantCAPem
 	// ClientCAPem describes the CA certificate used to verify client certificates.
 	ClientCAPem
+	// SQLServerCAPem describes the CA certificate used to sign the SQL server
+	// certificate.
+	SQLServerCAPem
 	// UICAPem describes the CA certificate used to verify the Admin UI server certificate.
 	UICAPem
 	// NodePem describes the server certificate for the RPC service,
@@ -82,7 +85,12 @@ const (
 )
 
 func isCA(usage PemUsage) bool {
-	return usage == CAPem || usage == ClientCAPem || usage == TenantCAPem || usage == UICAPem
+	switch usage {
+	case CAPem, ClientCAPem, SQLServerCAPem, TenantCAPem, UICAPem:
+		return true
+	default:
+		return false
+	}
 }
 
 func (p PemUsage) String() string {
@@ -91,6 +99,8 @@ func (p PemUsage) String() string {
 		return "CA"
 	case ClientCAPem:
 		return "Client CA"
+	case SQLServerCAPem:
+		return "SQL Server CA"
 	case TenantCAPem:
 		return "Tenant Client CA"
 	case UICAPem:
@@ -169,6 +179,11 @@ func CertInfoFromFilename(filename string) (*CertInfo, error) {
 		fileUsage = ClientCAPem
 		if numParts != 2 {
 			return nil, errors.Errorf("client CA certificate filename should match %s", certnames.ClientCACertFilename())
+		}
+	case `ca-sql-server`:
+		fileUsage = SQLServerCAPem
+		if numParts != 2 {
+			return nil, errors.Errorf("SQL server CA certificate filename should match %s", certnames.SQLServerCACertFilename())
 		}
 	case `ca-client-tenant`:
 		fileUsage = TenantCAPem

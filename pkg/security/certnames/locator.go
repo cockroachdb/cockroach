@@ -71,6 +71,18 @@ func (cl Locator) ClientCAKeyPath() string {
 	return filepath.Join(cl.certsDir, ClientCAKeyFilename())
 }
 
+// SQLServerCACertPath returns the expected file path for the CA certificate
+// used to verify client certificates.
+func (cl Locator) SQLServerCACertPath() string {
+	return filepath.Join(cl.certsDir, SQLServerCACertFilename())
+}
+
+// SQLServerCAKeyPath returns the expected file path for the CA key
+// used to sign client certificates.
+func (cl Locator) SQLServerCAKeyPath() string {
+	return filepath.Join(cl.certsDir, SQLServerCAKeyFilename())
+}
+
 // ClientNodeCertPath returns the expected file path for the certificate used
 // by other nodes to verify outgoing RPCs from this node.
 func (cl Locator) ClientNodeCertPath() string {
