@@ -72,14 +72,24 @@ func UIServerCertFilename() string { return "ui" + certExtension }
 // UIServerKeyFilename returns the expected file name for the HTTP CA key.
 func UIServerKeyFilename() string { return "ui" + keyExtension }
 
-// NodeCertFilename returns the expected file name for the node server certificate.
+// NodeCertFilename returns the expected file name for the RPC server certificate.
 func NodeCertFilename() string {
 	return "node" + certExtension
 }
 
-// NodeKeyFilename returns the expected file name for the node server key.
+// NodeKeyFilename returns the expected file name for the RPC server key.
 func NodeKeyFilename() string {
 	return "node" + keyExtension
+}
+
+// SQLServerCertFilename returns the expected file name for the SQL server certificate.
+func SQLServerCertFilename() string {
+	return "sql-server" + certExtension
+}
+
+// SQLServerKeyFilename returns the expected file name for the SQL server key.
+func SQLServerKeyFilename() string {
+	return "sql-server" + keyExtension
 }
 
 // TenantCertFilename returns the expected file name for the user's tenant client certificate.
