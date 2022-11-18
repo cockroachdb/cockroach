@@ -76,6 +76,21 @@ func NewEntryFromRawValue(b []byte) (*Entry, error) {
 	return e, nil
 }
 
+// raftEntryFromRawValue decodes a raft.Entry from a raw MVCC value.
+//
+// Same as NewEntryFromRawValue, but doesn't decode the command and doesn't use
+// the pool of entries.
+func raftEntryFromRawValue(b []byte, to *raftpb.Entry) error {
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(b, &meta); err != nil {
+		return errors.Wrap(err, "decoding raft log MVCCMetadata")
+	}
+	if err := storage.MakeValue(meta).GetProto(to); err != nil {
+		return errors.Wrap(err, "unmarshalling raft Entry")
+	}
+	return nil
+}
+
 func (e *Entry) load() error {
 	if len(e.Data) == 0 {
 		// Raft-proposed empty entry.
