@@ -410,34 +410,37 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
-// Regions implements the serverpb.TenantStatusServer interface.
+// Regions implements the serverpb.TenantStatusServer interface
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
-) (resp *serverpb.RegionsResponse, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error
-		resp, err = c.Regions(ctx, req)
-		return err
-	}); err != nil {
-		return nil, err
-	}
+) (resp *serverpb.RegionsResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.Regions(ctx, req)
+		return
+	})
+	return
+}
 
-	return resp, nil
+// NodeLocality implements the serverpb.TenantStatusServer interface
+func (c *Connector) NodeLocality(
+	ctx context.Context, req *serverpb.NodeLocalityRequest,
+) (resp *serverpb.NodeLocalityResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.NodeLocality(ctx, req)
+		return
+	})
+	return
 }
 
 // TenantRanges implements the serverpb.TenantStatusServer interface
 func (c *Connector) TenantRanges(
 	ctx context.Context, req *serverpb.TenantRangesRequest,
-) (resp *serverpb.TenantRangesResponse, _ error) {
-	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
-		var err error
-		resp, err = c.TenantRanges(ctx, req)
-		return err
-	}); err != nil {
-		return nil, err
-	}
-
-	return resp, nil
+) (resp *serverpb.TenantRangesResponse, retErr error) {
+	retErr = c.withClient(ctx, func(ctx context.Context, client *client) (err error) {
+		resp, err = client.TenantRanges(ctx, req)
+		return
+	})
+	return
 }
 
 // FirstRange implements the kvcoord.RangeDescriptorDB interface.
