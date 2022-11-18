@@ -166,16 +166,6 @@ func BenchmarkIterator(b *testing.B) {
 	b.Run("SeekGE", func(b *testing.B) {
 		benchForOp(b, (*Iterator).Next)
 	})
-
-	b.Run("NextPooled", func(b *testing.B) {
-		benchForOp(b, func(it *Iterator) (bool, error) {
-			if ok, err := it.Next(); err != nil || !ok {
-				return false, err
-			}
-			_ = it.Entry()
-			return true, nil
-		})
-	})
 }
 
 // Visit benchmarks Visit on a pebble engine, i.e. the results will measure
