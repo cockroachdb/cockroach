@@ -215,6 +215,7 @@ go_library(
         "show_fingerprints.go",
         "show_histogram.go",
         "show_stats.go",
+        "show_tenant.go",
         "show_trace.go",
         "show_trace_replica.go",
         "show_var.go",

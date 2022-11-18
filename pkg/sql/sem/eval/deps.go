@@ -575,6 +575,9 @@ type TenantOperator interface {
 	// the gc job will not wait for a GC ttl.
 	DestroyTenant(ctx context.Context, tenantName roachpb.TenantName, synchronous bool) error
 
+	// GetTenantInfo returns information about the specified tenant.
+	GetTenantInfo(ctx context.Context, tenantName roachpb.TenantName) (*descpb.TenantInfo, error)
+
 	// GCTenant attempts to garbage collect a DROP tenant from the system. Upon
 	// success it also removes the tenant record.
 	// It returns an error if the tenant does not exist.

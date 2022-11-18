@@ -775,6 +775,17 @@ func (node *ShowTableStats) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowTenant represents a SHOW TENANT statement.
+type ShowTenant struct {
+	Name Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTenant) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW TENANT ")
+	ctx.FormatNode(&node.Name)
+}
+
 // ShowHistogram represents a SHOW HISTOGRAM statement.
 type ShowHistogram struct {
 	HistogramID int64
