@@ -420,6 +420,12 @@ func (f *FlowBase) StartInternal(ctx context.Context, processors []execinfra.Pro
 
 	f.status = flowRunning
 
+	if !f.Gateway && f.CollectStats {
+		// Remote flows begin collecting CPU usage here, and finish when the last
+		// outbox finishes. Gateway flows are handled by the connExecutor.
+		f.FlowCtx.TenantCPUMonitor.StartCollection(ctx, f.Cfg.TenantCostController)
+	}
+
 	if log.V(1) {
 		log.Infof(ctx, "registered flow %s", f.ID.Short())
 	}

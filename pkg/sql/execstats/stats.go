@@ -78,6 +78,9 @@ type ScanStats struct {
 	// NumInternalSeeks is the number of times that MVCC seek was invoked
 	// internally, including to step over internal, uncompacted Pebble versions.
 	NumInternalSeeks uint64
+	// ConsumedRU is the number of RUs that were consumed during the course of a
+	// scan.
+	ConsumedRU uint64
 }
 
 // PopulateKVMVCCStats adds data from the input ScanStats to the input KVStats.
@@ -91,25 +94,29 @@ func PopulateKVMVCCStats(kvStats *execinfrapb.KVStats, ss *ScanStats) {
 // GetScanStats is a helper function to calculate scan stats from the given
 // recording or, if the recording is nil, from the tracing span from the
 // context.
-func GetScanStats(ctx context.Context, recording tracingpb.Recording) (ss ScanStats) {
+func GetScanStats(ctx context.Context, recording tracingpb.Recording) (scanStats ScanStats) {
 	if recording == nil {
 		recording = tracing.SpanFromContext(ctx).GetConfiguredRecording()
 	}
-	var ev roachpb.ScanStats
+	var ss roachpb.ScanStats
+	var tc roachpb.TenantConsumption
 	for i := range recording {
 		recording[i].Structured(func(any *pbtypes.Any, _ time.Time) {
-			if !pbtypes.Is(any, &ev) {
-				return
+			if pbtypes.Is(any, &ss) {
+				if err := pbtypes.UnmarshalAny(any, &ss); err != nil {
+					return
+				}
+				scanStats.NumInterfaceSteps += ss.NumInterfaceSteps
+				scanStats.NumInternalSteps += ss.NumInternalSteps
+				scanStats.NumInterfaceSeeks += ss.NumInterfaceSeeks
+				scanStats.NumInternalSeeks += ss.NumInternalSeeks
+			} else if pbtypes.Is(any, &tc) {
+				if err := pbtypes.UnmarshalAny(any, &tc); err != nil {
+					return
+				}
+				scanStats.ConsumedRU += uint64(tc.RU)
 			}
-			if err := pbtypes.UnmarshalAny(any, &ev); err != nil {
-				return
-			}
-
-			ss.NumInterfaceSteps += ev.NumInterfaceSteps
-			ss.NumInternalSteps += ev.NumInternalSteps
-			ss.NumInterfaceSeeks += ev.NumInterfaceSeeks
-			ss.NumInternalSeeks += ev.NumInternalSeeks
 		})
 	}
-	return ss
+	return scanStats
 }
