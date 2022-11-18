@@ -410,13 +410,28 @@ func (c *Connector) RangeLookup(
 	return nil, nil, ctx.Err()
 }
 
-// Regions implements the serverpb.TenantStatusServer interface.
+// Regions implements the serverpb.TenantStatusServer interface
 func (c *Connector) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
 ) (resp *serverpb.RegionsResponse, _ error) {
 	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
 		var err error
 		resp, err = c.Regions(ctx, req)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
+}
+
+// NodeLocality implements the serverpb.TenantStatusServer interface
+func (c *Connector) NodeLocality(
+	ctx context.Context, req *serverpb.NodeLocalityRequest,
+) (resp *serverpb.NodeLocalityResponse, err error) {
+	if err := c.withClient(ctx, func(ctx context.Context, c *client) error {
+		var err error
+		resp, err = c.NodeLocality(ctx, req)
 		return err
 	}); err != nil {
 		return nil, err
