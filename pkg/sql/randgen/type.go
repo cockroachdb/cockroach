@@ -11,11 +11,14 @@
 package randgen
 
 import (
+	"context"
 	"math/rand"
 	"sort"
 
+	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -152,15 +155,19 @@ func IsLegalColumnType(typ *types.T) bool {
 		// user-created tables.
 		return false
 	}
-	return colinfo.ValidateColumnDefType(typ) == nil
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(clustersettings.MakeTestingClusterSettings())
+	return colinfo.ValidateColumnDefType(ctx, evalCtx.Settings.Version, typ) == nil
 }
 
 // RandArrayType generates a random array type.
 func RandArrayType(rng *rand.Rand) *types.T {
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(clustersettings.MakeTestingClusterSettings())
 	for {
 		typ := RandColumnType(rng)
 		resTyp := types.MakeArray(typ)
-		if err := colinfo.ValidateColumnDefType(resTyp); err == nil {
+		if err := colinfo.ValidateColumnDefType(ctx, evalCtx.Settings.Version, resTyp); err == nil {
 			return resTyp
 		}
 	}
@@ -247,11 +254,13 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 // TODO(andyk): Remove this workaround once #36736 is resolved. Replace calls to
 // it with calls to RandColumnTypes.
 func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []*types.T {
+	ctx := context.Background()
+	evalCtx := eval.MakeTestingEvalContext(clustersettings.MakeTestingClusterSettings())
 	types := make([]*types.T, numCols)
 	for i := range types {
 		for {
 			types[i] = RandEncodableType(rng)
-			if err := colinfo.ValidateColumnDefType(types[i]); err == nil {
+			if err := colinfo.ValidateColumnDefType(ctx, evalCtx.Settings.Version, types[i]); err == nil {
 				break
 			}
 		}
