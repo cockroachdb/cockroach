@@ -1177,6 +1177,7 @@ type ExecutorConfig struct {
 	SQLStatusServer    serverpb.SQLStatusServer
 	TenantStatusServer serverpb.TenantStatusServer
 	RegionsServer      serverpb.RegionsServer
+	NodeLocalityServer serverpb.NodeLocalityServer
 	MetricsRecorder    nodeStatusGenerator
 	SessionRegistry    *SessionRegistry
 	ClosedSessionCache *ClosedSessionCache
