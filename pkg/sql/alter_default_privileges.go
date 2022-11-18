@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -59,6 +60,9 @@ func (p *planner) alterDefaultPrivileges(
 		tree.DatabaseLookupFlags{Required: true})
 	if err != nil {
 		return nil, err
+	}
+	if dbDesc.GetID() == keys.SystemDatabaseID {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue, "cannot alter system database")
 	}
 
 	objectType := n.Grant.Target
