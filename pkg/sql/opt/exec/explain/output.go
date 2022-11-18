@@ -361,6 +361,16 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
+// AddRUEstimate adds a top-level field for the estimated number of RUs consumed
+// by the query.
+func (ob *OutputBuilder) AddRUEstimate(ru int64) {
+	ob.AddRedactableTopLevelField(
+		RedactVolatile,
+		"estimated RUs consumed",
+		string(humanizeutil.Count(uint64(ru))),
+	)
+}
+
 // AddRegionsStats adds a top-level field for regions executed on statistics.
 func (ob *OutputBuilder) AddRegionsStats(regions []string) {
 	ob.AddRedactableTopLevelField(

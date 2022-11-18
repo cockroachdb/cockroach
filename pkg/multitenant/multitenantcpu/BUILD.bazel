@@ -1,0 +1,17 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "multitenantcpu",
+    srcs = ["cpu_usage.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/multitenant/multitenantcpu",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/multitenant",
+        "//pkg/server/status",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -321,6 +321,7 @@ func (tr *tableReader) execStatsForTrace() *execinfrapb.ComponentStats {
 		},
 		Output: tr.OutputHelper.Stats(),
 	}
+	ret.Exec.ConsumedRU = optional.MakeUint(tr.scanStats.ConsumedRU)
 	execstats.PopulateKVMVCCStats(&ret.KV, &tr.scanStats)
 	return ret
 }

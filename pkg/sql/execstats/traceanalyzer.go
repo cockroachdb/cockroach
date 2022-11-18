@@ -109,6 +109,7 @@ type NodeLevelStats struct {
 	KVTimeGroupedByNode                map[base.SQLInstanceID]time.Duration
 	NetworkMessagesGroupedByNode       map[base.SQLInstanceID]int64
 	ContentionTimeGroupedByNode        map[base.SQLInstanceID]time.Duration
+	RUEstimateGroupedByNode            map[base.SQLInstanceID]int64
 }
 
 // QueryLevelStats returns all the query level stats that correspond to the
@@ -125,6 +126,7 @@ type QueryLevelStats struct {
 	NetworkMessages       int64
 	ContentionTime        time.Duration
 	ContentionEvents      []roachpb.ContentionEvent
+	RUEstimate            int64
 }
 
 // QueryLevelStatsWithErr is the same as QueryLevelStats, but also tracks
@@ -159,6 +161,7 @@ func (s *QueryLevelStats) Accumulate(other QueryLevelStats) {
 	s.NetworkMessages += other.NetworkMessages
 	s.ContentionTime += other.ContentionTime
 	s.ContentionEvents = append(s.ContentionEvents, other.ContentionEvents...)
+	s.RUEstimate += other.RUEstimate
 }
 
 // TraceAnalyzer is a struct that helps calculate top-level statistics from a
@@ -234,6 +237,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		KVTimeGroupedByNode:                make(map[base.SQLInstanceID]time.Duration),
 		NetworkMessagesGroupedByNode:       make(map[base.SQLInstanceID]int64),
 		ContentionTimeGroupedByNode:        make(map[base.SQLInstanceID]time.Duration),
+		RUEstimateGroupedByNode:            make(map[base.SQLInstanceID]int64),
 	}
 	var errs error
 
@@ -249,6 +253,7 @@ func (a *TraceAnalyzer) ProcessStats() error {
 		a.nodeLevelStats.KVBatchRequestsIssuedGroupedByNode[instanceID] += int64(stats.KV.BatchRequestsIssued.Value())
 		a.nodeLevelStats.KVTimeGroupedByNode[instanceID] += stats.KV.KVTime.Value()
 		a.nodeLevelStats.ContentionTimeGroupedByNode[instanceID] += stats.KV.ContentionTime.Value()
+		a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(stats.Exec.ConsumedRU.Value())
 		allContentionEvents = append(allContentionEvents, stats.KV.ContentionEvents...)
 	}
 
@@ -287,6 +292,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				a.nodeLevelStats.MaxDiskUsageGroupedByNode[originInstanceID] = diskUsage
 			}
 		}
+		if stats.stats.FlowStats.ConsumedRU.HasValue() {
+			a.nodeLevelStats.RUEstimateGroupedByNode[originInstanceID] += int64(stats.stats.FlowStats.ConsumedRU.Value())
+		}
 
 		numMessages, err := getNumNetworkMessagesFromComponentsStats(stats.stats)
 		if err != nil {
@@ -312,7 +320,9 @@ func (a *TraceAnalyzer) ProcessStats() error {
 				if diskUsage := int64(v.FlowStats.MaxDiskUsage.Value()); diskUsage > a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] {
 					a.nodeLevelStats.MaxDiskUsageGroupedByNode[instanceID] = diskUsage
 				}
-
+			}
+			if v.FlowStats.ConsumedRU.HasValue() {
+				a.nodeLevelStats.RUEstimateGroupedByNode[instanceID] += int64(v.FlowStats.ConsumedRU.Value())
 			}
 		}
 	}
@@ -358,6 +368,10 @@ func (a *TraceAnalyzer) ProcessStats() error {
 
 	for _, contentionTime := range a.nodeLevelStats.ContentionTimeGroupedByNode {
 		a.queryLevelStats.ContentionTime += contentionTime
+	}
+
+	for _, estimatedRU := range a.nodeLevelStats.RUEstimateGroupedByNode {
+		a.queryLevelStats.RUEstimate += estimatedRU
 	}
 
 	a.queryLevelStats.ContentionEvents = allContentionEvents

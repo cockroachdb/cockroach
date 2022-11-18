@@ -734,6 +734,13 @@ func (dsp *DistSQLPlanner) Run(
 
 	recv.outputTypes = plan.GetResultTypes()
 	recv.contendedQueryMetric = dsp.distSQLSrv.Metrics.ContendedQueriesCount
+	if dsp.distSQLSrv.TenantCostController != nil && planCtx.planner != nil {
+		if instrumentation := planCtx.planner.curPlan.instrumentation; instrumentation != nil {
+			// Only collect the network egress estimate for a tenant that is running
+			// EXPLAIN ANALYZE, since the overhead is non-negligible.
+			recv.isTenantExplainAnalyze = instrumentation.outputMode != unmodifiedOutput
+		}
+	}
 
 	if len(flows) == 1 {
 		// We ended up planning everything locally, regardless of whether we
@@ -859,6 +866,13 @@ type DistSQLReceiver struct {
 
 	stats *topLevelQueryStats
 
+	// isTenantExplainAnalyze is used to indicate that network egress should be
+	// collected in order to estimate RU consumption for a tenant that is running
+	// a query with EXPLAIN ANALYZE.
+	isTenantExplainAnalyze bool
+
+	egressCounter TenantNetworkEgressCounter
+
 	expectedRowsRead int64
 	progressAtomic   *uint64
 
@@ -897,6 +911,21 @@ type batchResultWriter interface {
 type MetadataResultWriter interface {
 	AddMeta(ctx context.Context, meta *execinfrapb.ProducerMetadata)
 }
+
+// TenantNetworkEgressCounter is used by tenants running EXPLAIN ANALYZE to
+// measure the number of bytes that would be sent over the network if the
+// query result was returned to the client. Its implementation lives in the
+// pgwire package, in conn.go.
+type TenantNetworkEgressCounter interface {
+	// GetRowNetworkEgress estimates network egress for a row.
+	GetRowNetworkEgress(ctx context.Context, row tree.Datums, typs []*types.T) int64
+	// GetBatchNetworkEgress estimates network egress for a batch.
+	GetBatchNetworkEgress(ctx context.Context, batch coldata.Batch) int64
+}
+
+// NewTenantNetworkEgressCounter is used to create a tenantNetworkEgressCounter.
+// It hooks into pgwire code.
+var NewTenantNetworkEgressCounter func() TenantNetworkEgressCounter
 
 // MetadataCallbackWriter wraps a rowResultWriter to stream metadata in a
 // DistSQL flow. It executes a given callback when metadata is added.
@@ -1322,6 +1351,35 @@ func (r *DistSQLReceiver) Push(
 		return r.status
 	}
 
+	ensureDecodedRow := func() error {
+		if r.row == nil {
+			r.row = make(tree.Datums, len(row))
+		}
+		for i, encDatum := range row {
+			err := encDatum.EnsureDecoded(r.outputTypes[i], &r.alloc)
+			if err != nil {
+				return err
+			}
+			r.row[i] = encDatum.Datum
+		}
+		return nil
+	}
+
+	if r.isTenantExplainAnalyze {
+		if err := ensureDecodedRow(); err != nil {
+			r.SetError(err)
+			return r.status
+		}
+		if len(r.row) != len(r.outputTypes) {
+			r.SetError(errors.Errorf("expected number of columns and output types to be the same"))
+			return r.status
+		}
+		if r.egressCounter == nil {
+			r.egressCounter = NewTenantNetworkEgressCounter()
+		}
+		r.stats.networkEgressEstimate += r.egressCounter.GetRowNetworkEgress(r.ctx, r.row, r.outputTypes)
+	}
+
 	if r.discardRows {
 		// Discard rows.
 		return r.status
@@ -1334,16 +1392,9 @@ func (r *DistSQLReceiver) Push(
 		log.VEvent(r.ctx, 2, `a row is pushed in "exists" mode, so transition to draining`)
 		r.status = execinfra.DrainRequested
 	} else {
-		if r.row == nil {
-			r.row = make(tree.Datums, len(row))
-		}
-		for i, encDatum := range row {
-			err := encDatum.EnsureDecoded(r.outputTypes[i], &r.alloc)
-			if err != nil {
-				r.SetError(err)
-				return r.status
-			}
-			r.row[i] = encDatum.Datum
+		if err := ensureDecodedRow(); err != nil {
+			r.SetError(err)
+			return r.status
 		}
 	}
 	r.tracing.TraceExecRowsResult(r.ctx, r.row)
@@ -1378,6 +1429,13 @@ func (r *DistSQLReceiver) PushBatch(
 		// row with the row count in it, so just grab that and exit.
 		r.resultWriterMu.row.IncrementRowsAffected(r.ctx, int(batch.ColVec(0).Int64()[0]))
 		return r.status
+	}
+
+	if r.isTenantExplainAnalyze {
+		if r.egressCounter == nil {
+			r.egressCounter = NewTenantNetworkEgressCounter()
+		}
+		r.stats.networkEgressEstimate += r.egressCounter.GetBatchNetworkEgress(r.ctx, batch)
 	}
 
 	if r.discardRows {
