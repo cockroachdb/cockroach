@@ -324,7 +324,9 @@ func generateBaseCerts(certsDir string) error {
 // Generate certificates with separate CAs:
 // ca.crt: CA certificate
 // ca-client.crt: CA certificate to verify client certs
-// node.crt: node server cert: signed by ca.crt
+// ca-sql.crt: CA certificate for the SQL server cert
+// node.crt: RPC server cert: signed by ca.crt
+// sql-server.crt: SQL server cert: signed by ca-sql.crt
 // client.node.crt: node client cert: signed by ca-client.crt
 // client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
@@ -333,6 +335,20 @@ func generateSplitCACerts(certsDir string) error {
 	}
 
 	// Overwrite those certs that we want to split.
+
+	if err := security.CreateSQLServerCAPair(
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedSQLServerCAKey),
+		testKeySize, time.Hour*96, true, true,
+	); err != nil {
+		return errors.Wrap(err, "could not generate SQL server CA pair")
+	}
+
+	if err := security.CreateSQLServerPair(
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedSQLServerCAKey),
+		testKeySize, time.Hour*48, false, []string{"127.0.0.1"},
+	); err != nil {
+		return errors.Wrap(err, "could not generate SQL Server pair")
+	}
 
 	if err := security.CreateClientCAPair(
 		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),
@@ -537,17 +553,17 @@ func TestUseSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Success, but "node" is not a sql user.
-		{"node", certnames.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedSQLServerCACert, "client.node", "pq: password authentication failed for user node"},
 		// Success!
-		{"root", certnames.EmbeddedCACert, "client.root", ""},
+		{"root", certnames.EmbeddedSQLServerCACert, "client.root", ""},
 		// Bad server CA: can't verify server certificate.
 		{"root", certnames.EmbeddedClientCACert, "client.root", "certificate signed by unknown authority"},
 		// Bad client cert: we're using the node cert but it's not signed by the client CA.
-		{"node", certnames.EmbeddedCACert, "node", "tls: bad certificate"},
+		{"node", certnames.EmbeddedSQLServerCACert, "node", "tls: bad certificate"},
 		// We can't verify the node certificate using the UI cert.
 		{"node", certnames.EmbeddedUICACert, "node", "certificate signed by unknown authority"},
 		// And the SQL server doesn't know what the ui.crt is.
-		{"node", certnames.EmbeddedCACert, "ui", "tls: bad certificate"},
+		{"node", certnames.EmbeddedSQLServerCACert, "ui", "tls: bad certificate"},
 	}
 
 	for i, tc := range testCases {
@@ -656,9 +672,9 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Certificate signed by wrong client CA.
-		{"root", certnames.EmbeddedCACert, "client.root", "tls: bad certificate"},
+		{"root", certnames.EmbeddedSQLServerCACert, "client.root", "tls: bad certificate"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
-		{"node", certnames.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
+		{"node", certnames.EmbeddedSQLServerCACert, "node", "pq: password authentication failed for user node"},
 	}
 
 	for i, tc := range testCases {

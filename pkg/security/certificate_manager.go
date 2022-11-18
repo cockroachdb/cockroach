@@ -40,6 +40,12 @@ var (
 		Measurement: "Certificate Expiration",
 		Unit:        metric.Unit_TIMESTAMP_SEC,
 	}
+	metaSQLServerCAExpiration = metric.Metadata{
+		Name:        "security.certificate.expiration.sql-server-ca",
+		Help:        "Expiration for the SQL server CA certificate. 0 means no certificate or error.",
+		Measurement: "Certificate Expiration",
+		Unit:        metric.Unit_TIMESTAMP_SEC,
+	}
 	metaUICAExpiration = metric.Metadata{
 		Name:        "security.certificate.expiration.ui-ca",
 		Help:        "Expiration for the UI CA certificate. 0 means no certificate or error.",
@@ -122,14 +128,15 @@ type CertificateManager struct {
 	initialized bool
 
 	// Set of certs. These are swapped in during Load(), and never mutated afterwards.
-	caCert         *CertInfo // default CA certificate
-	clientCACert   *CertInfo // optional: certificate to verify client certificates
-	uiCACert       *CertInfo // optional: certificate to verify UI certificates
-	nodeCert       *CertInfo // certificate for RPC service (always server cert, sometimes client cert)
-	sqlServerCert  *CertInfo // optional: certificate for SQL service
-	nodeClientCert *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
-	uiCert         *CertInfo // optional: server certificate for the admin UI.
-	clientCerts    map[username.SQLUsername]*CertInfo
+	caCert          *CertInfo // default CA certificate
+	clientCACert    *CertInfo // optional: certificate to verify client certificates
+	uiCACert        *CertInfo // optional: certificate to verify UI certificates
+	nodeCert        *CertInfo // certificate for RPC service (always server cert, sometimes client cert)
+	sqlServerCACert *CertInfo // optional: certificate to sign SQL service cert
+	sqlServerCert   *CertInfo // optional: certificate for SQL service
+	nodeClientCert  *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
+	uiCert          *CertInfo // optional: server certificate for the admin UI.
+	clientCerts     map[username.SQLUsername]*CertInfo
 
 	// Certs only used with multi-tenancy.
 	tenantCACert, tenantCert, tenantSigningCert *CertInfo
@@ -156,15 +163,16 @@ type CertificateManager struct {
 // These are initialized when the certificate manager is created and updated
 // on reload.
 type CertificateMetrics struct {
-	CAExpiration         *metric.Gauge
-	ClientCAExpiration   *metric.Gauge
-	UICAExpiration       *metric.Gauge
-	NodeExpiration       *metric.Gauge
-	SQLServerExpiration  *metric.Gauge
-	NodeClientExpiration *metric.Gauge
-	UIExpiration         *metric.Gauge
-	TenantCAExpiration   *metric.Gauge
-	TenantExpiration     *metric.Gauge
+	CAExpiration          *metric.Gauge
+	ClientCAExpiration    *metric.Gauge
+	SQLServerCAExpiration *metric.Gauge
+	UICAExpiration        *metric.Gauge
+	NodeExpiration        *metric.Gauge
+	SQLServerExpiration   *metric.Gauge
+	NodeClientExpiration  *metric.Gauge
+	UIExpiration          *metric.Gauge
+	TenantCAExpiration    *metric.Gauge
+	TenantExpiration      *metric.Gauge
 }
 
 func makeCertificateManager(
@@ -180,15 +188,16 @@ func makeCertificateManager(
 		tenantIdentifier: o.tenantIdentifier,
 		tlsSettings:      tlsSettings,
 		certMetrics: CertificateMetrics{
-			CAExpiration:         metric.NewGauge(metaCAExpiration),
-			ClientCAExpiration:   metric.NewGauge(metaClientCAExpiration),
-			UICAExpiration:       metric.NewGauge(metaUICAExpiration),
-			NodeExpiration:       metric.NewGauge(metaNodeExpiration),
-			SQLServerExpiration:  metric.NewGauge(metaSQLServerExpiration),
-			NodeClientExpiration: metric.NewGauge(metaNodeClientExpiration),
-			UIExpiration:         metric.NewGauge(metaUIExpiration),
-			TenantCAExpiration:   metric.NewGauge(metaTenantCAExpiration),
-			TenantExpiration:     metric.NewGauge(metaTenantExpiration),
+			CAExpiration:          metric.NewGauge(metaCAExpiration),
+			ClientCAExpiration:    metric.NewGauge(metaClientCAExpiration),
+			SQLServerCAExpiration: metric.NewGauge(metaSQLServerCAExpiration),
+			UICAExpiration:        metric.NewGauge(metaUICAExpiration),
+			NodeExpiration:        metric.NewGauge(metaNodeExpiration),
+			SQLServerExpiration:   metric.NewGauge(metaSQLServerExpiration),
+			NodeClientExpiration:  metric.NewGauge(metaNodeClientExpiration),
+			UIExpiration:          metric.NewGauge(metaUIExpiration),
+			TenantCAExpiration:    metric.NewGauge(metaTenantCAExpiration),
+			TenantExpiration:      metric.NewGauge(metaTenantExpiration),
 		},
 	}
 }
@@ -284,6 +293,14 @@ func (cm *CertificateManager) ClientCACert() *CertInfo {
 	return cm.clientCACert
 }
 
+// SQLServerCACert returns the CA cert used to sign the SQL server cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) SQLServerCACert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.sqlServerCACert
+}
+
 // UICACert returns the CA cert used to verify the Admin UI certificate. May be nil.
 // Callers should check for an internal Error field.
 func (cm *CertificateManager) UICACert() *CertInfo {
@@ -363,7 +380,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 		return makeErrorf(err, "problem loading certs directory %s", cm.CertsDir())
 	}
 
-	var caCert, clientCACert, uiCACert, nodeCert, sqlServerCert, uiCert, nodeClientCert *CertInfo
+	var caCert, clientCACert, sqlServerCACert, uiCACert, nodeCert, sqlServerCert, uiCert, nodeClientCert *CertInfo
 	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[username.SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
@@ -372,6 +389,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 			caCert = ci
 		case ClientCAPem:
 			clientCACert = ci
+		case SQLServerCAPem:
+			sqlServerCACert = ci
 		case UICAPem:
 			uiCACert = ci
 		case NodePem:
@@ -434,6 +453,9 @@ func (cm *CertificateManager) LoadCertificates() error {
 		if err := checkCertIsValid(clientCACert); checkCertIsValid(cm.clientCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid CA certificate for client verification")
 		}
+		if err := checkCertIsValid(sqlServerCACert); checkCertIsValid(cm.sqlServerCACert) == nil && err != nil {
+			return makeError(err, "reload would lose valid CA certificate for SQL server cert")
+		}
 		if err := checkCertIsValid(uiCACert); checkCertIsValid(cm.uiCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid CA certificate for UI")
 		}
@@ -465,6 +487,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.caCert = caCert
 	cm.clientCACert = clientCACert
 	cm.uiCACert = uiCACert
+	cm.sqlServerCACert = sqlServerCACert
 
 	cm.nodeCert = nodeCert
 	cm.sqlServerCert = sqlServerCert
@@ -510,6 +533,9 @@ func (cm *CertificateManager) updateMetricsLocked() {
 
 	// Client CA certificate expiration.
 	maybeSetMetric(cm.certMetrics.ClientCAExpiration, cm.clientCACert)
+
+	// UI CA certificate expiration.
+	maybeSetMetric(cm.certMetrics.SQLServerCAExpiration, cm.sqlServerCACert)
 
 	// UI CA certificate expiration.
 	maybeSetMetric(cm.certMetrics.UICAExpiration, cm.uiCACert)
@@ -583,7 +609,7 @@ func (cm *CertificateManager) getEmbeddedSQLServerTLSConfig(
 		return cm.sqlServerConfig, nil
 	}
 
-	ca, err := cm.getCACertLocked()
+	ca, err := cm.getSQLServerCACertLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -767,6 +793,21 @@ func (cm *CertificateManager) getClientCACertLocked() (*CertInfo, error) {
 		return nil, makeError(err, "problem with client CA certificate")
 	}
 	return cm.clientCACert, nil
+}
+
+// getClientCACertLocked returns the CA cert used to sign SQL server certs.
+// Use the server SQL server CA if it exists, otherwise fall back on the general CA.
+// cm.mu must be held.
+func (cm *CertificateManager) getSQLServerCACertLocked() (*CertInfo, error) {
+	if cm.sqlServerCACert == nil {
+		// No SQL server CA: use general CA.
+		return cm.getCACertLocked()
+	}
+
+	if err := checkCertIsValid(cm.sqlServerCACert); err != nil {
+		return nil, makeError(err, "problem with SQL server CA certificate")
+	}
+	return cm.sqlServerCACert, nil
 }
 
 // getUICACertLocked returns the CA cert for the Admin UI.
@@ -1061,6 +1102,9 @@ func (cm *CertificateManager) ListCertificates() ([]*CertInfo, error) {
 	}
 	if cm.clientCACert != nil {
 		ret = append(ret, cm.clientCACert)
+	}
+	if cm.sqlServerCACert != nil {
+		ret = append(ret, cm.sqlServerCACert)
 	}
 	if cm.uiCACert != nil {
 		ret = append(ret, cm.uiCACert)

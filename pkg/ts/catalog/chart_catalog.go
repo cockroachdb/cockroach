@@ -69,6 +69,12 @@ var charts = []sectionDescription{
 				Metrics:     []string{"security.certificate.expiration.node-client"},
 			},
 			{
+				Title:       "SQL Server CA Expiration",
+				Downsampler: DescribeAggregator_MAX,
+				Aggregator:  DescribeAggregator_MAX,
+				Metrics:     []string{"security.certificate.expiration.sql-server-ca"},
+			},
+			{
 				Title:       "SQL Server Cert Expiration",
 				Downsampler: DescribeAggregator_MAX,
 				Aggregator:  DescribeAggregator_MAX,
