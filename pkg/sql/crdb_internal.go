@@ -3662,15 +3662,11 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 			return nil, nil, err
 		}
 
-		// Map node descriptors to localities
-		descriptors, err := getAllNodeDescriptors(p)
+		resp, err := p.ExecCfg().TenantStatusServer.NodeLocality(ctx, &serverpb.NodeLocalityRequest{})
 		if err != nil {
 			return nil, nil, err
 		}
-		nodeIDToLocality := make(map[roachpb.NodeID]roachpb.Locality)
-		for _, desc := range descriptors {
-			nodeIDToLocality[desc.NodeID] = desc.Locality
-		}
+		nodeIDToLocality := resp.NodeLocalities
 
 		var desc roachpb.RangeDescriptor
 
