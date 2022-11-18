@@ -324,7 +324,9 @@ func generateBaseCerts(certsDir string) error {
 // Generate certificates with separate CAs:
 // ca.crt: CA certificate
 // ca-client.crt: CA certificate to verify client certs
-// node.crt: node server cert: signed by ca.crt
+// ca-sql.crt: CA certificate for the SQL server cert
+// node.crt: RPC server cert: signed by ca.crt
+// sql-server.crt: SQL server cert: signed by ca-sql.crt
 // client.node.crt: node client cert: signed by ca-client.crt
 // client.root.crt: root client cert: signed by ca-client.crt
 func generateSplitCACerts(certsDir string) error {
@@ -333,6 +335,20 @@ func generateSplitCACerts(certsDir string) error {
 	}
 
 	// Overwrite those certs that we want to split.
+
+	if err := security.CreateSQLServerCAPair(
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedSQLServerCAKey),
+		testKeySize, time.Hour*96, true, true,
+	); err != nil {
+		return errors.Wrap(err, "could not generate SQL server CA pair")
+	}
+
+	if err := security.CreateSQLServerPair(
+		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
+		testKeySize, time.Hour*48, false, []string{"localhost"},
+	); err != nil {
+		return errors.Wrap(err, "could not generate SQL Server pair")
+	}
 
 	if err := security.CreateClientCAPair(
 		certsDir, filepath.Join(certsDir, certnames.EmbeddedClientCAKey),

@@ -60,13 +60,22 @@ func loadSecurityOptions(
 				// assume that the Go TLS code will fall back to a OS-level
 				// common trust store.
 
-				exists, err := loader.FileExists(cl.CACertPath())
+				// We try first the native SQL server CA, if one is available.
+				exists, err := loader.FileExists(cl.SQLServerCACertPath())
 				if err != nil {
 					return err
-				}
-				if exists {
+				} else if exists {
 					// The CL has found a CA cert. Use that.
-					caCertPath = cl.CACertPath()
+					caCertPath = cl.SQLServerCACertPath()
+				}
+				if caCertPath == "" {
+					// Try to fall back into the global CA instead.
+					exists, err := loader.FileExists(cl.CACertPath())
+					if err != nil {
+						return err
+					} else if exists {
+						caCertPath = cl.CACertPath()
+					}
 				}
 			}
 			// Fallback: if caCertPath was not assigned above, either
