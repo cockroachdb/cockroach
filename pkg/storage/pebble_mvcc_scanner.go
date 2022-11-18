@@ -40,6 +40,17 @@ var maxItersBeforeSeek = util.ConstantWithMetamorphicTestRange(
 	3,  /* max */
 )
 
+// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
+// timestamps from returned KV's.
+type MVCCDecodingStrategy int
+
+const (
+	// MVCCDecodingNotRequired is used when timestamps aren't needed.
+	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
+	// MVCCDecodingRequired is used when timestamps are needed.
+	MVCCDecodingRequired
+)
+
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
