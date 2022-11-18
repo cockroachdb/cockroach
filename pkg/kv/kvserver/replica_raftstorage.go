@@ -19,17 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -194,7 +193,7 @@ func entries(
 		return nil
 	}
 
-	if err := iterateEntries(ctx, reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
+	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
 	// Cache the fetched entries, if we may.
@@ -243,48 +242,6 @@ func entries(
 	}
 	// The requested lo index does not yet exist.
 	return nil, raft.ErrUnavailable
-}
-
-// iterateEntries iterates over each of the Raft log entries in the range
-// [lo,hi). At each step of the iteration, f() is invoked with the current log
-// entry.
-//
-// The function does not accept a maximum number of entries or bytes. Instead,
-// callers should enforce any limits by returning iterutil.StopIteration from
-// the iteration function to terminate iteration early, if necessary.
-func iterateEntries(
-	ctx context.Context,
-	reader storage.Reader,
-	rangeID roachpb.RangeID,
-	lo, hi uint64,
-	f func(raftpb.Entry) error,
-) error {
-	key := keys.RaftLogKey(rangeID, lo)
-	endKey := keys.RaftLogKey(rangeID, hi)
-	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{
-		UpperBound: endKey,
-	})
-	defer iter.Close()
-
-	var meta enginepb.MVCCMetadata
-	var ent raftpb.Entry
-
-	iter.SeekGE(storage.MakeMVCCMetadataKey(key))
-	for ; ; iter.Next() {
-		if ok, err := iter.Valid(); err != nil || !ok {
-			return err
-		}
-
-		if err := protoutil.Unmarshal(iter.UnsafeValue(), &meta); err != nil {
-			return errors.Wrap(err, "unable to decode MVCCMetadata")
-		}
-		if err := storage.MakeValue(meta).GetProto(&ent); err != nil {
-			return errors.Wrap(err, "unable to unmarshal raft Entry")
-		}
-		if err := f(ent); err != nil {
-			return iterutil.Map(err)
-		}
-	}
 }
 
 // invalidLastTerm is an out-of-band value for r.mu.lastTerm that
