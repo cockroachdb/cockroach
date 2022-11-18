@@ -91,11 +91,9 @@ var jepsenNemeses = []struct {
 	{"start-kill-2", "--nemesis start-kill-2"},
 	{"start-stop-2", "--nemesis start-stop-2"},
 	{"strobe-skews", "--nemesis strobe-skews"},
-	// TODO(bdarnell): subcritical-skews nemesis is currently flaky due to ntp rate limiting.
-	// https://github.com/cockroachdb/cockroach/issues/35599
-	//{"subcritical-skews", "--nemesis subcritical-skews"},
-	//{"majority-ring-subcritical-skews", "--nemesis majority-ring --nemesis2 subcritical-skews"},
-	//{"subcritical-skews-start-kill-2", "--nemesis subcritical-skews --nemesis2 start-kill-2"},
+	{"subcritical-skews", "--nemesis subcritical-skews"},
+	{"majority-ring-subcritical-skews", "--nemesis majority-ring --nemesis2 subcritical-skews"},
+	{"subcritical-skews-start-kill-2", "--nemesis subcritical-skews --nemesis2 start-kill-2"},
 	{"majority-ring-start-kill-2", "--nemesis majority-ring --nemesis2 start-kill-2"},
 	{"parts-start-kill-2", "--nemesis parts --nemesis2 start-kill-2"},
 }
