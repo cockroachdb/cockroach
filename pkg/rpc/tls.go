@@ -114,10 +114,13 @@ func (ctx *SecurityContext) GetCertificateManager() (*security.CertificateManage
 
 var errNoCertificatesFound = errors.New("no certificates found; does certs dir exist?")
 
-// GetServerTLSConfig returns the server TLS config, initializing it if needed.
+// GetSQLServerTLSConfig returns the SQL server TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a server TLS config.
-func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
+//
+// TODO(knz): This method should not be hosted in the 'rpc' package;
+// it has nothing to do with the RPC configuration / infrastructure.
+func (ctx *SecurityContext) GetSQLServerTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if ctx.config.Insecure {
 		return nil, nil
@@ -128,7 +131,28 @@ func (ctx *SecurityContext) GetServerTLSConfig() (*tls.Config, error) {
 		return nil, wrapError(err)
 	}
 
-	tlsCfg, err := cm.GetServerTLSConfig()
+	tlsCfg, err := cm.GetSQLServerTLSConfig()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetRPCServerTLSConfig returns the RPC server TLS config, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a server TLS config.
+func (ctx *SecurityContext) GetRPCServerTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if ctx.config.Insecure {
+		return nil, nil
+	}
+
+	cm, err := ctx.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetRPCServerTLSConfig()
 	if err != nil {
 		return nil, wrapError(err)
 	}

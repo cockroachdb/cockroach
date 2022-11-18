@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -375,6 +376,8 @@ func generateSplitCACerts(certsDir string) error {
 // We construct SSL server and clients and use the generated certs.
 func TestUseCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -457,6 +460,8 @@ func makeSecurePGUrl(addr, user, certsDir, caName, certName, keyName string) str
 // We construct SSL server and clients and use the generated certs.
 func TestUseSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
@@ -566,6 +571,8 @@ func TestUseSplitCACerts(t *testing.T) {
 // We construct SSL server and clients and use the generated certs.
 func TestUseWrongSplitCACerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
 	defer ResetTest()
