@@ -57,7 +57,7 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │   │
 │   └── • Stage 1 of 1 in PreCommitPhase
 │       │
-│       ├── • 26 elements transitioning toward ABSENT
+│       ├── • 27 elements transitioning toward ABSENT
 │       │   │
 │       │   ├── • Namespace:{DescID: 108, Name: table_regional_by_row, ReferencedDescID: 104}
 │       │   │   │ PUBLIC → ABSENT
@@ -99,6 +99,12 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │   │         rule: "descriptor TXN_DROPPED before DROPPED"
 │       │   │
 │       │   ├── • ObjectParent:{DescID: 108, ReferencedDescID: 106}
+│       │   │   │ PUBLIC → ABSENT
+│       │   │   │
+│       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
+│       │   │         rule: "descriptor drop right before dependent element removal"
+│       │   │
+│       │   ├── • TablePartitionAllBy:{DescID: 108}
 │       │   │   │ PUBLIC → ABSENT
 │       │   │   │
 │       │   │   └── • Precedence dependency from DROPPED Table:{DescID: 108}
@@ -352,13 +358,16 @@ EXPLAIN (ddl, verbose) DROP TABLE multi_region_test_db.public.table_regional_by_
 │       │       └── • skip PUBLIC → ABSENT operations
 │       │             rule: "skip index dependents removal ops on relation drop"
 │       │
-│       └── • 15 Mutation operations
+│       └── • 16 Mutation operations
 │           │
 │           ├── • MarkDescriptorAsDropped
 │           │     DescriptorID: 108
 │           │
 │           ├── • RemoveAllTableComments
 │           │     TableID: 108
+│           │
+│           ├── • NotImplemented
+│           │     ElementType: scpb.TablePartitionAllBy
 │           │
 │           ├── • RemoveColumnDefaultExpression
 │           │     ColumnID: 2

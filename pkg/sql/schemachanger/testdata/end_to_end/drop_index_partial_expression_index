@@ -26,6 +26,7 @@ upsert descriptor #104
   -    inaccessible: true
   -    name: crdb_internal_idx_expr
   -    nullable: true
+  -    pgAttributeNum: 3
   -    type:
   -      family: StringFamily
   -      oid: 25
@@ -52,9 +53,9 @@ upsert descriptor #104
   -    - 1
   -    name: idx
   -    partitioning: {}
-  -    predicate: i > 0:::INT8
+  -    predicate: i > 0
   -    sharded: {}
-  -    version: 3
+  -    version: 4
   +  indexes: []
      modificationTime: {}
   +  mutations:
@@ -76,10 +77,10 @@ upsert descriptor #104
   +      - 1
   +      name: crdb_internal_index_2_name_placeholder
   +      partitioning: {}
-  +      predicate: i > 0:::INT8
+  +      predicate: i > 0
   +      sharded: {}
-  +      version: 3
-  +    mutationId: 2
+  +      version: 4
+  +    mutationId: 1
   +    state: WRITE_ONLY
   +  - column:
   +      computeExpr: lower(j)
@@ -87,20 +88,21 @@ upsert descriptor #104
   +      inaccessible: true
   +      name: crdb_internal_column_3_name_placeholder
   +      nullable: true
+  +      pgAttributeNum: 3
   +      type:
   +        family: StringFamily
   +        oid: 25
   +      virtual: true
   +    direction: DROP
-  +    mutationId: 2
+  +    mutationId: 1
   +    state: WRITE_ONLY
      name: t
      nextColumnId: 4
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "8"
+  +  version: "9"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 2 MutationType ops
@@ -125,8 +127,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
+  -  version: "8"
+  +  version: "9"
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
 # end PreCommitPhase
@@ -139,15 +141,15 @@ begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops
 upsert descriptor #104
   ...
-         version: 3
-       mutationId: 2
+         version: 4
+       mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      - column:
          computeExpr: lower(j)
   ...
        direction: DROP
-       mutationId: 2
+       mutationId: 1
   -    state: WRITE_ONLY
   +    state: DELETE_ONLY
      name: t
@@ -155,8 +157,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "9"
+  +  version: "10"
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 5 MutationType ops pending"
 commit transaction #3
 begin transaction #4
@@ -201,10 +203,10 @@ upsert descriptor #104
   -      - 1
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
-  -      predicate: i > 0:::INT8
+  -      predicate: i > 0
   -      sharded: {}
-  -      version: 3
-  -    mutationId: 2
+  -      version: 4
+  -    mutationId: 1
   -    state: DELETE_ONLY
   -  - column:
   -      computeExpr: lower(j)
@@ -212,12 +214,13 @@ upsert descriptor #104
   -      inaccessible: true
   -      name: crdb_internal_column_3_name_placeholder
   -      nullable: true
+  -      pgAttributeNum: 3
   -      type:
   -        family: StringFamily
   -        oid: 25
   -      virtual: true
   -    direction: DROP
-  -    mutationId: 2
+  -    mutationId: 1
   -    state: DELETE_ONLY
   +  mutations: []
      name: t
@@ -225,8 +228,8 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "9"
-  +  version: "10"
+  -  version: "10"
+  +  version: "11"
 write *eventpb.DropIndex to event log: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
