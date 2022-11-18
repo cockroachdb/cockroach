@@ -128,8 +128,8 @@ type CertificateManager struct {
 	tenantCACert, tenantCert, tenantSigningCert *CertInfo
 
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
-	// Server-side config.
-	serverConfig *tls.Config
+	// Server-side config for inbound RPC connections.
+	rpcServerConfig *tls.Config
 	// Server-side config for the Admin UI.
 	uiServerConfig *tls.Config
 	// Client-side config for the cockroach node.
@@ -449,7 +449,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 
 	cm.initialized = true
 
-	cm.serverConfig = nil
+	cm.rpcServerConfig = nil
 	cm.uiServerConfig = nil
 	cm.clientConfig = nil
 
@@ -500,10 +500,16 @@ func (cm *CertificateManager) updateMetricsLocked() {
 	maybeSetMetric(cm.certMetrics.UIExpiration, cm.uiCert)
 }
 
-// GetServerTLSConfig returns a server TLS config with a callback to fetch the
+// GetSQLServerTLSConfig returns a SQL server TLS config.
+// TODO(knz): change this to use a separate cert wherever releavant.
+func (cm *CertificateManager) GetSQLServerTLSConfig() (*tls.Config, error) {
+	return cm.GetRPCServerTLSConfig()
+}
+
+// GetRPCServerTLSConfig returns a RPC server TLS config with a callback to fetch the
 // latest TLS config. We still attempt to get the config to make sure
 // the initial call has a valid config loaded.
-func (cm *CertificateManager) GetServerTLSConfig() (*tls.Config, error) {
+func (cm *CertificateManager) GetRPCServerTLSConfig() (*tls.Config, error) {
 	if _, err := cm.getEmbeddedServerTLSConfig(nil); err != nil {
 		return nil, err
 	}
@@ -532,8 +538,8 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	if cm.serverConfig != nil {
-		return cm.serverConfig, nil
+	if cm.rpcServerConfig != nil {
+		return cm.rpcServerConfig, nil
 	}
 
 	ca, err := cm.getCACertLocked()
@@ -578,7 +584,7 @@ func (cm *CertificateManager) getEmbeddedServerTLSConfig(
 		return nil, err
 	}
 
-	cm.serverConfig = cfg
+	cm.rpcServerConfig = cfg
 	return cfg, nil
 }
 

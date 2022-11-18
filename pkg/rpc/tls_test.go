@@ -203,7 +203,7 @@ func TestServerSSLSettings(t *testing.T) {
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("#%d: expected HTTPRequestScheme=%s, got: %s", tcNum, tc.requestScheme, cfg.HTTPRequestScheme())
 			}
-			tlsConfig, err := rpcContext.GetServerTLSConfig()
+			tlsConfig, err := rpcContext.GetRPCServerTLSConfig()
 			if (err == nil) != tc.configSuccess {
 				t.Fatalf("#%d: expected GetServerTLSConfig success=%t, got err=%v", tcNum, tc.configSuccess, err)
 			}
