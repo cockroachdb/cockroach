@@ -1184,3 +1184,45 @@ CREATE TABLE public.partition_by_nothing (
    INDEX partition_by_nothing_b_idx (b ASC),
    FAMILY fam_0_pk_a_b (pk, a, b)
 )
+
+# Verify that it's not possible to partition tables by array columns (#91766).
+
+statement error unimplemented: partitioning by array column
+CREATE TABLE partition_array (
+  pk INT[] PRIMARY KEY
+) PARTITION BY LIST (pk) (PARTITION blah VALUES IN (ARRAY[1], ARRAY[2]))
+
+statement error unimplemented: partitioning by array column
+CREATE TABLE partition_array (
+  pk INT[] PRIMARY KEY
+) PARTITION BY RANGE (pk) (PARTITION blah VALUES FROM (ARRAY[1]) TO (ARRAY[2]))
+
+statement error unimplemented: partitioning by array column
+CREATE TABLE partition_array (
+  a INT[],
+  INDEX (a) PARTITION BY LIST (a) (PARTITION blah VALUES IN (ARRAY[1], ARRAY[2]))
+)
+
+statement error unimplemented: partitioning by array column
+CREATE TABLE partition_array (
+  a INT[],
+  INDEX (a) PARTITION BY RANGE (a) (PARTITION blah VALUES FROM (ARRAY[1]) TO (ARRAY[2]))
+)
+
+statement ok
+CREATE TABLE partition_array (
+  pk INT[] PRIMARY KEY,
+  a INT[]
+)
+
+statement error unimplemented: partitioning by array column
+ALTER TABLE partition_array PARTITION BY LIST (pk) (PARTITION blah VALUES IN (ARRAY[1], ARRAY[2]))
+
+statement error unimplemented: partitioning by array column
+ALTER TABLE partition_array PARTITION BY RANGE (pk) (PARTITION blah VALUES FROM (ARRAY[1]) TO (ARRAY[2]))
+
+statement error unimplemented: partitioning by array column
+CREATE INDEX ON partition_array (a) PARTITION BY LIST (a) (PARTITION blah VALUES IN (ARRAY[1], ARRAY[2]))
+
+statement error unimplemented: partitioning by array column
+CREATE INDEX ON partition_array (a) PARTITION BY RANGE (a) (PARTITION blah VALUES FROM (ARRAY[1]) TO (ARRAY[2]))
