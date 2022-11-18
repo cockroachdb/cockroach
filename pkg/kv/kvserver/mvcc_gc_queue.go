@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -46,6 +47,11 @@ const (
 	// for ranged intent resolution if it exceeds the timeout.
 	mvccGCQueueIntentBatchTimeout = 2 * time.Minute
 
+	// mvccGCQueueCooldownDuration is duration to wait between MVCC GC attempts of
+	// the same rage when triggered by a low score threshold. This cooldown time
+	// is reduced proportionally to score and becomes 0 when score reaches a
+	// mvccGCKeyScoreNoCooldownThreshold score.
+	mvccGCQueueCooldownDuration = 2 * time.Hour
 	// mvccGCQueueIntentCooldownDuration is the duration to wait between MVCC GC
 	// attempts of the same range when triggered solely by intents. This is to
 	// prevent continually spinning on intents that belong to active transactions,
@@ -57,8 +63,9 @@ const (
 
 	// Thresholds used to decide whether to queue for MVCC GC based on keys and
 	// intents.
-	mvccGCKeyScoreThreshold    = 2
-	mvccGCIntentScoreThreshold = 1
+	mvccGCKeyScoreThreshold           = 1
+	mvccGCKeyScoreNoCooldownThreshold = 2
+	mvccGCIntentScoreThreshold        = 1
 
 	probablyLargeAbortSpanSysCountThreshold = 10000
 	largeAbortSpanBytesThreshold            = 16 * (1 << 20) // 16mb
@@ -402,8 +409,32 @@ func makeMVCCGCQueueScoreImpl(
 	valScore := r.DeadFraction * r.ValuesScalableScore
 	r.FinalScore = r.FuzzFactor * (valScore + r.IntentScore)
 
+	// Check GC queueing eligibility using cooldown discounted by score.
+	isGCScoreMet := func(score float64, minThreshold, maxThreshold float64, cooldown time.Duration) bool {
+		if minThreshold > maxThreshold {
+			if util.RaceEnabled {
+				log.Fatalf(ctx,
+					"invalid cooldown score thresholds. min (%f) must be less or equal to max (%f)",
+					minThreshold, maxThreshold)
+			}
+			// Swap thresholds for non test builds. This should never happen in practice.
+			minThreshold, maxThreshold = maxThreshold, minThreshold
+		}
+		// Cool down rate is how much we want to cool down after previous gc based
+		// on the score. If score is at min threshold we would wait for cooldown
+		// time, it is proportionally reduced as score reaches maxThreshold and is
+		// zero at maxThreshold which means no cooldown is necessary.
+		coolDownRate := 1 - (score-minThreshold)/(maxThreshold-minThreshold)
+		adjustedCoolDown := time.Duration(int64(float64(cooldown.Nanoseconds()) * coolDownRate))
+		if score > minThreshold && (r.LastGC == 0 || r.LastGC >= adjustedCoolDown) {
+			return true
+		}
+		return false
+	}
+
 	// First determine whether we should queue based on MVCC score alone.
-	r.ShouldQueue = canAdvanceGCThreshold && r.FuzzFactor*valScore > mvccGCKeyScoreThreshold
+	r.ShouldQueue = canAdvanceGCThreshold && isGCScoreMet(r.FuzzFactor*valScore, mvccGCKeyScoreThreshold,
+		mvccGCKeyScoreNoCooldownThreshold, mvccGCQueueCooldownDuration)
 
 	// Next, determine whether we should queue based on intent score. For
 	// intents, we also enforce a cooldown time since we may not actually
