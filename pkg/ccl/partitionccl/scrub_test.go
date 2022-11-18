@@ -27,13 +27,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+func tenantOrSystemCodec(s serverutils.TestServerInterface) keys.SQLCodec {
+	var codec = s.Codec()
+	if len(s.TestTenants()) > 0 {
+		codec = s.TestTenants()[0].Codec()
+	}
+	return codec
+}
+
 // TestScrubUniqueIndex tests SCRUB on a table that violates a UNIQUE
 // constraint.
 func TestScrubUniqueIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	utilccl.TestingEnableEnterprise()
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		DisableDefaultTestTenant: false,
+	})
 	defer s.Stopper().Stop(context.Background())
 
 	// Create the table and row entries.
@@ -56,13 +66,14 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 
 	// Overwrite the value on partition one with a duplicate unique index value.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3), tree.NewDInt(1)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	codec := tenantOrSystemCodec(s)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -76,7 +87,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2);
 	}
 
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -140,13 +151,14 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 
 	// Overwrite the value on partition one with a NULL index value.
 	values := []tree.Datum{tree.NewDInt(1), tree.DNull, tree.NewDInt(1)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	codec := tenantOrSystemCodec(s)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -160,7 +172,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, NULL, 2);
 	}
 
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
-	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
+	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -210,12 +222,13 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 
 	// Overwrite the value on partition one with a duplicate unique value.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(4)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	codec := tenantOrSystemCodec(s)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -229,7 +242,7 @@ INSERT INTO db.t VALUES (1, 3), (2, 4);
 	}
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -279,7 +292,8 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	// falls under the unique index constraint, and one that does not.
 	valuesConstrained := []tree.Datum{tree.NewDInt(3), tree.NewDInt(6), tree.NewDInt(1)}
 	valuesNotConstrained := []tree.Datum{tree.NewDInt(1), tree.NewDInt(3), tree.NewDInt(1)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	codec := tenantOrSystemCodec(s)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 	var colIDtoRowIndex catalog.TableColMap
@@ -288,7 +302,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
 
 	// Modify the primary index with a duplicate constrained value.
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, valuesConstrained, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, valuesConstrained, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -301,7 +315,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 
 	// Modify the secondary index with a duplicate constrained value.
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, valuesConstrained, true /* includeEmpty */)
+		codec, tableDesc, secondaryIndex, colIDtoRowIndex, valuesConstrained, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -314,7 +328,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 
 	// Modify the primary index with a duplicate value not in the constrained
 	// range.
-	primaryIndexKey, err = rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, valuesNotConstrained, true)
+	primaryIndexKey, err = rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, valuesNotConstrained, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -328,7 +342,7 @@ INSERT INTO db.t VALUES (1, 2, 1), (2, 3, 2), (3, 5, 1), (4, 6, 2);
 	// Modify the secondary index with a duplicate value not in the constrained
 	// range.
 	secondaryIndexKey, err = rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, valuesNotConstrained, true /* includeEmpty */)
+		codec, tableDesc, secondaryIndex, colIDtoRowIndex, valuesNotConstrained, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -394,14 +408,15 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 
 	// Insert a row on partition 2 with a duplicate unique index value.
 	values := []tree.Datum{tree.NewDInt(2), tree.NewDInt(1), tree.NewDInt(2), tree.NewDInt(2)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	codec := tenantOrSystemCodec(s)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[2].GetID(), 2)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[3].GetID(), 3)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}
@@ -417,7 +432,7 @@ INSERT INTO db.t VALUES (1, 1, 2, 1);
 	// Modify the secondary index with the duplicate value.
 	secondaryIndex := tableDesc.PublicNonPrimaryIndexes()[0]
 	secondaryIndexKey, err := rowenc.EncodeSecondaryIndex(
-		keys.SystemSQLCodec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
+		codec, tableDesc, secondaryIndex, colIDtoRowIndex, values, true /* includeEmpty */)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -479,12 +494,13 @@ INSERT INTO db.t VALUES (1, 1);
 
 	// Insert a duplicate primary key into a different partition.
 	values := []tree.Datum{tree.NewDInt(1), tree.NewDInt(2)}
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "db", "t")
+	codec := tenantOrSystemCodec(s)
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "db", "t")
 	primaryIndex := tableDesc.GetPrimaryIndex()
 	var colIDtoRowIndex catalog.TableColMap
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[0].GetID(), 0)
 	colIDtoRowIndex.Set(tableDesc.PublicColumns()[1].GetID(), 1)
-	primaryIndexKey, err := rowenc.EncodePrimaryIndex(keys.SystemSQLCodec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
+	primaryIndexKey, err := rowenc.EncodePrimaryIndex(codec, tableDesc, primaryIndex, colIDtoRowIndex, values, true)
 	if err != nil {
 		t.Fatalf("unexpected error %s", err)
 	}

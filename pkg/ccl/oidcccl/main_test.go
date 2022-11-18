@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package authccl_test
+package oidcccl_test
 
 import (
 	"os"
