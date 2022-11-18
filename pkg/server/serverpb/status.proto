@@ -59,6 +59,7 @@ message CertificateDetails {
     UI_CA = 4;
     UI = 5;
     SQL_SERVER = 6;
+    SQL_SERVER_CA = 7;
   }
 
   message Fields {
