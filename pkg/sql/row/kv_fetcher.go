@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -46,21 +47,10 @@ type KVFetcher struct {
 	}
 }
 
+var _ storage.NextKVer = &KVFetcher{}
+
 // NewKVFetcher creates a new KVFetcher.
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
-//
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly (if acc is non-nil). The
-// caller can only reuse the spans slice after the fetcher has been closed, and
-// if the caller does, it becomes responsible for the memory accounting.
-//
-// The fetcher also takes ownership of the spanIDs slice - it can modify the
-// slice, but it will **not** perform the memory accounting. It is the caller's
-// responsibility to track the memory under the spanIDs slice, and the slice
-// can only be reused once the fetcher has been closed. Notably, the capacity of
-// the slice will not be increased by the fetcher.
-//
-// If spanIDs is non-nil, then it must be of the same length as spans.
 func NewKVFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
@@ -192,32 +182,20 @@ func (f *KVFetcher) GetBatchRequestsIssued() int64 {
 	return atomic.LoadInt64(f.atomics.batchRequestsIssued)
 }
 
-// MVCCDecodingStrategy controls if and how the fetcher should decode MVCC
-// timestamps from returned KV's.
-type MVCCDecodingStrategy int
-
-const (
-	// MVCCDecodingNotRequired is used when timestamps aren't needed.
-	MVCCDecodingNotRequired MVCCDecodingStrategy = iota
-	// MVCCDecodingRequired is used when timestamps are needed.
-	MVCCDecodingRequired
-)
-
-// NextKV returns the next kv from this fetcher. Returns false if there are no
+// nextKV returns the next kv from this fetcher. Returns false if there are no
 // more kvs to fetch, the kv that was fetched, the ID associated with the span
 // that generated this kv (0 if nil spanIDs were provided when constructing the
 // fetcher), and any errors that may have occurred.
 //
-// finalReferenceToBatch is set to true if the returned KV's byte slices are
-// the last reference into a larger backing byte slice. This parameter allows
-// calling code to control its memory usage: if finalReferenceToBatch is true,
-// it means that the next call to NextKV might potentially allocate a big chunk
-// of new memory, so the returned KeyValue should be copied into a small slice
-// that the caller owns to avoid retaining two large backing byte slices at once
-// unexpectedly.
-func (f *KVFetcher) NextKV(
-	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
-) (ok bool, kv roachpb.KeyValue, spanID int, finalReferenceToBatch bool, err error) {
+// needsCopy is set to true when the caller should copy the returned KeyValue.
+// One example of when this happens is when the returned KV's byte slices are
+// the last reference into a larger backing byte slice. In such a case, the next
+// call to NextKV might potentially allocate a big chunk of new memory, and by
+// copying the returned KeyValue into a small slice that the caller owns, we
+// avoid retaining two large backing byte slices at once.
+func (f *KVFetcher) nextKV(
+	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
+) (ok bool, kv roachpb.KeyValue, spanID int, needsCopy bool, err error) {
 	for {
 		// Only one of f.kvs or f.batchResponse will be set at a given time. Which
 		// one is set depends on the format returned by a given BatchRequest.
@@ -225,7 +203,7 @@ func (f *KVFetcher) NextKV(
 		if nKvs != 0 {
 			kv = f.kvs[0]
 			f.kvs = f.kvs[1:]
-			// We always return "false" for finalReferenceToBatch when returning data in the
+			// We always return "false" for needsCopy when returning data in the
 			// KV format, because each of the KVs doesn't share any backing memory -
 			// they are all independently garbage collectable.
 			return true, kv, f.spanID, false, nil
@@ -236,9 +214,9 @@ func (f *KVFetcher) NextKV(
 			var err error
 			var ts hlc.Timestamp
 			switch mvccDecodeStrategy {
-			case MVCCDecodingRequired:
+			case storage.MVCCDecodingRequired:
 				key, ts, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValue(f.batchResponse)
-			case MVCCDecodingNotRequired:
+			case storage.MVCCDecodingNotRequired:
 				key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
 			}
 			if err != nil {
@@ -275,8 +253,35 @@ func (f *KVFetcher) NextKV(
 	}
 }
 
+// NextKV implements the storage.NextKVer interface.
+// gcassert:inline
+func (f *KVFetcher) NextKV(
+	ctx context.Context, mvccDecodeStrategy storage.MVCCDecodingStrategy,
+) (ok bool, kv roachpb.KeyValue, needsCopy bool, err error) {
+	ok, kv, _, needsCopy, err = f.nextKV(ctx, mvccDecodeStrategy)
+	return ok, kv, needsCopy, err
+}
+
+// GetLastEncodedKey implements the storage.NextKVer interface.
+func (f *KVFetcher) GetLastEncodedKey() roachpb.Key {
+	panic("unimplemented")
+}
+
 // SetupNextFetch overrides the same method from the wrapped KVBatchFetcher in
 // order to reset this KVFetcher.
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly (if acc is non-nil). The
+// caller can only reuse the spans slice after the fetcher has been closed, and
+// if the caller does, it becomes responsible for the memory accounting.
+//
+// The fetcher also takes ownership of the spanIDs slice - it can modify the
+// slice, but it will **not** perform the memory accounting. It is the caller's
+// responsibility to track the memory under the spanIDs slice, and the slice
+// can only be reused once the fetcher has been closed. Notably, the capacity of
+// the slice will not be increased by the fetcher.
+//
+// If spanIDs is non-nil, then it must be of the same length as spans.
 func (f *KVFetcher) SetupNextFetch(
 	ctx context.Context,
 	spans roachpb.Spans,
