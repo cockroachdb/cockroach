@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -124,6 +125,9 @@ func TestTopKSorter(t *testing.T) {
 func TestTopKSortRandomized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	if coldata.BatchSize() > 1024 {
+		skip.UnderStress(t, "too slow with large coldata.BatchSize()")
+	}
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
 	nTups := coldata.BatchSize()*2 + 1
