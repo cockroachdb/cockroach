@@ -25,36 +25,41 @@ func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	cm, err := security.NewCertificateManager(certnames.EmbeddedCertsDir, security.CommandTLSSettings{})
 	require.NoError(t, err)
-	config, err := cm.GetServerTLSConfig()
+	rpcConfig, err := cm.GetRPCServerTLSConfig()
 	require.NoError(t, err)
-	require.NotNil(t, config.GetConfigForClient)
-	config, err = config.GetConfigForClient(&tls.ClientHelloInfo{})
+	sqlConfig, err := cm.GetSQLServerTLSConfig()
 	require.NoError(t, err)
-	if err != nil {
-		t.Fatalf("Failed to load TLS config: %v", err)
-	}
 
-	if len(config.Certificates) != 1 {
-		t.Fatalf("config.Certificates should have 1 cert; found %d", len(config.Certificates))
-	}
-	cert := config.Certificates[0]
-	asn1Data := cert.Certificate[0] // TODO Check len()
+	for _, config := range []*tls.Config{rpcConfig, sqlConfig} {
+		require.NotNil(t, config.GetConfigForClient)
+		config, err = config.GetConfigForClient(&tls.ClientHelloInfo{})
+		require.NoError(t, err)
+		if err != nil {
+			t.Fatalf("Failed to load TLS config: %v", err)
+		}
 
-	x509Cert, err := x509.ParseCertificate(asn1Data)
-	if err != nil {
-		t.Fatalf("Couldn't parse test cert: %v", err)
-	}
+		if len(config.Certificates) != 1 {
+			t.Fatalf("config.Certificates should have 1 cert; found %d", len(config.Certificates))
+		}
+		cert := config.Certificates[0]
+		asn1Data := cert.Certificate[0] // TODO Check len()
 
-	if err = verifyX509Cert(x509Cert, "localhost", config.RootCAs); err != nil {
-		t.Errorf("Couldn't verify test cert against server CA: %v", err)
-	}
+		x509Cert, err := x509.ParseCertificate(asn1Data)
+		if err != nil {
+			t.Fatalf("Couldn't parse test cert: %v", err)
+		}
 
-	if err = verifyX509Cert(x509Cert, "localhost", config.ClientCAs); err != nil {
-		t.Errorf("Couldn't verify test cert against client CA: %v", err)
-	}
+		if err = verifyX509Cert(x509Cert, "localhost", config.RootCAs); err != nil {
+			t.Errorf("Couldn't verify test cert against server CA: %v", err)
+		}
 
-	if err = verifyX509Cert(x509Cert, "google.com", config.RootCAs); err == nil {
-		t.Errorf("Verified test cert for wrong hostname")
+		if err = verifyX509Cert(x509Cert, "localhost", config.ClientCAs); err != nil {
+			t.Errorf("Couldn't verify test cert against client CA: %v", err)
+		}
+
+		if err = verifyX509Cert(x509Cert, "google.com", config.RootCAs); err == nil {
+			t.Errorf("Verified test cert for wrong hostname")
+		}
 	}
 }
 
