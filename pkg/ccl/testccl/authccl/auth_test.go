@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -181,10 +180,16 @@ func jwtRunTest(t *testing.T, insecure bool) {
 		defer cleanup()
 
 		s, conn, _ := serverutils.StartServer(t,
-			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
+			base.TestServerArgs{
+				Insecure:   insecure,
+				SocketFile: maybeSocketFile,
+			})
 		defer s.Stopper().Stop(context.Background())
 
-		testServer := s.(*server.TestServer)
+		sv := &s.ClusterSettings().SV
+		if len(s.TestTenants()) > 0 {
+			sv = &s.TestTenants()[0].ClusterSettings().SV
+		}
 
 		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
@@ -204,22 +209,22 @@ func jwtRunTest(t *testing.T, insecure bool) {
 							if err != nil {
 								t.Fatalf("unknown value for jwt_cluster_setting enabled: %s", a.Vals[0])
 							}
-							jwtauthccl.JWTAuthEnabled.Override(context.Background(), &testServer.ClusterSettings().SV, v)
+							jwtauthccl.JWTAuthEnabled.Override(context.Background(), sv, v)
 						case "audience":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting audience: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthAudience.Override(context.Background(), &testServer.ClusterSettings().SV, a.Vals[0])
+							jwtauthccl.JWTAuthAudience.Override(context.Background(), sv, a.Vals[0])
 						case "issuers":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting issuers: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthIssuers.Override(context.Background(), &testServer.ClusterSettings().SV, a.Vals[0])
+							jwtauthccl.JWTAuthIssuers.Override(context.Background(), sv, a.Vals[0])
 						case "jwks":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting jwks: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthJWKS.Override(context.Background(), &testServer.ClusterSettings().SV, a.Vals[0])
+							jwtauthccl.JWTAuthJWKS.Override(context.Background(), sv, a.Vals[0])
 						case "ident_map":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
@@ -228,7 +233,7 @@ func jwtRunTest(t *testing.T, insecure bool) {
 							if len(args) != 3 {
 								t.Fatalf("wrong number of comma separated argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
 							}
-							pgwire.ConnIdentityMapConf.Override(context.Background(), &testServer.ClusterSettings().SV, strings.Join(args, "    "))
+							pgwire.ConnIdentityMapConf.Override(context.Background(), sv, strings.Join(args, "    "))
 						default:
 							t.Fatalf("unknown jwt_cluster_setting: %s", a.Key)
 						}
@@ -420,8 +425,12 @@ func TestClientAddrOverride(t *testing.T) {
 	// Enable conn/auth logging.
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
-	testServer := s.(*server.TestServer)
-	pgServer := testServer.PGServer().(*pgwire.Server)
+	var pgServer *pgwire.Server
+	if len(s.TestTenants()) > 0 {
+		pgServer = s.TestTenants()[0].PGServer().(*pgwire.Server)
+	} else {
+		pgServer = s.PGServer().(*pgwire.Server)
+	}
 	pgServer.TestingEnableAuthLogging()
 
 	testCases := []struct {

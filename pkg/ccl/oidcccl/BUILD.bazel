@@ -34,6 +34,7 @@ go_test(
     size = "small",
     srcs = [
         "authentication_oidc_test.go",
+        "main_test.go",
         "settings_test.go",
     ],
     args = ["-test.timeout=55s"],

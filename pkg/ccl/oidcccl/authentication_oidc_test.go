@@ -17,37 +17,28 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
-	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
-func TestMain(m *testing.M) {
-	defer utilccl.TestingEnableEnterprise()()
-	securityassets.SetLoader(securitytest.EmbeddedAssets)
-	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-	os.Exit(m.Run())
+func tenantOrSystemAdminURL(s serverutils.TestServerInterface) string {
+	if len(s.TestTenants()) > 0 {
+		return s.TestTenants()[0].AdminURL()
+	}
+	return s.AdminURL()
 }
 
 func TestOIDCBadRequestIfDisabled(t *testing.T) {
@@ -76,7 +67,7 @@ func TestOIDCBadRequestIfDisabled(t *testing.T) {
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
 
-	resp, err := client.Get(s.AdminURL() + "/oidc/v1/login")
+	resp, err := client.Get(tenantOrSystemAdminURL(s) + "/oidc/v1/login")
 	if err != nil {
 		t.Fatalf("could not issue GET request to admin server: %s", err)
 	}
@@ -199,7 +190,7 @@ func TestOIDCEnabled(t *testing.T) {
 	}
 
 	t.Run("login redirect", func(t *testing.T) {
-		resp, err := client.Get(s.AdminURL() + "/oidc/v1/login")
+		resp, err := client.Get(tenantOrSystemAdminURL(s) + "/oidc/v1/login")
 		if err != nil {
 			t.Fatalf("could not issue GET request to admin server: %s", err)
 		}

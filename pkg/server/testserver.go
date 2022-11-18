@@ -753,6 +753,11 @@ func (t *TestTenant) MustGetSQLCounter(name string) int64 {
 	return mustGetSQLCounterForRegistry(t.metricsRegistry, name)
 }
 
+// Codec is part of the TestTenantInterface.
+func (t *TestTenant) Codec() keys.SQLCodec {
+	return t.execCfg.Codec
+}
+
 // StartTenant starts a SQL tenant communicating with this TestServer.
 func (ts *TestServer) StartTenant(
 	ctx context.Context, params base.TestTenantArgs,
@@ -1515,6 +1520,10 @@ func (ts *TestServer) SpanConfigKVSubscriber() interface{} {
 // SystemConfigProvider is part of the TestServerInterface.
 func (ts *TestServer) SystemConfigProvider() config.SystemConfigProvider {
 	return ts.node.storeCfg.SystemConfigProvider
+}
+
+func (ts *TestServer) Codec() keys.SQLCodec {
+	return ts.ExecutorConfig().(sql.ExecutorConfig).Codec
 }
 
 type testServerFactoryImpl struct{}
