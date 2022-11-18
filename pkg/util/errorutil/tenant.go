@@ -12,7 +12,7 @@ package errorutil
 
 import "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 
-// UnsupportedWithMultiTenancyMessage is the message used by UnsupportedWithMultiTenancy error
+// UnsupportedWithMultiTenancyMessage is the message used by UnsupportedWithMultiTenancy error.
 const UnsupportedWithMultiTenancyMessage = "operation is unsupported in multi-tenancy mode"
 
 // UnsupportedWithMultiTenancy returns an error suitable for returning when an
