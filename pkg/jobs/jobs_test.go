@@ -1186,6 +1186,42 @@ func TestRegistryLifecycle(t *testing.T) {
 
 		<-completeCh
 	})
+	t.Run("job with created by fields", func(t *testing.T) {
+		createdByType := "internal_test"
+		rts := registryTestSuite{}
+		rts.setUp(t)
+		defer rts.tearDown()
+
+		resumerJob := make(chan *jobs.Job, 1)
+		jobs.RegisterConstructor(
+			jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+				return jobs.FakeResumer{
+					OnResume: func(ctx context.Context) error {
+						resumerJob <- j
+						return nil
+					},
+				}
+			}, jobs.UsesTenantCostControl)
+
+		jobID := rts.registry.MakeJobID()
+		record := jobs.Record{
+			Details:   jobspb.BackupDetails{},
+			Progress:  jobspb.BackupProgress{},
+			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
+		}
+		job, err := rts.registry.CreateAdoptableJobWithTxn(rts.ctx, record, jobID, nil /* txn */)
+		require.NoError(t, err)
+
+		loadedJob, err := rts.registry.LoadJob(rts.ctx, jobID)
+		require.NoError(t, err)
+		require.NotNil(t, loadedJob.CreatedBy())
+		require.Equal(t, job.CreatedBy(), loadedJob.CreatedBy())
+		rts.registry.TestingNudgeAdoptionQueue()
+		resumedJob := <-resumerJob
+		require.NotNil(t, resumedJob.CreatedBy())
+		require.Equal(t, job.CreatedBy(), resumedJob.CreatedBy())
+
+	})
 }
 
 func checkTraceFiles(t *testing.T, registry *jobs.Registry, expectedNumFiles int) {
@@ -1213,6 +1249,10 @@ func checkTraceFiles(t *testing.T, registry *jobs.Registry, expectedNumFiles int
 	}
 }
 
+// TestJobLifecycle tests the invariants about the job lifecycle
+// querires. It does not depend on the registries job management tasks
+// and assumes that it maintains the lease on the job through all
+// state transitions.
 func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1220,14 +1260,16 @@ func TestJobLifecycle(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{DisableRegistryLifecycleManagent: true}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
 	registry := s.JobRegistry().(*jobs.Registry)
 
 	createJob := func(record jobs.Record) (*jobs.Job, expectation) {
 		beforeTime := timeutil.Now()
-		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
+		job, err := registry.CreateJobWithTxn(ctx, record, registry.MakeJobID(), nil /* txn */)
 		require.NoError(t, err)
 		payload := job.Payload()
 		return job, expectation{
@@ -1247,38 +1289,6 @@ func TestJobLifecycle(t *testing.T) {
 
 	createDefaultJob := func() (*jobs.Job, expectation) {
 		return createJob(defaultRecord)
-	}
-
-	done := make(chan struct{})
-	defer close(done)
-	resumeSignaler := newResumeStartedSignaler()
-	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-		return jobs.FakeResumer{
-			OnResume: func(ctx context.Context) error {
-				resumeSignaler.SignalResumeStarted()
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-done:
-					return nil
-				}
-			},
-		}
-	}, jobs.UsesTenantCostControl)
-
-	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.StartableJob, expectation) {
-		beforeTime := timeutil.Now()
-		job, err := jobs.TestingCreateAndStartJob(ctx, registry, s.DB(), record)
-		if err != nil {
-			t.Fatal(err)
-		}
-		payload := job.Payload()
-		return job, expectation{
-			DB:     sqlDB,
-			Record: record,
-			Type:   payload.Type(),
-			Before: beforeTime,
-		}
 	}
 
 	t.Run("valid job lifecycles succeed", func(t *testing.T) {
@@ -1488,7 +1498,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("cancelable jobs can be paused until finished", func(t *testing.T) {
-		job, exp := startLeasedJob(t, defaultRecord)
+		job, exp := createDefaultJob()
 
 		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 			t.Fatal(err)
@@ -1510,10 +1520,6 @@ func TestJobLifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Wait for job to be adopted so that we have the
-		// lease and can move to succeeded.
-		resumeSignaler.WaitForResumeStarted()
-
 		// PauseRequested fails after job is successful.
 		if err := job.Succeeded(ctx); err != nil {
 			t.Fatal(err)
@@ -1525,7 +1531,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("cancelable jobs can be canceled until finished", func(t *testing.T) {
 		{
-			job, exp := startLeasedJob(t, defaultRecord)
+			job, exp := createDefaultJob()
 			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
 				t.Fatal(err)
 			}
@@ -1535,7 +1541,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, exp := startLeasedJob(t, defaultRecord)
+			job, exp := createDefaultJob()
 			if err := job.Started(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -1548,7 +1554,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, exp := startLeasedJob(t, defaultRecord)
+			job, exp := createDefaultJob()
 			if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 				t.Fatal(err)
 			}
@@ -1564,7 +1570,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, _ := startLeasedJob(t, defaultRecord)
+			job, _ := createDefaultJob()
 			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -1577,7 +1583,7 @@ func TestJobLifecycle(t *testing.T) {
 
 	t.Run("unpaused jobs cannot be resumed", func(t *testing.T) {
 		{
-			job, _ := startLeasedJob(t, defaultRecord)
+			job, _ := createDefaultJob()
 			if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
 				t.Fatal(err)
 			}
@@ -1587,7 +1593,7 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		{
-			job, _ := startLeasedJob(t, defaultRecord)
+			job, _ := createDefaultJob()
 			if err := job.Succeeded(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -1708,7 +1714,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("progress on paused job fails", func(t *testing.T) {
-		job, _ := startLeasedJob(t, defaultRecord)
+		job, _ := createDefaultJob()
 		if err := registry.PauseRequested(ctx, nil, job.ID(), ""); err != nil {
 			t.Fatal(err)
 		}
@@ -1720,7 +1726,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("progress on canceled job fails", func(t *testing.T) {
-		job, _ := startLeasedJob(t, defaultRecord)
+		job, _ := createDefaultJob()
 		if err := registry.CancelRequested(ctx, nil, job.ID()); err != nil {
 			t.Fatal(err)
 		}
@@ -1752,7 +1758,7 @@ func TestJobLifecycle(t *testing.T) {
 	updateStatusStmt := `UPDATE system.jobs SET status = $1 WHERE id = $2`
 
 	t.Run("set details works", func(t *testing.T) {
-		job, exp := startLeasedJob(t, defaultRecord)
+		job, exp := createDefaultJob()
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		newDetails := jobspb.ImportDetails{URIs: []string{"new"}}
 		exp.Record.Details = newDetails
@@ -1768,7 +1774,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("set details fails", func(t *testing.T) {
-		job, exp := startLeasedJob(t, defaultRecord)
+		job, exp := createDefaultJob()
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusCancelRequested, job.ID())
 		require.NoError(t, err)
@@ -1777,7 +1783,7 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("set progress works", func(t *testing.T) {
-		job, exp := startLeasedJob(t, defaultRecord)
+		job, exp := createDefaultJob()
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		newProgress := jobspb.ImportProgress{ResumePos: []int64{42}}
 		exp.Record.Progress = newProgress
@@ -1792,46 +1798,12 @@ func TestJobLifecycle(t *testing.T) {
 	})
 
 	t.Run("set progress fails", func(t *testing.T) {
-		job, exp := startLeasedJob(t, defaultRecord)
+		job, exp := createDefaultJob()
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusRunning))
 		_, err := exp.DB.Exec(updateStatusStmt, jobs.StatusPauseRequested, job.ID())
 		require.NoError(t, err)
 		require.Error(t, job.SetProgress(ctx, nil /* txn */, jobspb.ImportProgress{ResumePos: []int64{42}}))
 		require.NoError(t, exp.verify(job.ID(), jobs.StatusPauseRequested))
-	})
-
-	t.Run("job with created by fields", func(t *testing.T) {
-		createdByType := "internal_test"
-
-		resumerJob := make(chan *jobs.Job, 1)
-		jobs.RegisterConstructor(
-			jobspb.TypeBackup, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
-				return jobs.FakeResumer{
-					OnResume: func(ctx context.Context) error {
-						resumerJob <- j
-						return nil
-					},
-				}
-			}, jobs.UsesTenantCostControl)
-
-		jobID := registry.MakeJobID()
-		record := jobs.Record{
-			Details:   jobspb.BackupDetails{},
-			Progress:  jobspb.BackupProgress{},
-			CreatedBy: &jobs.CreatedByInfo{Name: createdByType, ID: 123},
-		}
-		job, err := registry.CreateAdoptableJobWithTxn(ctx, record, jobID, nil /* txn */)
-		require.NoError(t, err)
-
-		loadedJob, err := registry.LoadJob(ctx, jobID)
-		require.NoError(t, err)
-		require.NotNil(t, loadedJob.CreatedBy())
-		require.Equal(t, job.CreatedBy(), loadedJob.CreatedBy())
-		registry.TestingNudgeAdoptionQueue()
-		resumedJob := <-resumerJob
-		require.NotNil(t, resumedJob.CreatedBy())
-		require.Equal(t, job.CreatedBy(), resumedJob.CreatedBy())
-
 	})
 }
 

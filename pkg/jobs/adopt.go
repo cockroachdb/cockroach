@@ -437,8 +437,7 @@ const clearClaimQuery = `
       SET claim_session_id = NULL, claim_instance_id = NULL
     WHERE id = $1
       AND claim_session_id = $2
-      AND claim_instance_id = $3
-      AND status NOT IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `')`
+      AND claim_instance_id = $3`
 
 // maybeClearLease clears the claim on the given job, provided that
 // the current lease matches our liveness Session.
@@ -446,13 +445,16 @@ func (r *Registry) maybeClearLease(job *Job, jobErr error) {
 	if jobErr == nil {
 		return
 	}
+	r.clearLeaseForJobID(job.ID(), nil /* txn */)
+}
 
+func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, txn *kv.Txn) {
 	// We use the serverCtx here rather than the context from the
 	// caller since the caller's context may have been canceled.
 	r.withSession(r.serverCtx, func(ctx context.Context, s sqlliveness.Session) {
-		n, err := r.ex.ExecEx(ctx, "clear-job-claim", nil, /* txn */
+		n, err := r.ex.ExecEx(ctx, "clear-job-claim", txn,
 			sessiondata.InternalExecutorOverride{User: security.NodeUserName()},
-			clearClaimQuery, job.ID(), s.ID().UnsafeBytes(), r.ID())
+			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
 		if err != nil {
 			log.Warningf(ctx, "could not clear job claim: %s", err.Error())
 			return
@@ -500,11 +502,26 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 			statusString := *row[1].(*tree.DString)
 			switch Status(statusString) {
 			case StatusPaused:
-				r.cancelRegisteredJobContext(id)
+				if !r.cancelRegisteredJobContext(id) {
+					// If we didn't already have a running job for this lease,
+					// clear out the lease here since it won't be cleared be
+					// cleared out on Resume exit.
+					r.clearLeaseForJobID(id, txn)
+				}
 				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
 			case StatusReverting:
 				if err := job.Update(ctx, txn, func(txn *kv.Txn, md JobMetadata, ju *JobUpdater) error {
-					r.cancelRegisteredJobContext(id)
+					if !r.cancelRegisteredJobContext(id) {
+						// If we didn't already have a running job for this
+						// lease, clear out the lease here since it won't be
+						// cleared be cleared out on Resume exit.
+						//
+						// NB: This working as part of the update depends on
+						// the fact that the job struct does not have a
+						// claim set and thus won't validate the claim on
+						// update.
+						r.clearLeaseForJobID(id, txn)
+					}
 					md.Payload.Error = errJobCanceled.Error()
 					encodedErr := errors.EncodeError(ctx, errJobCanceled)
 					md.Payload.FinalResumeError = &encodedErr

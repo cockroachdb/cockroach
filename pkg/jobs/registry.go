@@ -704,6 +704,10 @@ func (r *Registry) withSession(ctx context.Context, f withSessionFunc) {
 // jobs if it observes a failure. Otherwise it starts all the main daemons of
 // registry that poll the jobs table and start/cancel/gc jobs.
 func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
+	if r.knobs.DisableRegistryLifecycleManagent {
+		return nil
+	}
+
 	// Since the job polling system is outside user control, exclude it from cost
 	// accounting and control. Individual jobs are not part of this exclusion.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
@@ -1450,12 +1454,14 @@ func (r *Registry) unregister(jobID jobspb.JobID) {
 	}
 }
 
-func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) {
+func (r *Registry) cancelRegisteredJobContext(jobID jobspb.JobID) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if aj, ok := r.mu.adoptedJobs[jobID]; ok {
+	aj, ok := r.mu.adoptedJobs[jobID]
+	if ok {
 		aj.cancel()
 	}
+	return ok
 }
 
 func (r *Registry) getClaimedJob(jobID jobspb.JobID) (*Job, error) {
