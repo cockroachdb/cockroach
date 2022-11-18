@@ -464,7 +464,7 @@ func TestProxyModifyRequestParams(t *testing.T) {
 	_, err := sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
 	require.NoError(t, err)
 
-	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
+	outgoingTLSConfig, err := sql.RPCContext().GetSQLClientTLSConfig()
 	require.NoError(t, err)
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true
@@ -649,7 +649,7 @@ func TestDenylistUpdate(t *testing.T) {
 	_, err = sqlDB.Exec("CREATE USER testuser WITH PASSWORD 'foo123'")
 	require.NoError(t, err)
 
-	outgoingTLSConfig, err := sql.RPCContext().GetClientTLSConfig()
+	outgoingTLSConfig, err := sql.RPCContext().GetSQLClientTLSConfig()
 	require.NoError(t, err)
 	proxyOutgoingTLSConfig := outgoingTLSConfig.Clone()
 	proxyOutgoingTLSConfig.InsecureSkipVerify = true

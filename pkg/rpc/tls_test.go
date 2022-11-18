@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func TestClientSSLSettings(t *testing.T) {
+func TestRPCClientSSLSettings(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const clientCertNotFound = "problem with client cert for user .*: not found"
@@ -78,7 +78,74 @@ func TestClientSSLSettings(t *testing.T) {
 			if cfg.HTTPRequestScheme() != tc.requestScheme {
 				t.Fatalf("expected HTTPRequestScheme=%s, got: %s", tc.requestScheme, cfg.HTTPRequestScheme())
 			}
-			tlsConfig, err := rpcContext.GetClientTLSConfig()
+			tlsConfig, err := rpcContext.GetRPCClientTLSConfig()
+			if !testutils.IsError(err, tc.configErr) {
+				t.Fatalf("expected err=%s, got err=%v", tc.configErr, err)
+			}
+			if err != nil {
+				return
+			}
+			if (tlsConfig == nil) != tc.nilConfig {
+				t.Fatalf("expected nil config=%t, got: %+v", tc.nilConfig, tlsConfig)
+			}
+			if tlsConfig == nil {
+				return
+			}
+			if (tlsConfig.RootCAs == nil) != tc.noCAs {
+				t.Fatalf("expected nil RootCAs: %t, got: %+v", tc.noCAs, tlsConfig.RootCAs)
+			}
+		})
+	}
+}
+
+func TestSQLClientSSLSettings(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const clientCertNotFound = "problem with client cert for user .*: not found"
+	const certDirNotFound = "no certificates found"
+	invalidUser := username.MakeSQLUsernameFromPreNormalizedString("not-a-user")
+	badUser := username.MakeSQLUsernameFromPreNormalizedString("bad-user")
+
+	testCases := []struct {
+		// args
+		insecure bool
+		hasCerts bool
+		user     username.SQLUsername
+		// output
+		configErr string
+		nilConfig bool
+		noCAs     bool
+	}{
+		{true, false, username.NodeUserName(), "", true, false},
+		{true, true, invalidUser, "", true, false},
+		{false, true, invalidUser, clientCertNotFound, true, false},
+		{false, false, username.NodeUserName(), certDirNotFound, false, true},
+		{false, true, username.NodeUserName(), "", false, false},
+		{false, true, badUser, clientCertNotFound, false, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			cfg := &base.Config{Insecure: tc.insecure, User: tc.user}
+			if tc.hasCerts {
+				cfg.SSLCertsDir = certnames.EmbeddedCertsDir
+			} else {
+				// We can't leave this empty because otherwise it refers to the cwd which
+				// always exists.
+				cfg.SSLCertsDir = "i-do-not-exist"
+			}
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			rpcContext := NewContext(ctx, ContextOptions{
+				TenantID:  roachpb.SystemTenantID,
+				Clock:     &timeutil.DefaultTimeSource{},
+				MaxOffset: time.Nanosecond,
+				Stopper:   stopper,
+				Settings:  cluster.MakeTestingClusterSettings(),
+				Config:    cfg,
+			})
+			tlsConfig, err := rpcContext.GetSQLClientTLSConfig()
 			if !testutils.IsError(err, tc.configErr) {
 				t.Fatalf("expected err=%s, got err=%v", tc.configErr, err)
 			}

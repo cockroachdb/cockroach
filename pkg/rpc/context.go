@@ -1400,9 +1400,9 @@ func (rpcCtx *Context) grpcDialOptions(
 		var tlsConfig *tls.Config
 		var err error
 		if rpcCtx.tenID == roachpb.SystemTenantID {
-			tlsConfig, err = rpcCtx.GetClientTLSConfig()
+			tlsConfig, err = rpcCtx.GetRPCClientTLSConfig()
 		} else {
-			tlsConfig, err = rpcCtx.GetTenantTLSConfig()
+			tlsConfig, err = rpcCtx.GetTenantRPCClientTLSConfig()
 		}
 		if err != nil {
 			return nil, err
