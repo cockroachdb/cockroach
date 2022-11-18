@@ -12,17 +12,17 @@ Schema change plan for rolling back CREATE INDEX ‹id1› ON ‹defaultdb›.pu
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 11 elements transitioning toward ABSENT
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
-           │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
-           │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104, IndexID: 2}
-           │    ├── PUBLIC        → ABSENT IndexPartitioning:{DescID: 104, IndexID: 2}
-           │    ├── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
-           │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
-           │    └── PUBLIC        → ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
+           │    ├── BACKFILL_ONLY    → ABSENT SecondaryIndex:{DescID: 104, IndexID: 2, ConstraintID: 0, TemporaryIndexID: 3, SourceIndexID: 1}
+           │    ├── PUBLIC           → ABSENT IndexPartitioning:{DescID: 104, IndexID: 2}
+           │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 2}
+           │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 2}
+           │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 2}
+           │    ├── PUBLIC           → ABSENT IndexData:{DescID: 104, IndexID: 2}
+           │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 104, IndexID: 3, ConstraintID: 0, SourceIndexID: 1}
+           │    ├── TRANSIENT_ABSENT → ABSENT IndexPartitioning:{DescID: 104, IndexID: 3}
+           │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}
+           │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 2, IndexID: 3}
+           │    └── PUBLIC           → ABSENT IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}
            └── 6 Mutation operations
                 ├── LogEvent {"TargetStatus":1}
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":104}

@@ -277,7 +277,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: STORED
     ordinalInKind: 0
     tableId: 110
@@ -285,7 +287,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: KEY
     ordinalInKind: 0
     tableId: 110
@@ -534,7 +538,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: STORED
     ordinalInKind: 0
     tableId: 109
@@ -542,7 +548,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: KEY
     ordinalInKind: 0
     tableId: 109
@@ -662,6 +670,9 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 104
+    tableId: 108
+  Status: PUBLIC
+- TablePartitionAllBy:
     tableId: 108
   Status: PUBLIC
 - TableLocalityRegionalByRow:
@@ -883,7 +894,9 @@ ElementState:
 - IndexColumn:
     columnId: 1
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: KEY
     ordinalInKind: 1
     tableId: 108
@@ -891,7 +904,9 @@ ElementState:
 - IndexColumn:
     columnId: 2
     direction: ASC
+    implicit: false
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: STORED
     ordinalInKind: 0
     tableId: 108
@@ -899,7 +914,9 @@ ElementState:
 - IndexColumn:
     columnId: 3
     direction: ASC
+    implicit: true
     indexId: 1
+    invertedKind: NOT_INVERTED
     kind: KEY
     ordinalInKind: 0
     tableId: 108

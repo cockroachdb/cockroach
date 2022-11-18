@@ -346,7 +346,7 @@ begin transaction #9
 validate forward indexes [3] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitPhase stage 8 of 15 with 12 MutationType ops
+## PostCommitPhase stage 8 of 15 with 13 MutationType ops
 upsert descriptor #104
   ...
      - direction: ADD
@@ -450,7 +450,7 @@ upsert descriptor #104
   +      - k
   +      keySuffixColumnIds:
   +      - 1
-  +      name: crdb_internal_index_5_name_placeholder
+  +      name: idx
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnNames: []
@@ -602,7 +602,7 @@ begin transaction #17
 validate forward indexes [5] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 2 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
 upsert descriptor #104
   ...
            statementTag: CREATE INDEX
@@ -691,7 +691,7 @@ upsert descriptor #104
   -      - k
   -      keySuffixColumnIds:
   -      - 1
-  -      name: crdb_internal_index_5_name_placeholder
+  -      name: idx
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnNames: []
@@ -719,6 +719,8 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "11"
   +  version: "12"
+write *eventpb.CreateIndex to event log: CREATE UNIQUE INDEX ‹idx› ON ‹defaultdb›.‹public›.‹t› (‹k›)
+adding table for stats refresh: 104
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 11 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #18
