@@ -290,7 +290,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		if _, err := rpcContext.GetUIServerTLSConfig(); err != nil {
 			return nil, err
 		}
-		if _, err := rpcContext.GetClientTLSConfig(); err != nil {
+		if _, err := rpcContext.GetRPCClientTLSConfig(); err != nil {
 			return nil, err
 		}
 		cm, err := rpcContext.GetCertificateManager()
