@@ -3,26 +3,102 @@ SELECT 'foo:1,2 bar:3'::tsvector @@ 'foo <-> bar'::tsquery, 'foo <-> bar'::tsque
 ----
 true  true
 
-statement error cannot be used for table columns
-CREATE TABLE a (v tsvector)
+statement ok
+CREATE TABLE a (v tsvector, q tsquery)
 
-statement error cannot be used for table columns
-CREATE TABLE a (q tsquery)
+statement ok
+INSERT INTO a VALUES('foo:1,2 bar:4B'::tsvector, 'foo <2> bar'::tsquery)
 
-# Uncomment once tsvector and tsquery are usable as table columns.
-#
-# statement ok
-# INSERT INTO a VALUES('foo:1,2 bar:4B'::tsvector, 'foo <2> bar'::tsquery)
-#
-# query TT
-# SELECT * FROM a
-# ----
-# 'bar':4B 'foo':1,2  'foo' <2> 'bar'
+query TT
+SELECT * FROM a
+----
+'bar':4B 'foo':1,2  'foo' <2> 'bar'
 
 query BB
 SELECT 'foo:1,2 bar:4B'::tsvector @@ 'foo <2> bar'::tsquery, 'foo:1,2 bar:4B' @@ 'foo <-> bar'::tsquery
 ----
 true  false
+
+query BB
+SELECT v @@ 'foo <2> bar'::tsquery, v @@ 'foo <-> bar'::tsquery FROM a
+----
+true  false
+
+query B
+SELECT v @@ q FROM a
+----
+true
+
+# Test column modifiers.
+
+statement ok
+CREATE TABLE b (a INT PRIMARY KEY DEFAULT 1, v tsvector DEFAULT 'foo:1' ON UPDATE 'bar:2', v2 tsvector AS (v) STORED, v3 tsvector AS (v) VIRTUAL)
+
+statement ok
+CREATE TABLE c (a INT PRIMARY KEY DEFAULT 1, q tsquery DEFAULT 'foo' ON UPDATE 'bar', q2 tsquery AS (q) STORED, q3 tsquery AS (q) VIRTUAL)
+
+statement ok
+INSERT INTO b DEFAULT VALUES
+
+statement ok
+INSERT INTO c DEFAULT VALUES
+
+query ITTT
+SELECT * FROM b
+----
+1  'foo':1  'foo':1  'foo':1
+
+query ITTT
+SELECT * FROM c
+----
+1  'foo'  'foo'  'foo'
+
+statement ok
+UPDATE b SET a = 2 WHERE a = 1
+
+statement ok
+UPDATE c SET a = 2 WHERE a = 1
+
+query ITTT
+SELECT * FROM b
+----
+2  'bar':2  'bar':2  'bar':2
+
+query ITTT
+SELECT * FROM c
+----
+2  'bar'  'bar'  'bar'
+
+statement ok
+INSERT INTO b VALUES (3, 'foo:1,5 zoop:3')
+
+statement error can't order by column type TSVECTOR
+SELECT * FROM b ORDER BY v
+
+statement error can't order by column type TSQUERY
+SELECT * FROM c ORDER BY q
+
+statement error arrays of tsvector not allowed
+CREATE TABLE tsarray(a tsvector[])
+
+statement error arrays of tsquery not allowed
+CREATE TABLE tsarray(a tsquery[])
+
+statement error unsupported comparison operator
+SELECT a, v FROM b WHERE v > 'bar:2'::tsvector
+
+statement error unsupported comparison operator
+SELECT a, q FROM c WHERE q > 'abc'::tsquery
+
+query IT
+SELECT a, v FROM b WHERE v = 'bar:2'::tsvector
+----
+2  'bar':2
+
+query IT
+SELECT a, q FROM c WHERE q = 'bar'::tsquery
+----
+2  'bar'
 
 # Ensure truncation of long position lists.
 query T

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -223,7 +224,8 @@ CREATE TABLE t.test (k INT);
 		t.Fatal(err)
 	}
 	colDef := alterCmd.AST.(*tree.AlterTable).Cmds[0].(*tree.AlterTableAddColumn).ColumnDef
-	cdd, err := tabledesc.MakeColumnDefDescs(ctx, colDef, nil, nil)
+	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	cdd, err := tabledesc.MakeColumnDefDescs(ctx, colDef, nil, evalCtx)
 	if err != nil {
 		t.Fatal(err)
 	}

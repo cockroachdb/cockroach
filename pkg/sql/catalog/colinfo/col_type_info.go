@@ -11,8 +11,10 @@
 package colinfo
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -68,7 +70,7 @@ func (ti ColTypeInfo) Type(idx int) *types.T {
 
 // ValidateColumnDefType returns an error if the type of a column definition is
 // not valid. It is checked when a column is created or altered.
-func ValidateColumnDefType(t *types.T) error {
+func ValidateColumnDefType(ctx context.Context, version clusterversion.Handle, t *types.T) error {
 	switch t.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		if t.Family() == types.CollatedStringFamily {
@@ -100,7 +102,7 @@ func ValidateColumnDefType(t *types.T) error {
 		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
 			return err
 		}
-		return ValidateColumnDefType(t.ArrayContents())
+		return ValidateColumnDefType(ctx, version, t.ArrayContents())
 
 	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
@@ -114,6 +116,12 @@ func ValidateColumnDefType(t *types.T) error {
 		}
 		if t.TypeMeta.ImplicitRecordType {
 			return unimplemented.NewWithIssue(70099, "cannot use table record type as table column")
+		}
+
+	case types.TSQueryFamily, types.TSVectorFamily:
+		if !version.IsActive(ctx, clusterversion.V23_1) {
+			return pgerror.Newf(pgcode.FeatureNotSupported,
+				"TSVector/TSQuery not supported until version 23.1")
 		}
 
 	default:

@@ -11,5 +11,7 @@
 /*
 Package randgen provides utility functions for generating random syntax trees,
 datums, encoded datums, types, and more. It useful in randomized tests.
+
+It should not be used outside of a testing context.
 */
 package randgen
