@@ -185,6 +185,15 @@ func generateTestSuites() {
 	}
 	sort.Strings(fixupForGetXData)
 
+	allTestsFile, err := os.Create("build/teamcity/cockroach/ci/ALL_TESTS")
+	if err != nil {
+		log.Fatalf("Failed to open file `pkg/BUILD.bazel` - %v", err)
+	}
+	for _, label := range testLabels {
+		allTestsFile.WriteString(fmt.Sprintf("%s\n", label))
+	}
+	_ = allTestsFile.Close()
+
 	f, err := os.Create("pkg/BUILD.bazel")
 	if err != nil {
 		log.Fatalf("Failed to open file `pkg/BUILD.bazel` - %v", err)

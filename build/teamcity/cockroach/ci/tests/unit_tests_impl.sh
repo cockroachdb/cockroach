@@ -4,5 +4,4 @@ set -xeuo pipefail
 
 bazel build //pkg/cmd/bazci --config=ci
 $(bazel info bazel-bin --config=ci)/pkg/cmd/bazci/bazci_/bazci -- test --config=cinolint --config=simplestamp -c fastbuild \
-		                  //pkg:small_tests //pkg:medium_tests //pkg:large_tests //pkg:enormous_tests \
-                                   --profile=/artifacts/profile.gz
+		                  $targets_to_test --profile=/artifacts/profile.gz --test_tag_filters="-broken_in_bazel,-integration"

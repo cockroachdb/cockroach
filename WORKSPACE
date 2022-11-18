@@ -638,3 +638,12 @@ new_local_repository(
     path = "/usr/local",
     build_file_content = """exports_files[("bin/node")]""",
 )
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_jar")
+http_jar(
+    name = "bazel_diff",
+    urls = [
+        "https://github.com/Tinder/bazel-diff/releases/download/4.1.0/bazel-diff_deploy.jar",
+    ],
+    sha256 = "45761593a478d1e432e8cfa9629b9dbf08cd610bafd29b04305de77644470722",
+)
