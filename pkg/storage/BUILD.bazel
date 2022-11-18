@@ -9,6 +9,7 @@ go_library(
         "array_64bit.go",
         "ballast.go",
         "batch.go",
+        "col_mvcc.go",
         "disk_map.go",
         "doc.go",
         "engine.go",
