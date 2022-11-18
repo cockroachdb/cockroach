@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -211,9 +212,11 @@ type cFetcher struct {
 	// mvccDecodeStrategy controls whether or not MVCC timestamps should
 	// be decoded from KV's fetched. It is set if any of the requested tables
 	// are required to produce an MVCC timestamp system column.
-	mvccDecodeStrategy row.MVCCDecodingStrategy
+	mvccDecodeStrategy storage.MVCCDecodingStrategy
 
-	// fetcher is the underlying fetcher that provides KVs.
+	// nextKVer provides KVs.
+	nextKVer storage.NextKVer
+	// fetcher, if set, is the same object as nextKVer.
 	fetcher *row.KVFetcher
 	// bytesRead and batchRequestsIssued store the total number of bytes read
 	// and of BatchRequests issued, respectively, by this cFetcher throughout
@@ -364,7 +367,7 @@ func (cf *cFetcher) Init(
 			switch colinfo.GetSystemColumnKindFromColumnID(colID) {
 			case catpb.SystemColumnKind_MVCCTIMESTAMP:
 				table.timestampOutputIdx = idx
-				cf.mvccDecodeStrategy = row.MVCCDecodingRequired
+				cf.mvccDecodeStrategy = storage.MVCCDecodingRequired
 				table.neededValueColsByIdx.Remove(idx)
 			case catpb.SystemColumnKind_TABLEOID:
 				table.oidOutputIdx = idx
@@ -455,6 +458,7 @@ func (cf *cFetcher) Init(
 	}
 
 	cf.table = table
+	cf.nextKVer = kvFetcher
 	cf.fetcher = kvFetcher
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
 
@@ -626,7 +630,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
-			moreKVs, kv, _, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -776,7 +780,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			moreKVs, kv, _, finalReferenceToBatch, err := cf.fetcher.NextKV(ctx, cf.mvccDecodeStrategy)
+			moreKVs, kv, finalReferenceToBatch, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, cf.convertFetchError(ctx, err)
 			}
@@ -1312,10 +1316,13 @@ func (cf *cFetcher) Release() {
 }
 
 func (cf *cFetcher) Close(ctx context.Context) {
-	if cf != nil && cf.fetcher != nil {
-		cf.bytesRead = cf.fetcher.GetBytesRead()
-		cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
-		cf.fetcher.Close(ctx)
-		cf.fetcher = nil
+	if cf != nil {
+		cf.nextKVer = nil
+		if cf.fetcher != nil {
+			cf.bytesRead = cf.fetcher.GetBytesRead()
+			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
+			cf.fetcher.Close(ctx)
+			cf.fetcher = nil
+		}
 	}
 }
