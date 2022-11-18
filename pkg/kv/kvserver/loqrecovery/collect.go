@@ -82,7 +82,7 @@ func GetDescriptorChangesFromRaftLog(
 	rangeID roachpb.RangeID, lo, hi uint64, reader storage.Reader,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
-	if err := raftlog.Visit(context.Background(), rangeID, reader, lo, hi, func(ctx context.Context, e *raftlog.Entry) error {
+	if err := raftlog.Visit(rangeID, reader, lo, hi, func(e *raftlog.Entry) error {
 		raftCmd := e.Cmd
 		switch {
 		case raftCmd.ReplicatedEvalResult.Split != nil:

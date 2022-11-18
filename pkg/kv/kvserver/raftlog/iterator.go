@@ -11,13 +11,10 @@
 package raftlog
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/errors"
 )
 
 type storageIter interface {
@@ -89,9 +86,7 @@ func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterato
 
 // Close releases the resources associated with this Iterator.
 func (it *Iterator) Close() {
-	if it.iter != nil {
-		it.iter.Close()
-	}
+	it.iter.Close()
 }
 
 func (it *Iterator) load() (bool, error) {
@@ -146,13 +141,7 @@ func (it *Iterator) Entry() *Entry {
 //
 // The closure may invoke `(*Entry).Release` if it is no longer going to access
 // any memory in the current Entry.
-func Visit(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	eng Reader,
-	lo, hi uint64,
-	fn func(context.Context, *Entry) error,
-) error {
+func Visit(rangeID roachpb.RangeID, eng Reader, lo, hi uint64, fn func(*Entry) error) error {
 	it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 	defer it.Close()
 	ok, err := it.SeekGE(lo)
@@ -160,15 +149,8 @@ func Visit(
 		return err
 	}
 	for ; ok; ok, err = it.Next() {
-		ent := it.Entry()
-		if ent.Index >= hi {
-			return nil
-		}
-		if err := fn(ctx, ent); err != nil {
-			if errors.Is(err, iterutil.StopIteration()) {
-				return nil
-			}
-			return err
+		if err := fn(it.Entry()); err != nil {
+			return iterutil.Map(err)
 		}
 	}
 	return err

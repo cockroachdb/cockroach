@@ -11,7 +11,6 @@
 package raftlog
 
 import (
-	"context"
 	"math"
 	"math/rand"
 	"testing"
@@ -136,6 +135,7 @@ func BenchmarkIterator(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			it := NewIterator(rangeID, &mockReader{}, IterOptions{Hi: 123456})
+			setMockIter(it)
 			it.Close()
 		}
 	})
@@ -169,8 +169,7 @@ func BenchmarkIterator(b *testing.B) {
 
 	b.Run("NextPooled", func(b *testing.B) {
 		benchForOp(b, func(it *Iterator) (bool, error) {
-			ok, err := it.Next()
-			if err != nil || !ok {
+			if ok, err := it.Next(); err != nil || !ok {
 				return false, err
 			}
 			ent := it.Entry()
@@ -192,12 +191,10 @@ func BenchmarkVisit(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := Visit(context.Background(), rangeID, eng, 0, math.MaxUint64,
-			func(ctx context.Context, entry *Entry) error {
-				entry.Release()
-				return nil
-			})
-		if err != nil {
+		if err := Visit(rangeID, eng, 0, math.MaxUint64, func(entry *Entry) error {
+			entry.Release()
+			return nil
+		}); err != nil {
 			b.Fatal(err)
 		}
 	}
