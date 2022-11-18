@@ -36,7 +36,7 @@ begin transaction #1
 checking for feature: ALTER TABLE
 increment telemetry for sql.schema.alter_table
 increment telemetry for sql.schema.alter_table.alter_primary_key
-## StatementPhase stage 1 of 1 with 12 MutationType ops
+## StatementPhase stage 1 of 1 with 13 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -112,7 +112,7 @@ upsert descriptor #104
   +      - i
   +      keySuffixColumnIds:
   +      - 2
-  +      name: crdb_internal_index_4_name_placeholder
+  +      name: t_i_key
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnNames: []
@@ -305,7 +305,7 @@ validate forward indexes [2] in table #104
 validate forward indexes [4] in table #104
 commit transaction #9
 begin transaction #10
-## PostCommitNonRevertiblePhase stage 1 of 3 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 11 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (j)
@@ -392,7 +392,7 @@ upsert descriptor #104
   ...
          keySuffixColumnIds:
          - 2
-  -      name: crdb_internal_index_4_name_placeholder
+  -      name: t_i_key
   +      name: crdb_internal_index_5_name_placeholder
          partitioning: {}
          sharded: {}
@@ -472,6 +472,8 @@ upsert descriptor #104
      unexposedParentSchemaId: 101
   -  version: "6"
   +  version: "7"
+write *eventpb.CreateIndex to event log: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER PRIMARY KEY USING COLUMNS (‹j›)
+adding table for stats refresh: 104
 update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 3 MutationType ops pending"
 set schema change job #1 to non-cancellable
 commit transaction #10
