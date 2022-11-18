@@ -184,13 +184,7 @@ func jwtRunTest(t *testing.T, insecure bool) {
 			base.TestServerArgs{Insecure: insecure, SocketFile: maybeSocketFile})
 		defer s.Stopper().Stop(context.Background())
 
-		// Enable conn/auth logging.
-		// We can't use the cluster settings to do this, because
-		// cluster settings propagate asynchronously.
 		testServer := s.(*server.TestServer)
-		pgServer := s.(*server.TestServer).PGServer().(*pgwire.Server)
-		pgServer.TestingEnableConnLogging()
-		pgServer.TestingEnableAuthLogging()
 
 		if _, err := conn.ExecContext(context.Background(), fmt.Sprintf(`CREATE USER %s`, username.TestUser)); err != nil {
 			t.Fatal(err)
