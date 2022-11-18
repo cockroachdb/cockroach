@@ -37,7 +37,6 @@ if [[ -z "${DRY_RUN}" ]] ; then
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
   # Used for docker login for gcloud
   gcr_hostname="us-docker.pkg.dev"
-  s3_download_hostname="${bucket}"
   git_repo_for_tag="cockroachdb/cockroach"
 else
   bucket="cockroach-builds-test"
@@ -48,7 +47,6 @@ else
   dockerhub_repository="docker.io/cockroachdb/cockroach-misc"
   gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
   gcr_hostname="us.gcr.io"
-  s3_download_hostname="${bucket}.s3.amazonaws.com"
   git_repo_for_tag="cockroachlabs/release-staging"
   if [[ -z "$(echo ${build_name} | grep -E -o '^v[0-9]+\.[0-9]+\.[0-9]+$')" ]] ; then
     # Using `.` to match how we usually format the pre-release portion of the
@@ -62,6 +60,7 @@ else
   fi
 fi
 
+download_prefix="https://storage.googleapis.com/$gcs_bucket"
 tc_end_block "Variable Setup"
 
 
@@ -101,7 +100,7 @@ docker_login_with_google
 docker_login
 
 # TODO: update publish-provisional-artifacts with option to leave one or more cockroach binaries in the local filesystem?
-curl -f -s -S -o- "https://${s3_download_hostname}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
+curl -f -s -S -o- "${download_prefix}/cockroach-${build_name}.linux-amd64.tgz" | tar ixfz - --strip-components 1
 cp cockroach lib/libgeos.so lib/libgeos_c.so build/deploy
 cp -r licenses build/deploy/
 
