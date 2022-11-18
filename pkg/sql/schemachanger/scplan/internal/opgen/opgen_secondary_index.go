@@ -86,6 +86,14 @@ func init() {
 				}),
 			),
 			to(scpb.Status_PUBLIC,
+				emit(func(this *scpb.SecondaryIndex) *scop.RefreshStats {
+					return &scop.RefreshStats{
+						TableID: this.TableID,
+					}
+				}),
+				emit(func(this *scpb.SecondaryIndex, md *opGenContext) *scop.LogEvent {
+					return newLogEventOp(this, md)
+				}),
 				emit(func(this *scpb.SecondaryIndex) *scop.MakeValidatedSecondaryIndexPublic {
 					return &scop.MakeValidatedSecondaryIndexPublic{
 						TableID: this.TableID,
