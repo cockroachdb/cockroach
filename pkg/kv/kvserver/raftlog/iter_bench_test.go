@@ -172,8 +172,7 @@ func BenchmarkIterator(b *testing.B) {
 			if ok, err := it.Next(); err != nil || !ok {
 				return false, err
 			}
-			ent := it.Entry()
-			ent.Release()
+			_ = it.Entry()
 			return true, nil
 		})
 	})
@@ -191,8 +190,7 @@ func BenchmarkVisit(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := Visit(rangeID, eng, 0, math.MaxUint64, func(entry *Entry) error {
-			entry.Release()
+		if err := Visit(eng, rangeID, 0, math.MaxUint64, func(entry raftpb.Entry) error {
 			return nil
 		}); err != nil {
 			b.Fatal(err)
