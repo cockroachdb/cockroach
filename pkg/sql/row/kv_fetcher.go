@@ -12,7 +12,6 @@ package row
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -38,20 +37,13 @@ type KVFetcher struct {
 
 	batchResponse []byte
 	spanID        int
-
-	// Observability fields.
-	// Note: these need to be read via an atomic op.
-	atomics struct {
-		bytesRead           int64
-		batchRequestsIssued *int64
-	}
 }
 
 var _ storage.NextKVer = &KVFetcher{}
 
-// NewKVFetcher creates a new KVFetcher.
+// newTxnKVFetcher creates a new txnKVFetcher.
 // If acc is non-nil, this fetcher will track its fetches and must be Closed.
-func NewKVFetcher(
+func newTxnKVFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
@@ -60,12 +52,12 @@ func NewKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
-) *KVFetcher {
+) *txnKVFetcher {
 	var sendFn sendFunc
 	var batchRequestsIssued int64
 	// Avoid the heap allocation by allocating sendFn specifically in the if.
 	if bsHeader == nil {
-		sendFn = makeKVBatchFetcherDefaultSendFunc(txn, &batchRequestsIssued)
+		sendFn = makeTxnKVFetcherDefaultSendFunc(txn, &batchRequestsIssued)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
@@ -89,7 +81,7 @@ func NewKVFetcher(
 		}
 	}
 
-	fetcherArgs := kvBatchFetcherArgs{
+	fetcherArgs := newTxnKVFetcherArgs{
 		sendFn:                     sendFn,
 		reverse:                    reverse,
 		lockStrength:               lockStrength,
@@ -97,6 +89,7 @@ func NewKVFetcher(
 		lockTimeout:                lockTimeout,
 		acc:                        acc,
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
+		batchRequestsIssued:        &batchRequestsIssued,
 	}
 	if txn != nil {
 		// In most cases, the txn is non-nil; however, in some code paths (e.g.
@@ -105,7 +98,25 @@ func NewKVFetcher(
 		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
 		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 	}
-	return newKVFetcher(newKVBatchFetcher(fetcherArgs), &batchRequestsIssued)
+	return newTxnKVFetcherInternal(fetcherArgs)
+}
+
+// NewKVFetcher creates a new KVFetcher.
+// If acc is non-nil, this fetcher will track its fetches and must be Closed.
+func NewKVFetcher(
+	txn *kv.Txn,
+	bsHeader *roachpb.BoundedStalenessHeader,
+	reverse bool,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
+	forceProductionKVBatchSize bool,
+) *KVFetcher {
+	return newKVFetcher(newTxnKVFetcher(
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		lockTimeout, acc, forceProductionKVBatchSize,
+	))
 }
 
 // NewStreamingKVFetcher returns a new KVFetcher that utilizes the provided
@@ -152,34 +163,11 @@ func NewStreamingKVFetcher(
 		maxKeysPerRow,
 		diskBuffer,
 	)
-	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc), &batchRequestsIssued)
+	return newKVFetcher(newTxnKVStreamer(streamer, lockStrength, kvFetcherMemAcc, &batchRequestsIssued))
 }
 
-func newKVFetcher(batchFetcher KVBatchFetcher, batchRequestsIssued *int64) *KVFetcher {
-	f := &KVFetcher{
-		KVBatchFetcher: batchFetcher,
-	}
-	f.atomics.batchRequestsIssued = batchRequestsIssued
-	return f
-}
-
-// GetBytesRead returns the number of bytes read by this fetcher. It is safe for
-// concurrent use and is able to handle a case of uninitialized fetcher.
-func (f *KVFetcher) GetBytesRead() int64 {
-	if f == nil {
-		return 0
-	}
-	return atomic.LoadInt64(&f.atomics.bytesRead)
-}
-
-// GetBatchRequestsIssued returns the number of BatchRequests issued by this
-// fetcher throughout its lifetime. It is safe for concurrent use and is able to
-// handle a case of uninitialized fetcher.
-func (f *KVFetcher) GetBatchRequestsIssued() int64 {
-	if f == nil {
-		return 0
-	}
-	return atomic.LoadInt64(f.atomics.batchRequestsIssued)
+func newKVFetcher(batchFetcher KVBatchFetcher) *KVFetcher {
+	return &KVFetcher{KVBatchFetcher: batchFetcher}
 }
 
 // nextKV returns the next kv from this fetcher. Returns false if there are no
@@ -237,19 +225,13 @@ func (f *KVFetcher) nextKV(
 			}, f.spanID, lastKey, nil
 		}
 
-		resp, err := f.nextBatch(ctx)
-		if err != nil || !resp.moreKVs {
-			return resp.moreKVs, roachpb.KeyValue{}, 0, false, err
+		resp, err := f.NextBatch(ctx)
+		if err != nil || !resp.MoreKVs {
+			return resp.MoreKVs, roachpb.KeyValue{}, 0, false, err
 		}
-		f.kvs = resp.kvs
-		f.batchResponse = resp.batchResponse
+		f.kvs = resp.KVs
+		f.batchResponse = resp.BatchResponse
 		f.spanID = resp.spanID
-		nBytes := len(f.batchResponse)
-		for i := range f.kvs {
-			nBytes += len(f.kvs[i].Key)
-			nBytes += len(f.kvs[i].Value.RawBytes)
-		}
-		atomic.AddInt64(&f.atomics.bytesRead, int64(nBytes))
 	}
 }
 
@@ -297,13 +279,6 @@ func (f *KVFetcher) SetupNextFetch(
 	)
 }
 
-// Close releases the resources held by this KVFetcher. It must be called
-// at the end of execution if the fetcher was provisioned with a memory
-// monitor.
-func (f *KVFetcher) Close(ctx context.Context) {
-	f.KVBatchFetcher.close(ctx)
-}
-
 // KVProvider is a KVBatchFetcher that returns a set slice of kvs.
 type KVProvider struct {
 	KVs []roachpb.KeyValue
@@ -311,16 +286,16 @@ type KVProvider struct {
 
 var _ KVBatchFetcher = &KVProvider{}
 
-// nextBatch implements the KVBatchFetcher interface.
-func (f *KVProvider) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
+// NextBatch implements the KVBatchFetcher interface.
+func (f *KVProvider) NextBatch(context.Context) (KVBatchFetcherResponse, error) {
 	if len(f.KVs) == 0 {
-		return kvBatchFetcherResponse{moreKVs: false}, nil
+		return KVBatchFetcherResponse{MoreKVs: false}, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return kvBatchFetcherResponse{
-		moreKVs: true,
-		kvs:     res,
+	return KVBatchFetcherResponse{
+		MoreKVs: true,
+		KVs:     res,
 	}, nil
 }
 
@@ -331,4 +306,15 @@ func (f *KVProvider) SetupNextFetch(
 	return nil
 }
 
-func (f *KVProvider) close(context.Context) {}
+// GetBytesRead implements the KVBatchFetcher interface.
+func (f *KVProvider) GetBytesRead() int64 {
+	return 0
+}
+
+// GetBatchRequestsIssued implements the KVBatchFetcher interface.
+func (f *KVProvider) GetBatchRequestsIssued() int64 {
+	return 0
+}
+
+// Close implements the KVBatchFetcher interface.
+func (f *KVProvider) Close(context.Context) {}
