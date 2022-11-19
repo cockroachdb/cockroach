@@ -52,6 +52,9 @@ type Command interface {
 // the command in that entry succeed are similar but not equivalent concepts.
 // A successfully committed entry may contain a command that the replicated
 // state machine decides to reject (deterministically).
+//
+// TODO(tbg): wouldn't StagedCommand be better? Stage() is what transforms
+// a Command into a CheckedCommand.
 type CheckedCommand interface {
 	Command
 	// Rejected returns whether the command was rejected.

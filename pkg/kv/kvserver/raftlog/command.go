@@ -78,6 +78,11 @@ func (c *ReplicatedCmd) IsTrivial() bool {
 //
 // This base implementation returns false, since it doesn't keep track
 // of whether a client is waiting for this Command.
+//
+// TODO(sep-raft-log): seems better to implement this on a new
+// (struct-identical) type StandaloneReplicatedCmd, for implementing "regular"
+// application might risk calling these methods and not the overloaded impl. See
+// for example CheckCommand.
 func (c *ReplicatedCmd) IsLocal() bool {
 	return false
 }

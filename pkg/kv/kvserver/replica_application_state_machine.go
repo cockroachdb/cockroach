@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -159,28 +158,33 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 // to the current view of ReplicaState and staged in the batch. The batch is
 // committed to the state machine's storage engine atomically.
 type replicaAppBatch struct {
-	r  *Replica
+	standaloneAppBatch
+	r *Replica
+	// TODO(sep-raft-log): this dependency is really light, we're only ever
+	// accessing sm.stats here. Just put an applyCommittedEntriesStats here
+	// and remove the *replicaStateMachine dep.
 	sm *replicaStateMachine
 
-	// batch accumulates writes implied by the raft entries in this batch.
-	batch storage.Batch
-	// state is this batch's view of the replica's state. It is copied from
-	// under the Replica.mu when the batch is initialized and is updated in
-	// stageTrivialReplicatedEvalResult.
-	state kvserverpb.ReplicaState
 	// closedTimestampSetter maintains historical information about the
 	// advancement of the closed timestamp.
+	//
+	// TODO(sep-raft-log): see comments on closedTimestampSetterInfo.record; this
+	// can move to standaloneAppBatch. It's used for the closedts assertions which
+	// we want to push down to standalone mode too.
 	closedTimestampSetter closedTimestampSetterInfo
 	// stats is stored on the application batch to avoid an allocation in
 	// tracking the batch's view of replicaState. All pointer fields in
 	// replicaState other than Stats are overwritten completely rather than
 	// updated in-place.
+	//
+	// TODO(sep-raft-log): this doesn't have to be on this struct, we can hide
+	// it on replicaStateMachine instead to avoid confusion. All access to this
+	// field is through standaloneAppBatch.state.Stats already.
 	stats enginepb.MVCCStats
-	// changeRemovesReplica tracks whether the command in the batch (there must
-	// be only one) removes this replica from the range.
-	changeRemovesReplica bool
 
 	// Statistics.
+	//
+	// TODO(sep-raft-log): consolidate with applyCommittedEntriesStats.
 	entries                 int
 	entryBytes              int64
 	emptyEntries            int
@@ -190,6 +194,117 @@ type replicaAppBatch struct {
 
 	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
 	asAlloc enginepb.RangeAppliedState
+}
+
+func (b *replicaAppBatch) onlineApplicationOnlyPreStageTriggers(
+	ctx context.Context, _ ApplyStepPreRepred, cmd *replicatedCmd,
+) error {
+	// Acquire the split or merge lock, if necessary. If a split or merge
+	// command was rejected with a below-Raft forced error then its replicated
+	// result was just cleared and this will be a no-op.
+	//
+	// TODO(tbg): can't this happen in splitPreApply which is called from
+	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
+	// way, it would become less of a one-off.
+	splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd)
+	if err != nil {
+		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
+			err = errors.Wrap(err, "unable to acquire split lock")
+		} else {
+			err = errors.Wrap(err, "unable to acquire merge lock")
+		}
+		return err
+	}
+	if splitMergeUnlock != nil {
+		// Set the splitMergeUnlock on the replicaAppBatch to be called
+		// after the batch has been applied (see replicaAppBatch.commit).
+		cmd.splitMergeUnlock = splitMergeUnlock
+	}
+
+	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
+		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
+	}
+
+	// We do the stats for store write byte sizes here since the code below may
+	// fiddle with these fields e.g. runPreApplyTriggersAfterStagingWriteBatch
+	// nils the AddSSTable field.
+	if !cmd.IsLocal() {
+		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
+		b.followerStoreWriteBytes.NumEntries++
+		b.followerStoreWriteBytes.WriteBytes += writeBytes
+		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+	}
+
+	return nil
+}
+
+// CheckCommand implements appHandlerNew. It calls through to appBatch's
+// implementation, then optionally adjusts the results via testing hooks,
+// and if the command has no forced error,
+func (b *replicaAppBatch) toCheckedCommand(
+	ctx context.Context, cmd *replicatedCmd,
+) (*ApplyStepChecked, error) {
+	// Call appBatch's implementation first.
+	sb := &b.standaloneAppBatch
+	leaseIndex, rejection, forcedErr, err := sb.assertAndCheckCommand(ctx, &cmd.ReplicatedCmd, cmd.IsLocal())
+	if err != nil {
+		return nil, err
+	}
+	// Then, maybe override the result with testing knobs.
+	if b.r.store.TestingKnobs() != nil {
+		rejection, forcedErr = replicaApplyTestingFilters(ctx, b.r, cmd, rejection, forcedErr)
+	}
+	tok := sb.toCheckedCmd(ctx, &cmd.ReplicatedCmd, leaseIndex, rejection, forcedErr)
+
+	if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
+		return nil, err
+	}
+	if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
+		return nil, err
+	}
+
+	return tok, nil
+}
+
+func replicaApplyTestingFilters(
+	ctx context.Context,
+	r *Replica,
+	cmd *replicatedCmd,
+	rejection kvserverbase.ProposalRejectionType,
+	forcedErr *roachpb.Error,
+) (newRejection kvserverbase.ProposalRejectionType, newForcedErr *roachpb.Error) {
+	// By default, output is input.
+	newRejection = rejection
+	newForcedErr = forcedErr
+
+	// Filters may change that.
+	if filter := r.store.cfg.TestingKnobs.TestingApplyCalledTwiceFilter; forcedErr != nil || filter != nil {
+		args := kvserverbase.ApplyFilterArgs{
+			CmdID:                cmd.ID,
+			ReplicatedEvalResult: *cmd.ReplicatedResult(),
+			StoreID:              r.store.StoreID(),
+			RangeID:              r.RangeID,
+			ForcedError:          forcedErr,
+		}
+		if forcedErr == nil {
+			if cmd.IsLocal() {
+				args.Req = cmd.proposal.Request
+			}
+			var newRej int
+			newRej, newForcedErr = filter(args)
+			cmd.ForcedErr = newForcedErr
+			if rejection == 0 {
+				newRejection = kvserverbase.ProposalRejectionType(newRej)
+			}
+		} else if feFilter := r.store.cfg.TestingKnobs.TestingApplyForcedErrFilter; feFilter != nil {
+			var newRej int
+			newRej, newForcedErr = filter(args)
+			if rejection == 0 {
+				newRejection = kvserverbase.ProposalRejectionType(newRej)
+			}
+		}
+	}
+	return newRejection, newForcedErr
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -218,96 +333,32 @@ func (b *replicaAppBatch) Stage(
 	ctx context.Context, cmdI apply.Command,
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
-	if cmd.Index() == 0 {
-		return nil, errors.AssertionFailedf("processRaftCommand requires a non-zero index")
-	}
-	if idx, applied := cmd.Index(), b.state.RaftAppliedIndex; idx != applied+1 {
-		// If we have an out of order index, there's corruption. No sense in
-		// trying to update anything or running the command. Simply return.
-		return nil, errors.AssertionFailedf("applied index jumped from %d to %d", applied, idx)
-	}
-	if log.V(4) {
-		log.Infof(ctx, "processing command %x: raftIndex=%d maxLeaseIndex=%d closedts=%s",
-			cmd.ID, cmd.Index(), cmd.Cmd.MaxLeaseIndex, cmd.Cmd.ClosedTimestamp)
-	}
 
-	// Determine whether the command should be applied to the replicated state
-	// machine or whether it should be rejected (and replaced by an empty command).
-	// This check is deterministic on all replicas, so if one replica decides to
-	// reject a command, all will.
-	if !b.r.shouldApplyCommand(ctx, cmd, &b.state) {
-		log.VEventf(ctx, 1, "applying command with forced error: %s", cmd.ForcedErr)
-
-		// Apply an empty command.
-		cmd.Cmd.ReplicatedEvalResult = kvserverpb.ReplicatedEvalResult{}
-		cmd.Cmd.WriteBatch = nil
-		cmd.Cmd.LogicalOpLog = nil
-		cmd.Cmd.ClosedTimestamp = nil
-	} else {
-		if err := b.assertNoCmdClosedTimestampRegression(ctx, cmd); err != nil {
-			return nil, err
-		}
-		if err := b.assertNoWriteBelowClosedTimestamp(cmd); err != nil {
-			return nil, err
-		}
-		log.Event(ctx, "applying command")
-	}
-
-	// Acquire the split or merge lock, if necessary. If a split or merge
-	// command was rejected with a below-Raft forced error then its replicated
-	// result was just cleared and this will be a no-op.
-	//
-	// TODO(tbg): can't this happen in splitPreApply which is called from
-	// b.runPreApplyTriggersAfterStagingWriteBatch and similar for merges? That
-	// way, it would become less of a one-off.
-	if splitMergeUnlock, err := b.r.maybeAcquireSplitMergeLock(ctx, cmd.Cmd); err != nil {
-		if cmd.Cmd.ReplicatedEvalResult.Split != nil {
-			err = errors.Wrap(err, "unable to acquire split lock")
-		} else {
-			err = errors.Wrap(err, "unable to acquire merge lock")
-		}
-		return nil, err
-	} else if splitMergeUnlock != nil {
-		// Set the splitMergeUnlock on the replicaAppBatch to be called
-		// after the batch has been applied (see replicaAppBatch.commit).
-		cmd.splitMergeUnlock = splitMergeUnlock
-	}
-
-	// Normalize the command, accounting for past migrations.
-	b.migrateReplicatedResult(ctx, cmd)
-
-	// Run any triggers that should occur before the batch is applied
-	// and before the write batch is staged in the batch.
-	if err := b.runPreApplyTriggersBeforeStagingWriteBatch(ctx, cmd); err != nil {
+	tok1, err := b.toCheckedCommand(ctx, cmd)
+	if err != nil {
 		return nil, err
 	}
 
-	// We do the stats for store write byte sizes here since the code below may
-	// fiddle with these fields e.g. runPreApplyTriggersAfterStagingWriteBatch
-	// nils the AddSSTable field.
-	if !cmd.IsLocal() {
-		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.NumEntries++
-		b.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
-	}
+	sb := &b.standaloneAppBatch
+	tok2, err := sb.preStageTriggers(*tok1, &cmd.ReplicatedCmd)
 
-	// Stage the command's write batch in the application batch.
-	if err := b.stageWriteBatch(ctx, cmd); err != nil {
+	if err := b.onlineApplicationOnlyPreStageTriggers(ctx, *tok2, cmd); err != nil {
 		return nil, err
 	}
 
-	// Run any triggers that should occur before the batch is applied
-	// but after the write batch is staged in the batch.
-	if err := b.runPreApplyTriggersAfterStagingWriteBatch(ctx, cmd); err != nil {
+	mutations, tok3, err := sb.applyBatchRepr(
+		ctx, *tok2, &cmd.ReplicatedCmd,
+	)
+	if err != nil {
+		return nil, err
+	}
+	tok4, err := sb.postStageTriggers(ctx, *tok3, &cmd.ReplicatedCmd)
+	if err := b.runPreApplyTriggersAfterStagingWriteBatch(ctx, *tok4, cmd); err != nil {
 		return nil, err
 	}
 
-	// Stage the command's trivial ReplicatedState updates in the batch. Any
-	// non-trivial commands will be in their own batch, so delaying their
-	// non-trivial ReplicatedState updates until later (without ever staging
-	// them in the batch) is sufficient.
-	b.stageTrivialReplicatedEvalResult(ctx, cmd)
+	// Update perf counters.
+	b.mutations += mutations
 	b.entries++
 	size := len(cmd.Data)
 	b.entryBytes += int64(size)
@@ -315,42 +366,8 @@ func (b *replicaAppBatch) Stage(
 		b.emptyEntries++
 	}
 
-	// The command was checked by shouldApplyCommand, so it can be returned
-	// as an apply.CheckedCommand.
+	// We now have a CheckedCommand.
 	return cmd, nil
-}
-
-// migrateReplicatedResult performs any migrations necessary on the command to
-// normalize it before applying it to the batch. This may modify the command.
-func (b *replicaAppBatch) migrateReplicatedResult(ctx context.Context, cmd *replicatedCmd) {
-	// If the command was using the deprecated version of the MVCCStats proto,
-	// migrate it to the new version and clear out the field.
-	res := cmd.ReplicatedResult()
-	if deprecatedDelta := res.DeprecatedDelta; deprecatedDelta != nil {
-		if res.Delta != (enginepb.MVCCStatsDelta{}) {
-			log.Fatalf(ctx, "stats delta not empty but deprecated delta provided: %+v", cmd)
-		}
-		res.Delta = deprecatedDelta.ToStatsDelta()
-		res.DeprecatedDelta = nil
-	}
-}
-
-// stageWriteBatch applies the command's write batch to the application batch's
-// RocksDB batch. This batch is committed to Pebble in replicaAppBatch.commit.
-func (b *replicaAppBatch) stageWriteBatch(ctx context.Context, cmd *replicatedCmd) error {
-	wb := cmd.Cmd.WriteBatch
-	if wb == nil {
-		return nil
-	}
-	if mutations, err := storage.PebbleBatchCount(wb.Data); err != nil {
-		log.Errorf(ctx, "unable to read header of committed WriteBatch: %+v", err)
-	} else {
-		b.mutations += mutations
-	}
-	if err := b.batch.ApplyBatchRepr(wb.Data, false); err != nil {
-		return errors.Wrapf(err, "unable to apply WriteBatch")
-	}
-	return nil
 }
 
 // changeRemovesStore returns true if any of the removals in this change have storeID.
@@ -365,25 +382,21 @@ func changeRemovesStore(
 	return !existsInChange
 }
 
-// runPreApplyTriggersBeforeStagingWriteBatch runs any triggers that must fire
-// before a command is applied to the state machine but after the command is
-// staged in the replicaAppBatch's write batch. It may modify the command.
-func (b *replicaAppBatch) runPreApplyTriggersBeforeStagingWriteBatch(
-	ctx context.Context, cmd *replicatedCmd,
-) error {
-	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
-		b.r.populatePrevValsInLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
-	}
-	return nil
-}
-
 // runPreApplyTriggersAfterStagingWriteBatch runs any triggers that must fire
 // before a command is applied to the state machine but after the command is
 // staged in the replicaAppBatch's write batch. It may modify the command.
 func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
-	ctx context.Context, cmd *replicatedCmd,
+	ctx context.Context, _ ApplyStepPostRepred, cmd *replicatedCmd,
 ) error {
+	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
+		b.closedTimestampSetter.record(cmd, b.state.Lease)
+	}
+
 	res := cmd.ReplicatedResult()
+
+	if res.State != nil && res.State.GCHint != nil {
+		b.r.handleGCHintResult(ctx, res.State.GCHint)
+	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
 	// has already been emitted and checkpointed via a rangefeed. Callers are
@@ -653,42 +666,6 @@ func (b *replicaAppBatch) runPreApplyTriggersAfterStagingWriteBatch(
 	return nil
 }
 
-// stageTrivialReplicatedEvalResult applies the trivial portions of the
-// command's ReplicatedEvalResult to the batch's ReplicaState. This function
-// modifies the receiver's ReplicaState but does not modify ReplicatedEvalResult
-// in order to give the TestingPostApplyFilter testing knob an opportunity to
-// inspect the command's ReplicatedEvalResult.
-func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
-	ctx context.Context, cmd *replicatedCmd,
-) {
-	if cmd.Index() == 0 {
-		log.Fatalf(ctx, "raft entry with index 0")
-	}
-	b.state.RaftAppliedIndex = cmd.Index()
-	b.state.RaftAppliedIndexTerm = cmd.Term
-
-	if leaseAppliedIndex := cmd.LeaseIndex; leaseAppliedIndex != 0 {
-		b.state.LeaseAppliedIndex = leaseAppliedIndex
-	}
-	if cts := cmd.Cmd.ClosedTimestamp; cts != nil && !cts.IsEmpty() {
-		b.state.RaftClosedTimestamp = *cts
-		b.closedTimestampSetter.record(cmd, b.state.Lease)
-	}
-
-	res := cmd.ReplicatedResult()
-
-	// Special-cased MVCC stats handling to exploit commutativity of stats delta
-	// upgrades. Thanks to commutativity, the spanlatch manager does not have to
-	// serialize on the stats key.
-	deltaStats := res.Delta.ToStats()
-	b.state.Stats.Add(deltaStats)
-
-	if res.State != nil && res.State.GCHint != nil {
-		b.r.handleGCHintResult(ctx, res.State.GCHint)
-		res.State.GCHint = nil
-	}
-}
-
 // ApplyToStateMachine implements the apply.Batch interface. The method handles
 // the second phase of applying a command to the replica state machine. It
 // writes the application batch's accumulated RocksDB batch to the storage
@@ -827,6 +804,8 @@ var raftClosedTimestampAssertionsEnabled = envutil.EnvOrDefaultBool("COCKROACH_R
 // cmd.Cmd.ClosedTimestamp. A command is allowed to write below the closed
 // timestamp carried by itself; in other words cmd.Cmd.ClosedTimestamp is a
 // promise about future commands, not the command carrying it.
+//
+// TODO(sep-raft-log): move to group with the receiver's other methods.
 func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) error {
 	if !cmd.IsLocal() || !cmd.proposal.Request.AppliesTimestampCache() {
 		return nil
@@ -856,7 +835,10 @@ func (b *replicaAppBatch) assertNoWriteBelowClosedTimestamp(cmd *replicatedCmd) 
 }
 
 // Assert that the closed timestamp carried by the command is not below one from
-// previous commands.
+// previous commands. The `cmd` will not have its LeaseIndex set yet; it is passed
+// in separately.
+//
+// TODO(sep-raft-log): move to group with the receiver's other methods.
 func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
@@ -905,8 +887,8 @@ func (b *replicaAppBatch) assertNoCmdClosedTimestampRegression(
 // The batch performs the bare-minimum amount of work to be able to
 // determine whether a replicated command should be rejected or applied.
 type ephemeralReplicaAppBatch struct {
-	r     *Replica
 	state kvserverpb.ReplicaState
+	r     *Replica
 }
 
 // Stage implements the apply.Batch interface.
@@ -915,7 +897,11 @@ func (mb *ephemeralReplicaAppBatch) Stage(
 ) (apply.CheckedCommand, error) {
 	cmd := cmdI.(*replicatedCmd)
 
-	mb.r.shouldApplyCommand(ctx, cmd, &mb.state)
+	leaseIndex, rejection, forcedErr := kvserverbase.CheckForcedErr(
+		ctx, cmd.ID, &cmd.Cmd, cmd.IsLocal(), &mb.state,
+	)
+	rejection, forcedErr = replicaApplyTestingFilters(ctx, mb.r, cmd, rejection, forcedErr)
+	cmd.LeaseIndex, cmd.Rejection, cmd.ForcedErr = leaseIndex, rejection, forcedErr
 	mb.state.LeaseAppliedIndex = cmd.LeaseIndex
 	return cmd, nil
 }
@@ -1227,12 +1213,15 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 	s.leaseIdx = ctpb.LAI(cmd.LeaseIndex)
 	s.lease = lease
 	if !cmd.IsLocal() {
+		// TODO(tbg): make this all work regardless of IsLocal(), see comments below.
 		return
 	}
 	req := cmd.proposal.Request
 	et, ok := req.GetArg(roachpb.EndTxn)
 	if ok {
 		endTxn := et.(*roachpb.EndTxnRequest)
+		// TODO(tbg): we can determine those from the ReplicatedEvalResult
+		// as well, i.e. for non-local commands.
 		if trig := endTxn.InternalCommitTrigger; trig != nil {
 			if trig.SplitTrigger != nil {
 				s.split = true
@@ -1241,6 +1230,9 @@ func (s *closedTimestampSetterInfo) record(cmd *replicatedCmd, lease *roachpb.Le
 			}
 		}
 	} else if req.IsSingleRequestLeaseRequest() {
+		// TODO(tbg): we can also get some of the lease info (though not the entire
+		// request) out of the ReplicatedEvalResult.State.Lease field.
+
 		// Make a deep copy since we're not allowed to hold on to request
 		// memory.
 		lr, _ := req.GetArg(roachpb.RequestLease)

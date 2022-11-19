@@ -64,8 +64,6 @@ var ErrRemoved = errors.New("replica removed")
 // An EphemeralBatch can stage a number of commands, but lacks the ability
 // to apply them to a state machine.
 type EphemeralBatch interface {
-	// Stage inserts a Command into the Batch. In doing so, the Command is
-	// checked for rejection and a CheckedCommand is returned.
 	Stage(context.Context, Command) (CheckedCommand, error)
 	// Close closes the batch and releases any resources that it holds.
 	Close()
