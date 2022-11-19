@@ -109,7 +109,8 @@ func runTC(queueBuild func(string, map[string]string)) {
 			} else {
 				opts["env.COCKROACH_KVNEMESIS_STEPS"] = "10000"
 			}
-		case baseImportPath + "sql/logictest", baseImportPath + "kv/kvserver":
+		case baseImportPath + "sql/logictest", baseImportPath + "kv/kvserver",
+			baseImportPath + "ccl/logictestccl":
 			// Stress heavy with reduced parallelism (to avoid overloading the
 			// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
 			parallelism /= 2
