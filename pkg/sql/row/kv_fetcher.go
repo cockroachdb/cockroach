@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -260,6 +261,11 @@ func (f *KVFetcher) nextKV(
 		}
 		f.kvs = resp.KVs
 		f.batchResponse = resp.BatchResponse
+		if buildutil.CrdbTestBuild {
+			if resp.ColBatch != nil {
+				panic(errors.AssertionFailedf("unexpectedly got a coldata.Batch response in a non-direct fetch"))
+			}
+		}
 		f.spanID = resp.spanID
 	}
 }
