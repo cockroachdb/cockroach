@@ -49,9 +49,7 @@ type KVFetcher struct {
 
 var _ storage.NextKVer = &KVFetcher{}
 
-// NewKVFetcher creates a new KVFetcher.
-// If acc is non-nil, this fetcher will track its fetches and must be Closed.
-func NewKVFetcher(
+func newKVBatchFetcher(
 	txn *kv.Txn,
 	bsHeader *roachpb.BoundedStalenessHeader,
 	reverse bool,
@@ -60,12 +58,12 @@ func NewKVFetcher(
 	lockTimeout time.Duration,
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
-) *KVFetcher {
+) (_ *txnKVFetcher, batchRequestsIssued *int64) {
 	var sendFn sendFunc
-	var batchRequestsIssued int64
+	batchRequestsIssued = new(int64)
 	// Avoid the heap allocation by allocating sendFn specifically in the if.
 	if bsHeader == nil {
-		sendFn = makeKVBatchFetcherDefaultSendFunc(txn, &batchRequestsIssued)
+		sendFn = makeKVBatchFetcherDefaultSendFunc(txn, batchRequestsIssued)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *roachpb.BatchRequest) (br *roachpb.BatchResponse, _ error) {
@@ -84,7 +82,7 @@ func NewKVFetcher(
 			if pErr != nil {
 				return nil, pErr.GoError()
 			}
-			batchRequestsIssued++
+			*batchRequestsIssued++
 			return br, nil
 		}
 	}
@@ -105,7 +103,47 @@ func NewKVFetcher(
 		fetcherArgs.requestAdmissionHeader = txn.AdmissionHeader()
 		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 	}
-	return newKVFetcher(newKVBatchFetcher(fetcherArgs), &batchRequestsIssued)
+	return newTxnKVFetcher(fetcherArgs), batchRequestsIssued
+}
+
+func NewDirectKVBatchFetcher(
+	txn *kv.Txn,
+	bsHeader *roachpb.BoundedStalenessHeader,
+	spec *descpb.IndexFetchSpec,
+	reverse bool,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
+	forceProductionKVBatchSize bool,
+) KVBatchFetcher {
+	// TODO: batch requests issued.
+	kvBatchFetcher, _ := newKVBatchFetcher(
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		lockTimeout, acc, forceProductionKVBatchSize,
+	)
+	kvBatchFetcher.scanFormat = roachpb.COL_BATCH_RESPONSE
+	kvBatchFetcher.indexFetchSpec = spec
+	return kvBatchFetcher
+}
+
+// NewKVFetcher creates a new KVFetcher.
+// If acc is non-nil, this fetcher will track its fetches and must be Closed.
+func NewKVFetcher(
+	txn *kv.Txn,
+	bsHeader *roachpb.BoundedStalenessHeader,
+	reverse bool,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
+	forceProductionKVBatchSize bool,
+) *KVFetcher {
+	kvBatchFetcher, batchRequestsIssued := newKVBatchFetcher(
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		lockTimeout, acc, forceProductionKVBatchSize,
+	)
+	return newKVFetcher(kvBatchFetcher, batchRequestsIssued)
 }
 
 // NewStreamingKVFetcher returns a new KVFetcher that utilizes the provided

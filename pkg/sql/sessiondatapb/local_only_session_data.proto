@@ -312,6 +312,8 @@ message LocalOnlySessionData {
   // AllowOrdinalColumnReferences indicates whether the deprecated ordinal
   // column reference syntax (e.g., `SELECT @1 FROM t`) is allowed.
   bool allow_ordinal_column_references = 85;
+  // PlanDirectScan indicates whether we should plan ColBatchDirectScans.
+  bool plan_direct_scan = 86;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
