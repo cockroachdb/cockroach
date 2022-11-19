@@ -38,7 +38,7 @@ func (sc testStreamClient) Dial(ctx context.Context) error {
 
 // Create implements the Client interface.
 func (sc testStreamClient) Create(
-	ctx context.Context, target roachpb.TenantID,
+	_ context.Context, _ roachpb.TenantName,
 ) (streampb.StreamID, error) {
 	return streampb.StreamID(1), nil
 }
@@ -46,8 +46,14 @@ func (sc testStreamClient) Create(
 // Plan implements the Client interface.
 func (sc testStreamClient) Plan(ctx context.Context, ID streampb.StreamID) (Topology, error) {
 	return Topology{
-		{SrcAddr: "test://host1"},
-		{SrcAddr: "test://host2"},
+		Partitions: []PartitionInfo{
+			{
+				SrcAddr: "test://host1",
+			},
+			{
+				SrcAddr: "test://host2",
+			},
+		},
 	}, nil
 }
 
@@ -174,7 +180,7 @@ func ExampleClient() {
 		_ = client.Close(ctx)
 	}()
 
-	id, err := client.Create(ctx, roachpb.MustMakeTenantID(1))
+	id, err := client.Create(ctx, "system")
 	if err != nil {
 		panic(err)
 	}
@@ -216,7 +222,7 @@ func ExampleClient() {
 			panic(err)
 		}
 
-		for _, partition := range topology {
+		for _, partition := range topology.Partitions {
 			// TODO(dt): use Subscribe helper and partition.SrcAddr
 			sub, err := client.Subscribe(ctx, id, partition.SubscriptionToken, ts)
 			if err != nil {

@@ -103,15 +103,15 @@ INSERT INTO d.t2 VALUES (2);
 			[][]string{{string(status)}})
 	}
 
-	streamID, err := client.Create(ctx, tenant.ID)
+	streamID, err := client.Create(ctx, testTenantName)
 	require.NoError(t, err)
 	// We can create multiple replication streams for the same tenant.
-	_, err = client.Create(ctx, tenant.ID)
+	_, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
 
 	top, err := client.Plan(ctx, streamID)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(top))
+	require.Equal(t, 1, len(top.Partitions))
 	// Plan for a non-existent stream
 	_, err = client.Plan(ctx, 999)
 	require.True(t, testutils.IsError(err, fmt.Sprintf("job with ID %d does not exist", 999)), err)
@@ -165,8 +165,8 @@ INSERT INTO d.t2 VALUES (2);
 	}
 
 	// Ignore table t2 and only subscribe to the changes to table t1.
-	require.Equal(t, len(top), 1)
-	url, err := streamingccl.StreamAddress(top[0].SrcAddr).URL()
+	require.Equal(t, len(top.Partitions), 1)
+	url, err := streamingccl.StreamAddress(top.Partitions[0].SrcAddr).URL()
 	require.NoError(t, err)
 	// Create a new stream client with the given partition address.
 	subClient, err := newPartitionedStreamClient(ctx, url)
@@ -219,7 +219,7 @@ INSERT INTO d.t2 VALUES (2);
 	h.SysSQL.Exec(t, `
 SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '200ms';
 `)
-	streamID, err = client.Create(ctx, tenant.ID)
+	streamID, err = client.Create(ctx, testTenantName)
 	require.NoError(t, err)
 	require.NoError(t, client.Complete(ctx, streamID, true))
 	h.SysSQL.CheckQueryResultsRetry(t,

@@ -181,6 +181,7 @@ var _ CCLOnlyStatement = &Import{}
 var _ CCLOnlyStatement = &Export{}
 var _ CCLOnlyStatement = &ScheduledBackup{}
 var _ CCLOnlyStatement = &StreamIngestion{}
+var _ CCLOnlyStatement = &CreateTenantFromReplication{}
 
 // StatementReturnType implements the Statement interface.
 func (*AlterChangefeed) StatementReturnType() StatementReturnType { return Rows }
@@ -741,6 +742,17 @@ func (*CreateTenant) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateTenant) StatementTag() string { return "CREATE TENANT" }
+
+// StatementReturnType implements the Statement interface.
+func (*CreateTenantFromReplication) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*CreateTenantFromReplication) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CreateTenantFromReplication) StatementTag() string { return "CREATE TENANT FROM REPLICATION" }
+
+func (*CreateTenantFromReplication) cclOnlyStatement() {}
 
 // StatementReturnType implements the Statement interface.
 func (*DropExternalConnection) StatementReturnType() StatementReturnType { return Ack }
@@ -2089,6 +2101,7 @@ func (n *CreateIndex) String() string                         { return AsString(
 func (n *CreateRole) String() string                          { return AsString(n) }
 func (n *CreateTable) String() string                         { return AsString(n) }
 func (n *CreateTenant) String() string                        { return AsString(n) }
+func (n *CreateTenantFromReplication) String() string         { return AsString(n) }
 func (n *CreateSchema) String() string                        { return AsString(n) }
 func (n *CreateSequence) String() string                      { return AsString(n) }
 func (n *CreateStats) String() string                         { return AsString(n) }

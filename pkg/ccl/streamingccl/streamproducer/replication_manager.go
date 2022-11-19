@@ -30,16 +30,9 @@ type replicationStreamManagerImpl struct {
 
 // StartReplicationStream implements streaming.ReplicationStreamManager interface.
 func (r *replicationStreamManagerImpl) StartReplicationStream(
-	ctx context.Context, tenantID uint64,
-) (streampb.StreamID, error) {
-	return startReplicationStreamJob(ctx, r.evalCtx, r.txn, tenantID)
-}
-
-// StartReplicationStreamByName implements streaming.ReplicationStreamManager interface.
-func (r *replicationStreamManagerImpl) StartReplicationStreamByName(
 	ctx context.Context, tenantName roachpb.TenantName,
 ) (streampb.StreamID, error) {
-	return startReplicationStreamJobByName(ctx, r.evalCtx, r.txn, tenantName)
+	return startReplicationStreamJob(ctx, r.evalCtx, r.txn, tenantName)
 }
 
 // HeartbeatReplicationStream implements streaming.ReplicationStreamManager interface.

@@ -593,6 +593,7 @@ create_external_connection_stmt ::=
 
 create_tenant_stmt ::=
 	'CREATE' 'TENANT' name
+	| 'CREATE' 'TENANT' name 'FROM' 'REPLICATION' 'OF' name 'ON' string_or_placeholder
 
 opt_with_clause ::=
 	with_clause

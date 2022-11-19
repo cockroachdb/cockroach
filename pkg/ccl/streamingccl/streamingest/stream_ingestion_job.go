@@ -264,7 +264,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		// Construct stream ingestion processor specs.
 		streamIngestionSpecs, streamIngestionFrontierSpec, err := distStreamIngestionPlanSpecs(
 			streamAddress, topology, sqlInstanceIDs, progress.GetStreamIngest().StartTime, checkpoint,
-			ingestionJob.ID(), streamID, details.TenantID, details.NewTenantID)
+			ingestionJob.ID(), streamID, topology.SourceTenantID, details.DestinationTenantID)
 		if err != nil {
 			return err
 		}
@@ -273,7 +273,7 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		log.Infof(ctx, "starting to run DistSQL flow for stream ingestion job %d",
 			ingestionJob.ID())
 		updateRunningStatus(ctx, ingestionJob, "running the SQL flow for the stream ingestion job")
-		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, ingestionJob.ID(), planCtx, dsp,
+		if err = distStreamIngest(ctx, execCtx, sqlInstanceIDs, planCtx, dsp,
 			streamIngestionSpecs, streamIngestionFrontierSpec); err != nil {
 			return err
 		}
@@ -289,9 +289,9 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 			return err
 		}
 
-		log.Infof(ctx, "activating destination tenant %d", details.NewTenantID)
+		log.Infof(ctx, "activating destination tenant %d", details.DestinationTenantID)
 		// Activate the tenant as it is now in a usable state.
-		if err = activateTenant(ctx, execCtx, details.NewTenantID); err != nil {
+		if err = activateTenant(ctx, execCtx, details.DestinationTenantID); err != nil {
 			return err
 		}
 
