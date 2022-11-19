@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -135,6 +136,9 @@ type txnKVFetcher struct {
 	// doesn't result in too much data), and wants to preserve concurrency for
 	// this scans inside of DistSender.
 	batchBytesLimit rowinfra.BytesLimit
+
+	scanFormat     roachpb.ScanFormat
+	indexFetchSpec *fetchpb.IndexFetchSpec
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
@@ -404,8 +408,13 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	if f.indexFetchSpec != nil {
+		ba.IndexFetchSpec = f.indexFetchSpec
+	} else if f.scanFormat == roachpb.COL_BATCH_RESPONSE {
+		return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
+	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength, f.reqsScratch)
+	ba.Requests = spansToRequests(f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.reqsScratch)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -664,12 +673,16 @@ const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 // spansToRequests converts the provided spans to the corresponding requests. If
 // a span doesn't have the EndKey set, then a Get request is used for it;
 // otherwise, a Scan (or ReverseScan if reverse is true) request is used with
-// BATCH_RESPONSE format.
+// the provided scan format.
 //
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
 func spansToRequests(
-	spans roachpb.Spans, reverse bool, keyLocking lock.Strength, reqsScratch []roachpb.RequestUnion,
+	spans roachpb.Spans,
+	scanFormat roachpb.ScanFormat,
+	reverse bool,
+	keyLocking lock.Strength,
+	reqsScratch []roachpb.RequestUnion,
 ) []roachpb.RequestUnion {
 	var reqs []roachpb.RequestUnion
 	if cap(reqsScratch) >= len(spans) {
@@ -733,7 +746,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union

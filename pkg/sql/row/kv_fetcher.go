@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -99,6 +100,26 @@ func newTxnKVFetcher(
 		fetcherArgs.responseAdmissionQ = txn.DB().SQLKVResponseAdmissionQ
 	}
 	return newTxnKVFetcherInternal(fetcherArgs)
+}
+
+func NewDirectKVBatchFetcher(
+	txn *kv.Txn,
+	bsHeader *roachpb.BoundedStalenessHeader,
+	spec *fetchpb.IndexFetchSpec,
+	reverse bool,
+	lockStrength descpb.ScanLockingStrength,
+	lockWaitPolicy descpb.ScanLockingWaitPolicy,
+	lockTimeout time.Duration,
+	acc *mon.BoundAccount,
+	forceProductionKVBatchSize bool,
+) KVBatchFetcher {
+	f := newTxnKVFetcher(
+		txn, bsHeader, reverse, lockStrength, lockWaitPolicy,
+		lockTimeout, acc, forceProductionKVBatchSize,
+	)
+	f.scanFormat = roachpb.COL_BATCH_RESPONSE
+	f.indexFetchSpec = spec
+	return f
 }
 
 // NewKVFetcher creates a new KVFetcher.
