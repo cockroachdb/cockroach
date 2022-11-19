@@ -152,6 +152,10 @@ type Telemetry interface {
 
 	// IncrementDropOwnedByCounter increments the DROP OWNED BY telemetry counter.
 	IncrementDropOwnedByCounter()
+
+	// IncrementSchemaChangeIndexCounter schema change counters related to index
+	// features during creation.
+	IncrementSchemaChangeIndexCounter(counterType string)
 }
 
 // SchemaFeatureChecker checks if a schema change feature is allowed by the

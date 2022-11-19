@@ -72,6 +72,10 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		if n.Unique {
 			panic(pgerror.New(pgcode.InvalidSQLStatementName, "inverted indexes can't be unique"))
 		}
+		b.IncrementSchemaChangeIndexCounter("inverted_index")
+		if len(n.Columns) > 0 {
+			b.IncrementSchemaChangeIndexCounter("multi_column_inverted_index")
+		}
 	}
 	var tempIdxSpec indexSpec
 	var idxSpec indexSpec
@@ -340,6 +344,7 @@ func processColNodeType(
 				panic(err)
 			}
 			indexSpec.secondary.GeoConfig = *config
+			b.IncrementSchemaChangeIndexCounter("geometry_inverted")
 		case types.GeographyFamily:
 			if columnNode.OpClass != "" {
 				panic(newUndefinedOpclassError(columnNode.OpClass))
@@ -348,6 +353,7 @@ func processColNodeType(
 				panic(newUndefinedOpclassError(columnNode.OpClass))
 			}
 			indexSpec.secondary.GeoConfig = *geoindex.DefaultGeographyIndexConfig()
+			b.IncrementSchemaChangeIndexCounter("geography_inverted")
 		case types.StringFamily:
 			// Check the opclass of the last column in the list, which is the column
 			// we're going to inverted index.
@@ -366,6 +372,8 @@ func processColNodeType(
 				panic(newUndefinedOpclassError(columnNode.OpClass))
 			}
 			invertedKind = catpb.InvertedIndexColumnKind_TRIGRAM
+			b.IncrementSchemaChangeIndexCounter("trigram_inverted")
+
 		}
 		relationElts := b.QueryByID(indexSpec.primary.TableID)
 		scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
@@ -474,6 +482,9 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 			columnsToPrepend = append(columnsToPrepend, newIndexColumn)
 		}
 		idxSpec.columns = append(columnsToPrepend, idxSpec.columns...)
+		if n.Inverted {
+			b.IncrementSchemaChangeIndexCounter("partitioned_inverted")
+		}
 	}
 	// Warn against creating a non-partitioned index on a partitioned table,
 	// which is undesirable in most cases.
@@ -539,12 +550,17 @@ func addColumnsForSecondaryIndex(
 	keyColNames := make([]string, len(n.Columns))
 	var keyColIDs catalog.TableColSet
 	lastColumnIdx := len(n.Columns) - 1
+	expressionTelemtryCounted := false
 	for i, columnNode := range n.Columns {
 		colName := columnNode.Column
 		if columnNode.Expr != nil {
 			tbl := relation.(*scpb.Table)
 			colNameStr := maybeCreateVirtualColumnForIndex(b, &n.Table, tbl, columnNode.Expr, n.Inverted, i == len(n.Columns)-1)
 			colName = tree.Name(colNameStr)
+			if !expressionTelemtryCounted {
+				b.IncrementSchemaChangeIndexCounter("expression")
+				expressionTelemtryCounted = true
+			}
 		}
 		colElts := b.ResolveColumn(tableID, colName, ResolveParams{
 			RequiredPrivilege: privilege.CREATE,
@@ -630,6 +646,7 @@ func addColumnsForSecondaryIndex(
 	}
 	// Set up sharding.
 	if n.Sharded != nil {
+		b.IncrementSchemaChangeIndexCounter("hash_sharded")
 		buckets, err := tabledesc.EvalShardBucketCount(b, b.SemaCtx(), b.EvalCtx(), n.Sharded.ShardBuckets, n.StorageParams)
 		if err != nil {
 			panic(err)
@@ -874,6 +891,10 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 		TableID:    idxSpec.secondary.TableID,
 		IndexID:    idxSpec.secondary.IndexID,
 		Expression: *expr,
+	}
+	b.IncrementSchemaChangeIndexCounter("partial")
+	if n.Inverted {
+		b.IncrementSchemaChangeIndexCounter("partial_inverted")
 	}
 }
 
