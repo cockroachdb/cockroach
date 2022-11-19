@@ -12,7 +12,6 @@ package storage
 
 import (
 	"context"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -68,7 +67,7 @@ type CFetcherWrapper interface {
 // on higher levels of the system.
 var GetCFetcherWrapper func(
 	ctx context.Context,
-	acc *mon.BoundAccount,
+	fetcherAccount, converterAccount *mon.BoundAccount,
 	indexFetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer NextKVer,
 ) (CFetcherWrapper, error)
@@ -213,22 +212,17 @@ func mvccScanToCols(
 	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
 
 	adapter := mvccScanFetchAdapter{scanner: mvccScanner}
-	unlimitedMonitor := mon.NewUnlimitedMonitor(
-		ctx,
-		"mvcc-scan-to-cols", /* name */
-		mon.MemoryResource,
-		nil,           /* curCount */
-		nil,           /* maxHist */
-		math.MaxInt64, /* noteworthy */
-		nil,           /* settings */
-	)
-	unlimitedMonitor.Start(ctx, nil /* parent */, mon.NewStandaloneBudget(math.MaxInt64))
-	defer unlimitedMonitor.Stop(ctx)
-	acc := unlimitedMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
+	var fetcherAcc, converterAcc *mon.BoundAccount
+	if m := opts.MemoryAccount.Monitor(); m != nil {
+		fetcherAccount, converterAccount := m.MakeBoundAccount(), m.MakeBoundAccount()
+		defer fetcherAccount.Close(ctx)
+		defer converterAccount.Close(ctx)
+		fetcherAcc, converterAcc = &fetcherAccount, &converterAccount
+	}
 	wrapper, err := GetCFetcherWrapper(
 		ctx,
-		&acc,
+		fetcherAcc,
+		converterAcc,
 		indexFetchSpec,
 		&adapter,
 	)
