@@ -1298,6 +1298,40 @@ func setupSpanForIncomingRPC(
 	}
 }
 
+func tenantPrefix(tenID roachpb.TenantID) roachpb.RSpan {
+	// TODO(nvanbenschoten): consider caching this span.
+	prefix := roachpb.RKey(keys.MakeTenantPrefix(tenID))
+	return roachpb.RSpan{
+		Key:    prefix,
+		EndKey: prefix.PrefixEnd(),
+	}
+}
+
+// filterRangeLookupResultsForTenant extracts the tenant ID from the context.
+// It filters descs to only include the prefix which have a start key in the
+// tenant's span. If there is no tenant in the context, it will filter all
+// the descriptors.
+func filterRangeLookupResponseForTenant(
+	ctx context.Context, descs []roachpb.RangeDescriptor,
+) []roachpb.RangeDescriptor {
+	tenID, ok := roachpb.TenantFromContext(ctx)
+	if !ok {
+		// If we do not know the tenant, don't permit any pre-fetching.
+		return []roachpb.RangeDescriptor{}
+	}
+	rs := tenantPrefix(tenID)
+	truncated := descs[:0]
+	// We say that any range which has a start key within the tenant prefix is
+	// fair game for the tenant to know about.
+	for _, d := range descs {
+		if !rs.ContainsKey(d.StartKey) {
+			break
+		}
+		truncated = append(truncated, d)
+	}
+	return truncated
+}
+
 // RangeLookup implements the roachpb.InternalServer interface.
 func (n *Node) RangeLookup(
 	ctx context.Context, req *roachpb.RangeLookupRequest,
@@ -1324,7 +1358,7 @@ func (n *Node) RangeLookup(
 		resp.Error = roachpb.NewError(err)
 	} else {
 		resp.Descriptors = rs
-		resp.PrefetchedDescriptors = preRs
+		resp.PrefetchedDescriptors = filterRangeLookupResponseForTenant(ctx, preRs)
 	}
 	return resp, nil
 }

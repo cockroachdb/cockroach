@@ -190,8 +190,9 @@ var CanSendToFollower = func(
 const (
 	// The default limit for asynchronous senders.
 	defaultSenderConcurrency = 1024
-	// The maximum number of range descriptors to prefetch during range lookups.
-	rangeLookupPrefetchCount = 8
+	// RangeLookupPrefetchCount is the maximum number of range descriptors to prefetch
+	// during range lookups.
+	RangeLookupPrefetchCount = 8
 	// The maximum number of times a replica is retried when it repeatedly returns
 	// stale lease info.
 	sameReplicaRetryLimit = 10
@@ -560,7 +561,7 @@ func (ds *DistSender) RangeLookup(
 	// RangeDescriptor is not on the first range we send the lookup too, we'll
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
-	return kv.RangeLookup(ctx, ds, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
+	return kv.RangeLookup(ctx, ds, key.AsRawKey(), rc, RangeLookupPrefetchCount, useReverseScan)
 }
 
 // FirstRange implements the RangeDescriptorDB interface.

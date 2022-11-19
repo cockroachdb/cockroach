@@ -389,10 +389,7 @@ func (c *Connector) RangeLookup(
 			// for more discussion on the choice of ReadConsistency and its
 			// implications.
 			ReadConsistency: rc,
-			// Until we add protection in the Internal service implementation to
-			// prevent prefetching from traversing into RangeDescriptors owned by
-			// other tenants, we must disable prefetching.
-			PrefetchNum:     0,
+			PrefetchNum:     kvcoord.RangeLookupPrefetchCount,
 			PrefetchReverse: useReverseScan,
 		})
 		if err != nil {
