@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -102,6 +103,7 @@ func (s *identifiableSpans) reset() {
 
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
+	kvBatchFetcherO11yHelper
 	// "Constant" fields, provided by the caller.
 	sendFn sendFunc
 	// spans is the list of Spans that will be read by this KV Fetcher. If an
@@ -225,7 +227,7 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 	}
 }
 
-func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) sendFunc {
+func makeTxnKVFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) sendFunc {
 	return func(
 		ctx context.Context,
 		ba *roachpb.BatchRequest,
@@ -239,7 +241,7 @@ func makeKVBatchFetcherDefaultSendFunc(txn *kv.Txn, batchRequestsIssued *int64) 
 	}
 }
 
-type kvBatchFetcherArgs struct {
+type newTxnKVFetcherArgs struct {
 	sendFn                     sendFunc
 	reverse                    bool
 	lockStrength               descpb.ScanLockingStrength
@@ -247,17 +249,18 @@ type kvBatchFetcherArgs struct {
 	lockTimeout                time.Duration
 	acc                        *mon.BoundAccount
 	forceProductionKVBatchSize bool
+	batchRequestsIssued        *int64
 	requestAdmissionHeader     roachpb.AdmissionHeader
 	responseAdmissionQ         *admission.WorkQueue
 }
 
-// newKVBatchFetcher initializes a KVBatchFetcher.
+// newTxnKVFetcherInternal initializes a txnKVFetcher.
 //
 // The passed-in memory account is owned by the fetcher throughout its lifetime
 // but is **not** closed - it is the caller's responsibility to close acc if it
 // is non-nil.
-func newKVBatchFetcher(args kvBatchFetcherArgs) *txnKVFetcher {
-	return &txnKVFetcher{
+func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
+	f := &txnKVFetcher{
 		sendFn:                     args.sendFn,
 		reverse:                    args.reverse,
 		lockStrength:               getKeyLockingStrength(args.lockStrength),
@@ -268,6 +271,8 @@ func newKVBatchFetcher(args kvBatchFetcherArgs) *txnKVFetcher {
 		requestAdmissionHeader:     args.requestAdmissionHeader,
 		responseAdmissionQ:         args.responseAdmissionQ,
 	}
+	f.kvBatchFetcherO11yHelper.init(f.nextBatch, args.batchRequestsIssued)
+	return f
 }
 
 // setTxnAndSendFn updates the txnKVFetcher with the new txn and sendFn. txn and
@@ -508,8 +513,7 @@ func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
 	return batch, remainingBatches
 }
 
-// nextBatch implements the KVBatchFetcher interface.
-func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherResponse, err error) {
+func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherResponse, err error) {
 	// The purpose of this loop is to unpack the two-level batch structure that is
 	// returned from the KV layer.
 	//
@@ -524,9 +528,9 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 		// list and return it.
 		var batchResp []byte
 		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
-		return kvBatchFetcherResponse{
-			moreKVs:       true,
-			batchResponse: batchResp,
+		return KVBatchFetcherResponse{
+			MoreKVs:       true,
+			BatchResponse: batchResp,
 			spanID:        f.curSpanID,
 		}, nil
 	}
@@ -545,7 +549,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 		// Check whether we need to resume scanning this span.
 		header := reply.Header()
 		if header.NumKeys > 0 && f.scratchSpans.Len() > 0 {
-			return kvBatchFetcherResponse{}, errors.Errorf(
+			return KVBatchFetcherResponse{}, errors.Errorf(
 				"span with results after resume span; it shouldn't happen given that "+
 					"we're only scanning non-overlapping spans. New spans: %s",
 				catalogkeys.PrettySpans(nil, f.spans.Spans, 0 /* skip */))
@@ -557,49 +561,49 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 			f.scratchSpans.push(*resumeSpan, f.curSpanID)
 		}
 
-		ret := kvBatchFetcherResponse{
-			moreKVs: true,
+		ret := KVBatchFetcherResponse{
+			MoreKVs: true,
 			spanID:  f.curSpanID,
 		}
 
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
 			if len(t.BatchResponses) > 0 {
-				ret.batchResponse, f.remainingBatches = popBatch(t.BatchResponses)
+				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
 			}
 			if len(t.Rows) > 0 {
-				return kvBatchFetcherResponse{}, errors.AssertionFailedf(
+				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
 					"unexpectedly got a ScanResponse using KEY_VALUES response format",
 				)
 			}
 			if len(t.IntentRows) > 0 {
-				return kvBatchFetcherResponse{}, errors.AssertionFailedf(
+				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
 					"unexpectedly got a ScanResponse with non-nil IntentRows",
 				)
 			}
-			// Note that ret.batchResponse might be nil when the ScanResponse is
+			// Note that ret.BatchResponse might be nil when the ScanResponse is
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
 		case *roachpb.ReverseScanResponse:
 			if len(t.BatchResponses) > 0 {
-				ret.batchResponse, f.remainingBatches = popBatch(t.BatchResponses)
+				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
 			}
 			if len(t.Rows) > 0 {
-				return kvBatchFetcherResponse{}, errors.AssertionFailedf(
+				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
 					"unexpectedly got a ScanResponse using KEY_VALUES response format",
 				)
 			}
 			if len(t.IntentRows) > 0 {
-				return kvBatchFetcherResponse{}, errors.AssertionFailedf(
+				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
 					"unexpectedly got a ScanResponse with non-nil IntentRows",
 				)
 			}
-			// Note that ret.batchResponse might be nil when the ScanResponse is
+			// Note that ret.BatchResponse might be nil when the ScanResponse is
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
 		case *roachpb.GetResponse:
 			if t.IntentValue != nil {
-				return kvBatchFetcherResponse{}, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
+				return KVBatchFetcherResponse{}, errors.AssertionFailedf("unexpectedly got an IntentValue back from a SQL GetRequest %v", *t.IntentValue)
 			}
 			if t.Value == nil {
 				// Nothing found in this particular response, let's continue to the next
@@ -607,7 +611,7 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 				continue
 			}
 			f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *t.Value}
-			ret.kvs = f.getResponseScratch[:]
+			ret.KVs = f.getResponseScratch[:]
 			return ret, nil
 		}
 	}
@@ -616,21 +620,21 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp kvBatchFetcherRespon
 		if f.scratchSpans.Len() == 0 {
 			// If we are out of keys, we can return and we're finished with the
 			// fetch.
-			return kvBatchFetcherResponse{moreKVs: false}, nil
+			return KVBatchFetcherResponse{MoreKVs: false}, nil
 		}
 		// We have some resume spans.
 		f.spans = f.scratchSpans
 		if f.acc != nil {
 			newSpansMemUsage := f.spans.MemUsage()
 			if err := f.acc.Resize(ctx, f.spansAccountedFor, newSpansMemUsage); err != nil {
-				return kvBatchFetcherResponse{}, err
+				return KVBatchFetcherResponse{}, err
 			}
 			f.spansAccountedFor = newSpansMemUsage
 		}
 	}
 	// We have more work to do. Ask the KV layer to continue where it left off.
 	if err := f.fetch(ctx); err != nil {
-		return kvBatchFetcherResponse{}, err
+		return KVBatchFetcherResponse{}, err
 	}
 	// We've got more data to process, recurse and process it.
 	return f.nextBatch(ctx)
@@ -650,8 +654,8 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 	f.batchResponseAccountedFor, f.spansAccountedFor = 0, 0
 }
 
-// close releases the resources of this txnKVFetcher.
-func (f *txnKVFetcher) close(ctx context.Context) {
+// Close releases the resources of this txnKVFetcher.
+func (f *txnKVFetcher) Close(ctx context.Context) {
 	f.reset(ctx)
 }
 
@@ -736,4 +740,53 @@ func spansToRequests(
 		}
 	}
 	return reqs
+}
+
+// kvBatchFetcherO11yHelper is a small helper that extracts common logic for
+// implementing some methods of the KVBatchFetcher interface related to
+// observability.
+type kvBatchFetcherO11yHelper struct {
+	nextBatch func(context.Context) (KVBatchFetcherResponse, error)
+	atomics   struct {
+		bytesRead           int64
+		batchRequestsIssued *int64
+	}
+}
+
+func (h *kvBatchFetcherO11yHelper) init(
+	nextBatch func(context.Context) (KVBatchFetcherResponse, error), batchRequestsIssued *int64,
+) {
+	h.nextBatch = nextBatch
+	h.atomics.batchRequestsIssued = batchRequestsIssued
+}
+
+// NextBatch implements the KVBatchFetcher interface.
+func (h *kvBatchFetcherO11yHelper) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
+	resp, err := h.nextBatch(ctx)
+	if !resp.MoreKVs || err != nil {
+		return resp, err
+	}
+	nBytes := len(resp.BatchResponse)
+	for i := range resp.KVs {
+		nBytes += len(resp.KVs[i].Key)
+		nBytes += len(resp.KVs[i].Value.RawBytes)
+	}
+	atomic.AddInt64(&h.atomics.bytesRead, int64(nBytes))
+	return resp, nil
+}
+
+// GetBytesRead implements the KVBatchFetcher interface.
+func (h *kvBatchFetcherO11yHelper) GetBytesRead() int64 {
+	if h == nil {
+		return 0
+	}
+	return atomic.LoadInt64(&h.atomics.bytesRead)
+}
+
+// GetBatchRequestsIssued implements the KVBatchFetcher interface.
+func (h *kvBatchFetcherO11yHelper) GetBatchRequestsIssued() int64 {
+	if h == nil || h.atomics.batchRequestsIssued == nil {
+		return 0
+	}
+	return atomic.LoadInt64(h.atomics.batchRequestsIssued)
 }
