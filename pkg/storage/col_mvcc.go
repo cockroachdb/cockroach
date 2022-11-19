@@ -68,7 +68,7 @@ type CFetcherWrapper interface {
 // on higher levels of the system.
 var GetCFetcherWrapper func(
 	ctx context.Context,
-	acc *mon.BoundAccount,
+	fetcherAccount, converterAccount *mon.BoundAccount,
 	indexFetchSpec *fetchpb.IndexFetchSpec,
 	nextKVer NextKVer,
 ) (CFetcherWrapper, error)
@@ -224,11 +224,14 @@ func mvccScanToCols(
 	)
 	unlimitedMonitor.Start(ctx, nil /* parent */, mon.NewStandaloneBudget(math.MaxInt64))
 	defer unlimitedMonitor.Stop(ctx)
-	acc := unlimitedMonitor.MakeBoundAccount()
-	defer acc.Close(ctx)
+	fetcherAcc := unlimitedMonitor.MakeBoundAccount()
+	defer fetcherAcc.Close(ctx)
+	converterAcc := unlimitedMonitor.MakeBoundAccount()
+	defer converterAcc.Close(ctx)
 	wrapper, err := GetCFetcherWrapper(
 		ctx,
-		&acc,
+		&fetcherAcc,
+		&converterAcc,
 		indexFetchSpec,
 		&adapter,
 	)

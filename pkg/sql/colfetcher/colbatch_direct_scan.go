@@ -16,34 +16,149 @@ import (
 	"github.com/apache/arrow/go/arrow/array"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
 type ColBatchDirectScan struct {
-	*ColBatchScan
+	*colBatchScan
 	fetcher row.KVBatchFetcher
-	spec    execinfrapb.TableReaderSpec
-	post    execinfrapb.PostProcessSpec
-	batch   coldata.Batch
-	data    []*array.Data
 
-	converter         *colserde.ArrowBatchConverter
-	deser             *colserde.RecordBatchSerializer
-	flowCtx           *execinfra.FlowCtx
-	kvFetcherMemAcc   *mon.BoundAccount
-	estimatedRowCount uint64
+	allocator   *colmem.Allocator
+	spec        *fetchpb.IndexFetchSpec
+	resultTypes []*types.T
+
+	// Only used when coldata.Batches are sent across the wire.
+	data      []array.Data
+	batch     coldata.Batch
+	converter *colserde.ArrowBatchConverter
+	deser     *colserde.RecordBatchSerializer
+}
+
+var _ ScanOperator = &ColBatchDirectScan{}
+
+func (s *ColBatchDirectScan) Init(ctx context.Context) {
+	if !s.InitHelper.Init(ctx) {
+		return
+	}
+	// If tracing is enabled, we need to start a child span so that the only
+	// contention events present in the recording would be because of this
+	// fetcher. Note that ProcessorSpan method itself will check whether tracing
+	// is enabled.
+	s.Ctx, s.tracingSpan = execinfra.ProcessorSpan(s.Ctx, "colbatchdirectscan")
+	var err error
+	s.deser, err = colserde.NewRecordBatchSerializer(s.resultTypes)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	s.converter, err = colserde.NewArrowBatchConverter(s.resultTypes, colserde.ArrowToBatchOnly, nil /* acc */)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	firstBatchLimit := cFetcherFirstBatchLimit(s.limitHint, s.spec.MaxKeysPerRow)
+	err = s.fetcher.SetupNextFetch(
+		ctx, s.Spans, nil /* spanIDs */, s.batchBytesLimit, firstBatchLimit,
+	)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+}
+
+func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
+	defer func() {
+		if ret != nil {
+			s.mu.Lock()
+			s.mu.rowsRead += int64(ret.Length())
+			s.mu.Unlock()
+		}
+	}()
+	var res row.KVBatchFetcherResponse
+	var err error
+	for {
+		res, err = s.fetcher.NextBatch(s.Ctx)
+		if err != nil {
+			colexecerror.InternalError(convertFetchError(s.spec, err))
+		}
+		if !res.MoreKVs {
+			return coldata.ZeroBatch
+		}
+		if res.KVs != nil {
+			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
+		}
+		// TODO: make sure that someone is accounting for the memory footprint of
+		// this batch.
+		if res.ColBatch != nil {
+			return res.ColBatch
+		}
+		if res.BatchResponse != nil {
+			break
+		}
+		// If both ColBatch and BatchResponse are nil, then it was an empty
+		// response for a ScanRequest, and we need to proceed further.
+	}
+	s.data = s.data[:0]
+	batchLength, err := s.deser.Deserialize(&s.data, res.BatchResponse)
+	if err != nil {
+		colexecerror.InternalError(err)
+	}
+	// We rely on the cFetcherWrapper to produce reasonably sized batches.
+	s.batch, _ = s.allocator.ResetMaybeReallocateNoMemLimit(s.resultTypes, s.batch, batchLength)
+	if err = s.converter.ArrowToBatch(s.data, batchLength, s.batch); err != nil {
+		colexecerror.InternalError(err)
+	}
+	return s.batch
+}
+
+// DrainMeta is part of the colexecop.MetadataSource interface.
+func (s *ColBatchDirectScan) DrainMeta() []execinfrapb.ProducerMetadata {
+	trailingMeta := s.colBatchScan.DrainMeta()
+	meta := execinfrapb.GetProducerMeta()
+	meta.Metrics = execinfrapb.GetMetricsMeta()
+	meta.Metrics.BytesRead = s.GetBytesRead()
+	meta.Metrics.RowsRead = s.GetRowsRead()
+	trailingMeta = append(trailingMeta, *meta)
+	return trailingMeta
+}
+
+// GetBytesRead is part of the colexecop.KVReader interface.
+func (s *ColBatchDirectScan) GetBytesRead() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fetcher.GetBytesRead()
+}
+
+// GetBatchRequestsIssued is part of the colexecop.KVReader interface.
+func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fetcher.GetBatchRequestsIssued()
+}
+
+// Release implements the execreleasable.Releasable interface.
+func (s *ColBatchDirectScan) Release() {
+	s.colBatchScan.Release()
+}
+
+// Close implements the colexecop.Closer interface.
+func (s *ColBatchDirectScan) Close(context.Context) error {
+	// Note that we're using the context of the ColBatchDirectScan rather than
+	// the argument of Close() because the ColBatchDirectScan derives its own
+	// tracing span.
+	ctx := s.EnsureCtx()
+	s.fetcher.Close(ctx)
+	return s.colBatchScan.Close(ctx)
 }
 
 // NewColBatchDirectScan creates a new ColBatchDirectScan operator.
+// TODO(yuzefovich): use estimated row count.
 func NewColBatchDirectScan(
 	ctx context.Context,
 	allocator *colmem.Allocator,
@@ -51,116 +166,32 @@ func NewColBatchDirectScan(
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
-	estimatedRowCount uint64,
 	typeResolver *descs.DistSQLTypeResolver,
-) (*ColBatchDirectScan, error) {
-	scan, err := NewColBatchScan(
-		ctx, allocator, kvFetcherMemAcc, flowCtx, spec, post, estimatedRowCount, typeResolver,
+) (*ColBatchDirectScan, []*types.T, error) {
+	scan, bsHeader, tableArgs, err := newColBatchScan(
+		ctx, kvFetcherMemAcc, flowCtx, spec, post, typeResolver,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	fetcher := row.NewDirectKVBatchFetcher(
+		flowCtx.Txn,
+		bsHeader,
+		&spec.FetchSpec,
+		spec.Reverse,
+		spec.LockingStrength,
+		spec.LockingWaitPolicy,
+		flowCtx.EvalCtx.SessionData().LockTimeout,
+		kvFetcherMemAcc,
+		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+	)
 
 	return &ColBatchDirectScan{
-		ColBatchScan:      scan,
-		data:              make([]*array.Data, len(scan.ResultTypes)),
-		spec:              *spec,
-		post:              *post,
-		estimatedRowCount: estimatedRowCount,
-		kvFetcherMemAcc:   kvFetcherMemAcc,
-		flowCtx:           flowCtx,
-	}, nil
-}
-
-func (c *ColBatchDirectScan) Init(ctx context.Context) {
-	c.ColBatchScan.Init(ctx)
-	scanSpec := &execinfrapb.ProcessorSpec{
-		Core: execinfrapb.ProcessorCoreUnion{
-			TableReader: &c.spec,
-		},
-		Post:              c.post,
-		EstimatedRowCount: c.estimatedRowCount,
-	}
-	/*
-		serializedSpec, err := types.MarshalAny(scanSpec)
-		if err != nil {
-			colexecerror.InternalError(err)
-		}
-	*/
-	var err error
-	c.deser, err = colserde.NewRecordBatchSerializer(c.ResultTypes)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-	c.converter, err = colserde.NewArrowBatchConverter(c.ResultTypes)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-	c.batch = coldata.NewMemBatch(c.ResultTypes, coldata.StandardColumnFactory)
-	// If we have a limit hint, we limit the first batch size. Subsequent
-	// batches get larger to avoid making things too slow (e.g. in case we have
-	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := rowinfra.KeyLimit(c.limitHint)
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up
-		// of more than one key. We take the maximum possible keys
-		// per row out of all the table rows we could potentially
-		// scan over.
-		firstBatchLimit = rowinfra.KeyLimit(int(c.limitHint) * int(c.spec.FetchSpec.MaxKeysPerRow))
-		// We need an extra key to make sure we form the last row.
-		firstBatchLimit++
-	}
-	c.fetcher, err = row.MakeKVBatchFetcher(
-		ctx,
-		row.KVBatchFetcherArgs{
-			SendFn:             row.MakeKVBatchFetcherDefaultSendFunc(c.flowCtx.Txn),
-			Spans:              c.Spans,
-			Reverse:            c.spec.Reverse,
-			BatchBytesLimit:    c.batchBytesLimit,
-			FirstBatchKeyLimit: firstBatchLimit,
-			Format:             roachpb.COL_BATCH_RESPONSE,
-			ColFormatArgs: row.ColFormatArgs{
-				Spec: scanSpec,
-				Post: c.post,
-			},
-			LockStrength:               c.spec.LockingStrength,
-			LockWaitPolicy:             c.spec.LockingWaitPolicy,
-			LockTimeout:                c.flowCtx.EvalCtx.SessionData().LockTimeout,
-			Acc:                        c.kvFetcherMemAcc,
-			ForceProductionKVBatchSize: c.flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
-			RequestAdmissionHeader:     c.flowCtx.Txn.AdmissionHeader(),
-			ResponseAdmissionQ:         c.flowCtx.Txn.DB().SQLKVResponseAdmissionQ,
-		},
-	)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-}
-
-func (c *ColBatchDirectScan) Next() coldata.Batch {
-	ok, res, err := c.fetcher.NextBatch(c.Ctx)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-	if !ok {
-		return coldata.ZeroBatch
-	}
-	if res.KVs != nil {
-		panic(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
-	}
-	if res.ColBatch != nil {
-		return res.ColBatch
-	}
-	if len(res.BatchResponse) == 0 {
-		return coldata.ZeroBatch
-	}
-	c.data = c.data[:0]
-	batchLength, err := c.deser.Deserialize(&c.data, res.BatchResponse)
-	if err != nil {
-		colexecerror.InternalError(err)
-	}
-	if err := c.converter.ArrowToBatch(c.data, batchLength, c.batch); err != nil {
-		colexecerror.InternalError(err)
-	}
-	return c.batch
+		colBatchScan: scan,
+		allocator:    allocator,
+		fetcher:      fetcher,
+		spec:         &spec.FetchSpec,
+		resultTypes:  tableArgs.typs,
+		data:         make([]array.Data, len(tableArgs.typs)),
+	}, tableArgs.typs, nil
 }

@@ -467,8 +467,38 @@ func (cf *cFetcher) Init(
 		cf.fetcher = kvFetcher
 	}
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs)
+	cf.machine.state[0] = stateResetBatch
+	cf.machine.state[1] = stateInitFetch
 
 	return nil
+}
+
+func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) rowinfra.KeyLimit {
+	// If we have a limit hint, we limit the first batch size. Subsequent
+	// batches get larger to avoid making things too slow (e.g. in case we have
+	// a very restrictive filter and actually have to retrieve a lot of rows).
+	firstBatchLimit := rowinfra.KeyLimit(limitHint)
+	if firstBatchLimit != 0 {
+		// The limitHint is a row limit, but each row could be made up of more
+		// than one key. We take the maximum possible keys per row out of all
+		// the table rows we could potentially scan over.
+		//
+		// Note that unlike for the row.Fetcher, we don't need an extra key to
+		// form the last row in the cFetcher because we are eagerly finalizing
+		// each row once we know that all KVs comprising that row have been
+		// fetched. Consider several cases:
+		// - the table has only one column family - then we can finalize each
+		//   row right after the first KV is decoded;
+		// - the table has multiple column families:
+		//   - KVs for all column families are present for all rows - then for
+		//     each row, when its last KV is fetched, the row can be finalized
+		//     (and firstBatchLimit asks exactly for the correct number of KVs);
+		//   - KVs for some column families are omitted for some rows - then we
+		//     will actually fetch more KVs than necessary, but we'll decode
+		//     limitHint number of rows.
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(maxKeysPerRow))
+	}
+	return firstBatchLimit
 }
 
 // StartScan initializes and starts the key-value scan. Can only be used
@@ -492,31 +522,7 @@ func (cf *cFetcher) StartScan(
 		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
-	// If we have a limit hint, we limit the first batch size. Subsequent
-	// batches get larger to avoid making things too slow (e.g. in case we have
-	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := rowinfra.KeyLimit(limitHint)
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up of more
-		// than one key. We take the maximum possible keys per row out of all
-		// the table rows we could potentially scan over.
-		//
-		// Note that unlike for the row.Fetcher, we don't need an extra key to
-		// form the last row in the cFetcher because we are eagerly finalizing
-		// each row once we know that all KVs comprising that row have been
-		// fetched. Consider several cases:
-		// - the table has only one column family - then we can finalize each
-		//   row right after the first KV is decoded;
-		// - the table has multiple column families:
-		//   - KVs for all column families are present for all rows - then for
-		//     each row, when its last KV is fetched, the row can be finalized
-		//     (and firstBatchLimit asks exactly for the correct number of KVs);
-		//   - KVs for some column families are omitted for some rows - then we
-		//     will actually fetch more KVs than necessary, but we'll decode
-		//     limitHint number of rows.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
-	}
-
+	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
 	cf.machine.lastRowPrefix = nil
 	cf.machine.limitHint = int(limitHint)
 	cf.machine.state[0] = stateResetBatch
@@ -638,7 +644,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				cf.machine.state[0] = stateEmitLastBatch
@@ -788,7 +794,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, needsCopy, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -1277,8 +1283,8 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(&cf.table.spec, err)
+func convertFetchError(indexFetchSpec *fetchpb.IndexFetchSpec, err error) error {
+	err = row.ConvertFetchError(indexFetchSpec, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }
