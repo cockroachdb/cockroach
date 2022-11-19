@@ -16,6 +16,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -157,8 +158,9 @@ type txnKVFetcher struct {
 	batchIdx       int
 	reqsScratch    []roachpb.RequestUnion
 
-	responses        []roachpb.ResponseUnion
-	remainingBatches [][]byte
+	responses           []roachpb.ResponseUnion
+	remainingBatchResps [][]byte
+	remainingColBatches []coldata.Batch
 
 	// getResponseScratch is reused to return the result of Get requests.
 	getResponseScratch [1]roachpb.KeyValue
@@ -266,6 +268,7 @@ type newTxnKVFetcherArgs struct {
 func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 	f := &txnKVFetcher{
 		sendFn:                     args.sendFn,
+		scanFormat:                 roachpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
 		lockStrength:               getKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
@@ -516,10 +519,25 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 // popBatch returns the 0th byte slice in a slice of byte slices, as well as
 // the rest of the slice of the byte slices. It nils the pointer to the 0th
 // element before reslicing the outer slice.
-func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
-	batch, remainingBatches = batches[0], batches[1:]
-	batches[0] = nil
-	return batch, remainingBatches
+// TODO: comment.
+func popBatch(
+	batchResps [][]byte, colBatches []coldata.Batch,
+) (
+	batchResp []byte,
+	colBatch coldata.Batch,
+	remainingBatchResps [][]byte,
+	remainingColBatches []coldata.Batch,
+) {
+	if len(batchResps) > 0 {
+		batchResp, remainingBatchResps = batchResps[0], batchResps[1:]
+		batchResps[0] = nil
+		return batchResp, nil, remainingBatchResps, nil
+	} else if len(colBatches) > 0 {
+		colBatch, remainingColBatches = colBatches[0], colBatches[1:]
+		colBatches[0] = nil
+		return nil, colBatch, nil, remainingColBatches
+	}
+	panic(errors.AssertionFailedf("invalid call to popBatch with both empty args"))
 }
 
 func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherResponse, err error) {
@@ -532,14 +550,16 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 	// each of which is a byte slice containing result data from KV. Since this
 	// function, by contract, returns just a single byte slice at a time, we store
 	// the inner list as state for the next invocation to pop from.
-	if len(f.remainingBatches) > 0 {
+	if len(f.remainingBatchResps) > 0 || len(f.remainingColBatches) > 0 {
 		// Are there remaining data batches? If so, just pop one off from the
 		// list and return it.
 		var batchResp []byte
-		batchResp, f.remainingBatches = popBatch(f.remainingBatches)
+		var colBatch coldata.Batch
+		batchResp, colBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(f.remainingBatchResps, f.remainingColBatches)
 		return KVBatchFetcherResponse{
 			MoreKVs:       true,
 			BatchResponse: batchResp,
+			ColBatch:      colBatch,
 			spanID:        f.curSpanID,
 		}, nil
 	}
@@ -577,8 +597,13 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			if len(t.BatchResponses) > 0 {
-				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
+			if len(t.BatchResponses) > 0 || len(t.ColBatches.ColBatches) > 0 {
+				// TODO: reuse this.
+				colBatches := make([]coldata.Batch, len(t.ColBatches.ColBatches))
+				for i := range t.ColBatches.ColBatches {
+					colBatches[i] = t.ColBatches.ColBatches[i].(coldata.Batch)
+				}
+				ret.BatchResponse, ret.ColBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(t.BatchResponses, colBatches)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
@@ -594,8 +619,9 @@ func (f *txnKVFetcher) nextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
 		case *roachpb.ReverseScanResponse:
+			// TODO
 			if len(t.BatchResponses) > 0 {
-				ret.BatchResponse, f.remainingBatches = popBatch(t.BatchResponses)
+				ret.BatchResponse, _, f.remainingBatchResps, _ = popBatch(t.BatchResponses, nil)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
@@ -653,7 +679,7 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 	f.alreadyFetched = false
 	f.batchIdx = 0
 	f.responses = nil
-	f.remainingBatches = nil
+	f.remainingBatchResps = nil
 	f.spans = identifiableSpans{}
 	f.scratchSpans = identifiableSpans{}
 	// Release only the allocations made by this fetcher. Note that we're still
