@@ -86,6 +86,61 @@ type results interface {
 	lastRowHasFinalColumnFamily(reverse bool) bool
 }
 
+type singleResults struct {
+	count, bytes int64
+	key          []byte
+	value        []byte
+}
+
+var _ results = &singleResults{}
+
+func (s *singleResults) continuesFirstRow(key roachpb.Key) bool {
+	panic("implement me")
+}
+
+func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error) {
+	panic("implement me")
+}
+
+func (s *singleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
+	panic("implement me")
+}
+
+func (s *singleResults) clear() {
+	*s = singleResults{}
+}
+
+func (s *singleResults) put(
+	_ context.Context, key []byte, value []byte, _ *mon.BoundAccount, _ int,
+) error {
+	s.count++
+	s.bytes += int64(len(key) + len(value))
+	/*
+		s.key = append([]byte{}, key...)
+		s.value = append([]byte{}, value...)
+	*/
+	s.key = key
+	s.value = value
+	return nil
+}
+
+func (s *singleResults) getNumKeys() int64 {
+	return s.count
+}
+
+// TODO(yuzefovich): consider using the footprint of coldata.Batches so far (or
+// of serialized representations) for TargetBytes computation.
+func (s *singleResults) getNumBytes() int64 {
+	return s.bytes
+}
+
+func (s *singleResults) getLastKV() roachpb.KeyValue {
+	return roachpb.KeyValue{
+		Key:   s.key,
+		Value: roachpb.Value{RawBytes: s.value},
+	}
+}
+
 // Struct to store MVCCScan / MVCCGet in the same binary format as that
 // expected by MVCCScanDecodeKeyValue.
 type pebbleResults struct {
@@ -535,6 +590,23 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 	}
 }
 
+func (p *pebbleMVCCScanner) seekToStartOfScan() (ok bool) {
+	if p.reverse {
+		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
+			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
+			return false
+		}
+		p.machine.fn = advanceKeyReverse
+	} else {
+		if !p.iterSeek(MVCCKey{Key: p.start}) {
+			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
+			return false
+		}
+		p.machine.fn = advanceKeyForward
+	}
+	return true
+}
+
 // advance advances the iterator according to the current state of the state
 // machine.
 func (p *pebbleMVCCScanner) advance() bool {
@@ -572,27 +644,19 @@ func (p *pebbleMVCCScanner) scan(
 	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
-
-	if p.reverse {
-		if !p.iterSeekReverse(MVCCKey{Key: p.end}) {
-			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
-			return nil, 0, 0, p.err
-		}
-		p.machine.fn = advanceKeyReverse
-	} else {
-		if !p.iterSeek(MVCCKey{Key: p.start}) {
-			p.maybeFailOnMoreRecent() // may have seen a conflicting range key
-			return nil, 0, 0, p.err
-		}
-		p.machine.fn = advanceKeyForward
+	if !p.seekToStartOfScan() {
+		return nil, 0, 0, p.err
 	}
-
 	for ok := true; ok; {
 		ok, _ = p.getOne(ctx)
 		if ok {
 			ok = p.advance()
 		}
 	}
+	return p.afterScan()
+}
+
+func (p *pebbleMVCCScanner) afterScan() (*roachpb.Span, roachpb.ResumeReason, int64, error) {
 	p.maybeFailOnMoreRecent()
 
 	if p.err != nil {
