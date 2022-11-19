@@ -100,6 +100,7 @@ func newCFetcherWrapper(
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
+		true,  /* allocateFreshBatches */
 	}
 
 	// We don't need to provide the eval context here since we will only decode
