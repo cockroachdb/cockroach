@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -25,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 const externalConnectionOp = "CREATE EXTERNAL CONNECTION"
@@ -97,6 +100,10 @@ func (p *planner) createExternalConnection(
 	// newly created External Connection with the appropriate privileges. We will
 	// grant root/admin, and the user that created the object ALL privileges.
 
+	if err = logAndSanitizeExternalConnectionURI(params.ctx, ec.endpoint); err != nil {
+		return errors.Wrap(err, "failed to log and sanitize External Connection")
+	}
+
 	// Construct the ConnectionDetails for the external resource represented by
 	// the External Connection.
 	exConn, err := externalconn.ExternalConnectionFromURI(
@@ -127,6 +134,15 @@ func (p *planner) createExternalConnection(
 		}
 		return nil
 	})
+}
+
+func logAndSanitizeExternalConnectionURI(ctx context.Context, externalConnectionURI string) error {
+	clean, err := cloud.SanitizeExternalStorageURI(externalConnectionURI, nil)
+	if err != nil {
+		return err
+	}
+	log.Ops.Infof(ctx, "external connection planning on connecting to destination %v", redact.Safe(clean))
+	return nil
 }
 
 func (c *createExternalConectionNode) Next(_ runParams) (bool, error) { return false, nil }
