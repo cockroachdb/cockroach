@@ -96,7 +96,7 @@ func TestGetLicenseTypePresent(t *testing.T) {
 		if err := setLicense(ctx, updater, lic); err != nil {
 			t.Fatal(err)
 		}
-		actual, err := getLicenseType(st)
+		actual, err := GetLicenseType(st)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -108,7 +108,7 @@ func TestGetLicenseTypePresent(t *testing.T) {
 
 func TestGetLicenseTypeAbsent(t *testing.T) {
 	expected := "None"
-	actual, err := getLicenseType(cluster.MakeTestingClusterSettings())
+	actual, err := GetLicenseType(cluster.MakeTestingClusterSettings())
 	if err != nil {
 		t.Fatal(err)
 	}

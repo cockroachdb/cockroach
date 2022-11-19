@@ -15,9 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -149,13 +147,6 @@ func IsEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, feature string
 		st, timeutil.Now(), cluster, feature, false /* withDetails */) == nil
 }
 
-func init() {
-	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
-	base.LicenseType = getLicenseType
-	base.UpdateMetricOnLicenseChange = UpdateMetricOnLicenseChange
-	server.ApplyTenantLicense = ApplyTenantLicense
-}
-
 var licenseMetricUpdateFrequency = 1 * time.Minute
 
 // UpdateMetricOnLicenseChange starts a task to periodically update
@@ -262,7 +253,7 @@ func getLicense(st *cluster.Settings) (*licenseccl.License, error) {
 	return license, nil
 }
 
-func getLicenseType(st *cluster.Settings) (string, error) {
+func GetLicenseType(st *cluster.Settings) (string, error) {
 	license, err := getLicense(st)
 	if err != nil {
 		return "", err
