@@ -25,6 +25,7 @@ import (
 
 // txnKVStreamer handles retrieval of key/values.
 type txnKVStreamer struct {
+	kvBatchFetcherO11yHelper
 	streamer   *kvstreamer.Streamer
 	keyLocking lock.Strength
 
@@ -49,13 +50,18 @@ var _ KVBatchFetcher = &txnKVStreamer{}
 
 // newTxnKVStreamer creates a new txnKVStreamer.
 func newTxnKVStreamer(
-	streamer *kvstreamer.Streamer, lockStrength descpb.ScanLockingStrength, acc *mon.BoundAccount,
+	streamer *kvstreamer.Streamer,
+	lockStrength descpb.ScanLockingStrength,
+	acc *mon.BoundAccount,
+	batchRequestsIssued *int64,
 ) KVBatchFetcher {
-	return &txnKVStreamer{
+	f := &txnKVStreamer{
 		streamer:   streamer,
 		keyLocking: getKeyLockingStrength(lockStrength),
 		acc:        acc,
 	}
+	f.kvBatchFetcherO11yHelper.init(f.nextBatch, batchRequestsIssued)
+	return f
 }
 
 // SetupNextFetch implements the KVBatchFetcher interface.
@@ -113,10 +119,10 @@ func (f *txnKVStreamer) getSpanID(resultPosition int) int {
 // GetResponses).
 func (f *txnKVStreamer) proceedWithLastResult(
 	ctx context.Context,
-) (skip bool, _ kvBatchFetcherResponse, _ error) {
+) (skip bool, _ KVBatchFetcherResponse, _ error) {
 	result := f.lastResultState.Result
-	ret := kvBatchFetcherResponse{
-		moreKVs: true,
+	ret := KVBatchFetcherResponse{
+		MoreKVs: true,
 		spanID:  f.getSpanID(result.Position),
 	}
 	if get := result.GetResp; get != nil {
@@ -125,21 +131,21 @@ func (f *txnKVStreamer) proceedWithLastResult(
 		if get.Value == nil {
 			// Nothing found in this particular response, so we skip it.
 			f.releaseLastResult(ctx)
-			return true, kvBatchFetcherResponse{}, nil
+			return true, KVBatchFetcherResponse{}, nil
 		}
 		origSpan := f.spans[result.Position]
 		f.getResponseScratch[0] = roachpb.KeyValue{Key: origSpan.Key, Value: *get.Value}
-		ret.kvs = f.getResponseScratch[:]
+		ret.KVs = f.getResponseScratch[:]
 		return false, ret, nil
 	}
 	scan := result.ScanResp
 	if len(scan.BatchResponses) > 0 {
-		ret.batchResponse, f.lastResultState.remainingBatches = scan.BatchResponses[0], scan.BatchResponses[1:]
+		ret.BatchResponse, f.lastResultState.remainingBatches = scan.BatchResponses[0], scan.BatchResponses[1:]
 	}
 	// We're consciously ignoring scan.Rows argument since the Streamer
 	// guarantees to always produce Scan responses using BATCH_RESPONSE format.
 	//
-	// Note that ret.batchResponse might be nil when the ScanResponse is empty,
+	// Note that ret.BatchResponse might be nil when the ScanResponse is empty,
 	// and the caller (the KVFetcher) will skip over it.
 	return false, ret, nil
 }
@@ -149,15 +155,14 @@ func (f *txnKVStreamer) releaseLastResult(ctx context.Context) {
 	f.lastResultState.Result = kvstreamer.Result{}
 }
 
-// nextBatch implements the KVBatchFetcher interface.
-func (f *txnKVStreamer) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
+func (f *txnKVStreamer) nextBatch(ctx context.Context) (resp KVBatchFetcherResponse, _ error) {
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
-		ret := kvBatchFetcherResponse{
-			moreKVs: true,
+		ret := KVBatchFetcherResponse{
+			MoreKVs: true,
 			spanID:  f.getSpanID(f.lastResultState.Result.Position),
 		}
-		ret.batchResponse, f.lastResultState.remainingBatches = f.lastResultState.remainingBatches[0], f.lastResultState.remainingBatches[1:]
+		ret.BatchResponse, f.lastResultState.remainingBatches = f.lastResultState.remainingBatches[0], f.lastResultState.remainingBatches[1:]
 		return ret, nil
 	}
 
@@ -188,7 +193,7 @@ func (f *txnKVStreamer) nextBatch(ctx context.Context) (kvBatchFetcherResponse, 
 	var err error
 	f.results, err = f.streamer.GetResults(ctx)
 	if len(f.results) == 0 || err != nil {
-		return kvBatchFetcherResponse{moreKVs: false}, err
+		return KVBatchFetcherResponse{MoreKVs: false}, err
 	}
 	return f.nextBatch(ctx)
 }
@@ -201,8 +206,8 @@ func (f *txnKVStreamer) reset(ctx context.Context) {
 	}
 }
 
-// close releases the resources of this txnKVStreamer.
-func (f *txnKVStreamer) close(ctx context.Context) {
+// Close releases the resources of this txnKVStreamer.
+func (f *txnKVStreamer) Close(ctx context.Context) {
 	f.reset(ctx)
 	f.streamer.Close(ctx)
 	*f = txnKVStreamer{}

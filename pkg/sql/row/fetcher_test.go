@@ -711,6 +711,9 @@ func TestRowFetcherReset(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+	// We need to nil out the kvFetchers since these are stored as pointers.
+	fetcher.kvFetcher = nil
+	resetFetcher.kvFetcher = nil
 
 	if !reflect.DeepEqual(resetFetcher, fetcher) {
 		t.Fatal("unequal before and after reset", resetFetcher, fetcher)
