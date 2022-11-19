@@ -7,6 +7,7 @@ go_library(
     srcs = [
         "cfetcher.go",
         "cfetcher_setup.go",
+        "cfetcher_wrapper.go",
         "colbatch_direct_scan.go",
         "colbatch_scan.go",
         "index_join.go",
@@ -16,6 +17,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/col/coldata",
+        "//pkg/col/coldataext",
         "//pkg/col/colserde",
         "//pkg/col/typeconv",
         "//pkg/keys",

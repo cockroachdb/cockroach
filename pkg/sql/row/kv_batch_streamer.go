@@ -89,7 +89,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	for i := len(spans); i < len(reqsScratch); i++ {
 		reqsScratch[i] = roachpb.RequestUnion{}
 	}
-	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, reqsScratch)
+	reqs := spansToRequests(spans, roachpb.BATCH_RESPONSE, false /* reverse */, f.keyLocking, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func (f *txnKVStreamer) releaseLastResult(ctx context.Context) {
 	f.lastResultState.Result = kvstreamer.Result{}
 }
 
-// nextBatch implements the KVBatchFetcher interface.
+// NextBatch implements the KVBatchFetcher interface.
 func (f *txnKVStreamer) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
@@ -201,7 +201,7 @@ func (f *txnKVStreamer) reset(ctx context.Context) {
 	}
 }
 
-// close releases the resources of this txnKVStreamer.
+// Close releases the resources of this txnKVStreamer.
 func (f *txnKVStreamer) Close(ctx context.Context) {
 	f.reset(ctx)
 	f.streamer.Close(ctx)

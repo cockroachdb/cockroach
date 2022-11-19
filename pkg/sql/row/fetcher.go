@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"strings"
 	"time"
 
@@ -73,6 +74,7 @@ type KVBatchFetcherResponse struct {
 	// corresponding ScanRequest, and the caller is expected to skip over the
 	// response.
 	BatchResponse []byte
+	ColBatch      coldata.Batch
 	// spanID is the ID associated with the span that generated this response.
 	spanID int
 }
@@ -394,7 +396,7 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 			fetcherArgs.requestAdmissionHeader = args.Txn.AdmissionHeader()
 			fetcherArgs.responseAdmissionQ = args.Txn.DB().SQLKVResponseAdmissionQ
 		}
-		rf.kvFetcher = newKVFetcher(newKVBatchFetcher(fetcherArgs), &batchRequestsIssued)
+		rf.kvFetcher = newKVFetcher(newTxnKVFetcher(fetcherArgs), &batchRequestsIssued)
 	}
 
 	return nil

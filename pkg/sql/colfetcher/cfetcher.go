@@ -468,27 +468,7 @@ func (cf *cFetcher) Init(
 	return nil
 }
 
-// StartScan initializes and starts the key-value scan. Can only be used
-// multiple times if cFetcherArgs.singleUse was set to false in Init().
-//
-// The fetcher takes ownership of the spans slice - it can modify the slice and
-// will perform the memory accounting accordingly. The caller can only reuse the
-// spans slice after the fetcher emits a zero-length batch, and if the caller
-// does, it becomes responsible for the memory accounting.
-func (cf *cFetcher) StartScan(
-	ctx context.Context,
-	spans roachpb.Spans,
-	limitBatches bool,
-	batchBytesLimit rowinfra.BytesLimit,
-	limitHint rowinfra.RowLimit,
-) error {
-	if len(spans) == 0 {
-		return errors.AssertionFailedf("no spans")
-	}
-	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
-		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
-	}
-
+func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) rowinfra.KeyLimit {
 	// If we have a limit hint, we limit the first batch size. Subsequent
 	// batches get larger to avoid making things too slow (e.g. in case we have
 	// a very restrictive filter and actually have to retrieve a lot of rows).
@@ -511,9 +491,33 @@ func (cf *cFetcher) StartScan(
 		//   - KVs for some column families are omitted for some rows - then we
 		//     will actually fetch more KVs than necessary, but we'll decode
 		//     limitHint number of rows.
-		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(cf.table.spec.MaxKeysPerRow))
+		firstBatchLimit = rowinfra.KeyLimit(int(limitHint) * int(maxKeysPerRow))
+	}
+	return firstBatchLimit
+}
+
+// StartScan initializes and starts the key-value scan. Can only be used
+// multiple times if cFetcherArgs.singleUse was set to false in Init().
+//
+// The fetcher takes ownership of the spans slice - it can modify the slice and
+// will perform the memory accounting accordingly. The caller can only reuse the
+// spans slice after the fetcher emits a zero-length batch, and if the caller
+// does, it becomes responsible for the memory accounting.
+func (cf *cFetcher) StartScan(
+	ctx context.Context,
+	spans roachpb.Spans,
+	limitBatches bool,
+	batchBytesLimit rowinfra.BytesLimit,
+	limitHint rowinfra.RowLimit,
+) error {
+	if len(spans) == 0 {
+		return errors.AssertionFailedf("no spans")
+	}
+	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
+		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
 	}
 
+	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
 	cf.machine.lastRowPrefix = nil
 	cf.machine.limitHint = int(limitHint)
 	cf.machine.state[0] = stateResetBatch
@@ -635,7 +639,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInitFetch:
 			moreKVs, kv, finalReferenceToBatch, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				cf.machine.state[0] = stateEmitLastBatch
@@ -785,7 +789,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateFetchNextKVWithUnfinishedRow:
 			moreKVs, kv, finalReferenceToBatch, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
-				return nil, cf.convertFetchError(ctx, err)
+				return nil, convertFetchError(&cf.table.spec, err)
 			}
 			if !moreKVs {
 				// No more data. Finalize the row and exit.
@@ -1274,8 +1278,8 @@ func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
 // storage error that will propagate through the exec subsystem unchanged. The
 // error may also undergo a mapping to make it more user friendly for SQL
 // consumers.
-func (cf *cFetcher) convertFetchError(ctx context.Context, err error) error {
-	err = row.ConvertFetchError(&cf.table.spec, err)
+func convertFetchError(indexFetchSpec *descpb.IndexFetchSpec, err error) error {
+	err = row.ConvertFetchError(indexFetchSpec, err)
 	err = colexecerror.NewStorageError(err)
 	return err
 }

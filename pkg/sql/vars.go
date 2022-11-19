@@ -1783,6 +1783,24 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: globalFalse,
 	},
 
+	`plan_direct_scan`: {
+		GetStringVal: makePostgresBoolGetStringValFn(`plan_direct_scan`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar(`plan_direct_scan`, s)
+			if err != nil {
+				return err
+			}
+			m.SetPlanDirectScan(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().PlanDirectScan), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(false)
+		},
+	},
+
 	`propagate_input_ordering`: {
 		GetStringVal: makePostgresBoolGetStringValFn(`propagate_input_ordering`),
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
