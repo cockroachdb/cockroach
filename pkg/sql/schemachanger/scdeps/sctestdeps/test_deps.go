@@ -133,6 +133,11 @@ func (s *TestState) IncrementDropOwnedByCounter() {
 	s.LogSideEffectf("increment telemetry for sql.drop_owned_by")
 }
 
+// IncrementSchemaChangeIndexCounter implements the scbuild.Dependencies interface.
+func (s *TestState) IncrementSchemaChangeIndexCounter(counterType string) {
+	s.LogSideEffectf("increment telemetry for sql.schema.%s_index", counterType)
+}
+
 var _ scbuild.AuthorizationAccessor = (*TestState)(nil)
 
 // CheckPrivilege implements the scbuild.AuthorizationAccessor interface.

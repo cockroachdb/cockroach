@@ -397,6 +397,11 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 	telemetry.Inc(sqltelemetry.CreateDropOwnedByCounter())
 }
 
+// IncrementSchemaChangeIndexCounter implements the scbuild.Dependencies interface.
+func (d *buildDeps) IncrementSchemaChangeIndexCounter(counterType string) {
+	telemetry.Inc(sqltelemetry.SchemaChangeIndexCounter(counterType))
+}
+
 func (d *buildDeps) DescriptorCommentCache() scbuild.CommentCache {
 	return descmetadata.NewCommentCache(d.txn, d.internalExecutor)
 }
