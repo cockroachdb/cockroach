@@ -95,7 +95,7 @@ func (f *txnKVStreamer) SetupNextFetch(
 	for i := len(spans); i < len(reqsScratch); i++ {
 		reqsScratch[i] = roachpb.RequestUnion{}
 	}
-	reqs := spansToRequests(spans, false /* reverse */, f.keyLocking, reqsScratch)
+	reqs := spansToRequests(spans, roachpb.BATCH_RESPONSE, false /* reverse */, f.keyLocking, reqsScratch)
 	if err := f.streamer.Enqueue(ctx, reqs); err != nil {
 		return err
 	}
