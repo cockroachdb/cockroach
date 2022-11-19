@@ -99,6 +99,7 @@ func newCFetcherWrapper(
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
+		true,  /* allocateFreshBatches */
 	}
 
 	// TODO: column factory.
