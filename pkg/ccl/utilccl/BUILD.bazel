@@ -10,9 +10,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/utilccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/base",
         "//pkg/ccl/utilccl/licenseccl",
-        "//pkg/server",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql",
