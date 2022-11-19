@@ -91,23 +91,21 @@ func (f *mvccScanFetchAdapter) NextKV(
 	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
 ) (ok bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
 	if f.needToAdvanceBeforeGet {
-		if !f.scanner.advanceKey() {
+		if !f.scanner.advance() {
 			// No more keys in the scan.
 			return false, roachpb.KeyValue{}, false, nil
 		}
 	}
-	// Set the scanner to "get" mode, which prevents it from advancing after it's
-	// finished retrieving the current key. This way, we have a chance to copy
-	// the current key into our columnar batch before the scanner advances.
-	f.scanner.isGet = true
-	if !f.scanner.getAndAdvance(ctx) && f.scanner.resumeReason != roachpb.RESUME_UNKNOWN {
-		// We hit our scan limit of some sort.
-		return false, roachpb.KeyValue{}, false, nil
-	}
-	f.scanner.isGet = false
 	// Make sure we will advance the iterator before getting a key next time
 	// NextKV is called.
 	f.needToAdvanceBeforeGet = true
+	ok, added := f.scanner.getOne(ctx)
+	if !ok {
+		return false, roachpb.KeyValue{}, false, nil
+	}
+	if !added {
+		return f.NextKV(ctx, mvccDecodeStrategy)
+	}
 	lastKV := f.results.getLastKV()
 
 	enc := lastKV.Key
@@ -127,7 +125,9 @@ func (f *mvccScanFetchAdapter) NextKV(
 			return false, lastKV, false, errors.AssertionFailedf("invalid encoded mvcc key: %x", enc)
 		}
 	}
-	return true, lastKV, false, nil
+	// TODO: think through for how we need to handle the copying with multiple
+	// column families (here or in the cFetcher).
+	return true, lastKV, true, nil
 }
 
 // MVCCScanToCols is like MVCCScan, but it returns KVData in a serialized
@@ -236,8 +236,8 @@ func mvccScanToCols(
 
 	var res MVCCScanResult
 
-	if err := mvccScanner.seekToStartOfScan(); err != nil {
-		return res, err
+	if !mvccScanner.seekToStartOfScan() {
+		return res, mvccScanner.err
 	}
 
 	if grpcutil.IsLocalRequestContext(ctx) {
@@ -263,41 +263,21 @@ func mvccScanToCols(
 			if batch == nil {
 				break
 			}
-			res.KVData = append(res.KVData, batch)
+			// We need to make a copy since the wrapper reuses underlying bytes
+			// buffer.
+			b := make([]byte, len(batch))
+			copy(b, batch)
+			res.KVData = append(res.KVData, b)
 		}
 	}
 
-	mvccScanner.maybeFailOnMoreRecent()
-
-	var resume *roachpb.Span
-	if mvccScanner.advanceKey() {
-		if mvccScanner.reverse {
-			// curKey was not added to results, so it needs to be included in the
-			// resume span.
-			//
-			// NB: this is equivalent to:
-			//  append(roachpb.Key(nil), p.curKey.Key...).Next()
-			// but with half the allocations.
-			curKey := mvccScanner.curUnsafeKey.Key
-			curKeyCopy := make(roachpb.Key, len(curKey), len(curKey)+1)
-			copy(curKeyCopy, curKey)
-			resume = &roachpb.Span{
-				Key:    mvccScanner.start,
-				EndKey: curKeyCopy.Next(),
-			}
-		} else {
-			resume = &roachpb.Span{
-				Key:    append(roachpb.Key(nil), mvccScanner.curUnsafeKey.Key...),
-				EndKey: mvccScanner.end,
-			}
-		}
+	res.ResumeSpan, res.ResumeReason, res.ResumeNextBytes, err = mvccScanner.afterScan()
+	if err != nil {
+		return MVCCScanResult{}, err
 	}
 
-	res.ResumeSpan = resume
-	res.ResumeReason = mvccScanner.resumeReason
-	res.ResumeNextBytes = mvccScanner.resumeNextBytes
-	//res.NumKeys = mvccScanner.results.count
-	//res.NumBytes = mvccScanner.results.bytes
+	res.NumKeys = mvccScanner.results.getCount()
+	res.NumBytes = mvccScanner.results.getBytes()
 
 	// If we have a trace, emit the scan stats that we produced.
 	recordIteratorStats(ctx, mvccScanner.parent)

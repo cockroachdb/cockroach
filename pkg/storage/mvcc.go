@@ -1089,11 +1089,11 @@ func mvccGetWithValueHeader(
 		intent = &intents[0]
 	}
 
-	if len(mvccScanner.results.repr) == 0 {
+	if mvccScanner.results.getCount() == 0 {
 		return optionalValue{}, intent, enginepb.MVCCValueHeader{}, nil
 	}
 
-	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.repr)
+	mvccKey, rawValue, _, err := MVCCScanDecodeKeyValue(mvccScanner.results.(*pebbleResults).repr)
 	if err != nil {
 		return optionalValue{}, nil, enginepb.MVCCValueHeader{}, err
 	}
@@ -3625,8 +3625,8 @@ func mvccScanToBytes(
 	}
 
 	res.KVData = mvccScanner.results.finish()
-	res.NumKeys = mvccScanner.results.count
-	res.NumBytes = mvccScanner.results.bytes
+	res.NumKeys = mvccScanner.results.getCount()
+	res.NumBytes = mvccScanner.results.getBytes()
 
 	// If we have a trace, emit the scan stats that we produced.
 	recordIteratorStats(ctx, mvccScanner.parent)
