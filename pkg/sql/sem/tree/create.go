@@ -2188,3 +2188,31 @@ func (node *CreateTenant) Format(ctx *FmtCtx) {
 	ctx.WriteString("CREATE TENANT ")
 	ctx.FormatNode(&node.Name)
 }
+
+// CreateTenantFromReplication represents a CREATE TENANT...FROM REPLICATION
+// statement.
+type CreateTenantFromReplication struct {
+	Name Name
+
+	// ReplicationSourceTenantName is the name of the tenant that we are
+	// replicating into the newly created tenant.
+	ReplicationSourceTenantName Name
+	// ReplicationSourceAddress is the address of the source cluster that we are
+	// replicating data from.
+	ReplicationSourceAddress Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CreateTenantFromReplication) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE TENANT ")
+	// NB: we do not anonymize the tenant name because we assume that tenant names
+	// do not contain sensitive information.
+	ctx.FormatNode(&node.Name)
+
+	if node.ReplicationSourceAddress != nil {
+		ctx.WriteString(" FROM REPLICATION OF ")
+		ctx.FormatNode(&node.ReplicationSourceTenantName)
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(node.ReplicationSourceAddress)
+	}
+}

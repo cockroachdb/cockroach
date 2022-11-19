@@ -70,32 +70,44 @@ func rejectIfSystemTenant(tenID uint64, op string) error {
 // CreateTenantRecord creates a tenant in system.tenants and installs an initial
 // span config (in system.span_configurations) for it. It also initializes the
 // usage data in system.tenant_usage if info.Usage is set.
+//
+// If the passed in `info` has the `TenantID` field unset (= 0),
+// CreateTenantRecord will assign the tenant the next available ID after
+// consulting the system.tenants table.
 func CreateTenantRecord(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	txn *kv.Txn,
 	info *descpb.TenantInfoWithUsage,
 	initialTenantZoneConfig *zonepb.ZoneConfig,
-) error {
+) (roachpb.TenantID, error) {
 	const op = "create"
 	if err := rejectIfCantCoordinateMultiTenancy(execCfg.Codec, op); err != nil {
-		return err
+		return roachpb.TenantID{}, err
 	}
 	if err := rejectIfSystemTenant(info.ID, op); err != nil {
-		return err
+		return roachpb.TenantID{}, err
 	}
 
 	tenID := info.ID
+	if tenID == 0 {
+		tenantID, err := getAvailableTenantID(ctx, info.Name, execCfg, txn)
+		if err != nil {
+			return roachpb.TenantID{}, err
+		}
+		tenID = tenantID.ToUint64()
+		info.ID = tenID
+	}
 	active := info.State == descpb.TenantInfo_ACTIVE
 	infoBytes, err := protoutil.Marshal(&info.TenantInfo)
 	if err != nil {
-		return err
+		return roachpb.TenantID{}, err
 	}
 
 	// Insert into the tenant table and detect collisions.
 	if info.Name != "" {
 		if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V23_1TenantNames) {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
+			return roachpb.TenantID{}, pgerror.Newf(pgcode.FeatureNotSupported, "cannot use tenant names")
 		}
 	}
 	if num, err := execCfg.InternalExecutor.ExecEx(
@@ -108,9 +120,9 @@ func CreateTenantRecord(
 			if info.Name != "" {
 				extra = redact.Sprintf(" with name %q", info.Name)
 			}
-			return pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\"%s already exists", tenID, extra)
+			return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\"%s already exists", tenID, extra)
 		}
-		return errors.Wrap(err, "inserting new tenant")
+		return roachpb.TenantID{}, errors.Wrap(err, "inserting new tenant")
 	} else if num != 1 {
 		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 	}
@@ -118,7 +130,7 @@ func CreateTenantRecord(
 	if u := info.Usage; u != nil {
 		consumption, err := protoutil.Marshal(&u.Consumption)
 		if err != nil {
-			return errors.Wrap(err, "marshaling tenant usage data")
+			return roachpb.TenantID{}, errors.Wrap(err, "marshaling tenant usage data")
 		}
 		if num, err := execCfg.InternalExecutor.ExecEx(
 			ctx, "create-tenant-usage", txn, sessiondata.NodeUserSessionDataOverride,
@@ -135,9 +147,9 @@ func CreateTenantRecord(
 			tree.NewDBytes(tree.DBytes(consumption)),
 		); err != nil {
 			if pgerror.GetPGCode(err) == pgcode.UniqueViolation {
-				return pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already has usage data", tenID)
+				return roachpb.TenantID{}, pgerror.Newf(pgcode.DuplicateObject, "tenant \"%d\" already has usage data", tenID)
 			}
-			return errors.Wrap(err, "inserting tenant usage data")
+			return roachpb.TenantID{}, errors.Wrap(err, "inserting tenant usage data")
 		} else if num != 1 {
 			log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
 		}
@@ -176,11 +188,11 @@ func CreateTenantRecord(
 		EndKey: tenantPrefix.Next(),
 	}), tenantSpanConfig)
 	if err != nil {
-		return err
+		return roachpb.TenantID{}, err
 	}
 	toUpsert := []spanconfig.Record{record}
 	scKVAccessor := execCfg.SpanConfigKVAccessor.WithTxn(ctx, txn)
-	return scKVAccessor.UpdateSpanConfigRecords(
+	return roachpb.MustMakeTenantID(tenID), scKVAccessor.UpdateSpanConfigRecords(
 		ctx, nil, toUpsert, hlc.MinTimestamp, hlc.MaxTimestamp,
 	)
 }
@@ -257,18 +269,17 @@ func updateTenantRecord(
 	return nil
 }
 
-// CreateTenant implements the tree.TenantOperator interface.
-func (p *planner) CreateTenant(
-	ctx context.Context, tenantName roachpb.TenantName,
+// getAvailableTenantID returns the first available ID that can be assigned to
+// the created tenant. Note, this ID could have previously belonged to another
+// tenant that has since been dropped and gc'ed.
+func getAvailableTenantID(
+	ctx context.Context, tenantName roachpb.TenantName, execCfg *ExecutorConfig, txn *kv.Txn,
 ) (roachpb.TenantID, error) {
-	if err := p.RequireAdminRole(ctx, "create tenant"); err != nil {
-		return roachpb.TenantID{}, err
-	}
-
 	// Find the first available ID that can be assigned to the created tenant.
 	// Note, this ID could have previously belonged to another tenant that has
 	// since been dropped and gc'ed.
-	row, err := p.execCfg.InternalExecutor.QueryRowEx(ctx, "next-tenant-id", p.Txn(), sessiondata.NodeUserSessionDataOverride, `
+	row, err := execCfg.InternalExecutor.QueryRowEx(ctx, "next-tenant-id", txn,
+		sessiondata.NodeUserSessionDataOverride, `
    SELECT id+1 AS newid
     FROM (VALUES (1) UNION ALL SELECT id FROM system.tenants) AS u(id)
    WHERE NOT EXISTS (SELECT 1 FROM system.tenants t WHERE t.id=u.id+1)
@@ -282,10 +293,29 @@ func (p *planner) CreateTenant(
 		return roachpb.TenantID{}, errors.Newf("tenant with name %q already exists", tenantName)
 	}
 	nextID := *row[0].(*tree.DInt)
-	if err := p.CreateTenantWithID(ctx, uint64(nextID), tenantName); err != nil {
+	return roachpb.MustMakeTenantID(uint64(nextID)), nil
+}
+
+// CreateTenant implements the tree.TenantOperator interface.
+func (p *planner) CreateTenant(
+	ctx context.Context, name roachpb.TenantName,
+) (roachpb.TenantID, error) {
+	const op = "create tenant"
+	if err := p.RequireAdminRole(ctx, op); err != nil {
 		return roachpb.TenantID{}, err
 	}
-	return roachpb.MustMakeTenantID(uint64(nextID)), nil
+	if err := rejectIfCantCoordinateMultiTenancy(p.execCfg.Codec, op); err != nil {
+		return roachpb.TenantID{}, err
+	}
+
+	nextID, err := getAvailableTenantID(ctx, name, p.ExecCfg(), p.Txn())
+	if err != nil {
+		return roachpb.TenantID{}, err
+	}
+	if err := p.CreateTenantWithID(ctx, nextID.ToUint64(), name); err != nil {
+		return roachpb.TenantID{}, err
+	}
+	return nextID, nil
 }
 
 // CreateTenantWithID implements the tree.TenantOperator interface.
@@ -311,7 +341,7 @@ func (p *planner) CreateTenantWithID(
 		return err
 	}
 
-	if err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info, initialTenantZoneConfig); err != nil {
+	if _, err := CreateTenantRecord(ctx, p.ExecCfg(), p.Txn(), info, initialTenantZoneConfig); err != nil {
 		return err
 	}
 

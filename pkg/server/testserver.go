@@ -791,7 +791,7 @@ func (ts *TestServer) StartTenant(
 		row, err := ts.InternalExecutor().(*sql.InternalExecutor).QueryRow(
 			ctx, "testserver-check-tenant-active", nil,
 			"SELECT name FROM system.tenants WHERE id=$1 AND active=true",
-			params.TenantID.ToUint64(), string(params.TenantName),
+			params.TenantID.ToUint64(),
 		)
 		if err != nil {
 			return nil, err
@@ -804,12 +804,12 @@ func (ts *TestServer) StartTenant(
 		if row[0] != tree.DNull {
 			actualName := (*string)(row[0].(*tree.DString))
 			if *actualName != string(params.TenantName) {
-				return nil, errors.Newf("name mismatch; tenant %d has name %q, but params specifies name %q",
-					params.TenantID.ToUint64(), *actualName, string(params.TenantName))
+				return nil, errors.Newf("name mismatch; tenant %d has name %s, but params specifies name %s",
+					params.TenantID.ToUint64(), *actualName, params.TenantName)
 			}
 		} else if params.TenantName != "" {
-			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %q",
-				params.TenantID.ToUint64(), string(params.TenantName))
+			return nil, errors.Newf("name mismatch; tenant %d has no name, but params specifies name %s",
+				params.TenantID.ToUint64(), params.TenantName)
 		}
 	}
 

@@ -50,11 +50,13 @@ type srcInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *s
 type destInitExecFunc func(t *testing.T, sysSQL *sqlutils.SQLRunner) // Tenant is created by the replication stream
 
 type tenantStreamingClustersArgs struct {
+	srcTenantName      roachpb.TenantName
 	srcTenantID        roachpb.TenantID
 	srcInitFunc        srcInitExecFunc
 	srcNumNodes        int
 	srcClusterSettings map[string]string
 
+	destTenantName      roachpb.TenantName
 	destTenantID        roachpb.TenantID
 	destInitFunc        destInitExecFunc
 	destNumNodes        int
@@ -63,7 +65,8 @@ type tenantStreamingClustersArgs struct {
 }
 
 var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
-	srcTenantID: roachpb.MustMakeTenantID(10),
+	srcTenantName: roachpb.TenantName("source"),
+	srcTenantID:   roachpb.MustMakeTenantID(10),
 	srcInitFunc: func(t *testing.T, sysSQL *sqlutils.SQLRunner, tenantSQL *sqlutils.SQLRunner) {
 		tenantSQL.Exec(t, `
 	CREATE DATABASE d;
@@ -76,7 +79,8 @@ var defaultTenantStreamingClustersArgs = tenantStreamingClustersArgs{
 	},
 	srcNumNodes:         1,
 	srcClusterSettings:  defaultSrcClusterSetting,
-	destTenantID:        roachpb.MustMakeTenantID(20),
+	destTenantName:      roachpb.TenantName("destination"),
+	destTenantID:        roachpb.MustMakeTenantID(2),
 	destNumNodes:        1,
 	destClusterSettings: defaultDestClusterSetting,
 }
@@ -156,8 +160,7 @@ func (c *tenantStreamingClusters) cutover(
 // Returns producer job ID and ingestion job ID.
 func (c *tenantStreamingClusters) startStreamReplication() (int, int) {
 	var ingestionJobID, streamProducerJobID int
-	streamReplStmt := fmt.Sprintf("RESTORE TENANT %s FROM REPLICATION STREAM FROM '%s' AS TENANT %s",
-		c.args.srcTenantID, c.srcURL.String(), c.args.destTenantID)
+	streamReplStmt := fmt.Sprintf("CREATE TENANT %s FROM REPLICATION OF %s ON '%s'", c.args.destTenantName, c.args.srcTenantName, c.srcURL.String())
 	c.destSysSQL.QueryRow(c.t, streamReplStmt).Scan(&ingestionJobID, &streamProducerJobID)
 	return streamProducerJobID, ingestionJobID
 }
@@ -216,7 +219,8 @@ func createTenantStreamingClusters(
 	srcCluster, srcURL, srcCleanup := startTestCluster(ctx, t, serverArgs, args.srcNumNodes)
 
 	tenantArgs := base.TestTenantArgs{
-		TenantID: args.srcTenantID,
+		TenantName: args.srcTenantName,
+		TenantID:   args.srcTenantID,
 		TestingKnobs: base.TestingKnobs{
 			TenantTestingKnobs: &sql.TenantTestingKnobs{
 				AllowSplitAndScatter: true,
@@ -794,7 +798,11 @@ func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	// Once srcCluster.Server(0) is shut down queries must be ran against a different server
 	alternateSrcSysSQL := sqlutils.MakeSQLRunner(c.srcCluster.ServerConn(1))
 	_, alternateSrcTenantConn := serverutils.StartTenant(t, c.srcCluster.Server(1),
-		base.TestTenantArgs{TenantID: c.args.srcTenantID, DisableCreateTenant: true})
+		base.TestTenantArgs{
+			TenantID:            c.args.srcTenantID,
+			TenantName:          c.args.srcTenantName,
+			DisableCreateTenant: true,
+		})
 	defer alternateSrcTenantConn.Close()
 	alternateSrcTenantSQL := sqlutils.MakeSQLRunner(alternateSrcTenantConn)
 

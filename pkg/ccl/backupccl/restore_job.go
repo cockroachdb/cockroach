@@ -1205,7 +1205,7 @@ func createImportingDescriptors(
 					default:
 						return errors.AssertionFailedf("unknown tenant state %v", tenant)
 					}
-					if err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant, initialTenantZoneConfig); err != nil {
+					if _, err := sql.CreateTenantRecord(ctx, p.ExecCfg(), txn, &tenant, initialTenantZoneConfig); err != nil {
 						return err
 					}
 				}

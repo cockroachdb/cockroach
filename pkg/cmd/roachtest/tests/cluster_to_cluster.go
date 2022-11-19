@@ -72,8 +72,10 @@ func registerClusterToCluster(r registry.Registry) {
 			srcClusterSettings(t, srcSQL)
 			destClusterSettings(t, destSQL)
 
-			srcTenantID, destTenantID := 10, 20
-			srcSQL.Exec(t, `SELECT crdb_internal.create_tenant($1::int)`, srcTenantID)
+			srcTenantID, destTenantID := 2, 2
+			srcTenantName := "source-tenant"
+			destTenantName := "destination-tenant"
+			srcSQL.Exec(t, fmt.Sprintf(`CREATE TENANT %q`, srcTenantName))
 			pgURL, cleanup, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, dstCluster, srcClusterSetting.PGUrlCertsDir, addr[0])
 			defer cleanup()
 			require.NoError(t, err)
@@ -104,7 +106,8 @@ func registerClusterToCluster(r registry.Registry) {
 			})
 
 			t.Status("starting replication stream")
-			streamReplStmt := fmt.Sprintf("RESTORE TENANT %d FROM REPLICATION STREAM FROM '%s' AS TENANT %d", srcTenantID, pgURL, destTenantID)
+			streamReplStmt := fmt.Sprintf("CREATE TENANT %q FROM REPLICATION OF %q ON '%s'",
+				destTenantName, srcTenantName, pgURL)
 			var ingestionJobID, streamProducerJobID int
 			destSQL.QueryRow(t, streamReplStmt).Scan(&ingestionJobID, &streamProducerJobID)
 

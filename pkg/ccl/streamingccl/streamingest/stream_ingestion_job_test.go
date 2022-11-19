@@ -10,7 +10,6 @@ package streamingest
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -95,8 +94,12 @@ func TestTenantStreaming(t *testing.T) {
 	defer source.Stopper().Stop(ctx)
 
 	// Start tenant server in the source cluster.
-	tenantID := serverutils.TestTenantID()
-	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{TenantID: tenantID})
+	sourceTenantID := serverutils.TestTenantID()
+	sourceTenantName := roachpb.TenantName("source-tenant")
+	_, tenantConn := serverutils.StartTenant(t, source, base.TestTenantArgs{
+		TenantID:   sourceTenantID,
+		TenantName: sourceTenantName,
+	})
 	defer func() {
 		require.NoError(t, tenantConn.Close())
 	}()
@@ -146,7 +149,7 @@ SET enable_experimental_stream_replication = true;
 	sourceSQL.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&startTime)
 
 	destSQL.QueryRow(t,
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT 20`,
+		`CREATE TENANT "destination-tenant" FROM REPLICATION OF "source-tenant" ON $1 `,
 		pgURL.String(),
 	).Scan(&ingestionJobID, &streamProducerJobID)
 
@@ -185,7 +188,11 @@ INSERT INTO d.t2 VALUES (2);
 	verifyIngestionStats(t, streamProducerJobID, cutoverTime,
 		destSQL.QueryStr(t, "SELECT crdb_internal.stream_ingestion_stats_json($1)", ingestionJobID)[0][0])
 
-	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(20), DisableCreateTenant: true})
+	_, destTenantConn := serverutils.StartTenant(t, hDest.SysServer, base.TestTenantArgs{
+		TenantID:            roachpb.MustMakeTenantID(2),
+		TenantName:          "destination-tenant",
+		DisableCreateTenant: true,
+	})
 	defer func() {
 		require.NoError(t, destTenantConn.Close())
 	}()
@@ -208,7 +215,11 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer destServer.Stopper().Stop(ctx)
 
 	srcTenantID := serverutils.TestTenantID()
-	_, srcTenantConn := serverutils.StartTenant(t, srcServer, base.TestTenantArgs{TenantID: srcTenantID})
+	srcTenantName := roachpb.TenantName("source")
+	_, srcTenantConn := serverutils.StartTenant(t, srcServer, base.TestTenantArgs{
+		TenantID:   srcTenantID,
+		TenantName: srcTenantName,
+	})
 	defer func() { require.NoError(t, srcTenantConn.Close()) }()
 
 	// Set required cluster settings.
@@ -222,15 +233,12 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
-	destSysSQL.ExpectErr(t, "pq: either old tenant ID 10 or the new tenant ID 1 cannot be system tenant",
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", roachpb.SystemTenantID.ToUint64()),
-		srcPgURL.String())
+	destSysSQL.ExpectErr(t, "pq: neither the source tenant \"source\" nor the destination tenant \"system\" can be the system tenant",
+		`CREATE TENANT system FROM REPLICATION OF source ON $1`, srcPgURL.String())
 
-	existingTenantID := uint64(100)
-	destSysSQL.Exec(t, "SELECT crdb_internal.create_tenant($1::INT)", existingTenantID)
-	destSysSQL.ExpectErr(t, fmt.Sprintf("pq: tenant with id %d already exists", existingTenantID),
-		`RESTORE TENANT 10 FROM REPLICATION STREAM FROM $1 AS TENANT `+fmt.Sprintf("%d", existingTenantID),
-		srcPgURL.String())
+	destSysSQL.Exec(t, "CREATE TENANT \"100\"")
+	destSysSQL.ExpectErr(t, "pq: tenant with name \"100\" already exists",
+		`CREATE TENANT "100" FROM REPLICATION OF source ON $1`, srcPgURL.String())
 }
 
 func TestCutoverBuiltin(t *testing.T) {

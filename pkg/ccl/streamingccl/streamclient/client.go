@@ -40,14 +40,14 @@ type CheckpointToken []byte
 
 // Client provides a way for the stream ingestion job to consume a
 // specified stream.
-// TODO(57427): The stream client does not yet support the concept of
 //
-//	generations in a stream.
+// TODO(57427): The stream client does not yet support the concept of
+// generations in a stream.
 type Client interface {
 	// Create initializes a stream with the source, potentially reserving any
 	// required resources, such as protected timestamps, and returns an ID which
 	// can be used to interact with this stream in the future.
-	Create(ctx context.Context, tenantID roachpb.TenantID) (streampb.StreamID, error)
+	Create(ctx context.Context, tenant roachpb.TenantName) (streampb.StreamID, error)
 
 	// Dial checks if the source is able to be connected to for queries
 	Dial(ctx context.Context) error
@@ -90,12 +90,18 @@ type Client interface {
 
 // Topology is a configuration of stream partitions. These are particular to a
 // stream. It specifies the number and addresses of partitions of the stream.
-type Topology []PartitionInfo
+//
+// The topology also contains the tenant ID of the tenant whose keys are being
+// streamed over the partitions.
+type Topology struct {
+	Partitions     []PartitionInfo
+	SourceTenantID roachpb.TenantID
+}
 
 // StreamAddresses returns the list of source addresses in a topology
 func (t Topology) StreamAddresses() []string {
 	var addresses []string
-	for _, partition := range t {
+	for _, partition := range t.Partitions {
 		addresses = append(addresses, string(partition.SrcAddr))
 	}
 	return addresses
@@ -104,6 +110,7 @@ func (t Topology) StreamAddresses() []string {
 // PartitionInfo describes a partition of a replication stream, i.e. a set of key
 // spans in a source cluster in which changes will be emitted.
 type PartitionInfo struct {
+	// ID is the stringified source instance ID.
 	ID string
 	SubscriptionToken
 	SrcInstanceID int
