@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 )
 
 // getKVBatchSize returns the number of keys we request at a time.
@@ -133,6 +134,9 @@ type txnKVFetcher struct {
 	// doesn't result in too much data), and wants to preserve concurrency for
 	// this scans inside of DistSender.
 	batchBytesLimit rowinfra.BytesLimit
+
+	scanFormat     roachpb.ScanFormat
+	indexFetchSpec *descpb.IndexFetchSpec
 
 	reverse bool
 	// lockStrength represents the locking mode to use when fetching KVs.
@@ -251,12 +255,12 @@ type kvBatchFetcherArgs struct {
 	responseAdmissionQ         *admission.WorkQueue
 }
 
-// newKVBatchFetcher initializes a KVBatchFetcher.
+// newTxnKVFetcher initializes a txnKVFetcher.
 //
 // The passed-in memory account is owned by the fetcher throughout its lifetime
 // but is **not** closed - it is the caller's responsibility to close acc if it
 // is non-nil.
-func newKVBatchFetcher(args kvBatchFetcherArgs) *txnKVFetcher {
+func newTxnKVFetcher(args kvBatchFetcherArgs) *txnKVFetcher {
 	return &txnKVFetcher{
 		sendFn:                     args.sendFn,
 		reverse:                    args.reverse,
@@ -399,8 +403,17 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.LockTimeout = f.lockTimeout
 	ba.Header.TargetBytes = int64(f.batchBytesLimit)
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
+	if f.indexFetchSpec != nil {
+		out, err := types.MarshalAny(f.indexFetchSpec)
+		if err != nil {
+			return err
+		}
+		ba.Header.IndexFetchSpec = out
+	} else if f.scanFormat == roachpb.COL_BATCH_RESPONSE {
+		return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
+	}
 	ba.AdmissionHeader = f.requestAdmissionHeader
-	ba.Requests = spansToRequests(f.spans.Spans, f.reverse, f.lockStrength, f.reqsScratch)
+	ba.Requests = spansToRequests(f.spans.Spans, f.scanFormat, f.reverse, f.lockStrength, f.reqsScratch)
 
 	if log.ExpensiveLogEnabled(ctx, 2) {
 		log.VEventf(ctx, 2, "Scan %s", f.spans)
@@ -508,7 +521,7 @@ func popBatch(batches [][]byte) (batch []byte, remainingBatches [][]byte) {
 	return batch, remainingBatches
 }
 
-// nextBatch implements the KVBatchFetcher interface.
+// NextBatch implements the KVBatchFetcher interface.
 func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherResponse, err error) {
 	// The purpose of this loop is to unpack the two-level batch structure that is
 	// returned from the KV layer.
@@ -650,7 +663,7 @@ func (f *txnKVFetcher) reset(ctx context.Context) {
 	f.batchResponseAccountedFor, f.spansAccountedFor = 0, 0
 }
 
-// close releases the resources of this txnKVFetcher.
+// Close releases the resources of this txnKVFetcher.
 func (f *txnKVFetcher) Close(ctx context.Context) {
 	f.reset(ctx)
 }
@@ -660,12 +673,16 @@ const requestUnionOverhead = int64(unsafe.Sizeof(roachpb.RequestUnion{}))
 // spansToRequests converts the provided spans to the corresponding requests. If
 // a span doesn't have the EndKey set, then a Get request is used for it;
 // otherwise, a Scan (or ReverseScan if reverse is true) request is used with
-// BATCH_RESPONSE format.
+// the provided scan format.
 //
 // The provided reqsScratch is reused if it has enough capacity for all spans,
 // if not, a new slice is allocated.
 func spansToRequests(
-	spans roachpb.Spans, reverse bool, keyLocking lock.Strength, reqsScratch []roachpb.RequestUnion,
+	spans roachpb.Spans,
+	scanFormat roachpb.ScanFormat,
+	reverse bool,
+	keyLocking lock.Strength,
+	reqsScratch []roachpb.RequestUnion,
 ) []roachpb.RequestUnion {
 	var reqs []roachpb.RequestUnion
 	if cap(reqsScratch) >= len(spans) {
@@ -729,7 +746,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.Scan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union

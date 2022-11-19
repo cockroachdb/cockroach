@@ -737,14 +737,43 @@ func NewColOperator(
 				ctx, flowCtx, "cfetcher" /* opName */, spec.ProcessorID, 2, /* numAccounts */
 			)
 			estimatedRowCount := spec.EstimatedRowCount
-			scanOp, err := colfetcher.NewColBatchScan(
-				ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
-				flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
-			)
+			var scanOp colfetcher.ScanOperator
+			var resultTypes []*types.T
+			onlyNativeTypes := true
+			fetchSpec := core.TableReader.FetchSpec
+			for _, c := range fetchSpec.KeyAndSuffixColumns {
+				if typeconv.TypeFamilyToCanonicalTypeFamily(c.Type.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+					onlyNativeTypes = false
+				}
+			}
+			for _, c := range fetchSpec.FetchedColumns {
+				if typeconv.TypeFamilyToCanonicalTypeFamily(c.Type.Family()) == typeconv.DatumVecCanonicalTypeFamily {
+					onlyNativeTypes = false
+				}
+			}
+			var foundGet bool
+			for i := range core.TableReader.Spans {
+				if len(core.TableReader.Spans[i].EndKey) == 0 {
+					foundGet = true
+					break
+				}
+			}
+			if onlyNativeTypes && !foundGet && !flowCtx.TraceKV &&
+				flowCtx.EvalCtx.SessionData().PlanDirectScan {
+				scanOp, resultTypes, err = colfetcher.NewColBatchDirectScan(
+					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
+					flowCtx, core.TableReader, post, args.TypeResolver,
+				)
+			} else {
+				scanOp, resultTypes, err = colfetcher.NewColBatchScan(
+					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
+					flowCtx, core.TableReader, post, estimatedRowCount, args.TypeResolver,
+				)
+			}
 			if err != nil {
 				return r, err
 			}
-			result.finishScanPlanning(scanOp, scanOp.ResultTypes)
+			result.finishScanPlanning(scanOp, resultTypes)
 
 		case core.JoinReader != nil:
 			if err := checkNumIn(inputs, 1); err != nil {
