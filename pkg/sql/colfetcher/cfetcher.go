@@ -181,6 +181,9 @@ type cFetcherArgs struct {
 	// collectStats, if true, indicates that cFetcher should collect execution
 	// statistics (e.g. CPU time).
 	collectStats bool
+	// allocateFreshBatches indicates whether the cFetcher will allocate new
+	// batches on each Next invocation, or instead just reuse a single batch.
+	allocateFreshBatches bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -321,9 +324,16 @@ func (cf *cFetcher) resetBatch() {
 			tuplesToBeSet = int(cf.estimatedRowCount)
 		}
 	}
-	cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
-		cf.table.typs, cf.machine.batch, tuplesToBeSet,
-	)
+	if cf.allocateFreshBatches {
+		cf.machine.batch = cf.accountingHelper.AllocateNewBatch(
+			cf.table.typs, cf.machine.batch, tuplesToBeSet,
+		)
+		reallocated = true
+	} else {
+		cf.machine.batch, reallocated = cf.accountingHelper.ResetMaybeReallocate(
+			cf.table.typs, cf.machine.batch, tuplesToBeSet,
+		)
+	}
 	if reallocated {
 		cf.machine.colvecs.SetBatch(cf.machine.batch)
 		// Pull out any requested system column output vecs.

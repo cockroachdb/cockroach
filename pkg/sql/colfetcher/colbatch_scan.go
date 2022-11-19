@@ -334,6 +334,7 @@ func NewColBatchScan(
 		flowCtx.TraceKV,
 		true, /* singleUse */
 		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
+		false, /* allocateFreshBatches */
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()

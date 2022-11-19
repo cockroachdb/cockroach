@@ -569,6 +569,7 @@ func NewColIndexJoin(
 		flowCtx.TraceKV,
 		false, /* singleUse */
 		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
+		false, /* allocateFreshBatches */
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcher, tableArgs,
