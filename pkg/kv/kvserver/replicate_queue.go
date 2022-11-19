@@ -986,6 +986,217 @@ func (rq *replicateQueue) processOneChange(
 	return rq.ShouldRequeue(ctx, change), nil
 }
 
+// CheckRangeAction takes a RangeDescriptor and SpanConfig and uses the allocator,
+// along with a provided StorePool (which may be distinct from the allocator's),
+// to return the operation that would be required to repair the range, the
+// upreplication target (if applicable), and any allocator errors encountered.
+// It is similar to PlanOneChange, but range-scoped rather than replica-scoped,
+// and as such cannot be used to plan a change, but can evaluate action viability.
+//
+// As this function does not take a replica (and in particular, a leaseholder
+// replica), it cannot determine the target for actions that require state from
+// a leaseholder and/or Raft leader. This includes replica rebalance, removal,
+// and lease transfer. Actions that do not require the allocator to determine
+// a target are treated as noops, and do not return errors.
+func (rq *replicateQueue) CheckRangeAction(
+	ctx context.Context,
+	storePool storepool.AllocatorStorePool,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
+) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, error) {
+	// Use the store pool to evaluate the allocator action given the provided
+	// state (which may be overridden from the actual state).
+	action, _ := rq.allocator.ComputeActionWithStorePool(ctx, storePool, conf, desc)
+
+	var err error
+	var noop, add, remove, replace, rebalance bool
+	var replicaStatus allocatorimpl.ReplicaStatus
+	var targetReplType allocatorimpl.TargetReplicaType
+	switch action {
+	// Noop replica actions.
+	case allocatorimpl.AllocatorNoop:
+		noop = true
+	case allocatorimpl.AllocatorRangeUnavailable:
+		noop = true
+
+	// Add replicas.
+	case allocatorimpl.AllocatorAddVoter:
+		add = true
+		replicaStatus = allocatorimpl.Alive
+		targetReplType = allocatorimpl.VoterTarget
+	case allocatorimpl.AllocatorAddNonVoter:
+		add = true
+		replicaStatus = allocatorimpl.Alive
+		targetReplType = allocatorimpl.NonVoterTarget
+
+	// Remove replicas.
+	case allocatorimpl.AllocatorRemoveVoter:
+		remove = true
+		replicaStatus = allocatorimpl.Alive
+		targetReplType = allocatorimpl.VoterTarget
+	case allocatorimpl.AllocatorRemoveNonVoter:
+		remove = true
+		replicaStatus = allocatorimpl.Alive
+		targetReplType = allocatorimpl.NonVoterTarget
+
+	// Replace dead replicas.
+	case allocatorimpl.AllocatorReplaceDeadVoter:
+		replace = true
+		replicaStatus = allocatorimpl.Dead
+		targetReplType = allocatorimpl.VoterTarget
+	case allocatorimpl.AllocatorReplaceDeadNonVoter:
+		replace = true
+		replicaStatus = allocatorimpl.Dead
+		targetReplType = allocatorimpl.NonVoterTarget
+
+	// Replace decommissioning replicas.
+	case allocatorimpl.AllocatorReplaceDecommissioningVoter:
+		replace = true
+		replicaStatus = allocatorimpl.Decommissioning
+		targetReplType = allocatorimpl.VoterTarget
+	case allocatorimpl.AllocatorReplaceDecommissioningNonVoter:
+		replace = true
+		replicaStatus = allocatorimpl.Decommissioning
+		targetReplType = allocatorimpl.NonVoterTarget
+
+	// Remove decommissioning replicas.
+	case allocatorimpl.AllocatorRemoveDecommissioningVoter:
+		remove = true
+		replicaStatus = allocatorimpl.Decommissioning
+		targetReplType = allocatorimpl.VoterTarget
+	case allocatorimpl.AllocatorRemoveDecommissioningNonVoter:
+		remove = true
+		replicaStatus = allocatorimpl.Decommissioning
+		targetReplType = allocatorimpl.NonVoterTarget
+
+	// Remove dead replicas.
+	case allocatorimpl.AllocatorRemoveDeadVoter:
+		remove = true
+		replicaStatus = allocatorimpl.Dead
+		targetReplType = allocatorimpl.VoterTarget
+	case allocatorimpl.AllocatorRemoveDeadNonVoter:
+		remove = true
+		replicaStatus = allocatorimpl.Dead
+		targetReplType = allocatorimpl.NonVoterTarget
+
+	// Rebalance replicas.
+	case allocatorimpl.AllocatorConsiderRebalance:
+		rebalance = true
+
+	// Finalize and cleanup replicas.
+	case allocatorimpl.AllocatorFinalizeAtomicReplicationChange, allocatorimpl.AllocatorRemoveLearner:
+		noop = true
+	default:
+		err = errors.Errorf("unknown allocator action %v", action)
+	}
+
+	if err != nil {
+		return action, roachpb.ReplicationTarget{}, err
+	}
+
+	if noop || remove || rebalance {
+		// NB: Currently, remove and rebalance actions require a leaseholder
+		// replica and/or Raft leader, and as such we cannot use the allocator to
+		// find a target using simply a range descriptor and a span config.
+		//
+		// E.g. When removing a voter, we need Raft leader state to determine
+		// a removal target (assuming we aren't removing dead or decommissioning
+		// replicas, which are self-evident), and we also need the lease to
+		// determine a new leaseholder, if a new leaseholder is needed after
+		// removal. When rebalancing, we similarly need to check leaseholder state.
+		//
+		// This means we unfortunately cannot validate that we have a valid target
+		// for removal, rebalance, or lease transfer (if needed).
+		return action, roachpb.ReplicationTarget{}, err
+	}
+
+	voterReplicas := desc.Replicas().VoterDescriptors()
+	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
+	liveVoterReplicas, deadVoterReplicas := storePool.LiveAndDeadReplicas(
+		voterReplicas, true, /* includeSuspectAndDrainingStores */
+	)
+	liveNonVoterReplicas, deadNonVoterReplicas := storePool.LiveAndDeadReplicas(
+		nonVoterReplicas, true, /* includeSuspectAndDrainingStores */
+	)
+	remainingLiveVoters := liveVoterReplicas
+
+	var target roachpb.ReplicationTarget
+	if replace && targetReplType == allocatorimpl.VoterTarget && len(voterReplicas) == 1 {
+		// If only one voter replica remains, that replica is the leaseholder and
+		// we won't be able to swap it out. Ignore the removal and simply add
+		// a replica.
+		replace = false
+		add = true
+	}
+
+	if replace {
+		var replicas []roachpb.ReplicaDescriptor
+		var deadReplicas []roachpb.ReplicaDescriptor
+		var deadOrDecommissioningReplicas []roachpb.ReplicaDescriptor
+
+		if targetReplType == allocatorimpl.VoterTarget {
+			replicas = voterReplicas
+			deadReplicas = deadVoterReplicas
+		} else if targetReplType == allocatorimpl.NonVoterTarget {
+			replicas = nonVoterReplicas
+			deadReplicas = deadNonVoterReplicas
+		} else {
+			return action, target, errors.AssertionFailedf("unexpected replica type: %v",
+				targetReplType)
+		}
+
+		if replicaStatus == allocatorimpl.Decommissioning {
+			deadOrDecommissioningReplicas = storePool.DecommissioningReplicas(replicas)
+		} else if replicaStatus == allocatorimpl.Dead {
+			deadOrDecommissioningReplicas = deadReplicas
+		} else {
+			return action, target, errors.AssertionFailedf("unexpected replica status: %v",
+				replicaStatus)
+		}
+
+		if len(deadOrDecommissioningReplicas) == 0 {
+			// Nothing to do.
+			return allocatorimpl.AllocatorNoop, target, err
+		}
+
+		if targetReplType == allocatorimpl.VoterTarget {
+			// NB: See addOrReplaceVoters(..) vs addOrReplaceNonVoters(..).
+			removeIdx := getRemoveIdx(replicas, deadOrDecommissioningReplicas[0])
+			replToRemove := replicas[removeIdx]
+			for i, r := range liveVoterReplicas {
+				if r.ReplicaID == replToRemove.ReplicaID {
+					remainingLiveVoters = append(liveVoterReplicas[:i:i], liveVoterReplicas[i+1:]...)
+					break
+				}
+			}
+		}
+	} else if !add {
+		return action, target, errors.AssertionFailedf(
+			"attempting to allocate target for unsupported action: %v", action,
+		)
+	}
+
+	if targetReplType == allocatorimpl.VoterTarget {
+		// NB: For the purposes of checking the range action, we do not check to
+		// ensure we are avoiding upreplication to fragile quorum.
+		// See addOrReplaceVoters(..).
+		target, _, err = rq.allocator.AllocateVoterWithStorePool(ctx, storePool, conf,
+			remainingLiveVoters, liveNonVoterReplicas, replicaStatus)
+	} else if targetReplType == allocatorimpl.NonVoterTarget {
+		target, _, err = rq.allocator.AllocateNonVoterWithStorePool(ctx, storePool, conf,
+			liveVoterReplicas, liveNonVoterReplicas, replicaStatus)
+	} else {
+		err = errors.AssertionFailedf("unexpected replica type: %v", targetReplType)
+	}
+
+	if err == nil && target.Equal(roachpb.ReplicationTarget{}) {
+		return action, target, errors.AssertionFailedf(
+			"no replication target found for action: %v", action)
+	}
+
+	return action, target, err
+}
+
 // PlanOneChange calls the allocator to determine an action to be taken upon a
 // range. The fn then calls back into the allocator to get the changes
 // necessary to act upon the action and returns them as a ReplicateQueueChange.
@@ -1162,6 +1373,8 @@ func (rq *replicateQueue) PlanOneChange(
 			canTransferLeaseFrom,
 			scatter,
 		)
+
+	// Finalize and cleanup replicas.
 	case allocatorimpl.AllocatorFinalizeAtomicReplicationChange, allocatorimpl.AllocatorRemoveLearner:
 		op = AllocationFinalizeAtomicReplicationOp{}
 	default:
