@@ -239,11 +239,11 @@ func (f *KVFetcher) nextKV(
 		}
 
 		resp, err := f.NextBatch(ctx)
-		if err != nil || !resp.moreKVs {
-			return resp.moreKVs, roachpb.KeyValue{}, 0, false, err
+		if err != nil || !resp.MoreKVs {
+			return resp.MoreKVs, roachpb.KeyValue{}, 0, false, err
 		}
-		f.kvs = resp.kvs
-		f.batchResponse = resp.batchResponse
+		f.kvs = resp.KVs
+		f.batchResponse = resp.BatchResponse
 		f.spanID = resp.spanID
 		nBytes := len(f.batchResponse)
 		for i := range f.kvs {
@@ -308,15 +308,15 @@ type KVProvider struct {
 var _ KVBatchFetcher = &KVProvider{}
 
 // NextBatch implements the KVBatchFetcher interface.
-func (f *KVProvider) NextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
+func (f *KVProvider) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
 	if len(f.KVs) == 0 {
-		return kvBatchFetcherResponse{moreKVs: false}, nil
+		return KVBatchFetcherResponse{MoreKVs: false}, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return kvBatchFetcherResponse{
-		moreKVs: true,
-		kvs:     res,
+	return KVBatchFetcherResponse{
+		MoreKVs: true,
+		KVs:     res,
 	}, nil
 }
 

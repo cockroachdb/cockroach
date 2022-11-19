@@ -52,27 +52,27 @@ const DebugRowFetch = false
 // part of the output.
 const noOutputColumn = -1
 
-// kvBatchFetcherResponse contains a response from the KVBatchFetcher.
-type kvBatchFetcherResponse struct {
-	// moreKVs indicates whether this response contains some keys from the
+// KVBatchFetcherResponse contains a response from the KVBatchFetcher.
+type KVBatchFetcherResponse struct {
+	// MoreKVs indicates whether this response contains some keys from the
 	// fetch.
 	//
 	// If true, then the fetch might (or might not) be complete at this point -
 	// another call to NextBatch() is needed to find out. If false, then the
 	// fetch has already been completed and this response doesn't have any
 	// fetched data.
-	moreKVs bool
-	// Only one of kvs and batchResponse will be set. Which one is set depends
+	MoreKVs bool
+	// Only one of KVs and BatchResponse will be set. Which one is set depends
 	// on the server version. Both must be handled by calling code.
 	//
-	// kvs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs
+	// KVs, if set, is a slice of roachpb.KeyValue, the deserialized kv pairs
 	// that were fetched.
-	kvs []roachpb.KeyValue
-	// batchResponse, if set, is a packed byte slice containing the keys and
-	// values. An empty batchResponse indicates that nothing was fetched for the
+	KVs []roachpb.KeyValue
+	// BatchResponse, if set, is a packed byte slice containing the keys and
+	// values. An empty BatchResponse indicates that nothing was fetched for the
 	// corresponding ScanRequest, and the caller is expected to skip over the
 	// response.
-	batchResponse []byte
+	BatchResponse []byte
 	// spanID is the ID associated with the span that generated this response.
 	spanID int
 }
@@ -88,9 +88,11 @@ type KVBatchFetcher interface {
 		firstBatchKeyLimit rowinfra.KeyLimit,
 	) error
 
-	// NextBatch returns the next batch of rows. See kvBatchFetcherResponse for
+	// NextBatch returns the next batch of rows. See KVBatchFetcherResponse for
 	// details on what is returned.
-	NextBatch(ctx context.Context) (kvBatchFetcherResponse, error)
+	// TODO: clarify contract about a response for ScanRequest that came up
+	// empty.
+	NextBatch(ctx context.Context) (KVBatchFetcherResponse, error)
 
 	Close(ctx context.Context)
 }
