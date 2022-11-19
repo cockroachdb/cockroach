@@ -98,7 +98,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
-	numKeys := mvccScanner.results.count
+	numKeys := mvccScanner.results.getCount()
 	require.Equal(t, 3, int(numKeys))
 	type kv struct {
 		k MVCCKey
@@ -157,7 +157,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 	require.NoError(t, err)
 
 	kvData := mvccScanner.results.finish()
-	numKeys := mvccScanner.results.count
+	numKeys := mvccScanner.results.getCount()
 	require.Equal(t, 4, int(numKeys))
 	require.Equal(t, 4, len(kvData))
 	require.Equal(t, 25, len(kvData[0]))
