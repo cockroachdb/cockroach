@@ -179,7 +179,7 @@ export type ContentionEvent = {
   execType: InsightExecEnum;
 };
 
-const highContentionInsight = (
+export const highContentionInsight = (
   execType: InsightExecEnum,
   latencyThreshold?: number,
   contentionDuration?: number,
@@ -207,9 +207,9 @@ const highContentionInsight = (
   };
 };
 
-const slowExecutionInsight = (
+export const slowExecutionInsight = (
   execType: InsightExecEnum,
-  latencyThreshold: number,
+  latencyThreshold?: number,
 ): Insight => {
   let threshold = latencyThreshold + "ms";
   if (!latencyThreshold) {
@@ -226,7 +226,7 @@ const slowExecutionInsight = (
   };
 };
 
-const planRegressionInsight = (execType: InsightExecEnum): Insight => {
+export const planRegressionInsight = (execType: InsightExecEnum): Insight => {
   const description =
     `This ${execType} was slow because we picked the wrong plan, ` +
     `possibly due to outdated statistics, the statement using different literals or ` +
@@ -240,7 +240,7 @@ const planRegressionInsight = (execType: InsightExecEnum): Insight => {
   };
 };
 
-const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
+export const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
   const description =
     `This ${execType} was slow because a good plan was not available, whether ` +
     `due to outdated statistics or missing indexes.`;
@@ -253,7 +253,7 @@ const suboptimalPlanInsight = (execType: InsightExecEnum): Insight => {
   };
 };
 
-const highRetryCountInsight = (execType: InsightExecEnum): Insight => {
+export const highRetryCountInsight = (execType: InsightExecEnum): Insight => {
   const description =
     `This ${execType} has being retried more times than the value of the ` +
     `'sql.insights.high_retry_count.threshold' cluster setting.`;
@@ -266,7 +266,7 @@ const highRetryCountInsight = (execType: InsightExecEnum): Insight => {
   };
 };
 
-const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
+export const failedExecutionInsight = (execType: InsightExecEnum): Insight => {
   const description =
     `This ${execType} execution failed completely, due to contention, resource ` +
     `saturation, or syntax errors.`;

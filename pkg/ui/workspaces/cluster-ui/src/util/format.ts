@@ -225,7 +225,17 @@ export const limitStringArray = (arr: string[], limit: number): string => {
     return limitText(arr[0], limit);
   }
 
-  return arr[0].concat("...");
+  let str = arr[0];
+  for (let next = 1; next < arr.length; ++next) {
+    const charsLeft = limit - str.length;
+    if (charsLeft < arr[next].length) {
+      str += arr[next].substring(0, charsLeft).concat("...");
+      break;
+    }
+    str += arr[next];
+  }
+
+  return str;
 };
 
 function add(a: string, b: string): string {
