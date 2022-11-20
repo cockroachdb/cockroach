@@ -97,6 +97,10 @@ func (b *bubblineReader) canPrompt() bool {
 	return true
 }
 
+func (b *bubblineReader) multilineEdit() bool {
+	return false
+}
+
 func (b *bubblineReader) setPrompt(prompt string) {
 	b.ins.Prompt = prompt
 }

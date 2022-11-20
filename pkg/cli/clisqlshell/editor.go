@@ -25,6 +25,7 @@ type editor interface {
 	addHistory(line string) error
 	canPrompt() bool
 	setPrompt(prompt string)
+	multilineEdit() bool
 }
 
 type sqlShell interface {

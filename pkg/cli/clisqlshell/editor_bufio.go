@@ -61,6 +61,10 @@ func (b *bufioReader) setPrompt(prompt string) {
 	}
 }
 
+func (b *bufioReader) multilineEdit() bool {
+	return false
+}
+
 func (b *bufioReader) getLine() (string, error) {
 	fmt.Fprint(b.wout, b.prompt)
 	l, err := b.buf.ReadString('\n')
