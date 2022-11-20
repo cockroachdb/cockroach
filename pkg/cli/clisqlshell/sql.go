@@ -282,6 +282,7 @@ func (c *cliState) invalidSyntax(nextState cliStateEnum) cliStateEnum {
 	return c.invalidSyntaxf(nextState, `%s. Try \? for help.`, c.lastInputLine)
 }
 
+// inCopy implements the sqlShell interface (to support the editor).
 func (c *cliState) inCopy() bool {
 	return c.copyFromState != nil
 }
@@ -987,6 +988,7 @@ func (c *cliState) refreshDatabaseName() string {
 
 var cmdHistFile = envutil.EnvOrDefaultString("COCKROACH_SQL_CLI_HISTORY", ".cockroachsql_history")
 
+// runShowCompletions implements the sqlShell interface (to support the editor).
 func (c *cliState) runShowCompletions(sql string, offset int) (rows [][]string, err error) {
 	query := fmt.Sprintf(`SHOW COMPLETIONS AT OFFSET %d FOR %s`, offset, lexbase.EscapeSQLString(sql))
 	err = c.runWithInterruptableCtx(func(ctx context.Context) error {
@@ -1783,6 +1785,7 @@ func (c *cliState) doPrepareStatementLine(
 	return checkState
 }
 
+// reflow implements the sqlShell interface (to support the editor).
 func (c *cliState) reflow(
 	allText bool, currentText string, targetWidth int,
 ) (changed bool, newText string, info string) {
@@ -2274,7 +2277,8 @@ func (c *cliState) runStatements(stmts []string) error {
 	return c.exitErr
 }
 
-// serverSideParse uses the SHOW SYNTAX statement to analyze the given string.
+// serverSideParse implements the sqlShell interface (to support the editor).
+// It uses the SHOW SYNTAX statement to analyze the given string.
 // If the syntax is correct, the function returns the statement
 // decomposition in the first return value. If it is not, the function
 // extracts a help string if available.
