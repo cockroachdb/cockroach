@@ -107,6 +107,10 @@ func (b *editlineReader) setPrompt(prompt string) {
 	b.ins.SetLeftPrompt(prompt)
 }
 
+func (b *editlineReader) multilineEdit() bool {
+	return false
+}
+
 func (b *editlineReader) GetCompletions(word string) []string {
 	if b.sql.inCopy() {
 		return []string{word + "\t"}
