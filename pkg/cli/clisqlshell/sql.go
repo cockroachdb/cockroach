@@ -2277,6 +2277,11 @@ func (c *cliState) runStatements(stmts []string) error {
 	return c.exitErr
 }
 
+// enableDebug implements the sqlShell interface (to support the editor).
+func (c *cliState) enableDebug() bool {
+	return c.sqlConnCtx.DebugMode
+}
+
 // serverSideParse implements the sqlShell interface (to support the editor).
 // It uses the SHOW SYNTAX statement to analyze the given string.
 // If the syntax is correct, the function returns the statement
