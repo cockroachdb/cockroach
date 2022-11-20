@@ -36,7 +36,9 @@ func (b *bubblineReader) init(
 	cleanupFn = func() { b.ins.Close() }
 
 	b.ins.MaxHistorySize = maxHistEntries
-	b.ins.SetDebugEnabled(true)
+	if sqlS.enableDebug() {
+		b.ins.SetDebugEnabled(true)
+	}
 	b.ins.Reflow = sqlS.reflow
 	b.ins.AutoComplete = b.getCompletions
 	b.ins.CheckInputComplete = b.checkInputComplete
