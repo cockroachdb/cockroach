@@ -1247,16 +1247,28 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 		return c.runOpen(cmd[1:], loopState, errState)
 
 	case `\p`:
+		if c.ins.multilineEdit() {
+			fmt.Fprintln(c.iCtx.stderr, `warning: \p is ineffective with this editor`)
+			break
+		}
 		// This is analogous to \show but does not need a special case.
 		// Implemented for compatibility with psql.
 		fmt.Fprintln(c.iCtx.stdout, strings.Join(c.partialLines, "\n"))
 
 	case `\r`:
+		if c.ins.multilineEdit() {
+			fmt.Fprintln(c.iCtx.stderr, `warning: \r is ineffective with this editor`)
+			break
+		}
 		// Reset the input buffer so far. This is useful when e.g. a user
 		// got confused with string delimiters and multi-line input.
 		return cliStartLine
 
 	case `\show`:
+		if c.ins.multilineEdit() {
+			fmt.Fprintln(c.iCtx.stderr, `warning: \show is ineffective with this editor`)
+			break
+		}
 		fmt.Fprintln(c.iCtx.stderr, `warning: \show is deprecated. Use \p.`)
 		if len(c.partialLines) == 0 {
 			fmt.Fprintf(c.iCtx.stderr, "No input so far. Did you mean SHOW?\n")
