@@ -79,6 +79,11 @@ func ingestionPlanHook(
 		)
 	}
 
+	if !p.ExecCfg().Codec.ForSystemTenant() {
+		return nil, nil, nil, false, pgerror.Newf(pgcode.InsufficientPrivilege,
+			"only the system tenant can create other tenants")
+	}
+
 	exprEval := p.ExprEvaluator("INGESTION")
 
 	from, err := exprEval.String(ctx, ingestionStmt.ReplicationSourceAddress)
@@ -188,6 +193,13 @@ func ingestionPlanHook(
 		if err != nil {
 			return err
 		}
+
+		tenantInfo.ID = destinationTenantID.ToUint64()
+		tenantInfo.TenantReplicationJobID = jobID
+		if err := sql.UpdateTenantRecord(ctx, p.ExecCfg(), p.Txn(), &tenantInfo.TenantInfo); err != nil {
+			return err
+		}
+
 		resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(sj.ID())), tree.NewDInt(tree.DInt(streamID))}
 		return nil
 	}

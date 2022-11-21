@@ -56,7 +56,7 @@ func gcTenant(
 			}
 			return nil
 		}
-		return errors.Wrapf(err, "fetching tenant %d", info.ID)
+		return errors.Wrapf(err, "fetching tenant %d", tenID)
 	}
 
 	// This case should never happen.
