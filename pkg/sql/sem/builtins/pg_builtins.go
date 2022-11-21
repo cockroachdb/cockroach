@@ -1933,6 +1933,18 @@ SELECT description
 		},
 	),
 
+	"pg_blocking_pids": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.IntArray),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDArray(types.Int), nil
+			},
+			Info:       notUsableInfo,
+			Volatility: volatility.Stable,
+		},
+	),
+
 	// pg_column_size(any) - number of bytes used to store a particular value
 	// (possibly compressed)
 
