@@ -360,5 +360,12 @@ func runDemoInternal(
 		return err
 	}
 
+	// Enable the latency as late in the process of starting the cluster as we
+	// can to minimize the startup time.
+	if demoCtx.SimulateLatency {
+		c.SetSimulatedLatency(true /* on */)
+		defer c.SetSimulatedLatency(false /* on */)
+	}
+
 	return sqlCtx.Run(ctx, conn)
 }
