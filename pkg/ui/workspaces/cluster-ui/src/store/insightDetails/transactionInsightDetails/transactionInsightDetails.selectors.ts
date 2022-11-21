@@ -26,7 +26,7 @@ const selectTxnInsightFromExecInsight = createSelector(
   (state: AppState) => state.adminUI.executionInsights?.data,
   selectExecutionID,
   (execInsights, execID): TxnInsightEvent => {
-    return execInsights.find(txn => txn.transactionExecutionID === execID);
+    return execInsights?.find(txn => txn.transactionExecutionID === execID);
   },
 );
 

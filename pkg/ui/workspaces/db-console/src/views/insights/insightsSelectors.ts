@@ -46,6 +46,10 @@ export const selectTransactionInsights = createSelector(
   selectTxnInsightsCombiner,
 );
 
+export const selectTransactionInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.transactionInsights?.valid &&
+  state.cachedData.transactionInsights?.inFlight;
+
 const selectTxnContentionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
@@ -84,13 +88,17 @@ export const selectTransactionInsightDetailsError = createSelector(
   },
 );
 
-export const selectStatementInsights = createSelector(
+export const selectExecutionInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.executionInsights?.valid &&
+  state.cachedData.executionInsights?.inFlight;
+
+export const selectExecutionInsights = createSelector(
   (state: AdminUIState) => state.cachedData.executionInsights?.data,
   selectFlattenedStmtInsightsCombiner,
 );
 
 export const selectStatementInsightDetails = createSelector(
-  selectStatementInsights,
+  selectExecutionInsights,
   selectExecutionID,
   selectStatementInsightDetailsCombiner,
 );

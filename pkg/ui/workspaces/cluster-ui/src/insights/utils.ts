@@ -9,7 +9,10 @@
 // licenses/APL.txt.
 
 import { limitStringArray, unset } from "src/util";
-import { FlattenedStmtInsights } from "src/api/insightsApi";
+import {
+  ExecutionInsightsRequest,
+  FlattenedStmtInsights,
+} from "src/api/insightsApi";
 import {
   ExecutionDetails,
   FlattenedStmtInsightEvent,
@@ -28,6 +31,7 @@ import {
   TxnInsightEvent,
   WorkloadInsightEventFilters,
 } from "./types";
+import { TimeScale, toDateRange } from "../timeScaleDropdown";
 
 export const filterTransactionInsights = (
   transactions: MergedTxnInsightEvent[] | null,
@@ -509,4 +513,14 @@ export function dedupInsights(insights: Insight[]): Insight[] {
     deduped.push(i);
     return deduped;
   }, []);
+}
+
+export function executionInsightsRequestFromTimeScale(
+  ts: TimeScale,
+): ExecutionInsightsRequest {
+  const [startTime, endTime] = toDateRange(ts);
+  return {
+    start: startTime,
+    end: endTime,
+  };
 }

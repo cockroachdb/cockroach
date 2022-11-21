@@ -34,3 +34,7 @@ export const selectFilters = createSelector(
   localStorageSelector,
   localStorage => localStorage["filters/InsightsPage"],
 );
+
+export const selectTransactionInsightsLoading = (state: AppState) =>
+  !state.adminUI.transactionInsights?.valid &&
+  state.adminUI.transactionInsights?.inFlight;
