@@ -338,22 +338,31 @@ message RestoreDetails {
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
   repeated BackupLocalityInfo backup_locality_info = 7 [(gogoproto.nullable) = false];
 
-  // We keep track of the descriptors that we're creating as part of the
-  // restore.
+  // DatabaseDescs contain the database descriptors for the whole databases we're restoring,
+  // remapped to their new IDs.
   repeated sqlbase.DatabaseDescriptor database_descs = 16;
+
+  // TableDescs contain the table descriptors for the whole tables we're restoring,
+  // remapped to their new IDs.
   repeated sqlbase.TableDescriptor table_descs = 5;
-  // TypeDescs contains the type descriptors written as part of this restore.
-  // Note that it does not include type descriptors existing in the cluster
-  // that backed up types are remapped to.
+
+  // TypeDescs contains the type descriptors written as part of this restore,
+  // remapped with their new IDs. Note that it does not include type descriptors
+  // existing in the cluster that backed up types are remapped to.
   repeated sqlbase.TypeDescriptor type_descs = 14;
-  // SchemaDescs contains schema descriptors written as part of this restore.
-  // Like TypeDescs, it does not include existing schema descriptors in the
-  // cluster that backed up schemas are remapped to.
+
+  // SchemaDescs contains schema descriptors written as part of this restore,
+  // remapped with their new IDs. Like TypeDescs, it does not include existing
+  // schema descriptors in the cluster that backed up schemas are remapped to.
   repeated sqlbase.SchemaDescriptor schema_descs = 15;
+
   // FunctionDescs contains function descriptors written as part of this
-  // restore.
+  // restore, remapped with their new IDs.
   repeated sqlbase.FunctionDescriptor function_descs = 27;
   reserved 13;
+
+  // Tenants contain info on each tenant to restore. Note this field contains the backed up
+  // tenant id.
   repeated sqlbase.TenantInfoWithUsage tenants = 21 [(gogoproto.nullable) = false];
 
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
@@ -421,7 +430,14 @@ message RestoreDetails {
 
   bool VerifyData = 26;
 
-  // NEXT ID: 28.
+  // ProtectedTimestampRecord is the ID of the protected timestamp record
+  // corresponding to this job.
+  bytes protected_timestamp_record = 28 [
+    (gogoproto.customname) = "ProtectedTimestampRecord",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // NEXT ID: 29.
 }
 
 
