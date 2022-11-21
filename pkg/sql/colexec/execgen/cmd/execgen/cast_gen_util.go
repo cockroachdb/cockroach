@@ -395,7 +395,7 @@ func stringToDate(to, from, evalCtx, _, _ string) string {
 	convStr := `
 		_now := %[3]s.GetRelativeParseTime()
 		_dateStyle := %[3]s.GetDateStyle()
-		_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(%[2]s))
+		_d, _, err := pgdate.ParseDate(_now, _dateStyle, string(%[2]s), &evalCtx.ParseHelper)
 		if err != nil {
 			colexecerror.ExpectedError(err)
 		}
