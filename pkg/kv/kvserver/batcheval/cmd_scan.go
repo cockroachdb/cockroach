@@ -102,6 +102,5 @@ func Scan(
 		}
 	}
 	res.Local.EncounteredIntents = scanRes.Intents
-
 	return res, nil
 }
