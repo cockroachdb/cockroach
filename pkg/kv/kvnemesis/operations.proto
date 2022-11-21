@@ -54,27 +54,27 @@ message ScanOperation {
 
 message PutOperation {
   bytes key = 1;
-  uint32 Seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message DeleteOperation {
   bytes key = 1;
-  uint32 Seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
 message DeleteRangeOperation {
   bytes key = 1;
   bytes end_key = 2;
-  uint32 Seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  uint32 seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
   Result result = 4 [(gogoproto.nullable) = false];
 }
 
 message DeleteRangeUsingTombstoneOperation {
   bytes key = 1;
   bytes end_key = 2;
-  uint32 Seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  uint32 seq = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
   Result result = 4 [(gogoproto.nullable) = false];
 }
 

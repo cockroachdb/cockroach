@@ -902,10 +902,14 @@ func (v *validator) checkAtomicCommitted(
 
 			// Make this write visible (at writeTS, regardless of whether it's the
 			// last write or not, since that's the snapshot at which our operation
-			// wrote). Helpfully, pebble will deal with all the partitioning of range
-			// tombstones that might be necessary under the hood. For example, if we
-			// currently have [a,z) and now are adding a Put(b), we'll automatically
-			// have [a,b); b; [b,z) after.
+			// wrote).
+			//
+			// Note that this doesn't entirely mirror the engine that the KV server
+			// would see. For example, if the "real" CRDB MVCC layer currently has
+			// [a,z) and now we are adding a Put(b), the mvcc rangedel will be
+			// partitioned into [a,b) and [b,z). But here, we are writing directly to
+			// a pebble instance and no such partitioning occurs. This should be fine
+			// as the results as observable in kvnemesis are the same.
 			if len(o.EndKey) == 0 {
 				if err := batch.Set(storage.EncodeMVCCKey(storage.MVCCKey{Key: o.Key, Timestamp: writeTS}), o.Value.RawBytes, nil); err != nil {
 					panic(err)
