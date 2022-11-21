@@ -218,6 +218,7 @@ configure_make(
     ] + select({
         "@io_bazel_rules_go//go/platform:linux_amd64": ["--host=x86_64-unknown-linux-gnu"],
         "@io_bazel_rules_go//go/platform:linux_arm64": ["--host=aarch64-unknown-linux-gnu"],
+        "@io_bazel_rules_go//go/platform:linux_s390x": ["--host=s390x-unknown-linux-gnu"],
         "//conditions:default": [],
     }),
     copts = select({
