@@ -123,7 +123,9 @@ func TestTenantFromCert(t *testing.T) {
 				},
 			}
 			if tc.tenantScope > 0 {
-				tenantSANs, err := security.MakeTenantURISANs(username.MakeSQLUsernameFromPreNormalizedString(tc.commonName), []roachpb.TenantID{roachpb.MustMakeTenantID(tc.tenantScope)})
+				tenantSANs, err := security.MakeTenantSQLClientURISANs(
+					username.MakeSQLUsernameFromPreNormalizedString(tc.commonName),
+					[]roachpb.TenantID{roachpb.MustMakeTenantID(tc.tenantScope)})
 				require.NoError(t, err)
 				cert.URIs = append(cert.URIs, tenantSANs...)
 			}
