@@ -850,6 +850,10 @@ const (
 	// ScheduledSchemaTelemetryExecutor is an executor responsible for the logging
 	// of schema telemetry.
 	ScheduledSchemaTelemetryExecutor
+
+	// ScheduledChangefeedExecutor is an executor responsible for
+	// the execution of the scheduled changefeeds.
+	ScheduledChangefeedExecutor
 )
 
 var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
@@ -858,6 +862,7 @@ var scheduleExecutorInternalNames = map[ScheduledJobExecutorType]string{
 	ScheduledSQLStatsCompactionExecutor: "scheduled-sql-stats-compaction-executor",
 	ScheduledRowLevelTTLExecutor:        "scheduled-row-level-ttl-executor",
 	ScheduledSchemaTelemetryExecutor:    "scheduled-schema-telemetry-executor",
+	ScheduledChangefeedExecutor:         "scheduled-changefeed-executor",
 }
 
 // InternalName returns an internal executor name.
@@ -877,6 +882,8 @@ func (t ScheduledJobExecutorType) UserName() string {
 		return "ROW LEVEL TTL"
 	case ScheduledSchemaTelemetryExecutor:
 		return "SCHEMA TELEMETRY"
+	case ScheduledChangefeedExecutor:
+		return "CHANGEFEED"
 	}
 	return "unsupported-executor"
 }

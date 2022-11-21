@@ -390,6 +390,7 @@ func init() {
 		&tree.ShowBackup{},
 		&tree.Restore{},
 		&tree.CreateChangefeed{},
+		&tree.ScheduledChangefeed{},
 		&tree.Import{},
 		&tree.ScheduledBackup{},
 		&tree.CreateTenantFromReplication{},
