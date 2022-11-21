@@ -487,21 +487,22 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			if t.Column == colinfo.TTLDefaultExpirationColumnName && n.tableDesc.HasRowLevelTTL() {
-				if ttlInfo := n.tableDesc.GetRowLevelTTL(); ttlInfo.DurationExpr != "" {
-					return errors.WithHintf(
-						pgerror.Newf(
-							pgcode.InvalidTableDefinition,
-							`cannot drop column %s while row-level TTL is active`,
-							t.Column,
-						),
-						"use ALTER TABLE %[1]s RESET (ttl) or ALTER TABLE %[1]s SET (ttl_expiration_expression = ...) instead",
-						tree.Name(n.tableDesc.GetName()),
-					)
-				}
+			tableDesc := n.tableDesc
+			if t.Column == colinfo.TTLDefaultExpirationColumnName &&
+				tableDesc.HasRowLevelTTL() &&
+				tableDesc.GetRowLevelTTL().HasDurationExpr() {
+				return errors.WithHintf(
+					pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`cannot drop column %s while ttl_expire_after is set`,
+						t.Column,
+					),
+					"use ALTER TABLE %[1]s RESET (ttl) or ALTER TABLE %[1]s SET (ttl_expiration_expression = ...) instead",
+					tree.Name(tableDesc.GetName()),
+				)
 			}
 
-			colDroppedViews, err := dropColumnImpl(params, tn, n.tableDesc, n.tableDesc.GetRowLevelTTL(), t)
+			colDroppedViews, err := dropColumnImpl(params, tn, tableDesc, tableDesc.GetRowLevelTTL(), t)
 			if err != nil {
 				return err
 			}
@@ -637,7 +638,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case tree.ColumnMutationCmd:
 			// Column mutations
-			col, err := n.tableDesc.FindColumnWithName(t.GetColumn())
+			tableDesc := n.tableDesc
+			col, err := tableDesc.FindColumnWithName(t.GetColumn())
 			if err != nil {
 				return err
 			}
@@ -645,8 +647,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
+			columnName := col.GetName()
+			if columnName == colinfo.TTLDefaultExpirationColumnName &&
+				tableDesc.HasRowLevelTTL() &&
+				tableDesc.GetRowLevelTTL().HasDurationExpr() {
+				return pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					`cannot alter column %s while ttl_expire_after is set`,
+					columnName,
+				)
+			}
 			// Apply mutations to copy of column descriptor.
-			if err := applyColumnMutation(params.ctx, n.tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
+			if err := applyColumnMutation(params.ctx, tableDesc, col, t, params, n.n.Cmds, tn); err != nil {
 				return err
 			}
 			descriptorChanged = true
@@ -780,7 +792,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableRenameColumn:
-			descChanged, err := params.p.renameColumn(params.ctx, n.tableDesc, t.Column, t.NewName)
+			tableDesc := n.tableDesc
+			columnName := t.Column
+			if columnName == colinfo.TTLDefaultExpirationColumnName &&
+				tableDesc.HasRowLevelTTL() &&
+				tableDesc.GetRowLevelTTL().HasDurationExpr() {
+				return pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					`cannot rename column %s while ttl_expire_after is set`,
+					columnName,
+				)
+			}
+			descChanged, err := params.p.renameColumn(params.ctx, tableDesc, columnName, t.NewName)
 			if err != nil {
 				return err
 			}
