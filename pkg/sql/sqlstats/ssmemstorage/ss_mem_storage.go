@@ -601,7 +601,7 @@ func (s *Container) SaveToLog(ctx context.Context, appName string) {
 	for key, stats := range s.mu.stmts {
 		stats.mu.Lock()
 		json, err := json.Marshal(stats.mu.data)
-		s.mu.Unlock()
+		stats.mu.Unlock()
 		if err != nil {
 			log.Errorf(ctx, "error while marshaling stats for %q // %q: %v", appName, key.String(), err)
 			continue
