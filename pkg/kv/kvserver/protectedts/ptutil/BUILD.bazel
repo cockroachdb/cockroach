@@ -7,12 +7,16 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/roachpb",
         "//pkg/spanconfig",
         "//pkg/spanconfig/spanconfigptsreader",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
         "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

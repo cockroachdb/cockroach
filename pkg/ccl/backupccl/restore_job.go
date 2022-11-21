@@ -25,8 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -1353,6 +1355,57 @@ func createImportingDescriptors(
 	return dataToPreRestore, preValidation, trackedRestore, nil
 }
 
+// protectRestoreSpans issues a protected timestamp over the span we seek to
+// restore. If a pts already exists in the job record, due to previous call of
+// this function, this noops.
+func protectRestoreSpans(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
+	details jobspb.RestoreDetails,
+	tenantRekeys []execinfrapb.TenantRekey,
+) (jobsprotectedts.Cleaner, error) {
+	if details.ProtectedTimestampRecord != nil {
+		// A protected time stamp has already been set. No need to write a new one.
+		return nil, nil
+	}
+	var target *ptpb.Target
+	switch {
+	case details.DescriptorCoverage == tree.AllDescriptors:
+		// During a cluster restore, protect the whole key space.
+		target = ptpb.MakeClusterTarget()
+	case len(details.Tenants) > 0:
+		// During restores of tenants, protect whole tenant key spans.
+		tenantIDs := make([]roachpb.TenantID, 0, len(tenantRekeys))
+		for _, tenant := range tenantRekeys {
+			if tenant.OldID == roachpb.SystemTenantID {
+				// The system tenant rekey acts as metadata for restore processors during
+				// restores of tenants. The host tenant's keyspace does not need protection.
+				// https://github.com/cockroachdb/cockroach/pull/73647
+				continue
+			}
+			tenantIDs = append(tenantIDs, tenant.NewID)
+		}
+		target = ptpb.MakeTenantsTarget(tenantIDs)
+	case len(details.DatabaseDescs) > 0:
+		// During database restores, protect whole databases.
+		databaseIDs := make([]descpb.ID, 0, len(details.DatabaseDescs))
+		for i := range details.DatabaseDescs {
+			databaseIDs = append(databaseIDs, details.DatabaseDescs[i].GetID())
+		}
+		target = ptpb.MakeSchemaObjectsTarget(databaseIDs)
+	default:
+		// Else, protect individual tables.
+		tableIDs := make([]descpb.ID, 0, len(details.TableDescs))
+		for i := range details.TableDescs {
+			tableIDs = append(tableIDs, details.TableDescs[i].GetID())
+		}
+		target = ptpb.MakeSchemaObjectsTarget(tableIDs)
+	}
+	protectedTime := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	return execCfg.ProtectedTimestampManager.Protect(ctx, job, target, protectedTime)
+}
+
 // remapPublicSchemas is used to create a descriptor backed public schema
 // for databases that have virtual public schemas.
 // The rewrite map is updated with the new public schema id.
@@ -1540,6 +1593,17 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 		mainData.addTenant(from, to)
 	}
 
+	_, err = protectRestoreSpans(ctx, p.ExecCfg(), r.job, details, mainData.tenantRekeys)
+	if err != nil {
+		return err
+	}
+	// the restore details now have pts
+	details = r.job.Details().(jobspb.RestoreDetails)
+	if err := p.ExecCfg().JobRegistry.CheckPausepoint(
+		"restore.before_flow"); err != nil {
+		return err
+	}
+
 	numNodes, err := clusterNodeCount(p.ExecCfg().Gossip)
 	if err != nil {
 		if !build.IsRelease() && p.ExecCfg().Codec.ForSystemTenant() {
@@ -1550,6 +1614,7 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	var resTotal roachpb.RowCount
+
 	if !preData.isEmpty() {
 		res, err := restoreWithRetry(
 			ctx,
@@ -1688,7 +1753,9 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 			return err
 		}
 	}
-
+	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
+		log.Errorf(ctx, "failed to release protected timestamp: %v", err)
+	}
 	r.notifyStatsRefresherOfNewTables()
 
 	r.restoreStats = resTotal
@@ -2210,6 +2277,10 @@ func (r *restoreResumer) OnFailOrCancel(
 	telemetry.Count("restore.total.failed")
 	telemetry.CountBucketed("restore.duration-sec.failed",
 		int64(timeutil.Since(timeutil.FromUnixMicros(r.job.Payload().StartedMicros)).Seconds()))
+
+	if err := r.execCfg.ProtectedTimestampManager.Unprotect(ctx, r.job); err != nil {
+		return err
+	}
 
 	details := r.job.Details().(jobspb.RestoreDetails)
 	logJobCompletion(ctx, restoreJobEventType, r.job.ID(), false, jobErr)
