@@ -162,14 +162,14 @@ test          public      t           /Table/106/1/"b"/0  None            Replic
 test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
 
 query TTTTTTBB colnames,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE contended=true
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE contended=true AND lock_key_pretty LIKE '/Table/106%'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"b"/0  Exclusive       Replicated    true    true
 test          public      t           /Table/106/1/"b"/0  None            Replicated    false   true
 
 query TTTTTTBB colnames,retry
-SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE contended=false
+SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, granted, contended FROM crdb_internal.cluster_locks WHERE contended=false AND lock_key_pretty LIKE '/Table/106%'
 ----
 database_name schema_name table_name  lock_key_pretty     lock_strength   durability    granted contended
 test          public      t           /Table/106/1/"c"/0  Exclusive       Replicated    true    false
