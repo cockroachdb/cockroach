@@ -48,7 +48,7 @@ func TestBackendDialTLS(t *testing.T) {
 
 	startupMsg := &pgproto3.StartupMessage{ProtocolVersion: pgproto3.ProtocolVersionNumber}
 
-	tenantCA, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantCACert))
+	tenantCA, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantKVClientCACert))
 	require.NoError(t, err)
 
 	ca := x509.NewCertPool()

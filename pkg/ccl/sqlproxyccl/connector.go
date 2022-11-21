@@ -462,7 +462,7 @@ func tlsConfigForTenant(
 
 		// TODO(jeffswenson): once URI SANs are added to the tenant sql
 		// servers, this should validate the URI SAN.
-		if !security.IsTenantCertificate(serverCert) {
+		if !security.IsTenantKVClientCertificate(serverCert) {
 			return errors.Newf("%s's certificate is not a tenant cert", outgoingHost)
 		}
 		if serverCert.Subject.CommonName != tenantID.String() {
