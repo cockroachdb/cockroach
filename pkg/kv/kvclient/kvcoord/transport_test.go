@@ -141,10 +141,43 @@ func TestSpanImport(t *testing.T) {
 	}
 }
 
+func TestResponseVerifyFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	metrics := makeDistSenderMetrics()
+	gt := grpcTransport{
+		opts: SendOptions{
+			metrics: &metrics,
+		},
+	}
+
+	ba := &roachpb.BatchRequest{}
+	req := roachpb.NewScan(roachpb.KeyMin, roachpb.KeyMax, false /* forUpdate */)
+	ba.Add(req)
+	br := ba.CreateReply()
+	resp := br.Responses[0].GetInner().(*roachpb.ScanResponse)
+	val := roachpb.MakeValueFromString("hi")
+	val.InitChecksum(roachpb.Key("not the right key"))
+	resp.Rows = append(resp.Rows, roachpb.KeyValue{
+		Key:   roachpb.Key("x"),
+		Value: val,
+	})
+	require.Error(t, resp.Verify(req)) // we set this up to fail
+
+	server := mockInternalClient{
+		br: br,
+	}
+
+	_, err := gt.sendBatch(ctx, roachpb.NodeID(1), &server, ba)
+	require.ErrorContains(t, err, "invalid checksum")
+}
+
 // mockInternalClient is an implementation of roachpb.InternalClient.
 // It simulates aspects of how the Node normally handles tracing in gRPC calls.
 type mockInternalClient struct {
 	tr   *tracing.Tracer
+	br   *roachpb.BatchResponse
 	pErr *roachpb.Error
 }
 
@@ -160,15 +193,24 @@ func (*mockInternalClient) ResetQuorum(
 func (m *mockInternalClient) Batch(
 	ctx context.Context, in *roachpb.BatchRequest, opts ...grpc.CallOption,
 ) (*roachpb.BatchResponse, error) {
-	sp := m.tr.StartSpan("mock", tracing.WithRecording(tracingpb.RecordingVerbose))
-	defer sp.Finish()
-	ctx = tracing.ContextWithSpan(ctx, sp)
+	var sp *tracing.Span
+	if m.tr != nil {
+		sp = m.tr.StartSpan("mock", tracing.WithRecording(tracingpb.RecordingVerbose))
+		defer sp.Finish()
+		ctx = tracing.ContextWithSpan(ctx, sp)
+	}
 
 	log.Eventf(ctx, "mockInternalClient processing batch")
-	br := &roachpb.BatchResponse{}
+	br := m.br
+	if br == nil {
+		br = &roachpb.BatchResponse{}
+	}
 	br.Error = m.pErr
-	if rec := sp.GetConfiguredRecording(); rec != nil {
-		br.CollectedSpans = append(br.CollectedSpans, rec...)
+
+	if sp != nil {
+		if rec := sp.GetConfiguredRecording(); rec != nil {
+			br.CollectedSpans = append(br.CollectedSpans, rec...)
+		}
 	}
 	return br, nil
 }
