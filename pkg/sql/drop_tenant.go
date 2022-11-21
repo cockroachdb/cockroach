@@ -32,7 +32,7 @@ func (p *planner) DropTenant(_ context.Context, n *tree.DropTenant) (planNode, e
 }
 
 func (n *dropTenantNode) startExec(params runParams) error {
-	err := params.p.DestroyTenant(params.ctx, n.name, false)
+	err := params.p.DestroyTenant(params.ctx, n.name, false /* synchronous */)
 	if err != nil {
 		if pgerror.GetPGCode(err) == pgcode.UndefinedObject && n.ifExists {
 			return nil
