@@ -664,7 +664,7 @@ CREATE TABLE system.sql_instances (
     addr         STRING,
     session_id   BYTES,
     locality     JSONB,
-	crdb_region  BYTES NOT NULL,
+    crdb_region  BYTES NOT NULL,
     CONSTRAINT "primary" PRIMARY KEY (crdb_region, id),
     FAMILY "primary" (crdb_region, id, addr, session_id, locality)
 )`
