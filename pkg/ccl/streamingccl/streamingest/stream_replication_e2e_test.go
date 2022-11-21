@@ -756,6 +756,62 @@ func TestTenantStreamingCancelIngestion(t *testing.T) {
 	})
 }
 
+func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+
+	testCancelIngestion := func(t *testing.T, cancelAfterPaused bool) {
+		c, cleanup := createTenantStreamingClusters(ctx, t, args)
+		defer cleanup()
+		producerJobID, ingestionJobID := c.startStreamReplication()
+
+		jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+
+		c.waitUntilHighWatermark(c.srcCluster.Server(0).Clock().Now(), jobspb.JobID(ingestionJobID))
+		if cancelAfterPaused {
+			c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", ingestionJobID))
+			jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+		}
+
+		// Set GC TTL low, so that the GC job completes quickly in the test.
+		c.destSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		c.destSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.args.destTenantName))
+		jobutils.WaitForJobToCancel(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
+		jobutils.WaitForJobToCancel(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+
+		// Check if the producer job has released protected timestamp.
+		stats := streamIngestionStats(t, c.destSysSQL, ingestionJobID)
+		require.NotNil(t, stats.ProducerStatus)
+		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+
+		// Wait for the GC job to finish
+		c.destSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
+
+		// Check if dest tenant key range is cleaned up.
+		destTenantPrefix := keys.MakeTenantPrefix(args.destTenantID)
+		rows, err := c.destCluster.Server(0).DB().
+			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+
+		c.destSysSQL.CheckQueryResults(t,
+			fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.destTenantID),
+			[][]string{{"0"}})
+	}
+
+	t.Run("drop-tenant-after-paused", func(t *testing.T) {
+		testCancelIngestion(t, true)
+	})
+
+	t.Run("drop-tenant-while-running", func(t *testing.T) {
+		testCancelIngestion(t, false)
+	})
+}
+
 func TestTenantStreamingUnavailableStreamAddress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

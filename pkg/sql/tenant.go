@@ -246,10 +246,16 @@ func GetTenantRecordByID(
 	return info, nil
 }
 
-// updateTenantRecord updates a tenant in system.tenants.
-func updateTenantRecord(
+// UpdateTenantRecord updates a tenant in system.tenants.
+//
+// Caller is expected to check the user's permission.
+func UpdateTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
 ) error {
+	if err := validateTenantInfo(info); err != nil {
+		return err
+	}
+
 	tenID := info.ID
 	active := info.State == descpb.TenantInfo_ACTIVE
 	infoBytes, err := protoutil.Marshal(info)
@@ -265,6 +271,16 @@ func updateTenantRecord(
 		return errors.Wrap(err, "activating tenant")
 	} else if num != 1 {
 		log.Fatalf(ctx, "unexpected number of rows affected: %d", num)
+	}
+	return nil
+}
+
+func validateTenantInfo(info *descpb.TenantInfo) error {
+	if info.TenantReplicationJobID != 0 && info.State == descpb.TenantInfo_ACTIVE {
+		return errors.Newf("tenant in state %v with replication job ID %d", info.State, info.TenantReplicationJobID)
+	}
+	if info.DroppedName != "" && info.State != descpb.TenantInfo_DROP {
+		return errors.Newf("tenant in state %v with dropped name %q", info.State, info.DroppedName)
 	}
 	return nil
 }
@@ -469,7 +485,7 @@ func ActivateTenant(ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, t
 
 	// Mark the tenant as active.
 	info.State = descpb.TenantInfo_ACTIVE
-	if err := updateTenantRecord(ctx, execCfg, txn, info); err != nil {
+	if err := UpdateTenantRecord(ctx, execCfg, txn, info); err != nil {
 		return errors.Wrap(err, "activating tenant")
 	}
 
@@ -501,7 +517,7 @@ func clearTenant(ctx context.Context, execCfg *ExecutorConfig, info *descpb.Tena
 
 // DestroyTenant implements the tree.TenantOperator interface.
 func (p *planner) DestroyTenant(
-	ctx context.Context, tenantName roachpb.TenantName, synchronous bool,
+	ctx context.Context, tenantName roachpb.TenantName, synchronousImmediateDrop bool,
 ) error {
 	if err := p.validateDestroyTenant(ctx); err != nil {
 		return err
@@ -512,11 +528,13 @@ func (p *planner) DestroyTenant(
 		return errors.Wrap(err, "destroying tenant")
 	}
 
-	return destroyTenantInternal(ctx, p.txn, p.execCfg, &p.extendedEvalCtx, p.User(), info, synchronous)
+	return destroyTenantInternal(ctx, p.txn, p.execCfg, &p.extendedEvalCtx, p.User(), info, synchronousImmediateDrop)
 }
 
 // DestroyTenantByID implements the tree.TenantOperator interface.
-func (p *planner) DestroyTenantByID(ctx context.Context, tenID uint64, synchronous bool) error {
+func (p *planner) DestroyTenantByID(
+	ctx context.Context, tenID uint64, synchronousImmediateDrop bool,
+) error {
 	if err := p.validateDestroyTenant(ctx); err != nil {
 		return err
 	}
@@ -525,7 +543,7 @@ func (p *planner) DestroyTenantByID(ctx context.Context, tenID uint64, synchrono
 	if err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
-	return destroyTenantInternal(ctx, p.txn, p.execCfg, &p.extendedEvalCtx, p.User(), info, synchronous)
+	return destroyTenantInternal(ctx, p.txn, p.execCfg, &p.extendedEvalCtx, p.User(), info, synchronousImmediateDrop)
 }
 
 func (p *planner) validateDestroyTenant(ctx context.Context) error {
@@ -543,7 +561,7 @@ func destroyTenantInternal(
 	extendedEvalCtx *extendedEvalContext,
 	user username.SQLUsername,
 	info *descpb.TenantInfo,
-	synchronous bool,
+	synchronousImmediateDrop bool,
 ) error {
 	const op = "destroy"
 	tenID := info.ID
@@ -557,23 +575,28 @@ func destroyTenantInternal(
 
 	// Mark the tenant as dropping.
 	//
-	// TODO(ssd): Once available, we should cancel any running
-	// replication job on this tenant record.
-	//
+	// Cancel any running replication job on this tenant record.
+	// The GCJob will wait for this job to enter a terminal state.
+	if info.TenantReplicationJobID != 0 {
+		if err := execCfg.JobRegistry.CancelRequested(ctx, txn, info.TenantReplicationJobID); err != nil {
+			return errors.Wrapf(err, "canceling tenant replication job %d", info.TenantReplicationJobID)
+		}
+	}
+
 	// TODO(ssd): We may want to implement a job that waits out
 	// any running sql pods before enqueing the GC job.
 	info.State = descpb.TenantInfo_DROP
 	info.DroppedName = info.Name
 	info.Name = ""
-	if err := updateTenantRecord(ctx, execCfg, txn, info); err != nil {
+	if err := UpdateTenantRecord(ctx, execCfg, txn, info); err != nil {
 		return errors.Wrap(err, "destroying tenant")
 	}
 
-	jobID, err := gcTenantJob(ctx, execCfg, txn, user, tenID, synchronous)
+	jobID, err := gcTenantJob(ctx, execCfg, txn, user, tenID, synchronousImmediateDrop)
 	if err != nil {
 		return errors.Wrap(err, "scheduling gc job")
 	}
-	if synchronous {
+	if synchronousImmediateDrop {
 		extendedEvalCtx.Jobs.add(jobID)
 	}
 	return nil
@@ -661,7 +684,7 @@ func gcTenantJob(
 	txn *kv.Txn,
 	user username.SQLUsername,
 	tenID uint64,
-	synchronous bool,
+	dropImmediately bool,
 ) (jobspb.JobID, error) {
 	// Queue a GC job that will delete the tenant data and finally remove the
 	// row from `system.tenants`.
@@ -671,7 +694,7 @@ func gcTenantJob(
 		DropTime: timeutil.Now().UnixNano(),
 	}
 	progress := jobspb.SchemaChangeGCProgress{}
-	if synchronous {
+	if dropImmediately {
 		progress.Tenant = &jobspb.SchemaChangeGCProgress_TenantProgress{
 			Status: jobspb.SchemaChangeGCProgress_CLEARING,
 		}
@@ -759,7 +782,7 @@ func (p *planner) UpdateTenantResourceLimits(
 func TestingUpdateTenantRecord(
 	ctx context.Context, execCfg *ExecutorConfig, txn *kv.Txn, info *descpb.TenantInfo,
 ) error {
-	return updateTenantRecord(ctx, execCfg, txn, info)
+	return UpdateTenantRecord(ctx, execCfg, txn, info)
 }
 
 // RenameTenant implements the tree.TenantOperator interface.

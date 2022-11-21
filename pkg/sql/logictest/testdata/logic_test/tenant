@@ -3,7 +3,7 @@ query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id
 ----
 id  active  length  name
-1   true    14      system
+1   true    16      system
 
 # Create a few tenants.
 
@@ -22,10 +22,10 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name        crdb_internal.pb_to_json
-1   true    system      {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}
-2   true    tenant-one  {"droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE"}
-3   true    two         {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE"}
-4   true    three       {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE"}
+1   true    system      {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+2   true    tenant-one  {"droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+3   true    two         {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+4   true    three       {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 query ITT colnames
 SHOW TENANT system
@@ -97,7 +97,7 @@ FROM system.tenants WHERE name = 'four'
 ORDER BY id
 ----
 id  active  name  crdb_internal.pb_to_json
-5   true    four  {"droppedName": "", "id": "5", "name": "four", "state": "ACTIVE"}
+5   true    four  {"droppedName": "", "id": "5", "name": "four", "state": "ACTIVE", "tenantReplicationJobId": "0"}
 
 statement ok
 DROP TENANT four
@@ -151,11 +151,11 @@ FROM system.tenants
 ORDER BY id
 ----
 id  active  name             crdb_internal.pb_to_json
-1   true    system           {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}
-2   true    tenant-one       {"droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE"}
-3   true    two              {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE"}
-4   true    three            {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE"}
-5   false   NULL             {"droppedName": "four", "id": "5", "name": "", "state": "DROP"}
-6   false   NULL             {"droppedName": "five-requiring-quotes", "id": "6", "name": "", "state": "DROP"}
-7   false   NULL             {"droppedName": "to-be-reclaimed", "id": "7", "name": "", "state": "DROP"}
-8   true    to-be-reclaimed  {"droppedName": "", "id": "8", "name": "to-be-reclaimed", "state": "ACTIVE"}
+1   true    system           {"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+2   true    tenant-one       {"droppedName": "", "id": "2", "name": "tenant-one", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+3   true    two              {"droppedName": "", "id": "3", "name": "two", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+4   true    three            {"droppedName": "", "id": "4", "name": "three", "state": "ACTIVE", "tenantReplicationJobId": "0"}
+5   false   NULL             {"droppedName": "four", "id": "5", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+6   false   NULL             {"droppedName": "five-requiring-quotes", "id": "6", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+7   false   NULL             {"droppedName": "to-be-reclaimed", "id": "7", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}
+8   true    to-be-reclaimed  {"droppedName": "", "id": "8", "name": "to-be-reclaimed", "state": "ACTIVE", "tenantReplicationJobId": "0"}
