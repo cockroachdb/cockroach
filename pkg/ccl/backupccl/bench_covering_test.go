@@ -62,7 +62,7 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 								introducedSpanFrontier, err := createIntroducedSpanFrontier(backups, hlc.Timestamp{})
 								require.NoError(b, err)
 
-								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, introducedSpanFrontier, nil)
+								cov := makeSimpleImportSpans(backups[numBackups-1].Spans, backups, nil, introducedSpanFrontier, nil, 0)
 								b.ReportMetric(float64(len(cov)), "coverSize")
 							}
 						})
