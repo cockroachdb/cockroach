@@ -157,6 +157,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Nodes = util.CombineUniqueInt64(s.Nodes, other.Nodes)
 	s.PlanGists = util.CombineUniqueString(s.PlanGists, other.PlanGists)
 	s.IndexRecommendations = other.IndexRecommendations
+	s.Indexes = util.CombineUniqueString(s.Indexes, other.Indexes)
 
 	s.ExecStats.Add(other.ExecStats)
 

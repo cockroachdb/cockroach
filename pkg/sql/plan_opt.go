@@ -645,6 +645,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	planTop.instrumentation.joinTypeCounts = bld.JoinTypeCounts
 	planTop.instrumentation.joinAlgorithmCounts = bld.JoinAlgorithmCounts
 	planTop.instrumentation.scanCounts = bld.ScanCounts
+	planTop.instrumentation.indexesUsed = bld.IndexesUsed
 
 	if gf != nil {
 		planTop.instrumentation.planGist = gf.PlanGist()
