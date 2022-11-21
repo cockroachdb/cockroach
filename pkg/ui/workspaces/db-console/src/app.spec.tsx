@@ -9,6 +9,8 @@
 // licenses/APL.txt.
 
 import { stubComponentInModule } from "./test-utils/mockComponent";
+stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
+stubComponentInModule("src/views/cluster/containers/events", "EventPage");
 stubComponentInModule("src/views/databases/databasesPage", "DatabasesPage");
 stubComponentInModule(
   "src/views/databases/databaseDetailsPage",
@@ -57,11 +59,9 @@ import { AdminUIState, createAdminUIStore } from "src/redux/state";
 
 const CLUSTER_OVERVIEW_CAPACITY_LABEL = "Capacity Usage";
 const CLUSTER_VIZ_NODE_MAP_LABEL = "Node Map";
-const METRICS_HEADER = "Metrics";
 const NODE_LIST_LABEL = /Nodes \([\d]\)/;
 const LOADING_CLUSTER_STATUS = /Loading cluster status.*/;
 const NODE_LOG_HEADER = /Logs Node.*/;
-const EVENTS_HEADER = "Events";
 const JOBS_HEADER = "Jobs";
 const SQL_ACTIVITY_HEADER = "SQL Activity";
 const TRANSACTION_DETAILS_HEADER = "Transaction Details";
@@ -142,7 +142,7 @@ describe("Routing to", () => {
   describe("'/metrics' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
 
     test("redirected to '/metrics/overview/cluster'", () => {
@@ -154,21 +154,21 @@ describe("Routing to", () => {
   describe("'/metrics/overview/cluster' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/overview/cluster");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
   });
 
   describe("'/metrics/overview/node' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/overview/node");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
   });
 
   describe("'/metrics/:dashboardNameAttr' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
 
     test("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
@@ -180,14 +180,14 @@ describe("Routing to", () => {
   describe("'/metrics/:dashboardNameAttr/cluster' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/cluster");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
   });
 
   describe("'/metrics/:dashboardNameAttr/node' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/node");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
 
     test("redirected to '/metrics/:${dashboardNameAttr}/cluster'", () => {
@@ -199,7 +199,7 @@ describe("Routing to", () => {
   describe("'/metrics/:dashboardNameAttr/node/:nodeIDAttr' path", () => {
     test("routes to <NodeGraphs> component", () => {
       navigateToPath("/metrics/some-dashboard/node/123");
-      screen.getByText(METRICS_HEADER, { selector: "h3" });
+      screen.getByTestId("nodeGraphs");
     });
   });
 
@@ -238,7 +238,7 @@ describe("Routing to", () => {
   describe("'/events' path", () => {
     test("routes to <EventPageUnconnected> component", () => {
       navigateToPath("/events");
-      screen.getByText(EVENTS_HEADER, { selector: "h1" });
+      screen.getByTestId("EventPage");
     });
   });
 
