@@ -30,12 +30,12 @@ import {
   selectStatementsLastError,
   selectTotalFingerprints,
   selectColumns,
-  selectTimeScale,
   selectSortSetting,
   selectFilters,
   selectSearch,
   selectStatementsLastUpdated,
 } from "./statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import {
   selectIsTenant,
   selectHasViewActivityRedactedRole,

@@ -19,30 +19,33 @@ import { AppState } from "src/store";
 import {
   actions as statementInsights,
   selectStatementInsightDetails,
-  selectStatementInsightsError,
+  selectExecutionInsightsError,
 } from "src/store/insights/statementInsights";
 import { selectIsTenant } from "src/store/uiConfig";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { selectTimeScale } from "../../store/utils/selectors";
+import { ExecutionInsightsRequest } from "../../api";
 
 const mapStateToProps = (
   state: AppState,
   props: RouteComponentProps,
 ): StatementInsightDetailsStateProps => {
   const insightStatements = selectStatementInsightDetails(state, props);
-  const insightError = selectStatementInsightsError(state);
+  const insightError = selectExecutionInsightsError(state);
   return {
     insightEventDetails: insightStatements,
     insightError: insightError,
     isTenant: selectIsTenant(state),
+    timeScale: selectTimeScale(state),
   };
 };
 
 const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementInsightDetailsDispatchProps => ({
-  refreshStatementInsights: () => {
-    dispatch(statementInsights.refresh());
+  refreshStatementInsights: (req: ExecutionInsightsRequest) => {
+    dispatch(statementInsights.refresh(req));
   },
   setTimeScale: (ts: TimeScale) => {
     dispatch(
