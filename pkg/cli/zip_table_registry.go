@@ -351,6 +351,16 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"num_runs",
 		},
 	},
+	"crdb_internal.kv_changefeed_jobs_details": {
+		// `changefeed_jobs_details_table_generation_error` may contain an error
+		// message which may contain sensitive data.
+		nonSensitiveCols: NonSensitiveColumns{
+			"job_id",
+			"topics",
+			"sink_uri",
+			"format",
+		},
+	},
 	"crdb_internal.kv_node_liveness": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"node_id",
