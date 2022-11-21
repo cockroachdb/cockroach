@@ -50,6 +50,9 @@ type Cleaner func(ctx context.Context) error
 
 func setProtectedTSOnJob(details jobspb.Details, u *uuid.UUID) jobspb.Details {
 	switch v := details.(type) {
+	case jobspb.RestoreDetails:
+		v.ProtectedTimestampRecord = u
+		return v
 	case jobspb.NewSchemaChangeDetails:
 		v.ProtectedTimestampRecord = u
 		return v
@@ -63,6 +66,8 @@ func setProtectedTSOnJob(details jobspb.Details, u *uuid.UUID) jobspb.Details {
 
 func getProtectedTSOnJob(details jobspb.Details) *uuid.UUID {
 	switch v := details.(type) {
+	case jobspb.RestoreDetails:
+		return v.ProtectedTimestampRecord
 	case jobspb.NewSchemaChangeDetails:
 		return v.ProtectedTimestampRecord
 	case jobspb.SchemaChangeDetails:
