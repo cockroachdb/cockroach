@@ -10,18 +10,19 @@
 export const selectTenantsFromCookies = (): string[] => {
   const sessionCookieStr = document.cookie
     .split(";")
-    .filter(row => row.startsWith("session="))[0];
+    .filter(row => row.trim().startsWith("session="))[0];
   return sessionCookieStr
     ? sessionCookieStr
+        .replace(/["]/g, "")
         .replace("session=", "")
         .split(/[,&]/g)
         .filter((_, idx) => idx % 2 == 1)
     : [];
 };
 
-export const selectCurrentTenantIDFromCookies = (): string | null => {
+export const selectCurrentTenantFromCookies = (): string | null => {
   const tenantCookieStr = document.cookie
     .split(";")
-    .filter(row => row.startsWith("tenant="))[0];
+    .filter(row => row.trim().startsWith("tenant="))[0];
   return tenantCookieStr ? tenantCookieStr.replace("tenant=", "") : null;
 };

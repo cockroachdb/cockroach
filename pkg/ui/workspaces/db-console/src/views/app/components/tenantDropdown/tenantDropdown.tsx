@@ -7,9 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
-import cookie from "cookie";
 import {
-  selectCurrentTenantIDFromCookies,
+  selectCurrentTenantFromCookies,
   selectTenantsFromCookies,
 } from "src/redux/tenantOptions";
 import React from "react";
@@ -18,11 +17,11 @@ import ErrorBoundary from "../errorMessage/errorBoundary";
 import { CaretDown } from "@cockroachlabs/icons";
 import "./tenantDropdown.styl";
 
-const tenantIDKey = "tenant_id";
+const tenantIDKey = "tenant";
 
 const TenantDropdown = () => {
   const tenants = selectTenantsFromCookies();
-  const currentTenantID = selectCurrentTenantIDFromCookies();
+  const currentTenant = selectCurrentTenantFromCookies();
 
   const createDropdownItems = () => {
     return (
@@ -32,11 +31,13 @@ const TenantDropdown = () => {
     );
   };
 
-  const setTenantIDCookie = (tenantID: string) => {
-    document.cookie = `${tenantIDKey}=${tenantID};path=/`;
-    location.reload();
+  const setTenantCookie = (tenant: string) => {
+    if (tenant !== currentTenant) {
+      document.cookie = `${tenantIDKey}=${tenant};path=/`;
+      location.reload();
+    }
   };
-  console.log(cookie.parse(document.cookie));
+
   if (tenants.length == 0) {
     return null;
   }
@@ -46,10 +47,10 @@ const TenantDropdown = () => {
       <Dropdown
         className="tenant-dropdown"
         items={createDropdownItems()}
-        onChange={tenantID => setTenantIDCookie(tenantID)}
+        onChange={tenantID => setTenantCookie(tenantID)}
         icon={<CaretDown className="tenant-caret-down" />}
       >
-        <div className="tenant-selected">{"Tenant " + currentTenantID}</div>
+        <div className="tenant-selected">{"Tenant " + currentTenant}</div>
       </Dropdown>
     </ErrorBoundary>
   );
