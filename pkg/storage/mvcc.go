@@ -3870,7 +3870,6 @@ func MVCCScan(
 		},
 	)
 	defer iter.Close()
-
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)
 }
 
