@@ -1,0 +1,41 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "schedulebase",
+    srcs = ["util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/kv",
+        "//pkg/scheduledjobs",
+        "//pkg/security/username",
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/resolver",
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_robfig_cron_v3//:cron",
+    ],
+)
+
+go_test(
+    name = "schedulebase_test",
+    srcs = ["util_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":schedulebase"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -93,6 +93,8 @@ FILES = [
     "create_inverted_index_stmt",
     "create_role_stmt",
     "create_schedule_for_backup_stmt",
+    "create_schedule_for_changefeed_stmt",
+    "create_schedule_stmt",
     "create_schema_stmt",
     "create_sequence_stmt",
     "create_stats_stmt",

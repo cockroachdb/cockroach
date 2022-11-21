@@ -97,3 +97,53 @@ func (node ScheduledBackup) Coverage() DescriptorCoverage {
 	}
 	return RequestedDescriptors
 }
+
+// ScheduledChangefeed represents scheduled changefeed job.
+type ScheduledChangefeed struct {
+	*CreateChangefeed
+	ScheduleLabelSpec LabelSpec
+	Recurrence        Expr
+	ScheduleOptions   KVOptions
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ScheduledChangefeed) Format(ctx *FmtCtx) {
+	ctx.WriteString("CREATE SCHEDULE")
+
+	if node.ScheduleLabelSpec.IfNotExists {
+		ctx.WriteString(" IF NOT EXISTS")
+	}
+
+	if node.ScheduleLabelSpec.Label != nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(node.ScheduleLabelSpec.Label)
+	}
+
+	ctx.WriteString(" FOR CHANGEFEED")
+
+	if node.Select == nil {
+		ctx.WriteString(" ")
+		ctx.FormatNode(&node.Targets)
+	}
+
+	ctx.WriteString(" INTO ")
+	ctx.FormatNode(node.SinkURI)
+
+	if node.Options != nil {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(&node.Options)
+	}
+
+	if node.Select != nil {
+		ctx.WriteString(" AS ")
+		ctx.FormatNode(node.Select)
+	}
+
+	ctx.WriteString(" RECURRING ")
+	ctx.FormatNode(node.Recurrence)
+
+	if node.ScheduleOptions != nil {
+		ctx.WriteString(" WITH SCHEDULE OPTIONS ")
+		ctx.FormatNode(&node.ScheduleOptions)
+	}
+}
