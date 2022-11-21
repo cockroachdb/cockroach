@@ -344,7 +344,7 @@ func generateSplitCACerts(certsDir string) error {
 
 	if err := security.CreateSQLServerPair(
 		certsDir, filepath.Join(certsDir, certnames.EmbeddedCAKey),
-		testKeySize, time.Hour*48, false, []string{"localhost"},
+		testKeySize, time.Hour*48, false, nil /* tenantIDs */, []string{"localhost"},
 	); err == nil {
 		return errors.Wrap(err, "could not generate SQL Server pair")
 	}

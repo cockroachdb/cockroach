@@ -211,6 +211,7 @@ func runCreateSQLServerCert(cmd *cobra.Command, args []string) error {
 			certCtx.keySize,
 			certCtx.certificateLifetime,
 			certCtx.overwriteFiles,
+			certCtx.tenantScope,
 			args),
 		"failed to generate SQL server certificate and key")
 }
