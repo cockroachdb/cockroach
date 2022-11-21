@@ -134,7 +134,7 @@ type Server struct {
 	http            *httpServer
 	adminAuthzCheck *adminPrivilegeChecker
 	admin           *adminServer
-	status          *statusServer
+	status          *systemStatusServer
 	drain           *drainServer
 	decomNodeMap    *decommissioningNodeMap
 	authentication  *authenticationServer
@@ -806,8 +806,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	remoteFlowRunnerAcc := sqlMonitorAndMetrics.rootSQLMemoryMonitor.MakeBoundAccount()
 	remoteFlowRunner := flowinfra.NewRemoteFlowRunner(cfg.AmbientCtx, stopper, &remoteFlowRunnerAcc)
 
+	serverIterator := &kvFanoutClient{
+		gossip:       g,
+		rpcCtx:       rpcContext,
+		db:           db,
+		nodeLiveness: nodeLiveness,
+		admin:        sAdmin,
+		st:           st,
+		ambientCtx:   cfg.AmbientCtx,
+	}
+
 	// Instantiate the status API server.
-	sStatus := newStatusServer(
+	sStatus := newSystemStatusServer(
 		cfg.AmbientCtx,
 		st,
 		cfg.Config,
@@ -825,6 +835,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		closedSessionCache,
 		remoteFlowRunner,
 		internalExecutor,
+		serverIterator,
 		spanConfig.reporter,
 	)
 
