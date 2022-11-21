@@ -575,9 +575,6 @@ func loadValueHeaderForDeleteRange(
 		if !ok {
 			break
 		}
-		if !it.RangeKeyChanged() {
-			continue
-		}
 		rkv, ok := it.RangeKeys().FirstAtOrAbove(t.Timestamp)
 		if !ok || rkv.Timestamp != t.Timestamp {
 			return enginepb.MVCCValueHeader{}, errors.AssertionFailedf("missing range key segment")
