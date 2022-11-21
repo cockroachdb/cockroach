@@ -92,17 +92,16 @@ func NewManager(
 
 // TryToProtectBeforeGC adds a protected timestamp record for a historical
 // transaction for a specific table, once a certain percentage of the GC TTL has
-// elapsed. This method can be preferred in scenarios where the cost of installing
-// a protected timestamp is more expensive relative to the typical length of an
-// operation (for example multi region). The approach here is heuristic
-// and can be considered a best-effort basis since the GC TTL could change or
-// the caller may not invoke this early enough in the transaction. Returns a Cleaner
-// function to cancel installation or remove the protected  timestamp.
+// elapsed. This method can be preferred in scenarios where the cost of
+// installing a protected timestamp is more expensive relative to the typical
+// length of an operation (for example multi region). The approach here is
+// heuristic and can be considered a best-effort basis since the GC TTL could
+// change or the caller may not invoke this early enough in the transaction.
+// Returns a Cleaner function to cancel installation or remove the protected
+// timestamp. Note, the function assumes the in-memory job is up to date with
+// the persisted job record.
 func (p *Manager) TryToProtectBeforeGC(
-	ctx context.Context,
-	jobID jobspb.JobID,
-	tableDesc catalog.TableDescriptor,
-	readAsOf hlc.Timestamp,
+	ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
 ) Cleaner {
 	waitGrp := ctxgroup.WithContext(ctx)
 	protectedTSInstallCancel := make(chan struct{})
@@ -127,7 +126,8 @@ func (p *Manager) TryToProtectBeforeGC(
 
 		select {
 		case <-time.After(waitBeforeProtectedTS):
-			unprotectCallback, err = p.Protect(ctx, jobID, tableDesc, readAsOf)
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			unprotectCallback, err = p.Protect(ctx, job, target, readAsOf)
 			if err != nil {
 				return err
 			}
@@ -152,16 +152,13 @@ func (p *Manager) TryToProtectBeforeGC(
 	}
 }
 
-// Protect adds a protected timestamp record for a historical
-// transaction for a specific table immediately in a synchronous
-// manner. If an existing record is found, it will be updated with
-// a new timestamp. Returns a Cleaner function to remove the protected timestamp,
-// if one was installed.
+// Protect adds a protected timestamp record for a historical transaction for a
+// specific table immediately in a synchronous manner. If an existing record is
+// found, it will be updated with a new timestamp. Returns a Cleaner function to
+// remove the protected timestamp, if one was installed. Note, the function
+// assumes the in-memory job is up to date with the persisted job record.
 func (p *Manager) Protect(
-	ctx context.Context,
-	jobID jobspb.JobID,
-	tableDesc catalog.TableDescriptor,
-	readAsOf hlc.Timestamp,
+	ctx context.Context, job *jobs.Job, target *ptpb.Target, readAsOf hlc.Timestamp,
 ) (Cleaner, error) {
 	// If we are not running a historical query, nothing to do here.
 	if readAsOf.IsEmpty() {
@@ -169,10 +166,6 @@ func (p *Manager) Protect(
 	}
 	var protectedtsID *uuid.UUID
 	err := p.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		job, err := p.jr.LoadJobWithTxn(ctx, jobID, txn)
-		if err != nil {
-			return err
-		}
 		details := job.Details()
 		protectedtsID = getProtectedTSOnJob(details)
 		// Check if there is an existing protected timestamp ID on the job,
@@ -187,9 +180,8 @@ func (p *Manager) Protect(
 				md.Payload.Details = jobspb.WrapPayloadDetails(details)
 				ju.UpdatePayload(md.Payload)
 
-				target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
 				rec := MakeRecord(*protectedtsID,
-					int64(jobID), readAsOf, nil, Jobs, target)
+					int64(job.ID()), readAsOf, nil, Jobs, target)
 				return p.protectedTSProvider.Protect(ctx, txn, rec)
 			})
 		}
@@ -200,31 +192,26 @@ func (p *Manager) Protect(
 		return nil, err
 	}
 	return func(ctx context.Context) error {
-		return p.Unprotect(ctx, jobID)
+		return p.Unprotect(ctx, job)
 	}, nil
 }
 
-// Unprotect based on a job ID, mainly for last resort cleanup.
-// Note: This should only be used for job cleanup if is not currently,
+// Unprotect the pts associated with the job, mainly for last resort cleanup.
+// The function assumes the in-memory job is up to date with the persisted job
+// record. Note: This should only be used for job cleanup if is not currently,
 // executing.
-func (p *Manager) Unprotect(ctx context.Context, jobID jobspb.JobID) error {
+func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 	return p.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		job, err := p.jr.LoadJobWithTxn(ctx, jobID, txn)
-		if err != nil {
-			return err
-		}
 		// Fetch the protected timestamp UUID from the job, if one exists.
-		details := job.Details()
-		protectedtsID := getProtectedTSOnJob(details)
+		protectedtsID := getProtectedTSOnJob(job.Details())
 		if protectedtsID == nil {
 			return nil
 		}
 		// If we do find one then we need to clean up the protected timestamp,
 		// and remove it from the job.
 		return job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-			details = md.Payload.UnwrapDetails()
-			details = setProtectedTSOnJob(details, nil)
-			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			updatedDetails := setProtectedTSOnJob(job.Details(), nil)
+			md.Payload.Details = jobspb.WrapPayloadDetails(updatedDetails)
 			ju.UpdatePayload(md.Payload)
 			return p.protectedTSProvider.Release(ctx, txn, *protectedtsID)
 		})
