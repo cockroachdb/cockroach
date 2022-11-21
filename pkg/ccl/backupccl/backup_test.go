@@ -6822,14 +6822,14 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB := sqlutils.MakeSQLRunner(restoreTC.Conns[0])
 
 		restoreDB.CheckQueryResults(t, `select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`, [][]string{
-			{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
+			{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 		})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
 			`SELECT id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) FROM system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			},
 		)
 		restoreDB.CheckQueryResults(t,
@@ -6858,8 +6858,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
-				{`10`, `false`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "DROP"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`10`, `false`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "DROP", "tenantReplicationJobId": "0"}`},
 			},
 		)
 
@@ -6883,8 +6883,8 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			},
 		)
 
@@ -6908,14 +6908,14 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/t10'`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			},
 		)
 	})
@@ -6937,14 +6937,14 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			})
 		restoreDB.Exec(t, `RESTORE TENANT 10 FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			},
 		)
 
@@ -6977,16 +6977,16 @@ func TestBackupRestoreTenant(t *testing.T) {
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			})
 		restoreDB.Exec(t, `RESTORE FROM 'nodelocal://1/clusterwide'`)
 		restoreDB.CheckQueryResults(t,
 			`select id, active, name, crdb_internal.pb_to_json('cockroach.sql.sqlbase.TenantInfo', info, true) from system.tenants`,
 			[][]string{
-				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE"}`},
-				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE"}`},
-				{`11`, `true`, `NULL`, `{"droppedName": "", "id": "11", "name": "", "state": "ACTIVE"}`},
-				{`20`, `true`, `NULL`, `{"droppedName": "", "id": "20", "name": "", "state": "ACTIVE"}`},
+				{`1`, `true`, `system`, `{"droppedName": "", "id": "1", "name": "system", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`10`, `true`, `NULL`, `{"droppedName": "", "id": "10", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`11`, `true`, `NULL`, `{"droppedName": "", "id": "11", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
+				{`20`, `true`, `NULL`, `{"droppedName": "", "id": "20", "name": "", "state": "ACTIVE", "tenantReplicationJobId": "0"}`},
 			},
 		)
 
