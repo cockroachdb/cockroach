@@ -416,17 +416,7 @@ func (tpccIncData) runRestoreDetached(
 
 // This data set restores a backup created from a 500k tpce fixture. The backed
 // up cluster had around 7.6 TB of data on disk, and the restore cluster will
-// have around 10TB on disk.
-//
-// Disk inflation explanation: The inflation is likely due to restore's
-// tendency to create more, smaller SSTs, which each have a fixed amount of
-// metadata. In a quick investigation, the restored cluster had nearly 2x more
-// SSTs than the backed up cluster that were on average half the size of the
-// backed up cluster's. Further investigation is required to understand
-// exactly how this leads to a 25% increase in disk inflation.
-// The problem does not seem apparent in 22.2,
-// likely because https://github.com/cockroachdb/cockroach/pull/86496
-// leads to larger restored SSTs.
+// have around 8.5TB on disk.
 //
 // Backup Fixture description: This fixture contains two full backups and hourly
 // incremental backups taken over 24 hours, with revision history. The cluster
@@ -453,7 +443,7 @@ func (tpccIncData) runRestoreDetached(
 type tpce10TB struct{}
 
 func (tpce10TB) name() string {
-	return "TPCC10TB"
+	return "TPCE10TB"
 }
 
 func (tpce10TB) runRestore(ctx context.Context, c cluster.Cluster) {
@@ -478,7 +468,8 @@ func (tpce10TB) runRestoreDetached(
 	}
 
 	var jobID jobspb.JobID
-	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE'`).Scan(&jobID); err != nil {
+	if err := db.QueryRow(`SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'RESTORE' ORDER BY created DESC LIMIT 1`).Scan(
+		&jobID); err != nil {
 		return 0, err
 	}
 
@@ -491,7 +482,7 @@ var _ testDataSet = tpccIncData{}
 func checkDetachedRestore(
 	ctx context.Context, t test.Test, c cluster.Cluster, jobID jobspb.JobID,
 ) error {
-	succeededJobTick := time.NewTicker(time.Minute * 5)
+	succeededJobTick := time.NewTicker(time.Minute * 1)
 	defer succeededJobTick.Stop()
 	done := ctx.Done()
 	for {
@@ -533,11 +524,11 @@ func registerRestore(r registry.Registry) {
 		timeout time.Duration
 
 		// detatched runs a detatched restore, which will cause the roachperf time to be off by at
-		// most 5 minutes. Use this setting for especially large roachtests where an
+		// most 1 minute. Use this setting for especially large roachtests where an
 		// ssh connection disruption could occur.
 		detached bool
 
-		// parallelize bumps the restore node  and addsstable request concurrency
+		// parallelize bumps the restore node and addsstable request concurrency.
 		parallelize bool
 	}{
 		{dataSet: dataBank2TB{}, nodes: 10, timeout: 6 * time.Hour},
