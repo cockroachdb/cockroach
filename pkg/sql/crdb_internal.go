@@ -137,6 +137,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalIndexUsageStatisticsTableID:        crdbInternalIndexUsageStatistics,
 		catconstants.CrdbInternalInflightTraceSpanTableID:           crdbInternalInflightTraceSpanTable,
 		catconstants.CrdbInternalJobsTableID:                        crdbInternalJobsTable,
+		catconstants.CrdbInternalChangefeedJobsTableID:              crdbInternalChangefeedJobsTable,
 		catconstants.CrdbInternalKVNodeStatusTableID:                crdbInternalKVNodeStatusTable,
 		catconstants.CrdbInternalKVStoreStatusTableID:               crdbInternalKVStoreStatusTable,
 		catconstants.CrdbInternalLeasesTableID:                      crdbInternalLeasesTable,
@@ -846,6 +847,136 @@ func tsOrNull(micros int64) (tree.Datum, error) {
 	}
 	ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
 	return tree.MakeDTimestamp(ts, time.Microsecond)
+}
+
+const (
+	changefeedDetailsCTE = `
+		WITH payload AS (
+			SELECT
+				id,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.jobs.jobspb.Payload',
+					payload, false, true
+					)->'changefeed' AS changefeed_details,
+				crdb_internal.pb_to_json(
+					'cockroach.sql.jobs.jobspb.Payload',
+					payload, true, true
+					)->'usernameProto' AS username
+			FROM
+				system.jobs
+		)
+		`
+	changefeedDetailsSelect = `
+		SELECT 
+			id,
+			replace(
+					changefeed_details->>'sink_uri', 
+					'\u0026', '&'
+				) AS sink_uri,
+			changefeed_details->'opts'->>'topics' AS topics,
+			COALESCE(changefeed_details->'opts'->>'format','json') AS format,
+			username
+		FROM payload
+		WHERE changefeed_details IS NOT NULL
+`
+	changefeedDetailsQuery = changefeedDetailsCTE + changefeedDetailsSelect
+)
+
+var crdbInternalChangefeedJobsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.kv_changefeed_jobs_details (
+    job_id INT,
+    sink_uri STRING,
+    topics STRING,
+    format STRING,
+    changefeed_jobs_details_table_generation_error STRING
+)`,
+	comment: `decoded changefeed details from system.jobs (KV scan)`,
+	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return makeChangefeedJobsTableRows(ctx, p, addRow, changefeedDetailsQuery)
+	},
+}
+
+func makeChangefeedJobsTableRows(
+	ctx context.Context, p *planner, addRow func(...tree.Datum) error, query string,
+) error {
+	// Beware: we're querying system.jobs as root; we need to be careful to filter
+	// out results that the current user is not able to see.
+	currentUser := p.SessionData().User()
+	isAdmin, err := p.HasAdminRole(ctx)
+	if err != nil {
+		return err
+	}
+	hasControlJob, err := p.HasRoleOption(ctx, roleoption.CONTROLJOB)
+	if err != nil {
+		return err
+	}
+	it, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryIteratorEx(
+		ctx, "crdb-internal-changefeed-jobs-table", p.txn,
+		sessiondata.InternalExecutorOverride{User: username.RootUserName()},
+		query)
+	if err != nil {
+		return err
+	}
+
+	cleanup := func(ctx context.Context) {
+		if err := it.Close(); err != nil {
+			// TODO(yuzefovich): this error should be propagated further up
+			// and not simply being logged. Fix it (#61123).
+			//
+			// Doing that as a return parameter would require changes to
+			// `planNode.Close` signature which is a bit annoying. One other
+			// possible solution is to panic here and catch the error
+			// somewhere.
+			log.Warningf(ctx, "error closing an iterator: %v", err)
+		}
+	}
+	defer cleanup(ctx)
+
+	for {
+		ok, err := it.Next(ctx)
+		if err != nil {
+			return err
+		}
+		var id, sinkUri, topics, format, user tree.Datum
+		if ok {
+			r := it.Cur()
+			id, sinkUri, topics, format, user =
+				r[0], r[1], r[2], r[3], r[4]
+		} else if !ok {
+			return nil
+		}
+
+		var errorStr = tree.DNull
+
+		// Changefeed jobs will have a payload, so jobs with a nil payload can be excluded from the results.
+		// Check permissions.
+		ownedByAdmin := false
+		sqlUsername := username.MakeSQLUsernameFromPreNormalizedString(user.String())
+		ownedByAdmin, err = p.UserHasAdminRole(ctx, sqlUsername)
+		if err != nil {
+			errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
+		}
+		sameUser := sqlUsername == currentUser
+		// The user can access the row if the meet one of the conditions:
+		//  1. The user is an admin.
+		//  2. The job is owned by the user.
+		//  3. The user has CONTROLJOB privilege and the job is not owned by
+		//      an admin.
+		if canAccess := isAdmin || !ownedByAdmin && hasControlJob || sameUser; !canAccess {
+			continue
+		}
+
+		if err = addRow(
+			id,
+			sinkUri,
+			topics,
+			format,
+			errorStr,
+		); err != nil {
+			return err
+		}
+	}
 }
 
 const (
