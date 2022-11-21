@@ -87,6 +87,7 @@ go_test(
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
+        "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
