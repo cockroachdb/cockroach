@@ -258,15 +258,20 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		return nil, err
 	}
 
-	// Identify which columns we should create statistics for.
 	var colStats []jobspb.CreateStatsDetails_ColStat
 	var deleteOtherStats bool
 	if len(n.ColumnNames) == 0 {
-		multiColEnabled := stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
+		// Disable multi-column stats and deleting stats
+		// if partial statistics at the extremes are requested.
+		// TODO (faizaanmadhani): Add support for multi-column stats.
+		var multiColEnabled bool
+		if !n.Options.UsingExtremes {
+			multiColEnabled = stats.MultiColumnStatisticsClusterMode.Get(&n.p.ExecCfg().Settings.SV)
+			deleteOtherStats = true
+		}
 		if colStats, err = createStatsDefaultColumns(tableDesc, multiColEnabled); err != nil {
 			return nil, err
 		}
-		deleteOtherStats = true
 	} else {
 		columns, err := tabledesc.FindPublicColumnsWithNames(tableDesc, n.ColumnNames)
 		if err != nil {
@@ -346,6 +351,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			AsOf:             asOfTimestamp,
 			MaxFractionIdle:  n.Options.Throttling,
 			DeleteOtherStats: deleteOtherStats,
+			UsingExtremes:    n.Options.UsingExtremes,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	}, nil
