@@ -183,6 +183,17 @@ func (ex *connExecutor) recordStatementSummary(
 	if err != nil {
 		log.Warningf(ctx, "failed to convert node ID to int: %s", err)
 	}
+
+	// TODO(todd): Is there a way to gather region info from the other nodes
+	//  the query traverses? (Compare with getNodesFromPlanner.) While the
+	//  information is / may be available in ListNodesInternal, we surely
+	//  don't want to make an RPC call here, and I haven't yet found a place
+	//  where that information has already been cached.
+	var regions []string
+	if region, ok := ex.server.cfg.Locality.Find("region"); ok {
+		regions = append(regions, region)
+	}
+
 	recordedStmtStats := sqlstats.RecordedStmtStats{
 		SessionID:            ex.sessionID,
 		StatementID:          planner.stmt.QueryID,
@@ -199,6 +210,7 @@ func (ex *connExecutor) recordStatementSummary(
 		RowsRead:             stats.rowsRead,
 		RowsWritten:          stats.rowsWritten,
 		Nodes:                util.CombineUniqueInt64(getNodesFromPlanner(planner), []int64{nodeID}),
+		Regions:              regions,
 		StatementType:        stmt.AST.StatementType(),
 		Plan:                 planner.instrumentation.PlanForStats(ctx),
 		PlanGist:             planner.instrumentation.planGist.String(),

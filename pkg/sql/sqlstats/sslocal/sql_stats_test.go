@@ -1292,3 +1292,48 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 		})
 	}
 }
+
+func TestSQLStatsRegions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name     string
+		locality roachpb.Locality
+		expected string
+	}{{
+		name:     "locality not set",
+		locality: roachpb.Locality{},
+		expected: `[]`,
+	}, {
+		name:     "locality set",
+		locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}}},
+		expected: `["us-east1"]`,
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			params, _ := tests.CreateTestServerParams()
+			params.Locality = tc.locality
+			s, db, _ := serverutils.StartServer(t, params)
+			defer s.Stopper().Stop(ctx)
+
+			_, err := db.Exec("SET application_name = $1", t.Name())
+			require.NoError(t, err)
+
+			_, err = db.Exec("SELECT 1")
+			require.NoError(t, err)
+
+			row := db.QueryRow(`
+				SELECT statistics->'statistics'->>'regions'
+				  FROM crdb_internal.statement_statistics
+				 WHERE app_name = $1`, t.Name())
+
+			var actual string
+			err = row.Scan(&actual)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, actual)
+		})
+	}
+}

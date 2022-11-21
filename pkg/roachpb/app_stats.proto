@@ -108,6 +108,9 @@ message StatementStatistics {
   // Nodes is the ordered list of nodes ids on which the statement was executed.
   repeated int64 nodes = 24;
 
+  // Regions is the ordered list of regions on which the statement was executed.
+  repeated string regions = 29;
+
   // plan_gists is the list of a compressed version of plan that can be converted (lossily)
   // back into a logical plan.
   // Each statement contain only one plan gist, but the same statement fingerprint id
