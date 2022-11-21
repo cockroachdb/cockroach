@@ -41,14 +41,13 @@ func TestOperationsFormat(t *testing.T) {
 		},
 	}
 
-	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))
-	defer w.Check(t)
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
 	for i, test := range tests {
 		name := fmt.Sprint(i)
-		t.Run(name, w.Do(t, name, func(t *testing.T, path string) {
+		t.Run(name, w.Run(t, name, func(t *testing.T) string {
 			var actual strings.Builder
 			test.step.format(&actual, formatCtx{indent: "···"})
-			echotest.Require(t, strings.TrimLeft(actual.String(), "\n"), path)
+			return strings.TrimLeft(actual.String(), "\n")
 		}))
 	}
 }

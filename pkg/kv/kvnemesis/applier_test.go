@@ -130,12 +130,11 @@ func TestApplier(t *testing.T) {
 	addPass(t, `zcfg`, step(changeZone(ChangeZoneType_ToggleGlobalReads)))
 	addErr(t, `zcfg-again`, step(changeZone(ChangeZoneType_ToggleGlobalReads)))
 
-	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))
-	defer w.Check(t)
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
 	for _, test := range tests {
-		t.Run(test.name, w.Do(t, test.name, func(t *testing.T, path string) {
-			echotest.Require(t, strings.TrimLeft(test.a, "\n"), path)
+		t.Run(test.name, w.Run(t, test.name, func(t *testing.T) string {
 			t.Log(test.a)
+			return strings.TrimLeft(test.a, "\n")
 		}))
 	}
 }
