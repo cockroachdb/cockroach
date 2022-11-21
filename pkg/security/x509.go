@@ -128,6 +128,7 @@ func GenerateServerCert(
 	nodePublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	user username.SQLUsername,
+	tenantIDs []roachpb.TenantID,
 	hosts []string,
 ) ([]byte, error) {
 	// Create template for user.
@@ -144,6 +145,8 @@ func GenerateServerCert(
 	// Both server and client authentication are allowed (for inter-node RPC).
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
 	addHostsToTemplate(template, hosts)
+	urls := MakeTenantSQLServerURISANs(tenantIDs)
+	template.URIs = append(template.URIs, urls...)
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, nodePublicKey, caPrivateKey)
 	if err != nil {
@@ -259,7 +262,7 @@ func GenerateClientCert(
 	clientPublicKey crypto.PublicKey,
 	lifetime time.Duration,
 	user username.SQLUsername,
-	tenantID []roachpb.TenantID,
+	tenantIDs []roachpb.TenantID,
 ) ([]byte, error) {
 
 	// TODO(marc): should we add extra checks?
@@ -281,7 +284,7 @@ func GenerateClientCert(
 	// Set client-specific fields.
 	// Client authentication only.
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}
-	urls := MakeTenantSQLClientURISANs(user, tenantID)
+	urls := MakeTenantSQLClientURISANs(user, tenantIDs)
 	template.URIs = append(template.URIs, urls...)
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
