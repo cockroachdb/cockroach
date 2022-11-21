@@ -79,7 +79,7 @@ func TestCaptureIndexUsageStats(t *testing.T) {
 	stubLoggingDelay := 0 * time.Second
 
 	// timeBuffer is a short time buffer to account for non-determinism in the logging timings.
-	const timeBuffer = 2 * time.Second
+	const timeBuffer = 3 * time.Second
 
 	settings := cluster.MakeTestingClusterSettings()
 	// Configure capture index usage statistics to be disabled. This is to test
