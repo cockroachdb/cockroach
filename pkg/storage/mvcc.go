@@ -1000,6 +1000,7 @@ func MVCCGet(
 
 // MVCCGetWithValueHeader is like MVCCGet, but in addition returns the
 // MVCCValueHeader for the value.
+// gcassert:inline
 func MVCCGetWithValueHeader(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, enginepb.MVCCValueHeader, error) {
@@ -1014,6 +1015,7 @@ func MVCCGetWithValueHeader(
 	return value.ToPointer(), intent, vh, err
 }
 
+// gcassert:inline
 func mvccGet(
 	ctx context.Context,
 	iter MVCCIterator,
