@@ -20,6 +20,7 @@ import {
   DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT,
   Duration,
   limitText,
+  NO_SAMPLES_FOUND,
 } from "src/util";
 import { InsightExecEnum, FlattenedStmtInsightEvent } from "src/insights";
 import {
@@ -143,7 +144,7 @@ export function makeStatementInsightsColumns(
       title: insightsTableTitles.contention(execType),
       cell: (item: FlattenedStmtInsightEvent) =>
         !item.totalContentionTime
-          ? "no samples"
+          ? NO_SAMPLES_FOUND
           : Duration(item.totalContentionTime.asMilliseconds() * 1e6),
       sort: (item: FlattenedStmtInsightEvent) =>
         item.totalContentionTime?.asMilliseconds() ?? -1,

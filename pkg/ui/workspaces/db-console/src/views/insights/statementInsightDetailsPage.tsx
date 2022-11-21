@@ -18,22 +18,22 @@ import { AdminUIState } from "src/redux/state";
 import { refreshExecutionInsights } from "src/redux/apiReducers";
 import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 
 const mapStateToProps = (
   state: AdminUIState,
   props: RouteComponentProps,
 ): StatementInsightDetailsStateProps => {
-  const insightStatements = selectStatementInsightDetails(state, props);
-  const insightError = state.cachedData?.executionInsights?.lastError;
   return {
-    insightEventDetails: insightStatements,
-    insightError,
+    insightEventDetails: selectStatementInsightDetails(state, props),
+    insightError: state.cachedData?.executionInsights?.lastError,
+    timeScale: selectTimeScale(state),
   };
 };
 
 const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
-  setTimeScale: setGlobalTimeScaleAction,
   refreshStatementInsights: refreshExecutionInsights,
+  setTimeScale: setGlobalTimeScaleAction,
 };
 
 const StatementInsightDetailsPage = withRouter(
