@@ -1014,7 +1014,12 @@ func (r *testRunner) teardownTest(
 			// Note that the debug.zip will hopefully also contain stacks, but we're just making sure
 			// there's something even if the debug.zip doesn't go through.
 			args := option.DefaultStopOpts()
-			args.RoachprodOpts.Sig = 3
+			if c.Spec().GatherCores {
+				// Need to use ABRT to get cores.
+				args.RoachprodOpts.Sig = 6
+			} else {
+				args.RoachprodOpts.Sig = 3
+			}
 			err := c.StopE(ctx, t.L(), args, c.All())
 			t.L().PrintfCtx(ctx, "asked CRDB nodes to dump stacks; check their main (DEV) logs: %v", err)
 			// It takes a little moment for the stacks to get flushed to the logs.
