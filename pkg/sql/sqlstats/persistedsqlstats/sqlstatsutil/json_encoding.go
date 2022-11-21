@@ -70,87 +70,95 @@ func BuildStmtMetadataJSON(statistics *roachpb.CollectedStatementStatistics) (js
 //
 // JSON Schema for stats portion:
 //
-//	{
-//	  "$schema": "https://json-schema.org/draft/2020-12/schema",
-//	  "title": "system.statement_statistics.statistics",
-//	  "type": "object",
+//		{
+//		  "$schema": "https://json-schema.org/draft/2020-12/schema",
+//		  "title": "system.statement_statistics.statistics",
+//		  "type": "object",
 //
-//	  "definitions": {
-//	    "numeric_stats": {
-//	      "type": "object",
-//	      "properties": {
-//	        "mean":   { "type": "number" },
-//	        "sqDiff": { "type": "number" }
-//	      },
-//	      "required": ["mean", "sqDiff"]
-//	    },
-//	    "node_ids": {
-//	      "type": "array",
-//	      "items": {
-//	        "type": "int",
-//	      },
-//	    },
-//	    "statistics": {
-//	      "type": "object",
-//	      "properties": {
-//	        "firstAttemptCnt":   { "type": "number" },
-//	        "maxRetries":        { "type": "number" },
-//	        "numRows":           { "$ref": "#/definitions/numeric_stats" },
-//	        "idleLat":           { "$ref": "#/definitions/numeric_stats" },
-//	        "parseLat":          { "$ref": "#/definitions/numeric_stats" },
-//	        "planLat":           { "$ref": "#/definitions/numeric_stats" },
-//	        "runLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
-//	        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
-//	        "rowsRead":          { "$ref": "#/definitions/numeric_stats" }
-//	        "firstExecAt":       { "type": "string" },
-//	        "lastExecAt":        { "type": "string" },
-//	        "nodes":             { "type": "node_ids" },
-//	      },
-//	      "required": [
-//	        "firstAttemptCnt",
-//	        "maxRetries",
-//	        "numRows",
-//	        "idleLat",
-//	        "parseLat",
-//	        "planLat",
-//	        "runLat",
-//	        "svcLat",
-//	        "ovhLat",
-//	        "bytesRead",
-//	        "rowsRead",
-//	        "nodes"
-//	      ]
-//	    },
-//	    "execution_statistics": {
-//	      "type": "object",
-//	      "properties": {
-//	        "cnt":             { "type": "number" },
-//	        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
-//	        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
-//	        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
-//	        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
-//	        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
-//	      },
-//	      "required": [
-//	        "cnt",
-//	        "networkBytes",
-//	        "maxMemUsage",
-//	        "contentionTime",
-//	        "networkMsgs",
-//	        "maxDiskUsage",
-//	      ]
-//	    }
-//	  },
+//		  "definitions": {
+//		    "numeric_stats": {
+//		      "type": "object",
+//		      "properties": {
+//		        "mean":   { "type": "number" },
+//		        "sqDiff": { "type": "number" }
+//		      },
+//		      "required": ["mean", "sqDiff"]
+//		    },
+//		    "indexes": {
+//		      "type": "array",
+//		      "items": {
+//		        "type": "string",
+//		      },
+//		    },
+//		    "node_ids": {
+//		      "type": "array",
+//		      "items": {
+//		        "type": "int",
+//		      },
+//		    },
+//		    "statistics": {
+//		      "type": "object",
+//		      "properties": {
+//		        "firstAttemptCnt":   { "type": "number" },
+//		        "maxRetries":        { "type": "number" },
+//		        "numRows":           { "$ref": "#/definitions/numeric_stats" },
+//		        "idleLat":           { "$ref": "#/definitions/numeric_stats" },
+//		        "parseLat":          { "$ref": "#/definitions/numeric_stats" },
+//		        "planLat":           { "$ref": "#/definitions/numeric_stats" },
+//		        "runLat":            { "$ref": "#/definitions/numeric_stats" },
+//		        "svcLat":            { "$ref": "#/definitions/numeric_stats" },
+//		        "ovhLat":            { "$ref": "#/definitions/numeric_stats" },
+//		        "bytesRead":         { "$ref": "#/definitions/numeric_stats" },
+//		        "rowsRead":          { "$ref": "#/definitions/numeric_stats" },
+//		        "firstExecAt":       { "type": "string" },
+//		        "lastExecAt":        { "type": "string" },
+//		        "nodes":             { "type": "node_ids" },
+//		        "indexes":           { "type": "indexes" },
+//		      },
+//		      "required": [
+//		        "firstAttemptCnt",
+//		        "maxRetries",
+//		        "numRows",
+//		        "idleLat",
+//		        "parseLat",
+//		        "planLat",
+//		        "runLat",
+//		        "svcLat",
+//		        "ovhLat",
+//		        "bytesRead",
+//		        "rowsRead",
+//		        "nodes",
+//	         "indexes,
+//		      ]
+//		    },
+//		    "execution_statistics": {
+//		      "type": "object",
+//		      "properties": {
+//		        "cnt":             { "type": "number" },
+//		        "networkBytes":    { "$ref": "#/definitions/numeric_stats" },
+//		        "maxMemUsage":     { "$ref": "#/definitions/numeric_stats" },
+//		        "contentionTime":  { "$ref": "#/definitions/numeric_stats" },
+//		        "networkMsgs":     { "$ref": "#/definitions/numeric_stats" },
+//		        "maxDiskUsage":    { "$ref": "#/definitions/numeric_stats" },
+//		      },
+//		      "required": [
+//		        "cnt",
+//		        "networkBytes",
+//		        "maxMemUsage",
+//		        "contentionTime",
+//		        "networkMsgs",
+//		        "maxDiskUsage",
+//		      ]
+//		    }
+//		  },
 //
-//	  "properties": {
-//	    "stats": { "$ref": "#/definitions/statistics" },
-//	    "execStats": {
-//	      "$ref": "#/definitions/execution_statistics"
-//	    }
-//	  }
-//	}
+//		  "properties": {
+//		    "stats": { "$ref": "#/definitions/statistics" },
+//		    "execStats": {
+//		      "$ref": "#/definitions/execution_statistics"
+//		    }
+//		  }
+//		}
 func BuildStmtStatisticsJSON(statistics *roachpb.StatementStatistics) (json.JSON, error) {
 	return (*stmtStats)(statistics).encodeJSON()
 }

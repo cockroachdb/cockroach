@@ -191,6 +191,9 @@ type instrumentationHelper struct {
 
 	// scanCounts records the number of times scans were used in the query.
 	scanCounts [exec.NumScanCountTypes]int
+
+	// indexesUsed list the indexes used in the query with format tableID@indexID.
+	indexesUsed []string
 }
 
 // outputMode indicates how the statement output needs to be populated (for
