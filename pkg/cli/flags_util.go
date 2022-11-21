@@ -330,15 +330,20 @@ func diskPercentResolverFactory(dir string) (percentResolverFunc, error) {
 	}, nil
 }
 
-// newBytesOrPercentageValue creates a bytesOrPercentageValue.
+// makeBytesOrPercentageValue creates a bytesOrPercentageValue.
 //
 // v and percentResolver can be nil (either they're both specified or they're
 // both nil). If they're nil, then Resolve() has to be called later to get the
 // passed-in value.
-func newBytesOrPercentageValue(
+//
+// When using this function, be sure to define the flag Value in a
+// context struct (in context.go) and place the call to
+// makeBytesOrPercentageValue() in one of the context init
+// functions. Do not use global-scope variables.
+func makeBytesOrPercentageValue(
 	v *int64, percentResolver func(percent int) (int64, error),
-) *bytesOrPercentageValue {
-	return &bytesOrPercentageValue{
+) bytesOrPercentageValue {
+	return bytesOrPercentageValue{
 		bval:            humanizeutil.NewBytesValue(v),
 		percentResolver: percentResolver,
 	}
