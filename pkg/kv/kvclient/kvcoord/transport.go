@@ -207,21 +207,15 @@ func (gt *grpcTransport) sendBatch(
 		gt.opts.metrics.LocalSentCount.Inc(1)
 	}
 	reply, err := iface.Batch(ctx, ba)
-
 	// If we queried a remote node, perform extra validation and
 	// import trace spans.
 	if reply != nil && !rpc.IsLocal(iface) {
-		if err == nil {
-			for i := range reply.Responses {
-				if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
-					log.Errorf(ctx, "%v", err)
-					return nil, err
-				}
+		for i := range reply.Responses {
+			if err := reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner()); err != nil {
+				log.Errorf(ctx, "%v", err)
 			}
 		}
-
-		// Import the remotely collected spans, if any. Do this on error too,
-		// to get traces in that case as well (or to at least have a chance).
+		// Import the remotely collected spans, if any.
 		if len(reply.CollectedSpans) != 0 {
 			span := tracing.SpanFromContext(ctx)
 			if span == nil {
