@@ -222,11 +222,6 @@ export const selectColumns = createSelector(
       : null,
 );
 
-export const selectTimeScale = createSelector(
-  localStorageSelector,
-  localStorage => localStorage["timeScale/SQLActivity"],
-);
-
 export const selectSortSetting = createSelector(
   localStorageSelector,
   localStorage => localStorage["sortSetting/StatementsPage"],
