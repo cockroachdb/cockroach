@@ -53,6 +53,9 @@ type DemoCluster interface {
 	// SetClusterSetting overrides a default cluster setting at system level
 	// and for all tenants.
 	SetClusterSetting(ctx context.Context, setting string, value interface{}) error
+
+	// SetSimulatedLatency is used to enable or disable simulated latency.
+	SetSimulatedLatency(on bool)
 }
 
 // EnableEnterprise is not implemented here in order to keep OSS/BSL builds successful.
