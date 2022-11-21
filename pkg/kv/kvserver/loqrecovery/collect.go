@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 // CollectReplicaInfo captures states of all replicas in all stores for the sake of quorum recovery.
@@ -82,7 +83,11 @@ func GetDescriptorChangesFromRaftLog(
 	rangeID roachpb.RangeID, lo, hi uint64, reader storage.Reader,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
-	if err := raftlog.Visit(context.Background(), rangeID, reader, lo, hi, func(ctx context.Context, e *raftlog.Entry) error {
+	if err := raftlog.Visit(reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
+		e, err := raftlog.NewEntry(ent)
+		if err != nil {
+			return err
+		}
 		raftCmd := e.Cmd
 		switch {
 		case raftCmd.ReplicatedEvalResult.Split != nil:

@@ -101,9 +101,9 @@ type modelIter struct {
 	hi   uint64
 }
 
-func (it *modelIter) load() (*Entry, error) {
+func (it *modelIter) load() (raftpb.Entry, error) {
 	// Only called when on valid position.
-	return NewEntry(it.ents[it.idx])
+	return it.ents[it.idx], nil
 }
 
 func (it *modelIter) check() error {
@@ -139,7 +139,7 @@ func (it *modelIter) Next() (bool, error) {
 	return err == nil, err
 }
 
-func (it *modelIter) Entry() *Entry {
+func (it *modelIter) Entry() raftpb.Entry {
 	e, err := it.load()
 	if err != nil {
 		panic(err) // bug in modelIter
@@ -275,7 +275,7 @@ func TestIterator(t *testing.T) {
 type iter interface {
 	SeekGE(idx uint64) (bool, error)
 	Next() (bool, error)
-	Entry() *Entry
+	Entry() raftpb.Entry
 }
 
 func consumeIter(it iter, lo uint64) ([]uint64, error) {
