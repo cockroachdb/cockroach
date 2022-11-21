@@ -186,10 +186,12 @@ func GetEnvVarsUsed() (result []redact.RedactableString) {
 // the name and the value safely: the value is known to never contain
 // sensitive information.
 var safeVarRegistry = map[redact.SafeString]struct{}{
+	// Go runtime.
 	"GOGC":        {},
 	"GODEBUG":     {},
 	"GOMAXPROCS":  {},
 	"GOTRACEBACK": {},
+	"GOMEMLIMIT":  {},
 	// gRPC.
 	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
 	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
