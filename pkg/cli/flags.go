@@ -523,13 +523,13 @@ func init() {
 			}
 
 			// Engine flags.
-			cliflagcfg.VarFlag(f, cacheSizeValue, cliflags.Cache)
-			cliflagcfg.VarFlag(f, sqlSizeValue, cliflags.SQLMem)
-			cliflagcfg.VarFlag(f, tsdbSizeValue, cliflags.TSDBMem)
+			cliflagcfg.VarFlag(f, &startCtx.cacheSizeValue, cliflags.Cache)
+			cliflagcfg.VarFlag(f, &startCtx.sqlSizeValue, cliflags.SQLMem)
+			cliflagcfg.VarFlag(f, &startCtx.tsdbSizeValue, cliflags.TSDBMem)
 			// N.B. diskTempStorageSizeValue.ResolvePercentage() will be called after
 			// the stores flag has been parsed and the storage device that a percentage
 			// refers to becomes known.
-			cliflagcfg.VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
+			cliflagcfg.VarFlag(f, &startCtx.diskTempStorageSizeValue, cliflags.SQLTempStorage)
 			cliflagcfg.StringFlag(f, &startCtx.tempDir, cliflags.TempDir)
 			cliflagcfg.StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir)
 		}
@@ -793,8 +793,8 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.WorkloadMaxQPS, cliflags.DemoWorkloadMaxQPS)
 		cliflagcfg.VarFlag(f, &demoCtx.Localities, cliflags.DemoNodeLocality)
 		cliflagcfg.BoolFlag(f, &demoCtx.GeoPartitionedReplicas, cliflags.DemoGeoPartitionedReplicas)
-		cliflagcfg.VarFlag(f, demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
-		cliflagcfg.VarFlag(f, demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
+		cliflagcfg.VarFlag(f, &demoCtx.demoNodeSQLMemSizeValue, cliflags.DemoNodeSQLMemSize)
+		cliflagcfg.VarFlag(f, &demoCtx.demoNodeCacheSizeValue, cliflags.DemoNodeCacheSize)
 		cliflagcfg.BoolFlag(f, &demoCtx.Insecure, cliflags.ClientInsecure)
 		// NB: Insecure for `cockroach demo` is deprecated. See #53404.
 		_ = f.MarkDeprecated(cliflags.ServerInsecure.Name,

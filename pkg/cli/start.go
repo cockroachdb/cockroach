@@ -182,11 +182,6 @@ func initTraceDir(ctx context.Context, dir string) {
 	}
 }
 
-var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
-var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
-var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
-var tsdbSizeValue = newBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
-
 func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, error) {
 	externalIODir := startCtx.externalIODir
 	if externalIODir == "" && !firstStore.InMemory {
@@ -257,12 +252,12 @@ func initTempStorageConfig(
 		tempStorePercentageResolver = memoryPercentResolver
 	}
 	var tempStorageMaxSizeBytes int64
-	if err := diskTempStorageSizeValue.Resolve(
+	if err := startCtx.diskTempStorageSizeValue.Resolve(
 		&tempStorageMaxSizeBytes, tempStorePercentageResolver,
 	); err != nil {
 		return base.TempStorageConfig{}, err
 	}
-	if !diskTempStorageSizeValue.IsSet() {
+	if !startCtx.diskTempStorageSizeValue.IsSet() {
 		// The default temp storage size is different when the temp
 		// storage is in memory (which occurs when no temp directory
 		// is specified and the first store is in memory).
@@ -1247,9 +1242,9 @@ func reportConfiguration(ctx context.Context) {
 
 func maybeWarnMemorySizes(ctx context.Context) {
 	// Is the cache configuration OK?
-	if !cacheSizeValue.IsSet() {
+	if !startCtx.cacheSizeValue.IsSet() {
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
+		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", &startCtx.cacheSizeValue)
 		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
 		if size, err := status.GetTotalMemory(ctx); err == nil {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
@@ -1267,7 +1262,8 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		if requestedMem > maxRecommendedMem {
 			log.Ops.Shoutf(ctx, severity.WARNING,
 				"the sum of --max-sql-memory (%s), --cache (%s), and --max-tsdb-memory (%s) is larger than 75%% of total RAM (%s).\nThis server is running at increased risk of memory-related failures.",
-				sqlSizeValue, cacheSizeValue, tsdbSizeValue, humanizeutil.IBytes(maxRecommendedMem))
+				&startCtx.sqlSizeValue, &startCtx.cacheSizeValue, &startCtx.tsdbSizeValue,
+				humanizeutil.IBytes(maxRecommendedMem))
 		}
 	}
 }

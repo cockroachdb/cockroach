@@ -494,6 +494,14 @@ var startCtx struct {
 
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string
+
+	// These configuration handles are flag.Value instances that allow
+	// configuring other variables using either a percentage or a
+	// humanized size value.
+	cacheSizeValue           bytesOrPercentageValue
+	sqlSizeValue             bytesOrPercentageValue
+	diskTempStorageSizeValue bytesOrPercentageValue
+	tsdbSizeValue            bytesOrPercentageValue
 }
 
 // setStartContextDefaults set the default values in startCtx.  This
@@ -514,6 +522,10 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+	startCtx.cacheSizeValue = makeBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
+	startCtx.sqlSizeValue = makeBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
+	startCtx.diskTempStorageSizeValue = makeBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
+	startCtx.tsdbSizeValue = makeBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
 }
 
 // drainCtx captures the command-line parameters of the `node drain`
@@ -599,6 +611,9 @@ func setConvContextDefaults() {
 var demoCtx = struct {
 	democluster.Context
 	disableEnterpriseFeatures bool
+
+	demoNodeCacheSizeValue  bytesOrPercentageValue
+	demoNodeSQLMemSizeValue bytesOrPercentageValue
 }{
 	Context: democluster.Context{
 		CliCtx: &cliCtx.Context,
@@ -629,6 +644,15 @@ func setDemoContextDefaults() {
 	demoCtx.DefaultEnableRangefeeds = true
 
 	demoCtx.disableEnterpriseFeatures = false
+
+	demoCtx.demoNodeCacheSizeValue = makeBytesOrPercentageValue(
+		&demoCtx.CacheSize,
+		memoryPercentResolver,
+	)
+	demoCtx.demoNodeSQLMemSizeValue = makeBytesOrPercentageValue(
+		&demoCtx.SQLPoolMemorySize,
+		memoryPercentResolver,
+	)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
