@@ -91,16 +91,16 @@ func CreateCAPair(
 	return createCACertAndKey(certsDir, caKeyPath, CAPem, keySize, lifetime, allowKeyReuse, overwrite)
 }
 
-// CreateTenantCAPair creates a tenant client CA pair. The private key is
+// CreateTenantKVClientCAPair creates a tenant KV client CA pair. The private key is
 // written to caKeyPath and the public key is created in certsDir.
-func CreateTenantCAPair(
+func CreateTenantKVClientCAPair(
 	certsDir, caKeyPath string,
 	keySize int,
 	lifetime time.Duration,
 	allowKeyReuse bool,
 	overwrite bool,
 ) error {
-	return createCACertAndKey(certsDir, caKeyPath, TenantCAPem, keySize, lifetime, allowKeyReuse, overwrite)
+	return createCACertAndKey(certsDir, caKeyPath, TenantKVClientCAPem, keySize, lifetime, allowKeyReuse, overwrite)
 }
 
 // CreateClientCAPair creates a client CA certificate and associated key.
@@ -161,7 +161,7 @@ func createCACertAndKey(
 		return errors.New("the path to the certs directory is required")
 	}
 	if caType != CAPem &&
-		caType != TenantCAPem &&
+		caType != TenantKVClientCAPem &&
 		caType != ClientCAPem &&
 		caType != SQLServerCAPem &&
 		caType != UICAPem {
@@ -223,8 +223,8 @@ func createCACertAndKey(
 	switch caType {
 	case CAPem:
 		certPath = cm.CACertPath()
-	case TenantCAPem:
-		certPath = cm.TenantCACertPath()
+	case TenantKVClientCAPem:
+		certPath = cm.TenantKVClientCACertPath()
 	case ClientCAPem:
 		certPath = cm.ClientCACertPath()
 	case SQLServerCAPem:
@@ -521,25 +521,25 @@ func CreateClientPair(
 	return nil
 }
 
-// TenantPair are client certs for use with multi-tenancy.
-type TenantPair struct {
+// TenantKVClientCertPair are client certs for use with multi-tenancy.
+type TenantKVClientCertPair struct {
 	PrivateKey *rsa.PrivateKey
 	Cert       []byte
 }
 
-// CreateTenantPair creates a key and certificate for use as client certs
+// CreateTenantKVClientCertPair creates a key and certificate for use as client certs
 // when communicating with the KV layer. The tenant CA cert and key must load
 // properly. If multiple certificates exist in the CA cert, the first one is
 // used.
 //
-// To write the returned TenantPair to disk, use WriteTenantPair.
-func CreateTenantPair(
+// To write the returned TenantKVClientCertPair to disk, use WriteTenantKVClientCerts.
+func CreateTenantKVClientCertPair(
 	certsDir, caKeyPath string,
 	keySize int,
 	lifetime time.Duration,
 	tenantIdentifier uint64,
 	hosts []string,
-) (*TenantPair, error) {
+) (*TenantKVClientCertPair, error) {
 	if len(caKeyPath) == 0 {
 		return nil, errors.New("the path to the CA key is required")
 	}
@@ -553,9 +553,14 @@ func CreateTenantPair(
 		return nil, err
 	}
 
-	// Load the tenant client CA cert info. Note that this falls back to the regular client CA which in turn falls
-	// back to the CA.
-	clientCA, err := cm.getTenantCACertLocked()
+	// Load the tenant client CA cert info.
+	//
+	// Currently, this falls back to the regular client CA which in turn
+	// falls back to the general-purpose CA.
+	//
+	// TODO(knz): Check this fallback logic. It doesn't seem correct
+	// that we use the client CA here.
+	clientCA, err := cm.getTenantKVClientCACertLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -572,20 +577,20 @@ func CreateTenantPair(
 		return nil, errors.Wrap(err, "could not generate new tenant key")
 	}
 
-	clientCert, err := GenerateTenantCert(
+	clientCert, err := GenerateTenantKVClientCert(
 		caCert, caPrivateKey, clientKey.Public(), lifetime, tenantIdentifier, hosts,
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating tenant certificate and key")
 	}
-	return &TenantPair{
+	return &TenantKVClientCertPair{
 		PrivateKey: clientKey,
 		Cert:       clientCert,
 	}, nil
 }
 
-// WriteTenantPair writes a TenantPair into certsDir.
-func WriteTenantPair(certsDir string, cp *TenantPair, overwrite bool) error {
+// WriteTenantKVClientCerts writes a TenantKVClientCertPair into certsDir.
+func WriteTenantKVClientCerts(certsDir string, cp *TenantKVClientCertPair, overwrite bool) error {
 	cm, err := NewCertificateManagerFirstRun(certsDir, CommandTLSSettings{})
 	if err != nil {
 		return err
@@ -595,13 +600,13 @@ func WriteTenantPair(certsDir string, cp *TenantPair, overwrite bool) error {
 		return err
 	}
 	tenantIdentifier := cert.Subject.CommonName
-	certPath := cm.TenantCertPath(tenantIdentifier)
+	certPath := cm.TenantKVClientCertPath(tenantIdentifier)
 	if err := writeCertificateToFile(certPath, cp.Cert, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing tenant certificate to %s", certPath)
 	}
 	log.Infof(context.Background(), "wrote SQL tenant client certificate: %s", certPath)
 
-	keyPath := cm.TenantKeyPath(tenantIdentifier)
+	keyPath := cm.TenantKVClientKeyPath(tenantIdentifier)
 	if err := writeKeyToFile(keyPath, cp.PrivateKey, overwrite); err != nil {
 		return errors.Wrapf(err, "error writing tenant key to %s", keyPath)
 	}

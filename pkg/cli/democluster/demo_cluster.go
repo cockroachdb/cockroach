@@ -1070,9 +1070,9 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 	// rootUserScope contains the tenant IDs the root user is allowed to access.
 	rootUserScope := []roachpb.TenantID{roachpb.SystemTenantID}
 	if demoCtx.Multitenant {
-		tenantCAKeyPath := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
+		tenantCAKeyPath := filepath.Join(certsDir, certnames.EmbeddedTenantKVClientCAKey)
 		// Create a CA key for the tenants.
-		if err := security.CreateTenantCAPair(
+		if err := security.CreateTenantKVClientCAPair(
 			certsDir,
 			tenantCAKeyPath,
 			demoCtx.DefaultKeySize,
@@ -1095,7 +1095,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 				"*.local",
 			}
 			tenantID := uint64(i + 2)
-			pair, err := security.CreateTenantPair(
+			pair, err := security.CreateTenantKVClientCertPair(
 				certsDir,
 				tenantCAKeyPath,
 				demoCtx.DefaultKeySize,
@@ -1106,7 +1106,7 @@ func (demoCtx *Context) generateCerts(certsDir string) (err error) {
 			if err != nil {
 				return err
 			}
-			if err := security.WriteTenantPair(certsDir, pair, false /* overwrite */); err != nil {
+			if err := security.WriteTenantKVClientCerts(certsDir, pair, false /* overwrite */); err != nil {
 				return err
 			}
 			if err := security.CreateTenantSigningPair(
@@ -1165,7 +1165,7 @@ func (c *transientCluster) getNetworkURLForServer(
 	} else {
 		caCert := certnames.CACertFilename()
 		if isTenant {
-			caCert = certnames.TenantClientCACertFilename()
+			caCert = certnames.TenantKVClientCACertFilename()
 		}
 
 		u.

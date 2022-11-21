@@ -197,13 +197,13 @@ func GenerateUIServerCert(
 	return certBytes, nil
 }
 
-// GenerateTenantCert generates a tenant client certificate and returns the cert bytes.
+// GenerateTenantKVClientCert generates a tenant client certificate and returns the cert bytes.
 // Takes in the CA cert and private key, the tenant client public key, the certificate lifetime,
 // and the tenant id.
 //
 // Tenant client certificates add OU=Tenants in the subject field to prevent
 // using them as user certificates.
-func GenerateTenantCert(
+func GenerateTenantKVClientCert(
 	caCert *x509.Certificate,
 	caPrivateKey crypto.PrivateKey,
 	clientPublicKey crypto.PublicKey,

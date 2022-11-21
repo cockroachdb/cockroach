@@ -38,9 +38,10 @@ func CACertFilename() string { return "ca" + certExtension }
 // CAKeyFilename returns the expected file name for the CA certificate.
 func CAKeyFilename() string { return "ca" + keyExtension }
 
-// TenantClientCACertFilename returns the expected file name for the Tenant CA
-// certificate.
-func TenantClientCACertFilename() string {
+// TenantKVClientCACertFilename returns the expected file name for the CA
+// certificate used to sign the cert used by tenant servers to autn themselves
+// to the KV layer.
+func TenantKVClientCACertFilename() string {
 	return "ca-client-tenant" + certExtension
 }
 
@@ -103,13 +104,14 @@ func SQLServerKeyFilename() string {
 	return "sql-server" + keyExtension
 }
 
-// TenantCertFilename returns the expected file name for the user's tenant client certificate.
-func TenantCertFilename(tenantIdentifier string) string {
+// TenantKVClientCertFilename returns the expected file name for the tenant client certificate
+// (used to authenticate a tenant server to the KV layer).
+func TenantKVClientCertFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + certExtension
 }
 
-// TenantKeyFilename returns the expected file name for the user's tenant client key.
-func TenantKeyFilename(tenantIdentifier string) string {
+// TenantKVClientKeyFilename returns the expected file name for the tenant client key.
+func TenantKVClientKeyFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + keyExtension
 }
 
