@@ -392,12 +392,14 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 				c.infoLog(ctx, "starting tenant node %d", i)
 				tenantStopper := stop.NewStopper()
+				tenID := uint64(i + 2)
 				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
-					TenantID:              roachpb.MustMakeTenantID(uint64(i + 2)),
+					TenantName:            roachpb.TenantName(fmt.Sprintf("demo-tenant-%d", tenID)),
+					TenantID:              roachpb.MustMakeTenantID(tenID),
 					Stopper:               tenantStopper,
 					ForceInsecure:         c.demoCtx.Insecure,
 					SSLCertsDir:           c.demoDir,
