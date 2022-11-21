@@ -34,6 +34,7 @@ import {
 import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 
 export const insightStatementColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -52,6 +53,7 @@ const transactionMapStateToProps = (
   transactionsError: state.cachedData?.transactionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  timeScale: selectTimeScale(state),
 });
 
 const statementMapStateToProps = (
@@ -64,6 +66,7 @@ const statementMapStateToProps = (
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
     insightStatementColumnsLocalSetting.selectorToArray(state),
+  timeScale: selectTimeScale(state),
 });
 
 const TransactionDispatchProps = {

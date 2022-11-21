@@ -9,9 +9,10 @@
 // licenses/APL.txt.
 
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import { DOMAIN_NAME, noopReducer } from "src/store/utils";
+import { DOMAIN_NAME } from "src/store/utils";
 import moment, { Moment } from "moment";
 import { TxnContentionInsightEvent } from "src/insights";
+import { ExecutionInsightsRequest } from "../../../api";
 
 export type TransactionInsightsState = {
   data: TxnContentionInsightEvent[];
@@ -44,8 +45,8 @@ const transactionInsightsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    refresh: noopReducer,
-    request: noopReducer,
+    refresh: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
+    request: (_, _action: PayloadAction<ExecutionInsightsRequest>) => {},
   },
 });
 

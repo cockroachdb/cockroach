@@ -11,15 +11,29 @@
 import { all, call, put, takeLatest } from "redux-saga/effects";
 
 import { actions } from "./statementInsights.reducer";
-import { getClusterInsightsApi } from "src/api/insightsApi";
+import {
+  ExecutionInsightsRequest,
+  getClusterInsightsApi,
+  getTxnInsightEvents,
+} from "src/api/insightsApi";
+import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshStatementInsightsSaga() {
-  yield put(actions.request());
+export function* refreshStatementInsightsSaga(
+  action?: PayloadAction<ExecutionInsightsRequest>,
+) {
+  yield put(actions.request(action.payload));
 }
 
-export function* requestStatementInsightsSaga(): any {
+export function* requestStatementInsightsSaga(
+  action?: PayloadAction<ExecutionInsightsRequest>,
+): any {
   try {
-    const result = yield call(getClusterInsightsApi);
+    let result: any;
+    if (action) {
+      result = yield call(getClusterInsightsApi, action.payload);
+    } else {
+      result = yield call(getClusterInsightsApi);
+    }
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));

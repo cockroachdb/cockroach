@@ -12,16 +12,29 @@ import { all, call, put, takeEvery } from "redux-saga/effects";
 
 import { actions } from "./transactionInsights.reducer";
 import { actions as stmtActions } from "../statementInsights/statementInsights.reducer";
-import { getTxnInsightEvents } from "src/api/insightsApi";
+import {
+  ExecutionInsightsRequest,
+  getTxnInsightEvents,
+} from "src/api/insightsApi";
+import { PayloadAction } from "@reduxjs/toolkit";
 
-export function* refreshTransactionInsightsSaga() {
-  yield put(actions.request());
-  yield put(stmtActions.request());
+export function* refreshTransactionInsightsSaga(
+  action?: PayloadAction<ExecutionInsightsRequest>,
+) {
+  yield put(actions.request(action.payload));
+  yield put(stmtActions.request(action.payload));
 }
 
-export function* requestTransactionInsightsSaga(): any {
+export function* requestTransactionInsightsSaga(
+  action?: PayloadAction<ExecutionInsightsRequest>,
+): any {
   try {
-    const result = yield call(getTxnInsightEvents);
+    let result: any;
+    if (action) {
+      result = yield call(getTxnInsightEvents, action.payload);
+    } else {
+      result = yield call(getTxnInsightEvents);
+    }
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(e));

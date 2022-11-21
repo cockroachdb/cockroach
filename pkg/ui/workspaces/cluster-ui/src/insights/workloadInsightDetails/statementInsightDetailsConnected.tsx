@@ -42,7 +42,7 @@ const mapDispatchToProps = (
   dispatch: Dispatch,
 ): StatementInsightDetailsDispatchProps => ({
   refreshStatementInsights: () => {
-    dispatch(statementInsights.refresh());
+    dispatch(statementInsights.refresh({}));
   },
   setTimeScale: (ts: TimeScale) => {
     dispatch(

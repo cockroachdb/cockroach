@@ -42,6 +42,8 @@ import {
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
 import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { selectTimeScale } from "../../statementsPage/statementsPage.selectors";
+import { ExecutionInsightsRequest } from "../../api";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -51,6 +53,7 @@ const transactionMapStateToProps = (
   transactionsError: selectTransactionInsightsError(state),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
+  timeScale: selectTimeScale(state),
 });
 
 const statementMapStateToProps = (
@@ -62,6 +65,7 @@ const statementMapStateToProps = (
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
+  timeScale: selectTimeScale(state),
 });
 
 const TransactionDispatchProps = (
@@ -88,8 +92,8 @@ const TransactionDispatchProps = (
       }),
     );
   },
-  refreshTransactionInsights: () => {
-    dispatch(transactionInsights.refresh());
+  refreshTransactionInsights: (req: ExecutionInsightsRequest) => {
+    dispatch(transactionInsights.refresh(req));
   },
 });
 
@@ -128,8 +132,8 @@ const StatementDispatchProps = (
       }),
     );
   },
-  refreshStatementInsights: () => {
-    dispatch(statementInsights.refresh());
+  refreshStatementInsights: (req: ExecutionInsightsRequest) => {
+    dispatch(statementInsights.refresh(req));
   },
 });
 

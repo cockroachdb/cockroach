@@ -30,8 +30,12 @@ import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
-import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
+  ExecutionInsightsRequest,
+  FlattenedStmtInsights,
+} from "src/api/insightsApi";
+import {
+  executionInsightsRequestFromTimeScale,
   filterStatementInsights,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
@@ -45,7 +49,12 @@ import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import ColumnsSelector from "../../../columnsSelector/columnsSelector";
 import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
-import { TimeScale } from "../../../timeScaleDropdown";
+import {
+  defaultTimeScaleOptions,
+  TimeScale,
+  TimeScaleDropdown,
+} from "../../../timeScaleDropdown";
+import { commonStyles } from "../../../common";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -57,12 +66,13 @@ export type StatementInsightsViewStateProps = {
   sortSetting: SortSetting;
   selectedColumnNames: string[];
   dropDownSelect?: React.ReactElement;
+  timeScale?: TimeScale;
 };
 
 export type StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshStatementInsights: () => void;
+  refreshStatementInsights: (req: ExecutionInsightsRequest) => void;
   onColumnsChange: (selectedColumns: string[]) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
@@ -81,6 +91,7 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     statements,
     statementsError,
     filters,
+    timeScale,
     refreshStatementInsights,
     onFiltersChange,
     onSortChange,
@@ -100,13 +111,14 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   );
 
   useEffect(() => {
+    const req = executionInsightsRequestFromTimeScale(timeScale);
+    refreshStatementInsights(req);
     // Refresh every 10 seconds.
-    refreshStatementInsights();
-    const interval = setInterval(refreshStatementInsights, 10 * 1000);
+    const interval = setInterval(refreshStatementInsights, 10 * 1000, req);
     return () => {
       clearInterval(interval);
     };
-  }, [refreshStatementInsights]);
+  }, [refreshStatementInsights, timeScale]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -230,6 +242,13 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
             onSubmitFilters={onSubmitFilters}
             appNames={apps}
             filters={filters}
+          />
+        </PageConfigItem>
+        <PageConfigItem className={commonStyles("separator")}>
+          <TimeScaleDropdown
+            options={defaultTimeScaleOptions}
+            currentScale={timeScale}
+            setTimeScale={setTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
