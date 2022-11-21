@@ -100,26 +100,39 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	nodesWithLiveness, err := s.status.nodesStatusWithLiveness(ctx)
+	nodes, err := s.status.ListNodesInternal(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	clock := s.admin.server.clock
+	statusMap, err := getLivenessStatusMap(ctx, s.nodeLiveness, clock.Now().GoTime(), s.st)
 	if err != nil {
 		return false, err
 	}
 
 	var newVersion string
 	var notRunningErr error
-	for nodeID, st := range nodesWithLiveness {
-		if st.livenessStatus != livenesspb.NodeLivenessStatus_LIVE &&
-			st.livenessStatus != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
+	for _, node := range nodes.Nodes {
+		nodeID := node.Desc.NodeID
+		st := statusMap[nodeID]
+
+		// Skip over removed nodes.
+		if st == livenesspb.NodeLivenessStatus_DECOMMISSIONED {
+			continue
+		}
+
+		if st != livenesspb.NodeLivenessStatus_LIVE &&
+			st != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
 			// We definitely won't be able to upgrade, but defer this error as
 			// we may find out that we are already at the latest version (the
-			// cluster may be up to date, but a node is down).
+			// cluster may be up-to-date, but a node is down).
 			if notRunningErr == nil {
-				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st.livenessStatus)
+				notRunningErr = errors.Errorf("node %d not running (%s), cannot determine version", nodeID, st)
 			}
 			continue
 		}
 
-		version := st.NodeStatus.Desc.ServerVersion.String()
+		version := node.Desc.ServerVersion.String()
 		if newVersion == "" {
 			newVersion = version
 		} else if version != newVersion {
