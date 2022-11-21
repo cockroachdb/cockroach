@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1154,9 +1155,9 @@ func constructExpectedScheduledBackupNode(
 	require.NoError(t, err)
 	firstRun, err := tree.MakeDTimestampTZ(sj.ScheduledRunTime(), time.Microsecond)
 	require.NoError(t, err)
-	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
+	wait, err := schedulebase.ParseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
 	require.NoError(t, err)
-	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
+	onError, err := schedulebase.ParseOnErrorOption(sj.ScheduleDetails().OnError)
 	require.NoError(t, err)
 	scheduleOptions := tree.KVOptions{
 		tree.KVOption{
