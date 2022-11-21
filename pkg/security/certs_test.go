@@ -110,7 +110,7 @@ func TestGenerateCACert(t *testing.T) {
 	}
 }
 
-func TestGenerateTenantCerts(t *testing.T) {
+func TestGenerateTenantKVClientCerts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Do not mock cert access for this test.
 	securityassets.ResetLoader()
@@ -119,7 +119,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 	certsDir := t.TempDir()
 
 	caKeyFile := filepath.Join(certsDir, "name-must-not-matter.key")
-	require.NoError(t, security.CreateTenantCAPair(
+	require.NoError(t, security.CreateTenantKVClientCAPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
@@ -128,7 +128,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 		false, // overwrite
 	))
 
-	cp, err := security.CreateTenantPair(
+	cp, err := security.CreateTenantKVClientCertPair(
 		certsDir,
 		caKeyFile,
 		testKeySize,
@@ -137,7 +137,7 @@ func TestGenerateTenantCerts(t *testing.T) {
 		[]string{"127.0.0.1"},
 	)
 	require.NoError(t, err)
-	require.NoError(t, security.WriteTenantPair(certsDir, cp, false))
+	require.NoError(t, security.WriteTenantKVClientCerts(certsDir, cp, false))
 
 	require.NoError(t, security.CreateTenantSigningPair(certsDir, time.Hour, false /* overwrite */, 999))
 
@@ -158,11 +158,11 @@ func TestGenerateTenantCerts(t *testing.T) {
 	}
 	require.Equal(t, []*security.CertInfo{
 		{
-			FileUsage: security.TenantCAPem,
+			FileUsage: security.TenantKVClientCAPem,
 			Filename:  "ca-client-tenant.crt",
 		},
 		{
-			FileUsage: security.TenantPem,
+			FileUsage: security.TenantKVClientPem,
 			Filename:  "client-tenant.999.crt",
 			Name:      "999",
 		},
@@ -297,20 +297,20 @@ func generateBaseCerts(certsDir string) error {
 
 	{
 		tenantID := uint64(10)
-		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantCAKey)
-		if err := security.CreateTenantCAPair(
+		caKey := filepath.Join(certsDir, certnames.EmbeddedTenantKVClientCAKey)
+		if err := security.CreateTenantKVClientCAPair(
 			certsDir, caKey,
 			testKeySize, time.Hour*96, true, true,
 		); err != nil {
 			return err
 		}
 
-		tcp, err := security.CreateTenantPair(certsDir, caKey,
+		tcp, err := security.CreateTenantKVClientCertPair(certsDir, caKey,
 			testKeySize, time.Hour*48, tenantID, []string{"127.0.0.1"})
 		if err != nil {
 			return err
 		}
-		if err := security.WriteTenantPair(certsDir, tcp, true); err != nil {
+		if err := security.WriteTenantKVClientCerts(certsDir, tcp, true); err != nil {
 			return err
 		}
 		if err := security.CreateTenantSigningPair(certsDir, 96*time.Hour, true /* overwrite */, tenantID); err != nil {
@@ -706,7 +706,7 @@ func TestAppendCertificateToBlob(t *testing.T) {
 	for _, certFilename := range []string{
 		//		security.EmbeddedClientCACert,
 		//		security.EmbeddedUICACert,
-		certnames.EmbeddedTenantCACert,
+		certnames.EmbeddedTenantKVClientCACert,
 	} {
 		newCertBlob, err := securitytest.Asset(filepath.Join(certnames.EmbeddedCertsDir, certFilename))
 		if err != nil {

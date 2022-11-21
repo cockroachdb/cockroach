@@ -14,12 +14,12 @@ Contains the following files:
 * client.testuser.key: testing user private key
 * client.testuser2.crt: testing user 2 certificate
 * client.testuser2.key: testing user 2 private key
-* ca-client-tenant.crt: tenant CA certificate
-* ca-client-tenant.key: tenant CA private key
-* client-tenant.<ID>.crt: tenant client certificate
-* client-tenant.<ID>.key: tenant client private key
-* tenant-signing.<ID>.crt: tenant signing certificate
-* tenant-signing.<ID>.key: tenant signing private key
+* ca-client-tenant.crt: CA certificate used to sign client-tenant and tenant-signing certs.
+* ca-client-tenant.key: CA private key for ca-client-tenant.crt.
+* client-tenant.<ID>.crt: tenant client certificate (used to authn to the KV layer)
+* client-tenant.<ID>.key: tenant client private key (used to authn to the KV layer)
+* tenant-signing.<ID>.crt: tenant signing certificate (used to sign serialized SQL sessions)
+* tenant-signing.<ID>.key: tenant signing private key (used to sign serialized SQL sessions)
 
 The per-tenant files include IDs: 10, 11, and 20.
 

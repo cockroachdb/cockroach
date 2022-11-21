@@ -136,10 +136,12 @@ type CertificateManager struct {
 	sqlServerCert   *CertInfo // optional: certificate for SQL service
 	nodeClientCert  *CertInfo // optional: client certificate for 'node' user. Also included in 'clientCerts'
 	uiCert          *CertInfo // optional: server certificate for the admin UI.
-	clientCerts     map[username.SQLUsername]*CertInfo
 
-	// Certs only used with multi-tenancy.
-	tenantCACert, tenantCert, tenantSigningCert *CertInfo
+	tenantKVClientCert   *CertInfo // optional: client certificate for a tenant server to authn to the KV layer
+	tenantKVClientCACert *CertInfo // optional: certificate to verify tenant KV client certs
+	tenantSigningCert    *CertInfo // optional: certificate used to sign serialized SQL sessions for a tenant
+
+	clientCerts map[username.SQLUsername]*CertInfo
 
 	// TLS configs. Initialized lazily. Wiped on every successful Load().
 	// Server-side config for inbound RPC connections.
@@ -381,7 +383,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 	}
 
 	var caCert, clientCACert, sqlServerCACert, uiCACert, nodeCert, sqlServerCert, uiCert, nodeClientCert *CertInfo
-	var tenantCACert, tenantCert, tenantSigningCert *CertInfo
+	var tenantKVClientCACert, tenantKVClientCert, tenantSigningCert *CertInfo
 	clientCerts := make(map[username.SQLUsername]*CertInfo)
 	for _, ci := range cl.Certificates() {
 		switch ci.FileUsage {
@@ -397,7 +399,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 			nodeCert = ci
 		case SQLServerPem:
 			sqlServerCert = ci
-		case TenantPem:
+		case TenantKVClientPem:
 			// When there are multiple tenant client certs, pick the one we need only.
 			// In practice, this is expected only during testing, when we share a certs
 			// dir between multiple tenants.
@@ -406,7 +408,7 @@ func (cm *CertificateManager) LoadCertificates() error {
 				return errors.Errorf("invalid tenant id %s", ci.Name)
 			}
 			if tenantID == cm.tenantIdentifier {
-				tenantCert = ci
+				tenantKVClientCert = ci
 			}
 		case TenantSigningPem:
 			// When there are multiple tenant signing certs, pick the one we need only.
@@ -419,8 +421,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 			if tenantID == cm.tenantIdentifier {
 				tenantSigningCert = ci
 			}
-		case TenantCAPem:
-			tenantCACert = ci
+		case TenantKVClientCAPem:
+			tenantKVClientCACert = ci
 		case UIPem:
 			uiCert = ci
 		case ClientPem:
@@ -463,16 +465,16 @@ func (cm *CertificateManager) LoadCertificates() error {
 			return makeError(err, "reload would lose valid UI certificate")
 		}
 
-		if err := checkCertIsValid(tenantCACert); checkCertIsValid(cm.tenantCACert) == nil && err != nil {
+		if err := checkCertIsValid(tenantKVClientCACert); checkCertIsValid(cm.tenantKVClientCACert) == nil && err != nil {
 			return makeError(err, "reload would lose valid tenant client CA certificate")
 		}
-		if err := checkCertIsValid(tenantCert); checkCertIsValid(cm.tenantCert) == nil && err != nil {
+		if err := checkCertIsValid(tenantKVClientCert); checkCertIsValid(cm.tenantKVClientCert) == nil && err != nil {
 			return makeError(err, "reload would lose valid tenant client certificate")
 		}
 	}
 
-	if tenantCert == nil && cm.tenantIdentifier != 0 {
-		return makeErrorf(errors.New("tenant client cert not found"), "for %d in %s", cm.tenantIdentifier, cm.CertsDir())
+	if tenantKVClientCert == nil && cm.tenantIdentifier != 0 {
+		return makeErrorf(errors.New("tenant KV client cert not found"), "for %d in %s", cm.tenantIdentifier, cm.CertsDir())
 	}
 
 	if nodeClientCert == nil && nodeCert != nil {
@@ -503,8 +505,8 @@ func (cm *CertificateManager) LoadCertificates() error {
 	cm.clientConfig = nil
 
 	cm.tenantConfig = nil
-	cm.tenantCACert = tenantCACert
-	cm.tenantCert = tenantCert
+	cm.tenantKVClientCACert = tenantKVClientCACert
+	cm.tenantKVClientCert = tenantKVClientCert
 	cm.tenantSigningCert = tenantSigningCert
 
 	cm.updateMetricsLocked()
@@ -633,7 +635,7 @@ func (cm *CertificateManager) getEmbeddedSQLServerTLSConfig(
 	} else {
 		// Tenant server.
 		// TODO(knz): also use sql-server.crt for tenant servers.
-		serverCert, err = cm.getTenantCertLocked()
+		serverCert, err = cm.getTenantKVClientCertLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -646,7 +648,7 @@ func (cm *CertificateManager) getEmbeddedSQLServerTLSConfig(
 		return nil, err
 	}
 
-	tenantCA, err := cm.getTenantCACertLocked()
+	tenantCA, err := cm.getTenantKVClientCACertLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -695,7 +697,7 @@ func (cm *CertificateManager) getEmbeddedRPCServerTLSConfig(
 		}
 	} else {
 		// Tenant server.
-		nodeCert, err = cm.getTenantCertLocked()
+		nodeCert, err = cm.getTenantKVClientCertLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -708,7 +710,7 @@ func (cm *CertificateManager) getEmbeddedRPCServerTLSConfig(
 		return nil, err
 	}
 
-	tenantCA, err := cm.getTenantCACertLocked()
+	tenantCA, err := cm.getTenantKVClientCACertLocked()
 	if err != nil {
 		return nil, err
 	}
@@ -854,7 +856,7 @@ func (cm *CertificateManager) getUICertLocked() (*CertInfo, error) {
 			return cm.getNodeCertLocked()
 		}
 		// Tenant server.
-		return cm.getTenantCertLocked()
+		return cm.getTenantKVClientCertLocked()
 	}
 	if err := checkCertIsValid(cm.uiCert); err != nil {
 		return nil, makeError(err, "problem with UI certificate")
@@ -897,26 +899,26 @@ func (cm *CertificateManager) getNodeClientCertLocked() (*CertInfo, error) {
 	return cm.nodeClientCert, nil
 }
 
-// getTenantCACertLocked returns the CA cert used to verify tenant client
+// getTenantKVClientCACertLocked returns the CA cert used to verify tenant client
 // certificates. Use the tenant client CA if it exists, otherwise fall back to
 // client CA. cm.mu must be held.
-func (cm *CertificateManager) getTenantCACertLocked() (*CertInfo, error) {
-	if cm.tenantCACert == nil {
+func (cm *CertificateManager) getTenantKVClientCACertLocked() (*CertInfo, error) {
+	if cm.tenantKVClientCACert == nil {
 		return cm.getClientCACertLocked()
 	}
-	c := cm.tenantCACert
+	c := cm.tenantKVClientCACert
 	if err := checkCertIsValid(c); err != nil {
 		return nil, makeError(err, "problem with tenant client CA certificate")
 	}
 	return c, nil
 }
 
-// getTenantCertLocked returns the tenant node cert.
+// getTenantKVClientCertLocked returns the tenant node cert.
 // cm.mu must be held.
-func (cm *CertificateManager) getTenantCertLocked() (*CertInfo, error) {
-	c := cm.tenantCert
+func (cm *CertificateManager) getTenantKVClientCertLocked() (*CertInfo, error) {
+	c := cm.tenantKVClientCert
 	if err := checkCertIsValid(c); err != nil {
-		return nil, makeError(err, "problem with tenant client certificate")
+		return nil, makeError(err, "problem with tenant KV client certificate")
 	}
 	return c, nil
 }
@@ -939,24 +941,24 @@ func (cm *CertificateManager) GetTenantRPCClientTLSConfig() (*tls.Config, error)
 
 	caBlob := ca.FileContents
 
-	if cm.tenantCACert != nil {
+	if cm.tenantKVClientCACert != nil {
 		// If it's available, we also include the tenant CA.
-		tenantCA, err := cm.getTenantCACertLocked()
+		tenantCA, err := cm.getTenantKVClientCACertLocked()
 		if err == nil {
 			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
 		}
 	}
 
 	// Client cert presented to KV nodes.
-	tenantCert, err := cm.getTenantCertLocked()
+	tenantKVClientCert, err := cm.getTenantKVClientCertLocked()
 	if err != nil {
 		return nil, err
 	}
 
 	cfg, err := newClientTLSConfig(
 		cm.tlsSettings,
-		tenantCert.FileContents,
-		tenantCert.KeyFileContents,
+		tenantKVClientCert.FileContents,
+		tenantKVClientCert.KeyFileContents,
 		caBlob)
 	if err != nil {
 		return nil, err
@@ -1008,7 +1010,7 @@ func (cm *CertificateManager) GetRPCClientTLSConfig(
 		}
 	} else {
 		// Tenant server.
-		ca, err = cm.getTenantCACertLocked()
+		ca, err = cm.getTenantKVClientCACertLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -1071,9 +1073,9 @@ func (cm *CertificateManager) GetUIClientTLSConfig() (*tls.Config, error) {
 
 	caBlob := uiCA.FileContents
 
-	if cm.tenantCACert != nil {
+	if cm.tenantKVClientCACert != nil {
 		// If it's available, we also include the tenant CA.
-		tenantCA, err := cm.getTenantCACertLocked()
+		tenantCA, err := cm.getTenantKVClientCACertLocked()
 		if err == nil {
 			caBlob = AppendCertificatesToBlob(caBlob, tenantCA.FileContents)
 		}

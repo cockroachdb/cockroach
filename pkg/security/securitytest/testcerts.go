@@ -33,7 +33,7 @@ func CreateTestCerts(certsDir string) (cleanup func() error) {
 		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedNodeKey),
 		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedRootCert),
 		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedRootKey),
-		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantCACert),
+		filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantKVClientCACert),
 	}
 
 	for _, a := range assets {

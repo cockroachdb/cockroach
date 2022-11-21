@@ -35,7 +35,7 @@ If the CA certificate exists and --overwrite is true, the new CA certificate is 
 	Args: cobra.NoArgs,
 	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		return errors.Wrap(
-			security.CreateTenantCAPair(
+			security.CreateTenantKVClientCAPair(
 				certCtx.certsDir,
 				certCtx.caKey,
 				certCtx.keySize,
@@ -53,7 +53,8 @@ var mtCreateTenantCertCmd = &cobra.Command{
 	Short: "create tenant client certificate and key",
 	Long: `
 Generate a tenant client certificate "<certs-dir>/client-tenant.<tenant-id>.crt" and key
-"<certs-dir>/client-tenant.<tenant-id>.key".
+"<certs-dir>/client-tenant.<tenant-id>.key". This certificate is used to authenticate
+a tenant server to the KV layer.
 
 If --overwrite is true, any existing files are overwritten.
 
@@ -92,7 +93,7 @@ If no server addresses are passed, then a default list containing 127.0.0.1, ::1
 			if err != nil {
 				return errors.Wrapf(err, "%s is invalid uint64", tenantIDs)
 			}
-			cp, err := security.CreateTenantPair(
+			cp, err := security.CreateTenantKVClientCertPair(
 				certCtx.certsDir,
 				certCtx.caKey,
 				certCtx.keySize,
@@ -106,7 +107,7 @@ If no server addresses are passed, then a default list containing 127.0.0.1, ::1
 					"failed to generate tenant client certificate and key")
 			}
 			return errors.Wrap(
-				security.WriteTenantPair(certCtx.certsDir, cp, certCtx.overwriteFiles),
+				security.WriteTenantKVClientCerts(certCtx.certsDir, cp, certCtx.overwriteFiles),
 				"failed to write tenant client certificate and key")
 		}),
 }

@@ -80,9 +80,16 @@ func PGUrlWithOptionalClientCertsE(
 	if err != nil {
 		return url.URL{}, func() {}, err
 	}
-	// This CA is the one used by the SQL client driver to authenticate SQL tenant servers.
-	tenantCAPath := filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantCACert)
-	if err := securitytest.AppendFile(tenantCAPath, tempCAPath); err != nil {
+	// This CA is the one used by the SQL client driver to authenticate
+	// to SQL tenant servers.
+	//
+	// TODO(knz): This is confused - this is really the CA that signs
+	// the cert used by the tenant server to authn itself to the KV
+	// layer. It has nominally nothing to do with SQL
+	// connections. Tenant servers should allow using a separate CA to
+	// sign their server cert.
+	tenantKVClientCAPath := filepath.Join(certnames.EmbeddedCertsDir, certnames.EmbeddedTenantKVClientCACert)
+	if err := securitytest.AppendFile(tenantKVClientCAPath, tempCAPath); err != nil {
 		return url.URL{}, func() {}, err
 	}
 	options := url.Values{}

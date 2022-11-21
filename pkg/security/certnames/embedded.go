@@ -34,6 +34,6 @@ const (
 
 // Embedded certificates specific to multi-tenancy testing.
 const (
-	EmbeddedTenantCACert = "ca-client-tenant.crt" // CA for client connections
-	EmbeddedTenantCAKey  = "ca-client-tenant.key" // CA for client connections
+	EmbeddedTenantKVClientCACert = "ca-client-tenant.crt" // CA for tenant connections to the KV layer
+	EmbeddedTenantKVClientCAKey  = "ca-client-tenant.key" // CA for tenant connections to the KV layer
 )
