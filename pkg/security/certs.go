@@ -304,7 +304,7 @@ func CreateNodePair(
 		username.PurposeValidation)
 
 	nodeCert, err := GenerateServerCert(caCert, caPrivateKey,
-		nodeKey.Public(), lifetime, nodeUser, hosts)
+		nodeKey.Public(), lifetime, nodeUser, nil /* tenantIDs */, hosts)
 	if err != nil {
 		return errors.Wrap(err, "error creating node server certificate and key")
 	}
@@ -328,7 +328,12 @@ func CreateNodePair(
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.
 func CreateSQLServerPair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	overwrite bool,
+	tenantIDs []roachpb.TenantID,
+	hosts []string,
 ) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")
@@ -371,7 +376,7 @@ func CreateSQLServerPair(
 		username.PurposeValidation)
 
 	serverCert, err := GenerateServerCert(caCert, caPrivateKey,
-		serverKey.Public(), lifetime, serverUser, hosts)
+		serverKey.Public(), lifetime, serverUser, tenantIDs, hosts)
 	if err != nil {
 		return errors.Wrap(err, "error creating SQL server certificate and key")
 	}
