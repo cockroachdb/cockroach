@@ -1,0 +1,21 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "schedulebase",
+    srcs = ["util.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/jobs/jobspb",
+        "//pkg/scheduledjobs",
+        "//pkg/security/username",
+        "//pkg/sql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_robfig_cron_v3//:cron",
+    ],
+)
+
+get_x_data(name = "get_x_data")

@@ -80,6 +80,7 @@ type annotatedChangefeedStatement struct {
 	*tree.CreateChangefeed
 	originalSpecs       map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
 	alterChangefeedAsOf hlc.Timestamp
+	CreatedByInfo       *jobs.CreatedByInfo
 }
 
 func getChangefeedStatement(stmt tree.Statement) *annotatedChangefeedStatement {
@@ -274,6 +275,31 @@ func changefeedPlanHook(
 			}
 
 			jr.Progress = *progress.GetChangefeed()
+
+			if changefeedStmt.CreatedByInfo != nil {
+				// This changefeed statement invoked by the scheduler.  As such, the scheduler
+				// must have specified transaction to use, and is responsible for committing
+				// transaction.
+
+				// Revisit: if the txn fails, should we not call CleanupOnRollback for job?
+				// do we not do that because the scheduler will roll back to a previous
+				// transaction save point?
+				txn := p.ExtendedEvalContext().Txn
+				_, err := p.ExecCfg().JobRegistry.CreateAdoptableJobWithTxn(ctx, *jr, jobID, txn)
+				if err != nil {
+					return err
+				}
+
+				if ptr != nil {
+					if err := p.ExecCfg().ProtectedTimestampProvider.Protect(ctx, txn, ptr); err != nil {
+						return err
+					}
+				}
+
+				// Revisit: why do we not check for ctx.Done as we do below before sending answer to resultCh?
+				resultsCh <- tree.Datums{tree.NewDInt(tree.DInt(jobID))}
+				return nil
+			}
 
 			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, *jr); err != nil {
@@ -616,7 +642,8 @@ func createChangefeedJobRecord(
 			}
 			return sqlDescIDs
 		}(),
-		Details: details,
+		Details:   details,
+		CreatedBy: changefeedStmt.CreatedByInfo,
 	}
 
 	return jr, err
