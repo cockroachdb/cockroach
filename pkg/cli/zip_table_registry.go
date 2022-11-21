@@ -132,6 +132,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"node_id",
 			"since",
 			"status",
+			"crdb_internal.redact_sql_constants(stmt) as stmt",
 		},
 	},
 	"crdb_internal.cluster_execution_insights": {
@@ -196,6 +197,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"distributed",
 			"phase",
 			"full_scan",
+			"crdb_internal.redact_sql_constants(query) as query",
 		},
 	},
 	"crdb_internal.cluster_sessions": {
@@ -215,6 +217,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"max_alloc_bytes",
 			"status",
 			"session_end",
+			"crdb_internal.redact_sql_constants(active_queries) as active_queries",
+			"crdb_internal.redact_sql_constants(last_active_query) as last_active_query",
 		},
 	},
 	"crdb_internal.cluster_settings": {
@@ -253,6 +257,7 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"schema_id",
 			"function_id",
 			"function_name",
+			"crdb_internal.redact_sql_constants(create_statement) as create_statement",
 		},
 	},
 	// The synthetic SQL CREATE statements for all tables.
@@ -281,6 +286,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"is_multi_region",
 			"is_virtual",
 			"is_temporary",
+			"crdb_internal.redact_sql_constants(create_statement) as create_statement",
+			"crdb_internal.redact_sql_constants(alter_statements) as alter_statements",
 		},
 	},
 	// Ditto, for CREATE TYPE.
@@ -584,6 +591,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"stmt",
 			"since",
 			"status",
+			"crdb_internal.redact_sql_constants(stmt) as stmt",
 		},
 	},
 	"crdb_internal.node_execution_insights": {
@@ -646,6 +654,7 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"distributed",
 			"phase",
 			"full_scan",
+			"crdb_internal.redact_sql_constants(query) as query",
 		},
 	},
 	"crdb_internal.node_runtime_info": {
@@ -673,6 +682,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"max_alloc_bytes",
 			"status",
 			"session_end",
+			"crdb_internal.redact_sql_constants(active_queries) as active_queries",
+			"crdb_internal.redact_sql_constants(last_active_query) as last_active_query",
 		},
 	},
 	"crdb_internal.node_statement_statistics": {
