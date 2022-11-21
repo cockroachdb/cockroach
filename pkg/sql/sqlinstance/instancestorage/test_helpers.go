@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
@@ -76,6 +77,7 @@ func (f *FakeStorage) ReleaseInstanceID(_ context.Context, id base.SQLInstanceID
 // table for testing purposes.
 func (s *Storage) CreateInstanceDataForTest(
 	ctx context.Context,
+	region []byte,
 	instanceID base.SQLInstanceID,
 	addr string,
 	sessionID sqlliveness.SessionID,
@@ -90,12 +92,13 @@ func (s *Storage) CreateInstanceDataForTest(
 		if err != nil {
 			return err
 		}
-		row, err := s.rowcodec.encodeRow(instanceID, addr, sessionID, locality, s.codec, s.tableID)
+		key := s.rowcodec.encodeKey(region, instanceID)
+		value, err := s.rowcodec.encodeValue(addr, sessionID, locality)
 		if err != nil {
 			return err
 		}
 		b := txn.NewBatch()
-		b.Put(row.Key, row.Value)
+		b.Put(key, value)
 		return txn.CommitInBatch(ctx, b)
 	})
 }
@@ -103,9 +106,9 @@ func (s *Storage) CreateInstanceDataForTest(
 // GetInstanceDataForTest returns instance data directly from raw storage for
 // testing purposes.
 func (s *Storage) GetInstanceDataForTest(
-	ctx context.Context, instanceID base.SQLInstanceID,
+	ctx context.Context, region []byte, instanceID base.SQLInstanceID,
 ) (sqlinstance.InstanceInfo, error) {
-	k := makeInstanceKey(s.codec, s.tableID, instanceID)
+	k := s.rowcodec.encodeKey(region, instanceID)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	row, err := s.db.Get(ctx, k)
 	if err != nil {
@@ -114,7 +117,7 @@ func (s *Storage) GetInstanceDataForTest(
 	if row.Value == nil {
 		return sqlinstance.InstanceInfo{}, sqlinstance.NonExistentInstanceError
 	}
-	_, addr, sessionID, locality, _, _, err := s.rowcodec.decodeRow(row)
+	addr, sessionID, locality, _, err := s.rowcodec.decodeValue(*row.Value)
 	if err != nil {
 		return sqlinstance.InstanceInfo{}, errors.Wrapf(err, "could not decode data for instance %d", instanceID)
 	}
@@ -135,7 +138,7 @@ func (s *Storage) GetAllInstancesDataForTest(
 	var rows []instancerow
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	err = s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		rows, err = s.getGlobalInstanceRows(ctx, txn)
+		rows, err = s.getInstanceRows(ctx, nil /*global*/, txn, lock.WaitPolicy_Block)
 		return err
 	})
 	if err != nil {

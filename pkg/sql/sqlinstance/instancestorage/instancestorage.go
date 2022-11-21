@@ -16,23 +16,24 @@ import (
 	"context"
 	"math"
 	"math/rand"
-	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -70,14 +71,17 @@ var PreallocatedCount = settings.RegisterIntSetting(
 var errNoPreallocatedRows = errors.New("no preallocated rows")
 
 // Storage implements the storage layer for the sqlinstance subsystem.
+//
+// SQL Instance IDs must be globally unique. The SQL Instance table may be
+// partitioned by region. In order to allow for fast cold starts, SQL Instances
+// are pre-allocated into each region. If a sql_instance row does not have a
+// session id, it is available for immediate use. It is also legal to reclaim
+// instances ids if the owning session has expired.
 type Storage struct {
-	codec        keys.SQLCodec
-	db           *kv.DB
-	tableID      descpb.ID
-	slReader     sqlliveness.Reader
-	rowcodec     rowCodec
-	settings     *cluster.Settings
-	reclaimGroup singleflight.Group
+	db       *kv.DB
+	slReader sqlliveness.Reader
+	rowcodec rowCodec
+	settings *cluster.Settings
 	// TestingKnobs refers to knobs used for testing.
 	TestingKnobs struct {
 		// JitteredIntervalFn corresponds to the function used to jitter the
@@ -88,6 +92,7 @@ type Storage struct {
 
 // instancerow encapsulates data for a single row within the sql_instances table.
 type instancerow struct {
+	region     []byte
 	instanceID base.SQLInstanceID
 	addr       string
 	sessionID  sqlliveness.SessionID
@@ -98,11 +103,7 @@ type instancerow struct {
 // isAvailable returns true if the instance row hasn't been claimed by a SQL pod
 // (i.e. available for claiming), or false otherwise.
 func (r *instancerow) isAvailable() bool {
-	return r.addr == ""
-}
-
-type dbScan interface {
-	Scan(ctx context.Context, begin, end interface{}, maxRows int64) ([]kv.KeyValue, error)
+	return r.sessionID == ""
 }
 
 // NewTestingStorage constructs a new storage with control for the database
@@ -116,9 +117,7 @@ func NewTestingStorage(
 ) *Storage {
 	s := &Storage{
 		db:       db,
-		codec:    codec,
-		tableID:  sqlInstancesTableID,
-		rowcodec: makeRowCodec(codec),
+		rowcodec: makeRowCodec(codec, sqlInstancesTableID),
 		slReader: slReader,
 		settings: settings,
 	}
@@ -147,6 +146,14 @@ func (s *Storage) CreateInstance(
 	if len(sessionID) == 0 {
 		return base.SQLInstanceID(0), errors.New("no session information for instance")
 	}
+
+	region, _, err := slstorage.UnsafeDecodeSessionID(sessionID)
+	if err != nil {
+		return base.SQLInstanceID(0), errors.Wrap(err, "unable to determine region for sql_instance")
+	}
+
+	// TODO(jeffswenson): advance session expiration. This can get stuck in a
+	// loop if the session already expired.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	assignInstance := func() (base.SQLInstanceID, error) {
 		var availableID base.SQLInstanceID
@@ -165,29 +172,30 @@ func (s *Storage) CreateInstance(
 				return err
 			}
 
-			availableID, err = s.getAvailableInstanceIDForRegion(ctx, txn)
+			// Try to retrieve an available instance ID. This blocks until one
+			// is available.
+			availableID, err = s.getAvailableInstanceIDForRegion(ctx, region, txn)
 			if err != nil {
 				return err
 			}
 
-			row, err := s.rowcodec.encodeRow(availableID, addr, sessionID, locality, s.codec, s.tableID)
+			key := s.rowcodec.encodeKey(region, availableID)
+			value, err := s.rowcodec.encodeValue(addr, sessionID, locality)
 			if err != nil {
 				log.Warningf(ctx, "failed to encode row for instance id %d: %v", availableID, err)
 				return err
 			}
 
 			b := txn.NewBatch()
-			b.Put(row.Key, row.Value)
+			b.Put(key, value)
 			return txn.CommitInBatch(ctx, b)
 		}); err != nil {
 			return base.SQLInstanceID(0), err
 		}
 		return availableID, nil
 	}
-	var err error
-	// There's a possibility where there are no available rows, and the cached
-	// reader takes time to fully find out that the sessions are dead, so retry
-	// with a backoff.
+	// It's possible that all allocated IDs are claimed, so retry with a back
+	// off.
 	opts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     200 * time.Millisecond,
@@ -195,7 +203,7 @@ func (s *Storage) CreateInstance(
 	}
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		log.Infof(ctx, "assigning instance id to addr %s", addr)
-		instanceID, err = assignInstance()
+		instanceID, err := assignInstance()
 		// Instance was successfully assigned an ID.
 		if err == nil {
 			return instanceID, err
@@ -203,10 +211,19 @@ func (s *Storage) CreateInstance(
 		if !errors.Is(err, errNoPreallocatedRows) {
 			return base.SQLInstanceID(0), err
 		}
-		// If the transaction failed because there were no pre-allocated rows,
-		// trigger reclaiming, and retry. This blocks until the reclaim process
-		// completes.
-		if err := s.generateAvailableInstanceRows(ctx, sessionExpiration); err != nil {
+		// If assignInstance failed because there are no available rows,
+		// allocate new instance IDs for the local region.
+		//
+		// There is a choice during start up:
+		//   1. Allocate for every region.
+		//   2. Allocate only for the local region.
+		//
+		// Allocating only for the local region removes one global round trip.
+		// In the uncontended case, allocating locally requires reading from
+		// every region, then writing to the local region. Allocating globally
+		// would require one round trip for reading and one round trip for
+		// writes.
+		if err := s.generateAvailableInstanceRows(ctx, [][]byte{region}, sessionExpiration); err != nil {
 			log.Warningf(ctx, "failed to generate available instance rows: %v", err)
 		}
 	}
@@ -222,171 +239,141 @@ func (s *Storage) CreateInstance(
 // TODO(jaylim-crl): Store current region enum in s once we implement regional
 // by row for the sql_instances table.
 func (s *Storage) getAvailableInstanceIDForRegion(
-	ctx context.Context, db dbScan,
+	ctx context.Context, region []byte, txn *kv.Txn,
 ) (base.SQLInstanceID, error) {
-	rows, err := s.getRegionalInstanceRows(ctx, db)
+	rows, err := s.getInstanceRows(ctx, region, txn, lock.WaitPolicy_SkipLocked)
 	if err != nil {
 		return base.SQLInstanceID(0), err
 	}
-	sortAvailableRowsFirst(rows)
 
-	for i := 0; i < len(rows); i++ {
-		if rows[i].isAvailable() {
-			return rows[i].instanceID, nil
+	for _, row := range rows {
+		if row.isAvailable() {
+			return row.instanceID, nil
 		}
+	}
 
+	for _, row := range rows {
 		// If the row has already been used, check if the session is alive.
 		// This is beneficial since the rows already belong to the same region.
 		// We will only do this after checking all **available** instance IDs.
-		sessionAlive, _ := s.slReader.IsAlive(ctx, rows[i].sessionID)
+		// If there are no locally available regions, the caller needs to
+		// consult all regions to determine which IDs are safe to allocate.
+		sessionAlive, _ := s.slReader.IsAlive(ctx, row.sessionID)
 		if !sessionAlive {
-			return rows[i].instanceID, nil
+			return row.instanceID, nil
 		}
 	}
+
 	return base.SQLInstanceID(0), errNoPreallocatedRows
 }
 
-// idsToReclaim retrieves two lists of instance IDs, one to claim, and another
-// to delete.
-func (s *Storage) idsToReclaim(
-	ctx context.Context, db dbScan,
-) (toClaim []base.SQLInstanceID, toDelete []base.SQLInstanceID, _ error) {
-	rows, err := s.getGlobalInstanceRows(ctx, db)
-	if err != nil {
-		return nil, nil, err
+// reclaimRegion will reclaim instances belonging to expired sessions and
+// delete surplus sessions. reclaimRegion should only be called by the
+// background clean up and allocation job.
+func (s *Storage) reclaimRegion(ctx context.Context, region []byte) error {
+	// In a separate transaction, read all rows that exist in the region. This
+	// allows us to check for expired sessions outside of a transaction. The
+	// expired sessions are stored in a map that is consulted in the clean up
+	// transaction. This is safe because once a session is in-active, it will
+	// never become active again.
+	var instances []instancerow
+	if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		var err error
+		instances, err = s.getInstanceRows(ctx, region, txn, lock.WaitPolicy_Block)
+		return err
+	}); err != nil {
+		return err
 	}
-	sortAvailableRowsFirst(rows)
 
-	availableCount := 0
-	for _, row := range rows {
-		if row.isAvailable() {
-			availableCount++
-		} else {
-			// Instance row has already been claimed.
-			sessionAlive, _ := s.slReader.IsAlive(ctx, row.sessionID)
-			if !sessionAlive {
-				toClaim = append(toClaim, row.instanceID)
+	// Build a map of expired regions
+	isExpired := map[sqlliveness.SessionID]bool{}
+	for i := range instances {
+		alive, err := s.slReader.IsAlive(ctx, instances[i].sessionID)
+		if err != nil {
+			return err
+		}
+		isExpired[instances[i].sessionID] = !alive
+	}
+
+	// Reclaim and delete rows
+	target := int(PreallocatedCount.Get(&s.settings.SV))
+	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		instances, err := s.getInstanceRows(ctx, region, txn, lock.WaitPolicy_Block)
+		if err != nil {
+			return err
+		}
+
+		toReclaim, toDelete := idsToReclaim(target, instances, isExpired)
+
+		writeBatch := txn.NewBatch()
+		for _, instance := range toReclaim {
+			availableValue, err := s.rowcodec.encodeAvailableValue()
+			if err != nil {
+				return err
 			}
+			writeBatch.Put(s.rowcodec.encodeKey(region, instance), availableValue)
 		}
-	}
-
-	// Since PreallocatedCount is a cluster setting, there could be a scenario
-	// where we have more pre-allocated rows than requested. In that case, we
-	// will just ignore anyway. Eventually, it will converge to the requested
-	// count.
-	claimCount := int(math.Max(float64(int(PreallocatedCount.Get(&s.settings.SV))-availableCount), 0))
-
-	// Truncate toClaim, delete the rest, and we are done here.
-	if len(toClaim) > claimCount {
-		return toClaim[:claimCount], toClaim[claimCount:], nil
-	}
-
-	// Sort in ascending order of instance IDs for the loop below.
-	sort.SliceStable(rows, func(idx1, idx2 int) bool {
-		return rows[idx1].instanceID < rows[idx2].instanceID
-	})
-
-	// Insufficient toClaim instances. Initialize prevInstanceID with starter
-	// value of 0 as instanceIDs begin from 1.
-	prevInstanceID := base.SQLInstanceID(0)
-	for i := 0; i < len(rows) && len(toClaim) < claimCount; {
-		// Check for a gap between adjacent instance IDs indicating the
-		// availability of an unused instance ID.
-		if rows[i].instanceID-prevInstanceID > 1 {
-			toClaim = append(toClaim, prevInstanceID+1)
-			prevInstanceID = prevInstanceID + 1
-		} else {
-			prevInstanceID = rows[i].instanceID
-			i++
+		for _, instance := range toDelete {
+			writeBatch.Del(s.rowcodec.encodeKey(region, instance))
 		}
-	}
 
-	remainingCount := claimCount - len(toClaim)
-	for i := 1; i <= remainingCount; i++ {
-		toClaim = append(toClaim, prevInstanceID+base.SQLInstanceID(i))
-	}
-	return toClaim, toDelete, nil
-}
-
-// sortAvailableRowsFirst sorts rows such that all available rows are placed
-// in front.
-func sortAvailableRowsFirst(rows []instancerow) {
-	sort.SliceStable(rows, func(idx1, idx2 int) bool {
-		addr1, addr2 := rows[idx1].addr, rows[idx2].addr
-		switch {
-		case addr1 == "" && addr2 == "":
-			// Both are available.
-			return rows[idx1].instanceID < rows[idx2].instanceID
-		case addr1 == "":
-			// addr1 should go before addr2.
-			return true
-		case addr2 == "":
-			// addr2 should go before addr1.
-			return false
-		default:
-			// Both are used.
-			return rows[idx1].instanceID < rows[idx2].instanceID
-		}
+		return txn.CommitInBatch(ctx, writeBatch)
 	})
 }
 
-// getGlobalInstanceRows decodes and returns all instance rows across all
-// regions from the sql_instances table.
-//
-// TODO(jaylim-crl): For now, global and regional are the same.
-func (s *Storage) getGlobalInstanceRows(
-	ctx context.Context, db dbScan,
-) (instances []instancerow, _ error) {
-	return s.getRegionalInstanceRows(ctx, db)
-}
-
-// getRegionalInstanceRows decodes and returns all instance rows associated
+// getInstanceRows decodes and returns all instance rows associated
 // with a given region from the sql_instances table. This returns both used and
 // available instance rows.
 //
 // TODO(rima): Add locking mechanism to prevent thrashing at startup in the
 // case where multiple instances attempt to initialize their instance IDs
 // simultaneously.
-//
-// TODO(jaylim-crl): This currently fetches all rows. We want to only fetch rows
-// associated with the region of the SQL pod. This method will likely need to
-// take in a region (or if we stored the region in s).
-func (s *Storage) getRegionalInstanceRows(
-	ctx context.Context, db dbScan,
-) (instances []instancerow, _ error) {
-	start := makeTablePrefix(s.codec, s.tableID)
-	end := start.PrefixEnd()
-	// Fetch all rows. The expected data size is small, so it should
-	// be okay to fetch all rows together.
-	const maxRows = 0
-	rows, err := db.Scan(ctx, start, end, maxRows)
-	if err != nil {
+func (s *Storage) getInstanceRows(
+	ctx context.Context, region []byte, txn *kv.Txn, waitPolicy lock.WaitPolicy,
+) ([]instancerow, error) {
+	var start roachpb.Key
+	if region == nil {
+		start = s.rowcodec.makeIndexPrefix()
+	} else {
+		start = s.rowcodec.makeRegionPrefix(region)
+	}
+
+	// Scan the entire range
+	batch := txn.NewBatch()
+	batch.Header.WaitPolicy = waitPolicy
+	batch.Scan(start, start.PrefixEnd())
+	if err := txn.Run(ctx, batch); err != nil {
 		return nil, err
 	}
+	if len(batch.Results) != 1 {
+		return nil, errors.AssertionFailedf("expected exactly on batch result found %d: %+v", len(batch.Results), batch.Results[1])
+	}
+	if err := batch.Results[0].Err; err != nil {
+		return nil, err
+	}
+	rows := batch.Results[0].Rows
+
+	// Convert the result to instancerows
+	instances := make([]instancerow, len(rows))
 	for i := range rows {
-		instanceID, addr, sessionID, locality, timestamp, _, err := s.rowcodec.decodeRow(rows[i])
+		var err error
+		instances[i], err = s.rowcodec.decodeRow(rows[i].Key, rows[i].Value)
 		if err != nil {
-			log.Warningf(ctx, "failed to decode row %v: %v", rows[i].Key, err)
 			return nil, err
 		}
-		curInstance := instancerow{
-			instanceID: instanceID,
-			addr:       addr,
-			sessionID:  sessionID,
-			timestamp:  timestamp,
-			locality:   locality,
-		}
-		instances = append(instances, curInstance)
 	}
 	return instances, nil
 }
 
-// ReleaseInstanceID deletes an instance ID record. The instance ID can then be
-// reused by another SQL pod of the same tenant.
-func (s *Storage) ReleaseInstanceID(ctx context.Context, id base.SQLInstanceID) error {
+// ReleaseInstanceID deletes an instance ID record. The instance ID becomes
+// available to be reused by another SQL pod of the same tenant.
+// TODO(jeffswenson): delete this, it is unused.
+func (s *Storage) ReleaseInstanceID(
+	ctx context.Context, region []byte, id base.SQLInstanceID,
+) error {
 	// TODO(andrei): Ensure that we do not delete an instance ID that we no longer
 	// own, instead of deleting blindly.
-	key := makeInstanceKey(s.codec, s.tableID, id)
+	key := s.rowcodec.encodeKey(region, id)
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if _, err := s.db.Del(ctx, key); err != nil {
 		return errors.Wrapf(err, "could not delete instance %d", id)
@@ -402,6 +389,9 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 	ts timeutil.TimeSource,
 	sessionExpirationFn func() hlc.Timestamp,
 ) error {
+	// TODO(jeffswenson): load regions from the system database enum.
+	regions := [][]byte{enum.One}
+
 	return stopper.RunAsyncTask(ctx, "instance-id-reclaim-loop", func(ctx context.Context) {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
@@ -420,7 +410,18 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 				return
 			case <-timer.Ch():
 				timer.MarkRead()
-				if err := s.generateAvailableInstanceRows(ctx, sessionExpirationFn()); err != nil {
+
+				// Mark instances that belong to expired sessions as available
+				// and delete surplus IDs. Cleaning up surplus IDs is necessary
+				// to avoid ID exhaustion.
+				for _, region := range regions {
+					if err := s.reclaimRegion(ctx, region); err != nil {
+						log.Warningf(ctx, "failed to reclaim instances in region '%v': %v", region, err)
+					}
+				}
+
+				// Allocate new ids regions that do not have enough pre-allocated sql instances.
+				if err := s.generateAvailableInstanceRows(ctx, regions, sessionExpirationFn()); err != nil {
 					log.Warningf(ctx, "failed to generate available instance rows: %v", err)
 				}
 			}
@@ -439,45 +440,85 @@ func (s *Storage) RunInstanceIDReclaimLoop(
 // insufficient. One global KV read and write would be sufficient for **all**
 // regions.
 func (s *Storage) generateAvailableInstanceRows(
-	ctx context.Context, sessionExpiration hlc.Timestamp,
+	ctx context.Context, regions [][]byte, sessionExpiration hlc.Timestamp,
 ) error {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
-	// We don't care about the results here.
-	_, _, err := s.reclaimGroup.Do("reclaim-instance-ids", func() (interface{}, error) {
-		err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-			// Set the transaction deadline to the session expiration to ensure
-			// transaction commits before the session expires.
-			err := txn.UpdateDeadline(ctx, sessionExpiration)
-			if err != nil {
-				return err
-			}
+	target := int(PreallocatedCount.Get(&s.settings.SV))
+	return s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		instances, err := s.getInstanceRows(ctx, nil /*global*/, txn, lock.WaitPolicy_Block)
+		if err != nil {
+			return err
+		}
 
-			// Fetch IDs to claim and delete.
-			toClaim, toDelete, err := s.idsToReclaim(ctx, txn)
+		b := txn.NewBatch()
+		for _, row := range idsToAllocate(target, regions, instances) {
+			value, err := s.rowcodec.encodeAvailableValue()
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "failed to encode row for instance id %d", row.instanceID)
 			}
-
-			b := txn.NewBatch()
-			for _, instanceID := range toClaim {
-				row, err := s.rowcodec.encodeRow(
-					instanceID, "", sqlliveness.SessionID([]byte{}), roachpb.Locality{}, s.codec, s.tableID,
-				)
-				if err != nil {
-					log.Warningf(ctx, "failed to encode row for instance id %d: %v", instanceID, err)
-					return err
-				}
-				b.Put(row.Key, row.Value)
-			}
-			for _, instanceID := range toDelete {
-				key := makeInstanceKey(s.codec, s.tableID, instanceID)
-				b.Del(key)
-			}
-			return txn.CommitInBatch(ctx, b)
-		})
-		return nil, err
+			b.Put(s.rowcodec.encodeKey(row.region, row.instanceID), value)
+		}
+		return txn.CommitInBatch(ctx, b)
 	})
-	return err
+}
+
+// idsToReclaim determines which instance rows with sessions should be
+// reclaimed and which surplus instances should be deleted.
+func idsToReclaim(
+	target int, instances []instancerow, isExpired map[sqlliveness.SessionID]bool,
+) (toReclaim []base.SQLInstanceID, toDelete []base.SQLInstanceID) {
+	available := 0
+	for _, instance := range instances {
+		free := instance.isAvailable() || isExpired[instance.sessionID]
+		switch {
+		case !free:
+			/* skip since it is in use */
+		case target <= available:
+			toDelete = append(toDelete, instance.instanceID)
+		case instance.isAvailable():
+			available += 1
+		case isExpired[instance.sessionID]:
+			available += 1
+			toReclaim = append(toReclaim, instance.instanceID)
+		}
+	}
+	return toReclaim, toDelete
+}
+
+// idsToAllocate inspects the allocated instances and determines which IDs
+// should be allocated. It avoids any ID that is present in the existing
+// instances. It only allocates for the passed in regions.
+func idsToAllocate(
+	target int, regions [][]byte, instances []instancerow,
+) (toAllocate []instancerow) {
+	availablePerRegion := map[string]int{}
+	existingIDs := map[base.SQLInstanceID]struct{}{}
+	for _, row := range instances {
+		existingIDs[row.instanceID] = struct{}{}
+		if row.isAvailable() {
+			availablePerRegion[string(row.region)] += 1
+		}
+	}
+
+	lastID := base.SQLInstanceID(0)
+	nextID := func() base.SQLInstanceID {
+		for {
+			lastID += 1
+			_, exists := existingIDs[lastID]
+			if !exists {
+				return lastID
+			}
+		}
+	}
+
+	for _, region := range regions {
+		available := availablePerRegion[string(region)]
+		for i := 0; i+available < target; i++ {
+			toAllocate = append(toAllocate, instancerow{region: region, instanceID: nextID()})
+		}
+	}
+
+	return toAllocate
 }
 
 // jitteredInterval returns a randomly jittered (+/-15%) duration.
