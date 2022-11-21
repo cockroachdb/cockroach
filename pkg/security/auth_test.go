@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -81,6 +82,48 @@ func makeFakeTLSState(t *testing.T, spec string) *tls.ConnectionState {
 		}
 	}
 	return tls
+}
+
+func TestParseTenantSQLClientURI(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		uri       string
+		expHasURI bool
+		expTid    string
+		expUser   string
+		expErr    string
+	}{
+		{`foo://bar`, false, "", "", ""},
+		{`foo:/:/bar`, false, "", "", ""},
+		{`crdb://bar`, false, "", "", ""},
+		{`crdb://tenant`, false, "", "", ""},
+		{`crdb://tenant/foo`, false, "", "", ""},
+		{`crdb://tenant/123/user`, false, "", "", ""},
+		{`crdb://tenant/123/user/`, false, "", "", ""},
+		{`crdb://tenant/123/user/foo`, true, "123", "foo", ""},
+		{`crdb://tenant/xxx/user/foo`, false, "", "", "invalid syntax"},
+		{`crdb://tenant/-1/user/foo`, false, "", "", "invalid syntax"},
+		{`crdb://tenant/0/user/foo`, true, "invalid", "", roachpb.ErrInvalidTenantID.Error()},
+		{`crdb://tenant/20000000000000000000/user/foo`, true, "invalid", "foo", "value out of range"},
+	}
+	for _, tc := range testData {
+		t.Run(tc.uri, func(t *testing.T) {
+			uri, err := url.Parse(tc.uri)
+			require.NoError(t, err)
+			hasURI, tenantID, username, perr := security.ParseTenantSQLClientURI(uri)
+			if !testutils.IsError(perr, tc.expErr) {
+				t.Errorf("expected err %q, got %v", tc.expErr, perr)
+			}
+			if perr == nil {
+				assert.Equal(t, tc.expHasURI, hasURI, "hasURI")
+				if hasURI {
+					assert.Equal(t, tc.expTid, tenantID.String(), "tenantID")
+					assert.Equal(t, tc.expUser, username, "username")
+				}
+			}
+		})
+	}
 }
 
 func TestGetCertificateUserScope(t *testing.T) {
@@ -162,9 +205,9 @@ func TestGetCertificateUserScope(t *testing.T) {
 
 	t.Run("errors when tenant URI SAN is not of expected format, even if other URI SAN is provided", func(t *testing.T) {
 		userScopes, err := security.GetCertificateUserScope(
-			makeFakeTLSState(t, "foo,uri:mycompany:sv:rootclient:dev:usw1,uri:crdb://tenant/bad/format/123;CA"))
+			makeFakeTLSState(t, "foo,uri:mycompany:sv:rootclient:dev:usw1,uri:crdb://tenant/0/user/foo;CA"))
 		require.Nil(t, userScopes)
-		require.ErrorContains(t, err, "invalid tenant URI SAN")
+		require.ErrorContains(t, err, "invalid tenant ID")
 	})
 
 	t.Run("falls back to global client cert when crdb URI SAN scheme is not followed", func(t *testing.T) {

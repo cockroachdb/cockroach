@@ -212,8 +212,7 @@ func TestGenerateClientCerts(t *testing.T) {
 	// We expect two certificates: the CA certificate and the tenant scoped client certificate.
 	require.Equal(t, 2, len(infos))
 	expectedClientCrtName := fmt.Sprintf("client.%s.crt", user)
-	expectedSANs, err := security.MakeTenantURISANs(user, tenantIDs)
-	require.NoError(t, err)
+	expectedSANs := security.MakeTenantSQLClientURISANs(user, tenantIDs)
 	for _, info := range infos {
 		if info.Filename == "ca.crt" {
 			continue
