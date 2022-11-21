@@ -17,7 +17,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -38,7 +37,6 @@ type Reader struct {
 	slReader        sqlliveness.Reader
 	f               *rangefeed.Factory
 	codec           keys.SQLCodec
-	tableID         descpb.ID
 	clock           *hlc.Clock
 	stopper         *stop.Stopper
 	rowcodec        rowCodec
@@ -67,9 +65,8 @@ func NewTestingReader(
 		slReader:        slReader,
 		f:               f,
 		codec:           codec,
-		tableID:         tableID,
 		clock:           clock,
-		rowcodec:        makeRowCodec(codec),
+		rowcodec:        makeRowCodec(codec, tableID),
 		initialScanDone: make(chan struct{}),
 		stopper:         stopper,
 	}
@@ -119,22 +116,12 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 	updateCacheFn := func(
 		ctx context.Context, keyVal *roachpb.RangeFeedValue,
 	) {
-		instanceID, addr, sessionID, locality, timestamp, tombstone, err := r.rowcodec.decodeRow(kv.KeyValue{
-			Key:   keyVal.Key,
-			Value: &keyVal.Value,
-		})
+		instance, err := r.rowcodec.decodeRow(keyVal.Key, &keyVal.Value)
 		if err != nil {
 			log.Ops.Warningf(ctx, "failed to decode settings row %v: %v", keyVal.Key, err)
 			return
 		}
-		instance := instancerow{
-			instanceID: instanceID,
-			addr:       addr,
-			sessionID:  sessionID,
-			timestamp:  timestamp,
-			locality:   locality,
-		}
-		r.updateInstanceMap(instance, tombstone)
+		r.updateInstanceMap(instance, !keyVal.Value.IsPresent())
 	}
 	initialScanDoneFn := func(_ context.Context) {
 		close(r.initialScanDone)
@@ -151,7 +138,7 @@ func (r *Reader) maybeStartRangeFeed(ctx context.Context) *rangefeed.RangeFeed {
 		return shouldFail
 	}
 
-	instancesTablePrefix := r.codec.TablePrefix(uint32(r.tableID))
+	instancesTablePrefix := r.rowcodec.makeIndexPrefix()
 	instancesTableSpan := roachpb.Span{
 		Key:    instancesTablePrefix,
 		EndKey: instancesTablePrefix.PrefixEnd(),

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/errors"
 )
@@ -24,6 +25,7 @@ type multiRegionTestClusterParams struct {
 	baseDir         string
 	replicationMode base.TestClusterReplicationMode
 	useDatabase     string
+	settings        *cluster.Settings
 }
 
 // MultiRegionTestClusterParamsOption is an option that can be passed to
@@ -52,6 +54,13 @@ func WithReplicationMode(
 func WithUseDatabase(db string) MultiRegionTestClusterParamsOption {
 	return func(params *multiRegionTestClusterParams) {
 		params.useDatabase = db
+	}
+}
+
+// WithSettings is used to configure the settings the cluster is created with.
+func WithSettings(settings *cluster.Settings) MultiRegionTestClusterParamsOption {
+	return func(params *multiRegionTestClusterParams) {
+		params.settings = settings
 	}
 }
 
@@ -97,6 +106,7 @@ func TestingCreateMultiRegionClusterWithRegionList(
 	for _, region := range regionNames {
 		for i := 0; i < serversPerRegion; i++ {
 			serverArgs[totalServerCount] = base.TestServerArgs{
+				Settings:      params.settings,
 				Knobs:         knobs,
 				ExternalIODir: params.baseDir,
 				UseDatabase:   params.useDatabase,

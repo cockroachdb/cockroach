@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
@@ -72,7 +73,7 @@ func TestReader(t *testing.T) {
 	t.Run("basic-get-instance-data", func(t *testing.T) {
 		storage, slStorage, clock, reader := setup(t)
 		require.NoError(t, reader.Start(ctx))
-		const sessionID = sqlliveness.SessionID("session_id")
+		sessionID := makeSession()
 		const addr = "addr"
 		locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}, {Key: "az", Value: "a"}}}
 		// Set a high enough expiration to ensure the session stays
@@ -111,9 +112,10 @@ func TestReader(t *testing.T) {
 		require.NoError(t, reader.Start(ctx))
 
 		// Set up expected test data.
+		region := enum.One
 		instanceIDs := []base.SQLInstanceID{1, 2, 3}
 		addresses := []string{"addr1", "addr2", "addr3"}
-		sessionIDs := []sqlliveness.SessionID{"session1", "session2", "session3"}
+		sessionIDs := []sqlliveness.SessionID{makeSession(), makeSession(), makeSession()}
 		localities := []roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
@@ -166,7 +168,7 @@ func TestReader(t *testing.T) {
 
 		// Release an instance and verify only active instances are returned.
 		{
-			err := storage.ReleaseInstanceID(ctx, instanceIDs[0])
+			err := storage.ReleaseInstanceID(ctx, region, instanceIDs[0])
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -200,7 +202,7 @@ func TestReader(t *testing.T) {
 		// the latest instance information is returned. This heuristic is used
 		// when instance information isn't released correctly prior to SQL instance shutdown.
 		{
-			sessionID := sqlliveness.SessionID("session4")
+			sessionID := makeSession()
 			locality := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "region4"}}}
 			sessionExpiry := clock.Now().Add(expiration.Nanoseconds(), 0)
 			id, err := storage.CreateInstance(ctx, sessionID, sessionExpiry, addresses[2], locality)
@@ -228,9 +230,10 @@ func TestReader(t *testing.T) {
 		storage, slStorage, clock, reader := setup(t)
 		require.NoError(t, reader.Start(ctx))
 		// Create three instances and release one.
+		region := enum.One
 		instanceIDs := [...]base.SQLInstanceID{1, 2, 3}
 		addresses := [...]string{"addr1", "addr2", "addr3"}
-		sessionIDs := [...]sqlliveness.SessionID{"session1", "session2", "session3"}
+		sessionIDs := [...]sqlliveness.SessionID{makeSession(), makeSession(), makeSession()}
 		localities := [...]roachpb.Locality{
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region1"}}},
 			{Tiers: []roachpb.Tier{{Key: "region", Value: "region2"}}},
@@ -270,7 +273,7 @@ func TestReader(t *testing.T) {
 
 		// Verify request for released instance data results in an error.
 		{
-			err := storage.ReleaseInstanceID(ctx, instanceIDs[0])
+			err := storage.ReleaseInstanceID(ctx, region, instanceIDs[0])
 			if err != nil {
 				t.Fatal(err)
 			}
