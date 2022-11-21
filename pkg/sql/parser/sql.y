@@ -3556,14 +3556,6 @@ restore_stmt:
       Options: *($9.restoreOptions()),
     }
   }
-| RESTORE backup_targets FROM REPLICATION STREAM FROM string_or_placeholder_opt_list opt_as_tenant_clause
-  {
-   $$.val = &tree.StreamIngestion{
-     Targets: $2.backupTargetList(),
-     From: $7.stringOrPlaceholderOptList(),
-     AsTenant: $8.asTenantClause(),
-   }
-  }
 | RESTORE error // SHOW HELP: RESTORE
 
 string_or_placeholder_opt_list:

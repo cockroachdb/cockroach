@@ -237,7 +237,6 @@ restore_stmt ::=
 	| 'RESTORE' backup_targets 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
 	| 'RESTORE' 'SYSTEM' 'USERS' 'FROM' string_or_placeholder 'IN' list_of_string_or_placeholder_opt_list opt_as_of_clause opt_with_restore_options
-	| 'RESTORE' backup_targets 'FROM' 'REPLICATION' 'STREAM' 'FROM' string_or_placeholder_opt_list opt_as_tenant_clause
 
 resume_stmt ::=
 	resume_jobs_stmt
@@ -727,11 +726,6 @@ backup_targets ::=
 	| 'TENANT' iconst64
 	| 'TENANT' 'identifier'
 	| 'DATABASE' name_list
-
-opt_as_tenant_clause ::=
-	'AS' 'TENANT' iconst64
-	| 'AS' 'TENANT' 'identifier'
-	| 
 
 resume_jobs_stmt ::=
 	'RESUME' 'JOB' a_expr
