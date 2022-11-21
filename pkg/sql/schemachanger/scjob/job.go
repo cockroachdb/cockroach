@@ -53,7 +53,7 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	n.rollback = true
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
-	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job.ID()); err != nil {
+	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job); err != nil {
 		log.Warningf(ctx, "unable to revert protected timestamp %v", err)
 	}
 	return n.run(ctx, execCtx)
