@@ -90,7 +90,7 @@ type SQLServerWrapper struct {
 	http            *httpServer
 	adminAuthzCheck *adminPrivilegeChecker
 	tenantAdmin     *tenantAdminServer
-	tenantStatus    *tenantStatusServer
+	tenantStatus    *statusServer
 	drainServer     *drainServer
 	authentication  *authenticationServer
 	// The Observability Server, used by the Observability Service to subscribe to
@@ -192,29 +192,39 @@ func NewTenantServer(
 		baseCfg.Settings, args.monitorAndMetrics.rootSQLMemoryMonitor, time.Now)
 	args.closedSessionCache = closedSessionCache
 
-	// Instantiate the status API server.
-	// The tenantStatusServer needs access to the sqlServer,
-	// but we also need the same object to set up the sqlServer.
-	// So construct the tenant status server with a nil sqlServer,
-	// and then assign it once an SQL server gets created. We are
-	// going to assume that the tenant status server won't require
-	// the SQL server object until later.
-	sStatus := newTenantStatusServer(
+	// Instantiate the serverIterator to provide fanout to SQL instances. The
+	// serverIterator needs access to sqlServer which is assigned below once we
+	// have an instance.
+	serverIterator := &tenantFanoutClient{
+		sqlServer: nil,
+		rpcCtx:    args.rpcContext,
+		stopper:   args.stopper,
+	}
+
+	// Instantiate the status API server. The statusServer needs access to the
+	// sqlServer, but we also need the same object to set up the sqlServer. So
+	// construct the status server with a nil sqlServer, and then assign it once
+	// an SQL server gets created. We are going to assume that the status server
+	// won't require the SQL server object until later.
+	sStatus := newStatusServer(
 		baseCfg.AmbientCtx,
-		adminAuthzCheck,
-		args.sessionRegistry,
-		args.closedSessionCache,
-		args.remoteFlowRunner,
 		baseCfg.Settings,
+		baseCfg.Config,
+		adminAuthzCheck,
+		nil, // TODO(davidh): Will be fixed in #92686
+		args.db,
+		args.recorder,
 		args.rpcContext,
-		args.stopper,
+		stopper,
+		args.sessionRegistry,
+		closedSessionCache,
+		args.remoteFlowRunner,
+		args.circularInternalExecutor,
+		serverIterator,
 	)
 	args.sqlStatusServer = sStatus
-	// Connect the admin server to the status service.
-	//
-	// TODO(knz): This would not be necessary if we could use the
-	// adminServer directly.
-	sAdmin.status = sStatus
+
+	sAdmin.serverIterator = serverIterator
 
 	// This is the location in NewServer() where we would be configuring
 	// the path to the special file that blocks background jobs.
@@ -259,6 +269,7 @@ func NewTenantServer(
 	// TODO(knz): If/when we want to support statement diagnostic requests
 	// in secondary tenants, this is where we would call setStmtDiagnosticsRequester(),
 	// like in NewServer().
+	serverIterator.sqlServer = sqlServer
 	sStatus.baseStatusServer.sqlServer = sqlServer
 	sAdmin.sqlServer = sqlServer
 
