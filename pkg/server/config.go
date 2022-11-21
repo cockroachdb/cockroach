@@ -211,36 +211,44 @@ func MakeBaseConfig(st *cluster.Settings, tr *tracing.Tracer, storeSpec base.Sto
 	if tr == nil {
 		panic("nil Tracer")
 	}
+	baseCfg := BaseConfig{Config: new(base.Config)}
+	baseCfg.SetDefaults(st, tr, storeSpec)
+
+	return baseCfg
+}
+
+// SetDefaults resets the values in BaseConfig but while preserving
+// the Config reference. Enables running tests multiple times.
+func (cfg *BaseConfig) SetDefaults(
+	st *cluster.Settings, tr *tracing.Tracer, storeSpec base.StoreSpec,
+) {
+	baseCfg := cfg.Config
+	*cfg = BaseConfig{Config: baseCfg}
+	cfg.Tracer = tr
+	cfg.Settings = st
 	idsProvider := &idProvider{
 		clusterID: &base.ClusterIDContainer{},
 		serverID:  &base.NodeIDContainer{},
 	}
 	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
-	baseCfg := BaseConfig{
-		Tracer:                         tr,
-		idProvider:                     idsProvider,
-		IDContainer:                    idsProvider.serverID,
-		ClusterIDContainer:             idsProvider.clusterID,
-		AmbientCtx:                     log.MakeServerAmbientContext(tr, idsProvider),
-		Config:                         new(base.Config),
-		Settings:                       st,
-		MaxOffset:                      MaxOffsetType(base.DefaultMaxClockOffset),
-		DefaultZoneConfig:              zonepb.DefaultZoneConfig(),
-		StorageEngine:                  storage.DefaultStorageEngine,
-		EnableWebSessionAuthentication: !disableWebLogin,
-		Stores: base.StoreSpecList{
-			Specs: []base.StoreSpec{storeSpec},
-		},
+	cfg.idProvider = idsProvider
+	cfg.IDContainer = idsProvider.serverID
+	cfg.ClusterIDContainer = idsProvider.clusterID
+	cfg.AmbientCtx = log.MakeServerAmbientContext(tr, idsProvider)
+	cfg.MaxOffset = MaxOffsetType(base.DefaultMaxClockOffset)
+	cfg.DefaultZoneConfig = zonepb.DefaultZoneConfig()
+	cfg.StorageEngine = storage.DefaultStorageEngine
+	cfg.EnableWebSessionAuthentication = !disableWebLogin
+	cfg.Stores = base.StoreSpecList{
+		Specs: []base.StoreSpec{storeSpec},
 	}
 	// We use the tag "n" here for both KV nodes and SQL instances,
 	// using the knowledge that the value part of a SQL instance ID
 	// container will prefix the value with the string "sql", resulting
 	// in a tag that is prefixed with "nsql".
-	baseCfg.AmbientCtx.AddLogTag("n", baseCfg.IDContainer)
-	baseCfg.InitDefaults()
-	baseCfg.InitTestingKnobs()
-
-	return baseCfg
+	cfg.AmbientCtx.AddLogTag("n", cfg.IDContainer)
+	cfg.Config.InitDefaults()
+	cfg.InitTestingKnobs()
 }
 
 // InitTestingKnobs sets up any testing knobs based on e.g. envvars.
@@ -388,18 +396,24 @@ type KVConfig struct {
 
 // MakeKVConfig returns a KVConfig with default values.
 func MakeKVConfig() KVConfig {
-	kvCfg := KVConfig{
-		DefaultSystemZoneConfig: zonepb.DefaultSystemZoneConfig(),
-		CacheSize:               DefaultCacheSize,
-		ScanInterval:            defaultScanInterval,
-		ScanMinIdleTime:         defaultScanMinIdleTime,
-		ScanMaxIdleTime:         defaultScanMaxIdleTime,
-		EventLogEnabled:         defaultEventLogEnabled,
-		SnapshotSendLimit:       kvserver.DefaultSnapshotSendLimit,
-		SnapshotApplyLimit:      kvserver.DefaultSnapshotApplyLimit,
-	}
-	kvCfg.RaftConfig.SetDefaults()
+	kvCfg := KVConfig{}
+	kvCfg.SetDefaults()
 	return kvCfg
+}
+
+// SetDefaults resets the values in KVConfig. Enables running tests
+// multiple times.
+func (kvCfg *KVConfig) SetDefaults() {
+	*kvCfg = KVConfig{}
+	kvCfg.RaftConfig.SetDefaults()
+	kvCfg.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
+	kvCfg.CacheSize = DefaultCacheSize
+	kvCfg.ScanInterval = defaultScanInterval
+	kvCfg.ScanMinIdleTime = defaultScanMinIdleTime
+	kvCfg.ScanMaxIdleTime = defaultScanMaxIdleTime
+	kvCfg.EventLogEnabled = defaultEventLogEnabled
+	kvCfg.SnapshotSendLimit = kvserver.DefaultSnapshotSendLimit
+	kvCfg.SnapshotApplyLimit = kvserver.DefaultSnapshotApplyLimit
 }
 
 // SQLConfig holds the parameters that (together with a BaseConfig) allow
@@ -445,13 +459,21 @@ type SQLConfig struct {
 // MakeSQLConfig returns a SQLConfig with default values.
 func MakeSQLConfig(tenID roachpb.TenantID, tempStorageCfg base.TempStorageConfig) SQLConfig {
 	sqlCfg := SQLConfig{
-		TenantID:           tenID,
-		MemoryPoolSize:     defaultSQLMemoryPoolSize,
-		TableStatCacheSize: defaultSQLTableStatCacheSize,
-		QueryCacheSize:     defaultSQLQueryCacheSize,
-		TempStorageConfig:  tempStorageCfg,
+		TenantID: tenID,
 	}
+	sqlCfg.SetDefaults(tempStorageCfg)
 	return sqlCfg
+}
+
+// SetDefaults resets the values in SQLConfig. Enables running tests
+// multiple times.
+func (sqlCfg *SQLConfig) SetDefaults(tempStorageCfg base.TempStorageConfig) {
+	tenID := sqlCfg.TenantID
+	*sqlCfg = SQLConfig{TenantID: tenID}
+	sqlCfg.MemoryPoolSize = defaultSQLMemoryPoolSize
+	sqlCfg.TableStatCacheSize = defaultSQLTableStatCacheSize
+	sqlCfg.QueryCacheSize = defaultSQLQueryCacheSize
+	sqlCfg.TempStorageConfig = tempStorageCfg
 }
 
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
@@ -484,13 +506,7 @@ func SetOpenFileLimitForOneStore() (uint64, error) {
 
 // MakeConfig returns a Config for the system tenant with default values.
 func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
-	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
-	if err != nil {
-		panic(err)
-	}
-	tempStorageCfg := base.TempStorageConfigFromEnv(
-		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
-
+	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
 	sqlCfg := MakeSQLConfig(roachpb.SystemTenantID, tempStorageCfg)
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 	baseCfg := MakeBaseConfig(st, tr, storeSpec)
@@ -503,6 +519,29 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 	}
 
 	return cfg
+}
+
+// SetDefaults initializes the Config to its default value while
+// preserving the base.Config reference. Enables running tests
+// multiple times.
+func (cfg *Config) SetDefaults(ctx context.Context, st *cluster.Settings) {
+	storeSpec, tempStorageCfg := makeStorageCfg(ctx, st)
+	cfg.SQLConfig.SetDefaults(tempStorageCfg)
+	cfg.KVConfig.SetDefaults()
+	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
+	cfg.BaseConfig.SetDefaults(st, tr, storeSpec)
+}
+
+func makeStorageCfg(
+	ctx context.Context, st *cluster.Settings,
+) (base.StoreSpec, base.TempStorageConfig) {
+	storeSpec, err := base.NewStoreSpec(DefaultStorePath)
+	if err != nil {
+		panic(err)
+	}
+	tempStorageCfg := base.TempStorageConfigFromEnv(
+		ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes)
+	return storeSpec, tempStorageCfg
 }
 
 // String implements the fmt.Stringer interface.
