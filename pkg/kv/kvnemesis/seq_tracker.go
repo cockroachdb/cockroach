@@ -75,6 +75,16 @@ func (tr *SeqTracker) Lookup(key, endKey roachpb.Key, ts hlc.Timestamp) (kvnemes
 	// value (since it's reported by the operation's BatchRequest). So this
 	// method checks whether the input span is contained in any span seen
 	// by the tracker.
+	if seq, fastPathOK := tr.seen[keyTS{
+		key:    string(key),
+		endKey: string(endKey),
+		ts:     ts,
+	}]; fastPathOK {
+		// Fast path - exact match. Should be the common case outside of MVCC range
+		// deletions.
+		return seq, true
+	}
+
 	for kts := range tr.seen {
 		if kts.ts != ts {
 			continue
