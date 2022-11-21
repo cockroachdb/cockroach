@@ -20,3 +20,8 @@ export const localStorageSelector = createSelector(
   adminUISelector,
   adminUiState => adminUiState.localStorage,
 );
+
+export const selectTimeScale = createSelector(
+  localStorageSelector,
+  localStorage => localStorage["timeScale/SQLActivity"],
+);

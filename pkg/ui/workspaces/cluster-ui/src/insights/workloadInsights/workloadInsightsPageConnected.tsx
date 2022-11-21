@@ -29,8 +29,9 @@ import { SortSetting } from "src/sortedtable";
 import {
   actions as statementInsights,
   selectColumns,
-  selectStatementInsights,
-  selectStatementInsightsError,
+  selectExecutionInsights,
+  selectExecutionInsightsError,
+  selectExecutionInsightsLoading,
 } from "src/store/insights/statementInsights";
 import {
   actions as transactionInsights,
@@ -38,10 +39,12 @@ import {
   selectTransactionInsightsError,
   selectFilters,
   selectSortSetting,
+  selectTransactionInsightsLoading,
 } from "src/store/insights/transactionInsights";
 import { Dispatch } from "redux";
 import { TimeScale } from "../../timeScaleDropdown";
-import { actions as sqlStatsActions } from "../../store/sqlStats";
+import { ExecutionInsightsRequest } from "../../api";
+import { selectTimeScale } from "../../store/utils/selectors";
 
 const transactionMapStateToProps = (
   state: AppState,
@@ -51,17 +54,21 @@ const transactionMapStateToProps = (
   transactionsError: selectTransactionInsightsError(state),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
+  timeScale: selectTimeScale(state),
+  isLoading: selectTransactionInsightsLoading(state),
 });
 
 const statementMapStateToProps = (
   state: AppState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  statements: selectStatementInsights(state),
-  statementsError: selectStatementInsightsError(state),
+  statements: selectExecutionInsights(state),
+  statementsError: selectExecutionInsightsError(state),
   filters: selectFilters(state),
   sortSetting: selectSortSetting(state),
   selectedColumnNames: selectColumns(state),
+  timeScale: selectTimeScale(state),
+  isLoading: selectExecutionInsightsLoading(state),
 });
 
 const TransactionDispatchProps = (
@@ -83,13 +90,13 @@ const TransactionDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      sqlStatsActions.updateTimeScale({
+      transactionInsights.updateTimeScale({
         ts: ts,
       }),
     );
   },
-  refreshTransactionInsights: () => {
-    dispatch(transactionInsights.refresh());
+  refreshTransactionInsights: (req: ExecutionInsightsRequest) => {
+    dispatch(transactionInsights.refresh(req));
   },
 });
 
@@ -123,13 +130,13 @@ const StatementDispatchProps = (
     ),
   setTimeScale: (ts: TimeScale) => {
     dispatch(
-      sqlStatsActions.updateTimeScale({
+      statementInsights.updateTimeScale({
         ts: ts,
       }),
     );
   },
-  refreshStatementInsights: () => {
-    dispatch(statementInsights.refresh());
+  refreshStatementInsights: (req: ExecutionInsightsRequest) => {
+    dispatch(statementInsights.refresh(req));
   },
 });
 

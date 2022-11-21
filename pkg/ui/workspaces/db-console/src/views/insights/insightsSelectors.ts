@@ -41,17 +41,29 @@ export const sortSettingLocalSetting = new LocalSetting<
 });
 
 export const selectTransactionInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
-  (state: AdminUIState) => state.cachedData.transactionInsights?.data,
+  (state: AdminUIState) => {
+    if (state.cachedData.executionInsights?.valid) {
+      return state.cachedData.executionInsights?.data;
+    } else return null;
+  },
+  (state: AdminUIState) => {
+    if (state.cachedData.transactionInsights?.valid) {
+      return state.cachedData.transactionInsights?.data;
+    } else return null;
+  },
   selectTxnInsightsCombiner,
 );
+
+export const selectTransactionInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.transactionInsights?.valid &&
+  state.cachedData.transactionInsights?.inFlight;
 
 const selectTxnContentionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
     selectID,
   ],
-  (insight, insightId): TxnContentionInsightDetails => {
+  (insight, insightId: string): TxnContentionInsightDetails => {
     if (!insight) {
       return null;
     }
@@ -84,13 +96,18 @@ export const selectTransactionInsightDetailsError = createSelector(
   },
 );
 
-export const selectStatementInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
-  selectFlattenedStmtInsightsCombiner,
-);
+export const selectExecutionInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.executionInsights?.valid &&
+  state.cachedData.executionInsights?.inFlight;
+
+export const selectExecutionInsights = createSelector((state: AdminUIState) => {
+  if (state.cachedData?.executionInsights?.valid) {
+    return state.cachedData?.executionInsights?.data;
+  } else return null;
+}, selectFlattenedStmtInsightsCombiner);
 
 export const selectStatementInsightDetails = createSelector(
-  selectStatementInsights,
+  selectExecutionInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
 );

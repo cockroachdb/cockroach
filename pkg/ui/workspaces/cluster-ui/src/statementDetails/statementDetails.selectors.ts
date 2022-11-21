@@ -21,7 +21,7 @@ import {
 } from "../util";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { TimeScale, toRoundedDateRange } from "../timeScaleDropdown";
-import { selectTimeScale } from "../statementsPage/statementsPage.selectors";
+import { selectTimeScale } from "../store/utils/selectors";
 import moment from "moment";
 
 type StatementDetailsResponseMessage =
