@@ -44,6 +44,7 @@ go_library(
         "//pkg/util/netutil/addr",
         "//pkg/util/retry",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/workload",
         "//pkg/workload/histogram",
         "//pkg/workload/workloadsql",
