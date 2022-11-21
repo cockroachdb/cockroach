@@ -2005,6 +2005,8 @@ type ParseTimeContext interface {
 	GetIntervalStyle() duration.IntervalStyle
 	// GetDateStyle returns the date style in the session.
 	GetDateStyle() pgdate.DateStyle
+	// GetParseHelper returns a helper to optmize date parsing.
+	GetDateHelper() *pgdate.ParseHelper
 }
 
 var _ ParseTimeContext = &simpleParseTimeContext{}
@@ -2037,6 +2039,7 @@ type simpleParseTimeContext struct {
 	RelativeParseTime time.Time
 	DateStyle         pgdate.DateStyle
 	IntervalStyle     duration.IntervalStyle
+	dateHelper        pgdate.ParseHelper
 }
 
 // GetRelativeParseTime implements ParseTimeContext.
@@ -2052,6 +2055,11 @@ func (ctx simpleParseTimeContext) GetIntervalStyle() duration.IntervalStyle {
 // GetDateStyle implements ParseTimeContext.
 func (ctx simpleParseTimeContext) GetDateStyle() pgdate.DateStyle {
 	return ctx.DateStyle
+}
+
+// GetDateHelper implements ParseTimeContext.
+func (ctx simpleParseTimeContext) GetDateHelper() *pgdate.ParseHelper {
+	return &ctx.dateHelper
 }
 
 // relativeParseTime chooses a reasonable "now" value for
@@ -2077,6 +2085,13 @@ func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
 	return ctx.GetIntervalStyle()
 }
 
+func dateParseHelper(ctx ParseTimeContext) *pgdate.ParseHelper {
+	if ctx == nil {
+		return nil
+	}
+	return ctx.GetDateHelper()
+}
+
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 //
@@ -2084,7 +2099,7 @@ func intervalStyle(ctx ParseTimeContext) duration.IntervalStyle {
 // ParseTimeContext (either for the time or the local timezone).
 func ParseDDate(ctx ParseTimeContext, s string) (_ *DDate, dependsOnContext bool, _ error) {
 	now := relativeParseTime(ctx)
-	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s)
+	t, dependsOnContext, err := pgdate.ParseDate(now, dateStyle(ctx), s, dateParseHelper(ctx))
 	return NewDDate(t), dependsOnContext, err
 }
 
