@@ -78,7 +78,7 @@ go_library(
 
 go_test(
     name = "jobs_test",
-    size = "medium",
+    size = "large",
     srcs = [
         "delegate_control_test.go",
         "executor_impl_test.go",
@@ -93,7 +93,7 @@ go_test(
         "scheduled_job_test.go",
         "testutils_test.go",
     ],
-    args = ["-test.timeout=295s"],
+    args = ["-test.timeout=895s"],
     embed = [":jobs"],
     shard_count = 16,
     deps = [
