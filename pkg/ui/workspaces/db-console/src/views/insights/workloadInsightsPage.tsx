@@ -27,13 +27,16 @@ import {
 } from "@cockroachlabs/cluster-ui";
 import {
   filtersLocalSetting,
-  selectStatementInsights,
+  selectExecutionInsights,
   sortSettingLocalSetting,
   selectTransactionInsights,
+  selectExecutionInsightsLoading,
+  selectTransactionInsightsLoading,
 } from "src/views/insights/insightsSelectors";
 import { bindActionCreators } from "redux";
 import { LocalSetting } from "src/redux/localsettings";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 
 export const insightStatementColumnsLocalSetting = new LocalSetting<
   AdminUIState,
@@ -52,18 +55,22 @@ const transactionMapStateToProps = (
   transactionsError: state.cachedData?.transactionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  timeScale: selectTimeScale(state),
+  isLoading: selectTransactionInsightsLoading(state),
 });
 
 const statementMapStateToProps = (
   state: AdminUIState,
   _props: RouteComponentProps,
 ): StatementInsightsViewStateProps => ({
-  statements: selectStatementInsights(state),
+  statements: selectExecutionInsights(state),
   statementsError: state.cachedData?.executionInsights?.lastError,
   filters: filtersLocalSetting.selector(state),
   sortSetting: sortSettingLocalSetting.selector(state),
   selectedColumnNames:
     insightStatementColumnsLocalSetting.selectorToArray(state),
+  timeScale: selectTimeScale(state),
+  isLoading: selectExecutionInsightsLoading(state),
 });
 
 const TransactionDispatchProps = {

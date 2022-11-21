@@ -35,7 +35,7 @@ export const selectStatementInsightDetailsCombiner = (
   statementInsights: FlattenedStmtInsights,
   executionID: string,
 ): FlattenedStmtInsightEvent | null => {
-  if (!statementInsights) {
+  if (!statementInsights || !executionID) {
     return null;
   }
 

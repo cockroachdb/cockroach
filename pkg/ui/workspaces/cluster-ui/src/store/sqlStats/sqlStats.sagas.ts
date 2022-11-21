@@ -24,6 +24,8 @@ import {
 } from "./sqlStats.reducer";
 import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 import { toRoundedDateRange } from "../../timeScaleDropdown";
+import { actions as stmtInsightActions } from "../insights/statementInsights";
+import { actions as txnInsightActions } from "../insights/transactionInsights";
 
 export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
   yield put(sqlStatsActions.request(action.payload));
@@ -57,6 +59,8 @@ export function* updateSQLStatsTimeScaleSaga(
     end: Long.fromNumber(end.unix()),
   });
   yield put(sqlStatsActions.invalidated());
+  yield put(stmtInsightActions.invalidated());
+  yield put(txnInsightActions.invalidated());
   yield put(sqlStatsActions.refresh(req));
 }
 
