@@ -1071,3 +1071,27 @@ func TestDependsOnContext(t *testing.T) {
 		})
 	}
 }
+
+var benchDates = [...]string{
+	"1993-05-23",
+	"1993-04-03",
+	"1993-07-28",
+	"1993-04-19",
+	"1993-06-15",
+	"1998-10-22",
+	"1998-07-11",
+	"1998-07-31",
+}
+
+func BenchmarkParseDate(b *testing.B) {
+	now := timeutil.Now()
+	ds := pgdate.DefaultDateStyle()
+	for i := 0; i < b.N; i++ {
+		for _, str := range benchDates {
+			_, _, err := pgdate.ParseDate(now, ds, str)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
