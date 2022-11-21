@@ -13,8 +13,10 @@ package sslocal_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"math"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -1291,4 +1293,96 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 				"expected: %v\nactual: %v", tc.lats, actual)
 		})
 	}
+}
+
+type indexInfo struct {
+	name  string
+	table string
+}
+
+func TestSQLStatsIndexesUsed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	testServer, sqlConn, _ := serverutils.StartServer(t, params)
+	defer func() {
+		require.NoError(t, sqlConn.Close())
+		testServer.Stopper().Stop(ctx)
+	}()
+	testConn := sqlutils.MakeSQLRunner(sqlConn)
+	appName := "indexes-usage"
+	testConn.Exec(t, "SET application_name = $1", appName)
+
+	testCases := []struct {
+		name          string
+		tableCreation string
+		indexCreation string
+		statement     string
+		fingerprint   string
+		indexes       []indexInfo
+	}{
+		{
+			name:          "no-index-creation",
+			tableCreation: "CREATE TABLE t1 (k INT, i INT, f FLOAT, s STRING)",
+			indexCreation: "",
+			statement:     "SELECT * FROM t1",
+			fingerprint:   "SELECT * FROM t1",
+			indexes:       []indexInfo{{name: "t1_pkey", table: "t1"}},
+		},
+		{
+			name:          "no-index-creation-two-tables",
+			tableCreation: "CREATE TABLE t2 (k INT, i INT, f FLOAT, s STRING); CREATE TABLE t3 (k INT, i INT, s STRING)",
+			indexCreation: "",
+			statement:     "SELECT t2.k FROM t2 JOIN t3 ON t2.k = t3.k WHERE t2.i > 3 AND t3.i > 3",
+			fingerprint:   "SELECT t2.k FROM t2 JOIN t3 ON t2.k = t3.k WHERE (t2.i > _) AND (t3.i > _)",
+			indexes:       []indexInfo{{name: "t2_pkey", table: "t2"}, {name: "t3_pkey", table: "t3"}},
+		},
+		{
+			name:          "index-creation-two-tables",
+			tableCreation: "CREATE TABLE t4 (k INT, i INT, f FLOAT, s STRING); CREATE TABLE t5 (k INT, i INT, s STRING)",
+			indexCreation: "CREATE INDEX t4_i_idx ON t4 (i) STORING (k); CREATE INDEX t5_i_idx ON t5 (i) STORING (k)",
+			statement:     "SELECT t4.k FROM t4 JOIN t5 ON t4.k = t5.k WHERE t4.i > 3 AND t5.i > 3",
+			fingerprint:   "SELECT t4.k FROM t4 JOIN t5 ON t4.k = t5.k WHERE (t4.i > _) AND (t5.i > _)",
+			indexes:       []indexInfo{{name: "t4_i_idx", table: "t4"}, {name: "t5_i_idx", table: "t5"}},
+		},
+	}
+
+	var indexesString string
+	var indexes []string
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testConn.Exec(t, tc.tableCreation)
+			testConn.Exec(t, tc.indexCreation)
+			testConn.Exec(t, tc.statement)
+
+			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' ->> 'indexes' "+
+				"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1 "+
+				"AND metadata ->> 'query'=$2", appName, tc.fingerprint)
+			rows.Scan(&indexesString)
+
+			err := json.Unmarshal([]byte(indexesString), &indexes)
+			require.NoError(t, err)
+			require.Equal(t, len(tc.indexes), len(indexes))
+			require.Equal(t, tc.indexes, convertIDsToNames(t, testConn, indexes))
+		})
+	}
+}
+
+func convertIDsToNames(t *testing.T, testConn *sqlutils.SQLRunner, indexes []string) []indexInfo {
+	var indexesInfo []indexInfo
+	var tableName string
+	var indexName string
+	for _, idx := range indexes {
+		tableID := strings.Split(idx, "@")[0]
+		idxID := strings.Split(idx, "@")[1]
+
+		rows := testConn.QueryRow(t, "SELECT descriptor_name, index_name FROM "+
+			"crdb_internal.table_indexes WHERE descriptor_id =$1 AND index_id=$2", tableID, idxID)
+		rows.Scan(&tableName, &indexName)
+		indexesInfo = append(indexesInfo, indexInfo{name: indexName, table: tableName})
+	}
+
+	return indexesInfo
 }

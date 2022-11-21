@@ -148,6 +148,15 @@ export function addStatementStats(
     indexRec = b.index_recommendations;
   }
 
+  let indexes: string[] = [];
+  if (a.indexes && b.indexes) {
+    indexes = unique(a.indexes.concat(b.indexes));
+  } else if (a.indexes) {
+    indexes = a.indexes;
+  } else if (b.indexes) {
+    indexes = b.indexes;
+  }
+
   return {
     count: a.count.add(b.count),
     first_attempt_count: a.first_attempt_count.add(b.first_attempt_count),
@@ -198,6 +207,7 @@ export function addStatementStats(
     nodes: uniqueLong([...a.nodes, ...b.nodes]),
     plan_gists: planGists,
     index_recommendations: indexRec,
+    indexes: indexes,
   };
 }
 
