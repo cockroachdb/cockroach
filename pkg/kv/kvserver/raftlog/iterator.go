@@ -11,13 +11,11 @@
 package raftlog
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
-	"github.com/cockroachdb/errors"
+	"go.etcd.io/etcd/raft/v3/raftpb"
 )
 
 type storageIter interface {
@@ -55,12 +53,12 @@ type Iterator struct {
 	// TODO(tbg): we're not reusing memory here. Since all of our allocs come
 	// from protobuf marshaling, this is hard to avoid but we can do a little
 	// better and at least avoid a few allocations.
-	entry *Entry
+	entry raftpb.Entry
 }
 
 // IterOptions are options to NewIterator.
 type IterOptions struct {
-	// Hi ensures the Iterator never seeks to any Entry with index >= Hi. This is
+	// Hi ensures the Iterator never seeks to any entry with index >= Hi. This is
 	// useful when the caller is interested in a slice [Lo, Hi) of the raft log.
 	Hi uint64
 }
@@ -89,50 +87,40 @@ func NewIterator(rangeID roachpb.RangeID, eng Reader, opts IterOptions) *Iterato
 
 // Close releases the resources associated with this Iterator.
 func (it *Iterator) Close() {
-	if it.iter != nil {
-		it.iter.Close()
-	}
+	it.iter.Close()
 }
 
 func (it *Iterator) load() (bool, error) {
-	ok, err := it.iter.Valid()
-	if err != nil || !ok {
+	if ok, err := it.iter.Valid(); err != nil || !ok {
 		return false, err
 	}
-
-	it.entry, err = NewEntryFromRawValue(it.iter.UnsafeValue())
-	if err != nil {
+	var err error
+	if it.entry, err = raftEntryFromRawValue(it.iter.UnsafeValue()); err != nil {
 		return false, err
 	}
-
 	return true, nil
 }
 
 // SeekGE positions the Iterator at the first raft log with index greater than
 // or equal to idx. Returns (true, nil) on success, (false, nil) if no such
-// Entry exists.
+// entry exists.
 func (it *Iterator) SeekGE(idx uint64) (bool, error) {
 	it.iter.SeekGE(storage.MakeMVCCMetadataKey(it.prefixBuf.RaftLogKey(idx)))
 	return it.load()
 }
 
 // Next returns (true, nil) when the (in ascending index order) next entry is
-// available via Entry. It returns (false, nil) if there are no more
-// entries.
+// available via Entry(). It returns (false, nil) if there are no more entries.
 //
-// Note that a valid raft log has no gaps, and that the Iterator does not
-// validate that.
+// NB: a valid raft log has no gaps, but the Iterator does not validate that.
 func (it *Iterator) Next() (bool, error) {
 	it.iter.Next()
 	return it.load()
 }
 
-// Entry returns the Entry the iterator is currently positioned at. This
+// Entry returns the raft entry the iterator is currently positioned at. This
 // must only be called after a prior successful call to SeekGE or Next.
-//
-// The caller may invoke `(*Entry).Release` if it no longer wishes to access the
-// current Entry.
-func (it *Iterator) Entry() *Entry {
+func (it *Iterator) Entry() raftpb.Entry {
 	return it.entry
 }
 
@@ -143,16 +131,7 @@ func (it *Iterator) Entry() *Entry {
 //
 // The closure may return iterutil.StopIteration(), which will stop iteration
 // without returning an error.
-//
-// The closure may invoke `(*Entry).Release` if it is no longer going to access
-// any memory in the current Entry.
-func Visit(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	eng Reader,
-	lo, hi uint64,
-	fn func(context.Context, *Entry) error,
-) error {
+func Visit(eng Reader, rangeID roachpb.RangeID, lo, hi uint64, fn func(raftpb.Entry) error) error {
 	it := NewIterator(rangeID, eng, IterOptions{Hi: hi})
 	defer it.Close()
 	ok, err := it.SeekGE(lo)
@@ -160,15 +139,8 @@ func Visit(
 		return err
 	}
 	for ; ok; ok, err = it.Next() {
-		ent := it.Entry()
-		if ent.Index >= hi {
-			return nil
-		}
-		if err := fn(ctx, ent); err != nil {
-			if errors.Is(err, iterutil.StopIteration()) {
-				return nil
-			}
-			return err
+		if err := fn(it.Entry()); err != nil {
+			return iterutil.Map(err)
 		}
 	}
 	return err
