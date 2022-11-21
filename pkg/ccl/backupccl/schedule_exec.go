@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -260,11 +261,11 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		return "", err
 	}
 
-	wait, err := parseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
+	wait, err := schedulebase.ParseOnPreviousRunningOption(sj.ScheduleDetails().Wait)
 	if err != nil {
 		return "", err
 	}
-	onError, err := parseOnErrorOption(sj.ScheduleDetails().OnError)
+	onError, err := schedulebase.ParseOnErrorOption(sj.ScheduleDetails().OnError)
 	if err != nil {
 		return "", err
 	}
