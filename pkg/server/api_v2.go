@@ -43,6 +43,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -76,6 +77,14 @@ func getSQLUsername(ctx context.Context) username.SQLUsername {
 	return username.MakeSQLUsernameFromPreNormalizedString(ctx.Value(webSessionUserKey{}).(string))
 }
 
+type apiV2ServerOpts struct {
+	admin            *adminServer
+	status           *statusServer
+	promRuleExporter *metric.PrometheusRuleExporter
+	sqlServer        *SQLServer
+	db               *kv.DB
+}
+
 // apiV2Server implements version 2 API endpoints, under apiV2Path. The
 // implementation of some endpoints is delegated to sub-servers (eg. auth
 // endpoints like `/login` and `/logout` are passed onto authServer), while
@@ -89,21 +98,24 @@ type apiV2Server struct {
 	status           *statusServer
 	promRuleExporter *metric.PrometheusRuleExporter
 	mux              *mux.Router
+	sqlServer        *SQLServer
+	db               *kv.DB
 }
 
 // newAPIV2Server returns a new apiV2Server.
-func newAPIV2Server(ctx context.Context, s *Server) *apiV2Server {
-	authServer := newAuthenticationV2Server(ctx, s, apiV2Path)
+func newAPIV2Server(ctx context.Context, opts *apiV2ServerOpts) *apiV2Server {
+	authServer := newAuthenticationV2Server(ctx, opts.sqlServer, opts.sqlServer.cfg.Config, apiV2Path)
 	innerMux := mux.NewRouter()
-
 	authMux := newAuthenticationV2Mux(authServer, innerMux)
 	outerMux := mux.NewRouter()
 	a := &apiV2Server{
-		admin:            s.admin,
+		admin:            opts.admin,
 		authServer:       authServer,
-		status:           s.status,
+		status:           opts.status,
 		mux:              outerMux,
-		promRuleExporter: s.promRuleExporter,
+		promRuleExporter: opts.promRuleExporter,
+		sqlServer:        opts.sqlServer,
+		db:               opts.db,
 	}
 	a.registerRoutes(innerMux, authMux)
 	return a
@@ -130,35 +142,36 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 	//    `role`, or does not have the roleoption `option`, an HTTP 403 forbidden
 	//    error is returned.
 	routeDefinitions := []struct {
-		url          string
-		handler      http.HandlerFunc
-		requiresAuth bool
-		role         apiRole
-		option       roleoption.Option
+		url           string
+		handler       http.HandlerFunc
+		requiresAuth  bool
+		role          apiRole
+		option        roleoption.Option
+		tenantEnabled bool
 	}{
 		// Pass through auth-related endpoints to the auth server.
-		{"login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption},
-		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption},
+		{"login/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
+		{"logout/", a.authServer.ServeHTTP, false /* requiresAuth */, regularRole, noOption, false},
 
 		// Directly register other endpoints in the api server.
-		{"sessions/", a.listSessions, true /* requiresAuth */, adminRole, noOption},
-		{"nodes/", a.listNodes, true, adminRole, noOption},
+		{"sessions/", a.listSessions, true /* requiresAuth */, adminRole, noOption, false},
+		{"nodes/", a.listNodes, true, adminRole, noOption, false},
 		// Any endpoint returning range information requires an admin user. This is because range start/end keys
 		// are sensitive info.
-		{"nodes/{node_id}/ranges/", a.listNodeRanges, true, adminRole, noOption},
-		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption},
-		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption},
-		{"health/", a.health, false, regularRole, noOption},
-		{"users/", a.listUsers, true, regularRole, noOption},
-		{"events/", a.listEvents, true, adminRole, noOption},
-		{"databases/", a.listDatabases, true, regularRole, noOption},
-		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, regularRole, noOption},
-		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption},
-		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption},
-		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption},
-		{"rules/", a.listRules, false, regularRole, noOption},
+		{"nodes/{node_id}/ranges/", a.listNodeRanges, true, adminRole, noOption, false},
+		{"ranges/hot/", a.listHotRanges, true, adminRole, noOption, false},
+		{"ranges/{range_id:[0-9]+}/", a.listRange, true, adminRole, noOption, false},
+		{"health/", a.health, false, regularRole, noOption, false},
+		{"users/", a.listUsers, true, regularRole, noOption, false},
+		{"events/", a.listEvents, true, adminRole, noOption, false},
+		{"databases/", a.listDatabases, true, regularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/", a.databaseDetails, true, regularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/grants/", a.databaseGrants, true, regularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/tables/", a.databaseTables, true, regularRole, noOption, false},
+		{"databases/{database_name:[\\w.]+}/tables/{table_name:[\\w.]+}/", a.tableDetails, true, regularRole, noOption, false},
+		{"rules/", a.listRules, false, regularRole, noOption, false},
 
-		{"sql/", a.execSQL, true, regularRole, noOption},
+		{"sql/", a.execSQL, true, regularRole, noOption, true},
 	}
 
 	// For all routes requiring authentication, have the outer mux (a.mux)
@@ -170,11 +183,16 @@ func (a *apiV2Server) registerRoutes(innerMux *mux.Router, authMux http.Handler)
 			counter: telemetry.GetCounter(fmt.Sprintf("api.v2.%s", route.url)),
 			inner:   route.handler,
 		}
+		if !route.tenantEnabled && !a.sqlServer.execCfg.Codec.ForSystemTenant() {
+			a.mux.Handle(apiV2Path+route.url, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "Not Available on Tenants", http.StatusNotImplemented)
+			}))
+		}
 		if route.requiresAuth {
 			a.mux.Handle(apiV2Path+route.url, authMux)
 			if route.role != regularRole {
 				handler = &roleAuthorizationMux{
-					ie:     a.admin.ie,
+					ie:     a.sqlServer.internalExecutor,
 					role:   route.role,
 					option: route.option,
 					inner:  handler,

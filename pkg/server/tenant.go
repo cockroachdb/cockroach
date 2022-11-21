@@ -285,7 +285,6 @@ func startTenantInternal(
 
 	httpServer.handleHealth(gwMux)
 
-	// TODO(knz): Add support for the APIv2 tree here.
 	if err := httpServer.setupRoutes(ctx,
 		authServer,      /* authnServer */
 		adminAuthzCheck, /* adminAuthzCheck */
@@ -293,7 +292,10 @@ func startTenantInternal(
 		args.runtime,    /* runtimeStatSampler */
 		gwMux,           /* handleRequestsUnauthenticated */
 		debugServer,     /* handleDebugUnauthenticated */
-		nil,             /* apiServer */
+		newAPIV2Server(background, &apiV2ServerOpts{
+			sqlServer: s,
+			db:        args.db,
+		}), /* apiServer */
 	); err != nil {
 		return nil, nil, nil, "", "", err
 	}

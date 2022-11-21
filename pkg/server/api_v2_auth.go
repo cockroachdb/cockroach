@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"net/http"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -44,13 +45,13 @@ type authenticationV2Server struct {
 // newAuthenticationV2Server creates a new authenticationV2Server for the given
 // outer Server, and base path.
 func newAuthenticationV2Server(
-	ctx context.Context, s *Server, basePath string,
+	ctx context.Context, s *SQLServer, cfg *base.Config, basePath string,
 ) *authenticationV2Server {
 	simpleMux := http.NewServeMux()
 
 	authServer := &authenticationV2Server{
-		sqlServer:  s.sqlServer,
-		authServer: newAuthenticationServer(s.cfg.Config, s.sqlServer),
+		sqlServer:  s,
+		authServer: newAuthenticationServer(cfg, s),
 		mux:        simpleMux,
 		ctx:        ctx,
 		basePath:   basePath,
