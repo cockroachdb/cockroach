@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1196,6 +1197,7 @@ func TestFlagUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	commandPrefix := "CockroachDB command-line interface and server.\n\n"
 	expUsage := `Usage:
   cockroach [command]
 
@@ -1244,19 +1246,22 @@ Flags:
 
 Use "cockroach [command] --help" for more information about a command.
 `
-	helpExpected := fmt.Sprintf("CockroachDB command-line interface and server.\n\n%s",
-		// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
-		// flag. Strangely, 'cockroach --help' does, as well as usage error messages.
-		strings.ReplaceAll(expUsage, "      --version                   version for cockroach\n", ""))
+	// Due to a bug in spf13/cobra, 'cockroach help' does not include the --version
+	// flag *the first time the test runs*.
+	// (But it does if the test is run a second time.)
+	// Strangely, 'cockroach --help' does, as well as usage error messages.
+	helpExpected1 := commandPrefix + expUsage
+	helpExpected2 := strings.ReplaceAll(helpExpected1, "      --version                   version for cockroach\n", "")
 	badFlagExpected := fmt.Sprintf("%s\nError: unknown flag: --foo\n", expUsage)
 
 	testCases := []struct {
-		flags    []string
-		expErr   bool
-		expected string
+		flags         []string
+		expErr        bool
+		expectHelp    bool
+		expectBadFlag bool
 	}{
-		{[]string{"help"}, false, helpExpected},    // request help specifically
-		{[]string{"--foo"}, true, badFlagExpected}, // unknown flag
+		{[]string{"help"}, false, true, false}, // request help specifically
+		{[]string{"--foo"}, true, false, true}, // unknown flag
 	}
 	for _, test := range testCases {
 		t.Run(strings.Join(test.flags, ","), func(t *testing.T) {
@@ -1302,7 +1307,21 @@ Use "cockroach [command] --help" for more information about a command.
 			}
 			got := strings.Join(final, "\n")
 
-			assert.Equal(t, test.expected, got)
+			if test.expectBadFlag {
+				assert.Equal(t, badFlagExpected, got)
+			}
+			if test.expectHelp {
+				if got != helpExpected1 && got != helpExpected2 {
+					diff, _ := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+						A:        difflib.SplitLines(helpExpected1),
+						B:        difflib.SplitLines(got),
+						FromFile: "Expected",
+						ToFile:   "Actual",
+						Context:  1,
+					})
+					t.Errorf("Diff:\n%s", diff)
+				}
+			}
 		})
 	}
 }
