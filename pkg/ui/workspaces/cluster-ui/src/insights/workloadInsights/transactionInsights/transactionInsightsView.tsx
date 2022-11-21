@@ -34,14 +34,21 @@ import {
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
   MergedTxnInsightEvent,
+  executionInsightsRequestFromTimeScale,
 } from "src/insights";
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { TransactionInsightsTable } from "./transactionInsightsTable";
 import { InsightsError } from "../../insightsErrorComponent";
+import {
+  TimeScale,
+  defaultTimeScaleOptions,
+  TimeScaleDropdown,
+} from "../../../timeScaleDropdown";
+import { ExecutionInsightsRequest } from "src/api";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import { TimeScale } from "../../../timeScaleDropdown";
+import { commonStyles } from "../../../common";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -51,13 +58,15 @@ export type TransactionInsightsViewStateProps = {
   transactionsError: Error | null;
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
+  isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
+  timeScale?: TimeScale;
 };
 
 export type TransactionInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: () => void;
+  refreshTransactionInsights: (req: ExecutionInsightsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
 
@@ -75,6 +84,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     transactions,
     transactionsError,
     filters,
+    timeScale,
+    isLoading,
     refreshTransactionInsights,
     onFiltersChange,
     onSortChange,
@@ -92,13 +103,18 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   );
 
   useEffect(() => {
-    // Refresh every 20 seconds.
-    refreshTransactionInsights();
-    const interval = setInterval(refreshTransactionInsights, 20 * 1000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshTransactionInsights]);
+    const req = executionInsightsRequestFromTimeScale(timeScale);
+    if (transactions === null || transactions.length < 1) {
+      refreshTransactionInsights(req);
+    }
+    if (timeScale.key !== "Custom") {
+      // Refresh every 10 seconds.
+      const interval = setInterval(refreshTransactionInsights, 10 * 1000, req);
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [timeScale, transactions, refreshTransactionInsights]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -209,10 +225,17 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
             filters={filters}
           />
         </PageConfigItem>
+        <PageConfigItem className={commonStyles("separator")}>
+          <TimeScaleDropdown
+            options={defaultTimeScaleOptions}
+            currentScale={timeScale}
+            setTimeScale={setTimeScale}
+          />
+        </PageConfigItem>
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions === null}
+          loading={transactions === null || isLoading}
           page="transaction insights"
           error={transactionsError}
           renderError={() => InsightsError()}

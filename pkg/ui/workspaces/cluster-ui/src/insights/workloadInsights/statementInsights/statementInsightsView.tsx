@@ -30,8 +30,12 @@ import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { TableStatistics } from "src/tableStatistics";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 
-import { FlattenedStmtInsights } from "src/api/insightsApi";
 import {
+  ExecutionInsightsRequest,
+  FlattenedStmtInsights,
+} from "src/api/insightsApi";
+import {
+  executionInsightsRequestFromTimeScale,
   filterStatementInsights,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
@@ -40,12 +44,17 @@ import {
 import { EmptyInsightsTablePlaceholder } from "../util";
 import { StatementInsightsTable } from "./statementInsightsTable";
 import { InsightsError } from "../../insightsErrorComponent";
+import ColumnsSelector from "../../../columnsSelector/columnsSelector";
+import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
+import {
+  defaultTimeScaleOptions,
+  TimeScale,
+  TimeScaleDropdown,
+} from "../../../timeScaleDropdown";
 
 import styles from "src/statementsPage/statementsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
-import ColumnsSelector from "../../../columnsSelector/columnsSelector";
-import { SelectOption } from "../../../multiSelectCheckbox/multiSelectCheckbox";
-import { TimeScale } from "../../../timeScaleDropdown";
+import { commonStyles } from "../../../common";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -56,13 +65,15 @@ export type StatementInsightsViewStateProps = {
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
   selectedColumnNames: string[];
+  isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
+  timeScale?: TimeScale;
 };
 
 export type StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshStatementInsights: () => void;
+  refreshStatementInsights: (req: ExecutionInsightsRequest) => void;
   onColumnsChange: (selectedColumns: string[]) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
@@ -81,6 +92,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
     statements,
     statementsError,
     filters,
+    timeScale,
+    isLoading,
     refreshStatementInsights,
     onFiltersChange,
     onSortChange,
@@ -100,13 +113,19 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
   );
 
   useEffect(() => {
-    // Refresh every 10 seconds.
-    refreshStatementInsights();
-    const interval = setInterval(refreshStatementInsights, 10 * 1000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshStatementInsights]);
+    const req = executionInsightsRequestFromTimeScale(timeScale);
+    if (statements === null || statements.length < 1) {
+      refreshStatementInsights(req);
+    }
+    if (timeScale.key !== "Custom") {
+      refreshStatementInsights(req);
+      // Refresh every 10 seconds except when on custom timeScale.
+      const interval = setInterval(refreshStatementInsights, 10 * 1000, req);
+      return () => {
+        clearInterval(interval);
+      };
+    }
+  }, [timeScale, statements, refreshStatementInsights]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -232,10 +251,17 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = (
             filters={filters}
           />
         </PageConfigItem>
+        <PageConfigItem className={commonStyles("separator")}>
+          <TimeScaleDropdown
+            options={defaultTimeScaleOptions}
+            currentScale={timeScale}
+            setTimeScale={setTimeScale}
+          />
+        </PageConfigItem>
       </PageConfig>
       <div className={cx("table-area")}>
         <Loading
-          loading={statements === null}
+          loading={statements === null || isLoading}
           page="statement insights"
           error={statementsError}
           renderError={() => InsightsError()}

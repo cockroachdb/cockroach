@@ -21,6 +21,7 @@ import {
   selectTransactionInsightDetailsError,
 } from "src/views/insights/insightsSelectors";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
+import { selectTimeScale } from "src/redux/timeScale";
 
 const mapStateToProps = (
   state: AdminUIState,
@@ -29,6 +30,7 @@ const mapStateToProps = (
   return {
     insightDetails: selectTxnInsightDetails(state, props),
     insightError: selectTransactionInsightDetailsError(state, props),
+    timeScale: selectTimeScale(state),
   };
 };
 

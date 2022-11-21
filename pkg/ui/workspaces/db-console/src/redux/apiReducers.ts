@@ -419,15 +419,12 @@ const transactionInsightsReducerObj = new CachedDataReducer(
 export const refreshTxnContentionInsights =
   transactionInsightsReducerObj.refresh;
 
-export const refreshTransactionInsights = (): ThunkAction<
-  any,
-  any,
-  any,
-  Action
-> => {
+export const refreshTransactionInsights = (
+  req?: clusterUiApi.ExecutionInsightsRequest,
+): ThunkAction<any, any, any, Action> => {
   return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
-    dispatch(refreshTxnContentionInsights());
-    dispatch(refreshExecutionInsights());
+    dispatch(refreshTxnContentionInsights(req));
+    dispatch(refreshExecutionInsights(req));
   };
 };
 
@@ -459,7 +456,7 @@ export const refreshTransactionInsightDetails = (
 ): ThunkAction<any, any, any, Action> => {
   return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
     dispatch(refreshTxnContentionInsightDetails(req));
-    dispatch(refreshExecutionInsights());
+    dispatch(refreshExecutionInsights({ start: req.start, end: req.end }));
   };
 };
 

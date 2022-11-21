@@ -46,12 +46,16 @@ export const selectTransactionInsights = createSelector(
   selectTxnInsightsCombiner,
 );
 
+export const selectTransactionInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.transactionInsights?.valid &&
+  state.cachedData.transactionInsights?.inFlight;
+
 const selectTxnContentionInsightDetails = createSelector(
   [
     (state: AdminUIState) => state.cachedData.transactionInsightDetails,
     selectID,
   ],
-  (insight, insightId): TxnContentionInsightDetails => {
+  (insight, insightId: string): TxnContentionInsightDetails => {
     if (!insight) {
       return null;
     }
@@ -84,13 +88,17 @@ export const selectTransactionInsightDetailsError = createSelector(
   },
 );
 
-export const selectStatementInsights = createSelector(
-  (state: AdminUIState) => state.cachedData.executionInsights?.data,
+export const selectExecutionInsightsLoading = (state: AdminUIState) =>
+  !state.cachedData.executionInsights?.valid &&
+  state.cachedData.executionInsights?.inFlight;
+
+export const selectExecutionInsights = createSelector(
+  (state: AdminUIState) => state.cachedData?.executionInsights?.data,
   selectFlattenedStmtInsightsCombiner,
 );
 
 export const selectStatementInsightDetails = createSelector(
-  selectStatementInsights,
+  selectExecutionInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
 );
