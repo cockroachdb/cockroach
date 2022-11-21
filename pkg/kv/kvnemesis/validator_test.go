@@ -1793,10 +1793,9 @@ func TestValidate(t *testing.T) {
 		},
 	}
 
-	w := echotest.Walk(t, testutils.TestDataPath(t, t.Name()))
-	defer w.Check(t)
+	w := echotest.NewWalker(t, testutils.TestDataPath(t, t.Name()))
 	for _, test := range tests {
-		t.Run(test.name, w.Do(t, test.name, func(t *testing.T, path string) {
+		t.Run(test.name, w.Run(t, test.name, func(t *testing.T) string {
 			e, err := MakeEngine()
 			require.NoError(t, err)
 			defer e.Close()
@@ -1842,7 +1841,7 @@ func TestValidate(t *testing.T) {
 			// TODO(during review): prefix all test names with a (padded) number so
 			// that it's easier to join up the test case and the file in a sorted
 			// view.
-			echotest.Require(t, buf.String(), path)
+			return buf.String()
 		}))
 	}
 }
