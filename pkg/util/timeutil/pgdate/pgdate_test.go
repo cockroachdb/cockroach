@@ -21,6 +21,7 @@ import (
 )
 
 func TestParseDate(t *testing.T) {
+	var parseHelper ParseHelper
 	for _, tc := range []struct {
 		s      string
 		err    string
@@ -72,23 +73,25 @@ func TestParseDate(t *testing.T) {
 		},
 	} {
 		t.Run(tc.s, func(t *testing.T) {
-			d, depOnCtx, err := ParseDate(time.Time{}, DateStyle{Order: Order_YMD}, tc.s)
-			if tc.err != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.err) {
-					t.Fatalf("got %v, expected %v", err, tc.err)
+			for _, ph := range []*ParseHelper{nil, &parseHelper} {
+				d, depOnCtx, err := ParseDate(time.Time{}, DateStyle{Order: Order_YMD}, tc.s, ph)
+				if tc.err != "" {
+					if err == nil || !strings.Contains(err.Error(), tc.err) {
+						t.Fatalf("got %v, expected %v", err, tc.err)
+					}
+					return
 				}
-				return
-			}
-			if depOnCtx {
-				t.Fatalf("should not depend on context")
-			}
-			pg := d.PGEpochDays()
-			if pg != tc.pgdays {
-				t.Fatalf("%d != %d", pg, tc.pgdays)
-			}
-			s := d.String()
-			if s != tc.s {
-				t.Fatalf("%s != %s", s, tc.s)
+				if depOnCtx {
+					t.Fatalf("should not depend on context")
+				}
+				pg := d.PGEpochDays()
+				if pg != tc.pgdays {
+					t.Fatalf("%d != %d", pg, tc.pgdays)
+				}
+				s := d.String()
+				if s != tc.s {
+					t.Fatalf("%s != %s", s, tc.s)
+				}
 			}
 		})
 	}

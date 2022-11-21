@@ -21,6 +21,7 @@ import (
 )
 
 func TestExtractRelative(t *testing.T) {
+	var parseHelper ParseHelper
 	tests := []struct {
 		s   string
 		rel int
@@ -42,20 +43,22 @@ func TestExtractRelative(t *testing.T) {
 	now := time.Date(2018, 10, 17, 0, 0, 0, 0, time.UTC)
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			d, depOnCtx, err := ParseDate(now, DateStyle{Order: Order_YMD}, tc.s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !depOnCtx {
-				t.Fatalf("relative dates should depend on context")
-			}
-			ts, err := d.ToTime()
-			if err != nil {
-				t.Fatal(err)
-			}
-			exp := now.AddDate(0, 0, tc.rel)
-			if ts != exp {
-				t.Fatalf("expected %v, got %v", exp, ts)
+			for _, ph := range []*ParseHelper{nil, &parseHelper} {
+				d, depOnCtx, err := ParseDate(now, DateStyle{Order: Order_YMD}, tc.s, ph)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !depOnCtx {
+					t.Fatalf("relative dates should depend on context")
+				}
+				ts, err := d.ToTime()
+				if err != nil {
+					t.Fatal(err)
+				}
+				exp := now.AddDate(0, 0, tc.rel)
+				if ts != exp {
+					t.Fatalf("expected %v, got %v", exp, ts)
+				}
 			}
 		})
 	}
