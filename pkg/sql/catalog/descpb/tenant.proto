@@ -37,9 +37,20 @@ message TenantInfo {
   optional string name = 3 [
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // DroppedName is the name the tenant had before DROP TENANT was
+  // run on the tenant. It should be empty for active or adding
+  // tenants.
   optional string dropped_name = 4 [
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
+
+  // TenantReplicationJobID is set if this tenant is the target tenant
+  // of a running tenant replication job.
+  optional int64 tenant_replication_job_id = 5 [
+     (gogoproto.nullable) = false,
+     (gogoproto.customname) = "TenantReplicationJobID",
+     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.JobID"];
 }
 
 // TenantInfoAndUsage contains the information for a tenant in a multi-tenant
