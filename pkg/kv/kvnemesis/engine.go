@@ -34,7 +34,7 @@ type Engine struct {
 // MakeEngine returns a new Engine.
 func MakeEngine() (*Engine, error) {
 	opts := storage.DefaultPebbleOptions()
-	opts.FormatMajorVersion = 8 // for range key deletions
+	opts.FormatMajorVersion = pebble.FormatNewest // for range key deletions
 	opts.FS = vfs.NewMem()
 	kvs, err := pebble.Open(`kvnemesis`, opts)
 	if err != nil {
@@ -122,7 +122,7 @@ func (e *Engine) DeleteRange(from, to roachpb.Key, ts hlc.Timestamp, val []byte)
 func (e *Engine) Iterate(
 	fn func(key, endKey roachpb.Key, ts hlc.Timestamp, value []byte, err error),
 ) {
-	iter := e.kvs.NewIter(&pebble.IterOptions{KeyTypes: storage.IterKeyTypePointsAndRanges})
+	iter := e.kvs.NewIter(&pebble.IterOptions{KeyTypes: pebble.IterKeyTypePointsAndRanges})
 	defer func() { _ = iter.Close() }()
 	for iter.First(); iter.Valid(); iter.Next() {
 		hasPoint, _ := iter.HasPointAndRange()
@@ -147,6 +147,8 @@ func (e *Engine) Iterate(
 					fn(nil, nil, hlc.Timestamp{}, nil, err)
 					continue
 				}
+
+				e.b, rk.Value = e.b.Copy(rk.Value, 0)
 				fn(key, endKey, ts, rk.Value, nil)
 			}
 		}

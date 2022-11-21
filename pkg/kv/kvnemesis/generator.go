@@ -238,11 +238,12 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRangeUsingTombstone = 0
 	// DeleteRangeUsingTombstone does in principle support batches, but
 	// in kvnemesis we don't let it span ranges non-atomically (as it
-	// is allowed to do in CRDB). So if we allow it in batches, it will
-	// likely doom most batches to fail, i.e. we're better off not adding
-	// it in the first place. We don't mix DeleteRangeUsingTombstone in
-	// CRDB, though we may use multiple in a single batch, so adding
-	// coverage for that would be useful.
+	// is allowed to do in CRDB). The generator already tries to avoid
+	// crossing range boundaries quite a fair bit, so we could enable this
+	// after some investigation to ensure that significant enough coverage
+	// remains on the batch path.
+	// Note also that at the time of writing `config.Ops.Batch` is cleared in its
+	// entirety below, so changing this line alonewon't have an effect.
 	config.Ops.Batch.Ops.DeleteRangeUsingTombstone = 0
 	// TODO(sarkesian): Enable DeleteRange in comingled batches once #71236 is fixed.
 	config.Ops.ClosureTxn.CommitBatchOps.DeleteRange = 0
@@ -255,12 +256,12 @@ func NewDefaultConfig() GeneratorConfig {
 	// (see CrossRangeTxnWrapperSender) if they are. roachpb.SpanGroup can be used
 	// to efficiently check this.
 	//
-	// TODO(during review): Make this `config.Ops.Batch.Ops.PutExisting = 0` (and
+	// TODO(tbg): could make this `config.Ops.Batch.Ops.PutExisting = 0` (and
 	// DeleteRange, etc, all ops that can overwrite existing keys basically), as
 	// #46081 has long been fixed. Then file an issue about generating
 	// non-self-overlapping operations for batches.
 	config.Ops.Batch = BatchOperationConfig{}
-	// TODO(during review): Should be able to remove the two lines below, since
+	// TODO(tbg): should be able to remove the two lines below, since
 	// #45586 has already been addressed.
 	config.Ops.ClosureTxn.CommitBatchOps.GetExisting = 0
 	config.Ops.ClosureTxn.CommitBatchOps.GetMissing = 0
