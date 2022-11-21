@@ -7391,13 +7391,17 @@ expires until the statement bundle is collected`,
 					}
 
 					sql := string(tree.MustBeDString(sqlDatum))
+					sqlNoConstants := ""
 
-					parsed, err := parser.ParseOne(sql)
-					if err != nil {
-						return nil, err
+					if len(sql) != 0 {
+						parsed, err := parser.ParseOne(sql)
+						if err != nil {
+							return nil, err
+						}
+
+						sqlNoConstants = tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 					}
 
-					sqlNoConstants := tree.AsStringWithFlags(parsed.AST, tree.FmtHideConstants)
 					if err := result.Append(tree.NewDString(sqlNoConstants)); err != nil {
 						return nil, err
 					}
