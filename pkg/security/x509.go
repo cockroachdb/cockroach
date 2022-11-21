@@ -232,6 +232,13 @@ func GenerateTenantKVClientCert(
 	template.ExtKeyUsage = []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
 	addHostsToTemplate(template, hosts)
 
+	// We also inject the SQL server URI in the tenant client
+	// cert, so that the tenant client cert can also be used
+	// as SQL server cert (when no cert separation is needed).
+	tid := roachpb.MustMakeTenantID(tenantID)
+	urls := MakeTenantSQLServerURISANs([]roachpb.TenantID{tid})
+	template.URIs = append(template.URIs, urls...)
+
 	certBytes, err := x509.CreateCertificate(rand.Reader, template, caCert, clientPublicKey, caPrivateKey)
 	if err != nil {
 		return nil, err
@@ -314,6 +321,64 @@ func GenerateTenantSigningCert(
 	}
 
 	return certBytes, nil
+}
+
+// MakeTenantSQLServerURISANs constructs the tenant SAN URI for the SQL server certificate.
+func MakeTenantSQLServerURISANs(tenantIDs []roachpb.TenantID) (urls []*url.URL) {
+	for _, tenantID := range tenantIDs {
+		uri := url.URL{
+			Scheme: "crdb",
+			Host:   "tenant",
+			Path:   fmt.Sprintf("/%d/server", tenantID.ToUint64()),
+		}
+		urls = append(urls, &uri)
+	}
+	return urls
+}
+
+// Note: we match the tenant ID using [^/]+ instead of \d+ because we
+// don't want to silently ignore non-numeric tenant IDs; they need to
+// produce an integer parse error after the regular expression
+// matches.
+var tenantServerPathRe = regexp.MustCompile(`^/([^/]+)/server$`)
+
+// parseTenantSQLServerURI extracts the tenant ID contained
+// within a tenant URI SAN.
+func parseTenantSQLServerURI(uri *url.URL) (hasURI bool, tenantID roachpb.TenantID, err error) {
+	if uri.Scheme != "crdb" || uri.Host != "tenant" {
+		return false, tenantID, nil
+	}
+	m := tenantServerPathRe.FindStringSubmatch(uri.Path)
+	if m == nil {
+		return false, tenantID, nil
+	}
+	tid, err := strconv.ParseUint(m[1], 10, 64)
+	if err != nil {
+		return true, tenantID, err
+	}
+	tenantID, err = roachpb.MakeTenantID(tid)
+	if err != nil {
+		return true, tenantID, err
+	}
+	return true, tenantID, nil
+}
+
+// IsValidServerCertForTenant checks whether this certificate contains
+// the expected tenant ID in its server scope.
+func IsValidServerCertForTenant(
+	cert *x509.Certificate, expectedTenantID roachpb.TenantID,
+) (bool, error) {
+	for _, uri := range cert.URIs {
+		hasURI, tenantID, err := parseTenantSQLServerURI(uri)
+		if err != nil {
+			return false, err
+		} else if hasURI {
+			if tenantID == expectedTenantID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // MakeTenantSQLClientURISANs constructs the tenant SAN URI for the SQL client certificate.
