@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -465,7 +466,14 @@ func activateTenant(ctx context.Context, execCtx interface{}, newTenantID roachp
 	p := execCtx.(sql.JobExecContext)
 	execCfg := p.ExecCfg()
 	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		return sql.ActivateTenant(ctx, execCfg, txn, newTenantID.ToUint64())
+		info, err := sql.GetTenantRecordByID(ctx, execCfg, txn, newTenantID)
+		if err != nil {
+			return err
+		}
+
+		info.State = descpb.TenantInfo_ACTIVE
+		info.TenantReplicationJobID = 0
+		return sql.UpdateTenantRecord(ctx, execCfg, txn, info)
 	})
 }
 
@@ -495,15 +503,26 @@ func (s *streamIngestionResumer) cancelProducerJob(
 // leftover in the keyspace if a ClearRange were to be issued here. In general
 // the tenant keyspace of a failed/canceled ingestion job should be treated as
 // corrupted, and the tenant should be dropped before resuming the ingestion.
-// TODO(adityamaru): Add ClearRange logic once we have introduced
-// synchronization between the flow tearing down and the job transitioning to a
-// failed/canceled state.
-func (s *streamIngestionResumer) OnFailOrCancel(ctx context.Context, _ interface{}, _ error) error {
+func (s *streamIngestionResumer) OnFailOrCancel(
+	ctx context.Context, execCtx interface{}, _ error,
+) error {
 	// Cancel the producer job on best effort. The source job's protected timestamp is no
 	// longer needed as this ingestion job is in 'reverting' status and we won't resume
 	// ingestion anymore.
+	jobExecCtx := execCtx.(sql.JobExecContext)
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	s.cancelProducerJob(ctx, details)
+
+	tenInfo, err := sql.GetTenantRecordByID(ctx, jobExecCtx.ExecCfg(), jobExecCtx.Txn(), details.DestinationTenantID)
+	if err != nil {
+		return errors.Wrap(err, "fetch tenant info")
+	}
+
+	tenInfo.TenantReplicationJobID = 0
+	if err := sql.UpdateTenantRecord(ctx, jobExecCtx.ExecCfg(), jobExecCtx.Txn(), tenInfo); err != nil {
+		return errors.Wrap(err, "update tenant record")
+	}
+
 	return nil
 }
 

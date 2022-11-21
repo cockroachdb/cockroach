@@ -17,6 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -457,8 +460,21 @@ func refreshTenant(
 		return true, time.Time{}, nil
 	}
 
-	// Read the tenant's GC TTL to check if the tenant's data has expired.
 	tenID := details.Tenant.ID
+	// TODO(ssd): Once
+	// https://github.com/cockroachdb/cockroach/issues/92093 is
+	// done, we should be able to simply rely on the protected
+	// timestamp for the replication job.
+	jobActive, err := tenantHasActiveReplicationJob(ctx, execCfg, tenID)
+	if err != nil {
+		return false, time.Time{}, err
+	}
+	if jobActive {
+		log.Infof(ctx, "tenant %d has active tenant replication job, waiting for it to stop before running GC", tenID)
+		return false, timeutil.Now().Add(MaxSQLGCInterval), nil
+	}
+
+	// Read the tenant's GC TTL to check if the tenant's data has expired.
 	cfg := execCfg.SystemConfig.GetSystemConfig()
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
 	zoneCfg, err := cfg.GetZoneConfigForObject(keys.SystemSQLCodec, keys.TenantsRangesID)
@@ -490,4 +506,31 @@ func refreshTenant(
 		return true, deadlineUnix, nil
 	}
 	return false, deadlineUnix, nil
+}
+
+func tenantHasActiveReplicationJob(
+	ctx context.Context, execCfg *sql.ExecutorConfig, tenID uint64,
+) (bool, error) {
+	info, err := sql.GetTenantRecordByID(ctx, execCfg, nil /* txn */, roachpb.MustMakeTenantID(tenID))
+	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.UndefinedObject {
+			log.Errorf(ctx, "tenant id %d not found while attempting to GC", tenID)
+			return false, nil
+		} else {
+			return false, errors.Wrapf(err, "fetching tenant %d", tenID)
+		}
+	}
+	if jobID := info.TenantReplicationJobID; jobID != 0 {
+		j, err := execCfg.JobRegistry.LoadJob(ctx, jobID)
+		if err != nil {
+			if errors.Is(err, &jobs.JobNotFoundError{}) {
+				log.Infof(ctx, "tenant replication job %d not found", jobID)
+				return false, nil
+			} else {
+				return false, err
+			}
+		}
+		return !j.Status().Terminal(), nil
+	}
+	return false, err
 }
