@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"sort"
@@ -427,4 +428,40 @@ func TestShowChangefeedJobsAlterChangefeed(t *testing.T) {
 
 	// Force kafka to validate topics
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+// TestShowChangefeedJobsForNonAdmins ensures that non-admins can see changefeed jobs.
+func TestShowChangefeedJobsForNonAdmins(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
+		rootDB.Exec(t, `CREATE TABLE foo (i INT)`)
+		rootDB.Exec(t, `CREATE USER nonadmin WITH CONTROLJOB CONTROLCHANGEFEED`)
+		rootDB.Exec(t, "ALTER USER nonadmin WITH PASSWORD 'password'")
+		rootDB.Exec(t, `GRANT SELECT ON foo TO nonadmin`)
+		rootDB.Exec(t, `INSERT INTO foo VALUES (0)`)
+
+		successfulFeed := feed(t, f, "CREATE CHANGEFEED FOR foo")
+		defer closeFeed(t, successfulFeed)
+		_, err := successfulFeed.Next()
+		require.NoError(t, err)
+
+		pgURL := url.URL{
+			Scheme: "postgres",
+			User:   url.UserPassword("nonadmin", "password"),
+			Host:   s.Server.SQLAddr(),
+			Path:   `d`,
+		}
+		db2, err := gosql.Open("postgres", pgURL.String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db2.Close()
+
+		userDB := sqlutils.MakeSQLRunner(db2)
+		userDB.Exec(t, `SHOW CHANGEFEED JOBS`)
+	}
+	cdcTest(t, testFn)
 }
