@@ -114,14 +114,12 @@ func GetCertificateUserScope(
 	// https://github.com/golang/go/blob/go1.8.1/src/crypto/tls/handshake_server.go#L723:L742
 	peerCert := tlsState.PeerCertificates[0]
 	for _, uri := range peerCert.URIs {
-		uriString := uri.String()
-		if URISANHasCRDBPrefix(uriString) {
-			tenantID, user, err := ParseTenantURISAN(uriString)
-			if err != nil {
-				return nil, err
-			}
+		hasURI, tenantID, username, err := ParseTenantSQLClientURI(uri)
+		if err != nil {
+			return nil, err
+		} else if hasURI {
 			scope := CertificateUserScope{
-				Username: user,
+				Username: username,
 				TenantID: tenantID,
 			}
 			userScopes = append(userScopes, scope)
