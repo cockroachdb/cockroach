@@ -283,7 +283,7 @@ func TestIdsToReclaim(t *testing.T) {
 	}
 }
 
-func TestGenerateAvailableInstanceRows(t *testing.T) {
+func TestReclaimAndGenerateInstanceRows(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
