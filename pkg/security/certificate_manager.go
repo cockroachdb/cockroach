@@ -617,27 +617,26 @@ func (cm *CertificateManager) getEmbeddedSQLServerTLSConfig(
 	}
 
 	var serverCert *CertInfo
-	if !cm.IsForTenant() {
-		// Storage cluster.
-		if cm.sqlServerCert != nil {
-			serverCert, err = cm.getSQLServerCertLocked()
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			// No sql-server.crt. Fall back to node.crt for
-			// backward-compatibility with previous versions of CockroachDB.
+	if cm.sqlServerCert != nil {
+		serverCert, err = cm.getSQLServerCertLocked()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No dedicated SQL server cert.
+		if !cm.IsForTenant() {
+			// Storage cluster.
 			serverCert, err = cm.getNodeCertLocked()
 			if err != nil {
 				return nil, err
 			}
-		}
-	} else {
-		// Tenant server.
-		// TODO(knz): also use sql-server.crt for tenant servers.
-		serverCert, err = cm.getTenantKVClientCertLocked()
-		if err != nil {
-			return nil, err
+		} else {
+			// We reuse the client cert used to authn to the KV layer also
+			// as server cert for clients.
+			serverCert, err = cm.getTenantKVClientCertLocked()
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
