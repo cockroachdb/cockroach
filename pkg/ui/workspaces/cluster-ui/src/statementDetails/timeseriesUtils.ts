@@ -21,14 +21,16 @@ export function generateExecuteAndPlanningTimeseries(
   const ts: Array<number> = [];
   const execution: Array<number> = [];
   const planning: Array<number> = [];
+  const idle: Array<number> = [];
 
   stats.forEach(function (stat: statementStatisticsPerAggregatedTs) {
     ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
     execution.push(stat.stats.run_lat.mean * 1e9);
     planning.push(stat.stats.plan_lat.mean * 1e9);
+    idle.push(stat.stats.idle_lat.mean * 1e9);
   });
 
-  return [ts, execution, planning];
+  return [ts, execution, planning, idle];
 }
 
 export function generateRowsProcessedTimeseries(

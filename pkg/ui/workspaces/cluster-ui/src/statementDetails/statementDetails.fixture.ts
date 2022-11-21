@@ -37,6 +37,7 @@ const statementDetailsNoData: StatementDetailsResponse = {
       max_retries: new Long(0),
       legacy_last_err: "",
       num_rows: { mean: 0, squared_diffs: 0 },
+      idle_lat: { mean: 0, squared_diffs: 0 },
       parse_lat: { mean: 0, squared_diffs: 0 },
       plan_lat: { mean: 0, squared_diffs: 0 },
       run_lat: { mean: 0, squared_diffs: 0 },
@@ -95,6 +96,10 @@ const statementDetailsData: StatementDetailsResponse = {
       num_rows: {
         mean: 6,
         squared_diffs: 0,
+      },
+      idle_lat: {
+        mean: 0.0000876,
+        squared_diffs: 2.35792e-8,
       },
       parse_lat: {
         mean: 0.0000876,
@@ -187,6 +192,10 @@ const statementDetailsData: StatementDetailsResponse = {
         legacy_last_err_redacted: "",
         num_rows: {
           mean: 6,
+          squared_diffs: 0,
+        },
+        idle_lat: {
+          mean: 0.00004,
           squared_diffs: 0,
         },
         parse_lat: {
@@ -285,6 +294,10 @@ const statementDetailsData: StatementDetailsResponse = {
           mean: 6,
           squared_diffs: 0,
         },
+        idle_lat: {
+          mean: 0.000071,
+          squared_diffs: 4.050000000000001e-9,
+        },
         parse_lat: {
           mean: 0.000071,
           squared_diffs: 4.050000000000001e-9,
@@ -381,6 +394,10 @@ const statementDetailsData: StatementDetailsResponse = {
           mean: 6,
           squared_diffs: 0,
         },
+        idle_lat: {
+          mean: 0.000046,
+          squared_diffs: 0,
+        },
         parse_lat: {
           mean: 0.000046,
           squared_diffs: 0,
@@ -475,6 +492,10 @@ const statementDetailsData: StatementDetailsResponse = {
         legacy_last_err_redacted: "",
         num_rows: {
           mean: 6,
+          squared_diffs: 0,
+        },
+        idle_lat: {
+          mean: 0.00021,
           squared_diffs: 0,
         },
         parse_lat: {
@@ -575,6 +596,10 @@ const statementDetailsData: StatementDetailsResponse = {
           mean: 6,
           squared_diffs: 0,
         },
+        idle_lat: {
+          mean: 0.0000876,
+          squared_diffs: 2.35792e-8,
+        },
         parse_lat: {
           mean: 0.0000876,
           squared_diffs: 2.35792e-8,
@@ -668,6 +693,10 @@ const statementDetailsData: StatementDetailsResponse = {
         num_rows: {
           mean: 6,
           squared_diffs: 0,
+        },
+        idle_lat: {
+          mean: 0.0000876,
+          squared_diffs: 2.35792e-8,
         },
         parse_lat: {
           mean: 0.0000876,

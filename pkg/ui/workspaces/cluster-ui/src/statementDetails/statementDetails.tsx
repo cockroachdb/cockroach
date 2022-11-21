@@ -563,7 +563,12 @@ export class StatementDetails extends React.Component<
       generateExecuteAndPlanningTimeseries(statsPerAggregatedTs);
     const executionAndPlanningOps: Partial<Options> = {
       axes: [{}, { label: "Time Spent" }],
-      series: [{}, { label: "Execution" }, { label: "Planning" }],
+      series: [
+        {},
+        { label: "Execution" },
+        { label: "Planning" },
+        { label: "Idle" },
+      ],
       width: cardWidth,
     };
 
