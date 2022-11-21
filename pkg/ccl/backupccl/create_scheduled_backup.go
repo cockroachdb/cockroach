@@ -11,7 +11,6 @@ package backupccl
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl/backupdest"
@@ -22,19 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
+	"github.com/cockroachdb/cockroach/pkg/scheduledjobs/schedulebase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -90,80 +86,16 @@ type scheduledBackupSpec struct {
 	incrementalStorage   []string
 }
 
-func parseOnError(onError string, details *jobspb.ScheduleDetails) error {
-	switch strings.ToLower(onError) {
-	case "retry":
-		details.OnError = jobspb.ScheduleDetails_RETRY_SOON
-	case "reschedule":
-		details.OnError = jobspb.ScheduleDetails_RETRY_SCHED
-	case "pause":
-		details.OnError = jobspb.ScheduleDetails_PAUSE_SCHED
-	default:
-		return errors.Newf(
-			"%q is not a valid on_execution_error; valid values are [retry|reschedule|pause]",
-			onError)
-	}
-	return nil
-}
-
-func parseWaitBehavior(wait string, details *jobspb.ScheduleDetails) error {
-	switch strings.ToLower(wait) {
-	case "start":
-		details.Wait = jobspb.ScheduleDetails_NO_WAIT
-	case "skip":
-		details.Wait = jobspb.ScheduleDetails_SKIP
-	case "wait":
-		details.Wait = jobspb.ScheduleDetails_WAIT
-	default:
-		return errors.Newf(
-			"%q is not a valid on_previous_running; valid values are [start|skip|wait]",
-			wait)
-	}
-	return nil
-}
-
-func parseOnPreviousRunningOption(
-	onPreviousRunning jobspb.ScheduleDetails_WaitBehavior,
-) (string, error) {
-	var onPreviousRunningOption string
-	switch onPreviousRunning {
-	case jobspb.ScheduleDetails_WAIT:
-		onPreviousRunningOption = "WAIT"
-	case jobspb.ScheduleDetails_NO_WAIT:
-		onPreviousRunningOption = "START"
-	case jobspb.ScheduleDetails_SKIP:
-		onPreviousRunningOption = "SKIP"
-	default:
-		return onPreviousRunningOption, errors.Newf("%s is an invalid onPreviousRunning option", onPreviousRunning.String())
-	}
-	return onPreviousRunningOption, nil
-}
-
-func parseOnErrorOption(onError jobspb.ScheduleDetails_ErrorHandlingBehavior) (string, error) {
-	var onErrorOption string
-	switch onError {
-	case jobspb.ScheduleDetails_RETRY_SCHED:
-		onErrorOption = "RESCHEDULE"
-	case jobspb.ScheduleDetails_RETRY_SOON:
-		onErrorOption = "RETRY"
-	case jobspb.ScheduleDetails_PAUSE_SCHED:
-		onErrorOption = "PAUSE"
-	default:
-		return onErrorOption, errors.Newf("%s is an invalid onError option", onError.String())
-	}
-	return onErrorOption, nil
-}
-
 func makeScheduleDetails(opts map[string]string) (jobspb.ScheduleDetails, error) {
 	var details jobspb.ScheduleDetails
 	if v, ok := opts[optOnExecFailure]; ok {
-		if err := parseOnError(v, &details); err != nil {
+		if err := schedulebase.ParseOnError(v, &details); err != nil {
 			return details, err
 		}
 	}
 
 	if v, ok := opts[optOnPreviousRunning]; ok {
-		if err := parseWaitBehavior(v, &details); err != nil {
+		if err := schedulebase.ParseWaitBehavior(v, &details); err != nil {
 			return details, err
 		}
 	}
@@ -181,14 +113,6 @@ func scheduleFirstRun(evalCtx *eval.Context, opts map[string]string) (*time.Time
 	return nil, nil
 }
 
-type scheduleRecurrence struct {
-	cron      string
-	frequency time.Duration
-}
-
-// A sentinel value indicating the schedule never recurs.
-var neverRecurs *scheduleRecurrence
-
 func frequencyFromCron(now time.Time, cronStr string) (time.Duration, error) {
 	expr, err := cron.ParseStandard(cronStr)
 	if err != nil {
@@ -200,37 +124,26 @@ func frequencyFromCron(now time.Time, cronStr string) (time.Duration, error) {
 	return expr.Next(nextRun).Sub(nextRun), nil
 }
 
-func computeScheduleRecurrence(now time.Time, rec *string) (*scheduleRecurrence, error) {
-	if rec == nil {
-		return neverRecurs, nil
-	}
-	cronStr := *rec
-	frequency, err := frequencyFromCron(now, cronStr)
-	if err != nil {
-		return nil, err
-	}
+var forceFullBackup *schedulebase.ScheduleRecurrence
 
-	return &scheduleRecurrence{cronStr, frequency}, nil
-}
-
-var forceFullBackup *scheduleRecurrence
-
-func pickFullRecurrenceFromIncremental(inc *scheduleRecurrence) *scheduleRecurrence {
-	if inc.frequency <= time.Hour {
+func pickFullRecurrenceFromIncremental(
+	inc *schedulebase.ScheduleRecurrence,
+) *schedulebase.ScheduleRecurrence {
+	if inc.Frequency <= time.Hour {
 		// If incremental is faster than once an hour, take fulls every day,
 		// some time between midnight and 1 am.
-		return &scheduleRecurrence{
-			cron:      "@daily",
-			frequency: 24 * time.Hour,
+		return &schedulebase.ScheduleRecurrence{
+			Cron:      "@daily",
+			Frequency: 24 * time.Hour,
 		}
 	}
 
-	if inc.frequency <= 24*time.Hour {
+	if inc.Frequency <= 24*time.Hour {
 		// If incremental is less than a day, take full weekly;  some day
 		// between 0 and 1 am.
-		return &scheduleRecurrence{
-			cron:      "@weekly",
-			frequency: 7 * 24 * time.Hour,
+		return &schedulebase.ScheduleRecurrence{
+			Cron:      "@weekly",
+			Frequency: 7 * 24 * time.Hour,
 		}
 	}
 
@@ -246,7 +159,7 @@ func doCreateBackupSchedules(
 	ctx context.Context, p sql.PlanHookState, eval *scheduledBackupSpec, resultsCh chan<- tree.Datums,
 ) error {
 	if eval.ScheduleLabelSpec.IfNotExists {
-		exists, err := checkScheduleAlreadyExists(ctx, p, *eval.scheduleLabel)
+		exists, err := schedulebase.CheckScheduleAlreadyExists(ctx, p, *eval.scheduleLabel)
 		if err != nil {
 			return err
 		}
@@ -262,16 +175,16 @@ func doCreateBackupSchedules(
 	env := sql.JobSchedulerEnv(p.ExecCfg())
 
 	// Evaluate incremental and full recurrence.
-	incRecurrence, err := computeScheduleRecurrence(env.Now(), eval.recurrence)
+	incRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), eval.recurrence)
 	if err != nil {
 		return err
 	}
-	fullRecurrence, err := computeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
+	fullRecurrence, err := schedulebase.ComputeScheduleRecurrence(env.Now(), eval.fullBackupRecurrence)
 	if err != nil {
 		return err
 	}
 
-	if fullRecurrence != nil && incRecurrence != nil && incRecurrence.frequency > fullRecurrence.frequency {
+	if fullRecurrence != nil && incRecurrence != nil && incRecurrence.Frequency > fullRecurrence.Frequency {
 		return errors.Newf("incremental backups must occur more often than full backups")
 	}
 
@@ -517,7 +430,7 @@ func makeBackupSchedule(
 	env scheduledjobs.JobSchedulerEnv,
 	owner username.SQLUsername,
 	label string,
-	recurrence *scheduleRecurrence,
+	recurrence *schedulebase.ScheduleRecurrence,
 	details jobspb.ScheduleDetails,
 	unpauseOnSuccess int64,
 	updateLastMetricOnSuccess bool,
@@ -540,7 +453,7 @@ func makeBackupSchedule(
 		args.BackupType = backuppb.ScheduledBackupExecutionArgs_FULL
 	}
 
-	if err := sj.SetSchedule(recurrence.cron); err != nil {
+	if err := sj.SetSchedule(recurrence.Cron); err != nil {
 		return nil, nil, err
 	}
 
@@ -600,23 +513,6 @@ func emitSchedule(
 	return nil
 }
 
-// checkScheduleAlreadyExists returns true if a schedule with the same label already exists,
-// regardless of backup destination.
-func checkScheduleAlreadyExists(
-	ctx context.Context, p sql.PlanHookState, scheduleLabel string,
-) (bool, error) {
-
-	row, err := p.ExecCfg().InternalExecutor.QueryRowEx(ctx, "check-sched",
-		p.Txn(), sessiondata.InternalExecutorOverride{User: username.RootUserName()},
-		fmt.Sprintf("SELECT count(schedule_name) FROM %s WHERE schedule_name = '%s'",
-			scheduledjobs.ProdJobSchedulerEnv.ScheduledJobsTableName(), scheduleLabel))
-
-	if err != nil {
-		return false, err
-	}
-	return int64(tree.MustBeDInt(row[0])) != 0, nil
-}
-
 // dryRunBackup executes backup in dry-run mode: we simply execute backup
 // under transaction savepoint, and then rollback to that save point.
 func dryRunBackup(
@@ -643,89 +539,6 @@ func dryRunInvokeBackup(
 	return invokeBackup(ctx, backupFn, p.ExecCfg().JobRegistry, p.Txn())
 }
 
-func fullyQualifyScheduledBackupTargetTables(
-	ctx context.Context, p sql.PlanHookState, tables tree.TablePatterns,
-) ([]tree.TablePattern, error) {
-	fqTablePatterns := make([]tree.TablePattern, len(tables))
-	for i, target := range tables {
-		tablePattern, err := target.NormalizeTablePattern()
-		if err != nil {
-			return nil, err
-		}
-		switch tp := tablePattern.(type) {
-		case *tree.TableName:
-			if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn,
-				col *descs.Collection) error {
-				// Resolve the table.
-				un := tp.ToUnresolvedObjectName()
-				found, _, tableDesc, err := resolver.ResolveExisting(ctx, un, p, tree.ObjectLookupFlags{},
-					p.CurrentDatabase(), p.CurrentSearchPath())
-				if err != nil {
-					return err
-				}
-				if !found {
-					return errors.Newf("target table %s could not be resolved", tp.String())
-				}
-
-				// Resolve the database.
-				found, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, tableDesc.GetParentID(),
-					tree.DatabaseLookupFlags{Required: true})
-				if err != nil {
-					return err
-				}
-				if !found {
-					return errors.Newf("database of target table %s could not be resolved", tp.String())
-				}
-
-				// Resolve the schema.
-				schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID(),
-					tree.SchemaLookupFlags{Required: true})
-				if err != nil {
-					return err
-				}
-				tn := tree.NewTableNameWithSchema(
-					tree.Name(dbDesc.GetName()),
-					tree.Name(schemaDesc.GetName()),
-					tree.Name(tableDesc.GetName()),
-				)
-				fqTablePatterns[i] = tn
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-		case *tree.AllTablesSelector:
-			if !tp.ExplicitSchema {
-				tp.ExplicitSchema = true
-				tp.SchemaName = tree.Name(p.CurrentDatabase())
-			} else if tp.ExplicitSchema && !tp.ExplicitCatalog {
-				// The schema field could either be a schema or a database. If we can
-				// successfully resolve the schema, we will add the DATABASE prefix.
-				// Otherwise, no updates are needed since the schema field refers to the
-				// database.
-				var schemaID descpb.ID
-				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-					flags := tree.DatabaseLookupFlags{Required: true}
-					dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, p.CurrentDatabase(), flags)
-					if err != nil {
-						return err
-					}
-					schemaID, err = col.Direct().ResolveSchemaID(ctx, txn, dbDesc.GetID(), tp.SchemaName.String())
-					return err
-				}); err != nil {
-					return nil, err
-				}
-
-				if schemaID != descpb.InvalidID {
-					tp.ExplicitCatalog = true
-					tp.CatalogName = tree.Name(p.CurrentDatabase())
-				}
-			}
-			fqTablePatterns[i] = tp
-		}
-	}
-	return fqTablePatterns, nil
-}
-
 // makeScheduleBackupSpec prepares helper scheduledBackupSpec struct to assist in evaluation
 // of various schedule and backup specific components.
 func makeScheduledBackupSpec(
@@ -739,7 +552,7 @@ func makeScheduledBackupSpec(
 		// planning. This is because the actual execution of the backup job occurs
 		// in a background, scheduled job session, that does not have the same
 		// resolution configuration as during planning.
-		schedule.Targets.Tables.TablePatterns, err = fullyQualifyScheduledBackupTargetTables(ctx, p,
+		schedule.Targets.Tables.TablePatterns, err = schedulebase.FullyQualifyTables(ctx, p,
 			schedule.Targets.Tables.TablePatterns)
 		if err != nil {
 			return nil, errors.Wrap(err, "qualifying backup target tables")
@@ -853,8 +666,8 @@ var scheduledBackupHeader = colinfo.ResultColumns{
 
 func collectScheduledBackupTelemetry(
 	ctx context.Context,
-	incRecurrence *scheduleRecurrence,
-	fullRecurrence *scheduleRecurrence,
+	incRecurrence *schedulebase.ScheduleRecurrence,
+	fullRecurrence *schedulebase.ScheduleRecurrence,
 	firstRun *time.Time,
 	fullRecurrencePicked bool,
 	ignoreExisting bool,
