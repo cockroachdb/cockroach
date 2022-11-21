@@ -120,7 +120,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		// This node is a KV node.
 		//
 		// Is this a connection from a SQL tenant server?
-		if security.IsTenantCertificate(clientCert) {
+		if security.IsTenantKVClientCertificate(clientCert) {
 			// Incoming connection originating from a tenant SQL server,
 			// into a KV node.
 			// We extract the tenant ID to perform authorization
@@ -131,7 +131,7 @@ func (a kvAuth) authenticate(ctx context.Context) (roachpb.TenantID, error) {
 		// This node is a SQL tenant server.
 		//
 		// Is this a connection from another SQL tenant server?
-		if security.IsTenantCertificate(clientCert) {
+		if security.IsTenantKVClientCertificate(clientCert) {
 			// Incoming connection originating from a tenant SQL server,
 			// into a KV node. Let through. The other server
 			// is able to use any of this server's RPCs.
