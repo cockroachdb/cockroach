@@ -101,9 +101,9 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	if err := d.fetcher.Init(
 		params.ctx,
 		row.FetcherInitArgs{
-			WillUseCustomKVBatchFetcher: true,
-			Alloc:                       &tree.DatumAlloc{},
-			Spec:                        &spec,
+			WillUseKVProvider: true,
+			Alloc:             &tree.DatumAlloc{},
+			Spec:              &spec,
 		},
 	); err != nil {
 		return err

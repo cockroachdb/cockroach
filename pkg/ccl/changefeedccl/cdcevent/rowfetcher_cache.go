@@ -28,11 +28,11 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// rowFetcherCache maintains a cache of single table RowFetchers. Given a key
+// rowFetcherCache maintains a cache of single table row.Fetchers. Given a key
 // with an mvcc timestamp, it retrieves the correct TableDescriptor for that key
-// and returns a Fetcher initialized with that table. This Fetcher's
-// StartScanFrom can be used to turn that key (or all the keys making up the
-// column families of one row) into a row.
+// and returns a row.Fetcher initialized with that table. This Fetcher's
+// ConsumeKVProvider() can be used to turn that key (or all the keys making up
+// the column families of one row) into a row.
 type rowFetcherCache struct {
 	codec           keys.SQLCodec
 	leaseMgr        *lease.Manager
@@ -237,9 +237,9 @@ func (c *rowFetcherCache) RowFetcherForColumnFamily(
 	if err := rf.Init(
 		context.TODO(),
 		row.FetcherInitArgs{
-			WillUseCustomKVBatchFetcher: true,
-			Alloc:                       &c.a,
-			Spec:                        &spec,
+			WillUseKVProvider: true,
+			Alloc:             &c.a,
+			Spec:              &spec,
 		},
 	); err != nil {
 		return nil, nil, err
