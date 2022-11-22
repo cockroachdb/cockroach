@@ -97,6 +97,23 @@ message StreamIngestionDetails {
     (gogoproto.nullable) = false,
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/roachpb.TenantName"];
 
+  // ID of the protected timestamp record that protects the destination tenant's
+  // keyspan from GC while it is being replicated into.
+  bytes protected_timestamp_record_id = 10 [
+    (gogoproto.customname) = "ProtectedTimestampRecordID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // ReplicationTTLSeconds specifies the maximum age of a value relative to the
+  // replication job's frontier timestamp, before the value is made eligible for
+  // garbage collection. Note, only older versions of values are eligible for
+  // GC. All values newer than this maximum age will be protected from GC by a
+  // protected timestamp record managed by the replication job.
+  //
+  // In other words, the `replication job's frontier timestamp - ReplicationTTLSeconds`
+  // is the earliest timestamp that the replication job can be cut-over to.
+  int32 replication_ttl_seconds = 11 [(gogoproto.customname) = "ReplicationTTLSeconds"];
+
   reserved 5, 6;
 }
 
