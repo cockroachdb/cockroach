@@ -180,7 +180,7 @@ go_test(
         "system_schema_test.go",
         "utils_test.go",
     ],
-    args = ["-test.timeout=3595s"],
+    args = ["-test.timeout=7195s"],
     data = glob(["testdata/**"]) + ["//c-deps:libgeos"],
     embed = [":backupccl"],
     shard_count = 16,
