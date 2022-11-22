@@ -129,13 +129,11 @@ func (s *ColBatchDirectScan) DrainMeta() []execinfrapb.ProducerMetadata {
 }
 
 func (s *ColBatchDirectScan) GetBytesRead() int64 {
-	//TODO implement me
-	return 0
+	return s.fetcher.GetBytesRead()
 }
 
 func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
-	//TODO implement me
-	return 0
+	return s.fetcher.GetBatchRequestsIssued()
 }
 
 // Release implements the execreleasable.Releasable interface.

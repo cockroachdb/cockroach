@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
@@ -43,19 +44,31 @@ type txnKVStreamer struct {
 		// Used only for ScanResponses.
 		remainingBatches [][]byte
 	}
+
+	// Observability fields.
+	// Note: these need to be read via an atomic op.
+	atomics struct {
+		bytesRead           int64
+		batchRequestsIssued *int64
+	}
 }
 
 var _ KVBatchFetcher = &txnKVStreamer{}
 
 // newTxnKVStreamer creates a new txnKVStreamer.
 func newTxnKVStreamer(
-	streamer *kvstreamer.Streamer, lockStrength descpb.ScanLockingStrength, acc *mon.BoundAccount,
+	streamer *kvstreamer.Streamer,
+	lockStrength descpb.ScanLockingStrength,
+	acc *mon.BoundAccount,
+	batchRequestsIssued *int64,
 ) KVBatchFetcher {
-	return &txnKVStreamer{
+	f := &txnKVStreamer{
 		streamer:   streamer,
 		keyLocking: getKeyLockingStrength(lockStrength),
 		acc:        acc,
 	}
+	f.atomics.batchRequestsIssued = batchRequestsIssued
+	return f
 }
 
 // SetupNextFetch implements the KVBatchFetcher interface.
@@ -150,7 +163,19 @@ func (f *txnKVStreamer) releaseLastResult(ctx context.Context) {
 }
 
 // NextBatch implements the KVBatchFetcher interface.
-func (f *txnKVStreamer) NextBatch(ctx context.Context) (KVBatchFetcherResponse, error) {
+func (f *txnKVStreamer) NextBatch(ctx context.Context) (resp KVBatchFetcherResponse, _ error) {
+	var recursed bool
+	defer func() {
+		if !resp.MoreKVs || recursed {
+			return
+		}
+		nBytes := len(resp.BatchResponse)
+		for i := range resp.KVs {
+			nBytes += len(resp.KVs[i].Key)
+			nBytes += len(resp.KVs[i].Value.RawBytes)
+		}
+		atomic.AddInt64(&f.atomics.bytesRead, int64(nBytes))
+	}()
 	// Check whether there are more batches in the current ScanResponse.
 	if len(f.lastResultState.remainingBatches) > 0 {
 		ret := KVBatchFetcherResponse{
@@ -190,7 +215,22 @@ func (f *txnKVStreamer) NextBatch(ctx context.Context) (KVBatchFetcherResponse, 
 	if len(f.results) == 0 || err != nil {
 		return KVBatchFetcherResponse{MoreKVs: false}, err
 	}
+	recursed = true
 	return f.NextBatch(ctx)
+}
+
+func (f *txnKVStreamer) GetBytesRead() int64 {
+	if f == nil {
+		return 0
+	}
+	return atomic.LoadInt64(&f.atomics.bytesRead)
+}
+
+func (f *txnKVStreamer) GetBatchRequestsIssued() int64 {
+	if f == nil || f.atomics.batchRequestsIssued == nil {
+		return 0
+	}
+	return atomic.LoadInt64(f.atomics.batchRequestsIssued)
 }
 
 // reset releases all of the results from the last fetch.
