@@ -97,9 +97,9 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	if err := rf.Init(
 		ctx,
 		row.FetcherInitArgs{
-			WillUseCustomKVBatchFetcher: true,
-			Alloc:                       &tree.DatumAlloc{},
-			Spec:                        &spec,
+			WillUseKVProvider: true,
+			Alloc:             &tree.DatumAlloc{},
+			Spec:              &spec,
 		},
 	); err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			log.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}
 
-		if err := rf.StartScanFrom(ctx, &row.SpanKVFetcher{KVs: kvs}); err != nil {
+		if err := rf.ConsumeKVProvider(ctx, &row.KVProvider{KVs: kvs}); err != nil {
 			t.Fatal(err)
 		}
 		var rows []rowWithMVCCMetadata

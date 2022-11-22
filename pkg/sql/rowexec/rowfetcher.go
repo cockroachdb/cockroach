@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -31,7 +30,6 @@ type rowFetcher interface {
 		_ context.Context, _ roachpb.Spans, spanIDs []int,
 		batchBytesLimit rowinfra.BytesLimit, rowLimitHint rowinfra.RowLimit,
 	) error
-	StartScanFrom(_ context.Context, _ row.KVBatchFetcher) error
 	StartInconsistentScan(
 		_ context.Context,
 		_ *kv.DB,

@@ -137,7 +137,7 @@ type tableInfo struct {
 	// meaningful when kv deletion tombstones are returned by the KVBatchFetcher,
 	// which the one used by `StartScan` (the common case) doesnt. Notably,
 	// changefeeds use this by providing raw kvs with tombstones unfiltered via
-	// `StartScanFrom`.
+	// `ConsumeKVProvider`.
 	rowIsDeleted bool
 }
 
@@ -224,12 +224,13 @@ type FetcherInitArgs struct {
 	// kvstreamer.Streamer API under the hood. The caller is then expected to
 	// use only StartScan() method.
 	StreamingKVFetcher *KVFetcher
-	// WillUseCustomKVBatchFetcher, if true, indicates that the caller will only
-	// use StartScanFrom() method and will be providing its own KVBatchFetcher.
-	WillUseCustomKVBatchFetcher bool
+	// WillUseKVProvider, if true, indicates that the caller will only use
+	// ConsumeKVProvider() method and will use its own KVBatchFetcher
+	// implementation.
+	WillUseKVProvider bool
 	// Txn is the txn for the fetch. It might be nil, and the caller is expected
-	// to either provide the txn later via SetTxn() or to only use StartScanFrom
-	// method.
+	// to either provide the txn later via SetTxn() or to only use
+	// ConsumeKVProvider method.
 	Txn *kv.Txn
 	// Reverse denotes whether or not the spans should be read in reverse or not
 	// when StartScan* methods are invoked.
@@ -368,13 +369,13 @@ func (rf *Fetcher) Init(ctx context.Context, args FetcherInitArgs) error {
 	}
 
 	if args.StreamingKVFetcher != nil {
-		if args.WillUseCustomKVBatchFetcher {
+		if args.WillUseKVProvider {
 			return errors.AssertionFailedf(
-				"StreamingKVFetcher is non-nil when WillUseCustomKVBatchFetcher is true",
+				"StreamingKVFetcher is non-nil when WillUseKVProvider is true",
 			)
 		}
 		rf.kvFetcher = args.StreamingKVFetcher
-	} else if !args.WillUseCustomKVBatchFetcher {
+	} else if !args.WillUseKVProvider {
 		fetcherArgs := kvBatchFetcherArgs{
 			reverse:                    args.Reverse,
 			lockStrength:               args.LockStrength,
@@ -423,8 +424,7 @@ func (rf *Fetcher) setTxnAndSendFn(txn *kv.Txn, sendFn sendFunc) error {
 }
 
 // StartScan initializes and starts the key-value scan. Can be used multiple
-// times. Cannot be used if WillUseCustomKVBatchFetcher was set to true in
-// Init().
+// times. Cannot be used if WillUseKVProvider was set to true in Init().
 //
 // The fetcher takes ownership of the spans slice - it can modify the slice and
 // will perform the memory accounting accordingly (if Init() was called with
@@ -467,8 +467,8 @@ func (rf *Fetcher) StartScan(
 	batchBytesLimit rowinfra.BytesLimit,
 	rowLimitHint rowinfra.RowLimit,
 ) error {
-	if rf.args.WillUseCustomKVBatchFetcher {
-		return errors.AssertionFailedf("StartScan is called instead of StartScanFrom")
+	if rf.args.WillUseKVProvider {
+		return errors.AssertionFailedf("StartScan is called instead of ConsumeKVProvider")
 	}
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -498,8 +498,8 @@ var TestingInconsistentScanSleep time.Duration
 // that has passed. See the documentation for TableReaderSpec for more
 // details.
 //
-// Can be used multiple times. Cannot be used if WillUseCustomKVBatchFetcher was
-// set to true in Init().
+// Can be used multiple times. Cannot be used if WillUseKVProvider was set to
+// true in Init().
 //
 // Batch limits can only be used if the spans are ordered.
 func (rf *Fetcher) StartInconsistentScan(
@@ -515,8 +515,8 @@ func (rf *Fetcher) StartInconsistentScan(
 	if rf.args.StreamingKVFetcher != nil {
 		return errors.AssertionFailedf("StartInconsistentScan is called instead of StartScan")
 	}
-	if rf.args.WillUseCustomKVBatchFetcher {
-		return errors.AssertionFailedf("StartInconsistentScan is called instead of StartScanFrom")
+	if rf.args.WillUseKVProvider {
+		return errors.AssertionFailedf("StartInconsistentScan is called instead of ConsumeKVProvider")
 	}
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
@@ -598,22 +598,20 @@ func (rf *Fetcher) rowLimitToKeyLimit(rowLimitHint rowinfra.RowLimit) rowinfra.K
 	return rowinfra.KeyLimit(int64(rowLimitHint)*int64(rf.table.spec.MaxKeysPerRow) + 1)
 }
 
-// StartScanFrom initializes and starts a scan from the given KVBatchFetcher.
-// Can be used multiple times. Cannot be used if WillUseCustomKVBatchFetcher was
-// set to false in Init().
-func (rf *Fetcher) StartScanFrom(ctx context.Context, f KVBatchFetcher) error {
-	if !rf.args.WillUseCustomKVBatchFetcher {
-		return errors.AssertionFailedf("StartScanFrom is called instead of StartScan")
+// ConsumeKVProvider initializes and starts a "scan" of the given KVProvider.
+// Can be used multiple times. Cannot be used if WillUseKVProvider was set to
+// false in Init().
+func (rf *Fetcher) ConsumeKVProvider(ctx context.Context, f *KVProvider) error {
+	if !rf.args.WillUseKVProvider {
+		return errors.AssertionFailedf("ConsumeKVProvider is called instead of StartScan")
 	}
-	var batchRequestsIssued *int64
 	if rf.kvFetcher != nil {
 		rf.kvFetcher.Close(ctx)
-		// Keep the same counter across different fetchers.
-		batchRequestsIssued = rf.kvFetcher.atomics.batchRequestsIssued
-	} else {
-		batchRequestsIssued = new(int64)
 	}
-	rf.kvFetcher = newKVFetcher(f, batchRequestsIssued)
+	// We won't actually perform any KV reads, so we don't need to track the
+	// number of batch requests issued - the case of the KVProvider is handled
+	// separately in GetBatchRequestsIssued().
+	rf.kvFetcher = newKVFetcher(f, nil /* batchRequestsIssued */)
 	return rf.startScan(ctx)
 }
 
@@ -1266,5 +1264,8 @@ func (rf *Fetcher) GetBytesRead() int64 {
 // GetBatchRequestsIssued returns total number of BatchRequests issued by the
 // underlying KVFetcher.
 func (rf *Fetcher) GetBatchRequestsIssued() int64 {
+	if rf == nil || rf.args.WillUseKVProvider {
+		return 0
+	}
 	return rf.kvFetcher.GetBatchRequestsIssued()
 }

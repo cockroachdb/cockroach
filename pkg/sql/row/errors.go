@@ -23,31 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
-
-// singleKVFetcher is a KVBatchFetcher that returns a single kv.
-type singleKVFetcher struct {
-	kvs  [1]roachpb.KeyValue
-	done bool
-}
-
-var _ KVBatchFetcher = &singleKVFetcher{}
-
-// nextBatch implements the KVBatchFetcher interface.
-func (f *singleKVFetcher) nextBatch(ctx context.Context) (kvBatchFetcherResponse, error) {
-	if f.done {
-		return kvBatchFetcherResponse{moreKVs: false}, nil
-	}
-	f.done = true
-	return kvBatchFetcherResponse{
-		moreKVs: true,
-		kvs:     f.kvs[:],
-	}, nil
-}
 
 // ConvertBatchError attempts to map a key-value error generated during a
 // key-value batch operating over the specified table to a user friendly SQL
@@ -281,20 +260,20 @@ func DecodeRowInfo(
 	if err := rf.Init(
 		ctx,
 		FetcherInitArgs{
-			WillUseCustomKVBatchFetcher: true,
-			Alloc:                       &tree.DatumAlloc{},
-			Spec:                        &spec,
+			WillUseKVProvider: true,
+			Alloc:             &tree.DatumAlloc{},
+			Spec:              &spec,
 		},
 	); err != nil {
 		return nil, nil, nil, err
 	}
-	f := singleKVFetcher{kvs: [1]roachpb.KeyValue{{Key: key}}}
+	f := KVProvider{KVs: []roachpb.KeyValue{{Key: key}}}
 	if value != nil {
-		f.kvs[0].Value = *value
+		f.KVs[0].Value = *value
 	}
 	// Use the Fetcher to decode the single kv pair above by passing in
-	// this singleKVFetcher implementation, which doesn't actually hit KV.
-	if err := rf.StartScanFrom(ctx, &f); err != nil {
+	// this KVProvider implementation, which doesn't actually hit KV.
+	if err := rf.ConsumeKVProvider(ctx, &f); err != nil {
 		return nil, nil, nil, err
 	}
 	datums, err := rf.NextRowDecoded(ctx)
@@ -317,11 +296,3 @@ func DecodeRowInfo(
 	}
 	return index, names, values, nil
 }
-
-func (f *singleKVFetcher) SetupNextFetch(
-	context.Context, roachpb.Spans, []int, rowinfra.BytesLimit, rowinfra.KeyLimit,
-) error {
-	return nil
-}
-
-func (f *singleKVFetcher) close(context.Context) {}
