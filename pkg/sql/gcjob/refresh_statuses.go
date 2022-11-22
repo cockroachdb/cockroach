@@ -461,19 +461,6 @@ func refreshTenant(
 	}
 
 	tenID := details.Tenant.ID
-	// TODO(ssd): Once
-	// https://github.com/cockroachdb/cockroach/issues/92093 is
-	// done, we should be able to simply rely on the protected
-	// timestamp for the replication job.
-	jobActive, err := tenantHasActiveReplicationJob(ctx, execCfg, tenID)
-	if err != nil {
-		return false, time.Time{}, err
-	}
-	if jobActive {
-		log.Infof(ctx, "tenant %d has active tenant replication job, waiting for it to stop before running GC", tenID)
-		return false, timeutil.Now().Add(MaxSQLGCInterval), nil
-	}
-
 	// Read the tenant's GC TTL to check if the tenant's data has expired.
 	cfg := execCfg.SystemConfig.GetSystemConfig()
 	tenantTTLSeconds := execCfg.DefaultZoneConfig.GC.TTLSeconds
