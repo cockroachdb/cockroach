@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -768,6 +770,9 @@ func TestTenantStreamingDropTenantCancelsStream(t *testing.T) {
 		defer cleanup()
 		producerJobID, ingestionJobID := c.startStreamReplication()
 
+		c.destSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+		c.destSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
+
 		jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
 		jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(ingestionJobID))
 
@@ -1072,4 +1077,170 @@ func TestTenantStreamingMultipleNodes(t *testing.T) {
 
 	// Since the data was distributed across multiple nodes, multiple nodes should've been connected to
 	require.Greater(t, len(clientAddresses), 1)
+}
+
+// TestTenantReplicationProtectedTimestampManagement tests the active protected
+// timestamps management on the destination tenant's keyspan.
+func TestTenantReplicationProtectedTimestampManagement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := defaultTenantStreamingClustersArgs
+	// Override the replication job details ReplicationTTLSeconds to a small value
+	// so that every progress update results in a protected timestamp update.
+	//
+	// TODO(adityamaru): Once this is wired up to be user configurable via an
+	// option to `CREATE TENANT ... FROM REPLICATION` we should replace this
+	// testing knob with a create tenant option.
+	args.testingKnobs = &sql.StreamingTestingKnobs{
+		OverrideReplicationTTLSeconds: 1,
+	}
+
+	testProtectedTimestampManagement := func(t *testing.T, pauseBeforeTerminal bool, completeReplication bool) {
+		// waitForProducerProtection asserts that there is a PTS record protecting
+		// the source tenant. We ensure the PTS record is protecting a timestamp
+		// greater or equal to the frontier we know we have replicated up until.
+		waitForProducerProtection := func(c *tenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
+			testutils.SucceedsSoon(t, func() error {
+				stats := streamIngestionStats(t, c.destSysSQL, replicationJobID)
+				if stats.ProducerStatus == nil {
+					return errors.New("nil ProducerStatus")
+				}
+				if stats.ProducerStatus.ProtectedTimestamp == nil {
+					return errors.New("nil ProducerStatus.ProtectedTimestamp")
+				}
+				pts := *stats.ProducerStatus.ProtectedTimestamp
+				if pts.Less(frontier) {
+					return errors.Newf("protection is at %s, expected to be >= %s",
+						pts.String(), frontier.String())
+				}
+				return nil
+			})
+		}
+
+		// checkNoDestinationProtections asserts that there is no PTS record
+		// protecting the destination tenant.
+		checkNoDestinationProtection := func(c *tenantStreamingClusters, replicationJobID int) {
+			execCfg := c.destSysServer.ExecutorConfig().(sql.ExecutorConfig)
+			require.NoError(t, c.destCluster.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
+				require.NoError(t, err)
+				payload := j.Payload()
+				replicationDetails := payload.GetStreamIngestion()
+				_, err = execCfg.ProtectedTimestampProvider.GetRecord(ctx, txn, *replicationDetails.ProtectedTimestampRecordID)
+				require.EqualError(t, err, protectedts.ErrNotExists.Error())
+				return nil
+			}))
+		}
+		checkDestinationProtection := func(c *tenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
+			execCfg := c.destSysServer.ExecutorConfig().(sql.ExecutorConfig)
+			ptp := execCfg.ProtectedTimestampProvider
+			require.NoError(t, c.destCluster.Server(0).DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
+				if err != nil {
+					return err
+				}
+				payload := j.Payload()
+				progress := j.Progress()
+				replicationDetails := payload.GetStreamIngestion()
+
+				require.NotNil(t, replicationDetails.ProtectedTimestampRecordID)
+				rec, err := ptp.GetRecord(ctx, txn, *replicationDetails.ProtectedTimestampRecordID)
+				if err != nil {
+					return err
+				}
+				require.True(t, frontier.LessEq(*progress.GetHighWater()))
+				frontier := progress.GetHighWater().GoTime().Round(time.Millisecond)
+				window := frontier.Sub(rec.Timestamp.GoTime().Round(time.Millisecond))
+				require.Equal(t, time.Second, window)
+				return nil
+			}))
+		}
+
+		c, cleanup := createTenantStreamingClusters(ctx, t, args)
+		defer cleanup()
+
+		c.destSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
+		c.destSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
+
+		producerJobID, replicationJobID := c.startStreamReplication()
+
+		jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+
+		// Ensure that we wait at least a second so that the gap between the first
+		// time we write the protected timestamp (t1) during replication job
+		// startup, and the first progress update (t2) is greater than 1s. This is
+		// important because if `frontier@t2 - ReplicationTTLSeconds < t1` then we
+		// will not update the PTS record.
+		now := c.srcCluster.Server(0).Clock().Now().Add(int64(time.Second)*2, 0)
+		c.waitUntilHighWatermark(now, jobspb.JobID(replicationJobID))
+
+		// Check that the producer and replication job have written a protected
+		// timestamp.
+		waitForProducerProtection(c, now, replicationJobID)
+		checkDestinationProtection(c, now, replicationJobID)
+
+		now2 := now.Add(time.Second.Nanoseconds(), 0)
+		c.waitUntilHighWatermark(now2, jobspb.JobID(replicationJobID))
+		// Let the replication progress for a second before checking that the
+		// protected timestamp record has also been updated on the destination
+		// cluster. This update happens in the same txn in which we update the
+		// replication job's progress.
+		waitForProducerProtection(c, now2, replicationJobID)
+		checkDestinationProtection(c, now2, replicationJobID)
+
+		if pauseBeforeTerminal {
+			c.destSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", replicationJobID))
+			jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+		}
+
+		if completeReplication {
+			c.destSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", replicationJobID))
+			jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+			var cutoverTime time.Time
+			c.destSysSQL.QueryRow(t, "SELECT clock_timestamp()").Scan(&cutoverTime)
+			c.cutover(producerJobID, replicationJobID, cutoverTime)
+			jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(replicationJobID))
+		}
+
+		// Set GC TTL low, so that the GC job completes quickly in the test.
+		c.destSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
+		c.destSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.args.destTenantName))
+
+		if !completeReplication {
+			jobutils.WaitForJobToCancel(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+			jobutils.WaitForJobToCancel(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
+		}
+
+		// Check if the producer job has released protected timestamp.
+		stats := streamIngestionStats(t, c.destSysSQL, replicationJobID)
+		require.NotNil(t, stats.ProducerStatus)
+		require.Nil(t, stats.ProducerStatus.ProtectedTimestamp)
+
+		// Check if the replication job has released protected timestamp.
+		checkNoDestinationProtection(c, replicationJobID)
+
+		// Wait for the GC job to finish, this should happen once the protected
+		// timestamp has been released.
+		c.destSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
+
+		// Check if dest tenant key range is cleaned up.
+		destTenantPrefix := keys.MakeTenantPrefix(args.destTenantID)
+		rows, err := c.destCluster.Server(0).DB().
+			Scan(ctx, destTenantPrefix, destTenantPrefix.PrefixEnd(), 10)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+
+		c.destSysSQL.CheckQueryResults(t,
+			fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.destTenantID),
+			[][]string{{"0"}})
+	}
+
+	testutils.RunTrueAndFalse(t, "pause-before-terminal", func(t *testing.T, pauseBeforeTerminal bool) {
+		testutils.RunTrueAndFalse(t, "complete-replication", func(t *testing.T, completeReplication bool) {
+			testProtectedTimestampManagement(t, pauseBeforeTerminal, completeReplication)
+		})
+	})
 }

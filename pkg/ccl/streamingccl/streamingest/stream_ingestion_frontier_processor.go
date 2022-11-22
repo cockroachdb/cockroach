@@ -400,6 +400,7 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 	f := sf.frontier
 	registry := sf.flowCtx.Cfg.JobRegistry
 	jobID := jobspb.JobID(sf.spec.JobID)
+	ptp := sf.flowCtx.Cfg.ProtectedTimestampProvider
 
 	frontierResolvedSpans := make([]jobspb.ResolvedSpan, 0)
 	f.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
@@ -438,6 +439,26 @@ func (sf *streamIngestionFrontier) maybeUpdatePartitionProgress() error {
 		// retries from having a large backoff because of past failures.
 		if md.RunStats != nil && md.RunStats.NumRuns > 1 {
 			ju.UpdateRunStats(1, md.RunStats.LastRun)
+		}
+
+		// Update the protected timestamp record protecting the destination tenant's
+		// keyspan if the highWatermark has moved forward since the last time we
+		// recorded progress. This makes older revisions of replicated values with a
+		// timestamp less than highWatermark - ReplicationTTLSeconds, eligible for
+		// garbage collection.
+		replicationDetails := md.Payload.GetStreamIngestion()
+		if replicationDetails.ProtectedTimestampRecordID == nil {
+			return errors.AssertionFailedf("expected replication job to have a protected timestamp " +
+				"record over the destination tenant's keyspan")
+		}
+		record, err := ptp.GetRecord(ctx, txn, *replicationDetails.ProtectedTimestampRecordID)
+		if err != nil {
+			return err
+		}
+		newProtectAbove := highWatermark.Add(
+			-int64(replicationDetails.ReplicationTTLSeconds)*time.Second.Nanoseconds(), 0)
+		if record.Timestamp.Less(newProtectAbove) {
+			return ptp.UpdateTimestamp(ctx, txn, *replicationDetails.ProtectedTimestampRecordID, newProtectAbove)
 		}
 		return nil
 	}); err != nil {
