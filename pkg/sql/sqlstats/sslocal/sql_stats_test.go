@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1109,9 +1110,7 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 91710)
-
-	skip.UnderStress(t, "These tests assert timings are within 10ms, which fails under stress.")
+	skip.UnderStress(t, "These tests make timing assertions, which may fail under stress.")
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -1287,7 +1286,18 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 				actual[query] = latency
 			}
 			require.NoError(t, rows.Err())
-			require.InDeltaMapValues(t, tc.lats, actual, 0.01,
+
+			// Make looser timing assertions in CI, since we've seen
+			// more variability there.
+			// - Bazel test runs also use this looser delta.
+			// - Goland and `go test` use the tighter delta unless
+			//   the crdb_test build tag has been set.
+			delta := 0.002
+			if buildutil.CrdbTestBuild {
+				delta = 0.05
+			}
+
+			require.InDeltaMapValues(t, tc.lats, actual, delta,
 				"expected: %v\nactual: %v", tc.lats, actual)
 		})
 	}
