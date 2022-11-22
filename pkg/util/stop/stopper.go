@@ -478,8 +478,8 @@ func (s *Stopper) RunAsyncTaskEx(ctx context.Context, opt TaskOpts, f func(conte
 	// Call f on another goroutine.
 	taskStarted = true // Another goroutine now takes ownership of the alloc, if any.
 	go func() {
-		defer sp.Finish()
 		defer s.runPostlude()
+		defer sp.Finish()
 		defer s.recover(ctx)
 		if alloc != nil {
 			defer alloc.Release()
