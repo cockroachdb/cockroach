@@ -284,14 +284,15 @@ unused_checker(srcs = GET_X_DATA_TARGETS)`)
 	}
 }
 
-// excludeSqliteLogicTests removes the sqlite logic tests targets from the
-// given list of targets and returns the updated list.
-func excludeSqliteLogicTests(targets []string) []string {
+// excludeReallyEnormousTargets removes the really enormous test targets
+// from the given list of targets and returns the updated list.
+func excludeReallyEnormousTargets(targets []string) []string {
 	for i := 0; i < len(targets); i++ {
 		var excluded bool
 		for _, toExclude := range []string{
 			"//pkg/ccl/sqlitelogictestccl",
 			"//pkg/sql/sqlitelogictest",
+			"//pkg/ccl/backupccl",
 		} {
 			if strings.HasPrefix(targets[i], toExclude) {
 				excluded = true
@@ -315,9 +316,9 @@ func generateTestsTimeouts() {
 	}
 	for size, timeout := range testSizeToDefaultTimeout {
 		if size == "enormous" {
-			// Exclude sqlite logic tests since they have a custom timeout that
+			// Exclude really enormous targets since they have a custom timeout that
 			// exceeds the default 1h.
-			targets[size] = excludeSqliteLogicTests(targets[size])
+			targets[size] = excludeReallyEnormousTargets(targets[size])
 		}
 		// Let the `go test` process timeout 5 seconds before bazel attempts to kill it.
 		// Note that if this causes issues such as not having enough time to run normally
