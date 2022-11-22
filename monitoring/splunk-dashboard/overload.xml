@@ -1,0 +1,467 @@
+<form version="1.1" theme="dark">
+  <label>CockroachDB Overload</label>
+  <fieldset submitButton="false" autoRun="false">
+    <input type="time" token="Time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-10m@m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="index_name" searchWhenChanged="true">
+      <label>Splunk Index</label>
+      <default>metrics_idx</default>
+    </input>
+    <input type="dropdown" token="cluster_id" searchWhenChanged="true">
+      <label>Cluster ID</label>
+      <fieldForLabel>cluster_id</fieldForLabel>
+      <fieldForValue>cluster_id</fieldForValue>
+      <search>
+        <query>|mstats count(*) where index=$index_name$  earliest=$Time_range.earliest$  by cluster_id  | table cluster_id</query>
+        <earliest>-1m@m</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>CPU Percent</title>
+      <chart>
+        <search>
+          <query>| mstats 
+latest(sys_cpu_combined_percent_normalized) as x 
+WHERE index=$index_name$ AND cluster_id=$cluster_id$ 
+span=10s by net.host.name
+| eval x=round(x*100, 2)
+| timechart  span=10s latest(x) by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">CPU (percentage)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Runnable Goroutines per CPU</title>
+      <chart>
+        <title>The number of Goroutines waiting for CPU across all nodes. This count should rise and fall based on load.</title>
+        <search>
+          <query>| mstats 
+sum(sys_runnable_goroutines_per_cpu) as x 
+WHERE index=$index_name$ AND cluster_id=$cluster_id$  span=10s by net.host.name
+| timechart  span=10s sum(x) as x by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">goroutines</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>LSM L0 Health</title>
+      <chart>
+        <title>The number of files and sublevels within Level 0.</title>
+        <search>
+          <query>| mstats 
+rate_sum(storage_l0_sublevels) as L0_sublevels,
+rate_sum(storage_l0_num_files) as L0_files 
+where index=$index_name$ AND cluster_id=$cluster_id$ span=10s by net.host.name
+|timechart span=10s 
+sum(L0_sublevels) as L0_sublevels,
+sum(L0_files) as L0_files
+by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">count</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>KV Admission Slots</title>
+      <chart>
+        <search>
+          <query>| mstats 
+sum(admission_granter_total_slots_kv) as total_slots,
+rate_sum(admission_granter_used_slots_kv) as used_slots 
+where index=$index_name$ AND cluster_id=$cluster_id$ 
+span=10s by net.host.name
+|timechart span=10s 
+sum(total_slots) as total_slots,
+sum(used_slots) as used_slots 
+by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">slots</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>KV Admission IO Tokens Exhausted Duration Per Second</title>
+      <chart>
+        <search>
+          <query>| mstats 
+rate_sum(admission_granter_io_tokens_exhausted_duration_kv) as IO_exhausted
+where index=$index_name$ AND cluster_id=$cluster_id$ 
+span=10s by net.host.name
+|timechart span=10s 
+sum(IO_exhausted) as IO_exhausted
+by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">duration (micros/sec)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Admission Work Rate</title>
+      <chart>
+        <search>
+          <query>| mstats 
+rate_sum(admission_admitted_kv) as KV_request_rate,
+rate_sum(admission_admitted_kv_stores) as KV_write_request_rate,
+rate_sum(admission_admitted_sql_kv_response) as SQL-KV_response_rate,
+rate_sum(admission_admitted_sql_sql_response) as SQL-SQL_response_rate
+where index=$index_name$ AND cluster_id=$cluster_id$ 
+span=10s by net.host.name
+|timechart span=10s 
+sum(KV_request_rate) as KV_request_rate,
+sum(KV_write_request_rate) as KV_write_request_rate,
+sum(SQL-KV_response_rate) as SQL-KV_response_rate,
+sum(SQL-SQL_response_rate) as SQL-SQL_response_rate
+by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">work rate</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Admission Delay Rate</title>
+      <chart>
+        <search>
+          <query>| mstats 
+rate_sum(admission_wait_sum_kv) as KV_request_rate,
+rate_sum(admission_wait_sum_kv_stores) as KV_write_request_rate,
+rate_sum(admission_wait_sum_sql_kv_response) as SQL-KV_response_rate,
+rate_sum(admission_wait_sum_sql_sql_response) as SQL-SQL_response_rate
+where index=$index_name$ AND cluster_id=$cluster_id$ 
+span=10s by net.host.name
+| timechart span=10s 
+sum(KV_request_rate) as KV_request_rate,
+sum(KV_write_request_rate) as KV_write_request_rate,
+sum(SQL-KV_response_rate) as SQL-KV_response_rate,
+sum(SQL-SQL_response_rate) as SQL-SQL_response_rate
+by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">delay rate (micros/sec)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Admission Delay: 75th percentile</title>
+      <chart>
+        <search>
+          <query>| mstats rate_sum(admission_wait_durations_kv_bucket) as x 
+  where index=$index_name$ AND cluster_id=$cluster_id$ 
+  by net.host.name, _timeseries, le span=10s
+| stats sum(x) as x by net.host.name, _time, le,
+| `histperc(0.75, x, le, "net.host.name,_time")`
+| eval kv=histperc
+| union [
+  | mstats rate_sum(admission_wait_durations_kv_stores_bucket) as x 
+    where index=$index_name$ AND cluster_id=$cluster_id$ 
+    by net.host.name, _timeseries, le span=10s
+  | stats sum(x) as x by net.host.name, _time, le,
+  | `histperc(0.75, x, le, "net.host.name,_time")`
+  | eval kv_write=histperc
+]
+| union [
+  | mstats rate_sum(admission_wait_durations_sql_sql_response_bucket) as x 
+    where index=$index_name$ AND cluster_id=$cluster_id$ 
+    by net.host.name, _timeseries, le span=10s
+  | stats sum(x) as x by net.host.name, _time, le,
+  | `histperc(0.75, x, le, "net.host.name,_time")`
+  | eval sql_sql_response=histperc
+]
+| union [
+  | mstats rate_sum(admission_wait_durations_sql_kv_response_bucket) as x 
+    where index=$index_name$ AND cluster_id=$cluster_id$ 
+    by net.host.name, _timeseries, le span=10s
+  | stats sum(x) as x by net.host.name, _time, le,
+  | `histperc(0.75, x, le, "net.host.name,_time")`
+  | eval sql_kv_response=histperc
+]
+| timechart span=10s latest(kv) as kv, latest(kv_write) as kv_write, latest(sql_sql_response) as sql_sql_response, latest(sql_kv_response) as sql_kv_response by net.host.name</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>10s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.text">delay for requests that waited (nanos)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+</form>
