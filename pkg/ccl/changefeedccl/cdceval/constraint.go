@@ -102,8 +102,5 @@ func constrainSpansBySelectClause(
 }
 
 func schemaTS(execCtx sql.JobExecContext) hlc.Timestamp {
-	if execCtx.Txn() != nil {
-		return execCtx.Txn().ReadTimestamp()
-	}
 	return execCtx.ExecCfg().Clock.Now()
 }
