@@ -63,13 +63,8 @@ func registerAcceptance(r registry.Registry) {
 		},
 		registry.OwnerTestEng: {
 			{
-				name: "version-upgrade",
-				fn:   runVersionUpgrade,
-				// This test doesn't like running on old versions because it upgrades to
-				// the latest released version and then it tries to "head", where head is
-				// the cockroach binary built from the branch on which the test is
-				// running. If that branch corresponds to an older release, then upgrading
-				// to head after 19.2 fails.
+				name:    "version-upgrade",
+				fn:      runVersionUpgrade,
 				timeout: 30 * time.Minute,
 			},
 		},
