@@ -30,6 +30,7 @@ stmt_without_legacy_transaction ::=
 	| fetch_cursor_stmt
 	| move_cursor_stmt
 	| unlisten_stmt
+	| show_commit_timestamp_stmt
 
 legacy_transaction_stmt ::=
 	legacy_begin_stmt
@@ -159,6 +160,9 @@ move_cursor_stmt ::=
 unlisten_stmt ::=
 	'UNLISTEN' type_name
 	| 'UNLISTEN' '*'
+
+show_commit_timestamp_stmt ::=
+	'SHOW' 'COMMIT' 'TIMESTAMP'
 
 legacy_begin_stmt ::=
 	'BEGIN' opt_transaction begin_transaction

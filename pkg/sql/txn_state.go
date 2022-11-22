@@ -254,7 +254,7 @@ func (ts *txnState) resetForNewSQLTxn(
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
 // called for starting another SQL txn. The ID of the finalized transaction is
 // returned.
-func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
+func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timestamp) {
 	ts.mon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
 	if sp == nil {
@@ -267,16 +267,18 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID) {
 
 	sp.Finish()
 	ts.Ctx = nil
-	txnID = func() (txnID uuid.UUID) {
+	ts.recordingThreshold = 0
+	return func() (txnID uuid.UUID, timestamp hlc.Timestamp) {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
 		txnID = ts.mu.txn.ID()
+		if ts.mu.txn.IsCommitted() {
+			timestamp = ts.mu.txn.CommitTimestamp()
+		}
 		ts.mu.txn = nil
 		ts.mu.txnStart = time.Time{}
-		return txnID
+		return txnID, timestamp
 	}()
-	ts.recordingThreshold = 0
-	return txnID
 }
 
 // finishExternalTxn is a stripped-down version of finishSQLTxn used by
@@ -390,6 +392,11 @@ type txnEvent struct {
 	// When a transaction commits or aborts, txnID is set to the ID of the
 	// transaction that just finished execution.
 	txnID uuid.UUID
+
+	// commitTimestamp is populated with the timestamp of the recently finished
+	// transaction corresponding to txnID. It will only be populated if that
+	// transaction committed.
+	commitTimestamp hlc.Timestamp
 }
 
 //go:generate stringer -type=txnEventType

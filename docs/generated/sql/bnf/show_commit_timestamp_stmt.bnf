@@ -1,0 +1,2 @@
+show_commit_timestamp_stmt ::=
+	'SHOW' 'COMMIT' 'TIMESTAMP'

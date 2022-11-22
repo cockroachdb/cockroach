@@ -878,14 +878,27 @@ func (c *conn) handleSimpleQuery(
 			return nil
 		}
 
+		// Determine whether there is only SHOW COMMIT TIMESTAMP after this
+		// statement in the batch. That case should be treated as though it
+		// were the last statement in the batch.
+		lastBeforeShowCommitTimestamp := func() bool {
+			n := len(stmts)
+			isShowCommitTimestamp := func(s parser.Statement) bool {
+				_, ok := s.AST.(*tree.ShowCommitTimestamp)
+				return ok
+			}
+			return n > 1 && i == n-2 && isShowCommitTimestamp(stmts[n-1])
+		}
+
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
-				Statement:    stmts[i],
-				TimeReceived: timeReceived,
-				ParseStart:   startParse,
-				ParseEnd:     endParse,
-				LastInBatch:  i == len(stmts)-1,
+				Statement:                            stmts[i],
+				TimeReceived:                         timeReceived,
+				ParseStart:                           startParse,
+				ParseEnd:                             endParse,
+				LastInBatch:                          i == len(stmts)-1,
+				LastInBatchBeforeShowCommitTimestamp: lastBeforeShowCommitTimestamp(),
 			}); err != nil {
 			return err
 		}

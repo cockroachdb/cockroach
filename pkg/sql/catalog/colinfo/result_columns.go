@@ -142,6 +142,11 @@ var ExplainPlanColumns = ResultColumns{
 	{Name: "info", Typ: types.String},
 }
 
+// ShowCommitTimestampColumns are the result columns of SHOW COMMIT TIMESTAMP.
+var ShowCommitTimestampColumns = ResultColumns{
+	{Name: "commit_timestamp", Typ: types.Decimal},
+}
+
 // ShowTraceColumns are the result columns of a SHOW [KV] TRACE statement.
 var ShowTraceColumns = ResultColumns{
 	{Name: "timestamp", Typ: types.TimestampTZ},

@@ -65,6 +65,8 @@
 /pkg/sql/pgwire/auth.go      @cockroachdb/sql-experience @cockroachdb/server-prs @cockroachdb/prodsec
 /pkg/sql/sem/builtins/       @cockroachdb/sql-experience
 /pkg/sql/vtable/             @cockroachdb/sql-experience
+/pkg/sql/importer/           @cockroachdb/sql-experience
+/pkg/ccl/importerccl/        @cockroachdb/sql-experience
 
 /pkg/sql/sessiondata/        @cockroachdb/sql-experience
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-experience
@@ -100,7 +102,7 @@
 /pkg/cli/debug*.go           @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/debug_job_trace*.go @cockroachdb/jobs-prs
 /pkg/cli/doctor*.go          @cockroachdb/sql-schema     @cockroachdb/cli-prs
-/pkg/cli/import_test.go      @cockroachdb/disaster-recovery        @cockroachdb/cli-prs
+/pkg/cli/import_test.go      @cockroachdb/sql-experience @cockroachdb/cli-prs
 /pkg/cli/sql*.go             @cockroachdb/sql-experience @cockroachdb/cli-prs
 /pkg/cli/clisqlshell/        @cockroachdb/sql-experience @cockroachdb/cli-prs
 /pkg/cli/clisqlclient/       @cockroachdb/sql-experience @cockroachdb/cli-prs
@@ -163,9 +165,6 @@
 
 /pkg/ccl/backupccl/          @cockroachdb/disaster-recovery
 /pkg/ccl/backupccl/*_job.go  @cockroachdb/disaster-recovery @cockroachdb/jobs-prs
-/pkg/sql/importer/           @cockroachdb/disaster-recovery
-/pkg/ccl/importerccl/        @cockroachdb/disaster-recovery
-/pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/ccl/storageccl/         @cockroachdb/disaster-recovery
 /pkg/ccl/cloudccl/           @cockroachdb/disaster-recovery
 /pkg/cloud/                  @cockroachdb/disaster-recovery
@@ -174,6 +173,7 @@
 /pkg/geo/                    @cockroachdb/geospatial
 
 /pkg/kv/                     @cockroachdb/kv-prs
+/pkg/ccl/spanconfigccl/      @cockroachdb/kv-prs
 /pkg/kv/kvclient/kvstreamer  @cockroachdb/sql-queries
 
 /pkg/ccl/storageccl/engineccl   @cockroachdb/storage

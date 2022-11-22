@@ -1185,6 +1185,7 @@ func (u *sqlSymUnion) functionObjs() tree.FuncObjs {
 %type <tree.Statement> show_stmt
 %type <tree.Statement> show_backup_stmt
 %type <tree.Statement> show_columns_stmt
+%type <tree.Statement> show_commit_timestamp_stmt
 %type <tree.Statement> show_constraints_stmt
 %type <tree.Statement> show_create_stmt
 %type <tree.Statement> show_create_schedules_stmt
@@ -1678,29 +1679,30 @@ stmt:
   }
 
 stmt_without_legacy_transaction:
-  preparable_stmt           // help texts in sub-rule
-| analyze_stmt              // EXTEND WITH HELP: ANALYZE
+  preparable_stmt            // help texts in sub-rule
+| analyze_stmt               // EXTEND WITH HELP: ANALYZE
 | copy_from_stmt
 | comment_stmt
-| execute_stmt              // EXTEND WITH HELP: EXECUTE
-| deallocate_stmt           // EXTEND WITH HELP: DEALLOCATE
-| discard_stmt              // EXTEND WITH HELP: DISCARD
-| grant_stmt                // EXTEND WITH HELP: GRANT
-| prepare_stmt              // EXTEND WITH HELP: PREPARE
-| revoke_stmt               // EXTEND WITH HELP: REVOKE
-| savepoint_stmt            // EXTEND WITH HELP: SAVEPOINT
-| reassign_owned_by_stmt    // EXTEND WITH HELP: REASSIGN OWNED BY
-| drop_owned_by_stmt        // EXTEND WITH HELP: DROP OWNED BY
-| release_stmt              // EXTEND WITH HELP: RELEASE
-| refresh_stmt              // EXTEND WITH HELP: REFRESH
-| nonpreparable_set_stmt    // help texts in sub-rule
-| transaction_stmt          // help texts in sub-rule
-| close_cursor_stmt         // EXTEND WITH HELP: CLOSE
-| declare_cursor_stmt       // EXTEND WITH HELP: DECLARE
-| fetch_cursor_stmt         // EXTEND WITH HELP: FETCH
-| move_cursor_stmt          // EXTEND WITH HELP: MOVE
+| execute_stmt               // EXTEND WITH HELP: EXECUTE
+| deallocate_stmt            // EXTEND WITH HELP: DEALLOCATE
+| discard_stmt               // EXTEND WITH HELP: DISCARD
+| grant_stmt                 // EXTEND WITH HELP: GRANT
+| prepare_stmt               // EXTEND WITH HELP: PREPARE
+| revoke_stmt                // EXTEND WITH HELP: REVOKE
+| savepoint_stmt             // EXTEND WITH HELP: SAVEPOINT
+| reassign_owned_by_stmt     // EXTEND WITH HELP: REASSIGN OWNED BY
+| drop_owned_by_stmt         // EXTEND WITH HELP: DROP OWNED BY
+| release_stmt               // EXTEND WITH HELP: RELEASE
+| refresh_stmt               // EXTEND WITH HELP: REFRESH
+| nonpreparable_set_stmt     // help texts in sub-rule
+| transaction_stmt           // help texts in sub-rule
+| close_cursor_stmt          // EXTEND WITH HELP: CLOSE
+| declare_cursor_stmt        // EXTEND WITH HELP: DECLARE
+| fetch_cursor_stmt          // EXTEND WITH HELP: FETCH
+| move_cursor_stmt           // EXTEND WITH HELP: MOVE
 | reindex_stmt
 | unlisten_stmt
+| show_commit_timestamp_stmt // EXTEND WITH HELP: SHOW COMMIT TIMESTAMP
 
 // %Help: ALTER
 // %Category: Group
@@ -6297,8 +6299,8 @@ zone_value:
 // SHOW ROLES, SHOW SCHEMAS, SHOW SEQUENCES, SHOW SESSION, SHOW SESSIONS,
 // SHOW STATISTICS, SHOW SYNTAX, SHOW TABLES, SHOW TRACE, SHOW TRANSACTION,
 // SHOW TRANSACTIONS, SHOW TRANSFER, SHOW TYPES, SHOW USERS, SHOW LAST QUERY STATISTICS,
-// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW FULL TABLE SCANS,
-// SHOW CREATE EXTERNAL CONNECTIONS, SHOW TENANT
+// SHOW SCHEDULES, SHOW LOCALITY, SHOW ZONE CONFIGURATION, SHOW COMMIT TIMESTAMP,
+// SHOW FULL TABLE SCANS, SHOW CREATE EXTERNAL CONNECTIONS, SHOW TENANT
 show_stmt:
   show_backup_stmt           // EXTEND WITH HELP: SHOW BACKUP
 | show_columns_stmt          // EXTEND WITH HELP: SHOW COLUMNS
@@ -6998,6 +7000,22 @@ show_indexes_stmt:
     $$.val = &tree.ShowDatabaseIndexes{Database: tree.Name($5), WithComment: $6.bool()}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
+
+// %Help: SHOW COMMIT TIMESTAMP - show timestamp commit timestamp of last transaction
+// %Category: Misc
+// %Text: SHOW COMMIT TIMESTAMP
+//
+// Shows the commit timestamp of the last committed transaction if not currently
+// in a transaction. If currently in a transaction, implicitly commits the
+// transaction, returning any errors which may have occurred during the commit.
+// The transaction state will remain open from the perspective of the client,
+// meaning that a COMMIT must be issued to move the connection back to a state
+// where new statements may be issued.
+show_commit_timestamp_stmt:
+  SHOW COMMIT TIMESTAMP
+  {
+    $$.val = &tree.ShowCommitTimestamp{}
+  }
 
 // %Help: SHOW CONSTRAINTS - list constraints
 // %Category: DDL

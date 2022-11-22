@@ -1638,6 +1638,13 @@ func TestTenantLogic_shift(
 	runLogicTest(t, "shift")
 }
 
+func TestTenantLogic_show_commit_timestamp(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_commit_timestamp")
+}
+
 func TestTenantLogic_show_completions(
 	t *testing.T,
 ) {
