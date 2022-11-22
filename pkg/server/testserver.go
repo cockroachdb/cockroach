@@ -896,38 +896,49 @@ func (ts *TestServer) StartTenant(
 		baseCfg.HTTPAddr = newAddr
 		baseCfg.HTTPAdvertiseAddr = newAddr
 	}
-	sw, err := NewTenantServer(
-		ctx,
-		stopper,
-		baseCfg,
-		sqlCfg,
-	)
+
+	sw, err := ts.Server.serverController.get(ctx, params.Name)
 	if err != nil {
 		return nil, err
 	}
-	go func() {
-		// If the server requests a shutdown, do that simply by stopping the
-		// tenant's stopper.
-		select {
-		case <-sw.ShutdownRequested():
-			stopper.Stop(sw.AnnotateCtx(context.Background()))
-		case <-stopper.ShouldQuiesce():
-		}
-	}()
 
-	if err := sw.Start(ctx); err != nil {
-		return nil, err
+	tsw, ok := sw.(*tenantServerWrapper)
+	if !ok {
+		panic("on demand tenant is not tenant server wrapper!")
 	}
+	//
+	//sw, err := NewTenantServer(
+	//	ctx,
+	//	stopper,
+	//	baseCfg,
+	//	sqlCfg,
+	//)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//go func() {
+	//	// If the server requests a shutdown, do that simply by stopping the
+	//	// tenant's stopper.
+	//	select {
+	//	case <-sw.ShutdownRequested():
+	//		stopper.Stop(sw.AnnotateCtx(context.Background()))
+	//	case <-stopper.ShouldQuiesce():
+	//	}
+	//}()
+	//
+	//if err := sw.Start(ctx); err != nil {
+	//	return nil, err
+	//}
 
 	hts := &httpTestServer{}
-	hts.t.authentication = sw.authentication
-	hts.t.sqlServer = sw.sqlServer
+	hts.t.authentication = tsw.server.authentication
+	hts.t.sqlServer = tsw.server.sqlServer
 
 	return &TestTenant{
-		SQLServer:      sw.sqlServer,
-		Cfg:            &baseCfg,
+		SQLServer:      tsw.server.sqlServer,
+		Cfg:            &tsw.server.baseCfg,
 		httpTestServer: hts,
-		drain:          sw.drainServer,
+		drain:          tsw.server.drainServer,
 	}, err
 }
 

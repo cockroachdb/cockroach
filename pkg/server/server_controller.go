@@ -243,7 +243,7 @@ func (c *serverController) routeLogin(tenantName string) http.Handler {
 		servers := c.getCurrentServers()
 		sw := &sessionWriter{w: w}
 		var sessionsStr string
-		for name, _ := range servers {
+		for name := range servers {
 			server, err := c.get(ctx, name)
 			if err != nil {
 				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
@@ -283,7 +283,7 @@ func (c *serverController) routeLogout(tenantName string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		servers := c.getCurrentServers()
-		for name, _ := range servers {
+		for name := range servers {
 			server, err := c.get(ctx, name)
 			if err != nil {
 				log.Warningf(ctx, "unable to find tserver for tenant %q: %v", name, err)
