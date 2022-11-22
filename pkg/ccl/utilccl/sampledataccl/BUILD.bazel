@@ -21,7 +21,7 @@ go_test(
     args = ["-test.timeout=55s"],
     embed = [":sampledataccl"],
     deps = [
-        "//pkg/ccl/utilccl",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -169,8 +169,7 @@ import ({{ if .SqliteLogicTest }}
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"{{ if .Ccl }}
-	_ "github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"{{ end }}
+	"github.com/cockroachdb/cockroach/pkg/ccl"{{ end }}
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"{{ if .ExecBuildLogicTest }}
@@ -206,7 +205,7 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-{{ end }}{{ if .Ccl }}	defer utilccl.TestingEnableEnterprise()()
+{{ end }}{{ if .Ccl }}	defer ccl.TestingEnableEnterprise()()
 {{ end }}	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
@@ -266,8 +265,7 @@ go_test(
     tags = ["cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}"],
     deps = [
         "//pkg/build/bazel",{{ if .Ccl }}
-        "//pkg/ccl",
-        "//pkg/ccl/utilccl",{{ end }}
+        "//pkg/ccl",{{ end }}
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",{{ if .ExecBuildLogicTest }}

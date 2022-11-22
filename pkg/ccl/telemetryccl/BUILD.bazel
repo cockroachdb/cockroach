@@ -15,7 +15,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
