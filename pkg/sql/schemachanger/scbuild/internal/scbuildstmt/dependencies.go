@@ -223,6 +223,12 @@ type TableHelpers interface {
 	// TODO(postamar): make this more low-level instead of consuming an AST
 	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr
 
+	// PartialIndexPredicateExpression returns a validated partial predicate
+	// wrapped expression
+	PartialIndexPredicateExpression(
+		tableID catid.DescID, expr tree.Expr,
+	) *scpb.Expression
+
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
 }
