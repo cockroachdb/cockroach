@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0, included in the file
 // licenses/APL.txt.
 
-import React from "react";
+import React, { ReactNode } from "react";
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 import { Tooltip } from "@cockroachlabs/ui-components";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
@@ -22,12 +22,18 @@ import {
   explainPlan,
   limitText,
   Count,
+  intersperse,
 } from "../../util";
 import { Anchor } from "../../anchor";
+import classNames from "classnames/bind";
+import styles from "./plansTable.module.scss";
+import { Link } from "react-router-dom";
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
 export class PlansSortedTable extends SortedTable<PlanHashStats> {}
+
+const cx = classNames.bind(styles);
 
 const planDetailsColumnLabels = {
   avgExecTime: "Average Execution Time",
@@ -36,6 +42,7 @@ const planDetailsColumnLabels = {
   execCount: "Execution Count",
   fullScan: "Full Scan",
   insights: "Insights",
+  indexes: "Used Indexes",
   lastExecTime: "Last Execution Time",
   planGist: "Plan Gist",
   vectorized: "Vectorized",
@@ -153,6 +160,17 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
       </Tooltip>
     );
   },
+  indexes: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"Indexes used by the Explain Plan."}
+      >
+        {planDetailsColumnLabels.indexes}
+      </Tooltip>
+    );
+  },
 };
 
 function formatInsights(recommendations: string[]): string {
@@ -163,6 +181,78 @@ function formatInsights(recommendations: string[]): string {
     return "1 Insight";
   }
   return `${recommendations.length} Insights`;
+}
+
+function formatIndexes(indexes: string[], database: string): ReactNode {
+  if (indexes.length == 0) {
+    return <></>;
+  }
+  const indexMap: Map<string, Array<string>> = new Map<string, Array<string>>();
+  let droppedCount = 0;
+  let tableName;
+  let idxName;
+  let indexInfo;
+  for (let i = 0; i < indexes.length; i++) {
+    if (indexes[i] === "dropped") {
+      droppedCount++;
+      continue;
+    }
+    if (!indexes[i].includes("@")) {
+      continue;
+    }
+    indexInfo = indexes[i].split("@");
+    tableName = indexInfo[0];
+    idxName = indexInfo[1];
+    if (indexMap.has(tableName)) {
+      indexMap.set(tableName, indexMap.get(tableName).concat(idxName));
+    } else {
+      indexMap.set(tableName, [idxName]);
+    }
+  }
+
+  let newLine;
+  const list = Array.from(indexMap).map((value, i) => {
+    const table = value[0];
+    newLine = i > 0 ? <br /> : "";
+    const indexesList = intersperse<ReactNode>(
+      value[1].map(idx => {
+        return (
+          <Link
+            className={cx("regular-link")}
+            to={`/database/${database}/table/${table}/index/${idx}`}
+            key={`${table}${idx}`}
+          >
+            {idx}
+          </Link>
+        );
+      }),
+      ", ",
+    );
+    return (
+      <span key={table}>
+        {newLine}
+        <Link
+          className={cx("bold-link")}
+          to={`/database/${database}/table/${table}`}
+        >
+          {table}
+        </Link>
+        : {indexesList}
+      </span>
+    );
+  });
+  newLine = list.length > 0 ? <br /> : "";
+  if (droppedCount === 1) {
+    list.push(<span key={`dropped`}>{newLine}[dropped index]</span>);
+  } else if (droppedCount > 1) {
+    list.push(
+      <span key={`dropped`}>
+        {newLine}[{droppedCount} dropped indexes]
+      </span>,
+    );
+  }
+
+  return intersperse<ReactNode>(list, ",");
 }
 
 export function makeExplainPlanColumns(
@@ -183,6 +273,13 @@ export function makeExplainPlanColumns(
       ),
       sort: (item: PlanHashStats) => item.stats.plan_gists[0],
       alwaysShow: true,
+    },
+    {
+      name: "indexes",
+      title: planDetailsTableTitles.indexes(),
+      cell: (item: PlanHashStats) =>
+        formatIndexes(item.stats.indexes, item.metadata.databases[0]),
+      sort: (item: PlanHashStats) => item.stats.indexes?.join(""),
     },
     {
       name: "insights",
