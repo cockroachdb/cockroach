@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -93,7 +92,7 @@ type Metrics struct {
 type LogStore struct {
 	Engine      storage.Engine
 	Sideload    SideloadStorage
-	StateLoader stateloader.StateLoader
+	StateLoader StateLoader
 	Settings    *cluster.Settings
 	Metrics     Metrics
 }
