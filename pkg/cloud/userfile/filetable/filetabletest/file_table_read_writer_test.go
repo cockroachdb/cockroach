@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/require"
@@ -101,6 +102,7 @@ func checkMetadataEntryExists(
 
 func TestListAndDeleteFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -155,6 +157,7 @@ func TestListAndDeleteFiles(t *testing.T) {
 
 func TestReadWriteFile(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -331,6 +334,7 @@ func TestReadWriteFile(t *testing.T) {
 // file and payload tables.
 func TestUserGrants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -412,6 +416,7 @@ func getTableGrantees(ctx context.Context, tablename string, conn *gosql.Conn) (
 // tables once they have been created/written to.
 func TestDifferentUserDisallowed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -467,6 +472,7 @@ func TestDifferentUserDisallowed(t *testing.T) {
 // access the tables once they have been created/written to.
 func TestDifferentRoleDisallowed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
@@ -527,6 +533,7 @@ func TestDifferentRoleDisallowed(t *testing.T) {
 // internal queries wrt the database it is given.
 func TestDatabaseScope(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	params, _ := tests.CreateTestServerParams()
