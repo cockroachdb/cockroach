@@ -131,6 +131,8 @@ func (rsl StateLoader) Save(
 			return enginepb.MVCCStats{}, err
 		}
 	}
+	// TODO(sep-raft-log): SetRaftTruncatedState will be in a separate batch when
+	// the Raft log engine is separated. Figure out the ordering required here.
 	if err := rsl.SetRaftTruncatedState(ctx, readWriter, state.TruncatedState); err != nil {
 		return enginepb.MVCCStats{}, err
 	}
