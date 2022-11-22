@@ -1121,13 +1121,15 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	testCases := []struct {
-		name string
-		lats map[string]float64
-		ops  func(*testing.T, *gosql.DB)
+		name     string
+		stmtLats map[string]float64
+		txnLat   float64
+		ops      func(*testing.T, *gosql.DB)
 	}{
 		{
-			name: "no latency",
-			lats: map[string]float64{"SELECT _": 0},
+			name:     "no latency",
+			stmtLats: map[string]float64{"SELECT _": 0},
+			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
 				tx, err := db.Begin()
 				require.NoError(t, err)
@@ -1138,8 +1140,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "no latency (implicit txn)",
-			lats: map[string]float64{"SELECT _": 0},
+			name:     "no latency (implicit txn)",
+			stmtLats: map[string]float64{"SELECT _": 0},
+			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
 				// These 100ms don't count because we're not in an explicit transaction.
 				time.Sleep(100 * time.Millisecond)
@@ -1148,8 +1151,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "no latency - prepared statement (implicit txn)",
-			lats: map[string]float64{"SELECT $1::INT8": 0},
+			name:     "no latency - prepared statement (implicit txn)",
+			stmtLats: map[string]float64{"SELECT $1::INT8": 0},
+			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
 				stmt, err := db.Prepare("SELECT $1::INT")
 				require.NoError(t, err)
@@ -1159,8 +1163,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "simple statement",
-			lats: map[string]float64{"SELECT _": 0.1},
+			name:     "simple statement",
+			stmtLats: map[string]float64{"SELECT _": 0.1},
+			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				tx, err := db.Begin()
 				require.NoError(t, err)
@@ -1173,8 +1178,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "compound statement",
-			lats: map[string]float64{"SELECT _": 0.1, "SELECT count(*) FROM crdb_internal.statement_statistics": 0},
+			name:     "compound statement",
+			stmtLats: map[string]float64{"SELECT _": 0.1, "SELECT count(*) FROM crdb_internal.statement_statistics": 0},
+			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				tx, err := db.Begin()
 				require.NoError(t, err)
@@ -1187,8 +1193,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple statements - slow generation",
-			lats: map[string]float64{"SELECT pg_sleep(_)": 0, "SELECT _": 0},
+			name:     "multiple statements - slow generation",
+			stmtLats: map[string]float64{"SELECT pg_sleep(_)": 0, "SELECT _": 0},
+			txnLat:   0,
 			ops: func(t *testing.T, db *gosql.DB) {
 				tx, err := db.Begin()
 				require.NoError(t, err)
@@ -1201,8 +1208,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "prepared statement",
-			lats: map[string]float64{"SELECT $1::INT8": 0.1},
+			name:     "prepared statement",
+			stmtLats: map[string]float64{"SELECT $1::INT8": 0.1},
+			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				stmt, err := db.Prepare("SELECT $1::INT")
 				require.NoError(t, err)
@@ -1217,8 +1225,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "prepared statement inside transaction",
-			lats: map[string]float64{"SELECT $1::INT8": 0.1},
+			name:     "prepared statement inside transaction",
+			stmtLats: map[string]float64{"SELECT $1::INT8": 0.1},
+			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				tx, err := db.Begin()
 				require.NoError(t, err)
@@ -1233,8 +1242,9 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple transactions",
-			lats: map[string]float64{"SELECT _": 0.1},
+			name:     "multiple transactions",
+			stmtLats: map[string]float64{"SELECT _": 0.1},
+			txnLat:   0.2,
 			ops: func(t *testing.T, db *gosql.DB) {
 				for i := 0; i < 3; i++ {
 					tx, err := db.Begin()
@@ -1274,34 +1284,47 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 			// Run the test operations.
 			tc.ops(t, opsDB)
 
-			// Look for the latencies we expect.
-			actual := make(map[string]float64)
-			rows, err := db.Query(`
-				SELECT metadata->>'query', statistics->'statistics'->'idleLat'->'mean'
-				  FROM crdb_internal.statement_statistics
-				 WHERE app_name = $1`, appName)
-			require.NoError(t, err)
-			for rows.Next() {
-				var query string
-				var latency float64
-				err = rows.Scan(&query, &latency)
-				require.NoError(t, err)
-				actual[query] = latency
-			}
-			require.NoError(t, rows.Err())
-
 			// Make looser timing assertions in CI, since we've seen
 			// more variability there.
 			// - Bazel test runs also use this looser delta.
 			// - Goland and `go test` use the tighter delta unless
 			//   the crdb_test build tag has been set.
-			delta := 0.002
+			delta := 0.003
 			if buildutil.CrdbTestBuild {
 				delta = 0.05
 			}
 
-			require.InDeltaMapValues(t, tc.lats, actual, delta,
-				"expected: %v\nactual: %v", tc.lats, actual)
+			// Look for the latencies we expect.
+			t.Run("stmt", func(t *testing.T) {
+				actual := make(map[string]float64)
+				rows, err := db.Query(`
+					SELECT metadata->>'query', statistics->'statistics'->'idleLat'->'mean'
+					  FROM crdb_internal.statement_statistics
+					 WHERE app_name = $1`, appName)
+				require.NoError(t, err)
+				for rows.Next() {
+					var query string
+					var latency float64
+					err = rows.Scan(&query, &latency)
+					require.NoError(t, err)
+					actual[query] = latency
+				}
+				require.NoError(t, rows.Err())
+				require.InDeltaMapValues(t, tc.stmtLats, actual, delta,
+					"expected: %v\nactual: %v", tc.stmtLats, actual)
+			})
+
+			t.Run("txn", func(t *testing.T) {
+				var actual float64
+				row := db.QueryRow(`
+					SELECT statistics->'statistics'->'idleLat'->'mean'
+					  FROM crdb_internal.transaction_statistics
+					 WHERE app_name = $1`, appName)
+				err := row.Scan(&actual)
+				require.NoError(t, err)
+				require.GreaterOrEqual(t, actual, float64(0))
+				require.InDelta(t, tc.txnLat, actual, delta)
+			})
 		})
 	}
 }

@@ -216,22 +216,35 @@ func (t *Times) GetSessionAge() time.Duration {
 func (t *Times) GetIdleLatency(previous *Times) time.Duration {
 	queryReceived := t.times[SessionQueryReceived]
 
+	previousQueryReceived := time.Time{}
+	previousQueryServiced := time.Time{}
+	if previous != nil {
+		previousQueryReceived = previous.times[SessionQueryReceived]
+		previousQueryServiced = previous.times[SessionQueryServiced]
+	}
+
 	// If we were received at the same time as the previous execution
 	// (i.e., as part of a compound statement), we didn't have to wait
 	// for the client at all.
-	if queryReceived == previous.times[SessionQueryReceived] {
+	if queryReceived == previousQueryReceived {
 		return 0
 	}
 
 	// In general, we have been waiting for the client since the end
 	// of the previous execution.
-	waitingSince := previous.times[SessionQueryServiced]
+	waitingSince := previousQueryServiced
 
 	// Although we really only want to measure idle latency *within*
 	// an open transaction. So if we're in a new transaction, measure
 	// from its start time instead.
 	if transactionStarted := t.times[SessionTransactionStarted]; transactionStarted.After(waitingSince) {
 		waitingSince = transactionStarted
+	}
+
+	// And if we were received before we started waiting for the client,
+	// then there is no idle latency at all.
+	if waitingSince.After(queryReceived) {
+		return 0
 	}
 
 	return queryReceived.Sub(waitingSince)

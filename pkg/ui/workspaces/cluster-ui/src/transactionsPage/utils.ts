@@ -340,6 +340,7 @@ function addTransactionStats(
       countA,
       countB,
     ),
+    idle_lat: aggregateNumericStats(a.idle_lat, b.idle_lat, countA, countB),
     rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
     rows_written: aggregateNumericStats(
       a.rows_written,
