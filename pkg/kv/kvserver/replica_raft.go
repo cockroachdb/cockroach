@@ -926,7 +926,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	s := logstore.LogStore{
 		Engine:      r.store.engine,
 		Sideload:    r.raftMu.sideloaded,
-		StateLoader: r.raftMu.stateLoader,
+		StateLoader: r.raftMu.stateLoader.StateLoader,
 		Settings:    r.store.cfg.Settings,
 		Metrics: logstore.Metrics{
 			RaftLogCommitLatency: r.store.metrics.RaftLogCommitLatency,

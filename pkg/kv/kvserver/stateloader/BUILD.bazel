@@ -10,8 +10,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/keys",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/logstore",
         "//pkg/roachpb",
         "//pkg/storage",
         "//pkg/storage/enginepb",
@@ -19,8 +19,6 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_cockroachdb_redact//:redact",
-        "@io_etcd_go_etcd_raft_v3//raftpb",
     ],
 )
 
