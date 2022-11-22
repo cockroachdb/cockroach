@@ -517,8 +517,11 @@ test           public       t1          testuser  ALL             true
 statement ok
 GRANT SELECT ON TABLE t1 TO testuser2
 
-statement ok
+# Show a notice when revoking privileges from the owner.
+query T noticetrace
 REVOKE ALL PRIVILEGES ON TABLE t1 FROM testuser
+----
+NOTICE: testuser is the owner of t1 and still has all privileges implicitly
 
 query TTTTTB colnames
 SHOW GRANTS ON TABLE t1;

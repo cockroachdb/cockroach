@@ -281,6 +281,16 @@ func (n *changeDescriptorBackedPrivilegesNode) startExec(params runParams) error
 			for _, grantee := range n.grantees {
 				changed := n.changePrivilege(privileges, n.desiredprivs, grantee)
 				descPrivsChanged = descPrivsChanged || changed
+				if !n.isGrant && grantee == privileges.Owner() {
+					params.p.BufferClientNotice(
+						ctx,
+						pgnotice.Newf(
+							"%s is the owner of %s and still has all privileges implicitly",
+							privileges.Owner(),
+							descriptor.GetName(),
+						),
+					)
+				}
 			}
 
 			if len(sequencePrivilegesNoOp) > 0 {
