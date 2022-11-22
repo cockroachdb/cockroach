@@ -750,26 +750,44 @@ https://www.postgresql.org/docs/9.5/infoschema-constraint-column-usage.html`,
 			table catalog.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			scNameStr := tree.NewDString(sc.GetName())
 			dbNameStr := tree.NewDString(db.GetName())
-
+			scNameStr := tree.NewDString(sc.GetName())
 			for _, c := range table.AllConstraints() {
-				conTable := table
 				conNameStr := tree.NewDString(c.GetName())
-				cols, err := constraintColumns(table, c, tableLookup.getTableByID)
-				if err != nil {
-					return err
+				refSchema := sc
+				refTable := table
+				var cols []catalog.Column
+				if ck := c.AsCheck(); ck != nil {
+					cols = table.CheckConstraintColumns(ck)
+				} else if fk := c.AsForeignKey(); fk != nil {
+					var err error
+					refTable, err = tableLookup.getTableByID(fk.GetReferencedTableID())
+					if err != nil {
+						return errors.NewAssertionErrorWithWrappedErrf(err,
+							"error resolving table %d referenced in foreign key %q in table %q",
+							fk.GetReferencedTableID(), fk.GetName(), table.GetName())
+					}
+					refSchema, err = tableLookup.getSchemaByID(refTable.GetParentSchemaID())
+					if err != nil {
+						return errors.NewAssertionErrorWithWrappedErrf(err,
+							"error resolving schema %d referenced in foreign key %q in table %q",
+							refTable.GetParentSchemaID(), fk.GetName(), table.GetName())
+					}
+					cols = refTable.ForeignKeyReferencedColumns(fk)
+				} else if uwi := c.AsUniqueWithIndex(); uwi != nil {
+					cols = table.IndexKeyColumns(uwi)
+				} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
+					cols = table.UniqueWithoutIndexColumns(uwoi)
 				}
-				tableNameStr := tree.NewDString(conTable.GetName())
 				for _, col := range cols {
 					if err := addRow(
-						dbNameStr,                      // table_catalog
-						scNameStr,                      // table_schema
-						tableNameStr,                   // table_name
-						tree.NewDString(col.GetName()), // column_name
-						dbNameStr,                      // constraint_catalog
-						scNameStr,                      // constraint_schema
-						conNameStr,                     // constraint_name
+						dbNameStr,                            // table_catalog
+						tree.NewDString(refSchema.GetName()), // table_schema
+						tree.NewDString(refTable.GetName()),  // table_name
+						tree.NewDString(col.GetName()),       // column_name
+						dbNameStr,                            // constraint_catalog
+						scNameStr,                            // constraint_schema
+						conNameStr,                           // constraint_name
 					); err != nil {
 						return err
 					}
@@ -797,16 +815,16 @@ https://www.postgresql.org/docs/9.5/infoschema-key-column-usage.html`,
 			scNameStr := tree.NewDString(sc.GetName())
 			tbNameStr := tree.NewDString(table.GetName())
 			for _, c := range table.AllConstraints() {
-				// Only Primary Key, Foreign Key, and Unique constraints are included.
-				if c.AsCheck() != nil {
-					continue
-				}
 				cstNameStr := tree.NewDString(c.GetName())
-				cols, err := constraintColumns(table, c, tableLookup.getTableByID)
-				if err != nil {
-					return err
+				var cols []catalog.Column
+				// Only Primary Key, Foreign Key, and Unique constraints are included.
+				if fk := c.AsForeignKey(); fk != nil {
+					cols = table.ForeignKeyOriginColumns(fk)
+				} else if uwi := c.AsUniqueWithIndex(); uwi != nil {
+					cols = table.IndexKeyColumns(uwi)
+				} else if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
+					cols = table.UniqueWithoutIndexColumns(uwoi)
 				}
-
 				for pos, col := range cols {
 					ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
 					uniquePos := tree.DNull
@@ -2799,34 +2817,6 @@ func forEachRoleMembership(
 		}
 	}
 	return err
-}
-
-func constraintColumns(
-	tbl catalog.TableDescriptor, c catalog.Constraint, tableLookup catalog.TableLookupFn,
-) ([]catalog.Column, error) {
-	// Check constraint columns.
-	if ck := c.AsCheck(); ck != nil {
-		return tbl.CheckConstraintColumns(ck), nil
-	}
-	// Foreign key constraint columns.
-	if fk := c.AsForeignKey(); fk != nil {
-		ref, err := tableLookup(fk.GetReferencedTableID())
-		if err != nil {
-			return nil, errors.NewAssertionErrorWithWrappedErrf(err,
-				"error resolving table %d referenced in foreign key %q in table %q",
-				fk.GetReferencedTableID(), fk.GetName(), tbl.GetName())
-		}
-		return ref.ForeignKeyReferencedColumns(fk), nil
-	}
-	// Index-backed unique constraint columns.
-	if uwi := c.AsUniqueWithIndex(); uwi != nil {
-		return tbl.IndexKeyColumns(uwi), nil
-	}
-	// Non-index-backed unique constraint columns.
-	if uwoi := c.AsUniqueWithoutIndex(); uwoi != nil {
-		return tbl.UniqueWithoutIndexColumns(uwoi), nil
-	}
-	return nil, errors.AssertionFailedf("unknown constraint type %T", c)
 }
 
 func userCanSeeDescriptor(

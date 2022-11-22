@@ -525,7 +525,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableValidateConstraint:
 			name := string(t.Constraint)
 			c, _ := n.tableDesc.FindConstraintWithName(name)
-			if c == nil || !c.IsEnforced() {
+			if c == nil {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", t.Constraint, n.tableDesc.Name)
 			}
@@ -750,13 +750,21 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableRenameConstraint:
 			constraint, _ := n.tableDesc.FindConstraintWithName(string(t.Constraint))
-			if constraint == nil || !constraint.IsEnforced() {
+			if constraint == nil {
 				return pgerror.Newf(pgcode.UndefinedObject,
 					"constraint %q of relation %q does not exist", tree.ErrString(&t.Constraint), n.tableDesc.Name)
 			}
 			if t.Constraint == t.NewName {
 				// Nothing to do.
 				break
+			}
+			switch constraint.GetConstraintValidity() {
+			case descpb.ConstraintValidity_Validating:
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint %q in the middle of being added, try again later", t.Constraint)
+			case descpb.ConstraintValidity_Dropping:
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"constraint %q in the middle of being dropped", t.Constraint)
 			}
 			if other, _ := n.tableDesc.FindConstraintWithName(string(t.NewName)); other != nil {
 				return pgerror.Newf(pgcode.DuplicateObject,
@@ -1664,7 +1672,7 @@ func dropColumnImpl(
 	}
 
 	// Drop check constraints which reference the column.
-	for _, check := range tableDesc.EnforcedCheckConstraints() {
+	for _, check := range tableDesc.CheckConstraints() {
 		if check.Dropped() {
 			continue
 		}
@@ -1886,27 +1894,25 @@ func (p *planner) tryRemoveFKBackReferences(
 	behavior tree.DropBehavior,
 	withSearchForReplacement bool,
 ) error {
-	// uniqueConstraintHasReplacementCandidate runs
-	// IsValidReferencedUniqueConstraint on the set of public constraints.
-	// Returns true if at least one constraint satisfies
-	// IsValidReferencedUniqueConstraint.
+	isSuitable := func(fk catalog.ForeignKeyConstraint, u catalog.UniqueConstraint) bool {
+		return u.GetConstraintID() != uniqueConstraint.GetConstraintID() && !u.Dropped() &&
+			u.IsValidReferencedUniqueConstraint(fk)
+	}
 	uwis := tableDesc.UniqueConstraintsWithIndex()
 	uwois := tableDesc.UniqueConstraintsWithoutIndex()
 	uniqueConstraintHasReplacementCandidate := func(
 		fk catalog.ForeignKeyConstraint,
 	) bool {
-		if withSearchForReplacement {
+		if !withSearchForReplacement {
 			return false
 		}
 		for _, uwi := range uwis {
-			if uwi.GetConstraintID() != uniqueConstraint.GetConstraintID() &&
-				!uwi.IsMutation() && uwi.IsValidReferencedUniqueConstraint(fk) {
+			if isSuitable(fk, uwi) {
 				return true
 			}
 		}
 		for _, uwoi := range uwois {
-			if uwoi.GetConstraintID() != uniqueConstraint.GetConstraintID() &&
-				!uwoi.IsMutation() && uwoi.IsValidReferencedUniqueConstraint(fk) {
+			if isSuitable(fk, uwoi) {
 				return true
 			}
 		}
@@ -1918,15 +1924,12 @@ func (p *planner) tryRemoveFKBackReferences(
 	for i, fk := range tableDesc.InboundForeignKeys() {
 		tableDesc.InboundFKs[sliceIdx] = tableDesc.InboundFKs[i]
 		sliceIdx++
-		if !uniqueConstraint.IsValidReferencedUniqueConstraint(fk) {
-			continue
-		}
-		// At this point, the constraint being deleted could potentially be the
-		// referenced unique constraint for this foreign key. We need to check
-		// for alternatives, and if there are none, remove the foreign key.
+		// The constraint being deleted could potentially be required by a
+		// referencing foreign key. Find alternatives if that's the case,
+		// otherwise remove the foreign key.
 		if uniqueConstraint.IsValidReferencedUniqueConstraint(fk) &&
 			!uniqueConstraintHasReplacementCandidate(fk) {
-			// If we found haven't found a replacement, then we check that the drop
+			// If we haven't found a replacement, then we check that the drop
 			// behavior is cascade.
 			if err := p.canRemoveFKBackreference(ctx, uniqueConstraint.GetName(), fk, behavior); err != nil {
 				return err

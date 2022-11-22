@@ -702,11 +702,12 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// Only validate column families, constraints, and indexes if this is
 	// actually a table, not if it's just a view.
 	if desc.IsPhysicalTable() {
+		desc.validateConstraintNamesAndIDs(vea)
 		newErrs := []error{
 			desc.validateColumnFamilies(columnsByID),
 			desc.validateCheckConstraints(columnsByID),
 			desc.validateUniqueWithoutIndexConstraints(columnsByID),
-			desc.validateTableIndexes(columnsByID, vea),
+			desc.validateTableIndexes(columnsByID),
 			desc.validatePartitioning(),
 		}
 		hasErrs := false
@@ -719,7 +720,7 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 		if hasErrs {
 			return
 		}
-		desc.validateConstraintNamesAndIDs(vea)
+
 	}
 
 	// Ensure that mutations cannot be queued if a primary key change, TTL change
@@ -902,24 +903,26 @@ func (desc *wrapper) validateConstraintNamesAndIDs(vea catalog.ValidationErrorAc
 		return
 	}
 	constraints := desc.AllConstraints()
-	names := make(map[string]struct{}, len(constraints))
+	names := make(map[string]descpb.ConstraintID, len(constraints))
 	idToName := make(map[descpb.ConstraintID]string, len(constraints))
 	for _, c := range constraints {
 		if c.GetConstraintID() == 0 {
 			vea.Report(errors.AssertionFailedf(
 				"constraint ID was missing for constraint %q",
 				c.GetName()))
+		} else if c.GetConstraintID() >= desc.NextConstraintID {
+			vea.Report(errors.AssertionFailedf(
+				"constraint %q has ID %d not less than NextConstraintID value %d for table",
+				c.GetName(), c.GetConstraintID(), desc.NextConstraintID))
 		}
 		if c.GetName() == "" {
 			vea.Report(pgerror.Newf(pgcode.Syntax, "empty constraint name"))
 		}
-		if !c.Dropped() {
-			if _, found := names[c.GetName()]; found {
-				vea.Report(pgerror.Newf(pgcode.DuplicateObject,
-					"duplicate constraint name: %q", c.GetName()))
-			}
-			names[c.GetName()] = struct{}{}
+		if otherID, found := names[c.GetName()]; found && c.GetConstraintID() != otherID {
+			vea.Report(pgerror.Newf(pgcode.DuplicateObject,
+				"duplicate constraint name: %q", c.GetName()))
 		}
+		names[c.GetName()] = c.GetConstraintID()
 		if other, found := idToName[c.GetConstraintID()]; found {
 			vea.Report(pgerror.Newf(pgcode.DuplicateObject,
 				"constraint ID %d in constraint %q already in use by %q",
@@ -927,6 +930,7 @@ func (desc *wrapper) validateConstraintNamesAndIDs(vea catalog.ValidationErrorAc
 		}
 		idToName[c.GetConstraintID()] = c.GetName()
 	}
+
 }
 
 func (desc *wrapper) validateColumns() error {
@@ -1199,9 +1203,7 @@ func (desc *wrapper) validateUniqueWithoutIndexConstraints(
 // IDs are unique, and the family of the primary key is 0. This does not check
 // if indexes are unique (i.e. same set of columns, direction, and uniqueness)
 // as there are practical uses for them.
-func (desc *wrapper) validateTableIndexes(
-	columnsByID map[descpb.ColumnID]catalog.Column, vea catalog.ValidationErrorAccumulator,
-) error {
+func (desc *wrapper) validateTableIndexes(columnsByID map[descpb.ColumnID]catalog.Column) error {
 	if len(desc.PrimaryIndex.KeyColumnIDs) == 0 {
 		return ErrMissingPrimaryKey
 	}

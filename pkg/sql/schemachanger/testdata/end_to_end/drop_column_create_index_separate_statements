@@ -461,7 +461,6 @@ upsert descriptor #104
   +    state: BACKFILLING
   +  - direction: ADD
   +    index:
-  +      constraintId: 4
   +      createdExplicitly: true
   +      foreignKey: {}
   +      geoConfig: {}
@@ -479,7 +478,6 @@ upsert descriptor #104
   +      partitioning: {}
   +      sharded: {}
   +      storeColumnNames: []
-  +      unique: true
   +      useDeletePreservingEncoding: true
   +      version: 4
   +    mutationId: 1
@@ -676,7 +674,7 @@ upsert descriptor #104
   +    state: DELETE_ONLY
   +  - direction: DROP
        index:
-         constraintId: 4
+  -      constraintId: 4
   -      createdAtNanos: "1640998800000000000"
          createdExplicitly: true
          foreignKey: {}
@@ -701,7 +699,6 @@ upsert descriptor #104
   -    state: WRITE_ONLY
   -  - direction: ADD
   -    index:
-  -      constraintId: 4
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}
@@ -865,7 +862,6 @@ upsert descriptor #104
   -    state: DELETE_ONLY
   -  - direction: DROP
   -    index:
-  -      constraintId: 4
   -      createdExplicitly: true
   -      foreignKey: {}
   -      geoConfig: {}
@@ -883,7 +879,6 @@ upsert descriptor #104
   -      partitioning: {}
   -      sharded: {}
   -      storeColumnNames: []
-  -      unique: true
   -      useDeletePreservingEncoding: true
   -      version: 4
   -    mutationId: 1

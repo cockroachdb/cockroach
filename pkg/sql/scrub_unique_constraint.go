@@ -28,7 +28,7 @@ import (
 type sqlUniqueConstraintCheckOperation struct {
 	tableName  *tree.TableName
 	tableDesc  catalog.TableDescriptor
-	constraint catalog.Constraint
+	constraint catalog.UniqueConstraint
 	cols       []catid.ColumnID
 	name       string
 	asOf       hlc.Timestamp
@@ -55,7 +55,7 @@ func newSQLUniqueWithIndexConstraintCheckOperation(
 		tableDesc:  tableDesc,
 		constraint: constraint,
 		asOf:       asOf,
-		cols:       constraint.CollectKeyColumnIDs().Ordered(),
+		cols:       constraint.IndexDesc().KeyColumnIDs,
 		name:       constraint.GetName(),
 		predicate:  constraint.GetPredicate(),
 	}
@@ -78,7 +78,7 @@ func newSQLUniqueWithoutIndexConstraintCheckOperation(
 		tableDesc:  tableDesc,
 		constraint: constraint,
 		asOf:       asOf,
-		cols:       constraint.CollectKeyColumnIDs().Ordered(),
+		cols:       constraint.UniqueWithoutIndexDesc().ColumnIDs,
 		name:       constraint.GetName(),
 		predicate:  constraint.GetPredicate(),
 	}

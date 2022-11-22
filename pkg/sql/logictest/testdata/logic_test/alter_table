@@ -1759,11 +1759,13 @@ SELECT count(descriptor_id)
 statement ok
 CREATE TABLE t_col_drop (a INT);
 
-statement ok
+statement error pgcode 0A000 constraint "a_auto_not_null" in the middle of being added, try again later
 BEGIN;
 ALTER TABLE t_col_drop ALTER COLUMN a SET NOT NULL;
 ALTER TABLE t_col_drop DROP COLUMN a;
-COMMIT
+
+statement ok
+ROLLBACK
 
 statement ok
 DROP TABLE t_col_drop

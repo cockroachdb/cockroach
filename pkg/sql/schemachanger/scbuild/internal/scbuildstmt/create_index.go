@@ -284,6 +284,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		IsUsingSecondaryEncoding: true,
 	}
 	temp.TemporaryIndexID = 0
+	temp.ConstraintID = 0
+	temp.IsUnique = false
 	temp.IndexID = nextRelationIndexID(b, relation)
 	if temp.IndexID != tempIndexID {
 		panic(errors.AssertionFailedf(

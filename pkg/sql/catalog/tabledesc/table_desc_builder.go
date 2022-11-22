@@ -743,91 +743,93 @@ func maybeAddConstraintIDs(desc *descpb.TableDescriptor) (hasChanged bool) {
 	if !desc.IsTable() {
 		return false
 	}
-	initialConstraintID := desc.NextConstraintID
-	// Maps index IDs to indexes for one which have
-	// a constraint ID assigned.
-	constraintIndexes := make(map[descpb.IndexID]*descpb.IndexDescriptor)
-	if desc.NextConstraintID == 0 {
-		desc.NextConstraintID = 1
-	}
-	nextConstraintID := func() descpb.ConstraintID {
-		id := desc.GetNextConstraintID()
-		desc.NextConstraintID++
-		return id
-	}
-	// Loop over all constraints and assign constraint IDs.
-	if desc.PrimaryIndex.ConstraintID == 0 {
-		desc.PrimaryIndex.ConstraintID = nextConstraintID()
-		constraintIndexes[desc.PrimaryIndex.ID] = &desc.PrimaryIndex
+	// Collect pointers to constraint ID variables.
+	var idPtrs []*descpb.ConstraintID
+	if len(desc.PrimaryIndex.KeyColumnIDs) > 0 {
+		idPtrs = append(idPtrs, &desc.PrimaryIndex.ConstraintID)
 	}
 	for i := range desc.Indexes {
 		idx := &desc.Indexes[i]
-		if idx.Unique && idx.ConstraintID == 0 {
-			idx.ConstraintID = nextConstraintID()
-			constraintIndexes[idx.ID] = idx
+		if !idx.Unique {
+			continue
 		}
+		idPtrs = append(idPtrs, &idx.ConstraintID)
 	}
+	checkByName := make(map[string]*descpb.TableDescriptor_CheckConstraint)
 	for i := range desc.Checks {
-		check := desc.Checks[i]
-		if check.ConstraintID == 0 {
-			check.ConstraintID = nextConstraintID()
-		}
+		ck := desc.Checks[i]
+		idPtrs = append(idPtrs, &ck.ConstraintID)
+		checkByName[ck.Name] = ck
 	}
-	for i := range desc.InboundFKs {
-		fk := &desc.InboundFKs[i]
-		if fk.ConstraintID == 0 {
-			fk.ConstraintID = nextConstraintID()
-		}
-	}
+	fkByName := make(map[string]*descpb.ForeignKeyConstraint)
 	for i := range desc.OutboundFKs {
 		fk := &desc.OutboundFKs[i]
-		if fk.ConstraintID == 0 {
-			fk.ConstraintID = nextConstraintID()
-		}
+		idPtrs = append(idPtrs, &fk.ConstraintID)
+		fkByName[fk.Name] = fk
 	}
+	for i := range desc.InboundFKs {
+		idPtrs = append(idPtrs, &desc.InboundFKs[i].ConstraintID)
+	}
+	uwoiByName := make(map[string]*descpb.UniqueWithoutIndexConstraint)
 	for i := range desc.UniqueWithoutIndexConstraints {
-		unique := desc.UniqueWithoutIndexConstraints[i]
-		if unique.ConstraintID == 0 {
-			unique.ConstraintID = nextConstraintID()
+		uwoi := &desc.UniqueWithoutIndexConstraints[i]
+		idPtrs = append(idPtrs, &uwoi.ConstraintID)
+		uwoiByName[uwoi.Name] = uwoi
+	}
+	for _, m := range desc.GetMutations() {
+		if idx := m.GetIndex(); idx != nil {
+			idPtrs = append(idPtrs, &idx.ConstraintID)
+		} else if c := m.GetConstraint(); c != nil {
+			switch c.ConstraintType {
+			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
+				idPtrs = append(idPtrs, &c.Check.ConstraintID)
+			case descpb.ConstraintToUpdate_FOREIGN_KEY:
+				idPtrs = append(idPtrs, &c.ForeignKey.ConstraintID)
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				idPtrs = append(idPtrs, &c.UniqueWithoutIndexConstraint.ConstraintID)
+			}
 		}
 	}
-	// Update mutations to add the constraint ID. In the case of a PK swap
-	// we may need to maintain the same constraint ID.
-	for _, mutation := range desc.GetMutations() {
-		if idx := mutation.GetIndex(); idx != nil &&
-			idx.ConstraintID == 0 &&
-			mutation.Direction == descpb.DescriptorMutation_ADD &&
-			idx.Unique {
-			idx.ConstraintID = nextConstraintID()
-			constraintIndexes[idx.ID] = idx
-		} else if pkSwap := mutation.GetPrimaryKeySwap(); pkSwap != nil {
-			for idx := range pkSwap.NewIndexes {
-				oldIdx, firstOk := constraintIndexes[pkSwap.OldIndexes[idx]]
-				newIdx := constraintIndexes[pkSwap.NewIndexes[idx]]
-				if !firstOk {
-					continue
-				}
-				newIdx.ConstraintID = oldIdx.ConstraintID
-			}
-		} else if constraint := mutation.GetConstraint(); constraint != nil {
-			switch constraint.ConstraintType {
-			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
-				if constraint.UniqueWithoutIndexConstraint.ConstraintID == 0 {
-					constraint.UniqueWithoutIndexConstraint.ConstraintID = nextConstraintID()
-				}
+	// Set constraint ID counter to sane initial value.
+	var maxID descpb.ConstraintID
+	for _, p := range idPtrs {
+		if id := *p; id > maxID {
+			maxID = id
+		}
+	}
+	if desc.NextConstraintID <= maxID {
+		desc.NextConstraintID = maxID + 1
+		hasChanged = true
+	}
+	// Update zero constraint IDs using counter.
+	for _, p := range idPtrs {
+		if *p != 0 {
+			continue
+		}
+		*p = desc.NextConstraintID
+		desc.NextConstraintID++
+		hasChanged = true
+	}
+	// Reconcile constraint IDs between enforced slice and mutation.
+	for _, m := range desc.GetMutations() {
+		if c := m.GetConstraint(); c != nil {
+			switch c.ConstraintType {
 			case descpb.ConstraintToUpdate_CHECK, descpb.ConstraintToUpdate_NOT_NULL:
-				if constraint.Check.ConstraintID == 0 {
-					constraint.Check.ConstraintID = nextConstraintID()
+				if other, ok := checkByName[c.Check.Name]; ok {
+					c.Check.ConstraintID = other.ConstraintID
 				}
 			case descpb.ConstraintToUpdate_FOREIGN_KEY:
-				if constraint.ForeignKey.ConstraintID == 0 {
-					constraint.ForeignKey.ConstraintID = nextConstraintID()
+				if other, ok := fkByName[c.ForeignKey.Name]; ok {
+					c.ForeignKey.ConstraintID = other.ConstraintID
+				}
+			case descpb.ConstraintToUpdate_UNIQUE_WITHOUT_INDEX:
+				if other, ok := uwoiByName[c.UniqueWithoutIndexConstraint.Name]; ok {
+					c.UniqueWithoutIndexConstraint.ConstraintID = other.ConstraintID
 				}
 			}
 		}
-
 	}
-	return desc.NextConstraintID != initialConstraintID
+	return hasChanged
 }
 
 // maybeSetCheckConstraintColumnIDs ensures that all check constraints have a

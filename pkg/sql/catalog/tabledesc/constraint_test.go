@@ -23,18 +23,24 @@ import (
 // methods of the catalog.TableDescriptor interface.
 func TestConstraintRetrieval(t *testing.T) {
 	primaryIndex := descpb.IndexDescriptor{
+		ID:           1,
 		Unique:       true,
+		KeyColumnIDs: []descpb.ColumnID{1},
 		ConstraintID: 1,
 		EncodingType: descpb.PrimaryIndexEncoding,
 	}
 
 	indexes := []descpb.IndexDescriptor{
 		{
-			Unique: false,
+			ID:           2,
+			Unique:       false,
+			KeyColumnIDs: []descpb.ColumnID{1},
 		},
 		{
+			ID:           3,
 			Unique:       true,
 			ConstraintID: 4,
+			KeyColumnIDs: []descpb.ColumnID{1},
 		},
 	}
 
@@ -67,6 +73,7 @@ func TestConstraintRetrieval(t *testing.T) {
 		{
 			Validity:     descpb.ConstraintValidity_Dropping,
 			ConstraintID: 7,
+			ColumnIDs:    []descpb.ColumnID{1},
 		},
 	}
 
@@ -93,8 +100,10 @@ func TestConstraintRetrieval(t *testing.T) {
 		{
 			Descriptor_: &descpb.DescriptorMutation_Index{
 				Index: &descpb.IndexDescriptor{
+					ID:           4,
 					Unique:       true,
 					ConstraintID: 8,
+					KeyColumnIDs: []descpb.ColumnID{1},
 				}},
 			State:     descpb.DescriptorMutation_DELETE_ONLY,
 			Direction: descpb.DescriptorMutation_ADD,
@@ -102,7 +111,9 @@ func TestConstraintRetrieval(t *testing.T) {
 		{
 			Descriptor_: &descpb.DescriptorMutation_Index{
 				Index: &descpb.IndexDescriptor{
-					Unique: false,
+					ID:           5,
+					Unique:       false,
+					KeyColumnIDs: []descpb.ColumnID{1},
 				}},
 			State:     descpb.DescriptorMutation_DELETE_ONLY,
 			Direction: descpb.DescriptorMutation_ADD,
@@ -117,7 +128,7 @@ func TestConstraintRetrieval(t *testing.T) {
 		InboundFKs:                    inboundFKs,
 		UniqueWithoutIndexConstraints: uniqueWithoutIndexConstraints,
 		Mutations:                     mutations,
-	}).BuildImmutable().(catalog.TableDescriptor)
+	}).BuildImmutableTable()
 
 	t.Run("test-AllConstraints", func(t *testing.T) {
 		all := tableDesc.AllConstraints()

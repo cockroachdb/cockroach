@@ -413,12 +413,12 @@ func FindFKReferencedUniqueConstraint(
 	referencedTable catalog.TableDescriptor, fk catalog.ForeignKeyConstraint,
 ) (catalog.UniqueConstraint, error) {
 	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
-		if uwi.IsValidReferencedUniqueConstraint(fk) {
+		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk) {
 			return uwi, nil
 		}
 	}
 	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
-		if uwoi.IsValidReferencedUniqueConstraint(fk) {
+		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk) {
 			return uwoi, nil
 		}
 	}
