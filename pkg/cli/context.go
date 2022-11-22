@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlshell"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -46,10 +45,9 @@ import (
 // configuration defaults. It is suitable for calling between tests of
 // the CLI utilities inside a single testing process.
 func initCLIDefaults() {
-	setServerContextDefaults()
 	// We don't reset the pointers (because they are tied into the
 	// flags), but instead overwrite the existing structs' values.
-	baseCfg.InitDefaults()
+	setServerContextDefaults()
 	setCliContextDefaults()
 	setSQLConnContextDefaults()
 	setSQLExecContextDefaults()
@@ -104,24 +102,9 @@ var serverCfg = func() server.Config {
 // function is called by initCLIDefaults() and thus re-called in every
 // test that exercises command-line parsing.
 func setServerContextDefaults() {
-	serverCfg.BaseConfig.DefaultZoneConfig = zonepb.DefaultZoneConfig()
-
-	serverCfg.ClockDevicePath = ""
-	serverCfg.ExternalIODirConfig = base.ExternalIODirConfig{}
-	serverCfg.GoroutineDumpDirName = ""
-	serverCfg.HeapProfileDirName = ""
-	serverCfg.CPUProfileDirName = ""
-	serverCfg.InflightTraceDirName = ""
-
-	serverCfg.AutoInitializeCluster = false
-	serverCfg.ReadyFn = nil
-	serverCfg.KVConfig.DelayedBootstrapFn = nil
-	serverCfg.KVConfig.JoinList = nil
-	serverCfg.KVConfig.JoinPreferSRVRecords = false
-	serverCfg.KVConfig.DefaultSystemZoneConfig = zonepb.DefaultSystemZoneConfig()
-	// Reset the store list.
-	storeSpec, _ := base.NewStoreSpec(server.DefaultStorePath)
-	serverCfg.Stores = base.StoreSpecList{Specs: []base.StoreSpec{storeSpec}}
+	st := cluster.MakeClusterSettings()
+	logcrash.SetGlobalSettings(&st.SV)
+	serverCfg.SetDefaults(context.Background(), st)
 
 	serverCfg.TenantKVAddrs = []string{"127.0.0.1:26257"}
 
@@ -494,6 +477,14 @@ var startCtx struct {
 
 	// geoLibsDir is used to specify locations of the GEOS library.
 	geoLibsDir string
+
+	// These configuration handles are flag.Value instances that allow
+	// configuring other variables using either a percentage or a
+	// humanized size value.
+	cacheSizeValue           bytesOrPercentageValue
+	sqlSizeValue             bytesOrPercentageValue
+	diskTempStorageSizeValue bytesOrPercentageValue
+	tsdbSizeValue            bytesOrPercentageValue
 }
 
 // setStartContextDefaults set the default values in startCtx.  This
@@ -514,6 +505,10 @@ func setStartContextDefaults() {
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
 	startCtx.geoLibsDir = "/usr/local/lib/cockroach"
+	startCtx.cacheSizeValue = makeBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
+	startCtx.sqlSizeValue = makeBytesOrPercentageValue(&serverCfg.MemoryPoolSize, memoryPercentResolver)
+	startCtx.diskTempStorageSizeValue = makeBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
+	startCtx.tsdbSizeValue = makeBytesOrPercentageValue(&serverCfg.TimeSeriesServerConfig.QueryMemoryMax, memoryPercentResolver)
 }
 
 // drainCtx captures the command-line parameters of the `node drain`
@@ -599,6 +594,9 @@ func setConvContextDefaults() {
 var demoCtx = struct {
 	democluster.Context
 	disableEnterpriseFeatures bool
+
+	demoNodeCacheSizeValue  bytesOrPercentageValue
+	demoNodeSQLMemSizeValue bytesOrPercentageValue
 }{
 	Context: democluster.Context{
 		CliCtx: &cliCtx.Context,
@@ -629,6 +627,15 @@ func setDemoContextDefaults() {
 	demoCtx.DefaultEnableRangefeeds = true
 
 	demoCtx.disableEnterpriseFeatures = false
+
+	demoCtx.demoNodeCacheSizeValue = makeBytesOrPercentageValue(
+		&demoCtx.CacheSize,
+		memoryPercentResolver,
+	)
+	demoCtx.demoNodeSQLMemSizeValue = makeBytesOrPercentageValue(
+		&demoCtx.SQLPoolMemorySize,
+		memoryPercentResolver,
+	)
 }
 
 // stmtDiagCtx captures the command-line parameters of the 'statement-diag'
