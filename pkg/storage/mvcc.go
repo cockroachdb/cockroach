@@ -1043,7 +1043,7 @@ func mvccGet(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	mvccScanner.init(opts.Txn, opts.Uncertainty, 0)
+	mvccScanner.init(opts.Txn, opts.Uncertainty, &pebbleResults{})
 	mvccScanner.get(ctx)
 
 	// If we have a trace, emit the scan stats that we produced.
@@ -3572,11 +3572,12 @@ func mvccScanToBytes(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	var trackLastOffsets int
+	results := &pebbleResults{}
 	if opts.WholeRowsOfSize > 1 {
-		trackLastOffsets = int(opts.WholeRowsOfSize)
+		results.lastOffsetsEnabled = true
+		results.lastOffsets = make([]int, opts.WholeRowsOfSize)
 	}
-	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
+	mvccScanner.init(opts.Txn, opts.Uncertainty, results)
 
 	var res MVCCScanResult
 	var err error
