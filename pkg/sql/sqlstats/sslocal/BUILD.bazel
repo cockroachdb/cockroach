@@ -70,6 +70,7 @@ go_test(
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
         "//pkg/util",
+        "//pkg/util/buildutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/mon",
