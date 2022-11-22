@@ -457,15 +457,6 @@ func (ex *connExecutor) execBind(
 		}
 	}
 
-	// This is a huge kludge to deal with the fact that we're resolving types
-	// using a planner with a committed transaction. This ends up being almost
-	// okay because the execution is going to re-acquire leases on these types.
-	// Regardless, holding this lease is worse than not holding it. Users might
-	// expect to get type mismatch errors if a rename of the type occurred.
-	if ex.getTransactionState() == NoTxnStateStr {
-		ex.planner.Descriptors().ReleaseAll(ctx)
-	}
-
 	// Create the new PreparedPortal.
 	if err := ex.addPortal(ctx, portalName, ps, qargs, columnFormatCodes); err != nil {
 		return retErr(err)
