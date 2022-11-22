@@ -355,8 +355,7 @@ func (s *streamIngestionResumer) handleResumeError(
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
-	jobExecCtx := execCtx.(sql.JobExecContext)
-	return s.job.PauseRequested(resumeCtx, jobExecCtx.Txn(), func(ctx context.Context,
+	return s.job.PauseRequested(resumeCtx, nil /* txn */, func(ctx context.Context,
 		planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
 		progress.RunningStatus = errorMessage
 		return nil
