@@ -2554,7 +2554,7 @@ message Header {
   // number of column families). If any larger rows are found at the end of the
   // result, an error is returned.
   //
-  // Added in 22.1, callers must check the ScanWholeRows version gate first.
+  // Not supported with COL_BATCH_RESPONSE scan format.
   int32 whole_rows_of_size = 26;
   // If true, allow returning an empty result when the first result exceeds a
   // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
