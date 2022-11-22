@@ -25,6 +25,7 @@ cockroachdb/sql-experience:
     cockroachdb/sqlproxy-prs: other
     cockroachdb/sql-api-prs: other
   triage_column_id: 7259065
+  label: T-sql-experience
 cockroachdb/sql-schema:
   triage_column_id: 8946818
 cockroachdb/sql-queries:
