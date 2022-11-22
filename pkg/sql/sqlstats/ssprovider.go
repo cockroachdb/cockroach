@@ -234,6 +234,7 @@ type RecordedTxnStats struct {
 	ServiceLatency          time.Duration
 	RetryLatency            time.Duration
 	CommitLatency           time.Duration
+	IdleLatency             time.Duration
 	RowsAffected            int
 	CollectedExecStats      bool
 	ExecStats               execstats.QueryLevelStats

@@ -914,6 +914,9 @@ func (ex *connExecutor) resetTransactionOnSchemaChangeRetry(ctx context.Context)
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, ast tree.Statement, commitFn func(context.Context) error,
 ) (fsm.Event, fsm.EventPayload) {
+	ex.extraTxnState.idleLatency += ex.statsCollector.PhaseTimes().
+		GetIdleLatency(ex.statsCollector.PreviousPhaseTimes())
+
 	ex.phaseTimes.SetSessionPhaseTime(sessionphase.SessionStartTransactionCommit, timeutil.Now())
 	if err := commitFn(ctx); err != nil {
 		if descs.IsTwoVersionInvariantViolationError(err) {
@@ -2285,6 +2288,7 @@ func (ex *connExecutor) onTxnRestart(ctx context.Context) {
 		// accumulatedStats are cleared, but shouldCollectTxnExecutionStats is
 		// unchanged.
 		ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+		ex.extraTxnState.idleLatency = 0
 		ex.extraTxnState.rowsRead = 0
 		ex.extraTxnState.bytesRead = 0
 		ex.extraTxnState.rowsWritten = 0
@@ -2317,6 +2321,7 @@ func (ex *connExecutor) recordTransactionStart(txnID uuid.UUID) {
 	ex.extraTxnState.numRows = 0
 	ex.extraTxnState.shouldCollectTxnExecutionStats = false
 	ex.extraTxnState.accumulatedStats = execstats.QueryLevelStats{}
+	ex.extraTxnState.idleLatency = 0
 	ex.extraTxnState.rowsRead = 0
 	ex.extraTxnState.bytesRead = 0
 	ex.extraTxnState.rowsWritten = 0
@@ -2396,6 +2401,7 @@ func (ex *connExecutor) recordTransactionFinish(
 		ServiceLatency:          txnServiceLat,
 		RetryLatency:            txnRetryLat,
 		CommitLatency:           commitLat,
+		IdleLatency:             ex.extraTxnState.idleLatency,
 		RowsAffected:            ex.extraTxnState.numRows,
 		CollectedExecStats:      ex.planner.instrumentation.collectExecStats,
 		ExecStats:               ex.extraTxnState.accumulatedStats,
