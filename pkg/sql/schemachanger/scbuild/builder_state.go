@@ -536,6 +536,27 @@ func (b *builderState) ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnT
 	return parsedExpr
 }
 
+// PartialIndexPredicateExpression implements the scbuildstmt.TableHelpers interface.
+func (b *builderState) PartialIndexPredicateExpression(
+	tableID catid.DescID, expr tree.Expr,
+) *scpb.Expression {
+	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
+	tn := tree.MakeTableNameFromPrefix(b.NamePrefix(ns), tree.Name(ns.Name))
+	// TODO(fqazi): this doesn't work when referencing newly added columns, this
+	// is not problematic today since declarative schema changer is only enabled
+	// for single statement transactions.
+	_, err := schemaexpr.ValidatePartialIndexPredicate(
+		b.ctx,
+		b.descCache[tableID].desc.(catalog.TableDescriptor),
+		expr,
+		&tn,
+		b.semaCtx)
+	if err != nil {
+		panic(err)
+	}
+	return b.WrapExpression(tableID, expr)
+}
+
 var _ scbuildstmt.ElementReferences = (*builderState)(nil)
 
 // ForwardReferences implements the scbuildstmt.ElementReferences interface.

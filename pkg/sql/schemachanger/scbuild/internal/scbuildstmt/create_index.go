@@ -170,6 +170,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	addColumnsForSecondaryIndex(b, n, relation, &idxSpec)
 	// If necessary set up the partitioning descriptor for the index.
 	maybeAddPartitionDescriptorForIndex(b, n, &idxSpec)
+	// If necessary setup a partial predicate
+	maybeAddIndexPredicate(b, n, &idxSpec)
 	keyIdx := 0
 	keySuffixIdx := 0
 	for _, ic := range idxSpec.columns {
@@ -218,12 +220,19 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 		tic.IndexID = tempIdxSpec.temporary.IndexID
 		tempIdxSpec.columns = append(tempIdxSpec.columns, tic)
 	}
-	if n.PartitionByIndex.ContainsPartitions() {
+	if idxSpec.partitioning != nil {
 		partitionDesc := protoutil.Clone(&idxSpec.partitioning.PartitioningDescriptor).(*catpb.PartitioningDescriptor)
 		tempIdxSpec.partitioning = &scpb.IndexPartitioning{
 			TableID:                tempIdxSpec.temporary.TableID,
 			IndexID:                tempIdxSpec.temporary.IndexID,
 			PartitioningDescriptor: *partitionDesc,
+		}
+	}
+	if idxSpec.partial != nil {
+		tempIdxSpec.partial = &scpb.SecondaryIndexPartial{
+			TableID:    tempIdxSpec.temporary.TableID,
+			IndexID:    tempIdxSpec.temporary.IndexID,
+			Expression: idxSpec.partial.Expression,
 		}
 	}
 	tempIdxSpec.apply(b.AddTransient)
@@ -817,4 +826,16 @@ func maybeCreateVirtualColumnForIndex(
 		col.IsInaccessible = true
 	}
 	return colName
+}
+
+func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec) {
+	if n.Predicate == nil {
+		return
+	}
+	expr := b.PartialIndexPredicateExpression(idxSpec.secondary.TableID, n.Predicate)
+	idxSpec.partial = &scpb.SecondaryIndexPartial{
+		TableID:    idxSpec.secondary.TableID,
+		IndexID:    idxSpec.secondary.IndexID,
+		Expression: *expr,
+	}
 }

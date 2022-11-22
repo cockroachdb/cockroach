@@ -41,7 +41,7 @@ import (
 //     or removed.
 func ValidatePartialIndexPredicate(
 	ctx context.Context,
-	desc catalog.MutableTableDescriptor,
+	desc catalog.TableDescriptor,
 	e tree.Expr,
 	tn *tree.TableName,
 	semaCtx *tree.SemaContext,
@@ -59,7 +59,7 @@ func ValidatePartialIndexPredicate(
 	if err != nil {
 		return "", err
 	}
-	if !desc.IsNew() {
+	if mutDesc, ok := desc.(catalog.MutableTableDescriptor); !ok || !mutDesc.IsNew() {
 		if err := validatePartialIndexExprColsArePublic(desc, cols); err != nil {
 			return "", err
 		}
