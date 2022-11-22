@@ -120,6 +120,9 @@ func WriteInitialRangeState(
 	); err != nil {
 		return err
 	}
+
+	// TODO(sep-raft-log): when the log storage is separated, the below can't be
+	// written in the same batch. Figure out the ordering required here.
 	sl := Make(desc.RangeID)
 	if err := sl.SynthesizeRaftState(ctx, readWriter); err != nil {
 		return err
