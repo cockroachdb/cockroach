@@ -554,6 +554,9 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	if newTempSpec.partitioning != nil {
 		newTempSpec.partitioning.IndexID = tempID
 	}
+	if newTempSpec.partial != nil {
+		newTempSpec.partial.IndexID = tempID
+	}
 	for _, ic := range newTempSpec.columns {
 		ic.IndexID = tempID
 	}
@@ -563,7 +566,6 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	newTempSpec.idxComment = nil
 	newTempSpec.name = nil
 	newTempSpec.secondary = nil
-	newTempSpec.partial = nil
 
 	return newTempSpec
 }

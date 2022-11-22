@@ -169,6 +169,8 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	addColumnsForSecondaryIndex(b, n, relation, &idxSpec)
 	// If necessary set up the partitioning descriptor for the index.
 	maybeAddPartitionDescriptorForIndex(b, n, &idxSpec)
+	// If necessary setup a partial predicate
+	maybeAddIndexPredicate(b, n, &idxSpec)
 	keyIdx := 0
 	keySuffixIdx := 0
 	keyStoredIdx := 0
@@ -803,4 +805,16 @@ func maybeCreateVirtualColumnForIndex(
 		col.IsInaccessible = true
 	}
 	return colName
+}
+
+func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec) {
+	if n.Predicate == nil {
+		return
+	}
+	expr := b.PartialIndexPredicateExpression(idxSpec.secondary.TableID, n.Predicate)
+	idxSpec.partial = &scpb.SecondaryIndexPartial{
+		TableID:    idxSpec.secondary.TableID,
+		IndexID:    idxSpec.secondary.IndexID,
+		Expression: *expr,
+	}
 }
