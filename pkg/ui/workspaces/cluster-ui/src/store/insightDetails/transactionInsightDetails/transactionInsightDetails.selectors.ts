@@ -9,28 +9,23 @@
 // licenses/APL.txt.
 
 import { createSelector } from "reselect";
-import { adminUISelector } from "src/store/utils/selectors";
+import { AppState } from "src/store/reducers";
+import { selectExecutionID } from "src/selectors/common";
 
 const selectTransactionInsightDetailsState = createSelector(
-  adminUISelector,
-  adminUiState => {
-    if (!adminUiState.transactionInsightDetails) return null;
-    return adminUiState.transactionInsightDetails;
+  (state: AppState) => state.adminUI.transactionInsightDetails.cachedData,
+  selectExecutionID,
+  (cachedTxnInsightDetails, execId) => {
+    return cachedTxnInsightDetails.get(execId);
   },
 );
 
 export const selectTransactionInsightDetails = createSelector(
   selectTransactionInsightDetailsState,
-  txnInsightDetailsState => {
-    if (!txnInsightDetailsState) return null;
-    return txnInsightDetailsState.data;
-  },
+  state => state.data,
 );
 
 export const selectTransactionInsightDetailsError = createSelector(
   selectTransactionInsightDetailsState,
-  txnInsightDetailsState => {
-    if (!txnInsightDetailsState) return null;
-    return txnInsightDetailsState.lastError;
-  },
+  state => state.lastError,
 );

@@ -311,11 +311,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                     component={InsightsOverviewPage}
                   />
                   <Route
-                    path={"/insights/transaction/:id"}
+                    path={`/insights/transaction/:${executionIdAttr}`}
                     component={TransactionInsightDetailsPage}
                   />
                   <Route
-                    path={"/insights/statement/:id"}
+                    path={`/insights/statement/:${executionIdAttr}`}
                     component={StatementInsightDetailsPage}
                   />
 
