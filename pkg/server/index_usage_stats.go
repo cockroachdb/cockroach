@@ -335,7 +335,10 @@ func getTableIDFromDatabaseAndTableName(
 		return 0, err
 	}
 	names := strings.Split(fqtName, ".")
-
+	// Strip quotations marks from db and table names.
+	for idx := range names {
+		names[idx] = strings.Trim(names[idx], "\"")
+	}
 	q := makeSQLQuery()
 	q.Append(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $ `, names[0])
 
