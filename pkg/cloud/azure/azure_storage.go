@@ -49,8 +49,10 @@ const (
 	// AzureEnvironmentKeyParam is the query parameter for the environment name in an azure URI.
 	AzureEnvironmentKeyParam = "AZURE_ENVIRONMENT"
 
-	scheme                   = "azure"
-	externalConnectionScheme = "azure-storage"
+	scheme = "azure-blob"
+
+	deprecatedScheme                   = "azure"
+	deprecatedExternalConnectionScheme = "azure-storage"
 )
 
 func parseAzureURL(
@@ -275,5 +277,5 @@ func (s *azureStorage) Close() error {
 
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_azure,
-		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, externalConnectionScheme)
+		parseAzureURL, makeAzureStorage, cloud.RedactedParams(AzureAccountKeyParam), scheme, deprecatedScheme, deprecatedExternalConnectionScheme)
 }
