@@ -90,7 +90,7 @@ func TestWorkload(t *testing.T) {
 	ql, err := wl.Ops(ctx, []string{pgURL.String()}, reg)
 	require.NoError(t, err)
 
-	const N = 800
+	const N = 100
 	workerFn := func(ctx context.Context, fn func(ctx context.Context) error) func() error {
 		return func() error {
 			for i := 0; i < N; i++ {
