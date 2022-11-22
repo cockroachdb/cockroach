@@ -35,21 +35,23 @@ import (
 // It is safe to have multiple state loaders for the same replica. Reusable
 // loaders are typically found in a struct with a mutex, and temporary loaders
 // may be created when locking is less desirable than an allocation.
+//
+// TODO(pavelkalinnikov): understand the split between logstore and raftlog
+// packages, reshuffle or merge them, including this StateLoader.
 type StateLoader struct {
 	keys.RangeIDPrefixBuf
 }
 
-// NewStateLoader creates a StateLoader.
+// NewStateLoader creates a log StateLoader for the given range.
 func NewStateLoader(rangeID roachpb.RangeID) StateLoader {
-	rsl := StateLoader{
+	return StateLoader{
 		RangeIDPrefixBuf: keys.MakeRangeIDPrefixBuf(rangeID),
 	}
-	return rsl
 }
 
 // LoadLastIndex loads the last index.
-func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
-	prefix := rsl.RaftLogPrefix()
+func (sl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader) (uint64, error) {
+	prefix := sl.RaftLogPrefix()
 	// NB: raft log has no intents.
 	iter := reader.NewMVCCIterator(storage.MVCCKeyIterKind, storage.IterOptions{LowerBound: prefix})
 	defer iter.Close()
@@ -72,7 +74,7 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader)
 	if lastIndex == 0 {
 		// The log is empty, which means we are either starting from scratch
 		// or the entire log has been truncated away.
-		lastEnt, err := rsl.LoadRaftTruncatedState(ctx, reader)
+		lastEnt, err := sl.LoadRaftTruncatedState(ctx, reader)
 		if err != nil {
 			return 0, err
 		}
@@ -82,12 +84,12 @@ func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader storage.Reader)
 }
 
 // LoadRaftTruncatedState loads the truncated state.
-func (rsl StateLoader) LoadRaftTruncatedState(
+func (sl StateLoader) LoadRaftTruncatedState(
 	ctx context.Context, reader storage.Reader,
 ) (roachpb.RaftTruncatedState, error) {
 	var truncState roachpb.RaftTruncatedState
 	if _, err := storage.MVCCGetProto(
-		ctx, reader, rsl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, storage.MVCCGetOptions{},
+		ctx, reader, sl.RaftTruncatedStateKey(), hlc.Timestamp{}, &truncState, storage.MVCCGetOptions{},
 	); err != nil {
 		return roachpb.RaftTruncatedState{}, err
 	}
@@ -95,7 +97,7 @@ func (rsl StateLoader) LoadRaftTruncatedState(
 }
 
 // SetRaftTruncatedState overwrites the truncated state.
-func (rsl StateLoader) SetRaftTruncatedState(
+func (sl StateLoader) SetRaftTruncatedState(
 	ctx context.Context, writer storage.Writer, truncState *roachpb.RaftTruncatedState,
 ) error {
 	if (*truncState == roachpb.RaftTruncatedState{}) {
@@ -106,7 +108,7 @@ func (rsl StateLoader) SetRaftTruncatedState(
 		ctx,
 		writer,
 		nil, /* ms */
-		rsl.RaftTruncatedStateKey(),
+		sl.RaftTruncatedStateKey(),
 		hlc.Timestamp{},      /* timestamp */
 		hlc.ClockTimestamp{}, /* localTimestamp */
 		truncState,
@@ -115,11 +117,11 @@ func (rsl StateLoader) SetRaftTruncatedState(
 }
 
 // LoadHardState loads the HardState.
-func (rsl StateLoader) LoadHardState(
+func (sl StateLoader) LoadHardState(
 	ctx context.Context, reader storage.Reader,
 ) (raftpb.HardState, error) {
 	var hs raftpb.HardState
-	found, err := storage.MVCCGetProto(ctx, reader, rsl.RaftHardStateKey(),
+	found, err := storage.MVCCGetProto(ctx, reader, sl.RaftHardStateKey(),
 		hlc.Timestamp{}, &hs, storage.MVCCGetOptions{})
 
 	if !found || err != nil {
@@ -129,7 +131,7 @@ func (rsl StateLoader) LoadHardState(
 }
 
 // SetHardState overwrites the HardState.
-func (rsl StateLoader) SetHardState(
+func (sl StateLoader) SetHardState(
 	ctx context.Context, writer storage.Writer, hs raftpb.HardState,
 ) error {
 	// "Blind" because ms == nil and timestamp.IsEmpty().
@@ -137,7 +139,7 @@ func (rsl StateLoader) SetHardState(
 		ctx,
 		writer,
 		nil, /* ms */
-		rsl.RaftHardStateKey(),
+		sl.RaftHardStateKey(),
 		hlc.Timestamp{},      /* timestamp */
 		hlc.ClockTimestamp{}, /* localTimestamp */
 		&hs,
@@ -147,7 +149,7 @@ func (rsl StateLoader) SetHardState(
 
 // SynthesizeHardState synthesizes an on-disk HardState from the given input,
 // taking care that a HardState compatible with the existing data is written.
-func (rsl StateLoader) SynthesizeHardState(
+func (sl StateLoader) SynthesizeHardState(
 	ctx context.Context,
 	readWriter storage.ReadWriter,
 	oldHS raftpb.HardState,
@@ -176,12 +178,12 @@ func (rsl StateLoader) SynthesizeHardState(
 	if oldHS.Term == newHS.Term {
 		newHS.Vote = oldHS.Vote
 	}
-	err := rsl.SetHardState(ctx, readWriter, newHS)
+	err := sl.SetHardState(ctx, readWriter, newHS)
 	return errors.Wrapf(err, "writing HardState %+v", &newHS)
 }
 
 // SetRaftReplicaID overwrites the RaftReplicaID.
-func (rsl StateLoader) SetRaftReplicaID(
+func (sl StateLoader) SetRaftReplicaID(
 	ctx context.Context, writer storage.Writer, replicaID roachpb.ReplicaID,
 ) error {
 	rid := roachpb.RaftReplicaID{ReplicaID: replicaID}
@@ -190,7 +192,7 @@ func (rsl StateLoader) SetRaftReplicaID(
 		ctx,
 		writer,
 		nil, /* ms */
-		rsl.RaftReplicaIDKey(),
+		sl.RaftReplicaIDKey(),
 		hlc.Timestamp{},      /* timestamp */
 		hlc.ClockTimestamp{}, /* localTimestamp */
 		&rid,
@@ -199,10 +201,10 @@ func (rsl StateLoader) SetRaftReplicaID(
 }
 
 // LoadRaftReplicaID loads the RaftReplicaID.
-func (rsl StateLoader) LoadRaftReplicaID(
+func (sl StateLoader) LoadRaftReplicaID(
 	ctx context.Context, reader storage.Reader,
 ) (replicaID roachpb.RaftReplicaID, found bool, err error) {
-	found, err = storage.MVCCGetProto(ctx, reader, rsl.RaftReplicaIDKey(),
+	found, err = storage.MVCCGetProto(ctx, reader, sl.RaftReplicaIDKey(),
 		hlc.Timestamp{}, &replicaID, storage.MVCCGetOptions{})
 	return
 }
