@@ -1,0 +1,249 @@
+<form theme="dark">
+  <label>CockroachDB Overview</label>
+  <fieldset submitButton="false" autoRun="false">
+    <input type="time" token="Time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-15m@m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="index_name" searchWhenChanged="true">
+      <label>Splunk Index</label>
+      <default>my-index-name</default>
+    </input>
+    <input type="dropdown" token="cluster_id" searchWhenChanged="true">
+      <label>Cluster ID</label>
+      <fieldForLabel>cluster_id</fieldForLabel>
+      <fieldForValue>cluster_id</fieldForValue>
+      <search>
+        <query>|mstats count(*) where index=$index_name$  earliest=$Time_range.earliest$  by cluster_id  | table cluster_id</query>
+        <earliest>-1m@m</earliest>
+        <latest>now</latest>
+      </search>
+      <choice value="*">All</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="dropdown" token="span_value" searchWhenChanged="true">
+      <label>span</label>
+      <default>1m</default>
+      <choice value="30s">30s</choice>
+      <choice value="1m">1m</choice>
+      <choice value="2m">2m</choice>
+      <choice value="5m">5m</choice>
+    </input>
+    <input type="dropdown" token="refresh_rate" searchWhenChanged="true">
+      <label>refresh rate</label>
+      <default>30s</default>
+      <choice value="10s">10s</choice>
+      <choice value="30s">30s</choice>
+      <choice value="1m">1m</choice>
+      <choice value="5m">5m</choice>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>SQL Statements</title>
+      <chart>
+        <title>A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements successfully executed per second across all nodes.</title>
+        <search>
+          <query>| mstats 
+rate_sum(sql_select_count_total) as sql_select_count_total, 
+rate_sum(sql_insert_count_total) as sql_insert_count_total, 
+rate_sum(sql_update_count_total) as sql_update_count_total, 
+rate_sum(sql_delete_count_total) as sql_delete_count_total
+where index=$index_name$ AND cluster_id=$cluster_id$  span=$span_value$
+          </query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">Queries</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>SQL Statement Contention</title>
+      <chart>
+        <title>The total number of SQL statements that experienced contention across all nodes.</title>
+        <search>
+          <query>| mstats 
+rate_sum(sql_distsql_contended_queries_count_total) as contention 
+WHERE index=$index_name$ span=$span_value$ 
+| timechart  span=$span_value$ sum(contention) as contention</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Replicas per Node</title>
+      <chart>
+        <title>The number of range replicas stored on this node. Ranges are subsets of your data, which are replicated to ensure survivability.</title>
+        <search>
+          <query>| mstats latest(replicas) as replicas WHERE index=$index_name$ span=$span_value$ by node_id
+| timechart  span=$span_value$ latest(replicas)  by node_id</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleY.text">Replicas</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Capacity</title>
+      <chart>
+        <title>Capacity: Maximum store size across all nodes. This value may be explicitly set per node using --store. If a store size has not been set, this metric displays the actual disk capacity.  Available: Free disk space available to CockroachDB data across all nodes.  Used: Disk space in use by CockroachDB data across all nodes. This excludes the Cockroach binary, operating system, and other system files.</title>
+        <search>
+          <query>|mstats latest(capacity) as max, latest(capacity_available) as available, latest(capacity_used) as used where  index=$index_name$ AND cluster_id=$cluster_id$ span=$span_value$ by node_id
+|eval max=max/1024/1024/1024
+|eval available=available/1024/1024/1024
+|eval used=used/1024/1024/1024
+|timechart span=2m sum(used) as used, sum(max) as max, sum(available) as available</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">Capacity(TiB)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Service Latency: SQL Statements, 99th percentile</title>
+      <chart>
+        <title>Over the last minute, this node executed 99% of SQL statements within this time. This time only includes SELECT, INSERT, UPDATE and DELETE statements and does not include network latency between the node and client.</title>
+        <search>
+          <query>| mstats rate(sql_service_latency_bucket) as x where index=$index_name$ AND cluster_id=$cluster_id$ by node_id, _timeseries, le  span=$span_value$
+| stats sum(x) as x by node_id, _time, le
+| `histpercIEPS(0.99, x, le, "node_id,_time")`
+| eval histperc=histperc/1000000
+| timechart  span=$span_value$ latest(histperc) by node_id</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">Latency</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+</form>

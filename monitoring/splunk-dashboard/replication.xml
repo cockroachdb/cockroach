@@ -1,0 +1,386 @@
+<form theme="dark">
+  <label>CockroachDB Replication</label>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="Time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-15m@m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="index_name" searchWhenChanged="true">
+      <label>Splunk Index</label>
+      <default>my-index-name</default>
+    </input>
+    <input type="dropdown" token="cluster_id" searchWhenChanged="true">
+      <label>Cluster ID</label>
+      <fieldForLabel>cluster_id</fieldForLabel>
+      <fieldForValue>cluster_id</fieldForValue>
+      <search>
+        <query>|mstats count(*) where index=$index_name$  earliest=$Time_range.earliest$  by cluster_id  | table cluster_id</query>
+        <earliest>-1m@m</earliest>
+        <latest>now</latest>
+      </search>
+      <choice value="*">All</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="dropdown" token="span_value" searchWhenChanged="true">
+      <label>span</label>
+      <default>1m</default>
+      <choice value="30s">30s</choice>
+      <choice value="1m">1m</choice>
+      <choice value="2m">2m</choice>
+      <choice value="5m">5m</choice>
+    </input>
+    <input type="dropdown" token="refresh_rate" searchWhenChanged="true">
+      <label>refresh rate</label>
+      <default>10s</default>
+      <choice value="10s">10s</choice>
+      <choice value="30s">30s</choice>
+      <choice value="1m">1m</choice>
+      <choice value="5m">5m</choice>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Ranges</title>
+      <chart>
+        <search>
+          <query>| mstats sum(ranges) as ranges , sum(replicas_leaders) as Leaders , sum(replicas_leaseholders) as "Lease Holders", sum(replicas_leaders_not_leaseholders) as "Leaders w/o Lease" , sum(ranges_unavailable) as Unavailable,sum(ranges_underreplicated) as "Under-replicated" , sum(ranges_overreplicated) as  "Over-replicated" where index=$index_name$ AND cluster_id=$cluster_id$  span=$span_value$</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">ranges</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Replicas per Node</title>
+      <chart>
+        <title>The number of replicas on each node.</title>
+        <search>
+          <query>| mstats latest(replicas) as replicas WHERE index=$index_name$  AND cluster_id=$cluster_id$ span=$span_value$ by node_id
+| timechart  span=$span_value$ latest(replicas)  by node_id</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleY.text">replicas</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Leaseholders per Node</title>
+      <chart>
+        <title>The number of leaseholder replicas on each node. A leaseholder replica is the one that receives and coordinates all read and write requests for its range.</title>
+        <search>
+          <query>| mstats sum(replicas_leaseholders) as replicas_leaseholders where index=$index_name$  AND cluster_id=$cluster_id$ by node_id span=$span_value$ 
+| timechart  span=$span_value$ sum(replicas_leaseholders) by node_id</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">leaseholders</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Average Queries per Store</title>
+      <chart>
+        <title>Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each node per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.</title>
+        <search>
+          <query>| mstats 
+latest(rebalancing_queriespersecond) as rebalancing_queriespersecond 
+WHERE index=$index_name$  AND cluster_id=$cluster_id$ span=$span_value$ by node_id
+| timechart  span=$span_value$ latest(rebalancing_queriespersecond) by node_id</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleY.text">queries</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Logical Bytes per Node</title>
+      <chart>
+        <title>Number of logical bytes stored in key-value pairs on each node.  This includes historical and deleted data.</title>
+        <search>
+          <query>| mstats 
+latest(totalbytes) as totalbytes 
+WHERE index=$index_name$  AND cluster_id=$cluster_id$ span=$span_value$ by node_id
+|eval totalbytes=totalbytes/1024/1024/1024
+| timechart  span=$span_value$ latest(totalbytes) by node_id</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">logical store size (GiB)</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Replica Quiescence</title>
+      <chart>
+        <search>
+          <query>| mstats 
+sum(replicas) as replicas , sum(replicas_quiescent) as replicas_quiescent 
+WHERE index=$index_name$  AND cluster_id=$cluster_id$  span=$span_value$</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">replicas</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Range Operations</title>
+      <chart>
+        <search>
+          <query>| mstats rate_sum(range_splits_total) as "Splits"   rate_sum(range_merges_total) as "Merges"   rate_sum(range_adds_total) as "Adds"   rate_sum(range_removes_total) as "Removes"   rate_sum(leases_transfers_success_total) as "Lease Transfers"   rate_sum(rebalancing_lease_transfers_total) as "Load-based Lease Transfers"  rate_sum(rebalancing_range_rebalances_total) as "Load-based Range Rebalances"   where index=$index_name$  AND cluster_id=$cluster_id$ span=$span_value$</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">ranges</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Snapshots</title>
+      <chart>
+        <search>
+          <query>| mstats rate_sum(range_snapshots_generated_total) as "Generated"   rate_sum(range_snapshots_applied_voter_total) as "Applied (Voters)"   rate_sum(range_snapshots_applied_initial_total) as "Applied (Initial Upreplication)"   rate_sum(range_snapshots_applied_initial_total) as "Applied (Non-Voters)"   rate_sum(replicas_reserved) as "Reserved Replicas"  where index=$index_name$  AND cluster_id=$cluster_id$ span=$span_value$</query>
+          <earliest>$Time_range.earliest$</earliest>
+          <latest>$Time_range.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>$refresh_rate$</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.text">snapshots</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+</form>
