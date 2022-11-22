@@ -478,8 +478,8 @@ func (s *samplerProcessor) sampleRow(
 
 func (s *samplerProcessor) close() {
 	if s.InternalClose() {
-		s.memAcc.Close(s.Ctx)
-		s.MemMonitor.Stop(s.Ctx)
+		s.memAcc.Close(s.Ctx())
+		s.MemMonitor.Stop(s.Ctx())
 	}
 }
 

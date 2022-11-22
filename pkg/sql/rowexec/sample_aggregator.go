@@ -205,9 +205,9 @@ func (s *sampleAggregator) Run(ctx context.Context) {
 
 func (s *sampleAggregator) close() {
 	if s.InternalClose() {
-		s.memAcc.Close(s.Ctx)
-		s.tempMemAcc.Close(s.Ctx)
-		s.MemMonitor.Stop(s.Ctx)
+		s.memAcc.Close(s.Ctx())
+		s.tempMemAcc.Close(s.Ctx())
+		s.MemMonitor.Stop(s.Ctx())
 	}
 }
 

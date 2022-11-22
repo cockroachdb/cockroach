@@ -88,7 +88,7 @@ func (ag *countAggregator) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMeta
 		if row == nil {
 			ret := make(rowenc.EncDatumRow, 1)
 			ret[0] = rowenc.EncDatum{Datum: tree.NewDInt(tree.DInt(ag.count))}
-			rendered, _, err := ag.OutputHelper.ProcessRow(ag.Ctx, ret)
+			rendered, _, err := ag.OutputHelper.ProcessRow(ag.Ctx(), ret)
 			// We're done as soon as we process our one output row, so we
 			// transition into draining state. We will, however, return non-nil
 			// error (if such occurs during rendering) separately below.

@@ -384,18 +384,17 @@ func (f *vectorizedFlow) Cleanup(ctx context.Context) {
 	// This cleans up all the memory and disk monitoring of the vectorized flow.
 	f.creator.cleanup(ctx)
 
-	// TODO(yuzefovich): uncomment this once the assertion is no longer flaky.
-	//if buildutil.CrdbTestBuild && f.FlowBase.Started() && !f.FlowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
-	//	// Check that all closers have been closed. Note that we don't check
-	//	// this in case the flow was never started in the first place (it is ok
-	//	// to not check this since closers haven't allocated any resources in
-	//	// such a case). We also don't check when the panic injection is
-	//	// enabled since then Close() might be legitimately not called (if a
-	//	// panic is injected in Init() of the wrapped operator).
-	//	if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
-	//		colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
-	//	}
-	//}
+	if buildutil.CrdbTestBuild && f.FlowBase.Started() && !f.FlowCtx.EvalCtx.SessionData().TestingVectorizeInjectPanics {
+		// Check that all closers have been closed. Note that we don't check
+		// this in case the flow was never started in the first place (it is ok
+		// to not check this since closers haven't allocated any resources in
+		// such a case). We also don't check when the panic injection is
+		// enabled since then Close() might be legitimately not called (if a
+		// panic is injected in Init() of the wrapped operator).
+		if numClosed := atomic.LoadInt32(f.testingInfo.numClosed); numClosed != f.testingInfo.numClosers {
+			colexecerror.InternalError(errors.AssertionFailedf("expected %d components to be closed, but found that only %d were", f.testingInfo.numClosers, numClosed))
+		}
+	}
 
 	f.tempStorage.Lock()
 	created := f.tempStorage.path != ""
