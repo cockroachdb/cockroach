@@ -44,6 +44,7 @@ go_library(
         "conn_executor_exec.go",
         "conn_executor_prepare.go",
         "conn_executor_savepoints.go",
+        "conn_executor_show_commit_timestamp.go",
         "conn_fsm.go",
         "conn_io.go",
         "constraint.go",

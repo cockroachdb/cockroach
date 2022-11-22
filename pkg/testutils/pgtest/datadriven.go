@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -49,7 +50,8 @@ func WalkWithNewServer(
 // "let": Run a query that returns a single row with a single column, and
 // save it in the variable named in the command argument. This variable can
 // be used in future "send" commands and is replaced by simple string
-// substitution.
+// substitution. The same variable may also be used for replacement in
+// the expected output.
 //
 // "send": Sends messages to a server. Takes a newline-delimited list of
 // pgproto3.FrontendMessage types. Can fill in values by adding a space then
@@ -97,7 +99,10 @@ func RunTest(t *testing.T, path, addr, user string) {
 				return d.Expected
 			}
 			require.GreaterOrEqual(t, len(d.CmdArgs), 1, "at least one argument required for let")
-			require.Truef(t, strings.HasPrefix(d.CmdArgs[0].Key, "$"), "let argument must begin with '$'")
+			require.Regexp(
+				t, `^\$[0-9A-Za-z_]+`, d.CmdArgs[0].Key,
+				"let argument must begin with '$' and only contain word characters",
+			)
 			lines := strings.Split(d.Input, "\n")
 			require.Len(t, lines, 1, "only one input command permitted for let")
 			require.Truef(t, strings.HasPrefix(lines[0], "Query "), "let must use a Query command")
@@ -155,7 +160,20 @@ func RunTest(t *testing.T, path, addr, user string) {
 			if err != nil {
 				t.Fatalf("%s: %+v", d.Pos, err)
 			}
-			return MsgsToJSONWithIgnore(msgs, d)
+			out := MsgsToJSONWithIgnore(msgs, d)
+			// If the expected output with the variables replaced with their current
+			// value matches the expected output, allow the expected output to be
+			// used directly. Otherwise, return the generated output.
+			expanded := os.Expand(d.Expected, func(s string) string {
+				if v, ok := vars["$"+s]; ok {
+					return v
+				}
+				return s
+			})
+			if expanded == out {
+				return d.Expected
+			}
+			return out
 		default:
 			t.Fatalf("unknown command %s", d.Cmd)
 			return ""
