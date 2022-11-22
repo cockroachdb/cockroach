@@ -236,6 +236,9 @@ func DefaultTestTempStorageConfigWithSize(
 type TestTenantArgs struct {
 	TenantID roachpb.TenantID
 
+	// Name sets the Tenant name.
+	Name string
+
 	// Existing, if true, indicates an existing tenant, rather than a new tenant
 	// to be created by StartTenant.
 	Existing bool

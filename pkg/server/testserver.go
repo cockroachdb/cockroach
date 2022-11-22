@@ -781,7 +781,7 @@ func (ts *TestServer) StartTenant(
 		if rowCount == 0 {
 			// Tenant doesn't exist. Create it.
 			if _, err := ts.InternalExecutor().(*sql.InternalExecutor).Exec(
-				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1)", params.TenantID.ToUint64(),
+				ctx, "testserver-create-tenant", nil /* txn */, "SELECT crdb_internal.create_tenant($1, $2)", params.TenantID.ToUint64(), params.Name,
 			); err != nil {
 				return nil, err
 			}

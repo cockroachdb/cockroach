@@ -392,12 +392,14 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
 				c.infoLog(ctx, "starting tenant node %d", i)
 				tenantStopper := stop.NewStopper()
+				tenantName := fmt.Sprintf("app%d", uint64(i))
 				ts, err := c.servers[i].StartTenant(ctx, base.TestTenantArgs{
 					// We set the tenant ID to i+2, since tenant 0 is not a tenant, and
 					// tenant 1 is the system tenant. We also subtract 2 for the "starting"
 					// SQL/HTTP ports so the first tenant ends up with the desired default
 					// ports.
 					TenantID:              roachpb.MakeTenantID(uint64(i + 2)),
+					Name:                  tenantName,
 					Stopper:               tenantStopper,
 					ForceInsecure:         c.demoCtx.Insecure,
 					SSLCertsDir:           c.demoDir,
@@ -423,7 +425,7 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					return err
 				}
 				c.tenantServers[i] = ts
-				c.infoLog(ctx, "started tenant %d: %s", i, ts.SQLAddr())
+				c.infoLog(ctx, "started tenant %d (%s): %s", i, tenantName, ts.SQLAddr())
 
 				// Propagate the tenant server tags to the initialization
 				// context, so that the initialization messages below are
