@@ -136,10 +136,8 @@ func errMsgPrefix(b BuildCtx, id catid.DescID) string {
 func dropElementWhenDroppingDescriptor(b BuildCtx, e scpb.Element) {
 	switch t := e.(type) {
 	case *scpb.ColumnType:
-		//lint:ignore SA1019 IsRelationBeingDropped is deprecated
 		t.IsRelationBeingDropped = true
 	case *scpb.SecondaryIndexPartial:
-		//lint:ignore SA1019 IsRelationBeingDropped is deprecated
 		t.IsRelationBeingDropped = true
 	}
 	b.Drop(e)
