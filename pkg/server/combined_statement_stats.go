@@ -693,6 +693,37 @@ func getExplainPlanFromGist(ctx context.Context, ie *sql.InternalExecutor, planG
 	return strings.Join(explainPlan, "\n")
 }
 
+func getIdxAndTableName(ctx context.Context, ie *sql.InternalExecutor, indexInfo string) string {
+	var args []interface{}
+	idxInfoArr := strings.Split(indexInfo, "@")
+	tableID, err := strconv.ParseInt(idxInfoArr[0], 10, 64)
+	if err != nil {
+		return indexInfo
+	}
+	indexID, err := strconv.ParseInt(idxInfoArr[1], 10, 64)
+	if err != nil {
+		return indexInfo
+	}
+	args = append(args, tableID)
+	args = append(args, indexID)
+
+	row, err := ie.QueryRowEx(ctx, "combined-stmts-details-get-index-and-table-names", nil,
+		sessiondata.InternalExecutorOverride{
+			User: username.NodeUserName(),
+		}, `SELECT descriptor_name, index_name FROM crdb_internal.table_indexes 
+    WHERE descriptor_id =$1 AND index_id=$2`, args...)
+	if err != nil {
+		return indexInfo
+	}
+	if row == nil {
+		// Value being used on the UI for checks.
+		return "dropped"
+	}
+	tableName := tree.MustBeDString(row[0])
+	indexName := tree.MustBeDString(row[1])
+	return fmt.Sprintf("%s@%s", tableName, indexName)
+}
+
 // getStatementDetailsPerPlanHash returns the list of statements
 // per plan hash, not using the columns aggregated timestamp as
 // part of the key on the grouping.
@@ -823,6 +854,12 @@ func getStatementDetailsPerPlanHash(
 			aggregatedMetadata.VecCount = metadata.Stats.Count
 		}
 		aggregatedMetadata.TotalCount = metadata.Stats.Count
+
+		var indexes []string
+		for _, idx := range metadata.Stats.Indexes {
+			indexes = append(indexes, getIdxAndTableName(ctx, ie, idx))
+		}
+		metadata.Stats.Indexes = indexes
 
 		stmt := serverpb.StatementDetailsResponse_CollectedStatementGroupedByPlanHash{
 			AggregationInterval:  time.Duration(aggInterval.Nanos()),
