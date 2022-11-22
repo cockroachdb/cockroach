@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1275,8 +1275,12 @@ func (r *Registry) stepThroughStateMachine(
 			return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 				"job %d: resuming with non-nil error", job.ID())
 		}
-		resumeCtx := logtags.AddTag(ctx, "job", job.ID())
-		labels := pprof.Labels("job", fmt.Sprintf("%s id=%d", jobType, job.ID()))
+		resumeCtx := logtags.AddTag(ctx, "job",
+			fmt.Sprintf("%s id=%d", jobType, job.ID()))
+		// Adding all tags as pprof labels (including the one we just added for job
+		// type and id).
+		resumeCtx, undo := pprofutil.SetProfilerLabelsFromCtxTags(resumeCtx)
+		defer undo()
 
 		if err := job.started(ctx, nil /* txn */); err != nil {
 			return err
@@ -1290,9 +1294,7 @@ func (r *Registry) stepThroughStateMachine(
 				jm.CurrentlyRunning.Dec(1)
 				r.metrics.RunningNonIdleJobs.Dec(1)
 			}()
-			pprof.Do(resumeCtx, labels, func(ctx context.Context) {
-				err = resumer.Resume(ctx, execCtx)
-			})
+			err = resumer.Resume(resumeCtx, execCtx)
 		}()
 
 		r.MarkIdle(job, false)
