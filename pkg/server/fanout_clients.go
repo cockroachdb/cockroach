@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
@@ -174,7 +175,7 @@ type kvFanoutClient struct {
 	rpcCtx       *rpc.Context
 	db           *kv.DB
 	nodeLiveness *liveness.NodeLiveness
-	admin        *adminServer
+	clock        *hlc.Clock
 	st           *cluster.Settings
 	ambientCtx   log.AmbientContext
 }
@@ -234,7 +235,7 @@ func (k kvFanoutClient) listNodes(ctx context.Context) (*serverpb.NodesResponse,
 		Nodes: statuses,
 	}
 
-	clock := k.admin.server.clock
+	clock := k.clock
 	resp.LivenessByNodeID, err = getLivenessStatusMap(ctx, k.nodeLiveness, clock.Now().GoTime(), k.st)
 	if err != nil {
 		return nil, err

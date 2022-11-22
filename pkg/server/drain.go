@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
@@ -70,10 +71,10 @@ var (
 // This method is part of the serverpb.AdminClient interface.
 func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_DrainServer) error {
 	ctx := stream.Context()
-	ctx = s.server.AnnotateCtx(ctx)
+	ctx = s.AnnotateCtx(ctx)
 
 	// Which node is this request for?
-	nodeID, local, err := s.server.status.parseNodeID(req.NodeId)
+	nodeID, local, err := s.serverIterator.parseServerID(req.NodeId)
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, err.Error())
 	}
@@ -85,14 +86,14 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		// response. We must forward all of them.
 
 		// Connect to the target node.
-		client, err := s.dialNode(ctx, nodeID)
+		client, err := s.dialNode(ctx, roachpb.NodeID(nodeID))
 		if err != nil {
 			return serverError(ctx, err)
 		}
 		return delegateDrain(ctx, req, client, stream)
 	}
 
-	return s.server.drain.handleDrain(ctx, req, stream)
+	return s.drainServer.handleDrain(ctx, req, stream)
 }
 
 type drainServer struct {

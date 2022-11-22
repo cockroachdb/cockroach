@@ -89,7 +89,7 @@ type SQLServerWrapper struct {
 
 	http            *httpServer
 	adminAuthzCheck *adminPrivilegeChecker
-	tenantAdmin     *tenantAdminServer
+	tenantAdmin     *adminServer
 	tenantStatus    *statusServer
 	drainServer     *drainServer
 	authentication  *authenticationServer
@@ -170,9 +170,6 @@ func NewTenantServer(
 		makePlanner: nil,
 	}
 
-	// Instantiate the admin API server.
-	sAdmin := newTenantAdminServer(baseCfg.AmbientCtx)
-
 	// Instantiate the HTTP server.
 	// These callbacks help us avoid a dependency on gossip in httpServer.
 	parseNodeIDFn := func(s string) (roachpb.NodeID, bool, error) {
@@ -211,7 +208,6 @@ func NewTenantServer(
 		baseCfg.Settings,
 		baseCfg.Config,
 		adminAuthzCheck,
-		nil, // TODO(davidh): Will be fixed in #92686
 		args.db,
 		args.recorder,
 		args.rpcContext,
@@ -221,10 +217,9 @@ func NewTenantServer(
 		args.remoteFlowRunner,
 		args.circularInternalExecutor,
 		serverIterator,
+		args.clock,
 	)
 	args.sqlStatusServer = sStatus
-
-	sAdmin.serverIterator = serverIterator
 
 	// This is the location in NewServer() where we would be configuring
 	// the path to the special file that blocks background jobs.
@@ -259,6 +254,26 @@ func NewTenantServer(
 	// Create the authentication RPC server (login/logout).
 	sAuth := newAuthenticationServer(baseCfg.Config, sqlServer)
 
+	// Create a drain server.
+	drainServer := newDrainServer(baseCfg, args.stopper, args.stopTrigger, args.grpc, sqlServer)
+
+	// Instantiate the admin API server.
+	sAdmin := newAdminServer(
+		sqlServer,
+		args.Settings,
+		adminAuthzCheck,
+		sqlServer.internalExecutor,
+		args.BaseConfig.AmbientCtx,
+		args.recorder,
+		args.db,
+		args.rpcContext,
+		serverIterator,
+		args.clock,
+		args.distSender,
+		args.grpc,
+		drainServer,
+	)
+
 	// Connect the various servers to RPC.
 	for _, gw := range []grpcGatewayServer{sAdmin, sStatus, sAuth} {
 		gw.RegisterService(args.grpc.Server)
@@ -281,14 +296,6 @@ func NewTenantServer(
 		sqlServer.execCfg.SQLStatusServer,
 		nil, /* serverTickleFn */
 	)
-
-	// Create a drain server.
-	drainServer := newDrainServer(baseCfg, args.stopper, args.stopTrigger, args.grpc, sqlServer)
-	// Connect the admin server to the drain service.
-	//
-	// TODO(knz): This would not be necessary if we could use the
-	// adminServer directly.
-	sAdmin.drain = drainServer
 
 	return &SQLServerWrapper{
 		clock:      args.clock,

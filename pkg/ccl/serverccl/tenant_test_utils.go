@@ -294,6 +294,14 @@ type httpClient struct {
 	baseURL string
 }
 
+func (c *httpClient) GetClient() http.Client {
+	return c.client
+}
+
+func (c *httpClient) GetBaseURL() string {
+	return c.baseURL
+}
+
 func (c *httpClient) GetJSON(path string, response protoutil.Message) {
 	err := httputil.GetJSON(c.client, c.baseURL+path, response)
 	require.NoError(c.t, err)
