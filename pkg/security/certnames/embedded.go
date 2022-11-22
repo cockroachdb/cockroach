@@ -32,8 +32,11 @@ const (
 	EmbeddedTestUserKey     = "client.testuser.key"
 )
 
-// Embedded certificates specific to multi-tenancy testing.
+// Embedded certificates specific to multi-tenancy testing. This CA
+// cert is used to sign `client-tenant.NN.crt` certs, used to
+// authenticate tenant servers to the KV layer and other tenant
+// servers.
 const (
-	EmbeddedTenantKVClientCACert = "ca-client-tenant.crt" // CA for tenant connections to the KV layer
-	EmbeddedTenantKVClientCAKey  = "ca-client-tenant.key" // CA for tenant connections to the KV layer
+	EmbeddedTenantKVClientCACert = "ca-client-tenant.crt"
+	EmbeddedTenantKVClientCAKey  = "ca-client-tenant.key"
 )
