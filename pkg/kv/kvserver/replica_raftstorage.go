@@ -98,13 +98,11 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 // Entries requires that r.mu is held for writing because it requires exclusive
 // access to r.mu.stateLoader.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
-	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
-	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
 	if r.raftMu.sideloaded == nil {
 		return nil, errors.New("sideloaded storage is uninitialized")
 	}
-	return entries(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache,
+	return entries(ctx, r.mu.stateLoader, r.store.Engine(), r.RangeID, r.store.raftEntryCache,
 		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
 
@@ -122,7 +120,7 @@ func (r *Replica) raftEntriesLocked(lo, hi, maxBytes uint64) ([]raftpb.Entry, er
 func entries(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	reader storage.Reader,
+	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	sideloaded logstore.SideloadStorage,
@@ -183,6 +181,8 @@ func entries(
 		return nil
 	}
 
+	reader := eng.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
 	if err := raftlog.Visit(reader, rangeID, expectedIndex, hi, scanFunc); err != nil {
 		return nil, err
 	}
@@ -240,10 +240,8 @@ func (r *replicaRaftStorage) Term(i uint64) (uint64, error) {
 	if r.mu.lastIndex == i && r.mu.lastTerm != invalidLastTerm {
 		return r.mu.lastTerm, nil
 	}
-	readonly := r.store.Engine().NewReadOnly(storage.StandardDurability)
-	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
-	return term(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache, i)
+	return term(ctx, r.mu.stateLoader, r.store.Engine(), r.RangeID, r.store.raftEntryCache, i)
 }
 
 // raftTermLocked requires that r.mu is locked for writing.
@@ -262,7 +260,7 @@ func (r *Replica) GetTerm(i uint64) (uint64, error) {
 func term(
 	ctx context.Context,
 	rsl stateloader.StateLoader,
-	reader storage.Reader,
+	eng storage.Engine,
 	rangeID roachpb.RangeID,
 	eCache *raftentry.Cache,
 	index uint64,
@@ -271,6 +269,9 @@ func term(
 	if found {
 		return entry.Term, nil
 	}
+
+	reader := eng.NewReadOnly(storage.StandardDurability)
+	defer reader.Close()
 
 	if err := raftlog.Visit(reader, rangeID, index, index+1, func(ent raftpb.Entry) error {
 		if found {
