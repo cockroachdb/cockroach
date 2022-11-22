@@ -93,7 +93,7 @@ func TestMVCCScanWithManyVersionsAndSeparatedIntents(t *testing.T) {
 		tombstones:       false,
 		failOnMoreRecent: false,
 	}
-	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, 0 /* trackLastOffsets */)
+	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &pebbleResults{})
 	_, _, _, err = mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
@@ -152,7 +152,7 @@ func TestMVCCScanWithLargeKeyValue(t *testing.T) {
 		end:     roachpb.Key("e"),
 		ts:      ts,
 	}
-	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, 0 /* trackLastOffsets */)
+	mvccScanner.init(nil /* txn */, uncertainty.Interval{}, &pebbleResults{})
 	_, _, _, err := mvccScanner.scan(context.Background())
 	require.NoError(t, err)
 
@@ -229,7 +229,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
-	scanner.init(&txn1, ui1, 0 /* trackLastOffsets */)
+	scanner.init(&txn1, ui1, &pebbleResults{})
 	cleanup := scannerWithAccount(ctx, st, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err := scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
@@ -245,7 +245,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 		end:    makeKey(nil, 11),
 		ts:     hlc.Timestamp{WallTime: 50},
 	}
-	scanner.init(&txn1, ui1, 0 /* trackLastOffsets */)
+	scanner.init(&txn1, ui1, &pebbleResults{})
 	cleanup = scannerWithAccount(ctx, st, scanner, 6000)
 	resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 	require.Nil(t, resumeSpan)
@@ -265,7 +265,7 @@ func TestMVCCScanWithMemoryAccounting(t *testing.T) {
 			ts:           hlc.Timestamp{WallTime: 50},
 			inconsistent: inconsistent,
 		}
-		scanner.init(nil, uncertainty.Interval{}, 0 /* trackLastOffsets */)
+		scanner.init(nil, uncertainty.Interval{}, &pebbleResults{})
 		cleanup = scannerWithAccount(ctx, st, scanner, 100)
 		resumeSpan, resumeReason, resumeNextBytes, err = scanner.scan(ctx)
 		require.Nil(t, resumeSpan)

@@ -542,14 +542,9 @@ func (p *pebbleMVCCScanner) release() {
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(
-	txn *roachpb.Transaction, ui uncertainty.Interval, trackLastOffsets int,
+	txn *roachpb.Transaction, ui uncertainty.Interval, results results,
 ) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
-	results := &pebbleResults{}
-	if trackLastOffsets > 0 {
-		results.lastOffsetsEnabled = true
-		results.lastOffsets = make([]int, trackLastOffsets)
-	}
 	p.results = results
 
 	if txn != nil {

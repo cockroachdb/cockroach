@@ -78,35 +78,45 @@ var GetCFetcherWrapper func(
 // scanner and returns the result. Note that the returned KV is only valid until
 // the next call to NextKV.
 type mvccScanFetchAdapter struct {
-	scanner    *pebbleMVCCScanner
-	results    singleResults
-	noMoreKeys bool
+	scanner *pebbleMVCCScanner
+	results singleResults
 
-	// needToAdvanceBeforeGet is true if the last time we called NextKV, we only
-	// retrieved the current value of the pebble iterator, without advancing it,
-	// and as a result we'll need to advance the iterator next time we call
-	// NextKV.
-	needToAdvanceBeforeGet bool
+	onNextKV onNextKVFn
 }
 
 var _ NextKVer = &mvccScanFetchAdapter{}
+
+type onNextKVFn int
+
+const (
+	_ onNextKVFn = iota
+	onNextKVSeek
+	onNextKVAdvance
+	onNextKVDone
+)
 
 // NextKV implements the NextKVer interface.
 func (f *mvccScanFetchAdapter) NextKV(
 	ctx context.Context, mvccDecodeStrategy MVCCDecodingStrategy,
 ) (ok bool, kv roachpb.KeyValue, finalReferenceToBatch bool, err error) {
-	if f.needToAdvanceBeforeGet {
+	switch f.onNextKV {
+	case onNextKVSeek:
+		if !f.scanner.seekToStartOfScan() {
+			return false, roachpb.KeyValue{}, false, f.scanner.err
+		}
+		f.onNextKV = onNextKVAdvance
+	case onNextKVAdvance:
 		if !f.scanner.advance() {
 			// No more keys in the scan.
 			return false, roachpb.KeyValue{}, false, nil
 		}
+	case onNextKVDone:
+		// No more keys in the scan.
+		return false, roachpb.KeyValue{}, false, nil
 	}
-	// Make sure we will advance the iterator before getting a key next time
-	// NextKV is called.
-	f.needToAdvanceBeforeGet = true
 	ok, added := f.scanner.getOne(ctx)
 	if !ok {
-		return false, roachpb.KeyValue{}, false, nil
+		f.onNextKV = onNextKVDone
 	}
 	if !added {
 		return f.NextKV(ctx, mvccDecodeStrategy)
@@ -122,7 +132,7 @@ func (f *mvccScanFetchAdapter) NextKV(
 	case MVCCDecodingRequired:
 		lastKV.Key, lastKV.Value.Timestamp, err = enginepb.DecodeKey(enc)
 		if err != nil {
-			return false, lastKV, false, err
+			return false, lastKV, false, errors.AssertionFailedf("invalid encoded mvcc key: %x", enc)
 		}
 	case MVCCDecodingNotRequired:
 		lastKV.Key, _, ok = enginepb.SplitMVCCKey(enc)
@@ -187,6 +197,12 @@ func mvccScanToCols(
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 		}, nil
 	}
+	if opts.WholeRowsOfSize != 0 {
+		// TODO(yuzefovich): add support for this.
+		return MVCCScanResult{}, errors.AssertionFailedf(
+			"WholeRowsOfSize option is not supported with COL_BATCH_RESPONSE scan format",
+		)
+	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer mvccScanner.release()
@@ -202,7 +218,7 @@ func mvccScanToCols(
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
 		allowEmpty:       opts.AllowEmpty,
-		wholeRows:        opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
+		wholeRows:        false,
 		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		skipLocked:       opts.SkipLocked,
@@ -211,13 +227,9 @@ func mvccScanToCols(
 		keyBuf:           mvccScanner.keyBuf,
 	}
 
-	var trackLastOffsets int
-	if opts.WholeRowsOfSize > 1 {
-		trackLastOffsets = int(opts.WholeRowsOfSize)
-	}
-	mvccScanner.init(opts.Txn, opts.Uncertainty, trackLastOffsets)
-
 	adapter := mvccScanFetchAdapter{scanner: mvccScanner}
+	mvccScanner.init(opts.Txn, opts.Uncertainty, &adapter.results)
+
 	unlimitedMonitor := mon.NewUnlimitedMonitor(
 		ctx,
 		"mvcc-scan-to-cols", /* name */
@@ -242,14 +254,9 @@ func mvccScanToCols(
 	}
 	defer wrapper.Close(ctx)
 
-	mvccScanner.results = &adapter.results
-
 	var res MVCCScanResult
 
-	if !mvccScanner.seekToStartOfScan() {
-		return res, mvccScanner.err
-	}
-
+	adapter.onNextKV = onNextKVSeek
 	if grpcutil.IsLocalRequestContext(ctx) {
 		for {
 			_, batch, err := wrapper.NextBatch(ctx, false /* serialize */)
