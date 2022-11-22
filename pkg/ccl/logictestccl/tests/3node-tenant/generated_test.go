@@ -1855,6 +1855,13 @@ func TestTenantLogic_temp_table_txn(
 	runLogicTest(t, "temp_table_txn")
 }
 
+func TestTenantLogic_tenant_from_tenant(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_from_tenant")
+}
+
 func TestTenantLogic_tenant_slow_repro(
 	t *testing.T,
 ) {
