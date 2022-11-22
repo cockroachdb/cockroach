@@ -64,15 +64,6 @@ const defaultGeneratorName = "movr"
 
 var defaultGenerator workload.Generator
 
-var demoNodeCacheSizeValue = newBytesOrPercentageValue(
-	&demoCtx.CacheSize,
-	memoryPercentResolver,
-)
-var demoNodeSQLMemSizeValue = newBytesOrPercentageValue(
-	&demoCtx.SQLPoolMemorySize,
-	memoryPercentResolver,
-)
-
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
