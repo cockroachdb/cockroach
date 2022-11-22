@@ -1,5 +1,5 @@
 load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "pprofutil",
@@ -7,6 +7,17 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/util/pprofutil",
     visibility = ["//visibility:public"],
     deps = ["@com_github_cockroachdb_logtags//:logtags"],
+)
+
+go_test(
+    name = "pprofutil_test",
+    srcs = ["labels_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":pprofutil"],
+    deps = [
+        "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 get_x_data(name = "get_x_data")

@@ -352,7 +352,6 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 		default:
 			return nil, false, nil
 		}
-
 	case oid.T_regclass:
 		switch inputFamily {
 		case types.StringFamily:
@@ -369,6 +368,43 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 
 			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
 			dOid = tree.NewDOidWithName(oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName))
+		default:
+			return nil, false, nil
+		}
+	case oid.T_regtype:
+		switch inputFamily {
+		case types.StringFamily:
+			s := tree.MustBeDString(datum)
+			typRef, err := parser.GetTypeFromValidSQLSyntax(string(s))
+			if err != nil {
+				return nil, true, err
+			}
+
+			var resolvedTyp *types.T
+			var isArray bool
+			switch t := typRef.(type) {
+			case *tree.ArrayTypeReference:
+				resolvedTyp, err = c.f.catalog.ResolveType(c.f.ctx, t.ElementType.(*tree.UnresolvedObjectName))
+				if err != nil {
+					return nil, true, err
+				}
+				isArray = true
+			case *tree.UnresolvedObjectName:
+				resolvedTyp, err = c.f.catalog.ResolveType(c.f.ctx, t)
+				if err != nil {
+					return nil, true, err
+				}
+			case *types.T:
+				resolvedTyp = t
+			default:
+				return nil, false, nil
+			}
+
+			if isArray {
+				resolvedTyp = types.MakeArray(resolvedTyp)
+			}
+			dOid = tree.NewDOidWithTypeAndName(resolvedTyp.Oid(), types.RegType, resolvedTyp.SQLStandardName())
+
 		default:
 			return nil, false, nil
 		}

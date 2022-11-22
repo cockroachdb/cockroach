@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -77,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -105,6 +107,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 	pgx "github.com/jackc/pgx/v4"
@@ -205,6 +208,61 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	remoteFoo := "nodelocal://2/foo"
 
 	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts)
+}
+
+// TestBackupRestoreJobTagAndLabel runs a backup and restore and verifies that
+// the flows are executed remotely with a job log tag and a job pprof label.
+func TestBackupRestoreJobTagAndLabel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+	ctx := context.Background()
+	getJobTag := func(ctx context.Context) string {
+		tags := logtags.FromContext(ctx)
+		if tags != nil {
+			for _, tag := range tags.Get() {
+				if tag.Key() == "job" {
+					return tag.ValueStr()
+				}
+			}
+		}
+		return ""
+	}
+	found := false
+	var mu syncutil.Mutex
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication,
+		base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DisableDefaultTestTenant: true,
+				Knobs: base.TestingKnobs{
+					DistSQL: &execinfra.TestingKnobs{
+						SetupFlowCb: func(ctx context.Context, _ base.SQLInstanceID, _ *execinfrapb.SetupFlowRequest) error {
+							mu.Lock()
+							defer mu.Unlock()
+							tag := getJobTag(ctx)
+							label, ok := pprof.Label(ctx, "job")
+							if tag == "" && !ok {
+								// Skip, it's not a job.
+								return nil
+							}
+							if tag == "" || !ok || tag != label {
+								log.Fatalf(ctx, "the job tag should exist and match the pprof label: tag=%s label=%s ctx=%s",
+									tag, label, ctx)
+							}
+							found = true
+							return nil
+						},
+					},
+				},
+			},
+		},
+	)
+	defer cleanupFn()
+
+	backupAndRestore(ctx, t, tc, []string{localFoo}, []string{localFoo}, numAccounts)
+
+	require.True(t, found)
 }
 
 func TestBackupRestorePartitioned(t *testing.T) {

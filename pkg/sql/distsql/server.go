@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
@@ -404,6 +405,9 @@ func (ds *ServerImpl) setupFlow(
 
 	if !f.IsLocal() {
 		flowCtx.AmbientContext.AddLogTag("f", flowCtx.ID.Short())
+		if req.JobTag != "" {
+			flowCtx.AmbientContext.AddLogTag("job", req.JobTag)
+		}
 		ctx = flowCtx.AmbientContext.AnnotateCtx(ctx)
 		telemetry.Inc(sqltelemetry.DistSQLExecCounter)
 	}
@@ -615,11 +619,6 @@ func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *execinfrapb.SetupFlowRequest,
 ) (*execinfrapb.SimpleResponse, error) {
 	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
-	if cb := ds.TestingKnobs.SetupFlowCb; cb != nil {
-		if err := cb(ds.ServerConfig.NodeID.SQLInstanceID(), req); err != nil {
-			return &execinfrapb.SimpleResponse{Error: execinfrapb.NewError(ctx, err)}, nil
-		}
-	}
 	_, rpcSpan := ds.setupSpanForIncomingRPC(ctx, req)
 	defer rpcSpan.Finish()
 
@@ -653,6 +652,15 @@ func (ds *ServerImpl) SetupFlow(
 				f.Cleanup(ctx)
 			}
 			return err
+		}
+		var undo func()
+		ctx, undo = pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+		defer undo()
+		if cb := ds.TestingKnobs.SetupFlowCb; cb != nil {
+			if err = cb(ctx, ds.ServerConfig.NodeID.SQLInstanceID(), req); err != nil {
+				f.Cleanup(ctx)
+				return err
+			}
 		}
 		return ds.remoteFlowRunner.RunFlow(ctx, f)
 	}(); err != nil {
@@ -700,7 +708,10 @@ func (ds *ServerImpl) flowStreamInt(
 	}
 	defer cleanup()
 	log.VEventf(ctx, 1, "connected inbound stream %s/%d", flowID.Short(), streamID)
-	return streamStrategy.Run(f.AmbientContext.AnnotateCtx(ctx), stream, msg, f)
+	ctx = f.AmbientContext.AnnotateCtx(ctx)
+	ctx, undo := pprofutil.SetProfilerLabelsFromCtxTags(ctx)
+	defer undo()
+	return streamStrategy.Run(ctx, stream, msg, f)
 }
 
 // FlowStream is part of the execinfrapb.DistSQLServer interface.

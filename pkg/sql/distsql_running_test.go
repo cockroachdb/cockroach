@@ -617,7 +617,7 @@ func TestSetupFlowRPCError(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				DistSQL: &execinfra.TestingKnobs{
-					SetupFlowCb: func(nodeID base.SQLInstanceID, req *execinfrapb.SetupFlowRequest) error {
+					SetupFlowCb: func(_ context.Context, nodeID base.SQLInstanceID, req *execinfrapb.SetupFlowRequest) error {
 						nodeIDForError, ok := stmtToNodeIDForError[req.StatementSQL]
 						if !ok || nodeIDForError != nodeID {
 							return nil
