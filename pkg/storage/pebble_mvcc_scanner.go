@@ -76,6 +76,7 @@ type singleResults struct {
 	count, bytes int64
 	key          []byte
 	value        []byte
+	newPut       bool
 }
 
 var _ results = &singleResults{}
@@ -107,6 +108,7 @@ func (s *singleResults) put(
 	*/
 	s.key = key
 	s.value = value
+	s.newPut = true
 	return nil
 }
 
@@ -126,6 +128,7 @@ func (s *singleResults) getBytes() int64 {
 }
 
 func (s *singleResults) getLastKV() roachpb.KeyValue {
+	s.newPut = false
 	return roachpb.KeyValue{
 		Key:   s.key,
 		Value: roachpb.Value{RawBytes: s.value},
@@ -474,9 +477,12 @@ type pebbleMVCCScanner struct {
 	skipLocked       bool
 	tombstones       bool
 	failOnMoreRecent bool
-	isGet            bool
-	keyBuf           []byte
-	savedBuf         []byte
+	// advanceKeyEnabled, if true, enables "eager" advance of the iterator in
+	// advanceKey() when evaluating Scan and ReverseScan requests with
+	// non-COL_BATCH_RESPONSE scan format.
+	advanceKeyEnabled bool
+	keyBuf            []byte
+	savedBuf          []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
@@ -521,14 +527,9 @@ func (p *pebbleMVCCScanner) release() {
 // init sets bounds on the underlying pebble iterator, and initializes other
 // fields not set by the calling method.
 func (p *pebbleMVCCScanner) init(
-	txn *roachpb.Transaction, ui uncertainty.Interval, trackLastOffsets int,
+	txn *roachpb.Transaction, ui uncertainty.Interval, results results,
 ) {
 	p.itersBeforeSeek = maxItersBeforeSeek / 2
-	results := &pebbleResults{}
-	if trackLastOffsets > 0 {
-		results.lastOffsetsEnabled = true
-		results.lastOffsets = make([]int, trackLastOffsets)
-	}
 	p.results = results
 
 	if txn != nil {
@@ -548,7 +549,7 @@ func (p *pebbleMVCCScanner) init(
 
 // get iterates exactly once and adds one KV to the result set.
 func (p *pebbleMVCCScanner) get(ctx context.Context) {
-	p.isGet = true
+	p.advanceKeyEnabled = false
 
 	// The iterator may already be positioned on a range key that SeekGE hits, in
 	// which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
@@ -588,7 +589,7 @@ func (p *pebbleMVCCScanner) scan(
 	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
-	p.isGet = false
+	p.advanceKeyEnabled = true
 
 	// The iterator may already be positioned on a range key that the seek hits,
 	// in which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
@@ -1063,7 +1064,7 @@ func (p *pebbleMVCCScanner) prevKey(key []byte) bool {
 
 // advanceKey advances to the next key in the iterator's direction.
 func (p *pebbleMVCCScanner) advanceKey() bool {
-	if p.isGet {
+	if !p.advanceKeyEnabled {
 		return false
 	}
 	if p.reverse {
