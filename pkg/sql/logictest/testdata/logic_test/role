@@ -1053,43 +1053,43 @@ DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
 statement ok
 CREATE ROLE rolewithlogin LOGIN
 
-query TTTO
-SELECT * FROM system.role_options
+query TTT
+SELECT username, option, value FROM system.role_options
 ----
 
 statement ok
 CREATE ROLE rolewithnologin NOLOGIN
 
-query TTTO
-SELECT * FROM system.role_options
+query TTT
+SELECT username, option, value FROM system.role_options
 ----
-rolewithnologin  NOLOGIN  NULL  133
+rolewithnologin  NOLOGIN  NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL '2020-01-01'
 
-query TTTO
-SELECT * FROM system.role_options
+query TTT
+SELECT username, option, value FROM system.role_options
 ----
-rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00  132
-rolewithnologin  NOLOGIN      NULL                       133
+rolewithlogin    VALID UNTIL  2020-01-01 00:00:00+00:00
+rolewithnologin  NOLOGIN      NULL
 
 statement ok
 ALTER ROLE rolewithlogin VALID UNTIL NULL
 
-query TTTO
-SELECT * FROM system.role_options
+query TTT
+SELECT username, option, value FROM system.role_options
 ----
-rolewithlogin    VALID UNTIL  NULL  132
-rolewithnologin  NOLOGIN      NULL  133
+rolewithlogin    VALID UNTIL  NULL
+rolewithnologin  NOLOGIN      NULL
 
 statement ok
 DROP ROLE rolewithlogin
 
-query TTTO
-SELECT * FROM system.role_options
+query TTT
+SELECT username, option, value FROM system.role_options
 ----
-rolewithnologin  NOLOGIN  NULL  133
+rolewithnologin  NOLOGIN  NULL
 
 statement error pq: conflicting role options
 CREATE ROLE thisshouldntwork LOGIN NOLOGIN
