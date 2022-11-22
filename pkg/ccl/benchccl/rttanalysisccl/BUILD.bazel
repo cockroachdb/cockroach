@@ -16,7 +16,6 @@ go_test(
         "//pkg/bench/rttanalysis",
         "//pkg/ccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/ccl/utilccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

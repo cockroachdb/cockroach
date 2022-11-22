@@ -187,6 +187,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/blobs",
+        "//pkg/ccl",
         "//pkg/ccl/backupccl/backupbase",
         "//pkg/ccl/backupccl/backupdest",
         "//pkg/ccl/backupccl/backupencryption",

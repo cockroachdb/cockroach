@@ -46,9 +46,9 @@ go_test(
     embed = [":cliccl"],
     deps = [
         "//pkg/build",
+        "//pkg/ccl",
         "//pkg/ccl/baseccl",
         "//pkg/ccl/storageccl/engineccl",
-        "//pkg/ccl/utilccl",
         "//pkg/cli",
         "//pkg/server",
         "//pkg/storage",

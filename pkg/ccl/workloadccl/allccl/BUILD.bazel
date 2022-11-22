@@ -49,7 +49,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl",
         "//pkg/ccl/workloadccl",
         "//pkg/col/coldata",
         "//pkg/security/securityassets",

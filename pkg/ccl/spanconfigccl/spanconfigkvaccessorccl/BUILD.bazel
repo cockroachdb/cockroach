@@ -10,8 +10,8 @@ go_test(
     args = ["-test.timeout=295s"],
     deps = [
         "//pkg/base",
+        "//pkg/ccl",
         "//pkg/ccl/kvccl/kvtenantccl",
-        "//pkg/ccl/utilccl",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/security/securityassets",

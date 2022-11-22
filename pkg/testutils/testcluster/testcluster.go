@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -382,20 +381,6 @@ func (tc *TestCluster) Start(t testing.TB) {
 			}(i)
 		} else {
 			if err := tc.startServer(i, tc.serverArgs[i]); err != nil {
-				if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
-					if i != 0 {
-						t.Fatal(errors.Newf("failed to start server on node %d due to lack of "+
-							"CCL binary after server started successfully on previous nodes", i))
-					}
-					// We're about to skip the test. Doing so requires us to
-					// clean up all servers before in advance, or else they'll
-					// be detected as a leaked stopper.
-					for j := 0; j < nodes; j++ {
-						tc.Servers[j].Stopper().Stop(context.TODO())
-					}
-					tc.Stopper().Stop(context.TODO())
-					skip.IgnoreLint(t, serverutils.TenantSkipCCLBinaryMessage)
-				}
 				t.Fatal(err)
 			}
 			// We want to wait for stores for each server in order to have predictable
@@ -408,16 +393,6 @@ func (tc *TestCluster) Start(t testing.TB) {
 	if tc.clusterArgs.ParallelStart {
 		for i := 0; i < nodes; i++ {
 			if err := <-errCh; err != nil {
-				if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
-					// We're about to skip the test. Doing so requires us to
-					// clean up all servers before in advance, or else they'll
-					// be detected as a leaked stopper.
-					for j := 0; j < nodes; j++ {
-						tc.Servers[j].Stopper().Stop(context.TODO())
-					}
-					tc.Stopper().Stop(context.TODO())
-					skip.IgnoreLint(t, serverutils.TenantSkipCCLBinaryMessage)
-				}
 				t.Fatal(err)
 			}
 		}
@@ -523,14 +498,7 @@ func (tc *TestCluster) AddAndStartServerE(serverArgs base.TestServerArgs) error 
 		return err
 	}
 
-	if err := tc.startServer(len(tc.Servers)-1, serverArgs); err != nil {
-		if strings.Contains(err.Error(), serverutils.RequiresCCLBinaryMessage) {
-			tc.Stopper().Stop(context.TODO())
-			skip.IgnoreLint(tc.t, serverutils.TenantSkipCCLBinaryMessage)
-		}
-		return err
-	}
-	return nil
+	return tc.startServer(len(tc.Servers)-1, serverArgs)
 }
 
 // AddServer is like AddAndStartServer, except it does not start it.

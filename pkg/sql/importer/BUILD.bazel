@@ -161,7 +161,6 @@ go_test(
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/ccl",
-        "//pkg/ccl/utilccl",
         "//pkg/cloud",
         "//pkg/cloud/cloudpb",
         "//pkg/cloud/impl:cloudimpl",
