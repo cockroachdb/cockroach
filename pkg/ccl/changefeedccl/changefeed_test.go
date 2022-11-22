@@ -6527,6 +6527,12 @@ func TestChangefeedOnlyInitialScan(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 				sqlDB.Exec(t, `INSERT INTO foo (a) SELECT * FROM generate_series(1, 5000);`)
 
+				// Most changefeed tests can afford to have a race condition between the initial
+				// inserts and starting the feed because the output looks the same for an initial
+				// scan and an insert. For tests with initial_scan=only, though, we can't start the feed
+				// until it's going to see all the initial inserts in the initial scan.
+				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo`, [][]string{{`5000`}})
+
 				feed := feed(t, f, changefeedStmt)
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (5005), (5007), (5009)")
@@ -6618,6 +6624,8 @@ func TestChangefeedOnlyInitialScanCSV(t *testing.T) {
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
 				sqlDB.Exec(t, "INSERT INTO bar VALUES (1, 'a'), (2, 'b'), (3, 'c')")
 
+				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo,bar`, [][]string{{`9`}})
+
 				feed := feed(t, f, testData.changefeedStmt)
 
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (4, 'Doug'), (5, 'Elaine'), (6, 'Fred')")
@@ -6674,6 +6682,8 @@ func TestChangefeedOnlyInitialScanCSVSinkless(t *testing.T) {
 			t.Run(testName, func(t *testing.T) {
 				sqlDB.Exec(t, "CREATE TABLE foo (id INT PRIMARY KEY, name STRING)")
 				sqlDB.Exec(t, "INSERT INTO foo VALUES (1, 'Alice'), (2, 'Bob'), (3, 'Carol')")
+
+				sqlDB.CheckQueryResultsRetry(t, `SELECT count(*) FROM foo`, [][]string{{`3`}})
 
 				feed := feed(t, f, changefeedStmt)
 
