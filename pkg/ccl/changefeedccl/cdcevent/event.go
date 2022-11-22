@@ -367,8 +367,8 @@ type eventDecoder struct {
 	// Cached allocations for *row.Fetcher
 	rfCache *rowFetcherCache
 
-	// kvFetcher used to decode datums.
-	kvFetcher row.SpanKVFetcher
+	// kvProvider used to feed KVs into fetcher to decode them into datums.
+	kvProvider row.KVProvider
 
 	// factory for constructing event descriptors.
 	getEventDescriptor eventDescriptorFactory
@@ -451,9 +451,9 @@ func (d *eventDecoder) DecodeKV(
 		return Row{}, err
 	}
 
-	d.kvFetcher.KVs = d.kvFetcher.KVs[:0]
-	d.kvFetcher.KVs = append(d.kvFetcher.KVs, kv)
-	if err := d.fetcher.StartScanFrom(ctx, &d.kvFetcher); err != nil {
+	d.kvProvider.KVs = d.kvProvider.KVs[:0]
+	d.kvProvider.KVs = append(d.kvProvider.KVs, kv)
+	if err := d.fetcher.ConsumeKVProvider(ctx, &d.kvProvider); err != nil {
 		return Row{}, err
 	}
 

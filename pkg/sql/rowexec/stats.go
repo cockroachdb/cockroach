@@ -74,9 +74,10 @@ func (isc *inputStatCollector) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 	return row, meta
 }
 
-// rowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects stats.
+// rowFetcherStatCollector is a wrapper on top of a row.Fetcher that collects
+// stats.
 type rowFetcherStatCollector struct {
-	fetcher *row.Fetcher
+	*row.Fetcher
 	// stats contains the collected stats.
 	stats              execinfrapb.InputStats
 	startScanStallTime time.Duration
@@ -86,7 +87,7 @@ var _ rowFetcher = &rowFetcherStatCollector{}
 
 // newRowFetcherStatCollector returns a new rowFetcherStatCollector.
 func newRowFetcherStatCollector(f *row.Fetcher) *rowFetcherStatCollector {
-	res := &rowFetcherStatCollector{fetcher: f}
+	res := &rowFetcherStatCollector{Fetcher: f}
 	res.stats.NumTuples.Set(0)
 	return res
 }
@@ -100,15 +101,7 @@ func (c *rowFetcherStatCollector) StartScan(
 	limitHint rowinfra.RowLimit,
 ) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartScan(ctx, spans, spanIDs, batchBytesLimit, limitHint)
-	c.startScanStallTime += timeutil.Since(start)
-	return err
-}
-
-// StartScanFrom is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) StartScanFrom(ctx context.Context, f row.KVBatchFetcher) error {
-	start := timeutil.Now()
-	err := c.fetcher.StartScanFrom(ctx, f)
+	err := c.Fetcher.StartScan(ctx, spans, spanIDs, batchBytesLimit, limitHint)
 	c.startScanStallTime += timeutil.Since(start)
 	return err
 }
@@ -125,7 +118,7 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 	qualityOfService sessiondatapb.QoSLevel,
 ) error {
 	start := timeutil.Now()
-	err := c.fetcher.StartInconsistentScan(
+	err := c.Fetcher.StartInconsistentScan(
 		ctx, db, initialTimestamp, maxTimestampAge, spans, batchBytesLimit, limitHint, qualityOfService,
 	)
 	c.startScanStallTime += timeutil.Since(start)
@@ -135,7 +128,7 @@ func (c *rowFetcherStatCollector) StartInconsistentScan(
 // NextRow is part of the rowFetcher interface.
 func (c *rowFetcherStatCollector) NextRow(ctx context.Context) (rowenc.EncDatumRow, int, error) {
 	start := timeutil.Now()
-	row, spanID, err := c.fetcher.NextRow(ctx)
+	row, spanID, err := c.Fetcher.NextRow(ctx)
 	if row != nil {
 		c.stats.NumTuples.Add(1)
 	}
@@ -148,31 +141,12 @@ func (c *rowFetcherStatCollector) NextRowInto(
 	ctx context.Context, destination rowenc.EncDatumRow, colIdxMap catalog.TableColMap,
 ) (ok bool, err error) {
 	start := timeutil.Now()
-	ok, err = c.fetcher.NextRowInto(ctx, destination, colIdxMap)
+	ok, err = c.Fetcher.NextRowInto(ctx, destination, colIdxMap)
 	if ok {
 		c.stats.NumTuples.Add(1)
 	}
 	c.stats.WaitTime.Add(timeutil.Since(start))
 	return ok, err
-}
-
-func (c *rowFetcherStatCollector) Reset() {
-	c.fetcher.Reset()
-}
-
-// GetBytesRead is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) GetBytesRead() int64 {
-	return c.fetcher.GetBytesRead()
-}
-
-// GetBatchRequestsIssued is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) GetBatchRequestsIssued() int64 {
-	return c.fetcher.GetBatchRequestsIssued()
-}
-
-// Close is part of the rowFetcher interface.
-func (c *rowFetcherStatCollector) Close(ctx context.Context) {
-	c.fetcher.Close(ctx)
 }
 
 // getInputStats is a utility function to check whether the given input is
