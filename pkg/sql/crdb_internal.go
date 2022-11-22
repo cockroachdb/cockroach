@@ -1182,6 +1182,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   last_error          STRING,
   rows_avg            FLOAT NOT NULL,
   rows_var            FLOAT NOT NULL,
+  idle_lat_avg        FLOAT NOT NULL,
+  idle_lat_var        FLOAT NOT NULL,
   parse_lat_avg       FLOAT NOT NULL,
   parse_lat_var       FLOAT NOT NULL,
   plan_lat_avg        FLOAT NOT NULL,
@@ -1285,6 +1287,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 				errString, // last_error
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.Mean)),                               // rows_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.NumRows.GetVariance(stats.Stats.Count))),     // rows_var
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.Mean)),                               // idle_lat_avg
+				tree.NewDFloat(tree.DFloat(stats.Stats.IdleLat.GetVariance(stats.Stats.Count))),     // idle_lat_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.Mean)),                              // parse_lat_avg
 				tree.NewDFloat(tree.DFloat(stats.Stats.ParseLat.GetVariance(stats.Stats.Count))),    // parse_lat_var
 				tree.NewDFloat(tree.DFloat(stats.Stats.PlanLat.Mean)),                               // plan_lat_avg
