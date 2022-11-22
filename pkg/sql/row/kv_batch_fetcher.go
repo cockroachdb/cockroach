@@ -12,6 +12,7 @@ package row
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -177,6 +178,13 @@ type txnKVFetcher struct {
 	// For request and response admission control.
 	requestAdmissionHeader roachpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+
+	// Observability fields.
+	// Note: these need to be read via an atomic op.
+	atomics struct {
+		bytesRead           int64
+		batchRequestsIssued *int64
+	}
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -262,8 +270,8 @@ type kvBatchFetcherArgs struct {
 // The passed-in memory account is owned by the fetcher throughout its lifetime
 // but is **not** closed - it is the caller's responsibility to close acc if it
 // is non-nil.
-func newTxnKVFetcher(args kvBatchFetcherArgs) *txnKVFetcher {
-	return &txnKVFetcher{
+func newTxnKVFetcher(args kvBatchFetcherArgs, batchRequestsIssued *int64) *txnKVFetcher {
+	f := &txnKVFetcher{
 		sendFn:                     args.sendFn,
 		scanFormat:                 roachpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
@@ -275,6 +283,8 @@ func newTxnKVFetcher(args kvBatchFetcherArgs) *txnKVFetcher {
 		requestAdmissionHeader:     args.requestAdmissionHeader,
 		responseAdmissionQ:         args.responseAdmissionQ,
 	}
+	f.atomics.batchRequestsIssued = batchRequestsIssued
+	return f
 }
 
 // setTxnAndSendFn updates the txnKVFetcher with the new txn and sendFn. txn and
@@ -541,6 +551,19 @@ func popBatch(
 
 // NextBatch implements the KVBatchFetcher interface.
 func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherResponse, err error) {
+	var recursed bool
+	defer func() {
+		if !resp.MoreKVs || recursed {
+			return
+		}
+		// TODO: col batches.
+		nBytes := len(resp.BatchResponse)
+		for i := range resp.KVs {
+			nBytes += len(resp.KVs[i].Key)
+			nBytes += len(resp.KVs[i].Value.RawBytes)
+		}
+		atomic.AddInt64(&f.atomics.bytesRead, int64(nBytes))
+	}()
 	// The purpose of this loop is to unpack the two-level batch structure that is
 	// returned from the KV layer.
 	//
@@ -672,7 +695,22 @@ func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 		return KVBatchFetcherResponse{}, err
 	}
 	// We've got more data to process, recurse and process it.
+	recursed = true
 	return f.NextBatch(ctx)
+}
+
+func (f *txnKVFetcher) GetBytesRead() int64 {
+	if f == nil {
+		return 0
+	}
+	return atomic.LoadInt64(&f.atomics.bytesRead)
+}
+
+func (f *txnKVFetcher) GetBatchRequestsIssued() int64 {
+	if f == nil {
+		return 0
+	}
+	return atomic.LoadInt64(f.atomics.batchRequestsIssued)
 }
 
 func (f *txnKVFetcher) reset(ctx context.Context) {
