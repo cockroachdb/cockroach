@@ -16,8 +16,8 @@ Contains the following files:
 * client.testuser2.key: testing user 2 private key
 * ca-client-tenant.crt: CA certificate used to sign client-tenant and tenant-signing certs.
 * ca-client-tenant.key: CA private key for ca-client-tenant.crt.
-* client-tenant.<ID>.crt: tenant client certificate (used to authn to the KV layer)
-* client-tenant.<ID>.key: tenant client private key (used to authn to the KV layer)
+* client-tenant.<ID>.crt: tenant client certificate (used to authn to the KV layer and other tenant servers)
+* client-tenant.<ID>.key: tenant client private key (used to authn to the KV layer and other tenant server)
 * tenant-signing.<ID>.crt: tenant signing certificate (used to sign serialized SQL sessions)
 * tenant-signing.<ID>.key: tenant signing private key (used to sign serialized SQL sessions)
 

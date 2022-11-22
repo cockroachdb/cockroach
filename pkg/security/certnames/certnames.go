@@ -104,8 +104,9 @@ func SQLServerKeyFilename() string {
 	return "sql-server" + keyExtension
 }
 
-// TenantKVClientCertFilename returns the expected file name for the tenant client certificate
-// (used to authenticate a tenant server to the KV layer).
+// TenantKVClientCertFilename returns the expected file name for the
+// tenant client certificate (used to authenticate a tenant server to
+// the KV layer and to other tenant servers for the same tenant).
 func TenantKVClientCertFilename(tenantIdentifier string) string {
 	return "client-tenant." + tenantIdentifier + certExtension
 }
