@@ -12,8 +12,10 @@ package democluster
 
 import (
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 )
 
 // DemoLocalityList represents a list of localities for the cockroach
@@ -60,3 +62,10 @@ var defaultLocalities = DemoLocalityList{
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "c"}}},
 	{Tiers: []roachpb.Tier{{Key: "region", Value: "europe-west1"}, {Key: "az", Value: "d"}}},
 }
+
+// Round-trip latencies collected from http://cloudping.co on 2019-09-11.
+var localityLatencies = regionlatency.RoundTripPairs{
+	{A: "us-east1", B: "us-west1"}:     66 * time.Millisecond,
+	{A: "us-east1", B: "europe-west1"}: 64 * time.Millisecond,
+	{A: "us-west1", B: "europe-west1"}: 146 * time.Millisecond,
+}.ToLatencyMap()

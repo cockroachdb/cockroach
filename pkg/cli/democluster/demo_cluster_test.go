@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -146,6 +147,7 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	// Set up an empty 9-node cluster with simulated latencies.
 	demoCtx.SimulateLatency = true
 	demoCtx.NumNodes = 9
+	demoCtx.Localities = defaultLocalities
 
 	certsDir := t.TempDir()
 
@@ -178,6 +180,8 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 
 	require.NoError(t, c.Start(ctx))
+
+	c.SetSimulatedLatency(true)
 
 	for _, tc := range []struct {
 		desc    string
@@ -212,12 +216,14 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 				}
 			}()
 			// Find the maximum latency in the cluster from the current node.
-			var maxLatency time.Duration
-			for _, latencyMS := range regionToRegionToLatency[tc.region] {
-				if d := time.Duration(latencyMS) * time.Millisecond; d > maxLatency {
-					maxLatency = d
+			var maxLatency regionlatency.RoundTripLatency
+			localityLatencies.ForEachLatencyFrom(tc.region, func(
+				_ regionlatency.Region, l regionlatency.OneWayLatency,
+			) {
+				if rtt := l * 2; rtt > maxLatency {
+					maxLatency = rtt
 				}
-			}
+			})
 
 			// Attempt to make a query that talks to every node.
 			// This should take at least maxLatency.
