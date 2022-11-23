@@ -67,8 +67,8 @@ exp,benchmark
 2,ORMQueries/has_table_privilege_1
 4,ORMQueries/has_table_privilege_3
 6,ORMQueries/has_table_privilege_5
-85,ORMQueries/hasura_column_descriptions
-85,ORMQueries/hasura_column_descriptions_8_tables
+7,ORMQueries/hasura_column_descriptions
+22,ORMQueries/hasura_column_descriptions_8_tables
 7,ORMQueries/hasura_column_descriptions_modified
 4,ORMQueries/information_schema._pg_index_position
 3,ORMQueries/pg_attribute
