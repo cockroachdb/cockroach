@@ -346,7 +346,6 @@
 /pkg/security/clientsecopts/ @cockroachdb/unowned @cockroachdb/server-prs @cockroachdb/sql-experience @cockroachdb/prodsec
 /pkg/settings/               @cockroachdb/unowned
 /pkg/spanconfig/             @cockroachdb/kv-prs
-/pkg/startupmigrations/      @cockroachdb/unowned @cockroachdb/sql-schema
 /pkg/repstream/              @cockroachdb/disaster-recovery
 /pkg/testutils/              @cockroachdb/test-eng-noreview
 /pkg/testutils/reduce/       @cockroachdb/sql-queries

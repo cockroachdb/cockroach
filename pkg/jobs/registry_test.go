@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -118,6 +119,10 @@ func TestRegistryGC(t *testing.T) {
 				// from getting created so that we don't have to special case it in the
 				// test itself.
 				ManagerDisableJobCreation: true,
+			},
+			UpgradeManager: &upgradebase.TestingKnobs{
+				// This test wants to look at job records.
+				DontUseJobs: true,
 			},
 		},
 	})
@@ -260,6 +265,10 @@ func TestRegistryGCPagination(t *testing.T) {
 				// test itself.
 				ManagerDisableJobCreation: true,
 			},
+			UpgradeManager: &upgradebase.TestingKnobs{
+				// This test wants to count job records.
+				DontUseJobs: true,
+			},
 		},
 	})
 	db := sqlutils.MakeSQLRunner(sqlDB)
@@ -305,6 +314,10 @@ func TestBatchJobsCreation(t *testing.T) {
 						// Avoiding jobs to be adopted.
 						JobsTestingKnobs: &TestingKnobs{
 							DisableAdoptions: true,
+						},
+						// DisableAdoptions needs this.
+						UpgradeManager: &upgradebase.TestingKnobs{
+							DontUseJobs: true,
 						},
 					},
 				}
@@ -473,6 +486,9 @@ func TestRetriesWithExponentialBackoff(t *testing.T) {
 					// from getting created so that we don't have to special case it in the
 					// test itself.
 					ManagerDisableJobCreation: true,
+				},
+				UpgradeManager: &upgradebase.TestingKnobs{
+					DontUseJobs: true,
 				},
 			},
 		}
@@ -776,7 +792,13 @@ func TestExponentialBackoffSettings(t *testing.T) {
 			retryMaxDelaySetting.Override(ctx, &cs.SV, time.Hour)
 			args := base.TestServerArgs{
 				Settings: cs,
-				Knobs:    base.TestingKnobs{JobsTestingKnobs: &TestingKnobs{BeforeUpdate: intercept}},
+				Knobs: base.TestingKnobs{
+					JobsTestingKnobs: &TestingKnobs{BeforeUpdate: intercept},
+					// This test wants to intercept the jobs that get created.
+					UpgradeManager: &upgradebase.TestingKnobs{
+						DontUseJobs: true,
+					},
+				},
 			}
 			s, sdb, kvDB := serverutils.StartServer(t, args)
 			defer s.Stopper().Stop(ctx)
@@ -1123,6 +1145,10 @@ func TestDisablingJobAdoptionClearsClaimSessionID(t *testing.T) {
 					Adopt:  &intervalOverride,
 					Cancel: &intervalOverride,
 				},
+			},
+			// DisableAdoptions needs this.
+			UpgradeManager: &upgradebase.TestingKnobs{
+				DontUseJobs: true,
 			},
 		},
 	})

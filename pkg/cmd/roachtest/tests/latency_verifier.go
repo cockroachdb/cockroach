@@ -26,6 +26,7 @@ import (
 
 type jobInfo interface {
 	GetHighWater() time.Time
+	GetFinishedTime() time.Time
 	GetStatus() string
 	GetError() string
 }
@@ -139,11 +140,14 @@ func (lv *latencyVerifier) pollLatency(
 			return err
 		}
 		status := info.GetStatus()
-		if status != "running" {
+		if status == "succeeded" {
+			lv.noteHighwater(info.GetFinishedTime())
+		} else if status == "running" {
+			lv.noteHighwater(info.GetHighWater())
+		} else {
 			lv.logger.Printf("unexpected status: %s, error: %s", status, info.GetError())
 			return errors.Errorf("unexpected status: %s", status)
 		}
-		lv.noteHighwater(info.GetHighWater())
 	}
 }
 
@@ -155,10 +159,10 @@ func (lv *latencyVerifier) assertValid(t test.Test) {
 		t.Fatalf("initial scan latency was more than target: %s vs %s",
 			lv.initialScanLatency, lv.targetInitialScanLatency)
 	}
-	if !lv.latencyBecameSteady {
+	if lv.targetSteadyLatency != 0 && !lv.latencyBecameSteady {
 		t.Fatalf("latency never dropped to acceptable steady level: %s", lv.targetSteadyLatency)
 	}
-	if lv.maxSeenSteadyLatency > lv.targetSteadyLatency {
+	if lv.targetSteadyLatency != 0 && lv.maxSeenSteadyLatency > lv.targetSteadyLatency {
 		t.Fatalf("max latency was more than allowed: %s vs %s",
 			lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
 	}

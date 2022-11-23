@@ -727,7 +727,7 @@ func TestBackupAndRestoreJobDescription(t *testing.T) {
 	asOf1 := strings.TrimPrefix(matches[1], "/full")
 
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE status != 'failed'",
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND status != 'failed'",
 		[][]string{
 			{fmt.Sprintf("BACKUP TO ('%s', '%s', '%s')", backups[0].(string), backups[1].(string),
 				backups[2].(string))},
@@ -5608,7 +5608,7 @@ func TestBackupRestoreShowJob(t *testing.T) {
 	// TODO (lucy): Update this if/when we decide to change how these jobs queued by
 	// the startup migration are handled.
 	sqlDB.CheckQueryResults(
-		t, "SELECT description FROM [SHOW JOBS] WHERE description != 'updating privileges' ORDER BY description",
+		t, "SELECT description FROM [SHOW JOBS] WHERE job_type != 'MIGRATION' AND description != 'updating privileges' ORDER BY description",
 		[][]string{
 			{"BACKUP DATABASE data TO 'nodelocal://0/foo' WITH revision_history = true"},
 			{"RESTORE TABLE data.bank FROM 'nodelocal://0/foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},

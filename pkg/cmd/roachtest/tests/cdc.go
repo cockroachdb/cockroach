@@ -29,6 +29,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,18 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-)
-
-type workloadType string
-
-const (
-	tpccWorkloadType   workloadType = "tpcc"
-	ledgerWorkloadType workloadType = "ledger"
 )
 
 // kafkaCreateTopicRetryDuration is the retry duration we use while
@@ -63,72 +59,73 @@ const (
 // seen with a 1-5% probability
 var kafkaCreateTopicRetryDuration = 1 * time.Minute
 
-type sinkType int32
+type sinkType string
 
 const (
-	cloudStorageSink sinkType = iota + 1
-	webhookSink
-	pubsubSink
+	cloudStorageSink sinkType = "cloudstorage"
+	webhookSink      sinkType = "webhook"
+	pubsubSink       sinkType = "pubsub"
+	kafkaSink        sinkType = "kafka"
+	nullSink         sinkType = "null"
 )
 
-type cdcTestArgs struct {
-	workloadType       workloadType
-	tpccWarehouseCount int
-	workloadDuration   string
-	initialScan        bool
-	kafkaChaos         bool
-	crdbChaos          bool
-	whichSink          sinkType
-	sinkURI            string
-	assumeRole         string
+type cdcTester struct {
+	ctx          context.Context
+	t            test.Test
+	mon          cluster.Monitor
+	cluster      cluster.Cluster
+	crdbNodes    option.NodeListOption
+	workloadNode option.NodeListOption
+	logger       *logger.Logger
 
-	// preStartStatements are executed after the workload is initialized but before the
-	// changefeed is created.
-	preStartStatements []string
+	// sinkType -> sinkURI
+	sinkCache map[sinkType]string
 
-	targetInitialScanLatency time.Duration
-	targetSteadyLatency      time.Duration
-	targetTxnPerSecond       float64
+	workloadWg *sync.WaitGroup
+	doneCh     chan struct{}
 }
 
-func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcTestArgs) {
-	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
-	workloadNode := c.Node(c.Spec().NodeCount)
-	kafkaNode := c.Node(c.Spec().NodeCount)
-	c.Put(ctx, t.Cockroach(), "./cockroach")
-	c.Put(ctx, t.DeprecatedWorkload(), "./workload", workloadNode)
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), crdbNodes)
-
-	db := c.Conn(ctx, t.L(), 1)
-	defer stopFeeds(db)
-	kafka := kafkaManager{
-		t:     t,
-		c:     c,
-		nodes: kafkaNode,
+func (ct *cdcTester) startCRDBChaos() {
+	chaosStopper := make(chan time.Time)
+	ct.mon.Go(func(ctx context.Context) error {
+		select {
+		case <-ct.doneCh:
+		case <-ctx.Done():
+		}
+		chaosStopper <- timeutil.Now()
+		return nil
+	})
+	ch := Chaos{
+		Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
+		Target:  ct.crdbNodes.RandNode,
+		Stopper: chaosStopper,
 	}
+	ct.mon.Go(ch.Runner(ct.cluster, ct.t, ct.mon))
+}
 
+func (ct *cdcTester) setupSink(args feedArgs) string {
 	var sinkURI string
-	if args.sinkURI != "" {
-		sinkURI = args.sinkURI
-	} else if args.whichSink == cloudStorageSink {
+	switch args.sinkType {
+	case nullSink:
+		sinkURI = "null://"
+	case cloudStorageSink:
 		ts := timeutil.Now().Format(`20060102150405`)
 		// cockroach-tmp is a multi-region bucket with a TTL to clean up old
 		// data.
 		sinkURI = `experimental-gs://cockroach-tmp/roachtest/` + ts + "?AUTH=implicit"
-	} else if args.whichSink == webhookSink {
-		// setup a sample cert for use by the mock sink
+	case webhookSink:
 		cert, certEncoded, err := cdctest.NewCACertBase64Encoded()
 		if err != nil {
-			t.Fatal(err)
+			ct.t.Fatal(err)
 		}
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
 		if err != nil {
-			t.Fatal(err)
+			ct.t.Fatal(err)
 		}
 
 		sinkDestHost, err := url.Parse(sinkDest.URL())
 		if err != nil {
-			t.Fatal(err)
+			ct.t.Fatal(err)
 		}
 
 		params := sinkDestHost.Query()
@@ -136,176 +133,367 @@ func cdcBasicTest(ctx context.Context, t test.Test, c cluster.Cluster, args cdcT
 		sinkDestHost.RawQuery = params.Encode()
 
 		sinkURI = fmt.Sprintf("webhook-%s", sinkDestHost.String())
-	} else if args.whichSink == pubsubSink {
+	case pubsubSink:
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
-	} else {
-		t.Status("installing kafka")
-		kafka.install(ctx)
-		kafka.start(ctx)
-		sinkURI = kafka.sinkURL(ctx)
+	case kafkaSink:
+		kafkaNode := ct.cluster.Node(ct.cluster.Spec().NodeCount)
+		kafka := kafkaManager{
+			t:     ct.t,
+			c:     ct.cluster,
+			nodes: kafkaNode,
+		}
+		kafka.install(ct.ctx)
+		kafka.start(ct.ctx)
+
+		if args.kafkaChaos {
+			ct.mon.Go(func(ctx context.Context) error {
+				period, downTime := 2*time.Minute, 20*time.Second
+				return kafka.chaosLoop(ctx, period, downTime, ct.doneCh)
+			})
+		}
+
+		sinkURI = kafka.sinkURL(ct.ctx)
+	default:
+		ct.t.Fatalf("unknown sink provided: %s", args.sinkType)
 	}
 
 	if args.assumeRole != "" {
 		sinkURI = sinkURI + "&ASSUME_ROLE=" + args.assumeRole
 	}
 
-	m := c.NewMonitor(ctx, crdbNodes)
-	workloadCompleteCh := make(chan struct{}, 1)
+	return sinkURI
+}
 
-	workloadStart := timeutil.Now()
-	if args.workloadType == tpccWorkloadType {
-		t.Status("installing TPCC")
-		tpcc := tpccWorkload{
-			sqlNodes:           crdbNodes,
-			workloadNodes:      workloadNode,
-			tpccWarehouseCount: args.tpccWarehouseCount,
-			// TolerateErrors if crdbChaos is true; otherwise, the workload will fail
-			// if it attempts to use the node which was brought down by chaos.
-			tolerateErrors: args.crdbChaos,
-		}
+type tpccArgs struct {
+	warehouses     int
+	duration       string
+	tolerateErrors bool
+}
 
-		tpcc.install(ctx, c)
+func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
+	tpcc := tpccWorkload{
+		sqlNodes:           ct.crdbNodes,
+		workloadNodes:      ct.workloadNode,
+		tpccWarehouseCount: args.warehouses,
+		// TolerateErrors if crdbChaos is true; otherwise, the workload will fail
+		// if it attempts to use the node which was brought down by chaos.
+		tolerateErrors: args.tolerateErrors,
+	}
+
+	if !ct.t.SkipInit() {
+		ct.t.Status("installing TPCC workload")
+		tpcc.install(ct.ctx, ct.cluster)
+	} else {
+		ct.t.Status("skipping TPCC installation")
+	}
+
+	if args.duration != "" {
 		// TODO(dan,ajwerner): sleeping momentarily before running the workload
 		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
 		time.Sleep(2 * time.Second)
-		t.Status("initiating workload")
-		m.Go(func(ctx context.Context) error {
-			defer func() { close(workloadCompleteCh) }()
-			tpcc.run(ctx, c, args.workloadDuration)
+		ct.t.Status("initiating TPCC workload")
+		ct.mon.Go(func(ctx context.Context) error {
+			ct.workloadWg.Add(1)
+			defer ct.workloadWg.Done()
+			tpcc.run(ctx, ct.cluster, args.duration)
 			return nil
 		})
 	} else {
-		t.Status("installing Ledger Workload")
-		lw := ledgerWorkload{
-			sqlNodes:      crdbNodes,
-			workloadNodes: workloadNode,
-		}
-		lw.install(ctx, c)
-
-		t.Status("initiating workload")
-		m.Go(func(ctx context.Context) error {
-			defer func() { close(workloadCompleteCh) }()
-			lw.run(ctx, c, args.workloadDuration)
-			return nil
-		})
+		ct.t.Status("skipping TPCC run")
 	}
+}
+
+type ledgerArgs struct {
+	duration string
+}
+
+func (ct *cdcTester) runLedgerWorkload(args ledgerArgs) {
+	lw := ledgerWorkload{
+		sqlNodes:      ct.crdbNodes,
+		workloadNodes: ct.workloadNode,
+	}
+	if !ct.t.SkipInit() {
+		ct.t.Status("installing Ledger workload")
+		lw.install(ct.ctx, ct.cluster)
+	} else {
+		ct.t.Status("skipping Ledger installation")
+	}
+
+	ct.t.Status("initiating Ledger workload")
+	ct.mon.Go(func(ctx context.Context) error {
+		ct.workloadWg.Add(1)
+		defer ct.workloadWg.Done()
+		lw.run(ctx, ct.cluster, args.duration)
+		return nil
+	})
+}
+
+func (ct *cdcTester) DB() *gosql.DB {
+	return ct.cluster.Conn(ct.ctx, ct.t.L(), 1)
+}
+
+func (ct *cdcTester) Close() {
+	ct.t.Status("cdcTester closing")
+	close(ct.doneCh)
+	ct.mon.Wait()
+
+	_, _ = ct.DB().Exec(`CANCEL ALL CHANGEFEED JOBS;`)
+
+	if !ct.t.IsDebug() {
+		if err := ct.cluster.StopGrafana(ct.ctx, ct.logger, ct.t.ArtifactsDir()); err != nil {
+			ct.t.Errorf("error shutting down prometheus/grafana: %s", err)
+		}
+	}
+
+	ct.logger.Close()
+	ct.t.Status("cdcTester closed")
+}
+
+type changefeedJob struct {
+	ctx            context.Context
+	sinkURI        string
+	jobID          int
+	targets        []string
+	opts           map[string]string
+	logger         *logger.Logger
+	db             *gosql.DB
+	tolerateErrors bool
+}
+
+func (cj *changefeedJob) Label() string {
+	if label, ok := cj.opts["metrics_label"]; ok {
+		return label
+	}
+	return "default"
+}
+
+var allTpccTargets []string = []string{
+	`tpcc.warehouse`,
+	`tpcc.district`,
+	`tpcc.customer`,
+	`tpcc.history`,
+	`tpcc.order`,
+	`tpcc.new_order`,
+	`tpcc.item`,
+	`tpcc.stock`,
+	`tpcc.order_line`,
+}
+
+var allLedgerTargets []string = []string{
+	`ledger.customer`,
+	`ledger.transaction`,
+	`ledger.entry`,
+	`ledger.session`,
+}
+
+type feedArgs struct {
+	sinkType       sinkType
+	targets        []string
+	opts           map[string]string
+	kafkaChaos     bool
+	assumeRole     string
+	tolerateErrors bool
+}
+
+// TODO: Maybe move away from feedArgs since its only 3 things
+func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
+	ct.t.Status(fmt.Sprintf("initiating %s sink", args.sinkType))
+	sinkURI := ct.setupSink(args)
+	ct.t.Status(fmt.Sprintf("using sinkURI %s", sinkURI))
+
+	targetsStr := strings.Join(args.targets, ", ")
+
+	feedOptions := make(map[string]string)
+	feedOptions["min_checkpoint_frequency"] = "'10s'"
+	if args.sinkType == cloudStorageSink || args.sinkType == webhookSink {
+		// Webhook and cloudstorage don't have a concept of keys and therefore
+		// require envelope=wrapped
+		feedOptions["envelope"] = "wrapped"
+
+		feedOptions["resolved"] = "'10s'"
+
+	} else {
+		feedOptions["resolved"] = ""
+	}
+
+	for option, value := range args.opts {
+		feedOptions[option] = value
+		if option == "initial_scan_only" || (option == "initial_scan" && value == "'only'") {
+			delete(feedOptions, "resolved")
+		}
+	}
+
+	ct.t.Status(fmt.Sprintf(
+		"creating %s changefeed into targets %s with options (%+v)",
+		args.sinkType, args.targets, feedOptions,
+	))
+	db := ct.DB()
+	jobID, err := newChangefeedCreator(db, targetsStr, sinkURI).
+		With(feedOptions).Create()
+	if err != nil {
+		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
+	}
+
+	cj := changefeedJob{
+		ctx:            ct.ctx,
+		sinkURI:        sinkURI,
+		jobID:          jobID,
+		targets:        args.targets,
+		opts:           feedOptions,
+		db:             db,
+		tolerateErrors: args.tolerateErrors,
+	}
+
+	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
+
+	return cj
+}
+
+func (ct *cdcTester) runFeedLatencyVerifier(cj changefeedJob, targets latencyTargets) {
+	info, err := getChangefeedInfo(ct.DB(), cj.jobID)
+	if err != nil {
+		ct.t.Fatalf("failed to get changefeed info: %s", err.Error())
+	}
+
+	verifier := makeLatencyVerifier(
+		fmt.Sprintf("changefeed[%s]", cj.Label()),
+		targets.initialScanLatency,
+		targets.steadyLatency,
+		ct.logger,
+		func(db *gosql.DB, jobID int) (jobInfo, error) { return getChangefeedInfo(db, jobID) },
+		ct.t.Status,
+		cj.tolerateErrors,
+	)
+	verifier.statementTime = info.statementTime
+
+	ct.mon.Go(func(ctx context.Context) error {
+		err := verifier.pollLatency(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
+		if err != nil {
+			return err
+		}
+
+		verifier.assertValid(ct.t)
+		verifier.maybeLogLatencyHist()
+		return nil
+	})
+}
+
+func (cj *changefeedJob) runFeedPoller(
+	ctx context.Context,
+	pollInterval time.Duration,
+	stopper chan struct{},
+	onInfo func(info *changefeedInfo),
+) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stopper:
+			return nil
+		case <-time.After(pollInterval):
+		}
+
+		info, err := getChangefeedInfo(cj.db, cj.jobID)
+		if err != nil {
+			if cj.tolerateErrors {
+				cj.logger.Printf("error getting changefeed info: %s", err)
+				continue
+			}
+			return err
+		}
+
+		onInfo(info)
+	}
+}
+
+func (ct *cdcTester) waitForWorkload() {
+	ct.workloadWg.Wait()
+}
+
+func (cj *changefeedJob) waitForCompletion() {
+	completionCh := make(chan struct{})
+	err := cj.runFeedPoller(cj.ctx, time.Second, completionCh, func(info *changefeedInfo) {
+		if info.status == "succeeded" || info.status == "failed" {
+			close(completionCh)
+		}
+	})
+	if err != nil {
+		cj.logger.Printf("completion poller error: %s", err)
+	}
+}
+
+func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster) cdcTester {
+	tester := cdcTester{
+		ctx:          ctx,
+		t:            t,
+		cluster:      c,
+		crdbNodes:    c.Range(1, c.Spec().NodeCount-1),
+		workloadNode: c.Node(c.Spec().NodeCount),
+		doneCh:       make(chan struct{}),
+		sinkCache:    make(map[sinkType]string),
+		workloadWg:   &sync.WaitGroup{},
+	}
+	tester.mon = c.NewMonitor(ctx, tester.crdbNodes)
 
 	changefeedLogger, err := t.L().ChildLogger("changefeed")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer changefeedLogger.Close()
-	verifier := makeLatencyVerifier(
-		"changefeed",
-		args.targetInitialScanLatency,
-		args.targetSteadyLatency,
-		changefeedLogger,
-		func(db *gosql.DB, jobID int) (jobInfo, error) { return getChangefeedInfo(db, jobID) },
-		t.Status,
-		args.crdbChaos,
-	)
-	defer verifier.maybeLogLatencyHist()
+	tester.logger = changefeedLogger
 
-	m.Go(func(ctx context.Context) error {
-		// Some of the tests have a tight enough bound on targetSteadyLatency
-		// that the default for kv.closed_timestamp.target_duration means the
-		// changefeed is never considered sufficiently caught up. We could
-		// instead make targetSteadyLatency less aggressive, but it'd be nice to
-		// keep it where it is.
-		//
-		// TODO(ssd): As of 797819b35f5 this is actually increasing rather than decreasing
-		// the closed_timestamp.target_duration. We can probably remove this. However,
-		// as of 2021-04-20, we want to understand why this test has started failing more often
-		// before changing this.
-		if _, err := db.Exec(
-			`SET CLUSTER SETTING kv.closed_timestamp.target_duration='10s'`,
-		); err != nil {
-			t.Fatal(err)
-		}
+	c.Put(ctx, t.Cockroach(), "./cockroach")
 
-		// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
-		// behind, which is well above the 60s targetSteadyLatency we have in some tests.
-		if _, err := db.Exec(
-			`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
-		); err != nil {
-			// We don't hard fail here because, not all versions support this setting
-			t.L().Printf("failed to set cluster setting: %s", err)
-		}
+	settings := install.MakeClusterSettings()
+	settings.Env = append(settings.Env, "COCKROACH_EXPERIMENTAL_ENABLE_PER_CHANGEFEED_METRICS=true")
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, tester.crdbNodes)
 
-		for _, stmt := range args.preStartStatements {
-			_, err := db.ExecContext(ctx, stmt)
-			if err != nil {
-				t.Fatalf("failed pre-start statement %q: %s", stmt, err.Error())
-			}
-		}
+	c.Put(ctx, t.DeprecatedWorkload(), "./workload", tester.workloadNode)
 
-		var targets string
-		if args.workloadType == tpccWorkloadType {
-			targets = `tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
-			tpcc.order, tpcc.new_order, tpcc.item, tpcc.stock,
-			tpcc.order_line`
-		} else {
-			targets = `ledger.customer, ledger.transaction, ledger.entry, ledger.session`
-		}
-
-		var options []cdcOption
-		if args.whichSink == cloudStorageSink || args.whichSink == webhookSink {
-			options = []cdcOption{
-				{"resolved", "'10s'"},
-				{"envelope", "wrapped"},
-				{"min_checkpoint_frequency", "'10s'"},
-			}
-		} else {
-			options = []cdcOption{{"resolved", ""}, {"min_checkpoint_frequency", "'10s'"}}
-		}
-		if !args.initialScan {
-			options = append(options, cdcOption{"cursor", "'-1s'"})
-		}
-
-		jobID, err := newChangefeedCreator(db, targets, sinkURI).With(options...).Create()
-		if err != nil {
-			return err
-		}
-
-		info, err := getChangefeedInfo(db, jobID)
-		if err != nil {
-			return err
-		}
-		verifier.statementTime = info.statementTime
-		changefeedLogger.Printf("started changefeed at (%d) %s\n",
-			verifier.statementTime.UnixNano(), verifier.statementTime)
-		t.Status("watching changefeed")
-		return verifier.pollLatency(ctx, db, jobID, time.Second, workloadCompleteCh)
-	})
-
-	if args.kafkaChaos {
-		m.Go(func(ctx context.Context) error {
-			period, downTime := 2*time.Minute, 20*time.Second
-			return kafka.chaosLoop(ctx, period, downTime, workloadCompleteCh)
-		})
+	db := tester.DB()
+	// With a target_duration of 10s, we won't see slow span logs from changefeeds untils we are > 100s
+	// behind, which is well above the 60s targetSteadyLatency we have in some tests.
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.slow_span_log_threshold='30s'`,
+	); err != nil {
+		// We don't hard fail here because, not all versions support this setting
+		t.L().Printf("failed to set cluster setting: %s", err)
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		t.L().Printf("failed to set cluster setting: %s", err)
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING server.child_metrics.enabled = true"); err != nil {
+		t.L().Printf("failed to set cluster setting: %s", err)
 	}
 
-	if args.crdbChaos {
-		chaosDuration, err := time.ParseDuration(args.workloadDuration)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ch := Chaos{
-			Timer:   Periodic{Period: 2 * time.Minute, DownTime: 20 * time.Second},
-			Target:  crdbNodes.RandNode,
-			Stopper: time.After(chaosDuration),
-		}
-		m.Go(ch.Runner(c, t, m))
+	if !t.SkipInit() {
+		tester.startGrafana()
 	}
-	m.Wait()
 
-	verifier.assertValid(t)
-	workloadEnd := timeutil.Now()
-	if args.targetTxnPerSecond > 0.0 {
-		verifyTxnPerSecond(
-			ctx, c, t, crdbNodes.RandNode(), workloadStart, workloadEnd, args.targetTxnPerSecond, 0.05,
-		)
+	return tester
+}
+
+func (ct *cdcTester) startGrafana() {
+	// Setup the prometheus instance on the workload node
+	cfg := (&prometheus.Config{}).
+		WithPrometheusNode(ct.workloadNode.InstallNodes()[0]).
+		WithCluster(ct.crdbNodes.InstallNodes()).
+		WithNodeExporter(ct.crdbNodes.InstallNodes()).
+		WithGrafanaDashboard("https://go.crdb.dev/p/changefeed-roachtest-grafana-dashboard")
+	cfg.Grafana.Enabled = true
+	err := ct.cluster.StartGrafana(ct.ctx, ct.t.L(), cfg)
+	if err != nil {
+		ct.t.Errorf("error starting prometheus/grafana: %s", err)
 	}
+	nodeURLs, err := ct.cluster.ExternalIP(ct.ctx, ct.t.L(), ct.workloadNode)
+	if err != nil {
+		ct.t.Errorf("error getting grafana node external ip: %s", err)
+	}
+	ct.t.Status(fmt.Sprintf("started grafana at http://%s:3000/d/928XNlN4k/basic?from=now-15m&to=now", nodeURLs[0]))
+}
+
+type latencyTargets struct {
+	initialScanLatency time.Duration
+	steadyLatency      time.Duration
 }
 
 func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -333,16 +521,18 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster) {
 	db := c.Conn(ctx, t.L(), 1)
 	defer stopFeeds(db)
 
-	options := []cdcOption{
-		{"updated", ""},
-		{"resolved", ""},
+	options := map[string]string{
+		"updated":  "",
+		"resolved": "",
 		// we need to set a min_checkpoint_frequency here because if we
 		// use the default 30s duration, the test will likely not be able
 		// to finish within 30 minutes
-		{"min_checkpoint_frequency", "'10s'"},
-		{"diff", ""},
+		"min_checkpoint_frequency": "'10s'",
+		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).With(options...).Create()
+	_, err := newChangefeedCreator(db, "bank.bank", kafka.sinkURL(ctx)).
+		With(options).
+		Create()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,19 +675,16 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatal(err)
 	}
 
-	// NB: the WITH diff option was not supported until v20.1.
-	options := []cdcOption{
-		{"updated", ""},
-		{"resolved", ""},
-		{"format", "experimental_avro"},
-		{"confluent_schema_registry", "$2"},
+	options := map[string]string{
+		"updated":                   "",
+		"resolved":                  "",
+		"format":                    "experimental_avro",
+		"confluent_schema_registry": "$2",
+		"diff":                      "",
 	}
-	withDiff := t.IsBuildVersion("v20.1.0")
-	if withDiff {
-		options = append(options, cdcOption{"diff", ""})
-	}
+
 	_, err := newChangefeedCreator(db, "foo", kafka.sinkURL(ctx)).
-		With(options...).
+		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
 	if err != nil {
@@ -560,27 +747,14 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 	sort.Strings(updated)
 
-	var expected []string
-	if withDiff {
-		expected = []string{
-			`{"before":null,"after":{"foo":{"a":{"long":1}}},"updated":{"string":""}}`,
-			`{"before":null,"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}},"updated":{"string":""}}`,
-			`{"before":null,"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}},"updated":{"string":""}}`,
-			`{"before":null,"after":{"foo":{"a":{"long":4},"c":{"long":4}}},"updated":{"string":""}}`,
-			`{"before":{"foo_before":{"a":{"long":1},"b":null,"c":null}},"after":{"foo":{"a":{"long":1},"c":null}},"updated":{"string":""}}`,
-			`{"before":{"foo_before":{"a":{"long":2},"b":{"string":"2"},"c":null}},"after":{"foo":{"a":{"long":2},"c":null}},"updated":{"string":""}}`,
-			`{"before":{"foo_before":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}},"after":{"foo":{"a":{"long":3},"c":{"long":3}}},"updated":{"string":""}}`,
-		}
-	} else {
-		expected = []string{
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":1}}}}`,
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}}}`,
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}}}`,
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"c":{"long":3}}}}`,
-			`{"updated":{"string":""},"after":{"foo":{"a":{"long":4},"c":{"long":4}}}}`,
-		}
+	expected := []string{
+		`{"before":null,"after":{"foo":{"a":{"long":1}}},"updated":{"string":""}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}},"updated":{"string":""}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}},"updated":{"string":""}}`,
+		`{"before":null,"after":{"foo":{"a":{"long":4},"c":{"long":4}}},"updated":{"string":""}}`,
+		`{"before":{"foo_before":{"a":{"long":1},"b":null,"c":null}},"after":{"foo":{"a":{"long":1},"c":null}},"updated":{"string":""}}`,
+		`{"before":{"foo_before":{"a":{"long":2},"b":{"string":"2"},"c":null}},"after":{"foo":{"a":{"long":2},"c":null}},"updated":{"string":""}}`,
+		`{"before":{"foo_before":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}},"after":{"foo":{"a":{"long":3},"c":{"long":3}}},"updated":{"string":""}}`,
 	}
 	if strings.Join(expected, "\n") != strings.Join(updated, "\n") {
 		t.Fatalf("expected\n%s\n\ngot\n%s\n\n",
@@ -662,18 +836,48 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
+		Name:            "cdc/initial-scan-only",
+		Owner:           registry.OwnerCDC,
+		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+		RequiresLicense: true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'only'"},
+			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+			})
+			feed.waitForCompletion()
+		},
+	})
+	r.Add(registry.TestSpec{
 		Name:            "cdc/tpcc-1000",
 		Owner:           registry.OwnerCDC,
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       1000,
-				workloadDuration:         "120m",
-				targetInitialScanLatency: 3 * time.Minute,
-				targetSteadyLatency:      10 * time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: kafkaSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'no'"},
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -683,14 +887,21 @@ func registerCDC(r registry.Registry) {
 		Tags:            []string{"manual"},
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       1000,
-				workloadDuration:         "120m",
-				targetInitialScanLatency: 3 * time.Minute,
-				targetSteadyLatency:      10 * time.Minute,
-				sinkURI:                  "null://",
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1000, duration: "120m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: nullSink,
+				targets:  allTpccTargets,
+				opts:     map[string]string{"initial_scan": "'no'"},
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      10 * time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -699,14 +910,17 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       100,
-				workloadDuration:         "30m",
-				initialScan:              true,
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{sinkType: nullSink, targets: allTpccTargets})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+				steadyLatency:      time.Minute,
 			})
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -715,14 +929,22 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       100,
-				workloadDuration:         "30m",
-				kafkaChaos:               true,
-				targetInitialScanLatency: 3 * time.Minute,
-				targetSteadyLatency:      5 * time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:   kafkaSink,
+				targets:    allTpccTargets,
+				kafkaChaos: true,
+				opts:       map[string]string{"initial_scan": "'no'"},
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      5 * time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -731,16 +953,24 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       100,
-				workloadDuration:         "30m",
-				crdbChaos:                true,
-				targetInitialScanLatency: 3 * time.Minute,
-				// TODO(aayush): It should be okay to drop this as low as 2 to 3 minutes. See
-				// #36879 for some discussion.
-				targetSteadyLatency: 5 * time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.startCRDBChaos()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m", tolerateErrors: true})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:       kafkaSink,
+				targets:        allTpccTargets,
+				opts:           map[string]string{"initial_scan": "'no'"},
+				tolerateErrors: true,
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 3 * time.Minute,
+				steadyLatency:      5 * time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -752,19 +982,29 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType: ledgerWorkloadType,
-				// TODO(ssd): Range splits cause changefeed latencies to balloon
-				// because of catchup-scan performance. Reducing the test time and
-				// bumping the range_max_bytes avoids the split until we can improve
-				// catchup scan performance.
-				workloadDuration:         "28m",
-				initialScan:              true,
-				targetInitialScanLatency: 10 * time.Minute,
-				targetSteadyLatency:      time.Minute,
-				targetTxnPerSecond:       575,
-				preStartStatements:       []string{"ALTER DATABASE ledger CONFIGURE ZONE USING range_max_bytes = 805306368, range_min_bytes = 134217728"},
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			workloadStart := timeutil.Now()
+			ct.runLedgerWorkload(ledgerArgs{duration: "28m"})
+
+			alterStmt := "ALTER DATABASE ledger CONFIGURE ZONE USING range_max_bytes = 805306368, range_min_bytes = 134217728"
+			_, err := ct.DB().ExecContext(ctx, alterStmt)
+			if err != nil {
+				t.Fatalf("failed statement %q: %s", alterStmt, err.Error())
+			}
+
+			feed := ct.newChangefeed(feedArgs{sinkType: kafkaSink, targets: allLedgerTargets})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 10 * time.Minute,
+				steadyLatency:      time.Minute,
 			})
+			ct.waitForWorkload()
+
+			workloadEnd := timeutil.Now()
+			verifyTxnPerSecond(
+				ctx, c, t, ct.crdbNodes.RandNode(), workloadStart, workloadEnd, 575, 0.05,
+			)
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -773,19 +1013,24 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType: tpccWorkloadType,
-				// Sending data to Google Cloud Storage is a bit slower than sending to
-				// Kafka on an adjacent machine, so use half the data of the
-				// initial-scan test. Consider adding a test that writes to nodelocal,
-				// which should be much faster, with a larger warehouse count.
-				tpccWarehouseCount:       50,
-				workloadDuration:         "30m",
-				initialScan:              true,
-				whichSink:                cloudStorageSink,
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			// Sending data to Google Cloud Storage is a bit slower than sending to
+			// Kafka on an adjacent machine, so use half the data of the
+			// initial-scan test. Consider adding a test that writes to nodelocal,
+			// which should be much faster, with a larger warehouse count.
+			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+				steadyLatency:      time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 	r.Add(registry.TestSpec{
@@ -794,15 +1039,20 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       1,
-				workloadDuration:         "30m",
-				initialScan:              true,
-				whichSink:                pubsubSink,
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType: pubsubSink,
+				targets:  allTpccTargets,
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+				steadyLatency:      time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 
@@ -820,16 +1070,21 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       1,
-				workloadDuration:         "30m",
-				initialScan:              true,
-				whichSink:                pubsubSink,
-				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:   pubsubSink,
+				assumeRole: "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
+				targets:    allTpccTargets,
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+				steadyLatency:      time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 
@@ -847,15 +1102,21 @@ func registerCDC(r registry.Registry) {
 		Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
 		RequiresLicense: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				tpccWarehouseCount:       50,
-				workloadDuration:         "30m",
-				initialScan:              true,
-				whichSink:                cloudStorageSink,
-				assumeRole:               "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      time.Minute,
+			ct := newCDCTester(ctx, t, c)
+			defer ct.Close()
+
+			ct.runTPCCWorkload(tpccArgs{warehouses: 50, duration: "30m"})
+
+			feed := ct.newChangefeed(feedArgs{
+				sinkType:   cloudStorageSink,
+				assumeRole: "cdc-roachtest-intermediate@cockroach-ephemeral.iam.gserviceaccount.com,cdc-roachtest@cockroach-ephemeral.iam.gserviceaccount.com",
+				targets:    allTpccTargets,
 			})
+			ct.runFeedLatencyVerifier(feed, latencyTargets{
+				initialScanLatency: 30 * time.Minute,
+				steadyLatency:      time.Minute,
+			})
+			ct.waitForWorkload()
 		},
 	})
 
@@ -863,23 +1124,28 @@ func registerCDC(r registry.Registry) {
 	// currently fails with "initial scan did not complete" because sink
 	// URI is set as localhost, need to expose it to the other nodes via IP
 	/*
-		r.Add(testSpec{
-			Name:            "cdc/webhook-sink",
-			Owner:           OwnerCDC,
-			Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
-			RequiresLicense: true,
-			Run: func(ctx context.Context, t *test, c Cluster) {
-				cdcBasicTest(ctx, t, c, cdcTestArgs{
-					workloadType:             tpccWorkloadType,
-					tpccWarehouseCount:       100,
-					workloadDuration:         "30m",
-					initialScan:              true,
-					whichSink:                webhookSink,
-					targetInitialScanLatency: 30 * time.Minute,
-					targetSteadyLatency:      time.Minute,
+				r.Add(registry.TestSpec{
+					Name:            "cdc/webhook-sink",
+					Owner:           `cdc`,
+					Cluster:         r.MakeClusterSpec(4, spec.CPU(16)),
+					RequiresLicense: true,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+		        ct := newCDCTester(ctx, t, c)
+		        defer ct.Close()
+
+		        ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m"})
+
+		        feed := ct.newChangefeed(feedArgs{
+		          sinkType:   webhookSink,
+		          targets:    allTpccTargets,
+		        })
+		        ct.runFeedLatencyVerifier(feed, latencyTargets{
+		          initialScanLatency: 30 * time.Minute,
+		          steadyLatency:      time.Minute,
+		        })
+		        ct.waitForWorkload()
+					},
 				})
-			},
-		})
 	*/
 	r.Add(registry.TestSpec{
 		Name:            "cdc/kafka-auth",
@@ -1629,18 +1895,13 @@ func (lw *ledgerWorkload) run(ctx context.Context, c cluster.Cluster, workloadDu
 	))
 }
 
-type cdcOption struct {
-	option string
-	value  string
-}
-
 // changefeedCreator wraps the process of creating a changefeed with
 // different options and sinks
 type changefeedCreator struct {
 	db        *gosql.DB
 	targets   string
 	sinkURL   string
-	options   []cdcOption
+	options   map[string]string
 	extraArgs []interface{}
 }
 
@@ -1649,14 +1910,17 @@ func newChangefeedCreator(db *gosql.DB, targets, sinkURL string) *changefeedCrea
 		db:      db,
 		targets: targets,
 		sinkURL: sinkURL,
+		options: make(map[string]string),
 	}
 }
 
 // With adds options to the changefeed being created. If a non-zero
 // `value` is passed in one of the options, the option will be passed
 // as {option}={value}.
-func (cfc *changefeedCreator) With(options ...cdcOption) *changefeedCreator {
-	cfc.options = append(cfc.options, options...)
+func (cfc *changefeedCreator) With(opts map[string]string) *changefeedCreator {
+	for option, value := range opts {
+		cfc.options[option] = value
+	}
 	return cfc
 }
 
@@ -1681,10 +1945,9 @@ func (cfc *changefeedCreator) Create() (int, error) {
 	stmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO $1", cfc.targets)
 
 	var options []string
-	for _, opt := range cfc.options {
-		option := opt.option
-		if opt.value != "" {
-			option += fmt.Sprintf("=%s", opt.value)
+	for option, value := range cfc.options {
+		if value != "" {
+			option += fmt.Sprintf("=%s", value)
 		}
 		options = append(options, option)
 	}
@@ -1707,11 +1970,13 @@ type changefeedInfo struct {
 	errMsg        string
 	statementTime time.Time
 	highwaterTime time.Time
+	finishedTime  time.Time
 }
 
-func (c *changefeedInfo) GetHighWater() time.Time { return c.highwaterTime }
-func (c *changefeedInfo) GetStatus() string       { return c.status }
-func (c *changefeedInfo) GetError() string        { return c.status }
+func (c *changefeedInfo) GetHighWater() time.Time    { return c.highwaterTime }
+func (c *changefeedInfo) GetFinishedTime() time.Time { return c.finishedTime }
+func (c *changefeedInfo) GetStatus() string          { return c.status }
+func (c *changefeedInfo) GetError() string           { return c.status }
 
 var _ jobInfo = (*changefeedInfo)(nil)
 
@@ -1742,6 +2007,7 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (*changefeedInfo, error) {
 		errMsg:        payload.Error,
 		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
 		highwaterTime: highwaterTime,
+		finishedTime:  time.UnixMicro(payload.FinishedMicros),
 	}, nil
 }
 

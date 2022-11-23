@@ -242,16 +242,16 @@ var _ = [...]interface{}{
 	// 	2. System keys: This is where we store global, system data which is
 	// 	replicated across the cluster.
 	SystemPrefix,
-	NodeLivenessPrefix,     // "\x00liveness-"
-	BootstrapVersionKey,    // "bootstrap-version"
-	LegacyDescIDGenerator,  // "desc-idgen"
-	NodeIDGenerator,        // "node-idgen"
-	RangeIDGenerator,       // "range-idgen"
-	StatusPrefix,           // "status-"
-	StatusNodePrefix,       // "status-node-"
-	StoreIDGenerator,       // "store-idgen"
-	StartupMigrationPrefix, // "system-version/"
-	StartupMigrationLease,  // "system-version/lease"
+	NodeLivenessPrefix,    // "\x00liveness-"
+	BootstrapVersionKey,   // "bootstrap-version"
+	LegacyDescIDGenerator, // "desc-idgen"
+	NodeIDGenerator,       // "node-idgen"
+	RangeIDGenerator,      // "range-idgen"
+	StatusPrefix,          // "status-"
+	StatusNodePrefix,      // "status-node-"
+	StoreIDGenerator,      // "store-idgen"
+	// StartupMigrationPrefix, // "system-version/" - removed in 23.1
+	// StartupMigrationLease,  // "system-version/lease" - removed in 23.1
 	TimeseriesPrefix,       // "tsd"
 	SystemSpanConfigPrefix, // "xffsys-scfg"
 	SystemMax,

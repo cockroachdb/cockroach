@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -418,17 +418,17 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 		},
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.
-		UpgradeManager: &upgrade.TestingKnobs{
+		UpgradeManager: &upgradebase.TestingKnobs{
 			ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 				return []roachpb.Version{to}
 			},
-			RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+			RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 				if !cv.Equal(v1) {
 					return nil, false
 				}
 				return upgrade.NewTenantUpgrade("testing",
 					v1,
-					upgrades.NoPrecondition,
+					upgrade.NoPrecondition,
 					func(
 						ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 					) error {
