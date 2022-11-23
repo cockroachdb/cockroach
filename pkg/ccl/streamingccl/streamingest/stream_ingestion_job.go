@@ -17,7 +17,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -302,6 +306,17 @@ func ingest(ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.
 		if err = client.Complete(ctx, streamID, true /* successfulIngestion */); err != nil {
 			log.Warningf(ctx, "encountered error when completing the source cluster producer job %d", streamID)
 		}
+
+		// Now that we have completed the cutover we can release the protected
+		// timestamp record on the destination tenant's keyspace.
+		if details.ProtectedTimestampRecordID != nil {
+			if err := execCtx.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+				return releaseDestinationTenantProtectedTimestamp(ctx, execCtx, txn, *details.ProtectedTimestampRecordID)
+			}); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	}
 	return errors.CombineErrors(ingestWithClient(), client.Close(ctx))
@@ -365,12 +380,75 @@ func (s *streamIngestionResumer) handleResumeError(
 // Resume is part of the jobs.Resumer interface.  Ensure that any errors
 // produced here are returned as s.handleResumeError.
 func (s *streamIngestionResumer) Resume(resumeCtx context.Context, execCtx interface{}) error {
+	// Protect the destination tenant's keyspan from garbage collection.
+	err := s.protectDestinationTenant(resumeCtx, execCtx)
+	if err != nil {
+		return s.handleResumeError(resumeCtx, execCtx, err)
+	}
+
 	// Start ingesting KVs from the replication stream.
-	err := ingestWithRetries(resumeCtx, execCtx.(sql.JobExecContext), s.job)
+	err = ingestWithRetries(resumeCtx, execCtx.(sql.JobExecContext), s.job)
 	if err != nil {
 		return s.handleResumeError(resumeCtx, execCtx, err)
 	}
 	return nil
+}
+
+func releaseDestinationTenantProtectedTimestamp(
+	ctx context.Context, execCtx interface{}, txn *kv.Txn, ptsID uuid.UUID,
+) error {
+	jobExecCtx := execCtx.(sql.JobExecContext)
+	ptp := jobExecCtx.ExecCfg().ProtectedTimestampProvider
+	if err := ptp.Release(ctx, txn, ptsID); err != nil {
+		if errors.Is(err, protectedts.ErrNotExists) {
+			// No reason to return an error which might cause problems if it doesn't
+			// seem to exist.
+			log.Warningf(ctx, "failed to release protected which seems not to exist: %v", err)
+			err = nil
+		}
+		return err
+	}
+	return nil
+}
+
+// protectDestinationTenant writes a protected timestamp record protecting the
+// destination tenant's keyspace from garbage collection. This protected
+// timestamp record is updated everytime the replication job records a new
+// frontier timestamp, and is released OnFailOrCancel.
+//
+// The method persists the ID of the protected timestamp record in the
+// replication job's Payload.
+func (s *streamIngestionResumer) protectDestinationTenant(
+	ctx context.Context, execCtx interface{},
+) error {
+	details := s.job.Details().(jobspb.StreamIngestionDetails)
+
+	// If we have already protected the destination tenant keyspan in a previous
+	// resumption of the stream ingestion job, then there is nothing to do.
+	if details.ProtectedTimestampRecordID != nil {
+		return nil
+	}
+
+	execCfg := execCtx.(sql.JobExecContext).ExecCfg()
+	target := ptpb.MakeTenantsTarget([]roachpb.TenantID{details.DestinationTenantID})
+	ptsID := uuid.MakeV4()
+	now := execCfg.Clock.Now()
+	return execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		pts := jobsprotectedts.MakeRecord(ptsID, int64(s.job.ID()), now,
+			nil /* deprecatedSpans */, jobsprotectedts.Jobs, target)
+		if err := execCfg.ProtectedTimestampProvider.Protect(ctx, txn, pts); err != nil {
+			return err
+		}
+		return s.job.Update(ctx, txn, func(txn *kv.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+			details.ProtectedTimestampRecordID = &ptsID
+			md.Payload.Details = jobspb.WrapPayloadDetails(details)
+			ju.UpdatePayload(md.Payload)
+			return nil
+		})
+	})
 }
 
 // revertToCutoverTimestamp attempts a cutover and errors out if one was not
@@ -521,6 +599,13 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 		tenInfo.TenantReplicationJobID = 0
 		if err := sql.UpdateTenantRecord(ctx, jobExecCtx.ExecCfg(), txn, tenInfo); err != nil {
 			return errors.Wrap(err, "update tenant record")
+		}
+
+		if details.ProtectedTimestampRecordID != nil {
+			if err := releaseDestinationTenantProtectedTimestamp(ctx, execCtx, txn,
+				*details.ProtectedTimestampRecordID); err != nil {
+				return err
+			}
 		}
 
 		return nil
