@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
@@ -39,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -858,7 +860,9 @@ func NewColOperator(
 				}
 			}
 			if !foundUDT && !foundGet && !flowCtx.TraceKV &&
-				flowCtx.EvalCtx.SessionData().PlanDirectScan {
+				flowCtx.EvalCtx.SessionData().PlanDirectScan &&
+				row.GetKeyLockingStrength(core.TableReader.LockingStrength) == lock.None &&
+				core.TableReader.LockingWaitPolicy != descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
 				scanOp, resultTypes, err = colfetcher.NewColBatchDirectScan(
 					ctx, colmem.NewAllocator(ctx, accounts[0], factory), accounts[1],
 					flowCtx, core.TableReader, post, args.TypeResolver,

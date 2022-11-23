@@ -652,7 +652,6 @@ message ReverseScanRequest {
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
-// TODO: support ColBatches.
 message ReverseScanResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
@@ -674,6 +673,8 @@ message ReverseScanResponse {
   // entry. There are num_keys total pairs across all entries, as defined by the
   // ResponseHeader. If set, rows will not be set and vice versa.
   repeated bytes batch_responses = 4;
+
+  ColBatches col_batches = 5 [(gogoproto.nullable) = false];
 }
 
 
