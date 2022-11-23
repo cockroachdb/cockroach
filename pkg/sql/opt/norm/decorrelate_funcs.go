@@ -1058,3 +1058,168 @@ func (r *subqueryHoister) constructGroupByAny(
 		opt.ColSet{},
 	)
 }
+
+// CanMaybeRemapOuterCols performs a best-effort check to minimize the cases
+// where TryRemapOuterCols is called unnecessarily.
+func (c *CustomFuncs) CanMaybeRemapOuterCols(input memo.RelExpr, filters memo.FiltersExpr) bool {
+	// The usages of ComputeEquivClosureNoCopy are ok because of the copy below.
+	outerCols := input.Relational().OuterCols.Copy()
+	equivGroup := input.Relational().FuncDeps.ComputeEquivClosureNoCopy(outerCols)
+	for i := range filters {
+		if equivGroup.Intersects(input.Relational().OutputCols) {
+			return true
+		}
+		equivGroup = filters[i].ScalarProps().FuncDeps.ComputeEquivClosureNoCopy(equivGroup)
+	}
+	return equivGroup.Intersects(input.Relational().OutputCols)
+}
+
+// TryRemapOuterCols attempts to replace outer column references in the given
+// expression with equivalent non-outer columns using equalities from the given
+// filters. It accomplishes this by traversing the operator tree for each outer
+// column with the set of equivalent non-outer columns, wherever it would be
+// valid to push down a filter on those non-outer columns. If a reference to the
+// outer column is discovered during this traversal, it is valid to replace it
+// with one of the non-outer columns in the set.
+func (c *CustomFuncs) TryRemapOuterCols(
+	input memo.RelExpr, filters memo.FiltersExpr,
+) (remapped memo.RelExpr, succeeded bool) {
+	outerCols := input.Relational().OuterCols
+	for col, ok := outerCols.Next(0); ok; col, ok = outerCols.Next(col + 1) {
+		// candidateCols is the set of input columns for which it may be possible to
+		// push a filter constraining the column to be equal to an outer column.
+		candidateCols := input.Relational().FuncDeps.ComputeEquivGroup(col)
+		for i := range filters {
+			candidateCols = filters[i].ScalarProps().FuncDeps.ComputeEquivClosureNoCopy(candidateCols)
+		}
+		candidateCols.DifferenceWith(input.Relational().OuterCols)
+		var replaceFn ReplaceFunc
+		replaceFn = func(e opt.Expr) opt.Expr {
+			if candidateCols.Empty() {
+				// It is not possible to remap any references to the current outer
+				// column within this expression.
+				return e
+			}
+			if v, ok := e.(*memo.VariableExpr); ok && v.Col == col {
+				if replaceCol, ok := candidateCols.Next(0); ok {
+					// This outer-column reference can be remapped.
+					succeeded = true
+					return c.f.ConstructVariable(replaceCol)
+				}
+			}
+			switch t := e.(type) {
+			case memo.RelExpr:
+				if !t.Relational().OuterCols.Contains(col) {
+					// This expression does not reference the current outer column.
+					return t
+				}
+				// Modifications to candidateCols may be necessary in order to allow
+				// outer-column remapping within (the children of) a RelExpr.
+				candidateCols = c.getCandidateColsRelExpr(t, candidateCols)
+			case opt.ScalarExpr:
+				// Any candidate columns that reach a ScalarExpr are valid candidates
+				// for outer-column replacement. No changes to candidateCols required.
+			}
+			// If we made it here, candidateCols has been modified so that calling the
+			// replace function on the current expression is valid.
+			return c.f.Replace(e, replaceFn)
+		}
+		remapped = replaceFn(input).(memo.RelExpr)
+	}
+	return remapped, succeeded
+}
+
+// getCandidateColsRelExpr modifies the given set of candidate columns to
+// reflect the set of columns for which an equality with an outer column could
+// be pushed through the given expression. The logic of getCandidateColsRelExpr
+// mirrors that of the filter push-down rules in select.opt and join.opt.
+// TODO(drewk): null-rejection has to push down a 'col IS NOT NULL' filter -
+// we should be able to share logic. Doing so would remove the issue of rule
+// cycles. Any other rules that reuse this logic should reconsider the
+// simplification made in getCandidateColsSetOp.
+func (c *CustomFuncs) getCandidateColsRelExpr(
+	expr memo.RelExpr, candidateCols opt.ColSet,
+) opt.ColSet {
+	// Remove any columns that are not in the output of this expression.
+	// Non-output columns can be in candidateCols after a recursive call
+	// into the input of an expression that either has multiple relational
+	// inputs (e.g. Joins) or can synthesize columns (e.g. Projects).
+	candidateCols = candidateCols.Intersection(expr.Relational().OutputCols)
+
+	// Depending on the expression, further modifications to candidateCols
+	// may be necessary.
+	switch t := expr.(type) {
+	case *memo.SelectExpr:
+		// [MergeSelects]
+		// No restrictions on push-down for the cols in candidateCols.
+	case *memo.ProjectExpr, *memo.ProjectSetExpr:
+		// [PushSelectIntoProject]
+		// [PushSelectIntoProjectSet]
+		// Filter push-down candidates can only reference input columns.
+		inputCols := t.Child(0).(memo.RelExpr).Relational().OutputCols
+		candidateCols = candidateCols.Intersection(inputCols)
+	case *memo.InnerJoinExpr, *memo.InnerJoinApplyExpr:
+		// [MergeSelectInnerJoin]
+		// [PushFilterIntoJoinLeft]
+		// [PushFilterIntoJoinRight]
+		// No restrictions on push-down for the cols in candidateCols.
+	case *memo.LeftJoinExpr, *memo.LeftJoinApplyExpr, *memo.SemiJoinExpr,
+		*memo.SemiJoinApplyExpr, *memo.AntiJoinExpr, *memo.AntiJoinApplyExpr:
+		// [PushSelectIntoJoinLeft]
+		// [PushSelectCondLeftIntoJoinLeftAndRight]
+		candidateCols = getCandidateColsLeftSemiAntiJoin(t, candidateCols)
+	case *memo.GroupByExpr, *memo.DistinctOnExpr:
+		// [PushSelectIntoGroupBy]
+		// Filters must refer only to grouping and ConstAgg columns.
+		private := t.Private().(*memo.GroupingPrivate)
+		aggs := t.Child(1).(*memo.AggregationsExpr)
+		candidateCols = candidateCols.Intersection(c.GroupingAndConstCols(private, *aggs))
+	case *memo.UnionExpr, *memo.UnionAllExpr, *memo.IntersectExpr,
+		*memo.IntersectAllExpr, *memo.ExceptExpr, *memo.ExceptAllExpr:
+		// [PushFilterIntoSetOp]
+		candidateCols = getCandidateColsSetOp(t, candidateCols)
+	default:
+		// Filter push-down through this expression is not supported.
+		candidateCols = opt.ColSet{}
+	}
+	return candidateCols
+}
+
+func getCandidateColsLeftSemiAntiJoin(join memo.RelExpr, candidateCols opt.ColSet) opt.ColSet {
+	// It is always valid to push an equality between an outer and non-outer
+	// left column into the left input of a LeftJoin, SemiJoin, or AntiJoin. If
+	// one of the join filters constrains that left column to be equal to a right
+	// column, it is also possible to remap and push the equality into the right
+	// input. See the PushSelectCondLeftIntoJoinLeftAndRight rule for more info.
+	//
+	// We can satisfy these requirements by first restricting candidateCols
+	// to left input columns, then extending it with right input columns
+	// that are held equivalent by the join filters.
+	left := join.Child(0).(memo.RelExpr)
+	on := join.Child(2).(*memo.FiltersExpr)
+	candidateCols = candidateCols.Intersection(left.Relational().OutputCols)
+	for i := range *on {
+		// The usage of ComputeEquivClosureNoCopy is ok because the call to
+		// Intersection above copies the set.
+		candidateCols = (*on)[i].ScalarProps().FuncDeps.ComputeEquivClosureNoCopy(candidateCols)
+	}
+	return candidateCols
+}
+
+func getCandidateColsSetOp(set memo.RelExpr, candidateCols opt.ColSet) opt.ColSet {
+	// Because TryRemapOuterCols is the equivalent of pushing down an
+	// equality filter between an input column and an outer column, we don't
+	// have to worry about composite sensitivity here (see CanMapOnSetOp).
+	// Map the output columns contained in candidateCols to the columns from
+	// both inputs. We filter out non-output columns from candidateCols on
+	// each recursive call to TryRemapOuterCols, so we don't need to remove any
+	// columns here.
+	private := set.Private().(*memo.SetPrivate)
+	for i, outCol := range private.OutCols {
+		if candidateCols.Contains(outCol) {
+			candidateCols.Add(private.LeftCols[i])
+			candidateCols.Add(private.RightCols[i])
+		}
+	}
+	return candidateCols
+}
