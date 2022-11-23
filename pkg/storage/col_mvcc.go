@@ -129,13 +129,18 @@ func (f *mvccScanFetchAdapter) NextKV(
 		f.onNextKV = f.noop
 		return f.NextKV(ctx, mvccDecodeStrategy)
 	}
+	if f.scanner.skippedTombstone {
+		return f.NextKV(ctx, mvccDecodeStrategy)
+	}
 	if !f.results.newPut {
 		// We didn't put a new KV into the result due to some limit.
+		f.scanner.advanceKeyEnabled = true
 		return false, roachpb.KeyValue{}, false, nil
 	} else if f.scanner.resumeReason != roachpb.RESUME_UNKNOWN {
 		// We've just reached some limit, so the current KV will be the last
 		// one.
 		f.onNextKV = f.done
+		f.scanner.advanceKeyEnabled = true
 	}
 	lastKV := f.results.getLastKV()
 
@@ -285,9 +290,6 @@ func mvccScanToCols(
 				break
 			}
 			res.ColBatches = append(res.ColBatches, batch)
-			if mvccScanner.resumeReason != roachpb.RESUME_UNKNOWN {
-				break
-			}
 		}
 	} else {
 		for {
