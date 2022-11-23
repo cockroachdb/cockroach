@@ -10,6 +10,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
+        "//pkg/util/iterutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )
@@ -21,6 +22,7 @@ go_test(
         "rangedesciter_test.go",
     ],
     args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
     deps = [
         ":rangedesciter",
         "//pkg/keys",
@@ -30,9 +32,12 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/tests",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
 

@@ -1382,7 +1382,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		responseChs = append(responseChs, responseCh)
 
 		// Truncate the request to range descriptor.
-		curRangeRS, err := rs.Intersect(ri.Token().Desc())
+		curRangeRS, err := rs.Intersect(ri.Token().Desc().RSpan())
 		if err != nil {
 			responseCh <- response{pErr: roachpb.NewError(err)}
 			return
@@ -1632,7 +1632,7 @@ func (ds *DistSender) sendPartialBatch(
 			// batch, so that we know that the response to it matches the positions
 			// into our batch (using the full batch here would give a potentially
 			// larger response slice with unknown mapping to our truncated reply).
-			intersection, err := rs.Intersect(routingTok.Desc())
+			intersection, err := rs.Intersect(routingTok.Desc().RSpan())
 			if err != nil {
 				return response{pErr: roachpb.NewError(err)}
 			}
