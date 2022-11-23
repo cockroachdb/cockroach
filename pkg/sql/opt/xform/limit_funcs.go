@@ -125,6 +125,7 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		}
 
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 
 		// If the alternate index does not conform to the ordering, then skip it.
@@ -323,6 +324,7 @@ func (c *CustomFuncs) GenerateLimitedTopKScans(
 		}
 		// Scan whatever columns we need which are available from the index.
 		newScanPrivate := *sp
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(sp.Cols)
 		// If the index is not covering, scan the needed index columns plus
