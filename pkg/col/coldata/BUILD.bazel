@@ -48,7 +48,6 @@ go_test(
     deps = [
         "//pkg/col/coldatatestutils",
         "//pkg/sql/colconv",
-        "//pkg/sql/randgen",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/randutil",
