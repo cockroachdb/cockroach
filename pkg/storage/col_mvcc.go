@@ -270,9 +270,6 @@ func mvccScanToCols(
 				break
 			}
 			res.ColBatches = append(res.ColBatches, batch)
-			if mvccScanner.resumeReason != roachpb.RESUME_UNKNOWN {
-				break
-			}
 		}
 	} else {
 		for {
