@@ -1269,22 +1269,9 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath string, upgradeBina
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutils.SucceedsSoon(t.rootT, func() error {
-		u := ts.PGURLForNode(0)
-		newDB, err := gosql.Open("postgres", u.String())
-		if err != nil {
-			return err
-		}
-		defer func() { _ = newDB.Close() }()
-		var s string
-		if err := newDB.QueryRow("SELECT 'started'").Scan(&s); err != nil {
-			return err
-		}
-		if s != "started" {
-			return errors.New("waiting for initialization")
-		}
-		return nil
-	})
+	if err := ts.WaitForInit(); err != nil {
+		t.Fatal(err)
+	}
 
 	t.testserverCluster = ts
 	t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, t.setUser(username.RootUser, 0 /* nodeIdxOverride */))
@@ -3041,22 +3028,14 @@ func (t *logicTest) processSubtest(
 			if err := t.testserverCluster.UpgradeNode(nodeIdx); err != nil {
 				t.Fatal(err)
 			}
-			testutils.SucceedsSoon(t.rootT, func() error {
-				u := t.testserverCluster.PGURLForNode(nodeIdx)
-				newDB, err := gosql.Open("postgres", u.String())
-				if err != nil {
-					return err
+			for i := 0; i < t.cfg.NumNodes; i++ {
+				// Wait for each node to be reachable, since UpgradeNode uses `kill`
+				// to terminate nodes, and may introduce temporary unavailability in
+				// the system range.
+				if err := t.testserverCluster.WaitForInitFinishForNode(i); err != nil {
+					t.Fatal(err)
 				}
-				defer func() { _ = newDB.Close() }()
-				var s string
-				if err := newDB.QueryRow("SELECT 'started'").Scan(&s); err != nil {
-					return err
-				}
-				if s != "started" {
-					return errors.New("waiting for initialization")
-				}
-				return nil
-			})
+			}
 		default:
 			return errors.Errorf("%s:%d: unknown command: %s",
 				path, s.Line+subtest.lineLineIndexIntoFile, cmd,
