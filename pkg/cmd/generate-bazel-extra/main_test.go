@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExcludeSqliteLogicTests(t *testing.T) {
+func TestExcludeReallyEnormousTests(t *testing.T) {
 	for _, tc := range []struct {
 		in  []string
 		out []string
@@ -24,6 +24,7 @@ func TestExcludeSqliteLogicTests(t *testing.T) {
 		{
 			in: []string{
 				"//pkg/jobs:jobs_test",
+				"//pkg/ccl/backupccl:backupccl_test",
 				"//pkg/sql/sem/eval:eval_test",
 				"//pkg/sql/sqlitelogictest:sqlitelogictest_test",
 			},
@@ -52,6 +53,7 @@ func TestExcludeSqliteLogicTests(t *testing.T) {
 		{
 			in: []string{
 				"//pkg/ccl/sqlitelogictestccl:sqlitelogictestccl_test",
+				"//pkg/ccl/backupccl:backupccl_test",
 				"//pkg/jobs:jobs_test",
 				"//pkg/sql/colexec:colexec_test",
 				"//pkg/sql/sem/eval:eval_test",
@@ -64,6 +66,6 @@ func TestExcludeSqliteLogicTests(t *testing.T) {
 			},
 		},
 	} {
-		require.Equal(t, tc.out, excludeSqliteLogicTests(tc.in))
+		require.Equal(t, tc.out, excludeReallyEnormousTargets(tc.in))
 	}
 }
