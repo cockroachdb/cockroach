@@ -249,6 +249,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"PreFiltererState":    {fullName: "invertedexpr.PreFiltererStateForInvertedFilterer", isPointer: true, usePointerIntern: true},
 		"Volatility":          {fullName: "volatility.V", passByVal: true},
 		"LiteralRows":         {fullName: "opt.LiteralRows", isExpr: true, isPointer: true},
+		"Distribution":        {fullName: "physical.Distribution", passByVal: true},
 	}
 
 	// Add types of generated op and private structs.

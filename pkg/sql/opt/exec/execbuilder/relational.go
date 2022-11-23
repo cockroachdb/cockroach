@@ -1862,7 +1862,7 @@ func (b *Builder) enforceScanWithHomeRegion(skipID cat.StableID) error {
 		if queryHasHomeRegion {
 			if homeRegion != queryHomeRegion {
 				return pgerror.Newf(pgcode.QueryHasNoHomeRegion,
-					`Query has no home region. The home region ('%s') of table '%s' does not match the home region ('%s') of lookup table '%s'.`,
+					`Query has no home region. The home region ('%s') of scan on table '%s' does not match the home region ('%s') of scan on table '%s'.`,
 					queryHomeRegion,
 					inputTableName,
 					homeRegion,

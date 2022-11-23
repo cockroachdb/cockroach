@@ -631,7 +631,11 @@ func (h *hasher) HashPhysProps(val *physical.Required) {
 	}
 	h.HashOrderingChoice(val.Ordering)
 	h.HashFloat64(val.LimitHint)
-	for _, region := range val.Distribution.Regions {
+	h.HashDistribution(val.Distribution)
+}
+
+func (h *hasher) HashDistribution(val physical.Distribution) {
+	for _, region := range val.Regions {
 		h.HashString(region)
 	}
 }
@@ -1050,6 +1054,10 @@ func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
 }
 
 func (h *hasher) IsPhysPropsEqual(l, r *physical.Required) bool {
+	return l.Equals(r)
+}
+
+func (h *hasher) IsDistributionEqual(l, r physical.Distribution) bool {
 	return l.Equals(r)
 }
 
