@@ -1763,31 +1763,30 @@ group-by (hash)
 norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM xy, uv
-WHERE x=v AND u=(SELECT max(i) FROM a WHERE k=x)
+WHERE x<v AND u=(SELECT max(i) FROM a WHERE k=x)
 ----
 project
  ├── columns: x:1!null y:2 u:5!null v:6!null
- ├── key: (5)
- ├── fd: (1)-->(2), (5)-->(1,2,6), (1)==(6), (6)==(1)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6)
  └── select
       ├── columns: x:1!null y:2 u:5!null v:6!null max:16!null
-      ├── key: (5)
-      ├── fd: (1)-->(2), (5)-->(1,2,6), (1)==(6), (6)==(1), (5)==(16), (16)==(5)
+      ├── key: (1,5)
+      ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6,16), (5)==(16), (16)==(5)
       ├── group-by (hash)
       │    ├── columns: x:1!null y:2 u:5!null v:6!null max:16!null
-      │    ├── grouping columns: u:5!null
-      │    ├── key: (5)
-      │    ├── fd: (1)-->(2), (5)-->(1,2,6,16), (1)==(6), (6)==(1)
+      │    ├── grouping columns: x:1!null u:5!null
+      │    ├── key: (1,5)
+      │    ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6,16)
       │    ├── inner-join (hash)
       │    │    ├── columns: x:1!null y:2 u:5!null v:6!null k:9!null i:10!null
       │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    │    ├── key: (5)
-      │    │    ├── fd: (1)-->(2), (5)-->(6), (1)==(6,9), (6)==(1,9), (9)-->(10), (9)==(1,6)
-      │    │    ├── inner-join (hash)
+      │    │    ├── key: (5,9)
+      │    │    ├── fd: (1)-->(2), (5)-->(6), (9)-->(10), (1)==(9), (9)==(1)
+      │    │    ├── inner-join (cross)
       │    │    │    ├── columns: x:1!null y:2 u:5!null v:6!null
-      │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    │    ├── key: (5)
-      │    │    │    ├── fd: (1)-->(2), (5)-->(6), (1)==(6), (6)==(1)
+      │    │    │    ├── key: (1,5)
+      │    │    │    ├── fd: (1)-->(2), (5)-->(6)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:1!null y:2
       │    │    │    │    ├── key: (1)
@@ -1797,7 +1796,7 @@ project
       │    │    │    │    ├── key: (5)
       │    │    │    │    └── fd: (5)-->(6)
       │    │    │    └── filters
-      │    │    │         └── x:1 = v:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │    │         └── x:1 < v:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │    ├── select
       │    │    │    ├── columns: k:9!null i:10!null
       │    │    │    ├── key: (9)
@@ -1815,10 +1814,8 @@ project
       │         │    └── i:10
       │         ├── const-agg [as=v:6, outer=(6)]
       │         │    └── v:6
-      │         ├── const-agg [as=y:2, outer=(2)]
-      │         │    └── y:2
-      │         └── const-agg [as=x:1, outer=(1)]
-      │              └── x:1
+      │         └── const-agg [as=y:2, outer=(2)]
+      │              └── y:2
       └── filters
            └── u:5 = max:16 [outer=(5,16), constraints=(/5: (/NULL - ]; /16: (/NULL - ]), fd=(5)==(16), (16)==(5)]
 
@@ -1827,31 +1824,30 @@ project
 norm expect=TryDecorrelateGroupBy
 SELECT *
 FROM xy, uv
-WHERE x=v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
+WHERE x<v AND (SELECT max(i) FROM a WHERE k=x) IS DISTINCT FROM u
 ----
 project
  ├── columns: x:1!null y:2 u:5!null v:6!null
- ├── key: (5)
- ├── fd: (1)-->(2), (5)-->(1,2,6), (1)==(6), (6)==(1)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6)
  └── select
       ├── columns: x:1!null y:2 u:5!null v:6!null max:16
-      ├── key: (5)
-      ├── fd: (1)-->(2), (5)-->(1,2,6,16), (1)==(6), (6)==(1)
+      ├── key: (1,5)
+      ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6,16)
       ├── group-by (hash)
       │    ├── columns: x:1!null y:2 u:5!null v:6!null max:16
-      │    ├── grouping columns: u:5!null
-      │    ├── key: (5)
-      │    ├── fd: (1)-->(2), (5)-->(1,2,6,16), (1)==(6), (6)==(1)
+      │    ├── grouping columns: x:1!null u:5!null
+      │    ├── key: (1,5)
+      │    ├── fd: (1)-->(2), (5)-->(6), (1,5)-->(2,6,16)
       │    ├── left-join (hash)
       │    │    ├── columns: x:1!null y:2 u:5!null v:6!null k:9 i:10
       │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
-      │    │    ├── key: (5)
-      │    │    ├── fd: (1)-->(2), (5)-->(6,9,10), (1)==(6), (6)==(1), (9)-->(10)
-      │    │    ├── inner-join (hash)
+      │    │    ├── key: (1,5)
+      │    │    ├── fd: (1)-->(2), (5)-->(6), (9)-->(10), (1,5)-->(9,10)
+      │    │    ├── inner-join (cross)
       │    │    │    ├── columns: x:1!null y:2 u:5!null v:6!null
-      │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    │    ├── key: (5)
-      │    │    │    ├── fd: (1)-->(2), (5)-->(6), (1)==(6), (6)==(1)
+      │    │    │    ├── key: (1,5)
+      │    │    │    ├── fd: (1)-->(2), (5)-->(6)
       │    │    │    ├── scan xy
       │    │    │    │    ├── columns: x:1!null y:2
       │    │    │    │    ├── key: (1)
@@ -1861,7 +1857,7 @@ project
       │    │    │    │    ├── key: (5)
       │    │    │    │    └── fd: (5)-->(6)
       │    │    │    └── filters
-      │    │    │         └── x:1 = v:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │    │         └── x:1 < v:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
       │    │    ├── scan a
       │    │    │    ├── columns: k:9!null i:10
       │    │    │    ├── key: (9)
@@ -1873,10 +1869,8 @@ project
       │         │    └── i:10
       │         ├── const-agg [as=v:6, outer=(6)]
       │         │    └── v:6
-      │         ├── const-agg [as=y:2, outer=(2)]
-      │         │    └── y:2
-      │         └── const-agg [as=x:1, outer=(1)]
-      │              └── x:1
+      │         └── const-agg [as=y:2, outer=(2)]
+      │              └── y:2
       └── filters
            └── u:5 IS DISTINCT FROM max:16 [outer=(5,16)]
 
@@ -6035,3 +6029,591 @@ project
  │              └── xy.x:8
  └── projections
       └── xy.x:8 [as=x:12, outer=(8)]
+
+# --------------------------------------------------
+# TryRemapJoinOuterColsRight
+# --------------------------------------------------
+
+# Case with Select. Matched join is an InnerJoin.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab WHERE b = x) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── select
+ │    ├── scan ab
+ │    └── filters
+ │         └── b = a
+ └── filters
+      └── a = x
+
+# Case with Select. Matched join is a LeftJoin.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy LEFT JOIN LATERAL (SELECT * FROM ab WHERE b = x) ON a = x
+----
+left-join (hash)
+ ├── scan xy
+ ├── select
+ │    ├── scan ab
+ │    └── filters
+ │         └── b = a
+ └── filters
+      └── a = x
+
+# Case with Project.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT a, a+x FROM ab) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── project
+ │    ├── scan ab
+ │    └── projections
+ │         └── a + a
+ └── filters
+      └── a = x
+
+# Case with ProjectSet.
+norm expect=TryRemapJoinOuterColsRight disable=ConvertZipArraysToValues format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT a, unnest(ARRAY[x, b]) FROM ab) ON a = x
+----
+project
+ └── inner-join (hash)
+      ├── scan xy
+      ├── project-set
+      │    ├── scan ab
+      │    └── zip
+      │         └── unnest(ARRAY[a, b])
+      └── filters
+           └── a = x
+
+# Case with an InnerJoin.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b, b+x FROM ab) INNER JOIN uv ON b = u) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── inner-join (hash)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    ├── scan uv
+ │    └── filters
+ │         └── b = u
+ └── filters
+      └── a = x
+
+# Case with an InnerJoin. The outer column is in the join filters.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab INNER JOIN uv ON b = u OR b = x) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── inner-join (cross)
+ │    ├── scan ab
+ │    ├── scan uv
+ │    └── filters
+ │         └── (b = u) OR (b = a)
+ └── filters
+      └── a = x
+
+# Case with a LeftJoin.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b, b+x FROM ab) LEFT JOIN uv ON b = u) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── left-join (hash)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    ├── scan uv
+ │    └── filters
+ │         └── b = u
+ └── filters
+      └── a = x
+
+# Case with a LeftJoin. The outer column is in the join filters.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab LEFT JOIN uv ON b = u OR b = x) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── left-join (cross)
+ │    ├── scan ab
+ │    ├── scan uv
+ │    └── filters
+ │         └── (b = u) OR (b = a)
+ └── filters
+      └── a = x
+
+# Case with a LeftJoin. The filter can be mapped to the right input.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab LEFT JOIN (SELECT u, v + x FROM uv) ON a = u) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── left-join (hash)
+ │    ├── scan ab
+ │    ├── project
+ │    │    ├── scan uv
+ │    │    └── projections
+ │    │         └── v + u
+ │    └── filters
+ │         └── a = u
+ └── filters
+      └── a = x
+
+# Case with a LeftJoin. Both inputs have an outer column reference that can be
+# remapped.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (
+  SELECT * FROM (SELECT a, b, b+x FROM ab) LEFT JOIN (SELECT u, v + x FROM uv) ON a = u
+) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── left-join (hash)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    ├── project
+ │    │    ├── scan uv
+ │    │    └── projections
+ │    │         └── v + u
+ │    └── filters
+ │         └── a = u
+ └── filters
+      └── a = x
+
+# Case with a SemiJoin.
+norm expect=TryRemapJoinOuterColsRight disable=TryDecorrelateSelect format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x AS c FROM ab) WHERE EXISTS (SELECT * FROM uv WHERE c = u)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── semi-join-apply
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    ├── select
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── c = u
+ │    └── filters (true)
+ └── filters
+      └── a = x
+
+# Case with a SemiJoin. The outer column is in the join filters.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab WHERE EXISTS (SELECT * FROM uv WHERE a = u OR v = x)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── semi-join (cross)
+ │    ├── scan ab
+ │    ├── scan uv
+ │    └── filters
+ │         └── (a = u) OR (v = a)
+ └── filters
+      └── a = x
+
+# Case with an AntiJoin.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x AS c FROM ab) WHERE NOT EXISTS (SELECT * FROM uv WHERE c = u)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── anti-join (hash)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    ├── scan uv
+ │    └── filters
+ │         └── c = u
+ └── filters
+      └── a = x
+
+# Case with an AntiJoin. The outer column is in the join filters.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab WHERE NOT EXISTS (SELECT * FROM uv WHERE a = u OR v = x)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── anti-join (cross)
+ │    ├── scan ab
+ │    ├── scan uv
+ │    └── filters
+ │         └── (a = u) OR (v = a)
+ └── filters
+      └── a = x
+
+# Case with a GroupBy. Equality references the grouping column.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT a, corr(b, x) FROM ab GROUP BY a) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── group-by (hash)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── a
+ │    └── aggregations
+ │         └── corr
+ │              ├── b
+ │              └── x
+ └── filters
+      └── a = xy.x
+
+# Case with a GroupBy. Equality references a ConstAgg column.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT v, corr(u, x) FROM uv GROUP BY u, v) ON v = x
+----
+project
+ └── inner-join (hash)
+      ├── scan xy
+      ├── group-by (hash)
+      │    ├── project
+      │    │    ├── scan uv
+      │    │    └── projections
+      │    │         └── v
+      │    └── aggregations
+      │         ├── corr
+      │         │    ├── u
+      │         │    └── x
+      │         └── const-agg
+      │              └── v
+      └── filters
+           └── v = xy.x
+
+# Case with a DistinctOn.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT DISTINCT ON (a) * FROM (SELECT *, b+x FROM ab)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── distinct-on
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    └── aggregations
+ │         ├── first-agg
+ │         │    └── b
+ │         └── first-agg
+ │              └── "?column?"
+ └── filters
+      └── a = x
+
+# Case with a Union.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab UNION (SELECT u, v+x FROM uv)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── union
+ │    ├── scan ab
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + u
+ └── filters
+      └── a = x
+
+# Case with a Union. Both inputs should be remapped.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) UNION (SELECT u, v+x FROM uv)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── union
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + ab.a
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + u
+ └── filters
+      └── a = x
+
+# Case with an Intersect.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab INTERSECT (SELECT u, v+x FROM uv)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── intersect-all
+ │    ├── scan ab
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + u
+ └── filters
+      └── a = x
+
+# Case with an Intersect. Both inputs should be remapped.
+norm format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) INTERSECT (SELECT u, v+x FROM uv)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── intersect-all
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + u
+ └── filters
+      └── a = x
+
+# Case with an Except.
+norm expect=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab EXCEPT (SELECT u, v+x FROM uv)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── except
+ │    ├── scan ab
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + u
+ └── filters
+      └── a = x
+
+# Case with an Except. Both inputs should be remapped.
+norm format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b+x FROM ab) EXCEPT (SELECT u, v+x FROM uv)) ON a = x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── except
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    └── project
+ │         ├── scan uv
+ │         └── projections
+ │              └── v + u
+ └── filters
+      └── a = x
+
+# No-op case with a LeftJoin. The filter cannot be mapped to the right input,
+# because there is no suitable equality between left and right columns.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab LEFT JOIN (SELECT u, v + x FROM uv) ON a <> u) ON a = x
+----
+left-join-apply
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── scan ab
+ │    └── filters
+ │         └── a = x
+ ├── project
+ │    ├── scan uv
+ │    └── projections
+ │         └── v + x
+ └── filters
+      └── a != u
+
+# No-op case with FullJoin.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b, b+x FROM ab) FULL JOIN uv ON a = x) ON True
+----
+inner-join-apply
+ ├── scan xy
+ ├── full-join (cross)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + x
+ │    ├── scan uv
+ │    └── filters
+ │         └── a = x
+ └── filters (true)
+
+# No-op case because there is no outer-non-outer column equality.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab WHERE b = x) ON a <> x
+----
+inner-join (hash)
+ ├── scan xy
+ ├── select
+ │    ├── scan ab
+ │    └── filters
+ │         └── a != b
+ └── filters
+      └── b = x
+
+# No-op case because the equality is a disjunct.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM ab WHERE b = x) ON a = x OR x IS NULL
+----
+inner-join (hash)
+ ├── scan xy
+ ├── select
+ │    ├── scan ab
+ │    └── filters
+ │         └── (a = b) OR (b IS NULL)
+ └── filters
+      └── b = x
+
+# No-op case because the outer column is equal to a synthesized column, so push
+# down is not possible below the Project.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT *, a+b AS c FROM ab WHERE b = x) ON c = x
+----
+project
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── select
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── b = (a + b)
+ │    └── filters
+ │         └── b = x
+ └── projections
+      └── a + b
+
+# No-op case because the outer column is equal to a synthesized column, so push
+# down is not possible below the GroupBy.
+norm expect-not=TryRemapJoinOuterColsRight format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT v, corr(u, v) AS w FROM (SELECT *, u + x FROM uv) GROUP BY u, v) ON w = x
+----
+project
+ └── inner-join (cross)
+      ├── scan xy
+      ├── group-by (hash)
+      │    ├── scan uv
+      │    └── aggregations
+      │         ├── corr
+      │         │    ├── u
+      │         │    └── v
+      │         └── const-agg
+      │              └── v
+      └── filters
+           └── corr = x
+
+# --------------------------------------------------
+# TryRemapJoinOuterColsLeft
+# --------------------------------------------------
+
+# Case with InnerJoin.
+norm expect=TryRemapJoinOuterColsLeft format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT * FROM ab WHERE b = x) INNER JOIN uv ON a = x) ON True
+----
+inner-join (cross)
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── select
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── b = a
+ │    └── filters
+ │         └── a = x
+ ├── scan uv
+ └── filters (true)
+
+# Case with SemiJoin.
+norm expect=TryRemapJoinOuterColsLeft format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT *, b+x FROM ab) WHERE EXISTS (SELECT * FROM uv WHERE a = x)) ON True
+----
+inner-join-apply
+ ├── scan xy
+ ├── semi-join (cross)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + a
+ │    ├── scan uv
+ │    └── filters
+ │         └── a = x
+ └── filters (true)
+
+# No-op case with LeftJoin.
+norm expect-not=TryRemapJoinOuterColsLeft format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT * FROM ab WHERE b = x) LEFT JOIN uv ON a = x) ON True
+----
+left-join (cross)
+ ├── inner-join (hash)
+ │    ├── scan xy
+ │    ├── scan ab
+ │    └── filters
+ │         └── b = x
+ ├── scan uv
+ └── filters
+      └── a = x
+
+# No-op case with AntiJoin.
+norm expect-not=TryRemapJoinOuterColsLeft format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT *, b+x FROM ab) WHERE NOT EXISTS (SELECT * FROM uv WHERE a = x)) ON True
+----
+inner-join-apply
+ ├── scan xy
+ ├── anti-join (cross)
+ │    ├── project
+ │    │    ├── scan ab
+ │    │    └── projections
+ │    │         └── b + x
+ │    ├── scan uv
+ │    └── filters
+ │         └── a = x
+ └── filters (true)
+
+# No-op case with FullJoin.
+norm expect-not=TryRemapJoinOuterColsLeft format=hide-all
+SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT * FROM ab WHERE b = x) FULL JOIN uv ON a = x) ON True
+----
+inner-join-apply
+ ├── scan xy
+ ├── full-join (cross)
+ │    ├── select
+ │    │    ├── scan ab
+ │    │    └── filters
+ │    │         └── b = x
+ │    ├── scan uv
+ │    └── filters
+ │         └── a = x
+ └── filters (true)
+
+# --------------------------------------------------
+# TryRemapSelectOuterCols
+# --------------------------------------------------
+
+norm expect=TryRemapSelectOuterCols format=hide-all
+SELECT * FROM xy LEFT JOIN LATERAL (SELECT * FROM (SELECT *, b+x FROM ab) WHERE a = x) ON True
+----
+left-join (hash)
+ ├── scan xy
+ ├── project
+ │    ├── scan ab
+ │    └── projections
+ │         └── b + a
+ └── filters
+      └── a = x
+
+# Case where the replacement leads to an "a = a" filter, which in turn gets
+# simplified into "a IS DISTINCT FROM NULL".
+norm expect=TryRemapSelectOuterCols format=hide-all
+SELECT * FROM xy WHERE x IN (SELECT a FROM ab WHERE a = x);
+----
+semi-join (hash)
+ ├── scan xy
+ ├── select
+ │    ├── scan ab
+ │    └── filters
+ │         └── a IS DISTINCT FROM CAST(NULL AS INT8)
+ └── filters
+      └── x = a
