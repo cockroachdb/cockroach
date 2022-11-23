@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -83,6 +85,10 @@ type transientCluster struct {
 	infoLog  LoggerFn
 	warnLog  LoggerFn
 	shoutLog ShoutLoggerFn
+
+	// latencyEnabled controls whether simulated latency is currently enabled.
+	// It is only relevant when using SimulateLatency.
+	latencyEnabled syncutil.AtomicBool
 }
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to
@@ -315,34 +321,13 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	phaseCtx = logtags.AddTag(ctx, "phase", 5)
 	if err := func(ctx context.Context) error {
 		// If latency simulation is requested, initialize the latency map.
-		if c.demoCtx.SimulateLatency {
-			// Now, all servers have been started enough to know their own RPC serving
-			// addresses, but nothing else. Assemble the artificial latency map.
-			c.infoLog(ctx, "initializing latency map")
-			for i, serv := range c.servers {
-				latencyMap := serv.Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
-				srcLocality, ok := serv.Cfg.Locality.Find("region")
-				if !ok {
-					continue
-				}
-				srcLocalityMap, ok := regionToRegionToLatency[srcLocality]
-				if !ok {
-					continue
-				}
-				for j, dst := range c.servers {
-					if i == j {
-						continue
-					}
-					dstLocality, ok := dst.Cfg.Locality.Find("region")
-					if !ok {
-						continue
-					}
-					latency := srcLocalityMap[dstLocality]
-					latencyMap[dst.ServingRPCAddr()] = latency
-				}
-			}
+		if !c.demoCtx.SimulateLatency {
+			return nil
 		}
-		return nil
+		// Now, all servers have been started enough to know their own RPC serving
+		// addresses, but nothing else. Assemble the artificial latency map.
+		c.infoLog(ctx, "initializing latency map")
+		return localityLatencies.Apply(c)
 	}(phaseCtx); err != nil {
 		return err
 	}
@@ -389,7 +374,8 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 
 			c.tenantServers = make([]serverutils.TestTenantInterface, c.demoCtx.NumNodes)
 			for i := 0; i < c.demoCtx.NumNodes; i++ {
-				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).ContextTestingKnobs.ArtificialLatencyMap
+				latencyMap := c.servers[i].Cfg.TestingKnobs.Server.(*server.TestingKnobs).
+					ContextTestingKnobs.InjectedLatencyOracle
 				c.infoLog(ctx, "starting tenant node %d", i)
 				tenantStopper := stop.NewStopper()
 				tenID := uint64(i + 2)
@@ -409,7 +395,8 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					TestingKnobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
 							ContextTestingKnobs: rpc.ContextTestingKnobs{
-								ArtificialLatencyMap: latencyMap,
+								InjectedLatencyOracle:  latencyMap,
+								InjectedLatencyEnabled: c.latencyEnabled.Get,
 							},
 						},
 					},
@@ -504,6 +491,19 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 	return nil
 }
 
+// SetSimulatedLatency enables or disable the simulated latency and then
+// clears the remote clock tracking. If the remote clocks were not cleared,
+// bad routing decisions would be made as soon as latency is turned on.
+func (c *transientCluster) SetSimulatedLatency(on bool) {
+	c.latencyEnabled.Set(on)
+	for _, s := range c.servers {
+		s.RPCContext().RemoteClocks.TestingResetLatencyInfos()
+	}
+	for _, s := range c.tenantServers {
+		s.RPCContext().RemoteClocks.TestingResetLatencyInfos()
+	}
+}
+
 // createAndAddNode is responsible for determining node parameters,
 // instantiating the server component and connecting it to the
 // cluster's stopper.
@@ -551,7 +551,8 @@ func (c *transientCluster) createAndAddNode(
 		// started listening on RPC, and before they proceed with their
 		// startup routine.
 		serverKnobs.ContextTestingKnobs = rpc.ContextTestingKnobs{
-			ArtificialLatencyMap: make(map[string]int),
+			InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
+			InjectedLatencyEnabled: c.latencyEnabled.Get,
 		}
 	}
 
@@ -1416,6 +1417,14 @@ func (s unixSocketDetails) String() string {
 
 func (c *transientCluster) NumNodes() int {
 	return len(c.servers)
+}
+
+func (c *transientCluster) NumServers() int {
+	return len(c.servers)
+}
+
+func (c *transientCluster) Server(i int) serverutils.TestServerInterface {
+	return c.servers[i]
 }
 
 func (c *transientCluster) GetLocality(nodeID int32) string {

@@ -401,9 +401,14 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 	var g *concurrency.Guard
 	defer func() {
 		// Handle load-based splitting, if necessary.
-		if pErr == nil {
-			spansRead, _, _ := r.collectSpansRead(ba, br)
-			r.recordBatchForLoadBasedSplitting(ctx, ba, spansRead)
+		if pErr == nil && br != nil {
+			if len(ba.Requests) != len(br.Responses) {
+				log.KvDistribution.Errorf(ctx,
+					"Requests and responses should be equal lengths: # of requests = %d, # of responses = %d",
+					len(ba.Requests), len(br.Responses))
+			} else {
+				r.recordBatchForLoadBasedSplitting(ctx, ba, br)
+			}
 		}
 
 		// NB: wrapped to delay g evaluation to its value when returning.
