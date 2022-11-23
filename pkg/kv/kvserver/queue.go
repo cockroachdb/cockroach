@@ -531,6 +531,13 @@ func (bq *baseQueue) PurgatoryLength() int {
 	return len(bq.mu.purgatory)
 }
 
+// Disabled returns true if the queue is disabled.
+func (bq *baseQueue) Disabled() bool {
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+	return bq.mu.disabled
+}
+
 // SetDisabled turns queue processing off or on as directed.
 func (bq *baseQueue) SetDisabled(disabled bool) {
 	bq.mu.Lock()

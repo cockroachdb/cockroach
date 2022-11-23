@@ -1516,6 +1516,12 @@ func (r *Replica) sendRaftMessageRaftMuLocked(ctx context.Context, msg raftpb.Me
 
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
+		if r.store.raftSnapshotQueue.Disabled() {
+			_ = r.withRaftGroup(false, func(raftGroup *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+				raftGroup.ReportSnapshot(msg.To, raft.SnapshotFailure)
+				return false, nil
+			})
+		}
 		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
 		return
 	}

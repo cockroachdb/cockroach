@@ -70,11 +70,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 		// In the test below we will propose a command and expect to see it in an
 		// apply-time interceptor on each replica. Unfortunately, right after adding
 		// a replica there can be an errant raft snapshot, see the schedule below
-		// (g1 and g2 are the intertwined operations). We could either "check less"
-		// (probe applies on at least one Replica as opposed to all of them) or
-		// disable the raft log queue (and also disable log truncations so that we
-		// really don't ever need raft snaps). We try the latter but should it cause
-		// issues, weakening the test is prudent.
+		// (g1 and g2 are the intertwined operations).
 		//
 		// - g1    | `tc.AddXOrFatal` begins
 		// - g1    | it calls into ChangeReplicas
@@ -92,11 +88,12 @@ func TestReplicaProbeRequest(t *testing.T) {
 		// -    g2 | follower applies the probe via the snap.
 		// - g1    | times out waiting for the interceptor to see the probe on follower.
 		//
-		// [^1]: we also call (*RawNode).ReportSnapshot after completing the INITIAL
-		// snapshot though so somewhat unclear why it's still queued in the raft log
-		// queue at this point, but you can also imagine the first MsgApp rejection
-		// being delayed. Or, the raft leader not equalling the leaseholder, in
-		// which case nothing ever blocks the raft snap queue.
+		// We tried to disable the raft snapshot queue (and log truncations) in this
+		// test but it turns out that in that case it might hang; once the leader gets
+		// the idea that a snapshot is necessary, it will pick an index that it wants
+		// to see, and this index might be above the INITIAL snapshot that actually
+		// gets sent. The range is then unavailable because the leader will not use
+		// the follower for quorum, and there are only two voters here.
 		DisableRaftSnapshotQueue: true,
 		DisableRaftLogQueue:      true,
 	}
