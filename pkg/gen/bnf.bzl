@@ -54,7 +54,6 @@ BNF_SRCS = [
   "//docs/generated/sql/bnf:alter_table_set_schema_stmt.bnf",
   "//docs/generated/sql/bnf:alter_table_set_storage_param.bnf",
   "//docs/generated/sql/bnf:alter_table_stmt.bnf",
-  "//docs/generated/sql/bnf:alter_tenant_csetting_stmt.bnf",
   "//docs/generated/sql/bnf:alter_type.bnf",
   "//docs/generated/sql/bnf:alter_view.bnf",
   "//docs/generated/sql/bnf:alter_view_owner_stmt.bnf",

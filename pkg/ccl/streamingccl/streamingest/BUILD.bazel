@@ -4,6 +4,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "streamingest",
     srcs = [
+        "alter_replication_job.go",
         "metrics.go",
         "stream_ingest_manager.go",
         "stream_ingestion_frontier_processor.go",
@@ -41,6 +42,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/exprutil",
+        "//pkg/sql/paramparse",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/physicalplan",
@@ -72,6 +74,7 @@ go_test(
     name = "streamingest_test",
     size = "large",
     srcs = [
+        "alter_replication_job_test.go",
         "main_test.go",
         "stream_ingestion_frontier_processor_test.go",
         "stream_ingestion_job_test.go",
