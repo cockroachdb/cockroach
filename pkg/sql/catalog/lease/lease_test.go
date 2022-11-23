@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
@@ -3242,9 +3243,17 @@ func TestAmbiguousResultIsRetried(t *testing.T) {
 			if !bytes.HasPrefix(r.Key, indexPrefix) {
 				return nil
 			}
+			in := bytes.TrimPrefix(r.Key, indexPrefix)
 			var a tree.DatumAlloc
+			if systemschema.TestSupportMultiRegion() {
+				var err error
+				_, in, err = keyside.Decode(&a, types.Bytes, in, encoding.Ascending)
+				if !assert.NoError(t, err) {
+					return roachpb.NewError(err)
+				}
+			}
 			id, _, err := keyside.Decode(
-				&a, types.Int, bytes.TrimPrefix(r.Key, indexPrefix), encoding.Ascending,
+				&a, types.Int, in, encoding.Ascending,
 			)
 			assert.NoError(t, err)
 			if tree.MustBeDInt(id) == tree.DInt(tableID) {

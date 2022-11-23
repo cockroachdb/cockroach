@@ -130,7 +130,7 @@ func (t *descriptorState) findForTimestamp(
 // If an existing lease exists for the descriptor version it replaces
 // it and returns it.
 func (t *descriptorState) upsertLeaseLocked(
-	ctx context.Context, desc catalog.Descriptor, expiration hlc.Timestamp,
+	ctx context.Context, desc catalog.Descriptor, expiration hlc.Timestamp, prefix []byte,
 ) (createdDescriptorVersionState *descriptorVersionState, toRelease *storedLease, _ error) {
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
@@ -140,7 +140,7 @@ func (t *descriptorState) upsertLeaseLocked(
 		if t.mu.active.findNewest() != nil {
 			log.Infof(ctx, "new lease: %s", desc)
 		}
-		descState := newDescriptorVersionState(t, desc, expiration, true /* isLease */)
+		descState := newDescriptorVersionState(t, desc, expiration, prefix, true /* isLease */)
 		t.mu.active.insert(descState)
 		return descState, nil, nil
 	}
@@ -163,6 +163,7 @@ func (t *descriptorState) upsertLeaseLocked(
 	s.mu.expiration = expiration
 	toRelease = s.mu.lease
 	s.mu.lease = &storedLease{
+		prefix:     prefix,
 		id:         desc.GetID(),
 		version:    int(desc.GetVersion()),
 		expiration: storedLeaseExpiration(expiration),
@@ -176,7 +177,11 @@ func (t *descriptorState) upsertLeaseLocked(
 var _ redact.SafeMessager = (*descriptorVersionState)(nil)
 
 func newDescriptorVersionState(
-	t *descriptorState, desc catalog.Descriptor, expiration hlc.Timestamp, isLease bool,
+	t *descriptorState,
+	desc catalog.Descriptor,
+	expiration hlc.Timestamp,
+	prefix []byte,
+	isLease bool,
 ) *descriptorVersionState {
 	descState := &descriptorVersionState{
 		t:          t,
@@ -186,6 +191,7 @@ func newDescriptorVersionState(
 	if isLease {
 		descState.mu.lease = &storedLease{
 			id:         desc.GetID(),
+			prefix:     prefix,
 			version:    int(desc.GetVersion()),
 			expiration: storedLeaseExpiration(expiration),
 		}
