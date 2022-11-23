@@ -1933,10 +1933,20 @@ func (rpcCtx *Context) grpcDialNodeInternal(
 			rpcCtx.metrics.HeartbeatLoopsStarted.Inc(1)
 
 			// Run the heartbeat; this will block until the connection breaks for
-			// whatever reason. We don't actually have to do anything with the error,
-			// so we ignore it.
-			_ = rpcCtx.runHeartbeat(ctx, conn, target)
+			// whatever reason.
+			connErr := rpcCtx.runHeartbeat(ctx, conn, target)
+			if connErr == nil {
+				// NB: at time of writing, runHeartbeat always returns on error
+				// since we never close connections until they break. Future-proof
+				// in case this ever changes.
+				connErr = errors.New("connection terminated gracefully")
+			}
+			// Remove the conn first, then store the error. This gives the invariant
+			// that if someone gets an error and the error condition gets fixed,
+			// the next dial will immediately succeed (since it has no chance of
+			// accidentally reacquiring the failed conn just before we delete it).
 			maybeFatal(ctx, rpcCtx.m.Remove(k, conn))
+			conn.err.Store(connErr)
 
 			// Context gets canceled on server shutdown, and if that's likely why
 			// the connection ended don't increment the metric as a result. We don't
@@ -1980,7 +1990,9 @@ var ErrNoConnection = errors.New("no connection found")
 
 // runHeartbeat synchronously runs the heartbeat loop for the given RPC
 // connection. The ctx passed as argument must be derived from rpcCtx.masterCtx,
-// so that it respects the same cancellation policy.
+// so that it respects the same cancellation policy. This method never returns
+// without an error at the time of writing, though callers should not rely on
+// this.
 func (rpcCtx *Context) runHeartbeat(
 	ctx context.Context, conn *Connection, target string,
 ) (retErr error) {
@@ -1996,7 +2008,6 @@ func (rpcCtx *Context) runHeartbeat(
 		}
 
 		if retErr != nil {
-			conn.err.Store(retErr)
 			if ctx.Err() == nil {
 				// If the remote peer is down, we'll get fail-fast errors and since we
 				// don't have circuit breakers at the rpcCtx level, we need to avoid a
