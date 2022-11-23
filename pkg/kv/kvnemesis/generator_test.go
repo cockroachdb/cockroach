@@ -12,11 +12,16 @@ package kvnemesis
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -229,4 +234,72 @@ func TestRandKeyDecode(t *testing.T) {
 		n := uint64FromKey(k)
 		require.Equal(t, k, uint64ToKey(n))
 	}
+}
+
+func TestRandDelRangeUsingTombstone(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var seq kvnemesisutil.Seq
+	nextSeq := func() kvnemesisutil.Seq {
+		seq++
+		return seq
+	}
+
+	spAll := roachpb.Span{
+		Key:    roachpb.Key(uint64ToKey(0)),
+		EndKey: roachpb.Key(uint64ToKey(math.MaxUint64)),
+	}
+	var curRanges roachpb.SpanGroup
+	curRanges.Add(spAll)
+	currentSplits := map[string]struct{}{}
+	for _, n := range []uint64{1, 5, 10, 15, 20, 25, 30} {
+		k := uint64ToKey(n)
+		sp := roachpb.Span{Key: roachpb.Key(k)}
+		currentSplits[k] = struct{}{}
+		curRanges.Sub(sp)
+	}
+
+	rng := rand.New(rand.NewSource(0)) // deterministic
+	const num = 1000
+
+	var numSingleRange, numCrossRange, numPoint int
+	for i := 0; i < num; i++ {
+		dr := randDelRangeUsingTombstoneImpl(currentSplits, nextSeq, rng).DeleteRangeUsingTombstone
+		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
+		nk, nek := uint64FromKey(string(dr.Key)), uint64FromKey(string(dr.EndKey))
+		s := fmt.Sprintf("[%d,%d)", nk, nek)
+		if uint64FromKey(string(dr.Key))+1 == uint64FromKey(string(dr.EndKey)) {
+			if numPoint == 0 {
+				t.Logf("first point request: %s", s)
+			}
+			numPoint++
+			continue
+		}
+		if curRanges.Encloses(sp) {
+			// `sp` does not contain a split point, i.e. this would likely end up
+			// being a single-range request.
+			if numSingleRange == 0 {
+				t.Logf("first single-range request: %s", s)
+			}
+			numSingleRange++
+		} else {
+			if numCrossRange == 0 {
+				t.Logf("first cross-range request: %s", s)
+			}
+			numCrossRange++
+		}
+	}
+	fracSingleRange := float64(numSingleRange) / float64(num)
+	fracCrossRange := float64(numCrossRange) / float64(num)
+	fracPoint := float64(numPoint) / float64(num)
+
+	echotest.Require(t,
+		fmt.Sprintf(`single-range: %.3f
+point:        %.3f
+cross-range:  %.3f
+------------------
+total         %.3f
+`, fracSingleRange, fracPoint, fracCrossRange,
+			fracSingleRange+fracPoint+fracCrossRange),
+		testutils.TestDataPath(t, t.Name()+".txt"))
 }

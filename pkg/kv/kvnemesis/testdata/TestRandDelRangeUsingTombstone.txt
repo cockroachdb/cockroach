@@ -1,0 +1,7 @@
+echo
+----
+single-range: 0.963
+point:        0.034
+cross-range:  0.003
+------------------
+total         1.000
