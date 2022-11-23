@@ -12,7 +12,6 @@ package server
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -359,38 +358,18 @@ func getTableIDFromDatabaseAndTableName(
 	if err != nil {
 		return 0, err
 	}
-	names := strings.Split(fqtName, ".")
-	// Strip quotations marks from db and table names.
-	for idx := range names {
-		names[idx] = strings.Trim(names[idx], "\"")
-	}
-	q := makeSQLQuery()
-	q.Append(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $ `, names[0])
 
-	if len(names) == 2 {
-		q.Append(`AND name = $`, names[1])
-	} else if len(names) == 3 {
-		q.Append(`AND schema_name = $ AND name = $`, names[1], names[2])
-	} else {
-		return 0, errors.Newf("expected array length 2 or 3, received %d", len(names))
-	}
-	if len(q.Errors()) > 0 {
-		return 0, combineAllErrors(q.Errors())
-	}
-
-	datums, err := ie.QueryRowEx(ctx, "get-table-id", nil,
-		sessiondata.InternalExecutorOverride{
-			User:     userName,
-			Database: database,
-		}, q.String(), q.QueryArguments()...)
-
+	row, err := ie.QueryRowEx(
+		ctx, "get-table-id", nil,
+		sessiondata.InternalExecutorOverride{User: userName, Database: database},
+		"SELECT $1::regclass::oid", table,
+	)
 	if err != nil {
 		return 0, err
 	}
-	if datums == nil {
+	if row == nil {
 		return 0, errors.Newf("expected to find table ID for table %s, but found nothing", fqtName)
 	}
-
-	tableID := int(tree.MustBeDInt(datums[0]))
-	return tableID, nil
+	tableID := tree.MustBeDOid(row[0]).Oid
+	return int(tableID), nil
 }
