@@ -1117,8 +1117,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	// include gist in error reports
 	ctx = withPlanGist(ctx, planner.instrumentation.planGist.String())
-
-	if planner.autoCommit {
+	if planner.extendedEvalCtx.TxnImplicit {
 		planner.curPlan.flags.Set(planFlagImplicitTxn)
 	}
 
