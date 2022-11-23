@@ -440,6 +440,17 @@ func (*AlterTenantSetClusterSetting) StatementType() StatementType { return Type
 func (*AlterTenantSetClusterSetting) StatementTag() string { return "ALTER TENANT SET CLUSTER SETTING" }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterTenantReplication) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*AlterTenantReplication) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterTenantReplication) StatementTag() string { return "ALTER TENANT REPLICATION" }
+
+func (*AlterTenantReplication) cclOnlyStatement() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterType) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2058,6 +2069,7 @@ func (n *AlterTableSetNotNull) String() string                { return AsString(
 func (n *AlterTableOwner) String() string                     { return AsString(n) }
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
+func (n *AlterTenantReplication) String() string              { return AsString(n) }
 func (n *AlterType) String() string                           { return AsString(n) }
 func (n *AlterRole) String() string                           { return AsString(n) }
 func (n *AlterRoleSet) String() string                        { return AsString(n) }
