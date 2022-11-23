@@ -16,15 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
-// Iterator paginates through every range descriptor in the system.
+// Iterator paginates through range descriptors in the system.
 type Iterator interface {
-	// Iterate paginates through range descriptors in the system using the given
-	// page size. It's important to note that the closure is being executed in
-	// the context of a distributed transaction that may be automatically
-	// retried. So something like the following is an anti-pattern:
+	// Iterate paginates through range descriptors in the system that overlap
+	// with the given span. When doing so it uses the given page size. It's
+	// important to note that the closure is being executed in the context of a
+	// distributed transaction that may be automatically retried. So something
+	// like the following is an anti-pattern:
 	//
 	//     processed := 0
 	//     _ = rdi.Iterate(...,
@@ -45,8 +47,15 @@ type Iterator interface {
 	//             log.Infof(ctx, "processed %d ranges", processed)
 	//         },
 	//     )
+	//
+	//
+	// When the query span is something other than keys.EverythingSpan, the page
+	// size is also approximately haw many extra keys/range descriptors we may
+	// be reading. Callers are expected to pick a page size accordingly
+	// (page sizes that are much larger than expected # of descriptors would
+	// lead to wasted work).
 	Iterate(
-		ctx context.Context, pageSize int, init func(),
+		ctx context.Context, pageSize int, init func(), span roachpb.Span,
 		fn func(descriptors ...roachpb.RangeDescriptor) error,
 	) error
 }
@@ -74,31 +83,58 @@ func (i *iteratorImpl) Iterate(
 	ctx context.Context,
 	pageSize int,
 	init func(),
+	span roachpb.Span,
 	fn func(descriptors ...roachpb.RangeDescriptor) error,
 ) error {
+	rspan := roachpb.RSpan{
+		Key:    keys.MustAddr(span.Key),
+		EndKey: keys.MustAddr(span.EndKey),
+	}
+
 	return i.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		// Inform the caller that we're starting a fresh attempt to page in
 		// range descriptors.
 		init()
 
-		// Iterate through meta{1,2} to pull out all the range descriptors.
+		// Bound the start key of the meta{1,2} scan as much as possible. If the
+		// start key < keys.Meta1KeyMax (we're also interested in the meta1
+		// range descriptor), start our scan at keys.MetaMin. If not, start it
+		// at the relevant range meta key -- in meta1 if the start key sits
+		// within meta2, in meta2 if the start key is an ordinary key.
+		//
+		// So what exactly is the "relevant range meta key"? Since keys in meta
+		// ranges are encoded using the end keys of range descriptors, we're
+		// looking for the lowest existing range meta key that's strictly
+		// greater than RangeMetaKey(start key).
+		rangeMetaKeyForStart := keys.RangeMetaKey(rspan.Key)
+		metaScanBoundsForStart, err := keys.MetaScanBounds(rangeMetaKeyForStart)
+		if err != nil {
+			return err
+		}
+		metaScanStartKey := metaScanBoundsForStart.Key.AsRawKey()
+
+		// Iterate through meta{1,2} to pull out relevant range descriptors.
+		// We'll keep scanning until we've found a range descriptor outside the
+		// scan of interest.
 		var lastRangeIDInMeta1 roachpb.RangeID
-		return txn.Iterate(ctx, keys.MetaMin, keys.MetaMax, pageSize,
+		return iterutil.Map(txn.Iterate(ctx, metaScanStartKey, keys.MetaMax, pageSize,
 			func(rows []kv.KeyValue) error {
 				descriptors := make([]roachpb.RangeDescriptor, 0, len(rows))
+				stopMetaIteration := false
+
 				var desc roachpb.RangeDescriptor
 				for _, row := range rows {
-					err := row.ValueProto(&desc)
-					if err != nil {
+					if err := row.ValueProto(&desc); err != nil {
 						return errors.Wrapf(err, "unable to unmarshal range descriptor from %s", row.Key)
 					}
 
-					// In small enough clusters it's possible for the same range
-					// descriptor to be stored in both meta1 and meta2. This
-					// happens when some range spans both the meta and the user
-					// keyspace. Consider when r1 is [/Min,
-					// /System/NodeLiveness); we'll store the range descriptor
-					// in both /Meta2/<r1.EndKey> and in /Meta1/KeyMax[1].
+					// In small enough clusters, it's possible for the same
+					// range descriptor to be stored in both meta1 and meta2.
+					// This happens when some range spans both the meta and the
+					// user keyspace. Consider when r1 is
+					// [/Min, /System/NodeLiveness); we'll store the range
+					// descriptor in both /Meta2/<r1.EndKey> and in
+					// /Meta1/KeyMax[1].
 					//
 					// As part of iterator we'll de-duplicate this descriptor
 					// away by checking whether we've seen it before in meta1.
@@ -111,15 +147,34 @@ func (i *iteratorImpl) Iterate(
 						continue
 					}
 
+					if _, err := desc.KeySpan().Intersect(rspan); err != nil {
+						// We're past the last range descriptor that overlaps
+						// with the given span.
+						stopMetaIteration = true
+						break
+					}
+
+					// This descriptor's span intersects with our query span, so
+					// collect it for the callback.
 					descriptors = append(descriptors, desc)
+
 					if keys.InMeta1(keys.RangeMetaKey(desc.StartKey)) {
 						lastRangeIDInMeta1 = desc.RangeID
 					}
 				}
 
-				// Invoke fn with the current chunk (of size ~blockSize) of
-				// range descriptors.
-				return fn(descriptors...)
-			})
+				if len(descriptors) != 0 {
+					// Invoke fn with the current chunk (of size ~pageSize) of
+					// range descriptors.
+					if err := fn(descriptors...); err != nil {
+						return err
+					}
+				}
+				if stopMetaIteration {
+					return iterutil.StopIteration() // we're done here
+				}
+				return nil
+			}),
+		)
 	})
 }

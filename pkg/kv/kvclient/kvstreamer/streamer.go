@@ -551,7 +551,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []roachpb.RequestUnion) (re
 			rs.Key = roachpb.RKeyMax
 		} else {
 			// Truncate the request span to the current range.
-			singleRangeSpan, err := rs.Intersect(ri.Token().Desc())
+			singleRangeSpan, err := rs.Intersect(ri.Token().Desc().RSpan())
 			if err != nil {
 				return err
 			}

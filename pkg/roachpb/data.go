@@ -2395,20 +2395,20 @@ func (rs RSpan) String() string {
 }
 
 // Intersect returns the intersection of the current span and the
-// descriptor's range. Returns an error if the span and the
-// descriptor's range do not overlap.
-func (rs RSpan) Intersect(desc *RangeDescriptor) (RSpan, error) {
-	if !rs.Key.Less(desc.EndKey) || !desc.StartKey.Less(rs.EndKey) {
-		return rs, errors.Errorf("span and descriptor's range do not overlap: %s vs %s", rs, desc)
+// given range. Returns an error if the span and the range do not
+// overlap.
+func (rs RSpan) Intersect(rspan RSpan) (RSpan, error) {
+	if !rs.Key.Less(rspan.EndKey) || !rspan.Key.Less(rs.EndKey) {
+		return rs, errors.Errorf("spans do not overlap: %s vs %s", rs, rspan)
 	}
 
 	key := rs.Key
-	if key.Less(desc.StartKey) {
-		key = desc.StartKey
+	if key.Less(rspan.Key) {
+		key = rspan.Key
 	}
 	endKey := rs.EndKey
-	if !desc.ContainsKeyRange(desc.StartKey, endKey) {
-		endKey = desc.EndKey
+	if !rspan.ContainsKeyRange(rspan.Key, endKey) {
+		endKey = rspan.EndKey
 	}
 	return RSpan{key, endKey}, nil
 }

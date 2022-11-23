@@ -1424,7 +1424,7 @@ func (e *CacheEntry) LeaseSpeculative() bool {
 // "speculative" (sequence=0).
 func (e *CacheEntry) overrides(o *CacheEntry) bool {
 	if util.RaceEnabled {
-		if _, err := e.Desc().RSpan().Intersect(o.Desc()); err != nil {
+		if _, err := e.Desc().RSpan().Intersect(o.Desc().RSpan()); err != nil {
 			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", e.Desc(), o.Desc()))
 		}
 	}
@@ -1464,7 +1464,7 @@ func (e *CacheEntry) overrides(o *CacheEntry) bool {
 // older; this matches the semantics of b.overrides(a).
 func compareEntryDescs(a, b *CacheEntry) int {
 	if util.RaceEnabled {
-		if _, err := a.Desc().RSpan().Intersect(b.Desc()); err != nil {
+		if _, err := a.Desc().RSpan().Intersect(b.Desc().RSpan()); err != nil {
 			panic(fmt.Sprintf("descriptors don't intersect: %s vs %s", a.Desc(), b.Desc()))
 		}
 	}

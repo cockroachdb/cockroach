@@ -1202,6 +1202,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`percentile_disc_impl(arg1: float[], arg2: varbit) -> varbit[]`:                                     302,
 	`pg_advisory_unlock(int: int) -> bool`:                                                              1428,
 	`pg_backend_pid() -> int`:                                                                           1400,
+	`pg_blocking_pids() -> int[]`:                                                                       2045,
 	`pg_client_encoding() -> string`:                                                                    1429,
 	`pg_collation_for(str: anyelement) -> string`:                                                       1418,
 	`pg_column_is_updatable(reloid: oid, attnum: int2, include_triggers: bool) -> bool`:                 1434,
