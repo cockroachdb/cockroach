@@ -18,7 +18,6 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -510,6 +509,16 @@ func TestProportionalSize(t *testing.T) {
 
 const letters = "abcdefghijklmnopqrstuvwxyz"
 
+// randString generates a random string of the desired length from the input
+// alphabet.
+func randString(rng *rand.Rand, length int, alphabet string) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	}
+	return string(buf)
+}
+
 func TestToArrowSerializationFormat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -523,7 +532,7 @@ func TestToArrowSerializationFormat(t *testing.T) {
 		if rng.Float64() < nullChance {
 			continue
 		}
-		element := []byte(randgen.RandString(rng, 1+rng.Intn(maxStringLength), letters))
+		element := []byte(randString(rng, 1+rng.Intn(maxStringLength), letters))
 		b.Set(i, element)
 	}
 
