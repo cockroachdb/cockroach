@@ -337,6 +337,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"rowsWritten", (*numericStats)(&s.RowsWritten)},
 		{"nodes", (*int64Array)(&s.Nodes)},
 		{"planGists", (*stringArray)(&s.PlanGists)},
+		{"indexes", (*stringArray)(&s.Indexes)},
 	}
 }
 

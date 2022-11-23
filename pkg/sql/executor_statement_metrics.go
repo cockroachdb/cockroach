@@ -210,6 +210,7 @@ func (ex *connExecutor) recordStatementSummary(
 		FullScan:             fullScan,
 		SessionData:          planner.SessionData(),
 		ExecStats:            queryLevelStats,
+		Indexes:              planner.instrumentation.indexesUsed,
 	}
 
 	stmtFingerprintID, err :=

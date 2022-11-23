@@ -97,6 +97,7 @@ const statementStats: Required<IStatementStatistics> = {
   },
   plan_gists: ["Ais="],
   index_recommendations: [""],
+  indexes: ["123@456"],
   exec_stats: execStats,
   last_exec_timestamp: {
     seconds: Long.fromInt(1599670292),

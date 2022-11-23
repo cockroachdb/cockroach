@@ -101,7 +101,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "nodes": [{{joinInts .IntArray}}],
-         "planGists": [{{joinStrings .StringArray}}]
+         "planGists": [{{joinStrings .StringArray}}],
+         "indexes": [{{joinStrings .StringArray}}]
        },
        "execution_statistics": {
          "cnt": {{.Int64}},

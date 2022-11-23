@@ -13,8 +13,11 @@ package sslocal_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"math"
 	"net/url"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -1301,4 +1304,117 @@ func TestSQLStatsIdleLatencies(t *testing.T) {
 				"expected: %v\nactual: %v", tc.lats, actual)
 		})
 	}
+}
+
+type indexInfo struct {
+	name  string
+	table string
+}
+
+func TestSQLStatsIndexesUsed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params, _ := tests.CreateTestServerParams()
+	testServer, sqlConn, _ := serverutils.StartServer(t, params)
+	defer func() {
+		require.NoError(t, sqlConn.Close())
+		testServer.Stopper().Stop(ctx)
+	}()
+	testConn := sqlutils.MakeSQLRunner(sqlConn)
+	appName := "indexes-usage"
+	testConn.Exec(t, "SET application_name = $1", appName)
+
+	testCases := []struct {
+		name          string
+		tableCreation string
+		statement     string
+		fingerprint   string
+		indexes       []indexInfo
+	}{
+		{
+			name:          "buildScan",
+			tableCreation: "CREATE TABLE t1 (k INT)",
+			statement:     "SELECT * FROM t1",
+			fingerprint:   "SELECT * FROM t1",
+			indexes:       []indexInfo{{name: "t1_pkey", table: "t1"}},
+		},
+		{
+			name:          "buildIndexJoin",
+			tableCreation: "CREATE TABLE t2 (x INT, y INT, INDEX x_idx (x))",
+			statement:     "SELECT * FROM t2@x_idx",
+			fingerprint:   "SELECT * FROM t2@x_idx",
+			indexes: []indexInfo{
+				{name: "t2_pkey", table: "t2"},
+				{name: "x_idx", table: "t2"}},
+		},
+		{
+			name:          "buildLookupJoin",
+			tableCreation: "CREATE TABLE t3 (x INT, y INT, INDEX x_idx (x)); CREATE TABLE t4 (u INT, v INT)",
+			statement:     "SELECT * FROM t4 INNER LOOKUP JOIN t3 ON u = x",
+			fingerprint:   "SELECT * FROM t4 INNER LOOKUP JOIN t3 ON u = x",
+			indexes: []indexInfo{
+				{name: "t3_pkey", table: "t3"},
+				{name: "t4_pkey", table: "t4"},
+				{name: "x_idx", table: "t3"}},
+		},
+		{
+			name:          "buildZigZag",
+			tableCreation: "CREATE TABLE t5 (a INT, b INT, INDEX a_idx(a), INDEX b_idx(b))",
+			statement:     "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE a = 1 AND b = 1",
+			fingerprint:   "SELECT * FROM t5@{FORCE_ZIGZAG} WHERE (a = _) AND (b = _)",
+			indexes: []indexInfo{
+				{name: "a_idx", table: "t5"},
+				{name: "b_idx", table: "t5"}},
+		},
+		{
+			name:          "buildInvertedJoin",
+			tableCreation: "CREATE TABLE t6 (k INT, j JSON, INVERTED INDEX j_idx (j))",
+			statement:     "SELECT * FROM t6 INNER INVERTED JOIN t6 AS t6_2 ON t6.j @> t6_2.j",
+			fingerprint:   "SELECT * FROM t6 INNER INVERTED JOIN t6 AS t6_2 ON t6.j @> t6_2.j",
+			indexes: []indexInfo{
+				{name: "j_idx", table: "t6"},
+				{name: "t6_pkey", table: "t6"}},
+		},
+	}
+
+	var indexesString string
+	var indexes []string
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testConn.Exec(t, tc.tableCreation)
+			testConn.Exec(t, tc.statement)
+
+			rows := testConn.QueryRow(t, "SELECT statistics -> 'statistics' ->> 'indexes' "+
+				"FROM CRDB_INTERNAL.STATEMENT_STATISTICS WHERE app_name = $1 "+
+				"AND metadata ->> 'query'=$2", appName, tc.fingerprint)
+			rows.Scan(&indexesString)
+
+			err := json.Unmarshal([]byte(indexesString), &indexes)
+			require.NoError(t, err)
+			require.Equal(t, len(tc.indexes), len(indexes))
+			require.Equal(t, tc.indexes, convertIDsToNames(t, testConn, indexes))
+		})
+	}
+}
+
+func convertIDsToNames(t *testing.T, testConn *sqlutils.SQLRunner, indexes []string) []indexInfo {
+	var indexesInfo []indexInfo
+	var tableName string
+	var indexName string
+	for _, idx := range indexes {
+		tableID := strings.Split(idx, "@")[0]
+		idxID := strings.Split(idx, "@")[1]
+
+		rows := testConn.QueryRow(t, "SELECT descriptor_name, index_name FROM "+
+			"crdb_internal.table_indexes WHERE descriptor_id =$1 AND index_id=$2", tableID, idxID)
+		rows.Scan(&tableName, &indexName)
+		indexesInfo = append(indexesInfo, indexInfo{name: indexName, table: tableName})
+	}
+
+	sort.Slice(indexesInfo, func(i, j int) bool {
+		return indexesInfo[i].name < indexesInfo[j].name
+	})
+	return indexesInfo
 }
