@@ -481,6 +481,7 @@ type pebbleMVCCScanner struct {
 	// advanceKey() when evaluating Scan and ReverseScan requests with
 	// non-COL_BATCH_RESPONSE scan format.
 	advanceKeyEnabled bool
+	skippedTombstone  bool
 	keyBuf            []byte
 	savedBuf          []byte
 	// cur* variables store the "current" record we're pointing to. Updated in
@@ -574,6 +575,18 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 }
 
 func (p *pebbleMVCCScanner) seekToStartOfScan() (ok bool) {
+	// The iterator may already be positioned on a range key that the seek hits,
+	// in which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
+	// here if needed. We check this before seeking, because in the typical case
+	// this will be a new, unpositioned iterator, which allows omitting the
+	// HasPointAndRange() call.
+	if ok, _ := p.parent.Valid(); ok {
+		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+			if !p.enablePointSynthesis() {
+				return false
+			}
+		}
+	}
 	if p.reverse {
 		return p.iterSeekReverse(MVCCKey{Key: p.end})
 	}
@@ -590,19 +603,6 @@ func (p *pebbleMVCCScanner) scan(
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
 	}
 	p.advanceKeyEnabled = true
-
-	// The iterator may already be positioned on a range key that the seek hits,
-	// in which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
-	// here if needed. We check this before seeking, because in the typical case
-	// this will be a new, unpositioned iterator, which allows omitting the
-	// HasPointAndRange() call.
-	if ok, _ := p.parent.Valid(); ok {
-		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-			if !p.enablePointSynthesis() {
-				return nil, 0, 0, p.err
-			}
-		}
-	}
 
 	if !p.seekToStartOfScan() {
 		return nil, 0, 0, p.err
@@ -722,6 +722,7 @@ func (p *pebbleMVCCScanner) uncertaintyError(ts hlc.Timestamp) bool {
 // Emit a tuple and return true if we have reason to believe iteration can
 // continue.
 func (p *pebbleMVCCScanner) getAndAdvance(ctx context.Context) bool {
+	p.skippedTombstone = false
 	if !p.curUnsafeKey.Timestamp.IsEmpty() {
 		if extended, valid := p.tryDecodeCurrentValueSimple(); !valid {
 			return false
@@ -1112,6 +1113,7 @@ func (p *pebbleMVCCScanner) addAndAdvance(
 	// Don't include deleted versions len(val) == 0, unless we've been instructed
 	// to include tombstones in the results.
 	if len(rawValue) == 0 && !p.tombstones {
+		p.skippedTombstone = true
 		return p.advanceKey()
 	}
 

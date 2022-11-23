@@ -275,7 +275,7 @@ func newTxnKVFetcher(args kvBatchFetcherArgs, batchRequestsIssued *int64) *txnKV
 		sendFn:                     args.sendFn,
 		scanFormat:                 roachpb.BATCH_RESPONSE,
 		reverse:                    args.reverse,
-		lockStrength:               getKeyLockingStrength(args.lockStrength),
+		lockStrength:               GetKeyLockingStrength(args.lockStrength),
 		lockWaitPolicy:             getWaitPolicy(args.lockWaitPolicy),
 		lockTimeout:                args.lockTimeout,
 		acc:                        args.acc,
@@ -642,9 +642,13 @@ func (f *txnKVFetcher) NextBatch(ctx context.Context) (resp KVBatchFetcherRespon
 			// empty, and the caller (the KVFetcher) will skip over it.
 			return ret, nil
 		case *roachpb.ReverseScanResponse:
-			// TODO
-			if len(t.BatchResponses) > 0 {
-				ret.BatchResponse, _, f.remainingBatchResps, _ = popBatch(t.BatchResponses, nil)
+			if len(t.BatchResponses) > 0 || len(t.ColBatches.ColBatches) > 0 {
+				// TODO: reuse this.
+				colBatches := make([]coldata.Batch, len(t.ColBatches.ColBatches))
+				for i := range t.ColBatches.ColBatches {
+					colBatches[i] = t.ColBatches.ColBatches[i].(coldata.Batch)
+				}
+				ret.BatchResponse, ret.ColBatch, f.remainingBatchResps, f.remainingColBatches = popBatch(t.BatchResponses, colBatches)
 			}
 			if len(t.Rows) > 0 {
 				return KVBatchFetcherResponse{}, errors.AssertionFailedf(
@@ -787,7 +791,7 @@ func spansToRequests(
 			}
 			curScan := i - curGet
 			scans[curScan].req.SetSpan(spans[i])
-			scans[curScan].req.ScanFormat = roachpb.BATCH_RESPONSE
+			scans[curScan].req.ScanFormat = scanFormat
 			scans[curScan].req.KeyLocking = keyLocking
 			scans[curScan].union.ReverseScan = &scans[curScan].req
 			reqs[i].Value = &scans[curScan].union
