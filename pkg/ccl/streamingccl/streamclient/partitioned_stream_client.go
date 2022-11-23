@@ -10,6 +10,9 @@ package streamclient
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/pem"
 	"net"
 	"net/url"
 
@@ -41,10 +44,26 @@ type partitionedStreamClient struct {
 func newPartitionedStreamClient(
 	ctx context.Context, remote *url.URL,
 ) (*partitionedStreamClient, error) {
-	config, err := pgx.ParseConfig(remote.String())
-	if err != nil {
-		return nil, err
+
+	var config *pgx.ConnConfig
+	if remote.Query().Get("sslinline") == "true" {
+		var err error
+		noTLSRemote := URIWithTLSCertsRemoved(remote)
+		config, err = pgx.ParseConfig(noTLSRemote.String())
+		if err != nil {
+			return nil, err
+		}
+		if err := AddTLSCertsToConfigFromInlineURL(remote, config.TLSConfig); err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		config, err = pgx.ParseConfig(remote.String())
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	conn, err := pgx.ConnectConfig(ctx, config)
 	if err != nil {
 		return nil, err
@@ -357,4 +376,51 @@ func (p *partitionedStreamSubscription) Events() <-chan streamingccl.Event {
 // Err implements the Subscription interface.
 func (p *partitionedStreamSubscription) Err() error {
 	return p.err
+}
+
+func URIWithTLSCertsRemoved(remote *url.URL) *url.URL {
+	ret := *remote
+	v := ret.Query()
+	v.Del("sslcert")
+	v.Del("sslkey")
+	v.Del("sslrootcert")
+	v.Del("sslinline")
+	ret.RawQuery = v.Encode()
+	return &ret
+}
+
+func AddTLSCertsToConfigFromInlineURL(remote *url.URL, tlsConfig *tls.Config) error {
+	v := remote.Query()
+	sslCert := v.Get("sslcert")
+	sslKey := v.Get("sslkey")
+	sslRootCert := v.Get("sslrootcert")
+
+	if (sslCert != "" && sslKey == "") || (sslCert == "" && sslKey != "") {
+		return errors.New(`both "sslcert" and "sslkey" are required`)
+	}
+
+	if sslRootCert != "" {
+		caCertPool := x509.NewCertPool()
+		if !caCertPool.AppendCertsFromPEM([]byte(sslRootCert)) {
+			return errors.New("unable to add CA to cert pool")
+		}
+		tlsConfig.RootCAs = caCertPool
+		tlsConfig.ClientCAs = caCertPool
+	}
+
+	if sslCert != "" && sslKey != "" {
+		// TODO(ssd): pgx supports sslpassword here. But, it
+		// only supports PKCS#1 and relies on functions that
+		// are deprecated in the stdlib. For now, I've skipped
+		// it.
+		block, _ := pem.Decode([]byte(sslKey))
+		pemKey := pem.EncodeToMemory(block)
+		cert, err := tls.X509KeyPair([]byte(sslCert), pemKey)
+		if err != nil {
+			return errors.Wrap(err, "unable to construct x509 key pair")
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+	return nil
+
 }
