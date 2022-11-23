@@ -198,8 +198,7 @@ func TestNonExistentTenant(t *testing.T) {
 			DisableCreateTenant: true,
 			SkipTenantCheck:     true,
 		})
-	require.Error(t, err)
-	require.Equal(t, "system DB uninitialized, check if tenant is non existent", err.Error())
+	require.EqualError(t, err, `database "[1]" does not exist`)
 }
 
 // TestTenantRowIDs confirms `unique_rowid()` works as expected in a

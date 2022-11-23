@@ -13,7 +13,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -70,7 +69,6 @@ func (e *plannerJobExecContext) MigrationJobDeps() upgrade.JobDeps {
 func (e *plannerJobExecContext) SpanConfigReconciler() spanconfig.Reconciler {
 	return e.p.SpanConfigReconciler()
 }
-func (e *plannerJobExecContext) Txn() *kv.Txn { return e.p.Txn() }
 
 // ConstrainPrimaryIndexSpanByExpr implements SpanConstrainer
 func (e *plannerJobExecContext) ConstrainPrimaryIndexSpanByExpr(
@@ -106,5 +104,4 @@ type JobExecContext interface {
 	User() username.SQLUsername
 	MigrationJobDeps() upgrade.JobDeps
 	SpanConfigReconciler() spanconfig.Reconciler
-	Txn() *kv.Txn
 }

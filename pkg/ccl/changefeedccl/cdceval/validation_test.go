@@ -65,7 +65,7 @@ func TestNormalizeAndValidate(t *testing.T) {
 			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
 		})
 	defer cleanup()
-	execCtx := p.(sql.JobExecContext)
+	execCtx := p.(sql.PlanHookState)
 
 	for _, tc := range []struct {
 		name         string
@@ -289,7 +289,7 @@ func TestSelectClauseRequiresPrev(t *testing.T) {
 			SearchPath: sessiondata.DefaultSearchPath.GetPathArray(),
 		})
 	defer cleanup()
-	execCtx := p.(sql.JobExecContext)
+	execCtx := p.(sql.PlanHookState)
 
 	for _, tc := range []struct {
 		name   string

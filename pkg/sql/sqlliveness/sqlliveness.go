@@ -34,9 +34,15 @@ type SessionID string
 // Provider is a wrapper around the sqlliveness subsystem for external
 // consumption.
 type Provider interface {
-	Start(ctx context.Context)
-	Metrics() metric.Struct
 	Liveness
+
+	// Start starts the sqlliveness subsystem. regionPhysicalRep should
+	// represent the physical representation of the current process region
+	// stored in the multi-region enum type associated with the system database.
+	Start(ctx context.Context, regionPhysicalRep []byte)
+
+	// Metrics returns a metric.Struct which holds metrics for the provider.
+	Metrics() metric.Struct
 
 	// CachedReader returns a reader which only consults its local cache and
 	// does not perform any RPCs in the IsAlive call.

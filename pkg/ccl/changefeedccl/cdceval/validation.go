@@ -38,7 +38,7 @@ import (
 // buffer using cdceval.AsStringUnredacted.
 func NormalizeAndValidateSelectForTarget(
 	ctx context.Context,
-	execCtx sql.JobExecContext,
+	execCtx sql.PlanHookState,
 	desc catalog.TableDescriptor,
 	target jobspb.ChangefeedTargetSpecification,
 	sc *tree.SelectClause,

@@ -355,8 +355,7 @@ func (s *streamIngestionResumer) handleResumeError(
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
-	jobExecCtx := execCtx.(sql.JobExecContext)
-	return s.job.PauseRequested(resumeCtx, jobExecCtx.Txn(), func(ctx context.Context,
+	return s.job.PauseRequested(resumeCtx, nil /* txn */, func(ctx context.Context,
 		planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
 		progress.RunningStatus = errorMessage
 		return nil
@@ -513,17 +512,19 @@ func (s *streamIngestionResumer) OnFailOrCancel(
 	details := s.job.Details().(jobspb.StreamIngestionDetails)
 	s.cancelProducerJob(ctx, details)
 
-	tenInfo, err := sql.GetTenantRecordByID(ctx, jobExecCtx.ExecCfg(), jobExecCtx.Txn(), details.DestinationTenantID)
-	if err != nil {
-		return errors.Wrap(err, "fetch tenant info")
-	}
+	return jobExecCtx.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		tenInfo, err := sql.GetTenantRecordByID(ctx, jobExecCtx.ExecCfg(), txn, details.DestinationTenantID)
+		if err != nil {
+			return errors.Wrap(err, "fetch tenant info")
+		}
 
-	tenInfo.TenantReplicationJobID = 0
-	if err := sql.UpdateTenantRecord(ctx, jobExecCtx.ExecCfg(), jobExecCtx.Txn(), tenInfo); err != nil {
-		return errors.Wrap(err, "update tenant record")
-	}
+		tenInfo.TenantReplicationJobID = 0
+		if err := sql.UpdateTenantRecord(ctx, jobExecCtx.ExecCfg(), txn, tenInfo); err != nil {
+			return errors.Wrap(err, "update tenant record")
+		}
 
-	return nil
+		return nil
+	})
 }
 
 func (s *streamIngestionResumer) ForceRealSpan() bool { return true }

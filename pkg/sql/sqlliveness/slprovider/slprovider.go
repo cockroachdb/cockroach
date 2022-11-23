@@ -55,9 +55,9 @@ type provider struct {
 
 var _ sqlliveness.Provider = &provider{}
 
-func (p *provider) Start(ctx context.Context) {
+func (p *provider) Start(ctx context.Context, regionPhysicalRep []byte) {
 	p.Storage.Start(ctx)
-	p.Instance.Start(ctx)
+	p.Instance.Start(ctx, regionPhysicalRep)
 }
 
 func (p *provider) Metrics() metric.Struct {
