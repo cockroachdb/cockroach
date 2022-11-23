@@ -897,7 +897,7 @@ func validateDetailsAndOptions(
 // This method modifies passed in select clause to reflect normalization step.
 func validateAndNormalizeChangefeedExpression(
 	ctx context.Context,
-	execCtx sql.JobExecContext,
+	execCtx sql.PlanHookState,
 	sc *tree.SelectClause,
 	descriptors map[tree.TablePattern]catalog.Descriptor,
 	targets []jobspb.ChangefeedTargetSpecification,
@@ -977,7 +977,7 @@ func (b *changefeedResumer) handleChangefeedError(
 		const errorFmt = "job failed (%v) but is being paused because of %s=%s"
 		errorMessage := fmt.Sprintf(errorFmt, changefeedErr,
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
-		return b.job.PauseRequested(ctx, jobExec.Txn(), func(ctx context.Context,
+		return b.job.PauseRequested(ctx, nil /* txn */, func(ctx context.Context,
 			planHookState interface{}, txn *kv.Txn, progress *jobspb.Progress) error {
 			err := b.OnPauseRequest(ctx, jobExec, txn, progress)
 			if err != nil {
