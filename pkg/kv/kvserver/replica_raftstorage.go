@@ -629,6 +629,10 @@ func clearRangeData(
 	return nil
 }
 
+var Logf func(string, ...interface{}) = func(s string, i ...interface{}) {
+
+}
+
 // applySnapshot updates the replica and its store based on the given
 // (non-empty) snapshot and associated HardState. All snapshots must pass
 // through Raft for correctness, i.e. the parameters to this method must be
@@ -721,6 +725,7 @@ func (r *Replica) applySnapshot(
 		ingestion time.Time
 	}
 	log.KvDistribution.Infof(ctx, "applying %s", inSnap)
+	Logf("%s: applying snapshot at idx", r.RangeID, inSnap.raftAppliedIndex)
 	defer func(start time.Time) {
 		var logDetails redact.StringBuilder
 		logDetails.Printf("total=%0.0fms", timeutil.Since(start).Seconds()*1000)

@@ -53,6 +53,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 		seen.Lock()
 		defer seen.Unlock()
 		seen.m[args.StoreID]++
+		t.Logf("seen.m[%d] = %d", args.StoreID, seen.m[args.StoreID])
 		if seen.injectedErr != nil {
 			return 0, seen.injectedErr
 		}
@@ -83,6 +84,7 @@ func TestReplicaProbeRequest(t *testing.T) {
 	}
 	// Sanity check that ProbeRequest is fit for sending through the entire KV
 	// stack, with both routing policies.
+	kvserver.Logf = t.Logf
 	for _, srv := range tc.Servers {
 		db := srv.DB()
 		{
