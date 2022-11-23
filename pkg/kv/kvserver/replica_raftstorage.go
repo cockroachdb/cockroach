@@ -179,17 +179,13 @@ func entries(
 		size += uint64(ent.Size())
 		if size > maxBytes {
 			exceededMaxBytes = true
-			if len(ents) > 0 {
-				if exceededMaxBytes {
-					return iterutil.StopIteration()
-				}
-				return nil
+			if len(ents) == 0 { // make sure to return at least one entry
+				ents = append(ents, ent)
 			}
-		}
-		ents = append(ents, ent)
-		if exceededMaxBytes {
 			return iterutil.StopIteration()
 		}
+
+		ents = append(ents, ent)
 		return nil
 	}
 
