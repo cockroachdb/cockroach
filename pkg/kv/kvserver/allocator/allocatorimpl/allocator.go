@@ -350,7 +350,8 @@ func (ae *allocatorError) Error() string {
 	return b.String()
 }
 
-func (*allocatorError) PurgatoryErrorMarker() {}
+func (*allocatorError) AllocationErrorMarker() {}
+func (*allocatorError) PurgatoryErrorMarker()  {}
 
 // allocatorRand pairs a rand.Rand with a mutex.
 // NOTE: Allocator is typically only accessed from a single thread (the
