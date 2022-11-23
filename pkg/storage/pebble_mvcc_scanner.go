@@ -599,6 +599,18 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 }
 
 func (p *pebbleMVCCScanner) seekToStartOfScan() (ok bool) {
+	// The iterator may already be positioned on a range key that the seek hits,
+	// in which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
+	// here if needed. We check this before seeking, because in the typical case
+	// this will be a new, unpositioned iterator, which allows omitting the
+	// HasPointAndRange() call.
+	if ok, _ := p.parent.Valid(); ok {
+		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
+			if !p.enablePointSynthesis() {
+				return false
+			}
+		}
+	}
 	if p.reverse {
 		p.machine.fn = advanceKeyReverse
 		return p.iterSeekReverse(MVCCKey{Key: p.end})
@@ -643,19 +655,6 @@ func (p *pebbleMVCCScanner) scan(
 ) (*roachpb.Span, roachpb.ResumeReason, int64, error) {
 	if p.wholeRows && !p.results.(*pebbleResults).lastOffsetsEnabled {
 		return nil, 0, 0, errors.AssertionFailedf("cannot use wholeRows without trackLastOffsets")
-	}
-
-	// The iterator may already be positioned on a range key that the seek hits,
-	// in which case RangeKeyChanged() wouldn't fire, so we enable point synthesis
-	// here if needed. We check this before seeking, because in the typical case
-	// this will be a new, unpositioned iterator, which allows omitting the
-	// HasPointAndRange() call.
-	if ok, _ := p.parent.Valid(); ok {
-		if _, hasRange := p.parent.HasPointAndRange(); hasRange {
-			if !p.enablePointSynthesis() {
-				return nil, 0, 0, p.err
-			}
-		}
 	}
 
 	if !p.seekToStartOfScan() {

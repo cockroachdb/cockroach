@@ -64,7 +64,7 @@ func newTxnKVStreamer(
 ) KVBatchFetcher {
 	f := &txnKVStreamer{
 		streamer:   streamer,
-		keyLocking: getKeyLockingStrength(lockStrength),
+		keyLocking: GetKeyLockingStrength(lockStrength),
 		acc:        acc,
 	}
 	f.atomics.batchRequestsIssued = batchRequestsIssued
