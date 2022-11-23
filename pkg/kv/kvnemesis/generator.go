@@ -14,7 +14,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"math/rand"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -543,59 +545,61 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 }
 
 func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
-	// Delete a span. We don't want MVCC rangedels to get split along range
-	// boundaries in kvnemesis (since that would violate atomicity, but is
-	// desired behavior in CRDB) so we try our best to not straddle splits. If
-	// we end up doing it anyway, an interceptor will cause the request to fail
-	// (but not kvnemesis).
-	var key, endKey string
-	n := rng.Intn(3)
-	switch {
-	case n == 0 && len(g.historicalSplits) > 0:
-		// Using historical splits gives us a bit of "everything coverage", including
-		// crossing range boundaries (which is supposed to error out anyway but still).
-		key, endKey = randMapKey(rng, g.historicalSplits), randMapKey(rng, g.historicalSplits)
-	case n == 1 && len(g.currentSplits) > 0:
-		key, endKey = randMapKey(rng, g.currentSplits), randMapKey(rng, g.currentSplits)
-	case n == 2 && len(g.keys) > 0:
-		// Delete a specific key (which may no longer be visible, but at least
-		// has nontrivial MVCC history).
-		key = randMapKey(rng, g.keys)
-		endKey = uint64ToKey(uint64FromKey(key) + 1)
-	default:
-		// Delete a random key.
-		key = randKey(rng)
-		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	return randDelRangeUsingTombstoneImpl(g.currentSplits, g.nextSeq, rng)
+}
+
+func randDelRangeUsingTombstoneImpl(
+	currentSplits map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
+) Operation {
+	yn := func(probY float64) bool {
+		return rng.Float64() > probY
 	}
 
-	if endKey < key {
-		endKey, key = key, endKey
-	} else if key == endKey {
-		// This span will always be contained in one range.
-		endKey = uint64ToKey(uint64FromKey(key) + 1)
+	var k, ek string
+	if yn(0.95) {
+		// 95% chance of picking an entire existing range.
+		// In kvnemesis, DeleteRangeUsingTombstone is prevented from spanning ranges since
+		// CRDB executes such requests non-atomically and so we can't really verify them
+		// well.
+		k, ek = randRangeSpan(rng, currentSplits)
+		if yn(0.5) {
+			// 50% chance of picking random subspan of this range.
+			if yn(0.5) {
+				// In 50% of cases, move startKey forward.
+				k = randKeyBetween(rng, k, ek)
+			}
+			if yn(0.3) {
+				// In 50% of cases, move endKey backward.
+				ek = randKeyBetween(rng, k, ek)
+			}
+		}
+
+		if yn(0.1) {
+			// 10% chance of turning the span we have now into a point write at
+			// the start key.
+			ek = uint64ToKey(uint64FromKey(k) + 1)
+		}
+	} else {
+		// 5% chance of picking a completely random span. This will often span range
+		// boundaries and be rejected, so these are essentially doomed to fail.
+		k, ek = randKey(rng), randKey(rng)
+		if ek < k {
+			k, ek = ek, k
+		}
+		if k == ek {
+			// On collision, move one by one unit in a direction
+			// that has no over/underflow.
+			if nk := uint64FromKey(k); nk == 0 {
+				// Both are zero, so use [0,1)
+				ek = uint64ToKey(1)
+			} else {
+				// Can subtract one off start key.
+				k = uint64ToKey(nk - 1)
+			}
+		}
 	}
 
-	// Fudge the boundaries a bit, some of the time. Note
-	// that if it's a single-point span, this is a no-op.
-	switch rng.Intn(3) {
-	case 0:
-		// Move start key forward.
-		key = randKeyBetween(rng, key, endKey)
-	case 1:
-		// Shorten endKey to something in (key,endKey].
-		endKey = randKeyBetween(rng,
-			uint64ToKey(uint64FromKey(key)+1),
-			uint64ToKey(uint64FromKey(endKey)-1),
-		)
-	default: // noop
-	}
-
-	seq := g.nextSeq()
-	if key >= endKey {
-		s := fmt.Sprintf("%d %d", uint64FromKey(key), uint64FromKey(endKey))
-		panic(s)
-	}
-	return delRangeUsingTombstone(key, endKey, seq)
+	return delRangeUsingTombstone(k, ek, nextSeq())
 }
 
 func randSplitNew(g *generator, rng *rand.Rand) Operation {
@@ -748,15 +752,29 @@ func uint64ToKey(n uint64) string {
 	return string(key)
 }
 
-func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
+// Returns a span which represents two random sort-adjacent keys from the map.
+// If the last element is picked, the end key will repesent MaxUint64. If the
+// map is empty, behaves as though input map has one random uint64 key.
+func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string, string) {
+	keys := make([]string, 0, len(curOrHistSplits))
+	for key := range curOrHistSplits {
 		keys = append(keys, key)
 	}
+	sort.Strings(keys) // for determinism
 	if len(keys) == 0 {
-		return randKey(rng)
+		return uint64ToKey(rng.Uint64()), uint64ToKey(math.MaxUint64)
 	}
-	return keys[rng.Intn(len(keys))]
+	idx := rng.Intn(len(keys))
+	k := keys[idx]
+	if idx == len(keys)-1 {
+		return k, uint64ToKey(math.MaxUint64)
+	}
+	return k, keys[idx+1]
+}
+
+func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
+	k, _ := randRangeSpan(rng, m)
+	return k
 }
 
 // Returns a key that falls into `[k,ek)`.
