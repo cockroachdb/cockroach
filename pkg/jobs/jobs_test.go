@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -226,6 +227,9 @@ func (rts *registryTestSuite) setUp(t *testing.T) {
 		args.Knobs.JobsTestingKnobs = knobs
 		args.Knobs.SpanConfig = &spanconfig.TestingKnobs{
 			ManagerDisableJobCreation: true,
+		}
+		args.Knobs.UpgradeManager = &upgradebase.TestingKnobs{
+			DontUseJobs: true,
 		}
 
 		if rts.traceRealSpan {

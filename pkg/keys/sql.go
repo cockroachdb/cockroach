@@ -163,18 +163,6 @@ func (e sqlEncoder) SequenceKey(tableID uint32) roachpb.Key {
 	return k
 }
 
-// StartupMigrationKeyPrefix returns the key prefix to store all startup
-// migration details.
-func (e sqlEncoder) StartupMigrationKeyPrefix() roachpb.Key {
-	return append(e.TenantPrefix(), StartupMigrationPrefix...)
-}
-
-// StartupMigrationLeaseKey returns the key that nodes must take a lease on in
-// order to run startup migration upgrades on the cluster.
-func (e sqlEncoder) StartupMigrationLeaseKey() roachpb.Key {
-	return append(e.TenantPrefix(), StartupMigrationLease...)
-}
-
 // unexpected to avoid colliding with sqlEncoder.tenantPrefix.
 func (d sqlDecoder) tenantPrefix() roachpb.Key {
 	return *d.buf

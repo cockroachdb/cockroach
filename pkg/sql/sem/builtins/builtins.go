@@ -5999,33 +5999,6 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Stable,
 		},
 	),
-	"crdb_internal.completed_migrations": makeBuiltin(
-		tree.FunctionProperties{
-			Category: builtinconstants.CategorySystemInfo,
-		},
-		tree.Overload{
-			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.StringArray),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				prefix := evalCtx.Codec.StartupMigrationKeyPrefix()
-				keyvals, err := evalCtx.Txn.Scan(ctx, prefix, prefix.PrefixEnd(), 0 /* maxRows */)
-				if err != nil {
-					return nil, errors.Wrapf(err, "failed to get list of completed migrations")
-				}
-				ret := &tree.DArray{ParamTyp: types.String, Array: make(tree.Datums, 0, len(keyvals))}
-				for _, keyval := range keyvals {
-					key := keyval.Key
-					if len(key) > len(keys.StartupMigrationPrefix) {
-						key = key[len(keys.StartupMigrationPrefix):]
-					}
-					ret.Array = append(ret.Array, tree.NewDString(string(key)))
-				}
-				return ret, nil
-			},
-			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
-			Volatility: volatility.Volatile,
-		},
-	),
 	"crdb_internal.unsafe_upsert_descriptor": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
@@ -52,6 +53,10 @@ func TestStreamIngestionFrontierProcessor(t *testing.T) {
 					// We create a job record to track persistence but we don't want it to
 					// be adopted as the processors are being manually executed in the test.
 					DisableAdoptions: true,
+				},
+				// DisableAdoptions needs this.
+				UpgradeManager: &upgradebase.TestingKnobs{
+					DontUseJobs: true,
 				},
 			},
 		},

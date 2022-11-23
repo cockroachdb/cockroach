@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -76,15 +76,15 @@ func TestAlreadyRunningJobsAreHandledProperly(t *testing.T) {
 					// See the TODO below for why we need this.
 					ProcessorNoTracingSpan: true,
 				},
-				UpgradeManager: &upgrade.TestingKnobs{
+				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 						return []roachpb.Version{to}
 					},
-					RegistryOverride: func(v roachpb.Version) (upgrade.Upgrade, bool) {
+					RegistryOverride: func(v roachpb.Version) (upgradebase.Upgrade, bool) {
 						if v != endCV {
 							return nil, false
 						}
-						return upgrade.NewTenantUpgrade("test", v, upgrades.NoPrecondition, func(
+						return upgrade.NewTenantUpgrade("test", v, upgrade.NoPrecondition, func(
 							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 						) error {
 							canResume := make(chan error)
@@ -223,11 +223,11 @@ func TestMigrateUpdatesReplicaVersion(t *testing.T) {
 					BinaryVersionOverride:          startCV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
-				UpgradeManager: &upgrade.TestingKnobs{
+				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 						return []roachpb.Version{from, to}
 					},
-					RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						if cv != endCV {
 							return nil, false
 						}
@@ -337,11 +337,11 @@ func TestConcurrentMigrationAttempts(t *testing.T) {
 					BinaryVersionOverride:          versions[0],
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
-				UpgradeManager: &upgrade.TestingKnobs{
+				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 						return versions
 					},
-					RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						return upgrade.NewSystemUpgrade("test", cv, func(
 							ctx context.Context, version clusterversion.ClusterVersion, d upgrade.SystemDeps,
 						) error {
@@ -419,15 +419,15 @@ func TestPauseMigration(t *testing.T) {
 					BinaryVersionOverride:          startCV,
 					DisableAutomaticVersionUpgrade: make(chan struct{}),
 				},
-				UpgradeManager: &upgrade.TestingKnobs{
+				UpgradeManager: &upgradebase.TestingKnobs{
 					ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 						return []roachpb.Version{to}
 					},
-					RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+					RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 						if cv != endCV {
 							return nil, false
 						}
-						return upgrade.NewTenantUpgrade("test", cv, upgrades.NoPrecondition, func(
+						return upgrade.NewTenantUpgrade("test", cv, upgrade.NoPrecondition, func(
 							ctx context.Context, version clusterversion.ClusterVersion, deps upgrade.TenantDeps,
 						) error {
 							canResume := make(chan error)
@@ -542,13 +542,13 @@ func TestPrecondition(t *testing.T) {
 		},
 		// Inject an upgrade which would run to upgrade the cluster.
 		// We'll validate that we never create a job for this upgrade.
-		UpgradeManager: &upgrade.TestingKnobs{
+		UpgradeManager: &upgradebase.TestingKnobs{
 			ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
 				start := sort.Search(len(versions), func(i int) bool { return from.Less(versions[i]) })
 				end := sort.Search(len(versions), func(i int) bool { return to.Less(versions[i]) })
 				return versions[start:end]
 			},
-			RegistryOverride: func(cv roachpb.Version) (upgrade.Upgrade, bool) {
+			RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 				switch cv {
 				case v1:
 					return upgrade.NewTenantUpgrade("v1", cv,
@@ -561,7 +561,7 @@ func TestPrecondition(t *testing.T) {
 					), true
 				case v2:
 					return upgrade.NewTenantUpgrade("v2", cv,
-						upgrades.NoPrecondition,
+						upgrade.NoPrecondition,
 						cf(&migrationRun, &migrationErr),
 					), true
 				default:

@@ -608,6 +608,7 @@ func (ca *changeAggregator) emitResolved(batch jobspb.ResolvedSpans) error {
 		rowenc.EncDatum{Datum: tree.DNull}, // key
 		rowenc.EncDatum{Datum: tree.DNull}, // value
 	})
+	ca.metrics.ResolvedMessages.Inc(1)
 
 	ca.recentKVCount = 0
 	return nil

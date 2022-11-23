@@ -223,11 +223,13 @@ type streamIngesitonJobInfo struct {
 	status        string
 	errMsg        string
 	highwaterTime time.Time
+	finishedTime  time.Time
 }
 
-func (c *streamIngesitonJobInfo) GetHighWater() time.Time { return c.highwaterTime }
-func (c *streamIngesitonJobInfo) GetStatus() string       { return c.status }
-func (c *streamIngesitonJobInfo) GetError() string        { return c.status }
+func (c *streamIngesitonJobInfo) GetHighWater() time.Time    { return c.highwaterTime }
+func (c *streamIngesitonJobInfo) GetFinishedTime() time.Time { return c.finishedTime }
+func (c *streamIngesitonJobInfo) GetStatus() string          { return c.status }
+func (c *streamIngesitonJobInfo) GetError() string           { return c.status }
 
 var _ jobInfo = (*streamIngesitonJobInfo)(nil)
 
@@ -257,6 +259,7 @@ func getStreamIngestionJobInfo(db *gosql.DB, jobID int) (jobInfo, error) {
 		status:        status,
 		errMsg:        payload.Error,
 		highwaterTime: highwaterTime,
+		finishedTime:  time.UnixMicro(payload.FinishedMicros),
 	}, nil
 }
 

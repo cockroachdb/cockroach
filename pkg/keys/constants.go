@@ -299,12 +299,6 @@ var (
 	// StatusNodePrefix stores all status info for nodes.
 	StatusNodePrefix = roachpb.Key(makeKey(StatusPrefix, roachpb.RKey("node-")))
 	//
-	// StartupMigrationPrefix specifies the key prefix to store all migration details.
-	StartupMigrationPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("system-version/")))
-	// StartupMigrationLease is the key that nodes must take a lease on in order to run
-	// system migrations on the cluster.
-	StartupMigrationLease = roachpb.Key(makeKey(StartupMigrationPrefix, roachpb.RKey("lease")))
-	//
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
 	// TimeseriesKeyMax is the maximum value for any timeseries data.

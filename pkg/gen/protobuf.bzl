@@ -62,7 +62,6 @@ PROTOBUF_SRCS = [
   "//pkg/sql/sqlstats/persistedsqlstats:persistedsqlstats_go_proto",
   "//pkg/sql/stats:stats_go_proto",
   "//pkg/sql/types:types_go_proto",
-  "//pkg/startupmigrations/leasemanager:leasemanager_go_proto",
   "//pkg/storage/enginepb:enginepb_go_proto",
   "//pkg/testutils/grpcutils:grpcutils_go_proto",
   "//pkg/ts/catalog:catalog_go_proto",

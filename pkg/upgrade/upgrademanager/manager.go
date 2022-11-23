@@ -16,6 +16,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -33,9 +34,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/migrationstable"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradejob"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -44,18 +48,19 @@ import (
 // Manager is the instance responsible for executing upgrades across the
 // cluster.
 type Manager struct {
-	deps     upgrade.SystemDeps
-	lm       *lease.Manager
-	ie       sqlutil.InternalExecutor
-	ief      descs.TxnManager
-	jr       *jobs.Registry
-	codec    keys.SQLCodec
-	settings *cluster.Settings
-	knobs    upgrade.TestingKnobs
+	deps      upgrade.SystemDeps
+	lm        *lease.Manager
+	ie        sqlutil.InternalExecutor
+	ief       descs.TxnManager
+	jr        *jobs.Registry
+	codec     keys.SQLCodec
+	settings  *cluster.Settings
+	knobs     upgradebase.TestingKnobs
+	clusterID uuid.UUID
 }
 
 // GetUpgrade returns the upgrade associated with this key.
-func (m *Manager) GetUpgrade(key roachpb.Version) (upgrade.Upgrade, bool) {
+func (m *Manager) GetUpgrade(key roachpb.Version) (upgradebase.Upgrade, bool) {
 	if m.knobs.RegistryOverride != nil {
 		if m, ok := m.knobs.RegistryOverride(key); ok {
 			return m, ok
@@ -80,21 +85,23 @@ func NewManager(
 	jr *jobs.Registry,
 	codec keys.SQLCodec,
 	settings *cluster.Settings,
-	testingKnobs *upgrade.TestingKnobs,
+	clusterID uuid.UUID,
+	testingKnobs *upgradebase.TestingKnobs,
 ) *Manager {
-	var knobs upgrade.TestingKnobs
+	var knobs upgradebase.TestingKnobs
 	if testingKnobs != nil {
 		knobs = *testingKnobs
 	}
 	return &Manager{
-		deps:     deps,
-		lm:       lm,
-		ie:       ie,
-		ief:      ief,
-		jr:       jr,
-		codec:    codec,
-		settings: settings,
-		knobs:    knobs,
+		deps:      deps,
+		lm:        lm,
+		ie:        ie,
+		ief:       ief,
+		jr:        jr,
+		codec:     codec,
+		settings:  settings,
+		clusterID: clusterID,
+		knobs:     knobs,
 	}
 }
 
@@ -148,8 +155,103 @@ func safeToUpgradeTenant(
 	return true, nil
 }
 
-// Migrate runs the set of upgrades required to upgrade the cluster version
-// from the current version to the target one.
+// RunPermanentUpgrades runs all the upgrades associated with cluster versions
+// <= upToVersion that are marked as permanent. Upgrades that have already run
+// to completion, or that are currently running, are not run again, but the call
+// will block for their completion.
+//
+// NOTE: All upgrades, permanent and non-permanent, end up running in order.
+// RunPermanentUpgrades(v1) is called before Migrate(v1,v2). Of course,
+// non-permanent upgrades for versions <= v1 are not run at all; they're assumed
+// to be baked into the bootstrap metadata.
+func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.Version) error {
+	log.Infof(ctx, "running permanent upgrades up to version: %v", upToVersion)
+	defer func() {
+		if fn := m.knobs.AfterRunPermanentUpgrades; fn != nil {
+			fn()
+		}
+	}()
+	vers := m.listBetween(roachpb.Version{}, upToVersion)
+	var permanentUpgrades []upgradebase.Upgrade
+	for _, v := range vers {
+		upgrade, exists := m.GetUpgrade(v)
+		if !exists || !upgrade.Permanent() {
+			continue
+		}
+		permanentUpgrades = append(permanentUpgrades, upgrade)
+	}
+
+	user := username.RootUserName()
+
+	if len(permanentUpgrades) == 0 {
+		// If we didn't find any permanent migrations, it must be that a test used
+		// some the testing knobs to inhibit us from finding the migrations.
+		// However, we must run the permanent migrations (at least the one writing
+		// the value of the cluster version to the system.settings table); the test
+		// did not actually mean to inhibit running these. So we'll run them anyway,
+		// without using jobs, so that the side effect of the migrations are
+		// minimized and tests continue to be happy as they were before the
+		// permanent migrations were introduced.
+		return m.runPermanentMigrationsWithoutJobsForTests(ctx, user)
+	}
+
+	// Do a best-effort check to see if all upgrades have already executed and so
+	// there's nothing for us to do. Probably the most common case is that a node
+	// is started in a cluster that has already run all the relevant upgrades, in
+	// which case we'll figure this out cheaply.
+	// We look at whether the last permanent upgrade that we need to run has
+	// already completed successfully. Looking only at the last one is sufficient
+	// because upgrades run in order.
+	latest := permanentUpgrades[len(permanentUpgrades)-1]
+	lastVer := latest.Version()
+	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
+	lastUpgradeCompleted, err := migrationstable.CheckIfMigrationCompleted(
+		ctx, lastVer, nil /* txn */, m.ie,
+		// We'll do a follower read. This is all best effort anyway, and the
+		// follower read should keep the startup time low in the common case where
+		// all upgrades have run a long time ago before this node start.
+		enterpriseEnabled,
+		migrationstable.StaleRead)
+	if err != nil {
+		return err
+	}
+	if lastUpgradeCompleted {
+		return nil
+	}
+
+	for _, u := range permanentUpgrades {
+		log.Infof(ctx, "running permanent upgrade for version %s", u.Version())
+		if err := m.runMigration(ctx, u, user, u.Version(), !m.knobs.DontUseJobs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runPermanentMigrationsWithoutJobsForTests runs all permanent migrations up to
+// VPrimordialMax. They are run without jobs, in order to minimize the side
+// effects left on cluster.
+//
+// NOTE: VPrimordialMax was chosen arbitrarily, since we don't have a great way
+// to tell which migrations are needed and which aren't on the code path leading
+// here.
+func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
+	ctx context.Context, user username.SQLUsername,
+) error {
+	log.Infof(ctx, "found test configuration that eliminated all upgrades; running permanent upgrades anyway")
+	vers := clusterversion.ListBetween(roachpb.Version{}, clusterversion.ByKey(clusterversion.VPrimordialMax))
+	for _, v := range vers {
+		upg, exists := upgrades.GetUpgrade(v)
+		if !exists || !upg.Permanent() {
+			continue
+		}
+		if err := m.runMigration(ctx, upg, user, upg.Version(), false /* useJob */); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *Manager) Migrate(
 	ctx context.Context,
 	user username.SQLUsername,
@@ -200,8 +302,11 @@ func (m *Manager) Migrate(
 		log.Infof(ctx, "stepping through %s", clusterVersion)
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
 		// First, run the actual upgrade if any.
-		if err := m.runMigration(ctx, user, clusterVersion); err != nil {
-			return err
+		mig, exists := m.GetUpgrade(clusterVersion)
+		if exists {
+			if err := m.runMigration(ctx, mig, user, clusterVersion, !m.knobs.DontUseJobs); err != nil {
+				return err
+			}
 		}
 
 		// Next we'll push out the version gate to every node in the cluster.
@@ -353,21 +458,66 @@ func forEveryNodeUntilClusterStable(
 }
 
 func (m *Manager) runMigration(
-	ctx context.Context, user username.SQLUsername, version roachpb.Version,
+	ctx context.Context,
+	mig upgradebase.Upgrade,
+	user username.SQLUsername,
+	version roachpb.Version,
+	useJob bool,
 ) error {
-	mig, exists := m.GetUpgrade(version)
-	if !exists {
-		return nil
-	}
 	_, isSystemMigration := mig.(*upgrade.SystemUpgrade)
 	if isSystemMigration && !m.codec.ForSystemTenant() {
 		return nil
 	}
-	alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version, mig.Name())
-	if alreadyCompleted || err != nil {
-		return err
+	if !useJob {
+		// Some tests don't like it when jobs are run at server startup, because
+		// they pollute the jobs table. So, we run the upgrade directly.
+
+		alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
+			ctx, version, nil /* txn */, m.ie, false /* enterpriseEnabled */, migrationstable.ConsistentRead,
+		)
+		if alreadyCompleted || err != nil {
+			return err
+		}
+
+		switch upg := mig.(type) {
+		case *upgrade.SystemUpgrade:
+			if err := upg.Run(ctx, mig.Version(), m.SystemDeps()); err != nil {
+				return err
+			}
+		case *upgrade.TenantUpgrade:
+			// The TenantDeps used here are incomplete, but enough for the "permanent
+			// upgrades" that run under this testing knob.
+			if err := upg.Run(ctx, mig.Version(), upgrade.TenantDeps{
+				DB:                      m.deps.DB,
+				Codec:                   m.codec,
+				Settings:                m.settings,
+				LeaseManager:            m.lm,
+				InternalExecutor:        m.ie,
+				InternalExecutorFactory: m.ief,
+				JobRegistry:             m.jr,
+			}); err != nil {
+				return err
+			}
+		}
+
+		if err := migrationstable.MarkMigrationCompleted(ctx, m.ie, mig.Version()); err != nil {
+			return err
+		}
+	} else {
+		// Run a job that, in turn, will run the upgrade. By running upgrades inside
+		// jobs, we get some observability for them and we avoid multiple nodes
+		// attempting to run the same upgrade all at once. Particularly for
+		// long-running upgrades, this is useful.
+		//
+		// If the job already exists, we wait for it to finish.
+		alreadyCompleted, id, err := m.getOrCreateMigrationJob(ctx, user, version, mig.Name())
+		if alreadyCompleted || err != nil {
+			return err
+		}
+		log.Infof(ctx, "running %s", mig.Name())
+		return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
 	}
-	return m.jr.Run(ctx, m.ie, []jobspb.JobID{id})
+	return nil
 }
 
 func (m *Manager) getOrCreateMigrationJob(
@@ -375,7 +525,10 @@ func (m *Manager) getOrCreateMigrationJob(
 ) (alreadyCompleted bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		alreadyCompleted, err = upgradejob.CheckIfMigrationCompleted(ctx, txn, m.ie, version)
+		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings, m.clusterID)
+		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
+			ctx, version, txn, m.ie, enterpriseEnabled, migrationstable.ConsistentRead,
+		)
 		if err != nil && ctx.Err() == nil {
 			log.Warningf(ctx, "failed to check if migration already completed: %v", err)
 		}

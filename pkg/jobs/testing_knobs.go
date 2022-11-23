@@ -70,6 +70,10 @@ type TestingKnobs struct {
 	TimeSource *hlc.Clock
 
 	// DisableAdoptions disables job adoptions.
+	//
+	// When setting this, you probably want to set UpgradeManager.DontUseJobs too,
+	// otherwise a test server will fail to bootstrap. The TestServer code
+	// validates that these knobs are used in tandem.
 	DisableAdoptions bool
 
 	// DisableRegistryLifecycleManagement
