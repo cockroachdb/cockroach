@@ -451,7 +451,7 @@ var systemTableBackupConfiguration = map[string]systemBackupConfiguration{
 	systemschema.EventLogTable.GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
-	systemschema.LeaseTable.GetName(): {
+	systemschema.LeaseTable().GetName(): {
 		shouldIncludeInClusterBackup: optOutOfClusterBackup,
 	},
 	systemschema.NamespaceTable.GetName(): {

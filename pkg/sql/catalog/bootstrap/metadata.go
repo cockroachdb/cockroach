@@ -299,7 +299,7 @@ func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	target.AddDescriptorForSystemTenant(systemschema.TenantsTable)
 
 	// Add all the other system tables.
-	target.AddDescriptor(systemschema.LeaseTable)
+	target.AddDescriptor(systemschema.LeaseTable())
 	target.AddDescriptor(systemschema.EventLogTable)
 	target.AddDescriptor(systemschema.RangeEventTable)
 	target.AddDescriptor(systemschema.UITable)

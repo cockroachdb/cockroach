@@ -1339,6 +1339,8 @@ func (s *SQLServer) preStart(
 		return err
 	}
 
+	s.leaseMgr.SetRegionPrefix(regionPhysicalRep)
+
 	// Start the sql liveness subsystem. We'll need it to get a session.
 	s.sqlLivenessProvider.Start(ctx, regionPhysicalRep)
 
