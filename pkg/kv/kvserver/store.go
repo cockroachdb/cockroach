@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
@@ -3603,6 +3604,63 @@ func (s *Store) AllocatorDryRun(ctx context.Context, repl *Replica) (tracingpb.R
 		log.Eventf(ctx, "error simulating allocator on replica %s: %s", repl, err)
 	}
 	return collectAndFinish(), nil
+}
+
+// AllocatorCheckRange takes a range descriptor and a node liveness override (or
+// nil, to use the configured StorePool's), looks up the configuration of
+// range, and utilizes the allocator to get the action needed to repair the
+// range, as well as any upreplication target if needed, returning along with
+// any encountered errors as well as the collected tracing spans.
+//
+// The range does not need to have a replica on the store in order to check the
+// needed allocator action and target. The liveness override function, if
+// provided, may return UNKNOWN to fall back to the actual node liveness.
+//
+// Assuming the span config is available, a valid allocator actions should
+// always be returned, even in case of errors.
+//
+// NB: In the case of removal or rebalance actions, a target cannot be
+// evaluated, as a leaseholder is required for evaluation.
+func (s *Store) AllocatorCheckRange(ctx context.Context,
+	desc *roachpb.RangeDescriptor,
+	nodeLivenessOverride storepool.NodeLivenessFunc,
+) (allocatorimpl.AllocatorAction, roachpb.ReplicationTarget, tracingpb.Recording, error) {
+	ctx, collectAndFinish := tracing.ContextWithRecordingSpan(ctx, s.cfg.AmbientCtx.Tracer, "allocator check range")
+	defer collectAndFinish()
+
+	err := s.WaitForSpanConfigSubscription(ctx)
+	if err != nil {
+		log.Eventf(ctx, "span configs unavailable: %s", err)
+		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, collectAndFinish(), err
+	}
+
+	conf, err := s.cfg.SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
+	if err != nil {
+		log.Eventf(ctx, "error retrieving span config for range %s: %s", desc, err)
+		return allocatorimpl.AllocatorNoop, roachpb.ReplicationTarget{}, collectAndFinish(), err
+	}
+
+	var storePool storepool.AllocatorStorePool
+	if nodeLivenessOverride != nil {
+		internalNodeLivenessFn := func(nid roachpb.NodeID, now time.Time, timeUntilStoreDead time.Duration) livenesspb.NodeLivenessStatus {
+			status := nodeLivenessOverride(nid, now, timeUntilStoreDead)
+			if status == livenesspb.NodeLivenessStatus_UNKNOWN {
+				return s.cfg.StorePool.NodeLivenessFn(nid, now, timeUntilStoreDead)
+			}
+
+			return status
+		}
+		storePool = storepool.NewOverrideStorePool(s.cfg.StorePool, internalNodeLivenessFn)
+	} else if s.cfg.StorePool != nil {
+		storePool = s.cfg.StorePool
+	}
+
+	action, target, err := s.replicateQueue.CheckRangeAction(ctx, storePool, desc, conf)
+	if err != nil {
+		log.Eventf(ctx, "error simulating allocator on range %s: %s", desc, err)
+	}
+
+	return action, target, collectAndFinish(), err
 }
 
 // Enqueue runs the given replica through the requested queue. If `async` is
