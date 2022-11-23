@@ -316,8 +316,7 @@ LEFT JOIN LATERAL
 		},
 
 		{
-			Name:      "hasura column descriptions 8 tables",
-			SkipIssue: 88885,
+			Name: "hasura column descriptions 8 tables",
 			Setup: `CREATE TABLE t1(a int primary key, b int);
 CREATE TABLE t2(a int primary key, b int);
 CREATE TABLE t3(a int primary key, b int);
@@ -352,8 +351,6 @@ LEFT JOIN LATERAL
   ) columns ON true;`,
 		},
 
-		// Once https://github.com/cockroachdb/cockroach/issues/88885 is resolved,
-		// the previous test case should be identical to this one.
 		{
 			Name:  "hasura column descriptions modified",
 			Setup: "CREATE TABLE t(a INT PRIMARY KEY)",
