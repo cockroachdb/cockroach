@@ -2405,7 +2405,7 @@ project
       │    │         ├── (a1:1 = c1:7) OR (c1:7 = c2:8) [outer=(1,7,8), constraints=(/7: (/NULL - ])]
       │    │         └── a2:2 = c2:8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ]), fd=(2)==(8), (8)==(2)]
       │    └── filters
-      │         └── (a1:1 = b1:14) OR (a1:1 = a2:2) [outer=(1,2,14), constraints=(/1: (/NULL - ])]
+      │         └── (a1:1 = b1:14) OR (a1:1 = c2:8) [outer=(1,8,14), constraints=(/1: (/NULL - ])]
       └── aggregations
            ├── const-agg [as=c1:7, outer=(7)]
            │    └── c1:7
