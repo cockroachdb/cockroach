@@ -112,6 +112,7 @@ func acquireUnreplicatedLocksOnKeys(
 	scanRes *storage.MVCCScanResult,
 ) error {
 	res.Local.AcquiredLocks = make([]roachpb.LockAcquisition, scanRes.NumKeys)
+	// TODO: add COL_BATCH_RESPONSE support.
 	switch scanFmt {
 	case roachpb.BATCH_RESPONSE:
 		var i int
