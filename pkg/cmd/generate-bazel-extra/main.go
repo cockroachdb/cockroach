@@ -293,6 +293,7 @@ func excludeReallyEnormousTargets(targets []string) []string {
 			"//pkg/ccl/sqlitelogictestccl",
 			"//pkg/sql/sqlitelogictest",
 			"//pkg/ccl/backupccl",
+			"//pkg/ccl/logictestccl",
 		} {
 			if strings.HasPrefix(targets[i], toExclude) {
 				excluded = true
