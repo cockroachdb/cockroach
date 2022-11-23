@@ -186,6 +186,9 @@ type Builder struct {
 	// 4 DML statements, SELECT, UPDATE, INSERT, DELETE, or an EXPLAIN of one of
 	// these statements.
 	IsANSIDML bool
+
+	// IndexesUsed list the indexes used in query with the format tableID@indexID.
+	IndexesUsed []string
 }
 
 // New constructs an instance of the execution node builder using the
