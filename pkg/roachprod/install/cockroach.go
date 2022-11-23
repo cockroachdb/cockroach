@@ -172,6 +172,8 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 	}
 
 	l.Printf("%s: starting nodes", c.Name)
+
+	// SSH retries are disabled by passing nil RunRetryOpts
 	if err := c.Parallel(l, "", len(nodes), parallelism, func(nodeIdx int) (*RunResultDetails, error) {
 		node := nodes[nodeIdx]
 		res := &RunResultDetails{Node: node}
@@ -216,7 +218,7 @@ func (c *SyncedCluster) Start(ctx context.Context, l *logger.Logger, startOpts S
 			return res, errors.Wrap(err, "failed to set cluster settings")
 		}
 		return res, nil
-	}); err != nil {
+	}, nil); err != nil {
 		return err
 	}
 	if startOpts.ScheduleBackups {
@@ -319,7 +321,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 	display := fmt.Sprintf("%s: executing sql", c.Name)
 	if err := c.Parallel(l, display, len(c.Nodes), 0, func(nodeIdx int) (*RunResultDetails, error) {
 		node := c.Nodes[nodeIdx]
-		sess, err := c.newSession(node)
+		sess, err := c.newSession(l, node)
 		if err != nil {
 			return newRunResultDetails(node, err), err
 		}
@@ -342,7 +344,7 @@ func (c *SyncedCluster) RunSQL(ctx context.Context, l *logger.Logger, args []str
 		}
 		resultChan <- result{node: node, output: string(res.CombinedOut)}
 		return res, nil
-	}); err != nil {
+	}, DefaultSSHRetryOpts); err != nil {
 		return err
 	}
 
@@ -369,7 +371,7 @@ func (c *SyncedCluster) startNode(
 	}
 
 	if err := func() error {
-		sess, err := c.newSession(node)
+		sess, err := c.newSession(l, node)
 		if err != nil {
 			return err
 		}
@@ -390,7 +392,7 @@ func (c *SyncedCluster) startNode(
 		return "", err
 	}
 
-	sess, err := c.newSession(node)
+	sess, err := c.newSession(l, node)
 	if err != nil {
 		return "", err
 	}
@@ -630,7 +632,7 @@ func (c *SyncedCluster) initializeCluster(ctx context.Context, l *logger.Logger,
 	l.Printf("%s: initializing cluster\n", c.Name)
 	initCmd := c.generateInitCmd(node)
 
-	sess, err := c.newSession(node)
+	sess, err := c.newSession(l, node)
 	if err != nil {
 		return err
 	}
@@ -651,7 +653,7 @@ func (c *SyncedCluster) setClusterSettings(ctx context.Context, l *logger.Logger
 	l.Printf("%s: setting cluster settings", c.Name)
 	clusterSettingCmd := c.generateClusterSettingCmd(l, node)
 
-	sess, err := c.newSession(node)
+	sess, err := c.newSession(l, node)
 	if err != nil {
 		return err
 	}

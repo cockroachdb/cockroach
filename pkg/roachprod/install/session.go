@@ -12,14 +12,18 @@ package install
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -44,25 +48,25 @@ type remoteSession struct {
 	logfile string // captures ssh -vvv
 }
 
-func newRemoteSession(user, host string, logdir string) (*remoteSession, error) {
-	// TODO(tbg): this is disabled at the time of writing. It was difficult
-	// to assign the logfiles to the roachtest and as a bonus our CI harness
-	// never actually managed to collect the files since they had wrong
-	// permissions; instead they clogged up the roachprod dir.
-	// logfile := filepath.Join(
-	//	logdir,
-	// 	fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)),
-	// )
-	const logfile = ""
+// TODO: MG investigate - ssh log is not produced for the 3rd and final attempt
+func newRemoteSession(l *logger.Logger, user, host string) (*remoteSession, error) {
+	var logfile string
+	var loggingArgs []string
+	cl, err := l.ChildLogger(fmt.Sprintf("ssh_%s_%s", host, timeutil.Now().Format(time.RFC3339)))
+	// running roachprod from the cli will result in a fileless logger
+	if err == nil && l.File != nil {
+		logfile = cl.File.Name()
+		loggingArgs = []string{
+			"-vvv", "-E", logfile,
+		}
+	} else {
+		// NB: -q suppresses -E, at least on *nix.
+		loggingArgs = []string{"-q"}
+	}
+	//const logfile = ""
 	args := []string{
 		user + "@" + host,
 
-		// TODO(tbg): see above.
-		//"-vvv", "-E", logfile,
-		// NB: -q suppresses -E, at least on OSX. Difficult decisions will have
-		// to be made if omitting -q leads to annoyance on stdout/stderr.
-
-		"-q",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
 		// Send keep alives every minute to prevent connections without activity
@@ -75,6 +79,7 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 		// context cancellation killing hanging roachprod processes.
 		"-o", "ConnectTimeout=5",
 	}
+	args = append(args, loggingArgs...)
 	args = append(args, sshAuthArgs()...)
 	ctx, cancel := context.WithCancel(context.Background())
 	cmd := exec.CommandContext(ctx, "ssh", args...)
@@ -83,7 +88,7 @@ func newRemoteSession(user, host string, logdir string) (*remoteSession, error) 
 
 func (s *remoteSession) errWithDebug(err error) error {
 	if err != nil && s.logfile != "" {
-		err = errors.Wrapf(err, "ssh verbose log retained in %s", s.logfile)
+		err = errors.Wrapf(err, "ssh verbose log retained in %s", filepath.Base(s.logfile))
 		s.logfile = "" // prevent removal on close
 	}
 	return err
@@ -132,7 +137,7 @@ func (s *remoteSession) Run(ctx context.Context, cmd string) error {
 
 func (s *remoteSession) Start(cmd string) error {
 	s.Cmd.Args = append(s.Cmd.Args, cmd)
-	return rperrors.ClassifyCmdError(s.Cmd.Start())
+	return rperrors.ClassifyCmdError(s.errWithDebug(s.Cmd.Start()))
 }
 
 func (s *remoteSession) SetStdin(r io.Reader) {
