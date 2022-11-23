@@ -293,6 +293,18 @@ func (e *DistributeExpr) NoOpDistribution() bool {
 	return false
 }
 
+// HasHomeRegion returns true if the operation tree being distributed has a home
+// region.
+func (e *DistributeExpr) HasHomeRegion() bool {
+	inputDistributionProvidedPhysical := e.Input.ProvidedPhysical()
+
+	if inputDistributionProvidedPhysical != nil {
+		inputDistribution := inputDistributionProvidedPhysical.Distribution
+		return len(inputDistribution.Regions) == 1
+	}
+	return false
+}
+
 // GetRegionOfDistribution returns the single region name of the provided
 // distribution, if there is exactly one.
 func (e *DistributeExpr) GetRegionOfDistribution() (region string, ok bool) {

@@ -66,6 +66,10 @@ define ScanPrivate {
     # rows.
     HardLimit ScanLimit
 
+    # Distribution specifies the leaseholder regions of the scanned rows if
+    # they can be statically determined.
+    Distribution Distribution
+
     # Flags modify how the table is scanned, such as which index is used to scan.
     Flags ScanFlags
 

@@ -107,6 +107,7 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 		var sb indexScanBuilder
 		sb.Init(c, scanPrivate.Table)
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 
@@ -447,6 +448,7 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 
 		// Construct new constrained ScanPrivate.
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.Cols = indexCols.Intersection(scanPrivate.Cols)
 		newScanPrivate.SetConstraint(c.e.evalCtx, combinedConstraint)
@@ -903,6 +905,7 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 
 		// Construct new ScanOpDef with the new index and constraint.
 		newScanPrivate := *scanPrivate
+		newScanPrivate.Distribution.Regions = nil
 		newScanPrivate.Index = index.Ordinal()
 		newScanPrivate.SetConstraint(c.e.evalCtx, constraint)
 		newScanPrivate.InvertedConstraint = spansToRead

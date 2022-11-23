@@ -112,6 +112,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 	// -----------------------
 	// Check the hard limit to determine whether there is at most one row. Note
 	// that def.HardLimit = 0 indicates there is no known limit.
+	tabMeta := md.TableMeta(scan.Table)
 	if hardLimit == 1 {
 		rel.FuncDeps.MakeMax1Row(rel.OutputCols)
 	} else {
@@ -122,7 +123,7 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		if scan.Constraint != nil {
 			rel.FuncDeps.AddConstants(scan.Constraint.ExtractConstCols(b.evalCtx))
 		}
-		if tabMeta := md.TableMeta(scan.Table); tabMeta.Constraints != nil {
+		if tabMeta.Constraints != nil {
 			b.addFiltersToFuncDep(*tabMeta.Constraints.(*FiltersExpr), &rel.FuncDeps)
 		}
 		if pred != nil {
@@ -178,6 +179,12 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 		// should never exceed zero based on the logic above, but this provides
 		// extra safety.
 		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
+
+	// Distribution
+	// ------------
+	if scan.Distribution.Regions == nil {
+		scan.Distribution.FromIndexScan(b.sb.ctx, b.evalCtx, tabMeta, scan.Index, scan.Constraint)
 	}
 
 	// Statistics

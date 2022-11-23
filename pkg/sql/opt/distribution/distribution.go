@@ -44,7 +44,11 @@ func CanProvide(
 
 	case *memo.ScanExpr:
 		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
-		provided.FromIndexScan(ctx, evalCtx, tabMeta, t.Index, t.Constraint)
+		if t.Distribution.Regions != nil {
+			provided = t.Distribution
+		} else {
+			provided.FromIndexScan(ctx, evalCtx, tabMeta, t.Index, t.Constraint)
+		}
 
 	case *memo.LookupJoinExpr:
 		if t.LocalityOptimized {
@@ -102,7 +106,11 @@ func BuildProvided(
 
 	case *memo.ScanExpr:
 		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
-		provided.FromIndexScan(ctx, evalCtx, tabMeta, t.Index, t.Constraint)
+		if t.Distribution.Regions != nil {
+			provided = t.Distribution
+		} else {
+			provided.FromIndexScan(ctx, evalCtx, tabMeta, t.Index, t.Constraint)
+		}
 
 	default:
 		// TODO(msirek): Clarify the distinction between a distribution which can
