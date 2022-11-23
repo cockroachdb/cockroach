@@ -1626,6 +1626,10 @@ type StreamingTestingKnobs struct {
 	// BeforeIngestionStart allows blocking the stream ingestion job
 	// before a stream ingestion happens.
 	BeforeIngestionStart func(ctx context.Context) error
+
+	// OverrideReplicationTTLSeconds will override the default value of the
+	// `ReplicationTTLSeconds` field on the StreamIngestion job details.
+	OverrideReplicationTTLSeconds int
 }
 
 var _ base.ModuleTestingKnobs = &StreamingTestingKnobs{}
