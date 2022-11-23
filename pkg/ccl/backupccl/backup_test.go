@@ -7284,8 +7284,6 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 90646)
-
 	allowRequest := make(chan struct{})
 	defer close(allowRequest)
 
@@ -7320,7 +7318,7 @@ func TestBackupExportRequestTimeout(t *testing.T) {
 	// should hang. The timeout should save us in this case.
 	_, err := sqlSessions[1].DB.ExecContext(ctx, "BACKUP data.bank TO 'nodelocal://0/timeout'")
 	require.Regexp(t,
-		`timeout: operation "ExportRequest for span .*/Table/\d+/.*\" timed out after \S+ \(given timeout 3s\)`,
+		`exporting .*/Table/\d+/.*\: context deadline exceeded`,
 		err.Error())
 }
 
