@@ -67,6 +67,38 @@ func TestReplicaProbeRequest(t *testing.T) {
 		// This is the main workhorse that counts probes and injects
 		// errors.
 		TestingApplyForcedErrFilter: filter,
+		// In the test below we will propose a command and expect to see it in an
+		// apply-time interceptor on each replica. Unfortunately, right after adding
+		// a replica there can be an errant raft snapshot, see the schedule below
+		// (g1 and g2 are the intertwined operations). We could either "check less"
+		// (probe applies on at least one Replica as opposed to all of them) or
+		// disable the raft log queue (and also disable log truncations so that we
+		// really don't ever need raft snaps). We try the latter but should it cause
+		// issues, weakening the test is prudent.
+		//
+		// - g1    | `tc.AddXOrFatal` begins
+		// - g1    | it calls into ChangeReplicas
+		// - g1    | Replica added to descriptor
+		//      g2 | leader sends first MsgApp
+		// -    g2 | follower gets MsgApp, rejects it, leader enqueues in Raft snapshot queue
+		// - g1    | block raft snapshots to follower
+		// - g1    | send INITIAL snapshot
+		// - g1    | unblock raft snapshots to follower
+		// - g1    | AddVoterOrWhatever returns to the test
+		// - g1    | test sends probe
+		// -    g2 | raft log queue processes the queued Replica (followers's
+		//           MsgAppResp following INITIAL snapshot not having reached leader yet)[^1]
+		// -    g2 | it sends another snap which includes the probe
+		// -    g2 | follower applies the probe via the snap.
+		// - g1    | times out waiting for the interceptor to see the probe on follower.
+		//
+		// [^1]: we also call (*RawNode).ReportSnapshot after completing the INITIAL
+		// snapshot though so somewhat unclear why it's still queued in the raft log
+		// queue at this point, but you can also imagine the first MsgApp rejection
+		// being delayed. Or, the raft leader not equalling the leaseholder, in
+		// which case nothing ever blocks the raft snap queue.
+		DisableRaftSnapshotQueue: true,
+		DisableRaftLogQueue:      true,
 	}
 	tc := testcluster.StartTestCluster(t, 3 /* nodes */, args)
 	defer tc.Stopper().Stop(ctx)
