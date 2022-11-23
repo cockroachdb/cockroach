@@ -43,3 +43,31 @@ func TestCombinesUniqueInt64(t *testing.T) {
 		require.Equal(t, tc.expected, output)
 	}
 }
+
+func TestCombinesUniqueStrings(t *testing.T) {
+	for _, tc := range []struct{ inputA, inputB, expected []string }{
+		{
+			inputA:   []string{"a", "b", "d"},
+			inputB:   []string{"c", "e"},
+			expected: []string{"a", "b", "c", "d", "e"},
+		},
+		{
+			inputA:   []string{"a", "b", "d"},
+			inputB:   []string{"a", "c", "d"},
+			expected: []string{"a", "b", "c", "d"},
+		},
+		{
+			inputA:   []string{"a", "b", "c"},
+			inputB:   []string{"a", "b", "c"},
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			inputA:   []string{},
+			inputB:   []string{"a", "c"},
+			expected: []string{"a", "c"},
+		},
+	} {
+		output := CombineUniqueString(tc.inputA, tc.inputB)
+		require.Equal(t, tc.expected, output)
+	}
+}
