@@ -2822,6 +2822,7 @@ contains common SQL event/execution details.
 | `ScanWithStatsForecastCount` | The number of scans using forecasted statistics in the query plan. | no |
 | `TotalScanRowsWithoutForecastsEstimate` | Total number of rows read by all scans in the query, as estimated by the optimizer without using forecasts. | no |
 | `NanosSinceStatsForecasted` | The greatest quantity of nanoseconds that have passed since the forecast time (or until the forecast time, if it is in the future, in which case it will be negative) for any table with forecasted stats scanned by this query. | no |
+| `Indexes` | The list of indexes used by this query. | no |
 
 
 #### Common fields
