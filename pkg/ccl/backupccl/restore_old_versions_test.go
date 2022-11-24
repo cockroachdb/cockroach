@@ -893,7 +893,7 @@ func TestRestoreWithDroppedSchemaCorruption(t *testing.T) {
 	hasSameNameSchema := func(dbName string) (exists bool) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 			// Using this method to avoid validation.
-			id, err := col.Direct().LookupDatabaseID(ctx, txn, dbName)
+			id, err := col.LookupDatabaseID(ctx, txn, dbName)
 			if err != nil {
 				return err
 			}

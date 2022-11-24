@@ -222,7 +222,9 @@ func (p *planner) dropSchemaImpl(
 
 	// Populate namespace update batch.
 	b := p.txn.NewBatch()
-	p.dropNamespaceEntry(ctx, b, sc)
+	if err := p.dropNamespaceEntry(ctx, b, sc); err != nil {
+		return err
+	}
 
 	// Remove any associated comments.
 	if err := p.removeSchemaComment(ctx, sc.GetID()); err != nil {

@@ -43,6 +43,9 @@ type StoredCatalog struct {
 	// nameIndex is a subset of cache which allows lookups by name.
 	nameIndex nstree.NameMap
 
+	// drainedNames is a set of keys which can't be looked up in nameIndex.
+	drainedNames map[descpb.NameInfo]struct{}
+
 	// validationLevels persists the levels to which each descriptor in cache
 	// has already been validated.
 	validationLevels map[descpb.ID]catalog.ValidationLevel
@@ -108,20 +111,44 @@ func (sc *StoredCatalog) Reset(ctx context.Context) {
 	}
 }
 
-// ensure adds a descriptor to the StoredCatalog layer.
+// ensure adds descriptors and namespace entries to the StoredCatalog layer.
 // This should not cause any information loss.
-func (sc *StoredCatalog) ensure(ctx context.Context, desc catalog.Descriptor) error {
-	if _, isMutable := desc.(catalog.MutableDescriptor); isMutable {
-		return errors.AssertionFailedf("attempted to add mutable descriptor to StoredCatalog")
-	}
-	if sc.UpdateValidationLevel(desc, catalog.NoValidation) && sc.memAcc != nil {
-		if err := sc.memAcc.Grow(ctx, desc.ByteSize()); err != nil {
-			return err
+func (sc *StoredCatalog) ensure(ctx context.Context, c nstree.Catalog) error {
+	if err := c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
+		if _, isMutable := desc.(catalog.MutableDescriptor); isMutable {
+			return errors.AssertionFailedf("attempted to add mutable descriptor to StoredCatalog")
 		}
+		if sc.UpdateValidationLevel(desc, catalog.NoValidation) && sc.memAcc != nil {
+			if err := sc.memAcc.Grow(ctx, desc.ByteSize()); err != nil {
+				return err
+			}
+		}
+		sc.cache.Upsert(desc)
+		skipNamespace := desc.Dropped() || desc.SkipNamespace()
+		sc.nameIndex.Upsert(desc, skipNamespace)
+		if !skipNamespace {
+			delete(sc.drainedNames, descpb.NameInfo{
+				ParentID:       desc.GetParentID(),
+				ParentSchemaID: desc.GetParentSchemaID(),
+				Name:           desc.GetName(),
+			})
+		}
+		return nil
+	}); err != nil {
+		return err
 	}
-	sc.cache.Upsert(desc)
-	sc.nameIndex.Upsert(desc, desc.Dropped() || desc.SkipNamespace())
-	return nil
+	return c.ForEachNamespaceEntry(func(e nstree.NamespaceEntry) error {
+		if sc.nameIndex.GetByID(e.GetID()) == nil &&
+			sc.nameIndex.GetByName(e.GetParentID(), e.GetParentSchemaID(), e.GetName()) == nil {
+			sc.nameIndex.Upsert(e, false /* skipNameMap */)
+		}
+		delete(sc.drainedNames, descpb.NameInfo{
+			ParentID:       e.GetParentID(),
+			ParentSchemaID: e.GetParentSchemaID(),
+			Name:           e.GetName(),
+		})
+		return nil
+	})
 }
 
 // GetCachedByID looks up a descriptor by ID.
@@ -135,35 +162,29 @@ func (sc *StoredCatalog) GetCachedByID(id descpb.ID) catalog.Descriptor {
 	return nil
 }
 
-// getCachedIDByName looks up a descriptor ID by name in the cache.
+// GetCachedIDByName looks up a descriptor ID by name in the cache.
 // Dropped descriptors are not added to the name index, so their IDs can't be
 // looked up by name in the cache.
-func (sc *StoredCatalog) getCachedIDByName(key descpb.NameInfo) descpb.ID {
-	if e := sc.nameIndex.GetByName(key.ParentID, key.ParentSchemaID, key.Name); e != nil {
+func (sc *StoredCatalog) GetCachedIDByName(key catalog.NameKey) descpb.ID {
+	if _, found := sc.drainedNames[descpb.NameInfo{
+		ParentID:       key.GetParentID(),
+		ParentSchemaID: key.GetParentSchemaID(),
+		Name:           key.GetName(),
+	}]; found {
+		return descpb.InvalidID
+	}
+	if e := sc.nameIndex.GetByName(key.GetParentID(), key.GetParentSchemaID(), key.GetName()); e != nil {
 		return e.GetID()
 	}
 	// If we're looking up a schema name, find it in the database if we have it.
-	if key.ParentID != descpb.InvalidID && key.ParentSchemaID == descpb.InvalidID {
-		if parentDesc := sc.GetCachedByID(key.ParentID); parentDesc != nil {
+	if key.GetParentID() != descpb.InvalidID && key.GetParentSchemaID() == descpb.InvalidID {
+		if parentDesc := sc.GetCachedByID(key.GetParentID()); parentDesc != nil {
 			if db, ok := parentDesc.(catalog.DatabaseDescriptor); ok {
-				return db.GetSchemaID(key.Name)
+				return db.GetSchemaID(key.GetName())
 			}
 		}
 	}
 	return descpb.InvalidID
-}
-
-// GetCachedByName is the by-name equivalent of GetCachedByID.
-func (sc *StoredCatalog) GetCachedByName(
-	dbID descpb.ID, schemaID descpb.ID, name string,
-) catalog.Descriptor {
-	key := descpb.NameInfo{ParentID: dbID, ParentSchemaID: schemaID, Name: name}
-	if id := sc.getCachedIDByName(key); id != descpb.InvalidID {
-		if desc := sc.GetCachedByID(id); desc != nil && desc.GetName() == name {
-			return desc
-		}
-	}
-	return nil
 }
 
 // EnsureAllDescriptors ensures that all stored descriptors are cached.
@@ -175,9 +196,7 @@ func (sc *StoredCatalog) EnsureAllDescriptors(ctx context.Context, txn *kv.Txn) 
 	if err != nil {
 		return err
 	}
-	if err = c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-		return sc.ensure(ctx, desc)
-	}); err != nil {
+	if err = sc.ensure(ctx, c); err != nil {
 		return err
 	}
 	sc.hasAllDescriptors = true
@@ -192,6 +211,9 @@ func (sc *StoredCatalog) EnsureAllDatabaseDescriptors(ctx context.Context, txn *
 	}
 	c, err := sc.ScanNamespaceForDatabases(ctx, txn)
 	if err != nil {
+		return err
+	}
+	if err = sc.ensure(ctx, c); err != nil {
 		return err
 	}
 	var readIDs catalog.DescriptorIDSet
@@ -224,6 +246,9 @@ func (sc *StoredCatalog) GetAllDescriptorNamesForDatabase(
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
+		if err = sc.ensure(ctx, c); err != nil {
+			return nstree.Catalog{}, err
+		}
 		sc.allDescriptorsForDatabase[db.GetID()] = c
 	}
 	return c, nil
@@ -240,6 +265,9 @@ func (sc *StoredCatalog) ensureAllSchemaIDsAndNamesForDatabase(
 	}
 	c, err := sc.ScanNamespaceForDatabaseSchemas(ctx, txn, db)
 	if err != nil {
+		return err
+	}
+	if err = sc.ensure(ctx, c); err != nil {
 		return err
 	}
 	m := make(map[descpb.ID]string)
@@ -294,12 +322,15 @@ func (sc *StoredCatalog) LookupDescriptorID(
 ) (descpb.ID, error) {
 	// Look for the descriptor ID in memory first.
 	key := descpb.NameInfo{ParentID: parentID, ParentSchemaID: parentSchemaID, Name: name}
-	if id := sc.getCachedIDByName(key); id != descpb.InvalidID {
+	if id := sc.GetCachedIDByName(&key); id != descpb.InvalidID {
 		return id, nil
 	}
 	// Fall back to querying the namespace table.
 	c, err := sc.GetNamespaceEntries(ctx, txn, []descpb.NameInfo{key})
 	if err != nil {
+		return descpb.InvalidID, err
+	}
+	if err = sc.ensure(ctx, c); err != nil {
 		return descpb.InvalidID, err
 	}
 	if ne := c.LookupNamespaceEntry(key); ne != nil {
@@ -324,9 +355,7 @@ func (sc *StoredCatalog) EnsureFromStorageByIDs(
 	if err != nil {
 		return err
 	}
-	return c.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-		return sc.ensure(ctx, desc)
-	})
+	return sc.ensure(ctx, c)
 }
 
 // IterateCachedByID applies fn to all known descriptors in the cache in
@@ -343,7 +372,11 @@ func (sc *StoredCatalog) IterateDatabasesByName(
 	fn func(desc catalog.DatabaseDescriptor) error,
 ) error {
 	return sc.nameIndex.IterateDatabasesByName(func(entry catalog.NameEntry) error {
-		db, err := catalog.AsDatabaseDescriptor(entry.(catalog.Descriptor))
+		id := sc.GetCachedIDByName(entry)
+		if id == descpb.InvalidID {
+			return nil
+		}
+		db, err := catalog.AsDatabaseDescriptor(sc.GetCachedByID(id))
 		if err != nil {
 			return err
 		}
@@ -376,11 +409,22 @@ func (sc *StoredCatalog) UpdateValidationLevel(
 	return false
 }
 
-// RemoveFromNameIndex removes a descriptor from the name index.
-// This needs to be done if the descriptor is to be promoted to the uncommitted
+// RemoveFromNameIndex removes an entry from the name index.
+// This needs to be done if a descriptor is to be promoted to the uncommitted
 // layer which shadows this one in the descs.Collection.
-func (sc *StoredCatalog) RemoveFromNameIndex(desc catalog.Descriptor) {
-	sc.nameIndex.Remove(desc.GetID())
+func (sc *StoredCatalog) RemoveFromNameIndex(id catid.DescID) {
+	e := sc.nameIndex.GetByID(id)
+	if e == nil {
+		return
+	}
+	if sc.drainedNames == nil {
+		sc.drainedNames = make(map[descpb.NameInfo]struct{})
+	}
+	sc.drainedNames[descpb.NameInfo{
+		ParentID:       e.GetParentID(),
+		ParentSchemaID: e.GetParentSchemaID(),
+		Name:           e.GetName(),
+	}] = struct{}{}
 }
 
 // NewValidationDereferencer returns this StoredCatalog object wrapped in a
@@ -430,10 +474,7 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptors(
 			return nil, err
 		}
 		// Add all descriptors to the cache BEFORE validating them.
-		err = read.ForEachDescriptorEntry(func(desc catalog.Descriptor) error {
-			return c.sc.ensure(ctx, desc)
-		})
-		if err != nil {
+		if err = c.sc.ensure(ctx, read); err != nil {
 			return nil, err
 		}
 		for j, id := range fallbackReqs {
@@ -461,6 +502,9 @@ func (c storedCatalogBackedDereferencer) DereferenceDescriptorIDs(
 	// TODO(postamar): cache namespace entries in StoredCatalog
 	read, err := c.sc.GetNamespaceEntries(ctx, c.txn, reqs)
 	if err != nil {
+		return nil, err
+	}
+	if err = c.sc.ensure(ctx, read); err != nil {
 		return nil, err
 	}
 	ret := make([]descpb.ID, len(reqs))

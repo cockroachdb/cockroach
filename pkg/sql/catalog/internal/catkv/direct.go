@@ -17,13 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -129,14 +127,6 @@ type Direct interface {
 	LookupObjectID(
 		ctx context.Context, txn *kv.Txn, dbID descpb.ID, schemaID descpb.ID, objectName string,
 	) (descpb.ID, error)
-
-	// WriteNewDescToBatch adds a CPut command writing a descriptor proto to the
-	// descriptors table. It writes the descriptor desc at the id descID, asserting
-	// that there was no previous descriptor at that id present already. If kvTrace
-	// is enabled, it will log an event explaining the CPut that was performed.
-	WriteNewDescToBatch(
-		ctx context.Context, kvTrace bool, b *kv.Batch, desc catalog.Descriptor,
-	) error
 }
 
 // direct wraps a StoredCatalog to implement the Direct interface.
@@ -232,14 +222,14 @@ func (d *direct) readDescriptorsForDirectAccess(
 	if err != nil {
 		return nil, err
 	}
+	if err = d.ensure(ctx, c); err != nil {
+		return nil, err
+	}
 	descs := make([]catalog.Descriptor, len(ids))
 	for i, id := range ids {
 		desc := c.LookupDescriptorEntry(id)
 		if desc == nil {
 			continue
-		}
-		if err := d.ensure(ctx, desc); err != nil {
-			return nil, err
 		}
 		descs[i] = desc
 	}
@@ -382,17 +372,4 @@ func (d *direct) LookupDatabaseID(
 	ctx context.Context, txn *kv.Txn, dbName string,
 ) (descpb.ID, error) {
 	return d.LookupDescriptorID(ctx, txn, keys.RootNamespaceID, keys.RootNamespaceID, dbName)
-}
-
-// WriteNewDescToBatch is part of the Direct interface.
-func (d *direct) WriteNewDescToBatch(
-	ctx context.Context, kvTrace bool, b *kv.Batch, desc catalog.Descriptor,
-) error {
-	descKey := catalogkeys.MakeDescMetadataKey(d.Codec(), desc.GetID())
-	proto := desc.DescriptorProto()
-	if kvTrace {
-		log.VEventf(ctx, 2, "CPut %s -> %s", descKey, proto)
-	}
-	b.CPut(descKey, proto, nil)
-	return nil
 }

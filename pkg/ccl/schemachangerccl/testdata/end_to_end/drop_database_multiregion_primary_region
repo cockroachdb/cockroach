@@ -6,10 +6,10 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_table (
 ----
 ...
 +database {0 0 multi_region_test_db} -> 104
-+object {104 106 crdb_internal_region} -> 105
-+schema {104 0 public} -> 106
-+object {104 106 _crdb_internal_region} -> 107
-+object {104 106 table_regional_by_table} -> 108
++schema {104 0 public} -> 105
++object {104 105 crdb_internal_region} -> 106
++object {104 105 _crdb_internal_region} -> 107
++object {104 105 table_regional_by_table} -> 108
 
 test
 DROP DATABASE multi_region_test_db CASCADE
@@ -29,12 +29,12 @@ add synthetic descriptor #104:
      privileges:
   ...
        public:
-         id: 106
+         id: 105
   +  state: DROP
      version: "1"
-add synthetic descriptor #106:
+add synthetic descriptor #105:
    schema:
-     id: 106
+     id: 105
   -  modificationTime: {}
   +  modificationTime:
   +    wallTime: "1640995200000000001"
@@ -45,9 +45,9 @@ add synthetic descriptor #106:
        version: 2
   +  state: DROP
      version: "1"
-add synthetic descriptor #105:
+add synthetic descriptor #106:
   ...
-     id: 105
+     id: 106
      kind: MULTIREGION_ENUM
   -  modificationTime: {}
   +  modificationTime:
@@ -86,16 +86,16 @@ add synthetic descriptor #108:
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 106
+     unexposedParentSchemaId: 105
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 23 MutationType ops
 delete database namespace entry {0 0 multi_region_test_db} -> 104
-delete object namespace entry {104 106 crdb_internal_region} -> 105
-delete schema namespace entry {104 0 public} -> 106
-delete object namespace entry {104 106 _crdb_internal_region} -> 107
-delete object namespace entry {104 106 table_regional_by_table} -> 108
+delete schema namespace entry {104 0 public} -> 105
+delete object namespace entry {104 105 crdb_internal_region} -> 106
+delete object namespace entry {104 105 _crdb_internal_region} -> 107
+delete object namespace entry {104 105 table_regional_by_table} -> 108
 upsert descriptor #104
    database:
   +  declarativeSchemaChangerState:
@@ -114,11 +114,33 @@ upsert descriptor #104
      modificationTime: {}
   ...
        public:
-         id: 106
+         id: 105
   -  version: "1"
   +  state: DROP
   +  version: "2"
 upsert descriptor #105
+   schema:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
+  +        statement: DROP DATABASE multi_region_test_db CASCADE
+  +        statementTag: DROP DATABASE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     id: 105
+     modificationTime: {}
+  ...
+         withGrantOption: 2
+       version: 2
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #106
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
@@ -141,28 +163,6 @@ upsert descriptor #105
   -  version: "2"
   +  state: DROP
   +  version: "3"
-upsert descriptor #106
-   schema:
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    currentStatuses: <redacted>
-  +    jobId: "1"
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: DROP DATABASE ‹multi_region_test_db› CASCADE
-  +        statement: DROP DATABASE multi_region_test_db CASCADE
-  +        statementTag: DROP DATABASE
-  +    targetRanks: <redacted>
-  +    targets: <redacted>
-     id: 106
-     modificationTime: {}
-  ...
-         withGrantOption: 2
-       version: 2
-  -  version: "1"
-  +  state: DROP
-  +  version: "2"
 upsert descriptor #107
   ...
        family: ArrayFamily
@@ -210,7 +210,7 @@ upsert descriptor #108
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 106
+     unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [108]
@@ -245,7 +245,7 @@ upsert descriptor #108
      families:
   ...
      state: DROP
-     unexposedParentSchemaId: 106
+     unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
 delete descriptor #104

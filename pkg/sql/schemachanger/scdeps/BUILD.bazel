@@ -24,7 +24,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

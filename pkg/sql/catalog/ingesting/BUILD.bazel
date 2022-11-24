@@ -15,7 +15,6 @@ go_library(
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/sql/catalog",
-        "//pkg/sql/catalog/catalogkeys",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/dbdesc",
