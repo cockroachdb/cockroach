@@ -394,8 +394,8 @@ func TestAggregator(t *testing.T) {
 
 	ctx := context.Background()
 	test := MakeProcessorTest(DefaultProcessorTestConfig())
+	defer test.Close(ctx)
 	test.RunTestCases(ctx, t, testCases)
-	test.Close(ctx)
 }
 
 func BenchmarkAggregation(b *testing.B) {

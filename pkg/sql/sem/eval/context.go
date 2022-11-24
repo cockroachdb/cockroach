@@ -15,7 +15,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/apd/v3"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -420,6 +420,14 @@ func NewTestingEvalContext(st *cluster.Settings) *Context {
 }
 
 // Stop closes out the EvalContext and must be called once it is no longer in use.
+//
+// Note: Stop is intended to gracefully handle panics. For this to work
+// properly, use `defer evalctx.Stop()`, i.e. have `Stop` be called by `defer` directly.
+//
+// If `Stop()` is called via an intermediate function (e.g. `defer
+// func() { ... evalCtx.Stop() ... }`) the panic will not be handled
+// gracefully and some memory monitors may complain that they are being shut down
+// with some allocated bytes remaining.
 func (ec *Context) Stop(c context.Context) {
 	if r := recover(); r != nil {
 		ec.TestingMon.EmergencyStop(c)

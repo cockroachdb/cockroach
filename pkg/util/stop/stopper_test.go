@@ -299,49 +299,6 @@ func TestStopperNumTasks(t *testing.T) {
 	}
 }
 
-// TestStopperRunTaskPanic ensures that a panic handler can recover panicking
-// tasks, and that no tasks are leaked when they panic.
-func TestStopperRunTaskPanic(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ch := make(chan interface{})
-	s := stop.NewStopper(stop.OnPanic(func(ctx context.Context, v interface{}) {
-		log.Infof(ctx, "recovering from panic")
-		ch <- v
-	}))
-	defer s.Stop(context.Background())
-	// If RunTask were not panic-safe, Stop() would deadlock.
-	type testFn func()
-	explode := func(context.Context) { panic(ch) }
-	ctx := context.Background()
-	for i, test := range []testFn{
-		func() {
-			_ = s.RunTask(ctx, "test", explode)
-		},
-		func() {
-			_ = s.RunAsyncTask(ctx, "test", func(ctx context.Context) { explode(ctx) })
-		},
-		func() {
-			_ = s.RunAsyncTaskEx(
-				context.Background(),
-				stop.TaskOpts{
-					TaskName:   "test",
-					Sem:        quotapool.NewIntPool("test", 1),
-					WaitForSem: true,
-				},
-				func(ctx context.Context) { explode(ctx) },
-			)
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			go test()
-			recovered := <-ch
-			if recovered != ch {
-				t.Errorf("%d: unexpected recovered value: %+v", i, recovered)
-			}
-		})
-	}
-}
-
 func TestStopperWithCancel(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s := stop.NewStopper()
