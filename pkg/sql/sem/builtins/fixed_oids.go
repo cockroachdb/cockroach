@@ -399,6 +399,7 @@ var builtinOidsBySignature = map[string]oid.Oid{
 	`crdb_internal.destroy_tenant(id: int) -> int`:                                                                                      1304,
 	`crdb_internal.destroy_tenant(id: int, synchronous: bool) -> int`:                                                                   1305,
 	`crdb_internal.encode_key(table_id: int, index_id: int, row_tuple: anyelement) -> bytes`:                                            1307,
+	`crdb_internal.fingerprint(span: bytes[], start_time: timestamptz, all_revisions: bool) -> int`:                                     2046,
 	`crdb_internal.filter_multiregion_fields_from_zone_config_sql(val: string) -> string`:                                               1366,
 	`crdb_internal.force_assertion_error(msg: string) -> int`:                                                                           1311,
 	`crdb_internal.force_delete_table_data(id: int) -> bool`:                                                                            1369,

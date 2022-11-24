@@ -1374,7 +1374,18 @@ func cmdExport(e *evalCtx) error {
 	e.results.buf.Printf("\n")
 
 	if shouldFingerprint {
+		// Fingerprint the rangekeys returned as a pebble SST.
+		rangekeyFingerprint, err := storage.FingerprintRangekeys(e.ctx, e.st, opts.FingerprintOptions,
+			[][]byte{sstFile.Bytes()})
+		if err != nil {
+			return err
+		}
+		fingerprint = fingerprint ^ rangekeyFingerprint
 		e.results.buf.Printf("fingerprint: %d\n", fingerprint)
+
+		// Return early, we don't need to print the point and rangekeys if we are
+		// fingerprinting.
+		return nil
 	}
 
 	iter, err := storage.NewMemSSTIterator(sstFile.Bytes(), false /* verify */, storage.IterOptions{
