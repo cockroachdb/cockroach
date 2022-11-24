@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
@@ -9035,10 +9034,10 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) liveness.IsLiveMap {
-		m := liveness.IsLiveMap{}
+	live := func(ids ...roachpb.NodeID) livenesspb.IsLiveMap {
+		m := livenesspb.IsLiveMap{}
 		for _, id := range ids {
-			m[id] = liveness.IsLiveMapEntry{IsLive: true}
+			m[id] = livenesspb.IsLiveMapEntry{IsLive: true}
 		}
 		return m
 	}
@@ -9055,7 +9054,7 @@ func TestReplicaMetrics(t *testing.T) {
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raft.Status
-		liveness    liveness.IsLiveMap
+		liveness    livenesspb.IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -9986,7 +9985,7 @@ type testQuiescer struct {
 	isDestroyed     bool
 
 	// Not used to implement quiescer, but used by tests.
-	livenessMap liveness.IsLiveMap
+	livenessMap livenesspb.IsLiveMap
 	paused      map[roachpb.ReplicaID]struct{}
 }
 
@@ -10073,7 +10072,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
-				livenessMap: liveness.IsLiveMap{
+				livenessMap: livenesspb.IsLiveMap{
 					1: {IsLive: true},
 					2: {IsLive: true},
 					3: {IsLive: true},
@@ -10179,7 +10178,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
 			nodeID := roachpb.NodeID(i)
-			q.livenessMap[nodeID] = liveness.IsLiveMapEntry{
+			q.livenessMap[nodeID] = livenesspb.IsLiveMapEntry{
 				Liveness: livenesspb.Liveness{NodeID: nodeID},
 				IsLive:   false,
 			}
@@ -10236,7 +10235,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 						},
 					},
 				},
-				livenessMap: liveness.IsLiveMap{
+				livenessMap: livenesspb.IsLiveMap{
 					1: {IsLive: true},
 					2: {IsLive: true},
 					3: {IsLive: true},
@@ -10287,7 +10286,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
@@ -10301,7 +10300,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
@@ -10316,7 +10315,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
@@ -10332,7 +10331,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
@@ -10347,7 +10346,7 @@ func TestFollowerQuiesceOnNotify(t *testing.T) {
 			Epoch:      7,
 			Expiration: hlc.LegacyTimestamp{WallTime: 8},
 		}
-		q.livenessMap[l.NodeID] = liveness.IsLiveMapEntry{
+		q.livenessMap[l.NodeID] = livenesspb.IsLiveMapEntry{
 			Liveness: l,
 			IsLive:   false,
 		}
@@ -11446,10 +11445,10 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 		},
 		NextReplicaID: 4,
 	}
-	livenessMap := liveness.IsLiveMap{
-		1: liveness.IsLiveMapEntry{IsLive: true},
-		2: liveness.IsLiveMapEntry{IsLive: false},
-		4: liveness.IsLiveMapEntry{IsLive: false},
+	livenessMap := livenesspb.IsLiveMap{
+		1: livenesspb.IsLiveMapEntry{IsLive: true},
+		2: livenesspb.IsLiveMapEntry{IsLive: false},
+		4: livenesspb.IsLiveMapEntry{IsLive: false},
 	}
 
 	myLease := roachpb.Lease{
@@ -11515,7 +11514,7 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	tests := []struct {
 		leaseStatus           kvserverpb.LeaseStatus
 		raftStatus            raft.BasicStatus
-		livenessMap           liveness.IsLiveMap
+		livenessMap           livenesspb.IsLiveMap
 		desc                  *roachpb.RangeDescriptor
 		requiresExpiringLease bool
 		exp                   bool
@@ -11584,12 +11583,12 @@ func TestReplicaShouldCampaignOnLeaseRequestRedirect(t *testing.T) {
 	}
 
 	now := hlc.Timestamp{WallTime: 100}
-	livenessMap := liveness.IsLiveMap{
-		1: liveness.IsLiveMapEntry{
+	livenessMap := livenesspb.IsLiveMap{
+		1: livenesspb.IsLiveMapEntry{
 			IsLive:   true,
 			Liveness: livenesspb.Liveness{Expiration: now.Add(1, 0).ToLegacyTimestamp()},
 		},
-		2: liveness.IsLiveMapEntry{
+		2: livenesspb.IsLiveMapEntry{
 			// NOTE: we purposefully set IsLive to true in disagreement with the
 			// Liveness expiration to ensure that we're only looking at node liveness
 			// in shouldCampaignOnLeaseRequestRedirect and not at whether this node is

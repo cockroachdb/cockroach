@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -239,7 +239,7 @@ func replicaUnavailableError(
 	err error,
 	desc *roachpb.RangeDescriptor,
 	replDesc roachpb.ReplicaDescriptor,
-	lm liveness.IsLiveMap,
+	lm livenesspb.IsLiveMap,
 	rs *raft.Status,
 	closedTS hlc.Timestamp,
 ) error {
@@ -280,7 +280,7 @@ func (r *Replica) replicaUnavailableError(err error) error {
 	desc := r.Desc()
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
-	isLiveMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	isLiveMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	ct := r.GetCurrentClosedTimestamp(context.Background())
 	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
 }
