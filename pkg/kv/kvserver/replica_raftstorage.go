@@ -209,11 +209,6 @@ func entries(
 
 	// Did we get any results at all? Because something went wrong.
 	if len(ents) > 0 {
-		// Was the lo already truncated?
-		if ents[0].Index > lo {
-			return nil, raft.ErrCompacted
-		}
-
 		// Was the missing index after the last index?
 		lastIndex, err := rsl.LoadLastIndex(ctx, reader)
 		if err != nil {
