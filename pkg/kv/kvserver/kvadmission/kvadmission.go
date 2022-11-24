@@ -78,7 +78,7 @@ var rangefeedCatchupScanElasticControlEnabled = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.rangefeed_catchup_scan_elastic_control.enabled",
 	"determines whether rangefeed catchup scans integrate with the elastic CPU control",
-	true,
+	false,
 )
 
 // Controller provides admission control for the KV layer.
