@@ -17,15 +17,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 type cFetcherWrapper struct {
-	fetcher    *cFetcher
+	fetcher       *cFetcher
+	sawBatch      bool
+	removeLastRow bool
+
 	converter  *colserde.ArrowBatchConverter
 	serializer *colserde.RecordBatchSerializer
 	buf        bytes.Buffer
@@ -44,9 +51,13 @@ func (c *cFetcherWrapper) NextBatch(
 	if err != nil {
 		return nil, nil, err
 	}
+	if l := batch.Length(); c.removeLastRow && l > 0 {
+		batch.SetLength(l - 1)
+	}
 	if batch.Length() == 0 {
 		return nil, nil, nil
 	}
+	c.sawBatch = true
 	if !serialize {
 		return nil, batch, nil
 	}
@@ -60,6 +71,62 @@ func (c *cFetcherWrapper) NextBatch(
 		return nil, nil, err
 	}
 	return c.buf.Bytes(), nil, nil
+}
+
+// ContinuesFirstRow returns true if the given key belongs to the same SQL row
+// as the first KV pair in the result (or if the result is empty). If either
+// key is not a valid SQL row key, returns false.
+func (c *cFetcherWrapper) ContinuesFirstRow(key roachpb.Key) bool {
+	return !c.sawBatch && // haven't yet returned a batch with at least one row, and
+		c.fetcher.machine.rowIdx == 0 && // are populating the first row in the batch, and
+		(c.fetcher.machine.state[0] == stateInitFetch || // this is the first KV in the current row, or
+			// this KV is part of the current row
+			c.fetcher.machine.state[0] == stateFetchNextKVWithUnfinishedRow && !c.fetcher.keyFromNewRow(key))
+}
+
+// MaybeTrimPartialLastRow removes the last KV pairs from the result that are
+// part of the same SQL row as the given key, returning the earliest key
+// removed.
+func (c *cFetcherWrapper) MaybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error) {
+	if c.fetcher.machine.state[0] == stateInitFetch {
+		// This is the first KV in the current row, so we don't need to remove
+		// the last row from the batch and need to resume the scan from the
+		// given key.
+		c.removeLastRow = false
+		return nextKey, nil
+	}
+	// We have at least one KV decoded into the current row. Check whether the
+	// next key is part of the same row.
+	if c.fetcher.keyFromNewRow(nextKey) {
+		// The given key is the first KV of the next row, so we don't need to
+		// remove anything and will resume from this key.
+		c.removeLastRow = false
+		return nextKey, nil
+	}
+	// The given key is part of the current last row, so we need to remove that
+	// row and will resume the fetch from the first key in that row.
+	c.removeLastRow = true
+	return c.fetcher.machine.firstKeyInRow, nil
+}
+
+// LastRowHasFinalColumnFamily returns true if the last key in the result is the
+// maximum column family ID of the row, i.e. we know that the row is complete.
+func (c *cFetcherWrapper) LastRowHasFinalColumnFamily(reverse bool) bool {
+	// This method is called after the KV has been put into singleResults but
+	// before NextKV() returned to cFetcher, so we have to peek into the key via
+	// the "key provider".
+	key, _, ok := enginepb.SplitMVCCKey(c.fetcher.nextKVer.GetLastEncodedKey())
+	if !ok {
+		return false
+	}
+	colFamilyID, err := keys.DecodeFamilyKey(key)
+	if err != nil {
+		return false
+	}
+	if reverse {
+		return colFamilyID == 0
+	}
+	return descpb.FamilyID(colFamilyID) == c.fetcher.table.spec.MaxFamilyID
 }
 
 func (c *cFetcherWrapper) Close(ctx context.Context) {
@@ -89,12 +156,14 @@ func newCFetcherWrapper(
 			fetcher.Release()
 		}
 	}()
+	allowNullsInNonNullableOnLastRowInBatch := fetchSpec.MaxKeysPerRow > 1
 	// TODO: args.
 	fetcher.cFetcherArgs = cFetcherArgs{
 		execinfra.DefaultMemoryLimit,
 		0,     /* estimatedRowCount */
 		false, /* traceKV */
 		true,  /* singleUse */
+		allowNullsInNonNullableOnLastRowInBatch,
 	}
 
 	// We don't need to provide the eval context here since we will only decode

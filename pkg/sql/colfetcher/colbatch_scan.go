@@ -324,7 +324,8 @@ func NewColBatchScan(
 		execinfra.GetWorkMemLimit(flowCtx),
 		estimatedRowCount,
 		flowCtx.TraceKV,
-		true, /* singleUse */
+		true,  /* singleUse */
+		false, /* allowNullsInNonNullableOnLastRowInBatch */
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()

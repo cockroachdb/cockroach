@@ -87,23 +87,24 @@ type results interface {
 }
 
 type singleResults struct {
+	wrapper      CFetcherWrapper
 	count, bytes int64
-	key          []byte
+	encKey       []byte
 	value        []byte
 }
 
 var _ results = &singleResults{}
 
 func (s *singleResults) continuesFirstRow(key roachpb.Key) bool {
-	panic("implement me")
+	return s.wrapper.ContinuesFirstRow(key)
 }
 
 func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error) {
-	panic("implement me")
+	return s.wrapper.MaybeTrimPartialLastRow(key)
 }
 
 func (s *singleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
-	panic("implement me")
+	return s.wrapper.LastRowHasFinalColumnFamily(reverse)
 }
 
 func (s *singleResults) clear() {
@@ -119,7 +120,7 @@ func (s *singleResults) put(
 		s.key = append([]byte{}, key...)
 		s.value = append([]byte{}, value...)
 	*/
-	s.key = key
+	s.encKey = key
 	s.value = value
 	return nil
 }
@@ -136,7 +137,7 @@ func (s *singleResults) getNumBytes() int64 {
 
 func (s *singleResults) getLastKV() roachpb.KeyValue {
 	return roachpb.KeyValue{
-		Key:   s.key,
+		Key:   s.encKey,
 		Value: roachpb.Value{RawBytes: s.value},
 	}
 }
