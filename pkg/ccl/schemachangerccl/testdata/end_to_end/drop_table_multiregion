@@ -6,10 +6,10 @@ CREATE TABLE multi_region_test_db.public.table_regional_by_row (
 ----
 ...
 +database {0 0 multi_region_test_db} -> 104
-+object {104 106 crdb_internal_region} -> 105
-+schema {104 0 public} -> 106
-+object {104 106 _crdb_internal_region} -> 107
-+object {104 106 table_regional_by_row} -> 108
++schema {104 0 public} -> 105
++object {104 105 crdb_internal_region} -> 106
++object {104 105 _crdb_internal_region} -> 107
++object {104 105 table_regional_by_row} -> 108
 
 test
 DROP TABLE multi_region_test_db.public.table_regional_by_row;
@@ -32,13 +32,13 @@ add synthetic descriptor #108:
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 106
+     unexposedParentSchemaId: 105
      version: "1"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 1 with 15 MutationType ops
-delete object namespace entry {104 106 table_regional_by_row} -> 108
-upsert descriptor #105
+delete object namespace entry {104 105 table_regional_by_row} -> 108
+upsert descriptor #106
    type:
      arrayTypeId: 107
   +  declarativeSchemaChangerState:
@@ -97,12 +97,12 @@ upsert descriptor #108
      replacementOf:
        time: {}
   +  state: DROP
-     unexposedParentSchemaId: 106
+     unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
 delete all comments for table descriptors [108]
 create job #1 (non-cancelable: true): "DROP TABLE multi_region_test_db.public.table_regional_by_row"
-  descriptor IDs: [105 107 108]
+  descriptor IDs: [106 107 108]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -111,7 +111,7 @@ begin transaction #2
 commit transaction #2
 begin transaction #3
 ## PostCommitNonRevertiblePhase stage 1 of 1 with 7 MutationType ops
-upsert descriptor #105
+upsert descriptor #106
    type:
      arrayTypeId: 107
   -  declarativeSchemaChangerState:
@@ -160,7 +160,7 @@ upsert descriptor #108
      families:
   ...
      state: DROP
-     unexposedParentSchemaId: 106
+     unexposedParentSchemaId: 105
   -  version: "2"
   +  version: "3"
 write *eventpb.DropTable to event log: DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›

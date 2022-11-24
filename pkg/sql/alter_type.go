@@ -288,7 +288,9 @@ func (p *planner) performRenameTypeDesc(
 
 	// Populate the namespace update batch.
 	b := p.txn.NewBatch()
-	p.renameNamespaceEntry(ctx, b, oldNameKey, desc)
+	if err := p.renameNamespaceEntry(ctx, b, oldNameKey, desc); err != nil {
+		return err
+	}
 
 	// Write the updated type descriptor.
 	if err := p.writeTypeSchemaChange(ctx, desc, jobDesc); err != nil {

@@ -36,7 +36,7 @@ func schemaExists(
 		}
 	}
 	// Now lookup in the namespace for other schemas.
-	schemaID, err := col.Direct().LookupSchemaID(ctx, txn, parentID, schema)
+	schemaID, err := col.LookupSchemaID(ctx, txn, parentID, schema)
 	if err != nil || schemaID == descpb.InvalidID {
 		return false, descpb.InvalidID, err
 	}

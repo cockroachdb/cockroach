@@ -235,7 +235,9 @@ func (p *planner) renameSchema(
 
 	// Write the new name and remove the old name.
 	b := p.txn.NewBatch()
-	p.renameNamespaceEntry(ctx, b, oldNameKey, desc)
+	if err := p.renameNamespaceEntry(ctx, b, oldNameKey, desc); err != nil {
+		return err
+	}
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}

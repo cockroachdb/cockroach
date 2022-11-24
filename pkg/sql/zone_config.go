@@ -445,7 +445,7 @@ func resolveZone(
 	errMissingKey := errors.New("missing key")
 	id, err := zonepb.ResolveZoneSpecifier(ctx, zs,
 		func(parentID uint32, schemaID uint32, name string) (uint32, error) {
-			id, err := col.Direct().LookupObjectID(ctx, txn, descpb.ID(parentID), descpb.ID(schemaID), name)
+			id, err := col.LookupObjectID(ctx, txn, descpb.ID(parentID), descpb.ID(schemaID), name)
 			if err != nil {
 				return 0, err
 			}

@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/oppurpose"
@@ -111,7 +110,6 @@ type txnDeps struct {
 	statsRefresher      scexec.StatsRefresher
 	tableStatsToRefresh []descpb.ID
 	eventLogger         scexec.EventLogger
-	deletedDescriptors  catalog.DescriptorIDSet
 	schemaChangerJobID  jobspb.JobID
 	schemaChangerJob    *jobs.Job
 	kvTrace             bool
@@ -236,24 +234,12 @@ func (b *catalogChangeBatcher) CreateOrUpdateDescriptor(
 func (b *catalogChangeBatcher) DeleteName(
 	ctx context.Context, nameInfo descpb.NameInfo, id descpb.ID,
 ) error {
-	marshalledKey := catalogkeys.EncodeNameKey(b.codec, nameInfo)
-	if b.kvTrace {
-		log.VEventf(ctx, 2, "Del %s", marshalledKey)
-	}
-	b.batch.Del(marshalledKey)
-	return nil
+	return b.descsCollection.DeleteNamespaceEntryToBatch(ctx, b.kvTrace, &nameInfo, b.batch)
 }
 
 // DeleteDescriptor implements the scexec.CatalogChangeBatcher interface.
 func (b *catalogChangeBatcher) DeleteDescriptor(ctx context.Context, id descpb.ID) error {
-	marshalledKey := catalogkeys.MakeDescMetadataKey(b.codec, id)
-	b.batch.Del(marshalledKey)
-	if b.kvTrace {
-		log.VEventf(ctx, 2, "Del %s", marshalledKey)
-	}
-	b.deletedDescriptors.Add(id)
-	b.descsCollection.NotifyOfDeletedDescriptor(id)
-	return nil
+	return b.descsCollection.DeleteDescToBatch(ctx, b.kvTrace, id, b.batch)
 }
 
 // DeleteZoneConfig implements the scexec.CatalogChangeBatcher interface.

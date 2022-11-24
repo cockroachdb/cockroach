@@ -132,13 +132,17 @@ func getDescriptorsByID(
 	}
 
 	// We want to avoid the allocation in the case that there is exactly one
-	// descriptor to resolve. This is the common case. The array stays on the
-	// stack.
+	// or two descriptors to resolve. These are the common cases.
+	// The array stays on the stack.
 	var vls []catalog.ValidationLevel
 	switch len(ids) {
 	case 1:
 		//gcassert:noescape
 		var arr [1]catalog.ValidationLevel
+		vls = arr[:]
+	case 2:
+		//gcassert:noescape
+		var arr [2]catalog.ValidationLevel
 		vls = arr[:]
 	default:
 		vls = make([]catalog.ValidationLevel, len(ids))
@@ -188,6 +192,11 @@ func getDescriptorsByID(
 		}
 	}
 	if !readIDs.Empty() {
+		if flags.AvoidStorage {
+			// Some descriptors are still missing and there's nowhere left to get
+			// them from.
+			return catalog.ErrDescriptorNotFound
+		}
 		if err = tc.stored.EnsureFromStorageByIDs(ctx, txn, readIDs, catalog.Any); err != nil {
 			return err
 		}
@@ -331,34 +340,24 @@ func (tc *Collection) getDescriptorByName(
 	// When looking up descriptors by name, then descriptors in the adding state
 	// must be uncommitted to be visible (among other things).
 	flags.AvoidCommittedAdding = true
-
 	desc, err := tc.getDescriptorByID(ctx, txn, flags, id)
-	if err != nil {
-		// Swallow error if the descriptor is dropped.
-		if errors.Is(err, catalog.ErrDescriptorDropped) {
-			return nil, nil
-		}
-		if errors.Is(err, catalog.ErrDescriptorNotFound) {
-			// Special case for temporary schemas, which can't always be resolved by
-			// ID alone.
-			if db != nil && sc == nil && isTemporarySchema(name) {
-				return schemadesc.NewTemporarySchema(name, id, db.GetID()), nil
-			}
-			// In all other cases, having an ID should imply having a descriptor.
-			return nil, errors.WithAssertionFailure(err)
-		}
-		return nil, err
+	if err == nil {
+		return desc, nil
 	}
-	if desc.GetName() != name && !(desc.DescriptorType() == catalog.Schema && isTemporarySchema(name)) {
-		// TODO(postamar): make Collection aware of name ops
-		//
-		// We're prevented from removing this check until the Collection mediates
-		// name changes in the system.namespace table similarly to how it mediates
-		// descriptor changes in system.descriptor via the uncommitted descriptors
-		// layer and the WriteDescsToBatch method.
+	// Swallow error if the descriptor is dropped.
+	if errors.Is(err, catalog.ErrDescriptorDropped) {
 		return nil, nil
 	}
-	return desc, nil
+	if errors.Is(err, catalog.ErrDescriptorNotFound) {
+		// Special case for temporary schemas, which can't always be resolved by
+		// ID alone.
+		if db != nil && sc == nil && isTemporarySchema(name) {
+			return schemadesc.NewTemporarySchema(name, id, db.GetID()), nil
+		}
+		// In all other cases, having an ID should imply having a descriptor.
+		return nil, errors.WithAssertionFailure(err)
+	}
+	return nil, err
 }
 
 type continueOrHalt bool
@@ -385,11 +384,13 @@ func (tc *Collection) getVirtualDescriptorByName(
 		},
 	}
 	switch requestedType {
+	case catalog.Database, catalog.Function:
+		return continueLookups, nil, nil
 	case catalog.Schema:
 		if vs := tc.virtual.getSchemaByName(name); vs != nil {
 			return haltLookups, vs, nil
 		}
-	case catalog.Type:
+	case catalog.Type, catalog.Any:
 		objFlags.DesiredObjectKind = tree.TypeObject
 		fallthrough
 	case catalog.Table:
@@ -480,8 +481,12 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return continueLookups, descpb.InvalidID, nil
 	}
 	lookupStoreCacheID := func() (continueOrHalt, descpb.ID, error) {
-		if cd := tc.stored.GetCachedByName(parentID, parentSchemaID, name); cd != nil {
-			return haltLookups, cd.GetID(), nil
+		if id := tc.stored.GetCachedIDByName(&descpb.NameInfo{
+			ParentID:       parentID,
+			ParentSchemaID: parentSchemaID,
+			Name:           name,
+		}); id != descpb.InvalidID {
+			return haltLookups, id, nil
 		}
 		return continueLookups, descpb.InvalidID, nil
 	}
@@ -504,6 +509,9 @@ func (tc *Collection) getNonVirtualDescriptorID(
 		return haltLookups, ld.GetID(), nil
 	}
 	lookupStoredID := func() (continueOrHalt, descpb.ID, error) {
+		if flags.AvoidStorage {
+			return haltLookups, descpb.InvalidID, nil
+		}
 		id, err := tc.stored.LookupDescriptorID(ctx, txn, parentID, parentSchemaID, name)
 		return haltLookups, id, err
 	}

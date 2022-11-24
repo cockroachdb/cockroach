@@ -18,7 +18,7 @@ decompose
 multi_region_test_db
 ----
 BackReferencedIDs:
-  - 106
+  - 105
 ElementState:
 - Database:
     databaseId: 104
@@ -50,7 +50,7 @@ ElementState:
   Status: PUBLIC
 - DatabaseRegionConfig:
     databaseId: 104
-    regionEnumTypeId: 105
+    regionEnumTypeId: 106
   Status: PUBLIC
 - DatabaseRoleSetting:
     databaseId: 104
@@ -298,7 +298,7 @@ ElementState:
     databaseId: 104
     descriptorId: 110
     name: table_global
-    schemaId: 106
+    schemaId: 105
   Status: PUBLIC
 - Owner:
     descriptorId: 110
@@ -316,7 +316,7 @@ ElementState:
   Status: PUBLIC
 - ObjectParent:
     objectId: 110
-    parentSchemaId: 106
+    parentSchemaId: 105
   Status: PUBLIC
 
 decompose
@@ -394,7 +394,7 @@ ElementState:
     tableId: 109
   Status: PUBLIC
 - TableLocalitySecondaryRegion:
-    regionEnumTypeId: 105
+    regionEnumTypeId: 106
     regionName: us-east2
     tableId: 109
   Status: PUBLIC
@@ -555,7 +555,7 @@ ElementState:
     databaseId: 104
     descriptorId: 109
     name: table_regional_by_table
-    schemaId: 106
+    schemaId: 105
   Status: PUBLIC
 - Owner:
     descriptorId: 109
@@ -573,7 +573,7 @@ ElementState:
   Status: PUBLIC
 - ObjectParent:
     objectId: 109
-    parentSchemaId: 106
+    parentSchemaId: 105
   Status: PUBLIC
 
 decompose
@@ -695,7 +695,7 @@ ElementState:
   Status: PUBLIC
 - ColumnType:
     closedTypeIds:
-    - 105
+    - 106
     - 107
     columnId: 3
     computeExpr: null
@@ -711,7 +711,7 @@ ElementState:
       geoMetadata: null
       intervalDurationField: null
       locale: null
-      oid: 100105
+      oid: 100106
       precision: 0
       timePrecisionIsSet: false
       tupleContents: []
@@ -823,12 +823,12 @@ ElementState:
   Status: PUBLIC
 - ColumnDefaultExpression:
     columnId: 3
-    expr: default_to_database_primary_region(gateway_region())::@100105
+    expr: default_to_database_primary_region(gateway_region())::@100106
     referencedColumnIds: []
     tableId: 108
     usesSequenceIds: []
     usesTypeIds:
-    - 105
+    - 106
     - 107
   Status: PUBLIC
 - ColumnComment:
@@ -912,7 +912,7 @@ ElementState:
     databaseId: 104
     descriptorId: 108
     name: table_regional_by_row
-    schemaId: 106
+    schemaId: 105
   Status: PUBLIC
 - Owner:
     descriptorId: 108
@@ -930,7 +930,7 @@ ElementState:
   Status: PUBLIC
 - ObjectParent:
     objectId: 108
-    parentSchemaId: 106
+    parentSchemaId: 105
   Status: PUBLIC
 
 decompose
@@ -943,49 +943,49 @@ ElementState:
 - EnumType:
     arrayTypeId: 107
     isMultiRegion: true
-    typeId: 105
+    typeId: 106
   Status: PUBLIC
 - Namespace:
     databaseId: 104
-    descriptorId: 105
+    descriptorId: 106
     name: crdb_internal_region
-    schemaId: 106
+    schemaId: 105
   Status: PUBLIC
 - Owner:
-    descriptorId: 105
+    descriptorId: 106
     owner: root
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 105
+    descriptorId: 106
     privileges: 2
     userName: admin
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 105
+    descriptorId: 106
     privileges: 2
     userName: root
   Status: PUBLIC
 - UserPrivileges:
-    descriptorId: 105
+    descriptorId: 106
     privileges: 512
     userName: public
   Status: PUBLIC
 - ObjectParent:
-    objectId: 105
-    parentSchemaId: 106
+    objectId: 106
+    parentSchemaId: 105
   Status: PUBLIC
 - EnumTypeValue:
     logicalRepresentation: us-east1
     physicalRepresentation: QA==
-    typeId: 105
+    typeId: 106
   Status: PUBLIC
 - EnumTypeValue:
     logicalRepresentation: us-east2
     physicalRepresentation: gA==
-    typeId: 105
+    typeId: 106
   Status: PUBLIC
 - EnumTypeValue:
     logicalRepresentation: us-east3
     physicalRepresentation: wA==
-    typeId: 105
+    typeId: 106
   Status: PUBLIC

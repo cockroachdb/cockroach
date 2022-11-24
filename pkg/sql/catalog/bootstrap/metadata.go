@@ -176,7 +176,6 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 	// Generate initial values for the system database's public schema, which
 	// doesn't have a descriptor.
 	{
-		// Initializing the system database.
 		publicSchemaValue := roachpb.Value{}
 		publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
 		nameInfo := descpb.NameInfo{ParentID: keys.SystemDatabaseID, Name: tree.PublicSchema}
