@@ -1546,7 +1546,25 @@ message ExportRequest {
   // then there is no limit.
   int64 target_file_size = 10;
 
+  // ExportFingerprint when set to true will result in ExportRequest command
+  // evaluation generating an fnv64 hash for every key/timestamp and value, for
+  // point keys encountered in the key/time interval. Each KV hash will be
+  // combined via a XOR into a running aggregate that is returned as part of the
+  // ExportResponse.
+  //
+  // Range keys are not fingerprinted but instead written to a pebble SST that
+  // is returned to the caller. This is because range keys do not have a stable,
+  // discrete identity. A range key can span multiple ranges, or it may be
+  // fragmented by range keys outside of the time bounds which are not relevant
+  // to the fingerprint. So, we could need multiple export requests to piece
+  // together the entire rangekey before fingerprinting it. It is up to the
+  // caller to define a deterministic fingerprinting scheme across all returned
+  // range keys.
+  bool export_fingerprint = 14;
+
   reserved 2, 5, 7, 8, 11;
+
+  // Next ID: 15
 }
 
 // BulkOpSummary summarizes the data processed by an operation, counting the
@@ -1586,14 +1604,24 @@ message ExportResponse {
         (gogoproto.customname) = "EndKeyTS"
     ];
     string path = 2;
-    reserved 3;
-    reserved 4;
-    reserved 5;
 
     BulkOpSummary exported = 6 [(gogoproto.nullable) = false];
 
     bytes sst = 7 [(gogoproto.customname) = "SST"];
     string locality_kv = 8 [(gogoproto.customname) = "LocalityKV"];
+
+    // Fingerprint is the XOR aggregate of the fnv64 hash of every point
+    // key/timestamp and corresponding value that has been exported as part of
+    // the ExportRequest. This field is only set when the request is sent with
+    // `ExportFingerprint` set to true.
+    //
+    // Range keys are not fingerprinted but instead written to the sst above
+    // that is returned to the caller. This is because range keys do not have a
+    // stable, discrete identity and so it is up to the caller to define a
+    // deterministic fingerprinting scheme across all returned range keys.
+    uint64 fingerprint  = 10;
+
+    reserved 3, 4, 5;
   }
 
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
