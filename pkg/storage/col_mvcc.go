@@ -56,6 +56,15 @@ type CFetcherWrapper interface {
 	// Close release the resources held by this CFetcherWrapper. It *must* be
 	// called after use of the wrapper.
 	Close(ctx context.Context)
+
+	ContinuesFirstRow(key roachpb.Key) bool
+	MaybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error)
+	LastRowHasFinalColumnFamily() bool
+}
+
+type LastKeyProvider interface {
+	// TODO: consider including it into NextKVer interface.
+	GetLastEncodedKey() roachpb.Key
 }
 
 // GetCFetcherWrapper returns a CFetcherWrapper. It's injected from
@@ -66,6 +75,8 @@ var GetCFetcherWrapper func(
 	acc *mon.BoundAccount,
 	indexFetchSpec proto.Message,
 	nextKVer NextKVer,
+	lastKeyProvider LastKeyProvider,
+	reverse bool,
 ) (CFetcherWrapper, error)
 
 // mvccScanFetchAdapter is a NextKVer that is implemented directly by a
@@ -196,12 +207,6 @@ func mvccScanToCols(
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 		}, nil
 	}
-	if opts.WholeRowsOfSize != 0 {
-		// TODO(yuzefovich): add support for this.
-		return MVCCScanResult{}, errors.AssertionFailedf(
-			"WholeRowsOfSize option is not supported with COL_BATCH_RESPONSE scan format",
-		)
-	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer mvccScanner.release()
@@ -217,7 +222,7 @@ func mvccScanToCols(
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
 		allowEmpty:       opts.AllowEmpty,
-		wholeRows:        false,
+		wholeRows:        opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
 		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		skipLocked:       opts.SkipLocked,
@@ -251,6 +256,8 @@ func mvccScanToCols(
 		&acc,
 		indexFetchSpec,
 		&adapter,
+		&adapter.results,
+		opts.Reverse,
 	)
 	if err != nil {
 		return MVCCScanResult{}, err
@@ -263,6 +270,7 @@ func mvccScanToCols(
 	//	return res, mvccScanner.err
 	//}
 	adapter.onNextKV = adapter.seek
+	adapter.results.wrapper = wrapper
 	if grpcutil.IsLocalRequestContext(ctx) {
 		for {
 			_, batch, err := wrapper.NextBatch(ctx, false /* serialize */)
