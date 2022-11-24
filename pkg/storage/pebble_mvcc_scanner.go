@@ -64,27 +64,31 @@ type results interface {
 	getLastKV() roachpb.KeyValue
 	continuesFirstRow(key roachpb.Key) bool
 	maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error)
+	// lastRowHasFinalColumnFamily is only called after having called put() with
+	// no error at least once, meaning that at least one key is in the results.
+	// Also, this is only called when wholeRows option is enabled.
 	lastRowHasFinalColumnFamily(reverse bool) bool
 }
 
 type singleResults struct {
+	wrapper      CFetcherWrapper
 	count, bytes int64
-	key          []byte
+	encKey       []byte
 	value        []byte
 }
 
 var _ results = &singleResults{}
 
 func (s *singleResults) continuesFirstRow(key roachpb.Key) bool {
-	panic("implement me")
+	return s.wrapper.ContinuesFirstRow(key)
 }
 
 func (s *singleResults) maybeTrimPartialLastRow(key roachpb.Key) (roachpb.Key, error) {
-	panic("implement me")
+	return s.wrapper.MaybeTrimPartialLastRow(key)
 }
 
 func (s *singleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
-	panic("implement me")
+	return s.wrapper.LastRowHasFinalColumnFamily(reverse)
 }
 
 func (s *singleResults) clear() {
@@ -100,9 +104,13 @@ func (s *singleResults) put(
 		s.key = append([]byte{}, key...)
 		s.value = append([]byte{}, value...)
 	*/
-	s.key = key
+	s.encKey = key
 	s.value = value
 	return nil
+}
+
+func (s *singleResults) GetLastEncodedKey() roachpb.Key {
+	return s.encKey
 }
 
 func (s *singleResults) finish() [][]byte {
@@ -122,7 +130,7 @@ func (s *singleResults) getBytes() int64 {
 
 func (s *singleResults) getLastKV() roachpb.KeyValue {
 	return roachpb.KeyValue{
-		Key:   s.key,
+		Key:   s.encKey,
 		Value: roachpb.Value{RawBytes: s.value},
 	}
 }
@@ -289,10 +297,6 @@ func (p *pebbleResults) continuesFirstRow(key roachpb.Key) bool {
 // the final column families of the row may be omitted, in which case the caller
 // has to scan to the next key to find out whether the row is complete.
 func (p *pebbleResults) lastRowHasFinalColumnFamily(reverse bool) bool {
-	if !p.lastOffsetsEnabled || p.count == 0 {
-		return false
-	}
-
 	lastOffsetIdx := p.lastOffsetIdx - 1 // p.lastOffsetIdx is where next offset would be stored
 	if lastOffsetIdx < 0 {
 		lastOffsetIdx = len(p.lastOffsets) - 1

@@ -2554,8 +2554,6 @@ message Header {
   // The given value specifies the maximum number of keys in a row (i.e. the
   // number of column families). If any larger rows are found at the end of the
   // result, an error is returned.
-  //
-  // Not supported with COL_BATCH_RESPONSE scan format.
   int32 whole_rows_of_size = 26;
   // If true, allow returning an empty result when the first result exceeds a
   // limit (e.g. TargetBytes). Only supported by Get, Scan, and ReverseScan.
