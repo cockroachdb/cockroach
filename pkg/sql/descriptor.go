@@ -72,7 +72,6 @@ func (p *planner) createDatabase(
 ) (*dbdesc.Mutable, bool, error) {
 
 	dbName := string(database.Name)
-	dKey := catalogkeys.MakeDatabaseNameKey(p.ExecCfg().Codec, dbName)
 
 	if dbID, err := p.Descriptors().Direct().LookupDatabaseID(ctx, p.txn, dbName); err == nil && dbID != descpb.InvalidID {
 		if database.IfNotExists {
@@ -154,6 +153,7 @@ func (p *planner) createDatabase(
 		return nil, true, err
 	}
 
+	dKey := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, desc)
 	if err := p.createDescriptorWithID(ctx, dKey, id, desc, jobDesc); err != nil {
 		return nil, true, err
 	}
@@ -190,7 +190,7 @@ func (p *planner) maybeCreatePublicSchemaWithDescriptor(
 
 	if err := p.createDescriptorWithID(
 		ctx,
-		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema),
+		catalogkeys.EncodeNameKey(p.ExecCfg().Codec, publicSchemaDesc),
 		publicSchemaDesc.GetID(),
 		publicSchemaDesc,
 		tree.AsStringWithFQNames(database, p.Ann()),
@@ -212,7 +212,10 @@ func (p *planner) createPublicSchema(
 		return publicSchemaID, nil
 	}
 	// Every database must be initialized with the public schema.
-	key := catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, dbID, tree.PublicSchema)
+	key := catalogkeys.EncodeNameKey(p.ExecCfg().Codec, &descpb.NameInfo{
+		ParentID: dbID,
+		Name:     tree.PublicSchema,
+	})
 	if err := p.CreateSchemaNamespaceEntry(ctx, key, keys.PublicSchemaID); err != nil {
 		return keys.PublicSchemaID, err
 	}

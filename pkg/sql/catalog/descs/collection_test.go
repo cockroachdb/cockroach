@@ -263,7 +263,7 @@ func TestAddUncommittedDescriptorAndMutableResolution(t *testing.T) {
 			// Don't write the descriptor, just write the namespace entry.
 			// This will mean that resolution still is based on the old name.
 			b := &kv.Batch{}
-			b.CPut(catalogkeys.MakeDatabaseNameKey(lm.Codec(), mut.Name), mut.GetID(), nil)
+			b.CPut(catalogkeys.EncodeNameKey(lm.Codec(), mut), mut.GetID(), nil)
 			err = txn.Run(ctx, b)
 			require.NoError(t, err)
 
@@ -1179,16 +1179,14 @@ SELECT id
 			require.NoError(t, err)
 			require.Equal(t, "foo", tabMut.GetName())
 			tabMut.Name = "baz"
-			if _, err := txn.Del(ctx, catalogkeys.MakeObjectNameKey(
-				codec,
-				tabMut.GetParentID(), tabMut.GetParentSchemaID(), tabMut.OriginalName(),
-			)); err != nil {
+			if _, err := txn.Del(ctx, catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
+				ParentID:       tabMut.GetParentID(),
+				ParentSchemaID: tabMut.GetParentSchemaID(),
+				Name:           tabMut.OriginalName(),
+			})); err != nil {
 				return err
 			}
-			if err := txn.Put(ctx, catalogkeys.MakeObjectNameKey(
-				codec,
-				tabMut.GetParentID(), tabMut.GetParentSchemaID(), tabMut.GetName(),
-			), int64(tabMut.ID)); err != nil {
+			if err := txn.Put(ctx, catalogkeys.EncodeNameKey(codec, tabMut), int64(tabMut.ID)); err != nil {
 				return err
 			}
 			const kvTrace = false

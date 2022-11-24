@@ -238,7 +238,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 	// Finally create the schema on disk.
 	if err := p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.MakeSchemaNameKey(p.ExecCfg().Codec, db.ID, desc.Name),
+		catalogkeys.EncodeNameKey(p.ExecCfg().Codec, desc),
 		desc.ID,
 		desc,
 		tree.AsStringWithFQNames(n, params.Ann()),
