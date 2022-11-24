@@ -732,9 +732,7 @@ func (sc *SchemaChanger) exec(ctx context.Context) error {
 		} else {
 			// We've dropped a non-physical table, no need for a GC job, let's delete
 			// its descriptor and zone config immediately.
-			if err := DeleteTableDescAndZoneConfig(
-				ctx, sc.db, sc.settings, sc.execCfg.Codec, tableDesc,
-			); err != nil {
+			if err := DeleteTableDescAndZoneConfig(ctx, sc.execCfg, tableDesc); err != nil {
 				return err
 			}
 		}
@@ -1055,10 +1053,13 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 		}
 		scTable.SetDropped()
 		scTable.DropTime = timeutil.Now().UnixNano()
-		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, scTable, b); err != nil {
+		const kvTrace = false
+		if err := descsCol.WriteDescToBatch(ctx, kvTrace, scTable, b); err != nil {
 			return err
 		}
-		b.Del(catalogkeys.EncodeNameKey(sc.execCfg.Codec, scTable))
+		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, scTable, b); err != nil {
+			return err
+		}
 
 		// Queue a GC job.
 		jobRecord := CreateGCJobRecord(
@@ -3020,21 +3021,18 @@ func (sc *SchemaChanger) applyZoneConfigChangeForMutation(
 
 // DeleteTableDescAndZoneConfig removes a table's descriptor and zone config from the KV database.
 func DeleteTableDescAndZoneConfig(
-	ctx context.Context,
-	db *kv.DB,
-	settings *cluster.Settings,
-	codec keys.SQLCodec,
-	tableDesc catalog.TableDescriptor,
+	ctx context.Context, execCfg *ExecutorConfig, tableDesc catalog.TableDescriptor,
 ) error {
 	log.Infof(ctx, "removing table descriptor and zone config for table %d", tableDesc.GetID())
-	return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-		b := &kv.Batch{}
-
+	const kvTrace = false
+	return DescsTxn(ctx, execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
+		b := txn.NewBatch()
 		// Delete the descriptor.
-		descKey := catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID())
-		b.Del(descKey)
-		// Delete the zone config entry for this table, if necessary.
-		if codec.ForSystemTenant() {
+		if err := col.DeleteDescToBatch(ctx, kvTrace, tableDesc.GetID(), b); err != nil {
+			return err
+		}
+		if codec := execCfg.Codec; codec.ForSystemTenant() {
+			// Delete the zone config entry for this table, if necessary.
 			zoneKeyPrefix := config.MakeZoneKeyPrefix(codec, tableDesc.GetID())
 			b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 		}

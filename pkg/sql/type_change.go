@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -243,7 +242,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	}
 	ctx = logtags.AddTags(ctx, t.logTags())
 	leaseMgr := t.execCfg.LeaseManager
-	codec := t.execCfg.Codec
+	const kvTrace = true
 
 	typeDesc, err := t.getTypeDescFromStore(ctx)
 	if err != nil {
@@ -435,7 +434,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 
 			b := txn.NewBatch()
 			if err := descsCol.WriteDescToBatch(
-				ctx, true /* kvTrace */, typeDesc, b,
+				ctx, kvTrace, typeDesc, b,
 			); err != nil {
 				return err
 			}
@@ -448,7 +447,7 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 				return err
 			}
 			if err := descsCol.WriteDescToBatch(
-				ctx, true /* kvTrace */, arrayTypeDesc, b,
+				ctx, kvTrace, arrayTypeDesc, b,
 			); err != nil {
 				return err
 			}
@@ -487,9 +486,11 @@ func (t *typeSchemaChanger) exec(ctx context.Context) error {
 	// If the type is being dropped, remove the descriptor here only
 	// if the declarative schema changer is not in use.
 	if typeDesc.Dropped() && typeDesc.GetDeclarativeSchemaChangerState() == nil {
-		if err := t.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if err := DescsTxn(ctx, t.execCfg, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
 			b := txn.NewBatch()
-			b.Del(catalogkeys.MakeDescMetadataKey(codec, typeDesc.GetID()))
+			if err := col.DeleteDescToBatch(ctx, kvTrace, typeDesc.GetID(), b); err != nil {
+				return err
+			}
 			return txn.Run(ctx, b)
 		}); err != nil {
 			return err

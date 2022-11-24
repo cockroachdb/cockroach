@@ -26,8 +26,8 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 108, Name: admin}
  │         │    ├── PUBLIC      → ABSENT  UserPrivileges:{DescID: 108, Name: root}
  │         │    ├── TXN_DROPPED → DROPPED Table:{DescID: 108}
- │         │    ├── PUBLIC      → ABSENT  ObjectParent:{DescID: 108, ReferencedDescID: 106}
- │         │    ├── PUBLIC      → ABSENT  TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 105}
+ │         │    ├── PUBLIC      → ABSENT  ObjectParent:{DescID: 108, ReferencedDescID: 105}
+ │         │    ├── PUBLIC      → ABSENT  TableLocalitySecondaryRegion:{DescID: 108, ReferencedDescID: 106}
  │         │    ├── PUBLIC      → ABSENT  ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}
  │         │    ├── WRITE_ONLY  → ABSENT  Column:{DescID: 108, ColumnID: 1}
  │         │    ├── PUBLIC      → ABSENT  ColumnName:{DescID: 108, Name: a, ColumnID: 1}
@@ -45,11 +45,11 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveAllTableComments {"TableID":108}
  │              ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
- │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":106}}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":1,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":108}
- │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
  └── PostCommitNonRevertiblePhase
@@ -62,6 +62,6 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
                 ├── LogEvent {"TargetStatus":1}
                 ├── CreateGCJobForTable {"DatabaseID":104,"TableID":108}
                 ├── CreateGCJobForIndex {"IndexID":1,"TableID":108}
-                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

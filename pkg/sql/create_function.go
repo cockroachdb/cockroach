@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
@@ -129,10 +128,8 @@ func (n *createFunctionNode) createNewFunction(
 		return err
 	}
 
-	err := params.p.createDescriptorWithID(
+	err := params.p.createDescriptor(
 		params.ctx,
-		roachpb.Key{}, // UDF does not have namespace entry.
-		udfDesc.GetID(),
 		udfDesc,
 		tree.AsStringWithFQNames(&n.cf.FuncName, params.Ann()),
 	)
