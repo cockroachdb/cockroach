@@ -110,6 +110,13 @@ func TestTenantLogic_distsql_tenant_locality(
 	runLogicTest(t, "distsql_tenant_locality")
 }
 
+func TestTenantLogic_tenant_from_tenant(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "tenant_from_tenant")
+}
+
 func TestTenantExecBuild_distsql_tenant_locality(
 	t *testing.T,
 ) {
