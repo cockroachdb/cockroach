@@ -248,12 +248,6 @@ func roleOptionsRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AddSystemUserIDColumn) {
-		return defaultSystemTableRestoreFunc(
-			ctx, execCfg, txn, systemTableName, tempTableName,
-		)
-	}
-
 	executor := execCfg.InternalExecutor
 	hasIDColumnQuery := fmt.Sprintf(
 		`SELECT EXISTS (SELECT 1 FROM [SHOW COLUMNS FROM %s] WHERE column_name = 'user_id')`, tempTableName)
@@ -357,20 +351,16 @@ func roleIDSeqRestoreFunc(
 	txn *kv.Txn,
 	systemTableName, tempTableName string,
 ) error {
-	if execCfg.Settings.Version.IsActive(ctx, clusterversion.V22_2AddSystemUserIDColumn) {
-		datums, err := execCfg.InternalExecutor.QueryRowEx(
-			ctx, "role-id-seq-custom-restore", txn,
-			sessiondata.NodeUserSessionDataOverride,
-			`SELECT max(user_id) FROM system.users`,
-		)
-		if err != nil {
-			return err
-		}
-		max := tree.MustBeDOid(datums[0])
-		return execCfg.DB.Put(ctx, execCfg.Codec.SequenceKey(keys.RoleIDSequenceID), max.Oid+1)
+	datums, err := execCfg.InternalExecutor.QueryRowEx(
+		ctx, "role-id-seq-custom-restore", txn,
+		sessiondata.NodeUserSessionDataOverride,
+		`SELECT max(user_id) FROM system.users`,
+	)
+	if err != nil {
+		return err
 	}
-	// Nothing to be done since no user ids have been assigned.
-	return nil
+	max := tree.MustBeDOid(datums[0])
+	return execCfg.DB.Put(ctx, execCfg.Codec.SequenceKey(keys.RoleIDSequenceID), max.Oid+1)
 }
 
 // systemTableBackupConfiguration is a map from every systemTable present in the

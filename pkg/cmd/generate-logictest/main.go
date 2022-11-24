@@ -28,6 +28,7 @@ type testFileTemplateConfig struct {
 	CclLogicTest                  bool
 	ExecBuildLogicTest            bool
 	SqliteLogicTest               bool
+	CockroachGoTestserverTest     bool
 	Ccl                           bool
 	ForceProductionValues         bool
 	Package, TestRuleName, RelDir string
@@ -160,6 +161,7 @@ func (t *testdir) dump() error {
 		tplCfg.Package = strings.ReplaceAll(strings.ReplaceAll(cfg.Name, "-", "_"), ".", "")
 		tplCfg.RelDir = t.relPathToParent
 		tplCfg.TestCount = testCount
+		tplCfg.CockroachGoTestserverTest = cfg.UseCockroachGoTestserver
 		// The NumCPU calculation is a guess pulled out of thin air to
 		// allocate the tests which use 3-node clusters 2 vCPUs, and
 		// the ones which use more a bit more.
