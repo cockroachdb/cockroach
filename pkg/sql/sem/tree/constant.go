@@ -635,6 +635,16 @@ func (expr *StrVal) ResolveAsType(
 			ptCtx.DateStyle = semaCtx.DateStyle
 			ptCtx.IntervalStyle = semaCtx.IntervalStyle
 		}
+		if typ.UserDefined() && !typ.IsHydrated() {
+			var err error
+			if semaCtx == nil || semaCtx.TypeResolver == nil {
+				return nil, errors.AssertionFailedf("unable to hydrate type for resolution")
+			}
+			typ, err = semaCtx.TypeResolver.ResolveTypeByOID(ctx, typ.Oid())
+			if err != nil {
+				return nil, err
+			}
+		}
 		val, dependsOnContext, err := ParseAndRequireString(typ, expr.s, ptCtx)
 		if err != nil {
 			return nil, err
