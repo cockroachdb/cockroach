@@ -108,6 +108,7 @@ func TestTelemetryLogging(t *testing.T) {
 		expectedStatsAvailable  bool
 		expectedRead            bool
 		expectedWrite           bool
+		expectedIndexes         bool
 		expectedErr             string // Empty string means no error is expected.
 		queryLevelStats         execstats.QueryLevelStats
 		enableTracing           bool
@@ -130,6 +131,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			expectedIndexes:         false,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:   0 * time.Nanosecond,
 				NetworkBytesSent: 1,
@@ -157,6 +159,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime: 1 * time.Nanosecond,
 			},
@@ -179,6 +182,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:   2 * time.Nanosecond,
 				NetworkBytesSent: 1,
@@ -203,6 +207,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:   3 * time.Nanosecond,
 				NetworkBytesSent: 1124,
@@ -230,6 +235,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:   0 * time.Nanosecond,
 				NetworkBytesSent: 124235,
@@ -256,6 +262,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           true,
+			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:   0 * time.Nanosecond,
 				NetworkBytesSent: 1,
@@ -280,6 +287,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  false,
 			expectedRead:            false,
 			expectedWrite:           false,
+			expectedIndexes:         false,
 			expectedErr:             "a role/user named ‹root› already exists",
 			enableTracing:           false,
 		},
@@ -300,6 +308,7 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedStatsAvailable:  true,
 			expectedRead:            true,
 			expectedWrite:           false,
+			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:   2 * time.Nanosecond,
 				NetworkBytesSent: 10,
@@ -543,6 +552,13 @@ func TestTelemetryLogging(t *testing.T) {
 						if !strings.Contains(e.Message, tc.expectedErr) {
 							t.Errorf("%s: missing error %s in message %s", tc.name, tc.expectedErr, e.Message)
 							break
+						}
+					}
+					if tc.expectedIndexes {
+						// Match indexes on any non-empty string value.
+						indexes := regexp.MustCompile("\"Indexes\":")
+						if !indexes.MatchString(e.Message) {
+							t.Errorf("expected to find Indexes but none was found in: %s", e.Message)
 						}
 					}
 				}
