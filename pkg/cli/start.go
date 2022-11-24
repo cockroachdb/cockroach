@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -645,12 +646,16 @@ func createAndStartServerAsync(
 		// mechanism to intercept the panic and log the panic details to
 		// the error reporting server.
 		defer func() {
+			var sv *settings.Values
 			if s != nil {
-				// We only attempt to log the panic details if the server has
-				// actually been started successfully. If there's no server,
-				// we won't know enough to decide whether reporting is
-				// permitted.
-				logcrash.RecoverAndReportPanic(ctx, &s.ClusterSettings().SV)
+				sv = &s.ClusterSettings().SV
+			}
+			if r := recover(); r != nil {
+				// This ensures that the panic, if any, is also reported on stderr.
+				// The settings.Values, if available, determines whether a Sentry
+				// report should be sent. No Sentry report is sent if sv is nil.
+				logcrash.ReportPanic(ctx, sv, r, 1 /* depth */)
+				panic(r)
 			}
 		}()
 		// When the start up goroutine completes, so can the start up span.

@@ -118,6 +118,13 @@ func ReportPanicWithGlobalSettings(ctx context.Context, r interface{}, depth int
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
 // real stderr a panic has occurred.
+// The argument sv may be nil; if it is, no Sentry report is sent.
+//
+// Note: this function _must_ be called with `defer log.RecoverAndReportPanic()`.
+// Do not use `defer func() { ... log.RecoverAndReportPanic() ...}` as this
+// will fail to actually catch the panic.
+// If you need more code around the call in your defer, use ReportPanic()
+// instead and do not forget to re-panic afterwards.
 func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
 		ReportPanic(ctx, sv, r, depthForRecoverAndReportPanic)
@@ -127,6 +134,13 @@ func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 
 // RecoverAndReportNonfatalPanic is an alternative RecoverAndReportPanic that
 // does not re-panic in Release builds.
+// The caller is responsible for ensuring that the argument sv is non-nil.
+//
+// Note: this function _must_ be called with `defer log.RecoverAndReportNonfatalPanic()`.
+// Do not use `defer func() { ... log.RecoverAndReportNonfatalPanic() ...}` as this
+// will fail to actually catch the panic.
+// If you need more code around the call in your defer, use ReportNonfatalPanic()
+// instead. The caller should not explicitly re-panic afterwards.
 func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
 		ReportPanic(ctx, sv, r, depthForRecoverAndReportPanic)
@@ -141,7 +155,7 @@ func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 // Note that ReportPanic() does not assume that the panic object
 // will be left uncaught to terminate the process. For example,
 // at the time of this writing, ReportPanic() is called from
-// RecoverAndReportNonfatalPanic() above.
+// ReportNonfatalPanic() above.
 func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth int) {
 	// Announce the panic has occurred to all places. The purpose
 	// of this call is threefold:
