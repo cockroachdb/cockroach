@@ -332,6 +332,7 @@ type elasticCPULimiter interface {
 	getUtilizationLimit() float64
 	setUtilizationLimit(limit float64)
 	hasWaitingRequests() bool
+	computeUtilizationMetric()
 }
 
 // SchedulerLatencyListener listens to the latest scheduler latency data. We
