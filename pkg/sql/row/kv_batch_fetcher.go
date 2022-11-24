@@ -413,6 +413,7 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	ba.Header.MaxSpanRequestKeys = int64(f.getBatchKeyLimit())
 	if f.indexFetchSpec != nil {
 		ba.IndexFetchSpec = f.indexFetchSpec
+		ba.Header.WholeRowsOfSize = int32(f.indexFetchSpec.MaxKeysPerRow)
 	} else if f.scanFormat == roachpb.COL_BATCH_RESPONSE {
 		return errors.AssertionFailedf("IndexFetchSpec not provided with COL_BATCH_RESPONSE scan format")
 	}
