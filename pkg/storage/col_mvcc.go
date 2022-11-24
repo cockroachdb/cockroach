@@ -62,6 +62,10 @@ type CFetcherWrapper interface {
 	// Close release the resources held by this CFetcherWrapper. It *must* be
 	// called after use of the wrapper.
 	Close(ctx context.Context)
+
+	ContinuesFirstRow(key roachpb.Key) bool
+	MaybeTrimPartialLastRow(nextKey roachpb.Key) (roachpb.Key, error)
+	LastRowHasFinalColumnFamily(reverse bool) bool
 }
 
 // GetCFetcherWrapper returns a CFetcherWrapper. It's injected from
@@ -148,7 +152,7 @@ func (f *mvccScanFetchAdapter) NextKV(
 
 // GetLastEncodedKey implements the NextKVer interface.
 func (f *mvccScanFetchAdapter) GetLastEncodedKey() roachpb.Key {
-	return f.results.key
+	return f.results.encKey
 }
 
 // MVCCScanToCols is like MVCCScan, but it returns KVData in a serialized
@@ -200,12 +204,6 @@ func mvccScanToCols(
 			ResumeReason: roachpb.RESUME_BYTE_LIMIT,
 		}, nil
 	}
-	if opts.WholeRowsOfSize != 0 {
-		// TODO(yuzefovich): add support for this.
-		return MVCCScanResult{}, errors.AssertionFailedf(
-			"WholeRowsOfSize option is not supported with COL_BATCH_RESPONSE scan format",
-		)
-	}
 
 	mvccScanner := pebbleMVCCScannerPool.Get().(*pebbleMVCCScanner)
 	defer mvccScanner.release()
@@ -221,7 +219,7 @@ func mvccScanToCols(
 		maxKeys:          opts.MaxKeys,
 		targetBytes:      opts.TargetBytes,
 		allowEmpty:       opts.AllowEmpty,
-		wholeRows:        false,
+		wholeRows:        opts.WholeRowsOfSize > 1, // single-KV rows don't need processing
 		maxIntents:       opts.MaxIntents,
 		inconsistent:     opts.Inconsistent,
 		skipLocked:       opts.SkipLocked,
@@ -264,6 +262,8 @@ func mvccScanToCols(
 		return MVCCScanResult{}, err
 	}
 	defer wrapper.Close(ctx)
+
+	adapter.results.wrapper = wrapper
 
 	var res MVCCScanResult
 
