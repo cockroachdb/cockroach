@@ -178,6 +178,8 @@ type cFetcherArgs struct {
 	// allocateFreshBatches indicates whether the cFetcher will allocate new
 	// batches on each Next invocation, or instead just reuse a single batch.
 	allocateFreshBatches bool
+	// TODO: comment.
+	allowNullsInNonNullableOnLastRowInBatch bool
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -258,6 +260,7 @@ type cFetcher struct {
 		// keys are compared against this prefix to determine whether they're part
 		// of a new row or not.
 		lastRowPrefix roachpb.Key
+		firstKeyInRow roachpb.Key
 		// prettyValueBuf is a temp buffer used to create strings for tracing.
 		prettyValueBuf *bytes.Buffer
 
@@ -633,6 +636,10 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue, needsCopy bool) {
 	cf.machine.nextKV = kvCopy
 }
 
+func (cf *cFetcher) keyFromNewRow(key roachpb.Key) bool {
+	return !bytes.HasPrefix(key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:])
+}
+
 // NextBatch processes keys until we complete one batch of rows (subject to the
 // limit hint and the memory limit while being max coldata.BatchSize() in
 // length), which are returned in columnar format as a coldata.Batch. The batch
@@ -649,6 +656,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateInvalid:
 			return nil, errors.New("invalid fetcher state")
 		case stateInitFetch:
+			cf.machine.firstKeyInRow = nil
 			moreKVs, kv, finalReferenceToBatch, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
@@ -688,6 +696,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 		case stateDecodeFirstKVOfRow:
 			// Reset MVCC metadata for the table, since this is the first KV of a row.
 			cf.table.rowLastModified = hlc.Timestamp{}
+			cf.machine.firstKeyInRow = cf.machine.nextKV.Key
 
 			// foundNull is set when decoding a new index key for a row finds a NULL value
 			// in the index key. This is used when decoding unique secondary indexes in order
@@ -818,7 +827,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
 			// longest common span prefix.
-			if !bytes.HasPrefix(kv.Key[cf.table.spec.KeyPrefixLength:], cf.machine.lastRowPrefix[cf.table.spec.KeyPrefixLength:]) {
+			if cf.keyFromNewRow(kv.Key) {
 				// The kv we just found is from a different row.
 				cf.machine.state[0] = stateFinalizeRow
 				cf.machine.state[1] = stateDecodeFirstKVOfRow
@@ -1233,7 +1242,8 @@ func (cf *cFetcher) fillNulls() error {
 		if table.compositeIndexColOrdinals.Contains(i) {
 			continue
 		}
-		if table.spec.FetchedColumns[i].IsNonNullable {
+		allowNull := cf.allowNullsInNonNullableOnLastRowInBatch && cf.machine.state[1] == stateEmitLastBatch
+		if table.spec.FetchedColumns[i].IsNonNullable && !allowNull {
 			var indexColValues strings.Builder
 			cf.writeDecodedCols(&indexColValues, table.indexColOrdinals, ',')
 			var indexColNames []string
