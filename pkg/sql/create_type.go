@@ -264,7 +264,6 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-	arrayTypeKey := catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, db.GetID(), schemaID, arrayTypeName)
 
 	// Generate the stable ID for the array type.
 	id, err := params.EvalContext().DescIDGenerator.GenerateUniqueDescID(params.ctx)
@@ -283,7 +282,7 @@ func (p *planner) createArrayType(
 	if err != nil {
 		return 0, err
 	}
-
+	arrayTypeKey := catalogkeys.EncodeNameKey(params.ExecCfg().Codec, arrayTypDesc)
 	jobStr := fmt.Sprintf("implicit array type creation for %s", typ)
 	if err := p.createDescriptorWithID(
 		params.ctx,
@@ -412,7 +411,7 @@ func (p *planner) createEnumWithID(
 	// Now create the type after the implicit array type as been created.
 	if err := p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, dbDesc.GetID(), schema.GetID(), typeName.Type()),
+		catalogkeys.EncodeNameKey(params.ExecCfg().Codec, typeDesc),
 		id,
 		typeDesc,
 		typeName.String(),

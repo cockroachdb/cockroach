@@ -417,7 +417,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// Descriptor written to store here.
 	if err := params.p.createDescriptorWithID(
 		params.ctx,
-		catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.n.Table.Table()),
+		catalogkeys.EncodeNameKey(params.ExecCfg().Codec, desc),
 		id,
 		desc,
 		tree.AsStringWithFQNames(n.n, params.Ann()),

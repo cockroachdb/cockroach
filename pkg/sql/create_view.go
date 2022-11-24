@@ -294,7 +294,7 @@ func (n *createViewNode) startExec(params runParams) error {
 				// do some basic string formatting (not accurate in the general case).
 				if err = params.p.createDescriptorWithID(
 					params.ctx,
-					catalogkeys.MakeObjectNameKey(params.ExecCfg().Codec, n.dbDesc.GetID(), schema.GetID(), n.viewName.Table()),
+					catalogkeys.EncodeNameKey(params.ExecCfg().Codec, &desc),
 					id,
 					&desc,
 					fmt.Sprintf("CREATE VIEW %q AS %q", n.viewName, n.viewQuery),

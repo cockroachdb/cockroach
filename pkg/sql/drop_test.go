@@ -234,7 +234,7 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	dKey := catalogkeys.MakeDatabaseNameKey(keys.SystemSQLCodec, "t")
+	dKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, descpb.NameInfo{Name: "t"})
 	r, err := kvDB.Get(ctx, dKey)
 	if err != nil {
 		t.Fatal(err)
@@ -598,7 +598,11 @@ func TestDropTable(t *testing.T) {
 	parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "kv")
-	nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, "kv")
+	nameKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{
+		ParentID:       parentDatabaseID,
+		ParentSchemaID: parentSchemaID,
+		Name:           "kv",
+	})
 	gr, err := kvDB.Get(ctx, nameKey)
 
 	if err != nil {
@@ -702,7 +706,11 @@ func TestDropTableDeleteData(t *testing.T) {
 		parentDatabaseID := descpb.ID(sqlutils.QueryDatabaseID(t, sqlDB, "t"))
 		parentSchemaID := descpb.ID(sqlutils.QuerySchemaID(t, sqlDB, "t", "public"))
 
-		nameKey := catalogkeys.MakeObjectNameKey(keys.SystemSQLCodec, parentDatabaseID, parentSchemaID, tableName)
+		nameKey := catalogkeys.EncodeNameKey(keys.SystemSQLCodec, &descpb.NameInfo{
+			ParentID:       parentDatabaseID,
+			ParentSchemaID: parentSchemaID,
+			Name:           tableName,
+		})
 		gr, err := kvDB.Get(ctx, nameKey)
 		if err != nil {
 			t.Fatal(err)
