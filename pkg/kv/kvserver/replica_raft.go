@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
@@ -1093,7 +1093,7 @@ func maybeFatalOnRaftReadyErr(ctx context.Context, err error) (removed bool) {
 // tick the Raft group, returning true if the raft group exists and should
 // be queued for Ready processing; false otherwise.
 func (r *Replica) tick(
-	ctx context.Context, livenessMap liveness.IsLiveMap, ioThresholdMap *ioThresholdMap,
+	ctx context.Context, livenessMap livenesspb.IsLiveMap, ioThresholdMap *ioThresholdMap,
 ) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
@@ -1804,7 +1804,7 @@ func shouldCampaignOnWake(
 	leaseStatus kvserverpb.LeaseStatus,
 	storeID roachpb.StoreID,
 	raftStatus raft.BasicStatus,
-	livenessMap liveness.IsLiveMap,
+	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	requiresExpiringLease bool,
 ) bool {
@@ -1863,7 +1863,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 
 	leaseStatus := r.leaseStatusAtRLocked(ctx, r.store.Clock().NowAsClockTimestamp())
 	raftStatus := r.mu.internalRaftGroup.BasicStatus()
-	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	if shouldCampaignOnWake(leaseStatus, r.store.StoreID(), raftStatus, livenessMap, r.descRLocked(), r.requiresExpiringLeaseRLocked()) {
 		r.campaignLocked(ctx)
 	}
@@ -1887,7 +1887,7 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 // become leader and can proceed with a future attempt to acquire the lease.
 func shouldCampaignOnLeaseRequestRedirect(
 	raftStatus raft.BasicStatus,
-	livenessMap liveness.IsLiveMap,
+	livenessMap livenesspb.IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	requiresExpiringLease bool,
 	now hlc.Timestamp,
