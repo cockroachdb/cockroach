@@ -145,6 +145,7 @@ func (e *schedulerLatencyListener) SchedulerLatency(p99, period time.Duration) {
 	}
 
 	e.elasticCPULimiter.setUtilizationLimit(newUtilizationLimit)
+	e.elasticCPULimiter.computeUtilizationMetric()
 	if e.coord != nil { // only nil in tests
 		// TODO(irfansharif): Right now this is the only ticking mechanism for
 		// elastic CPU grants; consider some form of explicit ticking instead.

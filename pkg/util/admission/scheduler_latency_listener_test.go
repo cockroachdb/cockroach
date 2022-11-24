@@ -364,6 +364,8 @@ func (t *testElasticCPUUtilizationLimiter) setHasWaitingRequests(hasWaitingReque
 	t.hasWaitingRequestsVal = hasWaitingRequestsVal
 }
 
+func (t *testElasticCPUUtilizationLimiter) computeUtilizationMetric() {}
+
 func (p schedulerLatencyListenerParams) String() string {
 	inactiveUtilizationLimit := p.minUtilization +
 		p.inactivePoint*(p.maxUtilization-p.minUtilization)
