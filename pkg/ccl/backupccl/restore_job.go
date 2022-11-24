@@ -2553,10 +2553,10 @@ func (r *restoreResumer) dropDescriptors(
 		// We have explicitly to delete the system.namespace entry for the public schema
 		// if the database does not have a public schema backed by a descriptor.
 		if !db.(catalog.DatabaseDescriptor).HasPublicSchemaWithDescriptor() {
-			b.Del(catalogkeys.MakeSchemaNameKey(codec, db.GetID(), tree.PublicSchema))
+			b.Del(catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{ParentID: db.GetID(), Name: tree.PublicSchema}))
 		}
 
-		nameKey := catalogkeys.MakeDatabaseNameKey(codec, db.GetName())
+		nameKey := catalogkeys.EncodeNameKey(codec, db)
 		b.Del(nameKey)
 		descsCol.NotifyOfDeletedDescriptor(db.GetID())
 		deletedDBs[db.GetID()] = struct{}{}

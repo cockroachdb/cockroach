@@ -400,8 +400,12 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 		return err
 	}
 	parentID, parentSchemaID, descID := descpb.ID(parentIDInt), descpb.ID(parentSchemaIDInt), descpb.ID(descIDInt)
-	key := catalogkeys.MakeObjectNameKey(p.execCfg.Codec, parentID, parentSchemaID, name)
-	val, err := p.txn.Get(ctx, key)
+	nameKey := catalogkeys.EncodeNameKey(p.execCfg.Codec, &descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	})
+	val, err := p.txn.Get(ctx, nameKey)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read namespace entry (%d, %d, %s)",
 			parentID, parentSchemaID, name)
@@ -489,7 +493,7 @@ func (p *planner) UnsafeUpsertNamespaceEntry(
 			return err
 		}
 	}
-	if err := p.txn.Put(ctx, key, descID); err != nil {
+	if err := p.txn.Put(ctx, nameKey, descID); err != nil {
 		return err
 	}
 	var validationErrStr string
@@ -527,7 +531,11 @@ func (p *planner) UnsafeDeleteNamespaceEntry(
 		return err
 	}
 	parentID, parentSchemaID, descID := descpb.ID(parentIDInt), descpb.ID(parentSchemaIDInt), descpb.ID(descIDInt)
-	key := catalogkeys.MakeObjectNameKey(p.execCfg.Codec, parentID, parentSchemaID, name)
+	key := catalogkeys.EncodeNameKey(p.execCfg.Codec, &descpb.NameInfo{
+		ParentID:       parentID,
+		ParentSchemaID: parentSchemaID,
+		Name:           name,
+	})
 	val, err := p.txn.Get(ctx, key)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read namespace entry (%d, %d, %s)",

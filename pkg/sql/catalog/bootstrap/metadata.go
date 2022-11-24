@@ -179,7 +179,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 		// Initializing the system database.
 		publicSchemaValue := roachpb.Value{}
 		publicSchemaValue.SetInt(int64(keys.SystemPublicSchemaID))
-		add(catalogkeys.MakeSchemaNameKey(ms.codec, keys.SystemDatabaseID, tree.PublicSchema), publicSchemaValue)
+		nameInfo := descpb.NameInfo{ParentID: keys.SystemDatabaseID, Name: tree.PublicSchema}
+		add(catalogkeys.EncodeNameKey(ms.codec, &nameInfo), publicSchemaValue)
 	}
 
 	// Generate initial values for system databases and tables, which have

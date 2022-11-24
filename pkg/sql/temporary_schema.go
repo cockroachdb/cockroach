@@ -105,18 +105,18 @@ func (p *planner) getOrCreateTemporarySchema(
 	if sc != nil || err != nil {
 		return sc, err
 	}
-	sKey := catalogkeys.NewNameKeyComponents(db.GetID(), keys.RootNamespaceID, tempSchemaName)
+	nameKey := descpb.NameInfo{ParentID: db.GetID(), Name: tempSchemaName}
 
 	// The temporary schema has not been created yet.
 	id, err := p.EvalContext().DescIDGenerator.GenerateUniqueDescID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, sKey), id); err != nil {
+	if err := p.CreateSchemaNamespaceEntry(ctx, catalogkeys.EncodeNameKey(p.ExecCfg().Codec, &nameKey), id); err != nil {
 		return nil, err
 	}
 	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.SetTemporarySchemaName(sKey.GetName())
+		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
 	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlagsRequired())
@@ -202,7 +202,10 @@ func cleanupSessionTempObjects(
 				// itself may still exist (eg. a temporary table was created and then
 				// dropped). So we remove the namespace table entry of the temporary
 				// schema.
-				key := catalogkeys.MakeSchemaNameKey(codec, dbDesc.GetID(), tempSchemaName)
+				key := catalogkeys.EncodeNameKey(codec, &descpb.NameInfo{
+					ParentID: dbDesc.GetID(),
+					Name:     tempSchemaName,
+				})
 				if _, err := txn.Del(ctx, key); err != nil {
 					return err
 				}
