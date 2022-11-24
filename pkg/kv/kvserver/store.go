@@ -2129,6 +2129,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 			}
 		})
+
+		// We also want to do it when the fallback config setting is changed.
+		spanconfigstore.FallbackConfigOverride.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
+			s.applyAllFromSpanConfigStore(ctx)
+		})
 	}
 
 	if !s.cfg.TestingKnobs.DisableAutomaticLeaseRenewal {
