@@ -38,7 +38,6 @@ go_library(
         "//pkg/sql/oppurpose",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/storage",
         "//pkg/util/admission/admissionpb",

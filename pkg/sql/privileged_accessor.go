@@ -90,7 +90,7 @@ func (p *planner) LookupZoneConfigByNamespaceID(
 func (p *planner) checkDescriptorPermissions(ctx context.Context, id descpb.ID) error {
 	desc, err := p.Descriptors().GetImmutableDescriptorByID(
 		ctx, p.txn, id,
-		tree.CommonLookupFlags{
+		catalog.CommonLookupFlags{
 			IncludeDropped: true,
 			IncludeOffline: true,
 			// Note that currently the ByID API implies required regardless of whether it

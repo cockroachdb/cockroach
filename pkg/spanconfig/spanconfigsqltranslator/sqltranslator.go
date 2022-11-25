@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -181,7 +180,7 @@ func (s *SQLTranslator) Translate(
 }
 
 // descLookupFlags is the set of look up flags used when fetching descriptors.
-var descLookupFlags = tree.CommonLookupFlags{
+var descLookupFlags = catalog.CommonLookupFlags{
 	// We act on errors being surfaced when the descriptor being looked up is
 	// not found.
 	Required: true,

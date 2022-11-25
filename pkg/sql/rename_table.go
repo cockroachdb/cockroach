@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -116,17 +117,16 @@ func (n *renameTableNode) startExec(params runParams) error {
 	if !newTn.ExplicitSchema && !newTn.ExplicitCatalog {
 		newTn.ObjectNamePrefix = oldTn.ObjectNamePrefix
 		var err error
-		targetDbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-			string(oldTn.CatalogName), tree.DatabaseLookupFlags{Required: true})
+		targetDbDesc, err = p.Descriptors().MustGetImmutableDatabaseByName(
+			ctx, p.txn, string(oldTn.CatalogName),
+		)
 		if err != nil {
 			return err
 		}
 
-		targetSchemaDesc, err = p.Descriptors().GetImmutableSchemaByName(
-			ctx, p.txn, targetDbDesc, oldTn.Schema(), tree.SchemaLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		targetSchemaDesc, err = p.Descriptors().MustGetImmutableSchemaByName(
+			ctx, p.txn, targetDbDesc, oldTn.Schema(), descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}
@@ -250,7 +250,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 func (p *planner) dependentError(
 	ctx context.Context, typeName string, objName string, parentID descpb.ID, id descpb.ID, op string,
 ) error {
-	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, id, tree.CommonLookupFlags{Required: true})
+	desc, err := p.Descriptors().GetImmutableDescriptorByID(ctx, p.txn, id, catalog.CommonLookupFlags{Required: true})
 	if err != nil {
 		return err
 	}
@@ -322,13 +322,9 @@ func (n *renameTableNode) checkForCrossDbReferences(
 			tableID = fk.OriginTableID
 		}
 
-		referencedTable, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				},
-			})
+		referencedTable, err := p.Descriptors().MustGetImmutableTableByID(
+			ctx, p.txn, tableID, descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}
@@ -352,12 +348,9 @@ func (n *renameTableNode) checkForCrossDbReferences(
 	type crossDBDepType int
 	const owner, reference crossDBDepType = 0, 1
 	checkDepForCrossDbRef := func(depID descpb.ID, depType crossDBDepType) error {
-		dependentObject, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, depID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				}})
+		dependentObject, err := p.Descriptors().MustGetImmutableTableByID(
+			ctx, p.txn, depID, descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}
@@ -453,12 +446,9 @@ func (n *renameTableNode) checkForCrossDbReferences(
 		if allowCrossDatabaseViews.Get(&p.execCfg.Settings.SV) {
 			return nil
 		}
-		dependentObject, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, depID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				}})
+		dependentObject, err := p.Descriptors().MustGetImmutableTypeByID(
+			ctx, p.txn, depID, descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}

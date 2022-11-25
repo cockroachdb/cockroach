@@ -422,10 +422,10 @@ func (v *virtualSchemaEntry) VisitTables(f func(object catalog.VirtualObject)) {
 }
 
 func (v *virtualSchemaEntry) GetObjectByName(
-	name string, flags tree.ObjectLookupFlags,
+	name string, flags catalog.ObjectLookupFlags,
 ) (catalog.VirtualObject, error) {
 	switch flags.DesiredObjectKind {
-	case tree.TypeObject:
+	case catalog.TypeObject:
 		// Currently, we don't allow creation of types in virtual schemas, so
 		// the only types present in the virtual schemas that have types (i.e.
 		// pg_catalog) are types that are known at parse time or implicit record
@@ -453,7 +453,7 @@ func (v *virtualSchemaEntry) GetObjectByName(
 		// If the type could not be found statically, then search for a table with
 		// this name so the implicit record type can be used.
 		fallthrough
-	case tree.TableObject:
+	case catalog.TableObject:
 		if def, ok := v.defs[name]; ok {
 			if flags.RequireMutable {
 				return &mutableVirtualDefEntry{
@@ -568,10 +568,9 @@ func (e *virtualDefEntry) getPlanInfo(
 		var dbDesc catalog.DatabaseDescriptor
 		var err error
 		if dbName != "" {
-			dbDesc, err = p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-				dbName, tree.DatabaseLookupFlags{
-					Required: true, AvoidLeased: p.skipDescriptorCache,
-				})
+			dbDesc, err = p.Descriptors().MustGetImmutableDatabaseByName(
+				ctx, p.txn, dbName, descs.SetAvoidLeased(p.skipDescriptorCache),
+			)
 			if err != nil {
 				return nil, err
 			}

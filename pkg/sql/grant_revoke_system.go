@@ -244,8 +244,9 @@ func (n *changeNonDescriptorBackedPrivilegesNode) makeSystemPrivilegeObject(
 func (p *planner) SynthesizePrivilegeDescriptor(
 	ctx context.Context, privilegeObjectPath string, privilegeObjectType privilege.ObjectType,
 ) (*catpb.PrivilegeDescriptor, error) {
-	_, desc, err := p.Descriptors().GetImmutableTableByName(ctx, p.Txn(),
-		syntheticprivilege.SystemPrivilegesTableName, tree.ObjectLookupFlagsWithRequired())
+	desc, err := p.Descriptors().MustGetImmutableTableByName(
+		ctx, p.Txn(), syntheticprivilege.SystemPrivilegesTableName,
+	)
 	if err != nil {
 		return nil, err
 	}

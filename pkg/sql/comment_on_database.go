@@ -43,8 +43,7 @@ func (p *planner) CommentOnDatabase(
 		return nil, err
 	}
 
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-		string(n.Name), tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, string(n.Name))
 	if err != nil {
 		return nil, err
 	}

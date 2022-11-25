@@ -45,24 +45,20 @@ import (
 func alterCrdbRegionType(
 	ctx context.Context, tableID descpb.ID, db *kv.DB, executor descs.TxnManager,
 ) error {
-	flags := tree.CommonLookupFlags{
-		Required:    true,
-		AvoidLeased: true,
-	}
-	objFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: flags,
-	}
-
 	getRegionEnum := func(systemDB catalog.DatabaseDescriptor, txn *kv.Txn, collection *descs.Collection) (*typedesc.Mutable, *types.T, error) {
 		enumID, err := systemDB.MultiRegionEnumID()
 		if err != nil {
 			return nil, nil, err
 		}
-		enumTypeDesc, err := collection.GetMutableTypeByID(ctx, txn, enumID, objFlags)
+		enumTypeDesc, err := collection.MustGetMutableTypeByID(
+			ctx, txn, enumID, descs.WithoutLeased(),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
-		schema, err := collection.GetImmutableSchemaByID(ctx, txn, enumTypeDesc.GetParentSchemaID(), flags)
+		schema, err := collection.MustGetImmutableSchemaByID(
+			ctx, txn, enumTypeDesc.GetParentSchemaID(), descs.WithoutLeased(),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -84,7 +80,9 @@ func alterCrdbRegionType(
 	}
 
 	err := executor.DescsTxn(ctx, db, func(ctx context.Context, txn *kv.Txn, collection *descs.Collection) error {
-		_, systemDB, err := collection.GetImmutableDatabaseByID(ctx, txn, keys.SystemDatabaseID, flags)
+		systemDB, err := collection.MustGetImmutableDatabaseByID(
+			ctx, txn, keys.SystemDatabaseID, descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}
@@ -95,7 +93,7 @@ func alterCrdbRegionType(
 		}
 
 		// Change the crdb_region column's type to the enum
-		tableDesc, err := collection.GetMutableTableByID(ctx, txn, tableID, objFlags)
+		tableDesc, err := collection.MustGetMutableTableByID(ctx, txn, tableID, descs.WithoutLeased())
 		if err != nil {
 			return err
 		}

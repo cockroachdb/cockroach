@@ -236,7 +236,7 @@ func getTargetDesc(
 		ctx,
 		targetName.ToUnresolvedObjectName(),
 		descResolver,
-		tree.ObjectLookupFlags{},
+		catalog.ObjectLookupFlags{},
 		p.CurrentDatabase(),
 		p.CurrentSearchPath(),
 	)

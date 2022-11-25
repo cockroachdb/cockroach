@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -381,11 +382,7 @@ CREATE TABLE crdb_internal.super_regions (
 				if err != nil {
 					return err
 				}
-				typeDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, typeID,
-					tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-						Required: true,
-					}},
-				)
+				typeDesc, err := p.Descriptors().MustGetImmutableTypeByID(ctx, p.txn, typeID)
 				if err != nil {
 					return err
 				}
@@ -493,8 +490,8 @@ CREATE TABLE crdb_internal.tables (
 				flags := p.CommonLookupFlagsRequired()
 				flags.Required = false
 				flags.IncludeOffline = true
-				ok, db, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.Txn(), dbID, flags)
-				if !ok || err != nil {
+				db, err := p.Descriptors().MayGetImmutableDatabaseByID(ctx, p.Txn(), dbID, descs.WithFlags(flags))
+				if db == nil || err != nil {
 					return false, err
 				}
 				return crdbInternalTablesDatabaseLookupFunc(ctx, p, db, addRow)
@@ -507,7 +504,7 @@ CREATE TABLE crdb_internal.tables (
 				flags := p.CommonLookupFlagsRequired()
 				flags.Required = false
 				flags.IncludeOffline = true
-				db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), dbName, flags)
+				db, err := p.Descriptors().MayGetImmutableDatabaseByName(ctx, p.Txn(), dbName, descs.WithFlags(flags))
 				if db == nil || err != nil {
 					return false, err
 				}
@@ -2772,7 +2769,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 		}
 
 		fnDescs, err := p.Descriptors().GetImmutableDescriptorsByID(
-			ctx, p.txn, tree.CommonLookupFlags{Required: true, AvoidLeased: true}, fnIDs...,
+			ctx, p.txn, catalog.CommonLookupFlags{Required: true, AvoidLeased: true}, fnIDs...,
 		)
 		if err != nil {
 			return err
@@ -3893,10 +3890,9 @@ CREATE TABLE crdb_internal.zones (
 
 			var table catalog.TableDescriptor
 			if zs.Database != "" {
-				_, database, err := p.Descriptors().GetImmutableDatabaseByID(ctx, p.txn, descpb.ID(id), tree.DatabaseLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				})
+				database, err := p.Descriptors().MustGetImmutableDatabaseByID(
+					ctx, p.txn, descpb.ID(id), descs.WithoutLeased(),
+				)
 				if err != nil {
 					return err
 				}
@@ -5208,10 +5204,9 @@ CREATE TABLE crdb_internal.cluster_database_privileges (
 				return false, nil
 			}
 
-			flags := tree.CommonLookupFlags{
-				AvoidLeased: true,
-			}
-			dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.Txn(), dbName, flags)
+			dbDesc, err := p.Descriptors().MayGetImmutableDatabaseByName(
+				ctx, p.Txn(), dbName, descs.WithoutLeased(),
+			)
 			if err != nil || dbDesc == nil {
 				return false, err
 			}
@@ -6741,13 +6736,9 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			Required: true,
-		}}
-
 		desc := p.Descriptors()
 		var tableDesc catalog.TableDescriptor
-		tableDesc, err = desc.GetImmutableTableByID(ctx, p.txn, descpb.ID(tableID), flags)
+		tableDesc, err = desc.MustGetImmutableTableByID(ctx, p.txn, descpb.ID(tableID))
 		if err != nil {
 			return nil, err
 		}
@@ -6757,13 +6748,13 @@ func convertContentionEventsToJSON(
 			return nil, err
 		}
 
-		ok, dbDesc, err := desc.GetImmutableDatabaseByID(ctx, p.txn, tableDesc.GetParentID(), tree.DatabaseLookupFlags{})
-		if err != nil || !ok {
+		dbDesc, err := desc.MayGetImmutableDatabaseByID(ctx, p.txn, tableDesc.GetParentID())
+		if err != nil || dbDesc == nil {
 			return nil, err
 		}
 
-		schemaDesc, err := desc.GetImmutableSchemaByID(ctx, p.txn, tableDesc.GetParentSchemaID(), tree.SchemaLookupFlags{})
-		if err != nil {
+		schemaDesc, err := desc.MayGetImmutableSchemaByID(ctx, p.txn, tableDesc.GetParentSchemaID())
+		if err != nil || schemaDesc == nil {
 			return nil, err
 		}
 

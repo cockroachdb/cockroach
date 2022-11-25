@@ -600,7 +600,7 @@ func (p *planner) ParseQualifiedTableName(sql string) (*tree.TableName, error) {
 
 // ResolveTableName implements the eval.DatabaseCatalog interface.
 func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tree.ID, error) {
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
+	flags := catalog.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 	_, desc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
 	if err != nil {
 		return 0, err
@@ -613,13 +613,9 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) (tre
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID descpb.ID,
 ) (catalog.TableDescriptor, error) {
-	const required = true // lookups by ID are always "required"
-	table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, tableID, p.ObjectLookupFlags(
-		required, false /* requireMutable */))
-	if err != nil {
-		return nil, err
-	}
-	return table, nil
+	return p.Descriptors().MustGetImmutableTableByID(
+		ctx, p.txn, tableID, descs.SetAvoidLeased(p.skipDescriptorCache),
+	)
 }
 
 // SessionData is part of the PlanHookState interface.

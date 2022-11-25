@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -52,16 +53,13 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	if n.Schema.ExplicitCatalog {
 		dbName = n.Schema.Catalog()
 	}
-	db, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, dbName,
-		tree.DatabaseLookupFlags{Required: true})
+	db, err := p.Descriptors().MustGetMutableDatabaseByName(ctx, p.txn, dbName)
 	if err != nil {
 		return nil, err
 	}
-	schema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db,
-		string(n.Schema.SchemaName), tree.SchemaLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	schema, err := p.Descriptors().MustGetImmutableSchemaByName(
+		ctx, p.txn, db, string(n.Schema.SchemaName), descs.WithoutLeased(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +71,9 @@ func (p *planner) AlterSchema(ctx context.Context, n *tree.AlterSchema) (planNod
 	case catalog.SchemaPublic, catalog.SchemaVirtual, catalog.SchemaTemporary:
 		return nil, pgerror.Newf(pgcode.InvalidSchemaName, "cannot modify schema %q", n.Schema.String())
 	case catalog.SchemaUserDefined:
-		flags := p.CommonLookupFlagsRequired()
-		desc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, schema.GetID(), flags)
+		desc, err := p.Descriptors().MustGetMutableSchemaByID(
+			ctx, p.txn, schema.GetID(), descs.WithFlags(p.CommonLookupFlagsRequired()),
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +122,7 @@ func (n *alterSchemaNode) startExec(params runParams) error {
 			return sqlerrors.NewSchemaAlreadyExistsError(newName)
 		}
 
-		lookupFlags := tree.CommonLookupFlags{Required: true, AvoidLeased: true}
+		lookupFlags := catalog.CommonLookupFlags{Required: true, AvoidLeased: true}
 		if err := maybeFailOnDependentDescInRename(
 			params.ctx, params.p, n.db, n.desc.GetName(), lookupFlags, catalog.Schema,
 		); err != nil {

@@ -301,8 +301,7 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 
 	dbDescID := descpb.ID(0)
 	if n.DatabaseName != "" {
-		dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn, string(n.DatabaseName),
-			tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, string(n.DatabaseName))
 		if err != nil {
 			return nil, err
 		}

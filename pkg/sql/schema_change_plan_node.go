@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -194,7 +195,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 				return err
 			}
 			desc, err := descriptors.GetImmutableDescriptorByID(ctx, txn, descID,
-				tree.CommonLookupFlags{
+				catalog.CommonLookupFlags{
 					Required:    true,
 					AvoidLeased: true,
 				})

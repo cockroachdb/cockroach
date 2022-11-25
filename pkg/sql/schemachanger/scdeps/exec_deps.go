@@ -133,7 +133,7 @@ var _ scexec.Catalog = (*txnDeps)(nil)
 func (d *txnDeps) MustReadImmutableDescriptors(
 	ctx context.Context, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		Required:       true,
 		RequireMutable: false,
 		AvoidLeased:    true,
@@ -146,7 +146,7 @@ func (d *txnDeps) MustReadImmutableDescriptors(
 
 // GetFullyQualifiedName implements the scmutationexec.CatalogReader interface
 func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (string, error) {
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		Required:       true,
 		IncludeOffline: true,
 		IncludeDropped: true,
@@ -163,14 +163,26 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	// we can fetch the fully qualified names.
 	if objectDesc.DescriptorType() != catalog.Database &&
 		objectDesc.DescriptorType() != catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(
-			ctx, d.txn, objectDesc.GetParentID(), flags,
+		databaseDesc, err := d.descsCollection.MustGetImmutableDatabaseByID(
+			ctx,
+			d.txn,
+			objectDesc.GetParentID(),
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+			descs.WithDropped(),
+			descs.WithoutSynthetic(),
 		)
 		if err != nil {
 			return "", err
 		}
-		schemaDesc, err := d.descsCollection.GetImmutableSchemaByID(
-			ctx, d.txn, objectDesc.GetParentSchemaID(), flags,
+		schemaDesc, err := d.descsCollection.MustGetImmutableSchemaByID(
+			ctx,
+			d.txn,
+			objectDesc.GetParentSchemaID(),
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+			descs.WithDropped(),
+			descs.WithoutSynthetic(),
 		)
 		if err != nil {
 			return "", err
@@ -184,8 +196,14 @@ func (d *txnDeps) GetFullyQualifiedName(ctx context.Context, id descpb.ID) (stri
 	} else if objectDesc.DescriptorType() == catalog.Database {
 		return objectDesc.GetName(), nil
 	} else if objectDesc.DescriptorType() == catalog.Schema {
-		_, databaseDesc, err := d.descsCollection.GetImmutableDatabaseByID(ctx,
-			d.txn, objectDesc.GetParentID(), flags,
+		databaseDesc, err := d.descsCollection.MustGetImmutableDatabaseByID(
+			ctx,
+			d.txn,
+			objectDesc.GetParentID(),
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+			descs.WithDropped(),
+			descs.WithoutSynthetic(),
 		)
 		if err != nil {
 			return "", err
@@ -323,13 +341,9 @@ func (d *txnDeps) MaybeSplitIndexSpans(
 func (d *txnDeps) GetResumeSpans(
 	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
 ) ([]roachpb.Span, error) {
-	table, err := d.descsCollection.GetImmutableTableByID(ctx, d.txn, tableID, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			Required:       true,
-			AvoidLeased:    true,
-			AvoidSynthetic: true,
-		},
-	})
+	table, err := d.descsCollection.MustGetImmutableTableByID(
+		ctx, d.txn, tableID, descs.WithoutLeased(), descs.WithoutSynthetic(),
+	)
 	if err != nil {
 		return nil, err
 	}

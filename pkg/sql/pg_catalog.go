@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -1081,9 +1082,7 @@ type oneAtATimeSchemaResolver struct {
 func (r oneAtATimeSchemaResolver) getDatabaseByID(
 	id descpb.ID,
 ) (catalog.DatabaseDescriptor, error) {
-	_, desc, err := r.p.Descriptors().GetImmutableDatabaseByID(
-		r.ctx, r.p.txn, id, tree.DatabaseLookupFlags{Required: true},
-	)
+	desc, err := r.p.Descriptors().MustGetImmutableDatabaseByID(r.ctx, r.p.txn, id)
 	return desc, err
 }
 
@@ -1164,10 +1163,9 @@ func makeAllRelationsVirtualTableWithDescriptorIDIndex(
 					}
 					h := makeOidHasher()
 					scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-					sc, err := p.Descriptors().GetImmutableSchemaByID(
-						ctx, p.txn, table.GetParentSchemaID(), tree.SchemaLookupFlags{
-							Required: true,
-						})
+					sc, err := p.Descriptors().MustGetImmutableSchemaByID(
+						ctx, p.txn, table.GetParentSchemaID(),
+					)
 					if err != nil {
 						return false, err
 					}
@@ -1621,21 +1619,18 @@ https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
 				objID = tree.NewDOid(oid.Oid(tree.MustBeDInt(objID)))
 				classOid = tree.NewDOid(catconstants.PgCatalogClassTableID)
 			case keys.ConstraintCommentType:
-				tableDesc, err := p.Descriptors().GetImmutableTableByID(
+				tableDesc, err := p.Descriptors().MustGetImmutableTableByID(
 					ctx,
 					p.txn,
 					descpb.ID(tree.MustBeDInt(objID)),
-					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc))
+					descs.WithTableKind(tree.ResolveRequireTableDesc),
+				)
 				if err != nil {
 					return err
 				}
-				schema, err := p.Descriptors().GetImmutableSchemaByID(
-					ctx,
-					p.txn,
-					tableDesc.GetParentSchemaID(),
-					tree.CommonLookupFlags{
-						Required: true,
-					})
+				schema, err := p.Descriptors().MustGetImmutableSchemaByID(
+					ctx, p.txn, tableDesc.GetParentSchemaID(),
+				)
 				if err != nil {
 					return err
 				}
@@ -2451,11 +2446,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-proc.html`,
 			func(dbDesc catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, dbDesc, func(scDesc catalog.SchemaDescriptor) error {
 					return scDesc.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-						fnDesc, err := p.Descriptors().GetImmutableFunctionByID(
-							ctx, p.Txn(), overload.ID,
-							tree.ObjectLookupFlags{
-								CommonLookupFlags: tree.CommonLookupFlags{AvoidLeased: true},
-							},
+						fnDesc, err := p.Descriptors().MustGetImmutableFunctionByID(
+							ctx, p.Txn(), overload.ID, descs.WithoutLeased(),
 						)
 						if err != nil {
 							return err
@@ -3099,7 +3091,7 @@ func addPGTypeRow(
 func getSchemaAndTypeByTypeID(
 	ctx context.Context, p *planner, id descpb.ID,
 ) (catalog.SchemaDescriptor, catalog.TypeDescriptor, error) {
-	typDesc, err := p.Descriptors().GetImmutableTypeByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+	typDesc, err := p.Descriptors().MustGetImmutableTypeByID(ctx, p.txn, id)
 	if err != nil {
 		// If the type was not found, it may be a table.
 		if !(errors.Is(err, catalog.ErrDescriptorNotFound) || pgerror.GetPGCode(err) == pgcode.UndefinedObject) {
@@ -3108,12 +3100,7 @@ func getSchemaAndTypeByTypeID(
 		return nil, nil, nil
 	}
 
-	sc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx,
-		p.txn,
-		typDesc.GetParentSchemaID(),
-		tree.SchemaLookupFlags{Required: true},
-	)
+	sc, err := p.Descriptors().MustGetImmutableSchemaByID(ctx, p.txn, typDesc.GetParentSchemaID())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3214,7 +3201,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// It's an entry for the implicit record type created on behalf of each
 				// table. We have special logic for this case.
 				if typDesc.GetKind() == descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE {
-					table, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id, tree.ObjectLookupFlags{})
+					table, err := p.Descriptors().MustGetImmutableTableByID(ctx, p.txn, id)
 					if err != nil {
 						if errors.Is(err, catalog.ErrDescriptorNotFound) ||
 							pgerror.GetPGCode(err) == pgcode.UndefinedObject ||

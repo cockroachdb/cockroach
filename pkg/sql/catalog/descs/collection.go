@@ -369,7 +369,7 @@ func (tc *Collection) LookupDatabaseID(
 	// First look up in-memory descriptors in collection,
 	// except for leased descriptors.
 	dbInMemory, err := func() (catalog.Descriptor, error) {
-		flags := tree.CommonLookupFlags{
+		flags := catalog.CommonLookupFlags{
 			Required:       true,
 			AvoidLeased:    true,
 			AvoidStorage:   true,
@@ -400,7 +400,7 @@ func (tc *Collection) LookupSchemaID(
 	// First look up in-memory descriptors in collection,
 	// except for leased descriptors.
 	scInMemory, err := func() (catalog.Descriptor, error) {
-		flags := tree.CommonLookupFlags{
+		flags := catalog.CommonLookupFlags{
 			Required:       true,
 			AvoidLeased:    true,
 			AvoidStorage:   true,
@@ -439,7 +439,7 @@ func (tc *Collection) LookupObjectID(
 	// First look up in-memory descriptors in collection,
 	// except for leased descriptors.
 	objInMemory, err := func() (catalog.Descriptor, error) {
-		flags := tree.CommonLookupFlags{
+		flags := catalog.CommonLookupFlags{
 			Required:       true,
 			AvoidLeased:    true,
 			AvoidStorage:   true,
@@ -566,7 +566,7 @@ func (tc *Collection) GetAllDescriptorsForDatabase(
 			return nil
 		})
 	}
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
@@ -619,7 +619,7 @@ func (tc *Collection) GetAllDescriptors(ctx context.Context, txn *kv.Txn) (nstre
 			return nil
 		})
 	}
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
@@ -668,7 +668,7 @@ func (tc *Collection) GetAllDatabaseDescriptors(
 		ids.Add(entry.GetID())
 		return nil
 	})
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		AvoidLeased:    true,
 		IncludeOffline: true,
 		IncludeDropped: true,
@@ -748,7 +748,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 	txn *kv.Txn,
 	dbDesc catalog.DatabaseDescriptor,
 	scName string,
-	flags tree.DatabaseListFlags,
+	flags catalog.DatabaseListFlags,
 ) (tree.TableNames, descpb.IDs, error) {
 	if ok, names, ds := tc.virtual.maybeGetObjectNamesAndIDs(
 		scName, dbDesc, flags,
@@ -756,7 +756,7 @@ func (tc *Collection) GetObjectNamesAndIDs(
 		return names, ds, nil
 	}
 
-	schemaFlags := tree.SchemaLookupFlags{
+	schemaFlags := catalog.SchemaLookupFlags{
 		Required:       flags.Required,
 		AvoidLeased:    flags.RequireMutable || flags.AvoidLeased,
 		IncludeDropped: flags.IncludeDropped,

@@ -796,9 +796,7 @@ func lookupTable(ec *sql.ExecutorConfig, database, table string) (catalog.TableD
 		context.Background(),
 		ec,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-			_, desc, err := col.GetImmutableTableByName(ctx, txn, tbName, tree.ObjectLookupFlags{
-				DesiredObjectKind: tree.TableObject,
-			})
+			desc, err := col.MayGetImmutableTableByName(ctx, txn, tbName, descs.WithTable())
 			if err != nil {
 				return err
 			}

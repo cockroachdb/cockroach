@@ -22,34 +22,58 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetMutableTableByName returns a mutable table descriptor with properties
-// according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetMutableTableByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ *tabledesc.Mutable, _ error) {
-	flags.RequireMutable = true
-	found, desc, err := tc.getTableByName(ctx, txn, name, flags)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*tabledesc.Mutable), nil
+// MustGetMutableTableByName returns a mutable table descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MustGetMutableTableByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (*tabledesc.Mutable, error) {
+	return tc.MayGetMutableTableByName(ctx, txn, name, prependWithRequired(options)...)
 }
 
-// GetImmutableTableByName returns a immutable table descriptor with properties
-// according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetImmutableTableByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ catalog.TableDescriptor, _ error) {
-	flags.RequireMutable = false
-	return tc.getTableByName(ctx, txn, name, flags)
+// MayGetMutableTableByName returns a mutable table descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MayGetMutableTableByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (*tabledesc.Mutable, error) {
+	var flags catalog.ObjectLookupFlags
+	flags.RequireMutable = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
+	found, desc, err := tc.getTableByName(ctx, txn, name, flags)
+	if err != nil || !found {
+		return nil, err
+	}
+	return desc.(*tabledesc.Mutable), nil
+}
+
+// MustGetImmutableTableByName returns a immutable table descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MustGetImmutableTableByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (catalog.TableDescriptor, error) {
+	return tc.MayGetImmutableTableByName(ctx, txn, name, prependWithRequired(options)...)
+}
+
+// MayGetImmutableTableByName returns a immutable table descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MayGetImmutableTableByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (catalog.TableDescriptor, error) {
+	var flags catalog.ObjectLookupFlags
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
+	_, tbl, err := tc.getTableByName(ctx, txn, name, flags)
+	return tbl, err
 }
 
 // getTableByName returns a table descriptor with properties according to the
 // provided lookup flags.
 func (tc *Collection) getTableByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags catalog.ObjectLookupFlags,
 ) (found bool, _ catalog.TableDescriptor, err error) {
-	flags.DesiredObjectKind = tree.TableObject
+	flags.DesiredObjectKind = catalog.TableObject
 	_, desc, err := tc.GetObjectByName(
 		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil || desc == nil {
@@ -68,7 +92,7 @@ func (tc *Collection) GetLeasedImmutableTableByID(
 		return nil, err
 	}
 	descs := []catalog.Descriptor{desc}
-	err = tc.hydrateDescriptors(ctx, txn, tree.CommonLookupFlags{}, descs)
+	err = tc.hydrateDescriptors(ctx, txn, catalog.CommonLookupFlags{}, descs)
 	if err != nil {
 		return nil, err
 	}
@@ -97,14 +121,24 @@ func (tc *Collection) GetUncommittedMutableTableByID(
 	return original.(catalog.TableDescriptor), mut.(*tabledesc.Mutable), nil
 }
 
-// GetMutableTableByID returns a mutable table descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetMutableTableByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
+// MustGetMutableTableByID returns a mutable table descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetMutableTableByID(
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID, options ...LookupOption,
 ) (*tabledesc.Mutable, error) {
+	return tc.MayGetMutableTableByID(ctx, txn, tableID, prependWithRequired(options)...)
+}
+
+// MayGetMutableTableByID returns a mutable table descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetMutableTableByID(
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID, options ...LookupOption,
+) (*tabledesc.Mutable, error) {
+	var flags catalog.ObjectLookupFlags
 	flags.RequireMutable = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
 	desc, err := tc.getTableByID(ctx, txn, tableID, flags)
 	if err != nil {
 		return nil, err
@@ -120,31 +154,36 @@ func (tc *Collection) GetMutableTableByID(
 func (tc *Collection) GetMutableTableVersionByID(
 	ctx context.Context, tableID descpb.ID, txn *kv.Txn,
 ) (*tabledesc.Mutable, error) {
-	return tc.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			IncludeOffline: true,
-			IncludeDropped: true,
-		},
-	})
+	return tc.MayGetMutableTableByID(ctx, txn, tableID, WithOffline(), WithDropped())
 }
 
-// GetImmutableTableByID returns an immutable table descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableTableByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
+// MustGetImmutableTableByID returns an immutable table descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetImmutableTableByID(
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID, options ...LookupOption,
 ) (catalog.TableDescriptor, error) {
-	flags.RequireMutable = false
-	desc, err := tc.getTableByID(ctx, txn, tableID, flags)
-	if err != nil {
-		return nil, err
+	var flags catalog.ObjectLookupFlags
+	flags.Required = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
 	}
-	return desc, nil
+	return tc.getTableByID(ctx, txn, tableID, flags)
+}
+
+// MayGetImmutableTableByID returns an immutable table descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetImmutableTableByID(
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID, options ...LookupOption,
+) (catalog.TableDescriptor, error) {
+	var flags catalog.ObjectLookupFlags
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
+	return tc.getTableByID(ctx, txn, tableID, flags)
 }
 
 func (tc *Collection) getTableByID(
-	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, tableID descpb.ID, flags catalog.ObjectLookupFlags,
 ) (catalog.TableDescriptor, error) {
 	descs, err := tc.getDescriptorsByID(ctx, txn, flags.CommonLookupFlags, tableID)
 	if err != nil {

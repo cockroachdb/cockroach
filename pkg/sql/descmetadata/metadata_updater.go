@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
@@ -165,16 +164,7 @@ func (mu metadataUpdater) DeleteDatabaseRoleSettings(ctx context.Context, dbID d
 		return nil
 	}
 	// Bump the table version for the role settings table when we modify it.
-	desc, err := mu.descriptors.GetMutableTableByID(
-		ctx,
-		mu.txn,
-		keys.DatabaseRoleSettingsTableID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:       true,
-				RequireMutable: true,
-			},
-		})
+	desc, err := mu.descriptors.MustGetMutableTableByID(ctx, mu.txn, keys.DatabaseRoleSettingsTableID)
 	if err != nil {
 		return err
 	}

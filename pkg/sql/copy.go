@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -246,7 +247,7 @@ func newCopyMachine(
 		)
 	}
 
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	flags := catalog.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, c.p, &n.Table, flags)
 	if err != nil {
 		return nil, err

@@ -66,7 +66,7 @@ func (dt *DistSQLTypeResolver) ResolveTypeByOID(
 func (dt *DistSQLTypeResolver) GetTypeDescriptor(
 	ctx context.Context, id descpb.ID,
 ) (tree.TypeName, catalog.TypeDescriptor, error) {
-	descs, err := dt.descriptors.getDescriptorsByID(ctx, dt.txn, tree.CommonLookupFlags{}, id)
+	descs, err := dt.descriptors.getDescriptorsByID(ctx, dt.txn, catalog.CommonLookupFlags{}, id)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -50,7 +49,7 @@ import (
 // TODO(ajwerner): Sort out the hydration mess; define clearly what is
 // hydrated where and test the API boundary accordingly.
 func (tc *Collection) hydrateDescriptors(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
+	ctx context.Context, txn *kv.Txn, flags catalog.CommonLookupFlags, descs []catalog.Descriptor,
 ) error {
 
 	var hydratableMutableIndexes, hydratableImmutableIndexes util.FastIntSet
@@ -129,7 +128,7 @@ func makeMutableTypeLookupFunc(
 		// descriptor for the system database. We only want it for the name, so
 		// let the caller have the immutable copy.
 		if id == catconstants.PublicSchemaID {
-			return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
+			return tc.GetImmutableDescriptorByID(ctx, txn, id, catalog.CommonLookupFlags{
 				Required:    true,
 				AvoidLeased: true,
 			})
@@ -140,7 +139,7 @@ func makeMutableTypeLookupFunc(
 }
 
 func makeImmutableTypeLookupFunc(
-	tc *Collection, txn *kv.Txn, flags tree.CommonLookupFlags, descs []catalog.Descriptor,
+	tc *Collection, txn *kv.Txn, flags catalog.CommonLookupFlags, descs []catalog.Descriptor,
 ) typedesc.TypeLookupFunc {
 	var imm nstree.MutableCatalog
 	for _, desc := range descs {
@@ -153,7 +152,7 @@ func makeImmutableTypeLookupFunc(
 		imm.UpsertDescriptorEntry(desc)
 	}
 	immutableLookupFunc := func(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
-		return tc.GetImmutableDescriptorByID(ctx, txn, id, tree.CommonLookupFlags{
+		return tc.GetImmutableDescriptorByID(ctx, txn, id, catalog.CommonLookupFlags{
 			Required:       true,
 			AvoidLeased:    flags.AvoidLeased,
 			IncludeOffline: flags.IncludeOffline,

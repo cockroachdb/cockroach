@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -42,12 +43,9 @@ func (p *planner) prepareSetSchema(
 	}
 
 	// Lookup the schema we want to set to.
-	res, err := p.Descriptors().GetImmutableSchemaByName(
-		ctx, p.txn, db, schema, tree.SchemaLookupFlags{
-			Required:       true,
-			RequireMutable: true,
-			AvoidLeased:    true,
-		})
+	res, err := p.Descriptors().MustGetImmutableSchemaByName(
+		ctx, p.txn, db, schema, descs.WithoutLeased(),
+	)
 	if err != nil {
 		return 0, err
 	}

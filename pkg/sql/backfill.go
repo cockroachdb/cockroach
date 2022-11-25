@@ -540,18 +540,14 @@ func (sc *SchemaChanger) dropConstraints(
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) (err error) {
-		if tableDescs[sc.descID], err = descsCol.GetImmutableTableByID(
-			ctx, txn, sc.descID, tree.ObjectLookupFlags{},
+		if tableDescs[sc.descID], err = descsCol.MayGetImmutableTableByID(
+			ctx, txn, sc.descID,
 		); err != nil {
 			return err
 		}
 		for id := range fksByBackrefTable {
-			desc, err := descsCol.GetImmutableTableByID(
-				ctx, txn, id, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						IncludeDropped: true,
-					},
-				},
+			desc, err := descsCol.MayGetImmutableTableByID(
+				ctx, txn, id, descs.WithDropped(),
 			)
 			if err != nil {
 				return err
@@ -736,9 +732,9 @@ func (sc *SchemaChanger) validateConstraints(
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		tableDesc, err = descriptors.MustGetImmutableTableByID(
+			ctx, txn, sc.descID, descs.WithoutLeased(),
+		)
 		return err
 	}); err != nil {
 		return err
@@ -822,7 +818,7 @@ func (sc *SchemaChanger) validateConstraints(
 func (sc *SchemaChanger) getTableVersion(
 	ctx context.Context, txn *kv.Txn, tc *descs.Collection, version descpb.DescriptorVersion,
 ) (catalog.TableDescriptor, error) {
-	tableDesc, err := tc.GetImmutableTableByID(ctx, txn, sc.descID, tree.ObjectLookupFlags{})
+	tableDesc, err := tc.MustGetImmutableTableByID(ctx, txn, sc.descID)
 	if err != nil {
 		return nil, err
 	}
@@ -1433,9 +1429,9 @@ func (sc *SchemaChanger) validateIndexes(ctx context.Context) error {
 	if err := sc.fixedTimestampTxn(ctx, readAsOf, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		tableDesc, err = descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		tableDesc, err = descriptors.MustGetImmutableTableByID(
+			ctx, txn, sc.descID, descs.WithoutLeased(),
+		)
 		return err
 	}); err != nil {
 		return err

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -658,7 +659,7 @@ func fullyQualifyScheduledBackupTargetTables(
 				col *descs.Collection) error {
 				// Resolve the table.
 				un := tp.ToUnresolvedObjectName()
-				found, _, tableDesc, err := resolver.ResolveExisting(ctx, un, p, tree.ObjectLookupFlags{},
+				found, _, tableDesc, err := resolver.ResolveExisting(ctx, un, p, catalog.ObjectLookupFlags{},
 					p.CurrentDatabase(), p.CurrentSearchPath())
 				if err != nil {
 					return err
@@ -668,18 +669,13 @@ func fullyQualifyScheduledBackupTargetTables(
 				}
 
 				// Resolve the database.
-				found, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, tableDesc.GetParentID(),
-					tree.DatabaseLookupFlags{Required: true})
+				dbDesc, err := col.MustGetImmutableDatabaseByID(ctx, txn, tableDesc.GetParentID())
 				if err != nil {
 					return err
 				}
-				if !found {
-					return errors.Newf("database of target table %s could not be resolved", tp.String())
-				}
 
 				// Resolve the schema.
-				schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID(),
-					tree.SchemaLookupFlags{Required: true})
+				schemaDesc, err := col.MustGetImmutableSchemaByID(ctx, txn, tableDesc.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -704,8 +700,7 @@ func fullyQualifyScheduledBackupTargetTables(
 				// database.
 				var schemaID descpb.ID
 				if err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-					flags := tree.DatabaseLookupFlags{Required: true}
-					dbDesc, err := col.GetImmutableDatabaseByName(ctx, txn, p.CurrentDatabase(), flags)
+					dbDesc, err := col.MustGetImmutableDatabaseByName(ctx, txn, p.CurrentDatabase())
 					if err != nil {
 						return err
 					}

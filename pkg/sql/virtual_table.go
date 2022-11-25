@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -263,13 +264,11 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	)
 	v.run.indexKeyDatums = make(tree.Datums, len(v.columns))
 	var err error
-	db, err := params.p.Descriptors().GetImmutableDatabaseByName(
+	db, err := params.p.Descriptors().MustGetImmutableDatabaseByName(
 		params.ctx,
 		params.p.txn,
 		v.dbName,
-		tree.DatabaseLookupFlags{
-			Required: true, AvoidLeased: params.p.skipDescriptorCache,
-		},
+		descs.SetAvoidLeased(params.p.skipDescriptorCache),
 	)
 	if err != nil {
 		return err

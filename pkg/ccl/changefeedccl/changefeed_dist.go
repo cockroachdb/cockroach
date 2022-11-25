@@ -148,9 +148,9 @@ func fetchTableDescriptors(
 		// and lie within the primary index span. Deduplication is important
 		// here as requesting the same span twice will deadlock.
 		return targets.EachTableID(func(id catid.DescID) error {
-			flags := tree.ObjectLookupFlagsWithRequired()
-			flags.AvoidLeased = true
-			tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, flags)
+			tableDesc, err := descriptors.MustGetImmutableTableByID(
+				ctx, txn, id, descs.WithoutLeased(),
+			)
 			if err != nil {
 				return err
 			}

@@ -27,34 +27,58 @@ import (
 // as a mutable, which is not allowed.
 var ErrMutableTableImplicitType = pgerror.Newf(pgcode.DependentObjectsStillExist, "table implicit type not mutable")
 
-// GetMutableTypeByName returns a mutable type descriptor with properties
-// according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetMutableTypeByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ *typedesc.Mutable, _ error) {
-	flags.RequireMutable = true
-	found, desc, err := tc.getTypeByName(ctx, txn, name, flags)
-	if err != nil || !found {
-		return false, nil, err
-	}
-	return true, desc.(*typedesc.Mutable), nil
+// MustGetMutableTypeByName returns a mutable type descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MustGetMutableTypeByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (*typedesc.Mutable, error) {
+	return tc.MayGetMutableTypeByName(ctx, txn, name, prependWithRequired(options)...)
 }
 
-// GetImmutableTypeByName returns a mutable type descriptor with properties
-// according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetImmutableTypeByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
-) (found bool, _ catalog.TypeDescriptor, _ error) {
-	flags.RequireMutable = false
-	return tc.getTypeByName(ctx, txn, name, flags)
+// MayGetMutableTypeByName returns a mutable type descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MayGetMutableTypeByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (*typedesc.Mutable, error) {
+	var flags catalog.ObjectLookupFlags
+	flags.RequireMutable = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
+	_, desc, err := tc.getTypeByName(ctx, txn, name, flags)
+	if err != nil || desc == nil {
+		return nil, err
+	}
+	return desc.(*typedesc.Mutable), nil
+}
+
+// MustGetImmutableTypeByName returns an immutable type descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MustGetImmutableTypeByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (catalog.TypeDescriptor, error) {
+	return tc.MayGetImmutableTypeByName(ctx, txn, name, prependWithRequired(options)...)
+}
+
+// MayGetImmutableTypeByName returns an immutable type descriptor with properties
+// according to the provided lookup options.
+func (tc *Collection) MayGetImmutableTypeByName(
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, options ...LookupOption,
+) (catalog.TypeDescriptor, error) {
+	var flags catalog.ObjectLookupFlags
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
+	_, desc, err := tc.getTypeByName(ctx, txn, name, flags)
+	return desc, err
 }
 
 // getTypeByName returns a type descriptor with properties according to the
 // provided lookup flags.
 func (tc *Collection) getTypeByName(
-	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, name tree.ObjectName, flags catalog.ObjectLookupFlags,
 ) (found bool, _ catalog.TypeDescriptor, err error) {
-	flags.DesiredObjectKind = tree.TypeObject
+	flags.DesiredObjectKind = catalog.TypeObject
 	_, desc, err := tc.GetObjectByName(
 		ctx, txn, name.Catalog(), name.Schema(), name.Object(), flags)
 	if err != nil || desc == nil {
@@ -71,24 +95,35 @@ func (tc *Collection) getTypeByName(
 func (tc *Collection) GetMutableTypeVersionByID(
 	ctx context.Context, txn *kv.Txn, typeID descpb.ID,
 ) (*typedesc.Mutable, error) {
-	return tc.GetMutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			IncludeOffline: true,
-			IncludeDropped: true,
-		},
-	})
+	return tc.MayGetMutableTypeByID(
+		ctx,
+		txn,
+		typeID,
+		WithOffline(),
+		WithDropped(),
+	)
 }
 
-// GetMutableTypeByID returns a mutable type descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetMutableTypeByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
+// MustGetMutableTypeByID returns a mutable type descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetMutableTypeByID(
+	ctx context.Context, txn *kv.Txn, typeID descpb.ID, options ...LookupOption,
 ) (*typedesc.Mutable, error) {
+	return tc.MayGetMutableTypeByID(ctx, txn, typeID, prependWithRequired(options)...)
+}
+
+// MayGetMutableTypeByID returns a mutable type descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetMutableTypeByID(
+	ctx context.Context, txn *kv.Txn, typeID descpb.ID, options ...LookupOption,
+) (*typedesc.Mutable, error) {
+	var flags catalog.ObjectLookupFlags
 	flags.RequireMutable = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
 	desc, err := tc.getTypeByID(ctx, txn, typeID, flags)
-	if err != nil {
+	if err != nil || desc == nil {
 		return nil, err
 	}
 	switch t := desc.(type) {
@@ -97,23 +132,36 @@ func (tc *Collection) GetMutableTypeByID(
 	case *typedesc.TableImplicitRecordType:
 		return nil, errors.Wrapf(ErrMutableTableImplicitType, "cannot modify table record type %q", desc.GetName())
 	}
-	return nil,
-		errors.AssertionFailedf("unhandled type descriptor type %T during GetMutableTypeByID", desc)
+	return nil, errors.AssertionFailedf("unhandled type descriptor type %T during GetMutableTypeByID", desc)
 }
 
-// GetImmutableTypeByID returns an immutable type descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableTypeByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
+// MustGetImmutableTypeByID returns an immutable type descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetImmutableTypeByID(
+	ctx context.Context, txn *kv.Txn, typeID descpb.ID, options ...LookupOption,
 ) (catalog.TypeDescriptor, error) {
-	flags.RequireMutable = false
+	var flags catalog.ObjectLookupFlags
+	flags.Required = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
+	return tc.getTypeByID(ctx, txn, typeID, flags)
+}
+
+// MayGetImmutableTypeByID returns an immutable type descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetImmutableTypeByID(
+	ctx context.Context, txn *kv.Txn, typeID descpb.ID, options ...LookupOption,
+) (catalog.TypeDescriptor, error) {
+	var flags catalog.ObjectLookupFlags
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
 	return tc.getTypeByID(ctx, txn, typeID, flags)
 }
 
 func (tc *Collection) getTypeByID(
-	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, typeID descpb.ID, flags catalog.ObjectLookupFlags,
 ) (catalog.TypeDescriptor, error) {
 	descs, err := tc.getDescriptorsByID(ctx, txn, flags.CommonLookupFlags, typeID)
 	if err != nil {

@@ -228,7 +228,7 @@ func (oc *optCatalog) ResolveDataSource(
 	}
 
 	oc.tn = *name
-	lflags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
+	lflags := catalog.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveAnyTableKind)
 	prefix, desc, err := resolver.ResolveExistingTableObject(ctx, oc.planner, &oc.tn, lflags)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err

@@ -1181,14 +1181,7 @@ func partitionByForRegionalByRow(
 
 // ValidateAllMultiRegionZoneConfigsInCurrentDatabase is part of the eval.DatabaseCatalog interface.
 func (p *planner) ValidateAllMultiRegionZoneConfigsInCurrentDatabase(ctx context.Context) error {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
-		ctx,
-		p.txn,
-		p.CurrentDatabase(),
-		tree.DatabaseLookupFlags{
-			Required: true,
-		},
-	)
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, p.CurrentDatabase())
 	if err != nil {
 		return err
 	}
@@ -1259,14 +1252,11 @@ func (p *planner) ResetMultiRegionZoneConfigsForTable(ctx context.Context, id in
 // database's zone configuration to match what would have originally been set by
 // the multi-region syntax.
 func (p *planner) ResetMultiRegionZoneConfigsForDatabase(ctx context.Context, id int64) error {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByID(
 		ctx,
 		p.txn,
 		descpb.ID(id),
-		tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		},
+		descs.WithoutLeased(),
 	)
 	if err != nil {
 		return err
@@ -1358,14 +1348,7 @@ func (p *planner) validateAllMultiRegionZoneConfigsInDatabase(
 func (p *planner) CurrentDatabaseRegionConfig(
 	ctx context.Context,
 ) (eval.DatabaseRegionConfig, error) {
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
-		ctx,
-		p.txn,
-		p.CurrentDatabase(),
-		tree.DatabaseLookupFlags{
-			Required: true,
-		},
-	)
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, p.CurrentDatabase())
 	if err != nil {
 		return nil, err
 	}
@@ -1570,11 +1553,13 @@ func getDBAndRegionEnumDescs(
 	useCache bool,
 	includeOffline bool,
 ) (dbDesc catalog.DatabaseDescriptor, regionEnumDesc catalog.TypeDescriptor, _ error) {
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, dbID, tree.DatabaseLookupFlags{
-		AvoidLeased:    !useCache,
-		Required:       true,
-		IncludeOffline: includeOffline,
-	})
+	dbDesc, err := descsCol.MustGetImmutableDatabaseByID(
+		ctx,
+		txn,
+		dbID,
+		descs.SetAvoidLeased(!useCache),
+		descs.SetIncludeOffline(includeOffline),
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1585,17 +1570,12 @@ func getDBAndRegionEnumDescs(
 	if err != nil {
 		return nil, nil, err
 	}
-	regionEnumDesc, err = descsCol.GetImmutableTypeByID(
+	regionEnumDesc, err = descsCol.MustGetImmutableTypeByID(
 		ctx,
 		txn,
 		regionEnumID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    !useCache,
-				Required:       true,
-				IncludeOffline: includeOffline,
-			},
-		},
+		descs.SetAvoidLeased(!useCache),
+		descs.SetIncludeOffline(includeOffline),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -1681,12 +1661,7 @@ func (p *planner) CheckZoneConfigChangePermittedForMultiRegion(
 	// Check if what we're altering is a multi-region entity.
 	if zs.Database != "" {
 		isDB = true
-		dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(
-			ctx,
-			p.txn,
-			string(zs.Database),
-			tree.DatabaseLookupFlags{Required: true},
-		)
+		dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, string(zs.Database))
 		if err != nil {
 			return err
 		}

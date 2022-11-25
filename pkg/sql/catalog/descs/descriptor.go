@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
@@ -32,7 +31,7 @@ import (
 func (tc *Collection) GetMutableDescriptorsByID(
 	ctx context.Context, txn *kv.Txn, ids ...descpb.ID,
 ) ([]catalog.MutableDescriptor, error) {
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		RequireMutable: true,
 		IncludeOffline: true,
 		IncludeDropped: true,
@@ -63,7 +62,7 @@ func (tc *Collection) GetMutableDescriptorByID(
 // descriptors with the requested ids. An error is returned if no descriptor
 // exists, regardless of whether the Required flag is set or not.
 func (tc *Collection) GetImmutableDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
+	ctx context.Context, txn *kv.Txn, flags catalog.CommonLookupFlags, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	flags.RequireMutable = false
 	return tc.getDescriptorsByID(ctx, txn, flags, ids...)
@@ -71,7 +70,7 @@ func (tc *Collection) GetImmutableDescriptorsByID(
 
 // GetImmutableDescriptorByID delegates to GetImmutableDescriptorsByID.
 func (tc *Collection) GetImmutableDescriptorByID(
-	ctx context.Context, txn *kv.Txn, id descpb.ID, flags tree.CommonLookupFlags,
+	ctx context.Context, txn *kv.Txn, id descpb.ID, flags catalog.CommonLookupFlags,
 ) (catalog.Descriptor, error) {
 	flags.RequireMutable = false
 	return tc.getDescriptorByID(ctx, txn, flags, id)
@@ -82,7 +81,7 @@ func (tc *Collection) GetImmutableDescriptorByID(
 //
 // The Required flag is ignored and always overridden.
 func (tc *Collection) getDescriptorByID(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
+	ctx context.Context, txn *kv.Txn, flags catalog.CommonLookupFlags, ids ...descpb.ID,
 ) (catalog.Descriptor, error) {
 	var arr [1]catalog.Descriptor
 	if err := getDescriptorsByID(
@@ -98,7 +97,7 @@ func (tc *Collection) getDescriptorByID(
 //
 // The Required flag is ignored and always overridden.
 func (tc *Collection) getDescriptorsByID(
-	ctx context.Context, txn *kv.Txn, flags tree.CommonLookupFlags, ids ...descpb.ID,
+	ctx context.Context, txn *kv.Txn, flags catalog.CommonLookupFlags, ids ...descpb.ID,
 ) ([]catalog.Descriptor, error) {
 	descs := make([]catalog.Descriptor, len(ids))
 	if err := getDescriptorsByID(
@@ -118,7 +117,7 @@ func getDescriptorsByID(
 	ctx context.Context,
 	tc *Collection,
 	txn *kv.Txn,
-	flags tree.CommonLookupFlags,
+	flags catalog.CommonLookupFlags,
 	descs []catalog.Descriptor,
 	ids ...descpb.ID,
 ) (err error) {
@@ -230,7 +229,7 @@ type byIDLookupContext struct {
 	ctx   context.Context
 	txn   *kv.Txn
 	tc    *Collection
-	flags tree.CommonLookupFlags
+	flags catalog.CommonLookupFlags
 }
 
 func (q *byIDLookupContext) lookupVirtual(
@@ -326,7 +325,7 @@ func (tc *Collection) getDescriptorByName(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	name string,
-	flags tree.CommonLookupFlags,
+	flags catalog.CommonLookupFlags,
 	requestedType catalog.DescriptorType,
 ) (catalog.Descriptor, error) {
 	mustBeVirtual, vd, err := tc.getVirtualDescriptorByName(sc, name, flags.RequireMutable, requestedType)
@@ -378,8 +377,8 @@ func (tc *Collection) getVirtualDescriptorByName(
 	isMutableRequired bool,
 	requestedType catalog.DescriptorType,
 ) (continueOrHalt, catalog.Descriptor, error) {
-	objFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
+	objFlags := catalog.ObjectLookupFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{
 			RequireMutable: isMutableRequired,
 		},
 	}
@@ -391,7 +390,7 @@ func (tc *Collection) getVirtualDescriptorByName(
 			return haltLookups, vs, nil
 		}
 	case catalog.Type, catalog.Any:
-		objFlags.DesiredObjectKind = tree.TypeObject
+		objFlags.DesiredObjectKind = catalog.TypeObject
 		fallthrough
 	case catalog.Table:
 		isVirtual, vd, err := tc.virtual.getObjectByName(sc.GetName(), name, objFlags)
@@ -412,9 +411,9 @@ func (tc *Collection) getNonVirtualDescriptorID(
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 	name string,
-	flags tree.CommonLookupFlags,
+	flags catalog.CommonLookupFlags,
 ) (descpb.ID, error) {
-	flags = tree.CommonLookupFlags{
+	flags = catalog.CommonLookupFlags{
 		AvoidLeased:    flags.AvoidLeased,
 		RequireMutable: flags.RequireMutable,
 		AvoidSynthetic: flags.AvoidSynthetic,
@@ -544,7 +543,7 @@ func (tc *Collection) getNonVirtualDescriptorID(
 func (tc *Collection) finalizeDescriptors(
 	ctx context.Context,
 	txn *kv.Txn,
-	flags tree.CommonLookupFlags,
+	flags catalog.CommonLookupFlags,
 	descs []catalog.Descriptor,
 	validationLevels []catalog.ValidationLevel,
 ) error {

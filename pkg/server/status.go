@@ -63,7 +63,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -2418,13 +2417,9 @@ func (s *statusServer) HotRangesV2(
 					} else {
 						if err = s.sqlServer.distSQLServer.InternalExecutorFactory.DescsTxnWithExecutor(
 							ctx, s.db, nil, func(ctx context.Context, txn *kv.Txn, col *descs.Collection, ie sqlutil.InternalExecutor) error {
-								commonLookupFlags := tree.CommonLookupFlags{
-									Required:    false,
-									AvoidLeased: true,
-								}
-								desc, err := col.GetImmutableTableByID(ctx, txn, descpb.ID(tableID), tree.ObjectLookupFlags{
-									CommonLookupFlags: commonLookupFlags,
-								})
+								desc, err := col.MayGetImmutableTableByID(
+									ctx, txn, descpb.ID(tableID), descs.WithoutLeased(),
+								)
 								if err != nil {
 									return errors.Wrapf(err, "cannot get table descriptor with tableID: %d, %s", tableID, r.Desc)
 								}
@@ -2442,13 +2437,17 @@ func (s *statusServer) HotRangesV2(
 									}
 								}
 
-								if ok, dbDesc, err := col.GetImmutableDatabaseByID(ctx, txn, desc.GetParentID(), commonLookupFlags); err != nil {
+								if dbDesc, err := col.MayGetImmutableDatabaseByID(
+									ctx, txn, desc.GetParentID(), descs.WithoutLeased(),
+								); err != nil {
 									log.Warningf(ctx, "cannot get database by descriptor ID: %s: %v", r.Desc, err)
-								} else if ok {
+								} else if dbDesc != nil {
 									dbName = dbDesc.GetName()
 								}
 
-								if schemaDesc, err := col.GetImmutableSchemaByID(ctx, txn, desc.GetParentSchemaID(), commonLookupFlags); err != nil {
+								if schemaDesc, err := col.MayGetImmutableSchemaByID(
+									ctx, txn, desc.GetParentSchemaID(), descs.WithoutLeased(),
+								); err != nil {
 									log.Warningf(ctx, "cannot get schema name for range descriptor: %s: %v", r.Desc, err)
 								} else {
 									schemaName = schemaDesc.GetName()

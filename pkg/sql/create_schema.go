@@ -82,12 +82,14 @@ func CreateUserDefinedSchemaDescriptor(
 			// and can't be in a dropping state.
 			if schemaID != descpb.InvalidID {
 				// Check if the object already exists in a dropped state
-				sc, err := descriptors.GetImmutableSchemaByID(ctx, txn, schemaID, tree.SchemaLookupFlags{
-					Required:       true,
-					AvoidLeased:    true,
-					IncludeOffline: true,
-					IncludeDropped: true,
-				})
+				sc, err := descriptors.MustGetImmutableSchemaByID(
+					ctx,
+					txn,
+					schemaID,
+					descs.WithoutLeased(),
+					descs.WithOffline(),
+					descs.WithDropped(),
+				)
 				if err != nil || sc.SchemaKind() != catalog.SchemaUserDefined {
 					return nil, nil, err
 				}
@@ -194,8 +196,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		dbName = n.Schema.Catalog()
 	}
 
-	db, err := p.Descriptors().GetMutableDatabaseByName(params.ctx, p.txn, dbName,
-		tree.DatabaseLookupFlags{Required: true})
+	db, err := p.Descriptors().MustGetMutableDatabaseByName(params.ctx, p.txn, dbName)
 	if err != nil {
 		return err
 	}

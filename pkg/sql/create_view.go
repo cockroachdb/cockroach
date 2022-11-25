@@ -111,7 +111,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		for id := range n.planDeps {
 			ids.Add(id)
 		}
-		flags := tree.CommonLookupFlags{
+		flags := catalog.CommonLookupFlags{
 			Required:       true,
 			RequireMutable: true,
 			AvoidLeased:    true,
@@ -124,8 +124,8 @@ func (n *createViewNode) startExec(params runParams) error {
 			return err
 		}
 		for id := range n.planDeps {
-			backRefMutable, err := params.p.Descriptors().GetMutableTableByID(
-				params.ctx, params.p.Txn(), id, tree.ObjectLookupFlagsWithRequired(),
+			backRefMutable, err := params.p.Descriptors().MustGetMutableTableByID(
+				params.ctx, params.p.Txn(), id,
 			)
 			if err != nil {
 				return err

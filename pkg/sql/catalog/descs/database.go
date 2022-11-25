@@ -18,17 +18,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/errors"
 )
 
-// GetMutableDatabaseByName returns a mutable database descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetMutableDatabaseByName(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
+// MustGetMutableDatabaseByName returns a mutable database descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetMutableDatabaseByName(
+	ctx context.Context, txn *kv.Txn, name string, options ...LookupOption,
 ) (*dbdesc.Mutable, error) {
-	flags.RequireMutable = true
+	return tc.MayGetMutableDatabaseByName(ctx, txn, name, prependWithRequired(options)...)
+}
+
+// MayGetMutableDatabaseByName returns a mutable database descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetMutableDatabaseByName(
+	ctx context.Context, txn *kv.Txn, name string, options ...LookupOption,
+) (*dbdesc.Mutable, error) {
+	flags := catalog.DatabaseLookupFlags{RequireMutable: true}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	desc, err := tc.getDatabaseByName(ctx, txn, name, flags)
 	if err != nil || desc == nil {
 		return nil, err
@@ -36,19 +46,39 @@ func (tc *Collection) GetMutableDatabaseByName(
 	return desc.(*dbdesc.Mutable), nil
 }
 
-// GetImmutableDatabaseByName returns an immutable database descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetImmutableDatabaseByName(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
+// MustGetImmutableDatabaseByName returns an immutable database descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetImmutableDatabaseByName(
+	ctx context.Context, txn *kv.Txn, name string, options ...LookupOption,
 ) (catalog.DatabaseDescriptor, error) {
+	return tc.MayGetImmutableDatabaseByName(ctx, txn, name, prependWithRequired(options)...)
+}
+
+// MayGetImmutableDatabaseByName returns an immutable database descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetImmutableDatabaseByName(
+	ctx context.Context, txn *kv.Txn, name string, options ...LookupOption,
+) (catalog.DatabaseDescriptor, error) {
+	flags := catalog.DatabaseLookupFlags{}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	flags.RequireMutable = false
 	return tc.getDatabaseByName(ctx, txn, name, flags)
+}
+
+// MustGetImmutableUnleasedDatabaseByName returns an immutable database descriptor with
+// properties according to the provided lookup flags. RequireMutable is ignored.
+func (tc *Collection) MustGetImmutableUnleasedDatabaseByName(
+	ctx context.Context, txn *kv.Txn, name string,
+) (catalog.DatabaseDescriptor, error) {
+	return tc.MustGetImmutableDatabaseByName(ctx, txn, name, WithoutLeased())
 }
 
 // getDatabaseByName returns a database descriptor with properties according to
 // the provided lookup flags.
 func (tc *Collection) getDatabaseByName(
-	ctx context.Context, txn *kv.Txn, name string, flags tree.DatabaseLookupFlags,
+	ctx context.Context, txn *kv.Txn, name string, flags catalog.DatabaseLookupFlags,
 ) (catalog.DatabaseDescriptor, error) {
 	desc, err := tc.getDescriptorByName(ctx, txn, nil /* db */, nil /* sc */, name, flags, catalog.Database)
 	if err != nil {
@@ -70,17 +100,30 @@ func (tc *Collection) getDatabaseByName(
 	return db, nil
 }
 
-// GetImmutableDatabaseByID returns an immutable database descriptor with
-// properties according to the provided lookup flags. RequireMutable is ignored.
-func (tc *Collection) GetImmutableDatabaseByID(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
-) (bool, catalog.DatabaseDescriptor, error) {
+// MustGetImmutableDatabaseByID returns an immutable database descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MustGetImmutableDatabaseByID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, options ...LookupOption,
+) (catalog.DatabaseDescriptor, error) {
+	return tc.MayGetImmutableDatabaseByID(ctx, txn, dbID, prependWithRequired(options)...)
+}
+
+// MayGetImmutableDatabaseByID returns an immutable database descriptor with
+// properties according to the provided lookup options.
+func (tc *Collection) MayGetImmutableDatabaseByID(
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, options ...LookupOption,
+) (catalog.DatabaseDescriptor, error) {
+	flags := catalog.DatabaseLookupFlags{}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	flags.RequireMutable = false
-	return tc.getDatabaseByID(ctx, txn, dbID, flags)
+	_, db, err := tc.getDatabaseByID(ctx, txn, dbID, flags)
+	return db, err
 }
 
 func (tc *Collection) getDatabaseByID(
-	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags tree.DatabaseLookupFlags,
+	ctx context.Context, txn *kv.Txn, dbID descpb.ID, flags catalog.DatabaseLookupFlags,
 ) (bool, catalog.DatabaseDescriptor, error) {
 	descs, err := tc.getDescriptorsByID(ctx, txn, flags, dbID)
 	if err != nil {

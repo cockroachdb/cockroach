@@ -384,9 +384,7 @@ func duplicateRowQuery(
 func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) error {
 	dbName := p.CurrentDatabase()
 	log.Infof(ctx, "validating unique constraints in database %s", dbName)
-	db, err := p.Descriptors().GetImmutableDatabaseByName(
-		ctx, p.Txn(), dbName, tree.DatabaseLookupFlags{Required: true},
-	)
+	db, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.Txn(), dbName)
 	if err != nil {
 		return err
 	}
@@ -410,12 +408,7 @@ func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) er
 // rows in the table have unique values for every unique constraint defined on
 // the table.
 func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableID int) error {
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.Txn(),
-		descpb.ID(tableID),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := p.Descriptors().MustGetImmutableTableByID(ctx, p.Txn(), descpb.ID(tableID))
 	if err != nil {
 		return err
 	}
@@ -432,12 +425,7 @@ func (p *planner) RevalidateUniqueConstraintsInTable(ctx context.Context, tableI
 func (p *planner) RevalidateUniqueConstraint(
 	ctx context.Context, tableID int, constraintName string,
 ) error {
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.Txn(),
-		descpb.ID(tableID),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := p.Descriptors().MustGetImmutableTableByID(ctx, p.Txn(), descpb.ID(tableID))
 	if err != nil {
 		return err
 	}
@@ -491,12 +479,7 @@ func (p *planner) RevalidateUniqueConstraint(
 func (p *planner) IsConstraintActive(
 	ctx context.Context, tableID int, constraintName string,
 ) (bool, error) {
-	tableDesc, err := p.Descriptors().GetImmutableTableByID(
-		ctx,
-		p.Txn(),
-		descpb.ID(tableID),
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := p.Descriptors().MustGetImmutableTableByID(ctx, p.Txn(), descpb.ID(tableID))
 	if err != nil {
 		return false, err
 	}
@@ -697,9 +680,7 @@ func validateUniqueConstraint(
 func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
 	dbName := p.CurrentDatabase()
 	log.Infof(ctx, "validating scheduled jobs in database %s", dbName)
-	db, err := p.Descriptors().GetImmutableDatabaseByName(
-		ctx, p.Txn(), dbName, tree.DatabaseLookupFlags{Required: true},
-	)
+	db, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.Txn(), dbName)
 	if err != nil {
 		return err
 	}
@@ -789,7 +770,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 
 // RepairTTLScheduledJobForTable is part of the EvalPlanner interface.
 func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int64) error {
-	tableDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, descpb.ID(tableID), tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := p.Descriptors().MustGetMutableTableByID(ctx, p.txn, descpb.ID(tableID))
 	if err != nil {
 		return err
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -718,14 +719,9 @@ func (p *planner) ForceDeleteTableData(ctx context.Context, descID int64) error 
 
 	// Validate no descriptor exists for this table
 	id := descpb.ID(descID)
-	desc, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, id,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
-			DesiredTableDescKind: tree.ResolveRequireTableDesc,
-		})
+	desc, err := p.Descriptors().MustGetImmutableTableByID(
+		ctx, p.txn, id, descs.WithoutLeased(), descs.WithTableKind(tree.ResolveRequireTableDesc),
+	)
 	if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedTable {
 		return err
 	}

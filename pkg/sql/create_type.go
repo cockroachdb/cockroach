@@ -79,11 +79,9 @@ func (p *planner) CreateType(ctx context.Context, n *tree.CreateType) (planNode,
 
 func (n *createTypeNode) startExec(params runParams) error {
 	// Check if a type with the same name exists already.
-	flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-		Required:    false,
-		AvoidLeased: true,
-	}}
-	found, _, err := params.p.Descriptors().GetImmutableTypeByName(params.ctx, params.p.Txn(), n.typeName, flags)
+	existing, err := params.p.Descriptors().MayGetImmutableTypeByName(
+		params.ctx, params.p.Txn(), n.typeName, descs.WithoutLeased(),
+	)
 	if err != nil {
 		return err
 	}
@@ -95,7 +93,7 @@ func (n *createTypeNode) startExec(params runParams) error {
 	// handle this case in CREATE TABLE IF NOT EXISTS by checking the return code
 	// (pgcode.DuplicateRelation) of getCreateTableParams. However, there isn't
 	// a pgcode for duplicate types, only the more general pgcode.DuplicateObject.
-	if found && n.n.IfNotExists {
+	if existing != nil && n.n.IfNotExists {
 		params.p.BufferClientNotice(
 			params.ctx,
 			pgnotice.Newf("type %q already exists, skipping", n.typeName),

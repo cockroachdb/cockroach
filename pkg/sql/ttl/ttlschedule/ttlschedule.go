@@ -97,7 +97,7 @@ func canDropTTLSchedule(
 	schedule *jobs.ScheduledJob,
 	args catpb.ScheduledRowLevelTTLArgs,
 ) (bool, error) {
-	desc, err := descsCol.GetImmutableTableByID(ctx, txn, args.TableID, tree.ObjectLookupFlags{})
+	desc, err := descsCol.MayGetImmutableTableByID(ctx, txn, args.TableID)
 	if err != nil {
 		// If the descriptor does not exist we can drop this schedule.
 		if sqlerrors.IsUndefinedRelationError(err) {
@@ -246,7 +246,7 @@ func createRowLevelTTLJob(
 	jobRegistry *jobs.Registry,
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 ) (jobspb.JobID, error) {
-	tableDesc, err := descsCol.GetImmutableTableByID(ctx, txn, ttlArgs.TableID, tree.ObjectLookupFlagsWithRequired())
+	tableDesc, err := descsCol.MustGetImmutableTableByID(ctx, txn, ttlArgs.TableID)
 	if err != nil {
 		return 0, err
 	}

@@ -13,6 +13,7 @@ package sqlerrors
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -140,11 +141,11 @@ func NewInvalidWildcardError(name string) error {
 
 // NewUndefinedObjectError returns the correct undefined object error based on
 // the kind of object that was requested.
-func NewUndefinedObjectError(name tree.NodeFormatter, kind tree.DesiredObjectKind) error {
+func NewUndefinedObjectError(name tree.NodeFormatter, kind catalog.DesiredObjectKind) error {
 	switch kind {
-	case tree.TableObject:
+	case catalog.TableObject:
 		return NewUndefinedRelationError(name)
-	case tree.TypeObject:
+	case catalog.TypeObject:
 		return NewUndefinedTypeError(name)
 	default:
 		return errors.AssertionFailedf("unknown object kind %d", kind)

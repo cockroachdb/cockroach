@@ -916,7 +916,7 @@ type FunctionDescriptor interface {
 // FilterDescriptorState inspects the state of a given descriptor and returns an
 // error if the state is anything but public. The error describes the state of
 // the descriptor.
-func FilterDescriptorState(desc Descriptor, flags tree.CommonLookupFlags) error {
+func FilterDescriptorState(desc Descriptor, flags CommonLookupFlags) error {
 	if flags.ParentID != 0 {
 		parent := desc.GetParentID()
 		if parent != 0 && parent != flags.ParentID {

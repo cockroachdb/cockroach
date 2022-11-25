@@ -150,14 +150,11 @@ func (s *Tenant) WithMutableDatabaseDescriptor(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		desc, err := descsCol.GetMutableDatabaseByName(
+		desc, err := descsCol.MustGetMutableDatabaseByName(
 			ctx,
 			txn,
 			dbName,
-			tree.DatabaseLookupFlags{
-				Required:       true,
-				IncludeOffline: true,
-			},
+			descs.WithOffline(),
 		)
 		if err != nil {
 			return err
@@ -177,16 +174,11 @@ func (s *Tenant) WithMutableTableDescriptor(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg, func(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
-		_, desc, err := descsCol.GetMutableTableByName(
+		desc, err := descsCol.MustGetMutableTableByName(
 			ctx,
 			txn,
 			tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName)),
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:       true,
-					IncludeOffline: true,
-				},
-			},
+			descs.WithOffline(),
 		)
 		if err != nil {
 			return err
@@ -194,13 +186,6 @@ func (s *Tenant) WithMutableTableDescriptor(
 		f(desc)
 		return descsCol.WriteDesc(ctx, false, desc, txn)
 	}))
-}
-
-// descLookupFlags is the set of look up flags used when fetching descriptors.
-var descLookupFlags = tree.CommonLookupFlags{
-	IncludeDropped: true,
-	IncludeOffline: true,
-	AvoidLeased:    true, // we want consistent reads
 }
 
 // LookupTableDescriptorByID returns the table identified by the given ID.
@@ -212,10 +197,13 @@ func (s *Tenant) LookupTableDescriptorByID(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		desc, err = descsCol.GetImmutableTableByID(ctx, txn, id,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: descLookupFlags,
-			},
+		desc, err = descsCol.MayGetImmutableTableByID(
+			ctx,
+			txn,
+			id,
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+			descs.WithDropped(),
 		)
 		return err
 	}))
@@ -231,11 +219,13 @@ func (s *Tenant) LookupTableByName(
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		var err error
-		_, desc, err = descsCol.GetImmutableTableByName(ctx, txn,
+		desc, err = descsCol.MayGetImmutableTableByName(
+			ctx,
+			txn,
 			tree.NewTableNameWithSchema(tree.Name(dbName), "public", tree.Name(tbName)),
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: descLookupFlags,
-			},
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+			descs.WithDropped(),
 		)
 		return err
 	}))
@@ -251,12 +241,9 @@ func (s *Tenant) LookupDatabaseByName(
 	require.NoError(s.t, sql.DescsTxn(ctx, &execCfg,
 		func(ctx context.Context, txn *kv.Txn, descsCol *descs.Collection) error {
 			var err error
-			desc, err = descsCol.GetImmutableDatabaseByName(ctx, txn, dbName,
-				tree.DatabaseLookupFlags{
-					Required:       true,
-					IncludeOffline: true,
-					AvoidLeased:    true,
-				},
+			desc, err = descsCol.MustGetImmutableDatabaseByName(ctx, txn, dbName,
+				descs.WithOffline(),
+				descs.WithoutLeased(),
 			)
 			return err
 		}))

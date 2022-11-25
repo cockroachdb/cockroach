@@ -28,16 +28,16 @@ import (
 // dependency injection for descriptor retrieval.
 type Accessor interface {
 
-	// GetImmutableDatabaseByName looks up a database by name and returns its
-	// descriptor. If the database is not found and required is true,
+	// MustGetImmutableUnleasedDatabaseByName looks up a database by name and
+	// returns its descriptor. If the database is not found and required is true,
 	// an error is returned; otherwise a nil reference is returned.
 	//
 	// Warning: This method uses no virtual schema information and only exists to
 	// accommodate the existing resolver.SchemaResolver interface (see #58228).
 	// Use GetMutableDatabaseByName() and GetImmutableDatabaseByName() on
 	// descs.Collection instead when possible.
-	GetImmutableDatabaseByName(
-		ctx context.Context, txn *kv.Txn, dbName string, flags tree.DatabaseLookupFlags,
+	MustGetImmutableUnleasedDatabaseByName(
+		ctx context.Context, txn *kv.Txn, dbName string,
 	) (DatabaseDescriptor, error)
 
 	// GetObjectNamesAndIDs returns the list of all objects in the given
@@ -50,6 +50,6 @@ type Accessor interface {
 	// tables and types). Furthermore, the fact that this buffers everything
 	// in ram in unfortunate.
 	GetObjectNamesAndIDs(
-		ctx context.Context, txn *kv.Txn, db DatabaseDescriptor, scName string, flags tree.DatabaseListFlags,
+		ctx context.Context, txn *kv.Txn, db DatabaseDescriptor, scName string, flags DatabaseListFlags,
 	) (tree.TableNames, descpb.IDs, error)
 }

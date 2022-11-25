@@ -49,7 +49,7 @@ type SchemaResolver interface {
 	// Accessor is a crufty name and interface that wraps the *descs.Collection.
 	Accessor() catalog.Accessor
 	CurrentSearchPath() sessiondata.SearchPath
-	CommonLookupFlagsRequired() tree.CommonLookupFlags
+	CommonLookupFlagsRequired() catalog.CommonLookupFlags
 }
 
 // ObjectNameExistingResolver is the helper interface to resolve table
@@ -60,7 +60,7 @@ type SchemaResolver interface {
 // us to know if the schema and database were found.
 type ObjectNameExistingResolver interface {
 	LookupObject(
-		ctx context.Context, flags tree.ObjectLookupFlags,
+		ctx context.Context, flags catalog.ObjectLookupFlags,
 		dbName, scName, obName string,
 	) (
 		found bool,
@@ -97,7 +97,7 @@ func GetObjectNamesAndIDs(
 	scName string,
 	explicitPrefix bool,
 ) (tree.TableNames, descpb.IDs, error) {
-	flags := tree.DatabaseListFlags{
+	flags := catalog.DatabaseListFlags{
 		CommonLookupFlags: sr.CommonLookupFlagsRequired(),
 		ExplicitPrefix:    explicitPrefix,
 	}
@@ -116,7 +116,7 @@ func GetObjectNamesAndIDs(
 // which is lame but a common pattern and it throws away all the work of
 // resolving the prefix.
 func ResolveExistingTableObject(
-	ctx context.Context, sc SchemaResolver, tn *tree.TableName, lookupFlags tree.ObjectLookupFlags,
+	ctx context.Context, sc SchemaResolver, tn *tree.TableName, lookupFlags catalog.ObjectLookupFlags,
 ) (prefix catalog.ResolvedObjectPrefix, res catalog.TableDescriptor, err error) {
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
 	//  passed as an argument to this function.
@@ -143,9 +143,9 @@ func ResolveMutableExistingTableObject(
 	required bool,
 	requiredType tree.RequiredTableKind,
 ) (prefix catalog.ResolvedObjectPrefix, res *tabledesc.Mutable, err error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:    tree.CommonLookupFlags{Required: required, RequireMutable: true},
-		DesiredObjectKind:    tree.TableObject,
+	lookupFlags := catalog.ObjectLookupFlags{
+		CommonLookupFlags:    catalog.CommonLookupFlags{Required: required, RequireMutable: true},
+		DesiredObjectKind:    catalog.TableObject,
 		DesiredTableDescKind: requiredType,
 	}
 	// TODO: As part of work for #34240, an UnresolvedObjectName should be
@@ -166,9 +166,9 @@ func ResolveMutableExistingTableObject(
 func ResolveMutableType(
 	ctx context.Context, sc SchemaResolver, un *tree.UnresolvedObjectName, required bool,
 ) (catalog.ResolvedObjectPrefix, *typedesc.Mutable, error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: required, RequireMutable: true},
-		DesiredObjectKind: tree.TypeObject,
+	lookupFlags := catalog.ObjectLookupFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{Required: required, RequireMutable: true},
+		DesiredObjectKind: catalog.TypeObject,
 	}
 	desc, prefix, err := ResolveExistingObject(ctx, sc, un, lookupFlags)
 	if err != nil || desc == nil {
@@ -191,7 +191,7 @@ func ResolveExistingObject(
 	ctx context.Context,
 	sc SchemaResolver,
 	un *tree.UnresolvedObjectName,
-	lookupFlags tree.ObjectLookupFlags,
+	lookupFlags catalog.ObjectLookupFlags,
 ) (res catalog.Descriptor, _ catalog.ResolvedObjectPrefix, err error) {
 	found, prefix, obj, err := ResolveExisting(ctx, un, sc, lookupFlags, sc.CurrentDatabase(), sc.CurrentSearchPath())
 	if err != nil {
@@ -224,13 +224,13 @@ func ResolveExistingObject(
 	}
 
 	switch lookupFlags.DesiredObjectKind {
-	case tree.TypeObject:
+	case catalog.TypeObject:
 		typ, isType := obj.(catalog.TypeDescriptor)
 		if !isType {
 			return nil, prefix, sqlerrors.NewUndefinedTypeError(getResolvedTn())
 		}
 		return typ, prefix, nil
-	case tree.TableObject:
+	case catalog.TableObject:
 		table, ok := obj.(catalog.TableDescriptor)
 		if !ok {
 			return nil, prefix, sqlerrors.NewUndefinedRelationError(getResolvedTn())
@@ -378,7 +378,7 @@ func ResolveExisting(
 	ctx context.Context,
 	u *tree.UnresolvedObjectName,
 	r ObjectNameExistingResolver,
-	lookupFlags tree.ObjectLookupFlags,
+	lookupFlags catalog.ObjectLookupFlags,
 	curDb string,
 	searchPath sessiondata.SearchPath,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, result catalog.Descriptor, err error) {
@@ -568,9 +568,9 @@ func ResolveIndex(
 	err error,
 ) {
 	if tableIndexName.Table.ObjectName != "" {
-		lflags := tree.ObjectLookupFlags{
-			CommonLookupFlags:    tree.CommonLookupFlags{Required: required},
-			DesiredObjectKind:    tree.TableObject,
+		lflags := catalog.ObjectLookupFlags{
+			CommonLookupFlags:    catalog.CommonLookupFlags{Required: required},
+			DesiredObjectKind:    catalog.TableObject,
 			DesiredTableDescKind: tree.ResolveRequireTableOrViewDesc,
 		}
 
@@ -790,11 +790,11 @@ func findTableContainingIndex(
 		return false, nil, nil, err
 	}
 
-	lflags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
+	lflags := catalog.ObjectLookupFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{
 			IncludeOffline: true,
 		},
-		DesiredObjectKind:    tree.TableObject,
+		DesiredObjectKind:    catalog.TableObject,
 		DesiredTableDescKind: tree.ResolveAnyTableKind,
 	}
 	for _, dsName := range dsNames {

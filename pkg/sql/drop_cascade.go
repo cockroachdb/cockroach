@@ -75,9 +75,7 @@ func (d *dropCascadeState) collectObjectsInSchema(
 	// objectNamesToDelete. Instead, we need to go through each schema descriptor
 	// to collect function descriptors by function ids.
 	err = schema.ForEachFunctionOverload(func(overload descpb.SchemaDescriptor_FunctionOverload) error {
-		fnDesc, err := p.Descriptors().GetMutableFunctionByID(
-			ctx, p.txn, overload.ID, tree.ObjectLookupFlagsWithRequired(),
-		)
+		fnDesc, err := p.Descriptors().MustGetMutableFunctionByID(ctx, p.txn, overload.ID)
 		if err != nil {
 			return err
 		}
@@ -102,15 +100,15 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 		// First try looking up objName as a table.
 		found, _, desc, err := p.LookupObject(
 			ctx,
-			tree.ObjectLookupFlags{
+			catalog.ObjectLookupFlags{
 				// Note we set required to be false here in order to not error out
 				// if we don't find the object.
-				CommonLookupFlags: tree.CommonLookupFlags{
+				CommonLookupFlags: catalog.CommonLookupFlags{
 					Required:       false,
 					RequireMutable: true,
 					IncludeOffline: true,
 				},
-				DesiredObjectKind: tree.TableObject,
+				DesiredObjectKind: catalog.TableObject,
 			},
 			objName.Catalog(),
 			objName.Schema(),
@@ -159,13 +157,13 @@ func (d *dropCascadeState) resolveCollectedObjects(ctx context.Context, p *plann
 			// If we couldn't resolve objName as a table, try a type.
 			found, _, desc, err := p.LookupObject(
 				ctx,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
+				catalog.ObjectLookupFlags{
+					CommonLookupFlags: catalog.CommonLookupFlags{
 						Required:       true,
 						RequireMutable: true,
 						IncludeOffline: true,
 					},
-					DesiredObjectKind: tree.TypeObject,
+					DesiredObjectKind: catalog.TypeObject,
 				},
 				objName.Catalog(),
 				objName.Schema(),

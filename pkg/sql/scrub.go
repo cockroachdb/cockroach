@@ -153,9 +153,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 // the database. Views are skipped without errors.
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
-	database := string(*name)
-	dbDesc, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-		database, tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, string(*name))
 	if err != nil {
 		return err
 	}
@@ -413,7 +411,7 @@ func createConstraintCheckOperations(
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
 	constraints, err := tableDesc.GetConstraintInfoWithLookup(func(id descpb.ID) (catalog.TableDescriptor, error) {
-		return p.Descriptors().GetImmutableTableByID(ctx, p.Txn(), id, tree.ObjectLookupFlagsWithRequired())
+		return p.Descriptors().MustGetImmutableTableByID(ctx, p.Txn(), id)
 	})
 	if err != nil {
 		return nil, err

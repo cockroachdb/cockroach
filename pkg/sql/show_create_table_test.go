@@ -52,9 +52,8 @@ func TestShowCreateTableWithConstraintInvalidated(t *testing.T) {
 			ctx context.Context, txn *kv.Txn, descriptors *descs.Collection, ie sqlutil.InternalExecutor,
 		) error {
 			tn := tree.MakeTableNameWithSchema("db", "schema", "table")
-			flags := tree.ObjectLookupFlagsWithRequired()
 
-			_, mut, err := descriptors.GetMutableTableByName(ctx, txn, &tn, flags)
+			mut, err := descriptors.MustGetMutableTableByName(ctx, txn, &tn)
 			require.NoError(t, err)
 			require.NotNil(t, mut)
 

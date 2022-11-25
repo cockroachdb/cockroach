@@ -54,14 +54,14 @@ func (p *planner) CommentOnSchema(ctx context.Context, n *tree.CommentOnSchema) 
 			"cannot comment schema without being connected to a database")
 	}
 
-	db, err := p.Descriptors().GetImmutableDatabaseByName(ctx, p.txn,
-		dbName, tree.DatabaseLookupFlags{Required: true})
+	db, err := p.Descriptors().MustGetImmutableDatabaseByName(ctx, p.txn, dbName)
 	if err != nil {
 		return nil, err
 	}
 
-	schemaDesc, err := p.Descriptors().GetImmutableSchemaByID(ctx, p.txn,
-		db.GetSchemaID(n.Name.Schema()), tree.SchemaLookupFlags{Required: true})
+	schemaDesc, err := p.Descriptors().MustGetImmutableSchemaByID(
+		ctx, p.txn, db.GetSchemaID(n.Name.Schema()),
+	)
 	if err != nil {
 		return nil, err
 	}

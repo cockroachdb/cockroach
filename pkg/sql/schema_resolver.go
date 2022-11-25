@@ -76,8 +76,8 @@ func (sr *schemaResolver) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // CommonLookupFlagsRequired implements the resolver.SchemaResolver interface.
-func (sr *schemaResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
-	return tree.CommonLookupFlags{
+func (sr *schemaResolver) CommonLookupFlagsRequired() catalog.CommonLookupFlags {
+	return catalog.CommonLookupFlags{
 		Required:    true,
 		AvoidLeased: sr.skipDescriptorCache,
 	}
@@ -85,14 +85,14 @@ func (sr *schemaResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (sr *schemaResolver) LookupObject(
-	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+	ctx context.Context, flags catalog.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	flags.CommonLookupFlags.Required = false
 	flags.CommonLookupFlags.AvoidLeased = sr.skipDescriptorCache
 
 	// Check if we are looking up a type which matches a built-in type in
 	// CockroachDB but is an extension type on the public schema in PostgreSQL.
-	if flags.DesiredObjectKind == tree.TypeObject && scName == tree.PublicSchema {
+	if flags.DesiredObjectKind == catalog.TypeObject && scName == tree.PublicSchema {
 		if alias, ok := types.PublicSchemaAliases[obName]; ok {
 			if flags.RequireMutable {
 				return true, catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.WrongObjectType, "type %q is a built-in type", obName)
@@ -102,8 +102,9 @@ func (sr *schemaResolver) LookupObject(
 			if err != nil || !found {
 				return found, prefix, nil, err
 			}
-			dbDesc, err := sr.descCollection.GetImmutableDatabaseByName(ctx, sr.txn, dbName,
-				tree.DatabaseLookupFlags{AvoidLeased: sr.skipDescriptorCache})
+			dbDesc, err := sr.descCollection.MayGetImmutableDatabaseByName(
+				ctx, sr.txn, dbName, descs.SetAvoidLeased(sr.skipDescriptorCache),
+			)
 			if err != nil {
 				return found, prefix, nil, err
 			}
@@ -125,11 +126,15 @@ func (sr *schemaResolver) LookupSchema(
 ) (found bool, scMeta catalog.ResolvedObjectPrefix, err error) {
 	flags := sr.CommonLookupFlagsRequired()
 	flags.Required = false
-	db, err := sr.descCollection.GetImmutableDatabaseByName(ctx, sr.txn, dbName, flags)
+	db, err := sr.descCollection.MayGetImmutableDatabaseByName(
+		ctx, sr.txn, dbName, descs.WithFlags(flags),
+	)
 	if err != nil || db == nil {
 		return false, catalog.ResolvedObjectPrefix{}, err
 	}
-	sc, err := sr.descCollection.GetImmutableSchemaByName(ctx, sr.txn, db, scName, flags)
+	sc, err := sr.descCollection.MayGetImmutableSchemaByName(
+		ctx, sr.txn, db, scName, descs.WithFlags(flags),
+	)
 	if err != nil || sc == nil {
 		return false, catalog.ResolvedObjectPrefix{}, err
 	}
@@ -146,14 +151,9 @@ func (sr *schemaResolver) CurrentDatabase() string {
 func (sr *schemaResolver) GetQualifiedTableNameByID(
 	ctx context.Context, id int64, requiredType tree.RequiredTableKind,
 ) (*tree.TableName, error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags:    tree.CommonLookupFlags{Required: true},
-		DesiredObjectKind:    tree.TableObject,
-		DesiredTableDescKind: requiredType,
-	}
-
-	table, err := sr.descCollection.GetImmutableTableByID(
-		ctx, sr.txn, descpb.ID(id), lookupFlags)
+	table, err := sr.descCollection.MustGetImmutableTableByID(
+		ctx, sr.txn, descpb.ID(id), descs.WithTableKind(requiredType),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -166,13 +166,14 @@ func (sr *schemaResolver) GetQualifiedTableNameByID(
 func (sr *schemaResolver) getQualifiedTableName(
 	ctx context.Context, desc catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(),
-		tree.DatabaseLookupFlags{
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-			AvoidLeased:    true,
-		})
+	dbDesc, err := sr.descCollection.MustGetImmutableDatabaseByID(
+		ctx,
+		sr.txn,
+		desc.GetParentID(),
+		descs.WithoutLeased(),
+		descs.WithOffline(),
+		descs.WithDropped(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -186,13 +187,14 @@ func (sr *schemaResolver) getQualifiedTableName(
 	// information from the namespace table.
 	var schemaName tree.Name
 	schemaID := desc.GetParentSchemaID()
-	scDesc, err := sr.descCollection.GetImmutableSchemaByID(ctx, sr.txn, schemaID,
-		tree.SchemaLookupFlags{
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-			AvoidLeased:    true,
-		})
+	scDesc, err := sr.descCollection.MustGetImmutableSchemaByID(
+		ctx,
+		sr.txn,
+		schemaID,
+		descs.WithoutLeased(),
+		descs.WithOffline(),
+		descs.WithDropped(),
+	)
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
@@ -221,17 +223,25 @@ func (sr *schemaResolver) getQualifiedTableName(
 func (sr *schemaResolver) getQualifiedFunctionName(
 	ctx context.Context, fnDesc catalog.FunctionDescriptor,
 ) (*tree.FunctionName, error) {
-	lookupFlags := tree.CommonLookupFlags{
-		Required:       true,
-		IncludeOffline: true,
-		IncludeDropped: true,
-		AvoidLeased:    true,
-	}
-	_, dbDesc, err := sr.descCollection.GetImmutableDatabaseByID(ctx, sr.txn, fnDesc.GetParentID(), lookupFlags)
+	dbDesc, err := sr.descCollection.MustGetImmutableDatabaseByID(
+		ctx,
+		sr.txn,
+		fnDesc.GetParentID(),
+		descs.WithoutLeased(),
+		descs.WithOffline(),
+		descs.WithDropped(),
+	)
 	if err != nil {
 		return nil, err
 	}
-	scDesc, err := sr.descCollection.GetImmutableSchemaByID(ctx, sr.txn, fnDesc.GetParentSchemaID(), lookupFlags)
+	scDesc, err := sr.descCollection.MustGetImmutableSchemaByID(
+		ctx,
+		sr.txn,
+		fnDesc.GetParentSchemaID(),
+		descs.WithoutLeased(),
+		descs.WithOffline(),
+		descs.WithDropped(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -244,9 +254,9 @@ func (sr *schemaResolver) getQualifiedFunctionName(
 func (sr *schemaResolver) ResolveType(
 	ctx context.Context, name *tree.UnresolvedObjectName,
 ) (*types.T, error) {
-	lookupFlags := tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{Required: true, RequireMutable: false},
-		DesiredObjectKind: tree.TypeObject,
+	lookupFlags := catalog.ObjectLookupFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{Required: true, RequireMutable: false},
+		DesiredObjectKind: catalog.TypeObject,
 	}
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, sr, name, lookupFlags)
 	if err != nil {
@@ -303,21 +313,28 @@ func (sr *schemaResolver) GetTypeDescriptor(
 	// Note that the value of required doesn't matter for lookups by ID.
 	flags := sr.CommonLookupFlagsRequired()
 	flags.ParentID = sr.typeResolutionDbID
-	desc, err := tc.GetImmutableTypeByID(ctx, sr.txn, id, tree.ObjectLookupFlags{
-		CommonLookupFlags: flags,
-	})
+	desc, err := tc.MustGetImmutableTypeByID(
+		ctx,
+		sr.txn,
+		id,
+		descs.WithFlags(flags),
+	)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
 	dbName := sr.CurrentDatabase()
 	if !descpb.IsVirtualTable(desc.GetID()) {
-		_, db, err := tc.GetImmutableDatabaseByID(ctx, sr.txn, desc.GetParentID(), flags)
+		db, err := tc.MustGetImmutableDatabaseByID(
+			ctx, sr.txn, desc.GetParentID(), descs.WithFlags(flags),
+		)
 		if err != nil {
 			return tree.TypeName{}, nil, err
 		}
 		dbName = db.GetName()
 	}
-	sc, err := tc.GetImmutableSchemaByID(ctx, sr.txn, desc.GetParentSchemaID(), flags)
+	sc, err := tc.MustGetImmutableSchemaByID(
+		ctx, sr.txn, desc.GetParentSchemaID(), descs.WithFlags(flags),
+	)
 	if err != nil {
 		return tree.TypeName{}, nil, err
 	}
@@ -531,8 +548,9 @@ func (sr *schemaResolver) ResolveFunctionByOID(
 	if err != nil {
 		return "", nil, err
 	}
-	funcDesc, err := sr.descCollection.GetImmutableFunctionByID(ctx, sr.txn, descID,
-		tree.ObjectLookupFlags{CommonLookupFlags: flags})
+	funcDesc, err := sr.descCollection.MustGetImmutableFunctionByID(
+		ctx, sr.txn, descID, descs.WithFlags(flags),
+	)
 	if err != nil {
 		return "", nil, err
 	}

@@ -793,7 +793,7 @@ func (m *Manager) AcquireByName(
 	validateDescriptorForReturn := func(desc LeasedDescriptor) (LeasedDescriptor, error) {
 		if desc.Underlying().Offline() {
 			if err := catalog.FilterDescriptorState(
-				desc.Underlying(), tree.CommonLookupFlags{},
+				desc.Underlying(), catalog.CommonLookupFlags{},
 			); err != nil {
 				desc.Release(ctx)
 				return nil, err

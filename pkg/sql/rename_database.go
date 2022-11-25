@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -54,8 +55,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, pgerror.DangerousStatementf("RENAME DATABASE on current database")
 	}
 
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MustGetMutableDatabaseByName(ctx, p.txn, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +199,7 @@ func maybeFailOnDependentDescInRename(
 	p *planner,
 	dbDesc catalog.DatabaseDescriptor,
 	schema string,
-	lookupFlags tree.CommonLookupFlags,
+	lookupFlags catalog.CommonLookupFlags,
 	renameDescType catalog.DescriptorType,
 ) error {
 	tbNames, _, err := p.Descriptors().GetObjectNamesAndIDs(
@@ -207,7 +207,7 @@ func maybeFailOnDependentDescInRename(
 		p.txn,
 		dbDesc,
 		schema,
-		tree.DatabaseListFlags{
+		catalog.DatabaseListFlags{
 			CommonLookupFlags: lookupFlags,
 			ExplicitPrefix:    true,
 		},
@@ -219,13 +219,13 @@ func maybeFailOnDependentDescInRename(
 	// TODO(ajwerner): Make this do something better than one-at-a-time lookups
 	// followed by catalogkv reads on each dependency.
 	for i := range tbNames {
-		found, tbDesc, err := p.Descriptors().GetImmutableTableByName(
-			ctx, p.txn, &tbNames[i], tree.ObjectLookupFlags{CommonLookupFlags: lookupFlags},
+		tbDesc, err := p.Descriptors().MayGetImmutableTableByName(
+			ctx, p.txn, &tbNames[i], descs.WithFlags(lookupFlags),
 		)
 		if err != nil {
 			return err
 		}
-		if !found {
+		if tbDesc == nil {
 			continue
 		}
 

@@ -583,7 +583,7 @@ func (sc *SchemaChanger) getTargetDescriptor(ctx context.Context) (catalog.Descr
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		flags := tree.CommonLookupFlags{
+		flags := catalog.CommonLookupFlags{
 			AvoidLeased:    true,
 			Required:       true,
 			IncludeOffline: true,
@@ -884,9 +884,7 @@ func (sc *SchemaChanger) handlePermanentSchemaChangeError(
 // initialize the job running status.
 func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 	return sc.txn(ctx, func(ctx context.Context, txn *kv.Txn, descriptors *descs.Collection) error {
-		flags := tree.ObjectLookupFlagsWithRequired()
-		flags.AvoidLeased = true
-		desc, err := descriptors.GetImmutableTableByID(ctx, txn, sc.descID, flags)
+		desc, err := descriptors.MustGetImmutableTableByID(ctx, txn, sc.descID, descs.WithoutLeased())
 		if err != nil {
 			return err
 		}
@@ -969,14 +967,9 @@ func (sc *SchemaChanger) dropViewDeps(
 			return err
 		}
 		for id := range typeClosure {
-			typeDesc, err := descsCol.GetMutableTypeByID(ctx,
-				txn,
-				id,
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						AvoidLeased: true,
-					},
-				})
+			typeDesc, err := descsCol.MayGetMutableTypeByID(
+				ctx, txn, id, descs.WithoutLeased(),
+			)
 			if err != nil {
 				log.Warningf(ctx, "error resolving type dependency %d", id)
 				continue
@@ -1101,14 +1094,8 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 		if err != nil {
 			return err
 		}
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			tbl.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
+		dbDesc, err := descsCol.MustGetImmutableDatabaseByID(
+			ctx, txn, tbl.GetParentID(), descs.WithoutLeased(),
 		)
 		if err != nil {
 			return err
@@ -1361,14 +1348,8 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 			return err
 		}
 
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx,
-			txn,
-			scTable.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
+		dbDesc, err := descsCol.MustGetImmutableDatabaseByID(
+			ctx, txn, scTable.GetParentID(), descs.WithoutLeased(),
 		)
 		if err != nil {
 			return err
@@ -1376,7 +1357,7 @@ func (sc *SchemaChanger) done(ctx context.Context) error {
 
 		collectReferencedTypeIDs := func() (catalog.DescriptorIDSet, error) {
 			typeLookupFn := func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				desc, err := descsCol.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{})
+				desc, err := descsCol.MayGetImmutableTypeByID(ctx, txn, id)
 				if err != nil {
 					return nil, err
 				}
@@ -3082,14 +3063,8 @@ func (sc *SchemaChanger) preSplitHashShardedIndexRanges(ctx context.Context) err
 		ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 	) error {
 		hour := hlc.Timestamp{WallTime: timeutil.Now().Add(time.Hour).UnixNano()}
-		tableDesc, err := descsCol.GetMutableTableByID(
-			ctx, txn, sc.descID,
-			tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					IncludeOffline: true,
-					IncludeDropped: true,
-				},
-			},
+		tableDesc, err := descsCol.MayGetMutableTableByID(
+			ctx, txn, sc.descID, descs.WithOffline(), descs.WithDropped(),
 		)
 		if err != nil {
 			return err

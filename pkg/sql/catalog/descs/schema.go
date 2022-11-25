@@ -24,20 +24,39 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetMutableSchemaByName resolves the schema and returns a mutable descriptor
-// usable by the transaction. RequireMutable is ignored.
+// MustGetMutableSchemaByName resolves the schema and returns a mutable descriptor
+// usable by the transaction.
 //
 // TODO(ajwerner): Change this to take database by name to avoid any weirdness
 // due to the descriptor being passed in having been cached and causing
 // problems.
-func (tc *Collection) GetMutableSchemaByName(
+func (tc *Collection) MustGetMutableSchemaByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	schemaName string,
-	flags tree.SchemaLookupFlags,
+	options ...LookupOption,
 ) (*schemadesc.Mutable, error) {
-	flags.RequireMutable = true
+	return tc.MayGetMutableSchemaByName(ctx, txn, db, schemaName, prependWithRequired(options)...)
+}
+
+// MayGetMutableSchemaByName resolves the schema and returns a mutable descriptor
+// usable by the transaction.
+//
+// TODO(ajwerner): Change this to take database by name to avoid any weirdness
+// due to the descriptor being passed in having been cached and causing
+// problems.
+func (tc *Collection) MayGetMutableSchemaByName(
+	ctx context.Context,
+	txn *kv.Txn,
+	db catalog.DatabaseDescriptor,
+	schemaName string,
+	options ...LookupOption,
+) (*schemadesc.Mutable, error) {
+	flags := catalog.SchemaLookupFlags{RequireMutable: true}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	sc, err := tc.getSchemaByName(ctx, txn, db, schemaName, flags)
 	if err != nil || sc == nil {
 		return nil, err
@@ -45,20 +64,39 @@ func (tc *Collection) GetMutableSchemaByName(
 	return sc.(*schemadesc.Mutable), nil
 }
 
-// GetImmutableSchemaByName returns a catalog.SchemaDescriptor object if the
-// target schema exists under the target database. RequireMutable is ignored.
+// MustGetImmutableSchemaByName returns a catalog.SchemaDescriptor object if the
+// target schema exists under the target database.
 //
 // TODO(ajwerner): Change this to take database by name to avoid any weirdness
 // due to the descriptor being passed in having been cached and causing
 // problems.
-func (tc *Collection) GetImmutableSchemaByName(
+func (tc *Collection) MustGetImmutableSchemaByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	scName string,
-	flags tree.SchemaLookupFlags,
+	options ...LookupOption,
 ) (catalog.SchemaDescriptor, error) {
-	flags.RequireMutable = false
+	return tc.MayGetImmutableSchemaByName(ctx, txn, db, scName, prependWithRequired(options)...)
+}
+
+// MayGetImmutableSchemaByName returns a catalog.SchemaDescriptor object if the
+// target schema exists under the target database.
+//
+// TODO(ajwerner): Change this to take database by name to avoid any weirdness
+// due to the descriptor being passed in having been cached and causing
+// problems.
+func (tc *Collection) MayGetImmutableSchemaByName(
+	ctx context.Context,
+	txn *kv.Txn,
+	db catalog.DatabaseDescriptor,
+	scName string,
+	options ...LookupOption,
+) (catalog.SchemaDescriptor, error) {
+	flags := catalog.SchemaLookupFlags{}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	return tc.getSchemaByName(ctx, txn, db, scName, flags)
 }
 
@@ -69,7 +107,7 @@ func (tc *Collection) getSchemaByName(
 	txn *kv.Txn,
 	db catalog.DatabaseDescriptor,
 	schemaName string,
-	flags tree.SchemaLookupFlags,
+	flags catalog.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
 	desc, err := tc.getDescriptorByName(ctx, txn, db, nil /* sc */, schemaName, flags, catalog.Schema)
 	if err != nil {
@@ -91,23 +129,43 @@ func (tc *Collection) getSchemaByName(
 	return schema, nil
 }
 
-// GetImmutableSchemaByID returns a ResolvedSchema wrapping an immutable
-// descriptor, if applicable. RequireMutable is ignored.
-// Required is ignored, and an error is always returned if no descriptor with
-// the ID exists.
-func (tc *Collection) GetImmutableSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
+// MustGetImmutableSchemaByID looks up an immutable schema descriptor by its
+// ID, returning an error if none is found.
+func (tc *Collection) MustGetImmutableSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, options ...LookupOption,
 ) (catalog.SchemaDescriptor, error) {
-	flags.RequireMutable = false
+	return tc.MayGetImmutableSchemaByID(ctx, txn, schemaID, prependWithRequired(options)...)
+}
+
+// MayGetImmutableSchemaByID looks up an immutable schema descriptor by its
+// ID, returning nil if none is found.
+func (tc *Collection) MayGetImmutableSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, options ...LookupOption,
+) (catalog.SchemaDescriptor, error) {
+	flags := catalog.SchemaLookupFlags{}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	return tc.getSchemaByID(ctx, txn, schemaID, flags)
 }
 
-// GetMutableSchemaByID returns a mutable schema descriptor with the given
+// MustGetMutableSchemaByID returns a mutable schema descriptor with the given
 // schema ID. An error is always returned if the descriptor is not physical.
-func (tc *Collection) GetMutableSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
+func (tc *Collection) MustGetMutableSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, options ...LookupOption,
 ) (*schemadesc.Mutable, error) {
-	flags.RequireMutable = true
+	return tc.MayGetMutableSchemaByID(ctx, txn, schemaID, prependWithRequired(options)...)
+}
+
+// MayGetMutableSchemaByID returns a mutable schema descriptor with the given
+// schema ID. An error is always returned if the descriptor is not physical.
+func (tc *Collection) MayGetMutableSchemaByID(
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, options ...LookupOption,
+) (*schemadesc.Mutable, error) {
+	flags := catalog.SchemaLookupFlags{RequireMutable: true}
+	for _, opt := range options {
+		opt.apply(&flags)
+	}
 	desc, err := tc.getSchemaByID(ctx, txn, schemaID, flags)
 	if err != nil {
 		return nil, err
@@ -116,7 +174,7 @@ func (tc *Collection) GetMutableSchemaByID(
 }
 
 func (tc *Collection) getSchemaByID(
-	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags tree.SchemaLookupFlags,
+	ctx context.Context, txn *kv.Txn, schemaID descpb.ID, flags catalog.SchemaLookupFlags,
 ) (catalog.SchemaDescriptor, error) {
 	descs, err := tc.getDescriptorsByID(ctx, txn, flags, schemaID)
 	if err != nil {

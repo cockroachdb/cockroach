@@ -98,8 +98,9 @@ func (p *planner) getOrCreateTemporarySchema(
 	ctx context.Context, db catalog.DatabaseDescriptor,
 ) (catalog.SchemaDescriptor, error) {
 	tempSchemaName := p.TemporarySchemaName()
-	flags := tree.CommonLookupFlags{AvoidLeased: true}
-	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, tempSchemaName, flags)
+	sc, err := p.Descriptors().MayGetImmutableSchemaByName(
+		ctx, p.txn, db, tempSchemaName, descs.WithoutLeased(),
+	)
 	if sc != nil || err != nil {
 		return sc, err
 	}
@@ -122,7 +123,9 @@ func (p *planner) getOrCreateTemporarySchema(
 		m.SetTemporarySchemaName(tempSchemaName)
 		m.SetTemporarySchemaIDForDatabase(uint32(db.GetID()), uint32(id))
 	})
-	return p.Descriptors().GetImmutableSchemaByID(ctx, p.Txn(), id, p.CommonLookupFlagsRequired())
+	return p.Descriptors().MustGetImmutableSchemaByID(
+		ctx, p.Txn(), id, descs.WithFlags(p.CommonLookupFlagsRequired()),
+	)
 }
 
 // temporarySchemaName returns the session specific temporary schema name given
@@ -226,7 +229,7 @@ func cleanupSchemaObjects(
 		txn,
 		dbDesc,
 		schemaName,
-		tree.DatabaseListFlags{CommonLookupFlags: tree.CommonLookupFlags{Required: false}},
+		catalog.DatabaseListFlags{CommonLookupFlags: catalog.CommonLookupFlags{Required: false}},
 	)
 	if err != nil {
 		return err

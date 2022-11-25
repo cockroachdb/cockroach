@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
@@ -81,8 +82,9 @@ func (n *createTableNode) ReadingOwnWrites() {}
 func (p *planner) getNonTemporarySchemaForCreate(
 	ctx context.Context, db catalog.DatabaseDescriptor, scName string,
 ) (catalog.SchemaDescriptor, error) {
-	flags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-	sc, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, db, scName, flags)
+	sc, err := p.Descriptors().MustGetImmutableSchemaByName(
+		ctx, p.txn, db, scName, descs.WithoutLeased(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +92,7 @@ func (p *planner) getNonTemporarySchemaForCreate(
 	case catalog.SchemaPublic:
 		return sc, nil
 	case catalog.SchemaUserDefined:
-		return p.Descriptors().GetMutableSchemaByID(ctx, p.txn, sc.GetID(), flags)
+		return p.Descriptors().MustGetMutableSchemaByID(ctx, p.txn, sc.GetID())
 	case catalog.SchemaVirtual:
 		return nil, pgerror.Newf(pgcode.InsufficientPrivilege, "schema cannot be modified: %q", scName)
 	default:
@@ -443,14 +445,11 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if desc.LocalityConfig != nil {
-		_, dbDesc, err := params.p.Descriptors().GetImmutableDatabaseByID(
+		dbDesc, err := params.p.Descriptors().MustGetImmutableDatabaseByID(
 			params.ctx,
 			params.p.txn,
 			desc.ParentID,
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
+			descs.WithoutLeased(),
 		)
 		if err != nil {
 			return errors.Wrap(err, "error resolving database for multi-region")

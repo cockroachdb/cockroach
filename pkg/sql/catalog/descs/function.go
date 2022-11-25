@@ -21,11 +21,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// GetImmutableFunctionByID returns a immutable function descriptor.
-func (tc *Collection) GetImmutableFunctionByID(
-	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
+// MustGetImmutableFunctionByID returns a immutable function descriptor.
+func (tc *Collection) MustGetImmutableFunctionByID(
+	ctx context.Context, txn *kv.Txn, fnID descpb.ID, options ...LookupOption,
 ) (catalog.FunctionDescriptor, error) {
-	flags.RequireMutable = false
+	return tc.MayGetImmutableFunctionByID(ctx, txn, fnID, prependWithRequired(options)...)
+}
+
+// MayGetImmutableFunctionByID returns a immutable function descriptor.
+func (tc *Collection) MayGetImmutableFunctionByID(
+	ctx context.Context, txn *kv.Txn, fnID descpb.ID, options ...LookupOption,
+) (catalog.FunctionDescriptor, error) {
+	var flags catalog.ObjectLookupFlags
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
 	desc, err := tc.getFunctionByID(ctx, txn, fnID, flags)
 	if err != nil {
 		return nil, err
@@ -33,11 +43,22 @@ func (tc *Collection) GetImmutableFunctionByID(
 	return desc, nil
 }
 
-// GetMutableFunctionByID returns a mutable function descriptor.
-func (tc *Collection) GetMutableFunctionByID(
-	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
+// MustGetMutableFunctionByID returns a mutable function descriptor.
+func (tc *Collection) MustGetMutableFunctionByID(
+	ctx context.Context, txn *kv.Txn, fnID descpb.ID, options ...LookupOption,
 ) (*funcdesc.Mutable, error) {
+	return tc.MayGetMutableFunctionByID(ctx, txn, fnID, prependWithRequired(options)...)
+}
+
+// MayGetMutableFunctionByID returns a mutable function descriptor.
+func (tc *Collection) MayGetMutableFunctionByID(
+	ctx context.Context, txn *kv.Txn, fnID descpb.ID, options ...LookupOption,
+) (*funcdesc.Mutable, error) {
+	var flags catalog.ObjectLookupFlags
 	flags.RequireMutable = true
+	for _, opt := range options {
+		opt.applyObject(&flags)
+	}
 	desc, err := tc.getFunctionByID(ctx, txn, fnID, flags)
 	if err != nil {
 		return nil, err
@@ -46,7 +67,7 @@ func (tc *Collection) GetMutableFunctionByID(
 }
 
 func (tc *Collection) getFunctionByID(
-	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags tree.ObjectLookupFlags,
+	ctx context.Context, txn *kv.Txn, fnID descpb.ID, flags catalog.ObjectLookupFlags,
 ) (catalog.FunctionDescriptor, error) {
 	desc, err := tc.getDescriptorByID(ctx, txn, flags.CommonLookupFlags, fnID)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -58,8 +59,7 @@ func (p *planner) alterDefaultPrivileges(
 	if n.Database != nil {
 		database = n.Database.Normalize()
 	}
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, database,
-		tree.DatabaseLookupFlags{Required: true})
+	dbDesc, err := p.Descriptors().MustGetMutableDatabaseByName(ctx, p.txn, database)
 	if err != nil {
 		return nil, err
 	}
@@ -81,16 +81,16 @@ func (p *planner) alterDefaultPrivileges(
 
 	var schemaDescs []*schemadesc.Mutable
 	for _, sc := range n.Schemas {
-		immFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-		immSchema, err := p.Descriptors().GetImmutableSchemaByName(ctx, p.txn, dbDesc, sc.Schema(), immFlags)
+		immSchema, err := p.Descriptors().MustGetImmutableSchemaByName(
+			ctx, p.txn, dbDesc, sc.Schema(), descs.WithoutLeased(),
+		)
 		if err != nil {
 			return nil, err
 		}
 		if immSchema.SchemaKind() != catalog.SchemaUserDefined {
 			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "%s is not a physical schema", immSchema.GetName())
 		}
-		mutFlags := tree.SchemaLookupFlags{Required: true}
-		mutableSchemaDesc, err := p.Descriptors().GetMutableSchemaByID(ctx, p.txn, immSchema.GetID(), mutFlags)
+		mutableSchemaDesc, err := p.Descriptors().MustGetMutableSchemaByID(ctx, p.txn, immSchema.GetID())
 		if err != nil {
 			return nil, err
 		}

@@ -38,7 +38,7 @@ func (tc *virtualDescriptors) getSchemaByName(schemaName string) catalog.SchemaD
 }
 
 func (tc *virtualDescriptors) getObjectByName(
-	schema string, object string, flags tree.ObjectLookupFlags,
+	schema string, object string, flags catalog.ObjectLookupFlags,
 ) (isVirtual bool, _ catalog.Descriptor, _ error) {
 	if tc.vs == nil {
 		return false, nil, nil
@@ -100,7 +100,7 @@ func (tc virtualDescriptors) getSchemaByID(
 }
 
 func (tc virtualDescriptors) maybeGetObjectNamesAndIDs(
-	scName string, dbDesc catalog.DatabaseDescriptor, flags tree.DatabaseListFlags,
+	scName string, dbDesc catalog.DatabaseDescriptor, flags catalog.DatabaseListFlags,
 ) (isVirtual bool, _ tree.TableNames, _ descpb.IDs) {
 	if tc.vs == nil {
 		return false, nil, nil

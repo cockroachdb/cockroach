@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -32,7 +33,7 @@ func (tc *Collection) GetObjectByName(
 	ctx context.Context,
 	txn *kv.Txn,
 	catalogName, schemaName, objectName string,
-	flags tree.ObjectLookupFlags,
+	flags catalog.ObjectLookupFlags,
 ) (prefix catalog.ResolvedObjectPrefix, desc catalog.Descriptor, err error) {
 	prefix, err = tc.getObjectPrefixByName(ctx, txn, catalogName, schemaName, flags)
 	if err != nil || prefix.Schema == nil {
@@ -42,9 +43,9 @@ func (tc *Collection) GetObjectByName(
 	{
 		var requestedType catalog.DescriptorType
 		switch flags.DesiredObjectKind {
-		case tree.TableObject:
+		case catalog.TableObject:
 			requestedType = catalog.Table
-		case tree.TypeObject:
+		case catalog.TypeObject:
 			requestedType = catalog.Type
 		default:
 			return prefix, nil, errors.AssertionFailedf(
@@ -76,11 +77,11 @@ func (tc *Collection) GetObjectByName(
 		// requested descriptor type, we return either the table descriptor itself,
 		// or the table descriptor's implicit record type.
 		switch flags.DesiredObjectKind {
-		case tree.TableObject, tree.TypeObject:
+		case catalog.TableObject, catalog.TypeObject:
 		default:
 			return prefix, nil, nil
 		}
-		if flags.DesiredObjectKind == tree.TypeObject {
+		if flags.DesiredObjectKind == catalog.TypeObject {
 			// Since a type descriptor was requested, we need to return the implicitly
 			// created record type for the table that we found.
 			if flags.RequireMutable {
@@ -96,7 +97,7 @@ func (tc *Collection) GetObjectByName(
 			}
 		}
 	case catalog.TypeDescriptor:
-		if flags.DesiredObjectKind != tree.TypeObject {
+		if flags.DesiredObjectKind != catalog.TypeObject {
 			return prefix, nil, nil
 		}
 	default:
@@ -108,20 +109,23 @@ func (tc *Collection) GetObjectByName(
 }
 
 func (tc *Collection) getObjectPrefixByName(
-	ctx context.Context, txn *kv.Txn, catalogName, schemaName string, objFlags tree.ObjectLookupFlags,
+	ctx context.Context,
+	txn *kv.Txn,
+	catalogName, schemaName string,
+	objFlags catalog.ObjectLookupFlags,
 ) (prefix catalog.ResolvedObjectPrefix, err error) {
 	// If we're reading the object descriptor from the store,
 	// we should read its parents from the store too to ensure
 	// that subsequent name resolution finds the latest name
 	// in the face of a concurrent rename.
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		Required:       objFlags.Required,
 		AvoidLeased:    objFlags.AvoidLeased || objFlags.RequireMutable,
 		IncludeDropped: objFlags.IncludeDropped,
 		IncludeOffline: objFlags.IncludeOffline,
 	}
 	if catalogName != "" {
-		prefix.Database, err = tc.GetImmutableDatabaseByName(ctx, txn, catalogName, flags)
+		prefix.Database, err = tc.MayGetImmutableDatabaseByName(ctx, txn, catalogName, WithFlags(flags))
 		if err != nil {
 			return prefix, err
 		}
@@ -132,7 +136,9 @@ func (tc *Collection) getObjectPrefixByName(
 			return prefix, nil
 		}
 	}
-	prefix.Schema, err = tc.GetImmutableSchemaByName(ctx, txn, prefix.Database, schemaName, flags)
+	prefix.Schema, err = tc.MayGetImmutableSchemaByName(
+		ctx, txn, prefix.Database, schemaName, WithFlags(flags),
+	)
 	if err != nil {
 		return prefix, err
 	}
@@ -143,4 +149,92 @@ func (tc *Collection) getObjectPrefixByName(
 		return prefix, nil
 	}
 	return prefix, nil
+}
+
+type LookupOption interface {
+	apply(flags *catalog.CommonLookupFlags)
+	applyObject(flags *catalog.ObjectLookupFlags)
+}
+
+type commonOptionFunc func(*catalog.CommonLookupFlags)
+
+func (o commonOptionFunc) apply(flags *catalog.CommonLookupFlags)       { o(flags) }
+func (o commonOptionFunc) applyObject(flags *catalog.ObjectLookupFlags) { o(&flags.CommonLookupFlags) }
+
+var _ LookupOption = (commonOptionFunc)(nil)
+
+type objectOptionFunc func(flags *catalog.ObjectLookupFlags)
+
+func (o objectOptionFunc) apply(_ *catalog.CommonLookupFlags)           {}
+func (o objectOptionFunc) applyObject(flags *catalog.ObjectLookupFlags) { o(flags) }
+
+var _ LookupOption = (commonOptionFunc)(nil)
+
+func WithOffline() LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.IncludeOffline = true
+	})
+}
+
+func SetIncludeOffline(includeOffline bool) LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.IncludeOffline = includeOffline
+	})
+}
+
+func WithDropped() LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.IncludeDropped = true
+	})
+}
+
+func SetAvoidLeased(avoidLeased bool) LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.AvoidLeased = avoidLeased
+	})
+}
+
+func WithoutLeased() LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.AvoidLeased = true
+	})
+}
+
+func WithoutSynthetic() LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.AvoidSynthetic = true
+	})
+}
+
+func WithParentID(parentID descpb.ID) LookupOption {
+	return commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+		flags.ParentID = parentID
+	})
+}
+
+func WithTable() LookupOption {
+	return objectOptionFunc(func(flags *catalog.ObjectLookupFlags) {
+		flags.DesiredObjectKind = catalog.TableObject
+	})
+}
+
+func WithFlags(f catalog.CommonLookupFlags) LookupOption {
+	return objectOptionFunc(func(flags *catalog.ObjectLookupFlags) {
+		flags.CommonLookupFlags = f
+	})
+}
+
+func prependWithRequired(options []LookupOption) []LookupOption {
+	return append([]LookupOption{withRequired}, options...)
+}
+
+var withRequired LookupOption = commonOptionFunc(func(flags *catalog.CommonLookupFlags) {
+	flags.Required = true
+})
+
+func WithTableKind(kind tree.RequiredTableKind) LookupOption {
+	return objectOptionFunc(func(flags *catalog.ObjectLookupFlags) {
+		flags.DesiredObjectKind = catalog.TableObject
+		flags.DesiredTableDescKind = kind
+	})
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -259,13 +260,9 @@ func dropDepTableOnSequence(
 	seqName string,
 	depColIDs []descpb.ColumnID,
 ) error {
-	tblDesc, err := p.Descriptors().GetMutableTableByID(ctx, p.txn, tblDesc.ID,
-		tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				IncludeOffline: true,
-				IncludeDropped: true,
-			},
-		})
+	tblDesc, err := p.Descriptors().MayGetMutableTableByID(
+		ctx, p.txn, tblDesc.ID, descs.WithOffline(), descs.WithDropped(),
+	)
 	if err != nil {
 		return err
 	}

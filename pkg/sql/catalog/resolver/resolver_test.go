@@ -114,7 +114,7 @@ func (f *fakeMetadata) LookupSchema(
 
 // LookupObject implements the TableNameResolver interface.
 func (f *fakeMetadata) LookupObject(
-	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+	ctx context.Context, flags catalog.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	defer func() {
 		f.t.Logf("LookupObject(%s, %s, %s) -> found %v prefix %v meta %v err %v",
@@ -462,7 +462,7 @@ func TestResolveTablePatternOrName(t *testing.T) {
 					ctPrefix = tpv.Catalog()
 				case *tree.TableName:
 					if tc.expected {
-						flags := tree.ObjectLookupFlags{}
+						flags := catalog.ObjectLookupFlags{}
 						// TODO: As part of work for #34240, we should be operating on
 						//  UnresolvedObjectNames here, rather than TableNames.
 						un := tpv.ToUnresolvedObjectName()
@@ -677,12 +677,11 @@ CREATE INDEX baz_idx ON baz (s);
 `)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		found, tbl, err := col.GetMutableTableByName(
+		tbl, err := col.MustGetMutableTableByName(
 			ctx, txn,
 			tree.NewTableNameWithSchema("defaultdb", "public", "baz"),
-			tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc),
+			descs.WithTableKind(tree.ResolveRequireTableDesc),
 		)
-		require.True(t, found)
 		require.NoError(t, err)
 		tbl.SetOffline("testing-index-resolving")
 		err = col.WriteDesc(ctx, false, tbl, txn)

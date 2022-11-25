@@ -1086,12 +1086,13 @@ func createImportingDescriptors(
 			// to the new tables being restored.
 			for _, table := range mutableTables {
 				// Collect all types used by this table.
-				_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-					ctx, txn, table.GetParentID(), tree.DatabaseLookupFlags{
-						Required:       true,
-						AvoidLeased:    true,
-						IncludeOffline: true,
-					})
+				dbDesc, err := descsCol.MustGetImmutableDatabaseByID(
+					ctx,
+					txn,
+					table.GetParentID(),
+					descs.WithoutLeased(),
+					descs.WithOffline(),
+				)
 				if err != nil {
 					return err
 				}
@@ -1113,7 +1114,13 @@ func createImportingDescriptors(
 						continue
 					}
 					// Otherwise, add a backreference to this table.
-					typDesc, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+					typDesc, err := descsCol.MustGetMutableTypeByID(
+						ctx,
+						txn,
+						id,
+						descs.WithOffline(),
+						descs.WithDropped(),
+					)
 					if err != nil {
 						return err
 					}
@@ -1137,15 +1144,12 @@ func createImportingDescriptors(
 			if details.DescriptorCoverage != tree.AllDescriptors {
 				for _, table := range tableDescs {
 					if lc := table.GetLocalityConfig(); lc != nil {
-						_, desc, err := descsCol.GetImmutableDatabaseByID(
+						desc, err := descsCol.MustGetImmutableDatabaseByID(
 							ctx,
 							txn,
 							table.ParentID,
-							tree.DatabaseLookupFlags{
-								Required:       true,
-								AvoidLeased:    true,
-								IncludeOffline: true,
-							},
+							descs.WithoutLeased(),
+							descs.WithOffline(),
 						)
 						if err != nil {
 							return err
@@ -2368,12 +2372,13 @@ func (r *restoreResumer) dropDescriptors(
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
 		typDesc := details.TypeDescs[i]
-		mutType, err := descsCol.GetMutableTypeByID(ctx, txn, typDesc.ID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeOffline: true,
-			},
-		})
+		mutType, err := descsCol.MayGetMutableTypeByID(
+			ctx,
+			txn,
+			typDesc.ID,
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+		)
 		if err != nil {
 			return err
 		}
@@ -2389,12 +2394,13 @@ func (r *restoreResumer) dropDescriptors(
 
 	for i := range details.FunctionDescs {
 		fnDesc := details.FunctionDescs[i]
-		mutFn, err := descsCol.GetMutableFunctionByID(ctx, txn, fnDesc.ID, tree.ObjectLookupFlags{
-			CommonLookupFlags: tree.CommonLookupFlags{
-				AvoidLeased:    true,
-				IncludeOffline: true,
-			},
-		})
+		mutFn, err := descsCol.MustGetMutableFunctionByID(
+			ctx,
+			txn,
+			fnDesc.ID,
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+		)
 		if err != nil {
 			return err
 		}
@@ -2597,24 +2603,26 @@ func setGCTTLForDroppingTable(
 	log.VInfof(ctx, 2, "lowering TTL for table %q (%d)", tableToDrop.GetName(), tableToDrop.GetID())
 	// We get a mutable descriptor here because we are going to construct a
 	// synthetic descriptor collection in which they are online.
-	_, dbDesc, err := descsCol.GetImmutableDatabaseByID(ctx, txn, tableToDrop.GetParentID(),
-		tree.DatabaseLookupFlags{
-			Required:       true,
-			IncludeOffline: true,
-			IncludeDropped: true,
-			AvoidLeased:    true,
-		})
+	dbDesc, err := descsCol.MustGetImmutableDatabaseByID(
+		ctx,
+		txn,
+		tableToDrop.GetParentID(),
+		descs.WithoutLeased(),
+		descs.WithOffline(),
+		descs.WithDropped(),
+	)
 	if err != nil {
 		return err
 	}
 
-	schemaDesc, err := descsCol.GetImmutableSchemaByID(ctx, txn, tableToDrop.GetParentSchemaID(),
-		tree.SchemaLookupFlags{
-			Required:       true,
-			IncludeDropped: true,
-			IncludeOffline: true,
-			AvoidLeased:    true,
-		})
+	schemaDesc, err := descsCol.MustGetImmutableSchemaByID(
+		ctx,
+		txn,
+		tableToDrop.GetParentSchemaID(),
+		descs.WithoutLeased(),
+		descs.WithOffline(),
+		descs.WithDropped(),
+	)
 	if err != nil {
 		return err
 	}
@@ -2673,7 +2681,13 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 				return restored, nil
 			}
 			// Finally, look it up using the transaction.
-			typ, err := descsCol.GetMutableTypeVersionByID(ctx, txn, id)
+			typ, err := descsCol.MayGetMutableTypeByID(
+				ctx,
+				txn,
+				id,
+				descs.WithOffline(),
+				descs.WithDropped(),
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -2681,12 +2695,13 @@ func (r *restoreResumer) removeExistingTypeBackReferences(
 			return typ, nil
 		}
 
-		_, dbDesc, err := descsCol.GetImmutableDatabaseByID(
-			ctx, txn, tbl.GetParentID(), tree.DatabaseLookupFlags{
-				Required:       true,
-				AvoidLeased:    true,
-				IncludeOffline: true,
-			})
+		dbDesc, err := descsCol.MustGetImmutableDatabaseByID(
+			ctx,
+			txn,
+			tbl.GetParentID(),
+			descs.WithoutLeased(),
+			descs.WithOffline(),
+		)
 		if err != nil {
 			return err
 		}

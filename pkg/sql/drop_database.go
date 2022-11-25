@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -61,8 +62,9 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := p.Descriptors().GetMutableDatabaseByName(ctx, p.txn, string(n.Name),
-		tree.DatabaseLookupFlags{Required: !n.IfExists})
+	dbDesc, err := p.Descriptors().MayGetMutableDatabaseByName(
+		ctx, p.txn, string(n.Name), descs.WithFlags(catalog.DatabaseLookupFlags{Required: !n.IfExists}),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -83,11 +85,8 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	d := newDropCascadeState()
 
 	for _, schema := range schemas {
-		res, err := p.Descriptors().GetImmutableSchemaByName(
-			ctx, p.txn, dbDesc, schema, tree.SchemaLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			},
+		res, err := p.Descriptors().MustGetImmutableSchemaByName(
+			ctx, p.txn, dbDesc, schema, descs.WithoutLeased(),
 		)
 		if err != nil {
 			return nil, err
@@ -167,8 +166,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 			}
 		case catalog.SchemaUserDefined:
 			// For user defined schemas, we have to do a bit more work.
-			mutDesc, err := p.Descriptors().GetMutableSchemaByID(
-				ctx, p.txn, schemaToDelete.GetID(), p.CommonLookupFlagsRequired(),
+			mutDesc, err := p.Descriptors().MustGetMutableSchemaByID(
+				ctx, p.txn, schemaToDelete.GetID(), descs.WithFlags(p.CommonLookupFlagsRequired()),
 			)
 			if err != nil {
 				return err

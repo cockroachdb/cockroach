@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -204,10 +205,9 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		fqTableName = n.p.ResolvedName(t).FQString()
 
 	case *tree.TableRef:
-		flags := tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-			AvoidLeased: n.p.skipDescriptorCache,
-		}}
-		tableDesc, err = n.p.Descriptors().GetImmutableTableByID(ctx, n.p.txn, descpb.ID(t.TableID), flags)
+		tableDesc, err = n.p.Descriptors().MayGetImmutableTableByID(
+			ctx, n.p.txn, descpb.ID(t.TableID), descs.SetAvoidLeased(n.p.skipDescriptorCache),
+		)
 		if err != nil {
 			return nil, err
 		}

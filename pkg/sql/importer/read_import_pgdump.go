@@ -278,10 +278,9 @@ func createPostgresSchemas(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
 		schemaDescs = nil // reset for retries
-		_, dbDesc, err := descriptors.GetImmutableDatabaseByID(ctx, txn, parentID, tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+		dbDesc, err := descriptors.MustGetImmutableDatabaseByID(
+			ctx, txn, parentID, descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}

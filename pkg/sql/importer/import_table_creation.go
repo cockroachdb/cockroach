@@ -377,13 +377,13 @@ func (r *fkResolver) CurrentSearchPath() sessiondata.SearchPath {
 }
 
 // CommonLookupFlagsRequired implements the resolver.SchemaResolver interface.
-func (r *fkResolver) CommonLookupFlagsRequired() tree.CommonLookupFlags {
-	return tree.CommonLookupFlags{Required: true}
+func (r *fkResolver) CommonLookupFlagsRequired() catalog.CommonLookupFlags {
+	return catalog.CommonLookupFlags{Required: true}
 }
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkResolver) LookupObject(
-	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+	ctx context.Context, flags catalog.ObjectLookupFlags, dbName, scName, obName string,
 ) (found bool, prefix catalog.ResolvedObjectPrefix, objMeta catalog.Descriptor, err error) {
 	// PGDUMP supports non-public schemas so respect the schema name.
 	var lookupName string

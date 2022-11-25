@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -133,8 +134,8 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 
-	scDesc, err := params.p.Descriptors().GetMutableSchemaByID(
-		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
+	scDesc, err := params.p.Descriptors().MustGetMutableSchemaByID(
+		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(),
 	)
 	if err != nil {
 		return err
@@ -269,16 +270,15 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	}
 	// Functions cannot be resolved across db, so just use current db name to get
 	// the descriptor.
-	db, err := params.p.Descriptors().GetMutableDatabaseByName(
-		params.ctx, params.p.txn, params.p.CurrentDatabase(), tree.DatabaseLookupFlags{Required: true},
+	db, err := params.p.Descriptors().MustGetMutableDatabaseByName(
+		params.ctx, params.p.txn, params.p.CurrentDatabase(),
 	)
 	if err != nil {
 		return err
 	}
 
-	scFlags := tree.SchemaLookupFlags{Required: true, AvoidLeased: true}
-	sc, err := params.p.Descriptors().GetImmutableSchemaByName(
-		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), scFlags,
+	sc, err := params.p.Descriptors().MustGetImmutableSchemaByName(
+		params.ctx, params.p.txn, db, string(n.n.NewSchemaName), descs.WithoutLeased(),
 	)
 	if err != nil {
 		return err
@@ -304,8 +304,8 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		// No-op if moving to the same schema.
 		return nil
 	}
-	targetSc, err := params.p.Descriptors().GetMutableSchemaByID(
-		params.ctx, params.p.txn, sc.GetID(), params.p.CommonLookupFlagsRequired(),
+	targetSc, err := params.p.Descriptors().MustGetMutableSchemaByID(
+		params.ctx, params.p.txn, sc.GetID(), descs.WithFlags(params.p.CommonLookupFlagsRequired()),
 	)
 	if err != nil {
 		return err
@@ -326,8 +326,8 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 		)
 	}
 
-	sourceSc, err := params.p.Descriptors().GetMutableSchemaByID(
-		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true},
+	sourceSc, err := params.p.Descriptors().MustGetMutableSchemaByID(
+		params.ctx, params.p.txn, fnDesc.GetParentSchemaID(),
 	)
 	if err != nil {
 		return err

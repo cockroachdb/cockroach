@@ -2417,10 +2417,10 @@ func TestLeaseWithOfflineTables(t *testing.T) {
 		require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
 			ctx context.Context, txn *kv.Txn, descsCol *descs.Collection,
 		) error {
-			flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
-			flags.CommonLookupFlags.IncludeOffline = true
-			flags.CommonLookupFlags.IncludeDropped = true
-			desc, err := descsCol.GetMutableTableByID(ctx, txn, testTableID(), flags)
+			desc, err := descsCol.MustGetMutableTableByID(
+				ctx, txn, testTableID(),
+				descs.WithOffline(), descs.WithDropped(), descs.WithTableKind(tree.ResolveRequireTableDesc),
+			)
 			require.NoError(t, err)
 			require.Equal(t, desc.State, expected)
 			desc.State = next
@@ -2793,7 +2793,9 @@ CREATE TABLE d1.t2 (name int);
 	require.NoError(t, sql.DescsTxn(ctx, &cfg, func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) error {
-		_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn, tree.NewTableNameWithSchema("d1", "public", "t1"), tree.ObjectLookupFlagsWithRequired())
+		tableDesc, err := descriptors.MustGetMutableTableByName(
+			ctx, txn, tree.NewTableNameWithSchema("d1", "public", "t1"),
+		)
 		if err != nil {
 			return err
 		}
@@ -2816,14 +2818,13 @@ CREATE TABLE d1.t2 (name int);
 			mu.Unlock()
 
 			// Online the descriptor by making it public
-			_, tableDesc, err := descriptors.GetMutableTableByName(ctx, txn,
+			tableDesc, err := descriptors.MustGetMutableTableByName(
+				ctx,
+				txn,
 				tree.NewTableNameWithSchema("d1", "public", "t1"),
-				tree.ObjectLookupFlags{CommonLookupFlags: tree.CommonLookupFlags{
-					Required:       true,
-					RequireMutable: true,
-					IncludeOffline: true,
-					AvoidLeased:    true,
-				}})
+				descs.WithoutLeased(),
+				descs.WithOffline(),
+			)
 			if err != nil {
 				return err
 			}

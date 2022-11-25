@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,7 +39,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 		testName   string
 		setup      []string
 		name       tree.UnresolvedName
-		flags      tree.ObjectLookupFlags
+		flags      catalog.ObjectLookupFlags
 		searchPath string
 	}{
 		{
@@ -47,7 +48,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				"CREATE TABLE foo ()",
 			},
 			name:  tree.MakeUnresolvedName("foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: catalog.ObjectLookupFlagsWithRequired(),
 		},
 		{
 			testName: "in schema, explicit",
@@ -56,7 +57,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				"CREATE TABLE sc.foo ()",
 			},
 			name:  tree.MakeUnresolvedName("sc", "foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: catalog.ObjectLookupFlagsWithRequired(),
 		},
 		{
 			testName: "in schema, implicit",
@@ -65,7 +66,7 @@ func BenchmarkResolveExistingObject(b *testing.B) {
 				"CREATE TABLE sc.foo ()",
 			},
 			name:       tree.MakeUnresolvedName("foo"),
-			flags:      tree.ObjectLookupFlagsWithRequired(),
+			flags:      catalog.ObjectLookupFlagsWithRequired(),
 			searchPath: "public,$user,sc",
 		},
 	} {
@@ -127,7 +128,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 		testName   string
 		setup      []string
 		name       tree.UnresolvedName
-		flags      tree.ObjectLookupFlags
+		flags      catalog.ObjectLookupFlags
 		searchPath string
 	}{
 		{
@@ -136,7 +137,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				"CREATE FUNCTION foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
 			},
 			name:  tree.MakeUnresolvedName("foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: catalog.ObjectLookupFlagsWithRequired(),
 		},
 		{
 			testName: "in schema, explicit",
@@ -145,7 +146,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				"CREATE FUNCTION sc.foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
 			},
 			name:  tree.MakeUnresolvedName("sc", "foo"),
-			flags: tree.ObjectLookupFlagsWithRequired(),
+			flags: catalog.ObjectLookupFlagsWithRequired(),
 		},
 		{
 			testName: "in schema, implicit",
@@ -154,7 +155,7 @@ func BenchmarkResolveFunction(b *testing.B) {
 				"CREATE FUNCTION sc.foo() RETURNS int IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$",
 			},
 			name:       tree.MakeUnresolvedName("foo"),
-			flags:      tree.ObjectLookupFlagsWithRequired(),
+			flags:      catalog.ObjectLookupFlagsWithRequired(),
 			searchPath: "public,$user,sc",
 		},
 	} {

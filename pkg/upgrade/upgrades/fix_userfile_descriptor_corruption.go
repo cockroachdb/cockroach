@@ -58,12 +58,7 @@ func fixInvalidObjectsThatLookLikeBadUserfileConstraint(
 				errString := string(tree.MustBeDString(row[4]))
 				if veryLikelyKnownUserfileBreakage(ctx, txn, descriptors, tableID, errString) {
 					log.Infof(ctx, "attempting to fix invalid table descriptor %d assuming it is a userfile-related table", tableID)
-					mutTableDesc, err := descriptors.GetMutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlags{
-						CommonLookupFlags: tree.CommonLookupFlags{
-							IncludeOffline: true,
-							IncludeDropped: true,
-						},
-					})
+					mutTableDesc, err := descriptors.GetMutableTableVersionByID(ctx, tableID, txn)
 					if err != nil {
 						return err
 					}
@@ -93,12 +88,9 @@ func veryLikelyKnownUserfileBreakage(
 		return false
 	}
 
-	tableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, id, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
-			IncludeOffline: true,
-			IncludeDropped: true,
-		},
-	})
+	tableDesc, err := descriptors.MayGetImmutableTableByID(
+		ctx, txn, id, descs.WithOffline(), descs.WithDropped(),
+	)
 	if err != nil {
 		return false
 	}
@@ -141,12 +133,9 @@ func mutationsLookLikeuserfilePayloadCorruption(
 	if mutation.Adding() && mutation.DeleteOnly() {
 		if constraintMutation := mutation.AsConstraint(); constraintMutation != nil {
 			if fkConstraint := constraintMutation.AsForeignKey(); fkConstraint != nil {
-				targetTableDesc, err := descriptors.GetImmutableTableByID(ctx, txn, fkConstraint.ReferencedTableID, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						IncludeOffline: true,
-						IncludeDropped: true,
-					},
-				})
+				targetTableDesc, err := descriptors.MayGetImmutableTableByID(
+					ctx, txn, fkConstraint.ReferencedTableID, descs.WithOffline(), descs.WithDropped(),
+				)
 				if err != nil {
 					return false
 				}

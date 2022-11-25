@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -197,11 +198,9 @@ func (p *planner) removeTypeBackReferences(
 func (p *planner) addBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), descs.WithoutLeased(),
+	)
 	if err != nil {
 		return err
 	}
@@ -227,11 +226,9 @@ func (p *planner) addBackRefsFromAllTypesInTable(
 func (p *planner) removeBackRefsFromAllTypesInTable(
 	ctx context.Context, desc *tabledesc.Mutable,
 ) error {
-	_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-		ctx, p.txn, desc.GetParentID(), tree.DatabaseLookupFlags{
-			Required:    true,
-			AvoidLeased: true,
-		})
+	dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByID(
+		ctx, p.txn, desc.GetParentID(), descs.WithoutLeased(),
+	)
 	if err != nil {
 		return err
 	}

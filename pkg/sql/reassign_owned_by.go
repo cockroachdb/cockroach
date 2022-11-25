@@ -121,8 +121,9 @@ func (n *reassignOwnedByNode) startExec(params runParams) error {
 
 	// Filter for all objects in current database.
 	currentDatabase := params.p.CurrentDatabase()
-	currentDbDesc, err := params.p.Descriptors().GetMutableDatabaseByName(
-		params.ctx, params.p.txn, currentDatabase, tree.DatabaseLookupFlags{Required: true})
+	currentDbDesc, err := params.p.Descriptors().MustGetMutableDatabaseByName(
+		params.ctx, params.p.txn, currentDatabase,
+	)
 	if err != nil {
 		return err
 	}
@@ -341,8 +342,8 @@ func (n *reassignOwnedByNode) reassignTypeOwner(
 func (n *reassignOwnedByNode) reassignFunctionOwner(
 	fnDesc catalog.FunctionDescriptor, params runParams,
 ) error {
-	mutableDesc, err := params.p.Descriptors().GetMutableFunctionByID(
-		params.ctx, params.p.txn, fnDesc.GetID(), tree.ObjectLookupFlagsWithRequired(),
+	mutableDesc, err := params.p.Descriptors().MustGetMutableFunctionByID(
+		params.ctx, params.p.txn, fnDesc.GetID(),
 	)
 	if err != nil {
 		return err

@@ -17,14 +17,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/errors"
 )
 
 // GetTableNameByID fetches the full tree table name by the given ID.
 func GetTableNameByID(
 	ctx context.Context, txn *kv.Txn, tc *Collection, tableID descpb.ID,
 ) (*tree.TableName, error) {
-	tbl, err := tc.GetImmutableTableByID(ctx, txn, tableID, tree.ObjectLookupFlagsWithRequired())
+	tbl, err := tc.MustGetImmutableTableByID(ctx, txn, tableID)
 	if err != nil {
 		return nil, err
 	}
@@ -35,16 +34,13 @@ func GetTableNameByID(
 func GetTableNameByDesc(
 	ctx context.Context, txn *kv.Txn, tc *Collection, tbl catalog.TableDescriptor,
 ) (*tree.TableName, error) {
-	sc, err := tc.GetImmutableSchemaByID(ctx, txn, tbl.GetParentSchemaID(), tree.SchemaLookupFlags{Required: true})
+	sc, err := tc.MustGetImmutableSchemaByID(ctx, txn, tbl.GetParentSchemaID())
 	if err != nil {
 		return nil, err
 	}
-	found, db, err := tc.GetImmutableDatabaseByID(ctx, txn, tbl.GetParentID(), tree.DatabaseLookupFlags{Required: true})
+	db, err := tc.MustGetImmutableDatabaseByID(ctx, txn, tbl.GetParentID())
 	if err != nil {
 		return nil, err
-	}
-	if !found {
-		return nil, errors.AssertionFailedf("expected database %d to exist", tbl.GetParentID())
 	}
 	return tree.NewTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(tbl.GetName())), nil
 }

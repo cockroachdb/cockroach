@@ -104,14 +104,13 @@ func GetHydratedTableDescriptor(
 	var found bool
 	require.NoError(t, sql.DescsTxn(context.Background(), &execCfg,
 		func(ctx context.Context, txn *kv.Txn, col *descs.Collection) (err error) {
-			found, td, err = col.GetImmutableTableByName(ctx, txn,
+			td, err = col.MustGetImmutableTableByName(
+				ctx,
+				txn,
 				tree.NewTableNameWithSchema(dbName, scName, tableName),
-				tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+				descs.WithoutLeased(),
+			)
+			found = td != nil
 			return err
 		}))
 	require.True(t, found)

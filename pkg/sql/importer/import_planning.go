@@ -297,22 +297,17 @@ func resolveUDTsUsedByImportInto(
 	err := sql.DescsTxn(ctx, p.ExecCfg(), func(
 		ctx context.Context, txn *kv.Txn, descriptors *descs.Collection,
 	) (err error) {
-		_, dbDesc, err = descriptors.GetImmutableDatabaseByID(ctx, txn, table.GetParentID(),
-			tree.DatabaseLookupFlags{
-				Required:    true,
-				AvoidLeased: true,
-			})
+		dbDesc, err = descriptors.MustGetImmutableDatabaseByID(
+			ctx, txn, table.GetParentID(), descs.WithoutLeased(),
+		)
 		if err != nil {
 			return err
 		}
 		typeIDs, _, err := table.GetAllReferencedTypeIDs(dbDesc,
 			func(id descpb.ID) (catalog.TypeDescriptor, error) {
-				immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, id, tree.ObjectLookupFlags{
-					CommonLookupFlags: tree.CommonLookupFlags{
-						Required:    true,
-						AvoidLeased: true,
-					},
-				})
+				immutDesc, err := descriptors.MustGetImmutableTypeByID(
+					ctx, txn, id, descs.WithoutLeased(),
+				)
 				if err != nil {
 					return nil, err
 				}
@@ -323,12 +318,9 @@ func resolveUDTsUsedByImportInto(
 		}
 
 		for _, typeID := range typeIDs {
-			immutDesc, err := descriptors.GetImmutableTypeByID(ctx, txn, typeID, tree.ObjectLookupFlags{
-				CommonLookupFlags: tree.CommonLookupFlags{
-					Required:    true,
-					AvoidLeased: true,
-				},
-			})
+			immutDesc, err := descriptors.MustGetImmutableTypeByID(
+				ctx, txn, typeID, descs.WithoutLeased(),
+			)
 			if err != nil {
 				return err
 			}
@@ -521,10 +513,7 @@ func importPlanHook(
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
 			txn := p.Txn()
-			db, err = p.Accessor().GetImmutableDatabaseByName(ctx, txn, p.SessionData().Database, tree.DatabaseLookupFlags{
-				AvoidLeased: true,
-				Required:    true,
-			})
+			db, err = p.Accessor().MustGetImmutableUnleasedDatabaseByName(ctx, txn, p.SessionData().Database)
 			if err != nil {
 				return pgerror.Wrap(err, pgcode.UndefinedObject,
 					"could not resolve current database")

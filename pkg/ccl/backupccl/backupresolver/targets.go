@@ -136,7 +136,7 @@ func (r *DescriptorResolver) LookupSchema(
 
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *DescriptorResolver) LookupObject(
-	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+	ctx context.Context, flags catalog.ObjectLookupFlags, dbName, scName, obName string,
 ) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
 	// LookupObject guarantees that the ResolvedObjectPrefix is always
 	// populated, even if the object itself cannot be found. This information
@@ -379,7 +379,7 @@ func DescriptorsMatchingTargets(
 			// Verify that the database is in the correct state.
 			doesNotExistErr := errors.Errorf(`database %q does not exist`, d)
 			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{},
+				desc, catalog.CommonLookupFlags{},
 			); err != nil {
 				// Return a does not exist error if explicitly asking for this database.
 				return ret, doesNotExistErr
@@ -402,7 +402,7 @@ func DescriptorsMatchingTargets(
 		if _, ok := alreadyRequestedSchemas[id]; !ok {
 			schemaDesc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
-				schemaDesc, tree.CommonLookupFlags{IncludeOffline: !requirePublic},
+				schemaDesc, catalog.CommonLookupFlags{IncludeOffline: !requirePublic},
 			); err != nil {
 				if requirePublic {
 					return errors.Wrapf(err, "schema %d was expected to be PUBLIC", id)
@@ -467,7 +467,7 @@ func DescriptorsMatchingTargets(
 		switch p := pattern.(type) {
 		case *tree.TableName:
 			un := p.ToUnresolvedObjectName()
-			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, tree.ObjectLookupFlags{}, currentDatabase, searchPath)
+			found, prefix, descI, err := resolver.ResolveExisting(ctx, un, r, catalog.ObjectLookupFlags{}, currentDatabase, searchPath)
 			if err != nil {
 				return ret, err
 			}
@@ -492,7 +492,7 @@ func DescriptorsMatchingTargets(
 
 			// Verify that the table is in the correct state.
 			if err := catalog.FilterDescriptorState(
-				tableDesc, tree.CommonLookupFlags{},
+				tableDesc, catalog.CommonLookupFlags{},
 			); err != nil {
 				// Return a does not exist error if explicitly asking for this table.
 				return ret, doesNotExistErr
@@ -592,7 +592,7 @@ func DescriptorsMatchingTargets(
 		for _, id := range objectsIDs.Ordered() {
 			desc := r.DescByID[id]
 			if err := catalog.FilterDescriptorState(
-				desc, tree.CommonLookupFlags{IncludeOffline: true},
+				desc, catalog.CommonLookupFlags{IncludeOffline: true},
 			); err != nil {
 				// Don't include this object in the expansion since it's not in a valid
 				// state. Silently fail since this object was not directly requested,

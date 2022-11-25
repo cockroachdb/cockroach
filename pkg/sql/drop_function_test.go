@@ -62,7 +62,7 @@ CREATE SCHEMA test_sc;
 	)
 
 	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		funcDesc, err := col.GetImmutableFunctionByID(ctx, txn, 109, tree.ObjectLookupFlagsWithRequired())
+		funcDesc, err := col.MustGetImmutableFunctionByID(ctx, txn, 109)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
@@ -91,7 +91,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
-		_, tbl, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		tbl, err := col.MustGetImmutableTableByName(ctx, txn, &tn)
 		require.NoError(t, err)
 		require.Equal(t, "t", tbl.GetName())
 		require.Equal(t,
@@ -106,7 +106,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure sequence has correct back references.
 		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", "sq1")
-		_, seq, err := col.GetImmutableTableByName(ctx, txn, &sqn, tree.ObjectLookupFlagsWithRequired())
+		seq, err := col.MustGetImmutableTableByName(ctx, txn, &sqn)
 		require.NoError(t, err)
 		require.Equal(t, "sq1", seq.GetName())
 		require.Equal(t,
@@ -118,7 +118,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure view has correct back references.
 		vn := tree.MakeTableNameWithSchema("defaultdb", "public", "v")
-		_, view, err := col.GetImmutableTableByName(ctx, txn, &vn, tree.ObjectLookupFlagsWithRequired())
+		view, err := col.MustGetImmutableTableByName(ctx, txn, &vn)
 		require.NoError(t, err)
 		require.Equal(t, "v", view.GetName())
 		require.Equal(t,
@@ -130,7 +130,7 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := col.GetImmutableTypeByName(ctx, txn, &typn, tree.ObjectLookupFlagsWithRequired())
+		typ, err := col.MustGetImmutableTypeByName(ctx, txn, &typn)
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
 		require.Equal(t,
@@ -145,13 +145,13 @@ SELECT nextval(105:::REGCLASS);`,
 	// DROP the function and make sure dependencies are cleared.
 	tDB.Exec(t, "DROP FUNCTION f")
 	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-		_, err := col.GetImmutableFunctionByID(ctx, txn, 109, tree.ObjectLookupFlagsWithRequired())
+		_, err := col.MustGetImmutableFunctionByID(ctx, txn, 109)
 		require.Error(t, err)
 		require.Regexp(t, "descriptor is being dropped", err.Error())
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
-		_, tbl, err := col.GetImmutableTableByName(ctx, txn, &tn, tree.ObjectLookupFlagsWithRequired())
+		tbl, err := col.MustGetImmutableTableByName(ctx, txn, &tn)
 		require.NoError(t, err)
 		require.Equal(t,
 			[]descpb.TableDescriptor_Reference{
@@ -162,19 +162,19 @@ SELECT nextval(105:::REGCLASS);`,
 
 		// Make sure sequence has correct back references.
 		sqn := tree.MakeTableNameWithSchema("defaultdb", "public", "sq1")
-		_, seq, err := col.GetImmutableTableByName(ctx, txn, &sqn, tree.ObjectLookupFlagsWithRequired())
+		seq, err := col.MustGetImmutableTableByName(ctx, txn, &sqn)
 		require.NoError(t, err)
 		require.Nil(t, seq.GetDependedOnBy())
 
 		// Make sure view has correct back references.
 		vn := tree.MakeTableNameWithSchema("defaultdb", "public", "v")
-		_, view, err := col.GetImmutableTableByName(ctx, txn, &vn, tree.ObjectLookupFlagsWithRequired())
+		view, err := col.MustGetImmutableTableByName(ctx, txn, &vn)
 		require.NoError(t, err)
 		require.Nil(t, view.GetDependedOnBy())
 
 		// Make sure type has correct back references.
 		typn := tree.MakeQualifiedTypeName("defaultdb", "public", "notmyworkday")
-		_, typ, err := col.GetImmutableTypeByName(ctx, txn, &typn, tree.ObjectLookupFlagsWithRequired())
+		typ, err := col.MustGetImmutableTypeByName(ctx, txn, &typn)
 		require.NoError(t, err)
 		require.Nil(t, typ.GetReferencingDescriptorIDs())
 
@@ -374,7 +374,7 @@ $$;
 			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
 
 			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				fnDesc, err := col.MustGetImmutableFunctionByID(ctx, txn, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
 				require.True(t, fnDesc.Public())
@@ -385,7 +385,7 @@ $$;
 			tDB.Exec(t, tc.stmt)
 
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				_, err := col.MustGetImmutableFunctionByID(ctx, txn, 113)
 				require.Error(t, err)
 				require.Regexp(t, "descriptor is being dropped", err.Error())
 				return nil
@@ -407,7 +407,7 @@ $$;
 			tDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
 			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				fnDesc, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				fnDesc, err := col.MustGetImmutableFunctionByID(ctx, txn, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
 				require.True(t, fnDesc.Public())
@@ -418,7 +418,7 @@ $$;
 			tDB.Exec(t, tc.stmt)
 
 			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn *kv.Txn, col *descs.Collection) error {
-				_, err := col.GetImmutableFunctionByID(ctx, txn, 113, tree.ObjectLookupFlagsWithRequired())
+				_, err := col.MustGetImmutableFunctionByID(ctx, txn, 113)
 				require.Error(t, err)
 				require.Regexp(t, "descriptor is being dropped", err.Error())
 				return nil

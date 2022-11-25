@@ -459,12 +459,7 @@ func MemberOfWithAdminOption(
 	roleMembersCache := execCfg.RoleMemberCache
 
 	// Lookup table version.
-	_, tableDesc, err := descsCol.GetImmutableTableByName(
-		ctx,
-		txn,
-		&roleMembersTableName,
-		tree.ObjectLookupFlagsWithRequired(),
-	)
+	tableDesc, err := descsCol.MustGetImmutableTableByName(ctx, txn, &roleMembersTableName)
 	if err != nil {
 		return nil, err
 	}
@@ -747,8 +742,7 @@ func (p *planner) canCreateOnSchema(
 	user username.SQLUsername,
 	checkPublicSchema shouldCheckPublicSchema,
 ) error {
-	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true})
+	scDesc, err := p.Descriptors().MustGetImmutableSchemaByID(ctx, p.Txn(), schemaID)
 	if err != nil {
 		return err
 	}
@@ -760,8 +754,7 @@ func (p *planner) canCreateOnSchema(
 			// The caller wishes to skip this check.
 			return nil
 		}
-		_, dbDesc, err := p.Descriptors().GetImmutableDatabaseByID(
-			ctx, p.Txn(), dbID, tree.DatabaseLookupFlags{Required: true})
+		dbDesc, err := p.Descriptors().MustGetImmutableDatabaseByID(ctx, p.Txn(), dbID)
 		if err != nil {
 			return err
 		}
@@ -853,9 +846,7 @@ func (p *planner) HasOwnershipOnSchema(
 		// Only the node user has ownership over the system database.
 		return p.User().IsNodeUser(), nil
 	}
-	scDesc, err := p.Descriptors().GetImmutableSchemaByID(
-		ctx, p.Txn(), schemaID, tree.SchemaLookupFlags{Required: true},
-	)
+	scDesc, err := p.Descriptors().MustGetImmutableSchemaByID(ctx, p.Txn(), schemaID)
 	if err != nil {
 		return false, err
 	}

@@ -96,9 +96,9 @@ var _ scbuild.CatalogReader = (*buildDeps)(nil)
 func (d *buildDeps) MayResolveDatabase(
 	ctx context.Context, name tree.Name,
 ) catalog.DatabaseDescriptor {
-	db, err := d.descsCollection.GetImmutableDatabaseByName(ctx, d.txn, string(name), tree.DatabaseLookupFlags{
-		AvoidLeased: true,
-	})
+	db, err := d.descsCollection.MayGetImmutableDatabaseByName(
+		ctx, d.txn, string(name), descs.WithoutLeased(),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -113,9 +113,9 @@ func (d *buildDeps) MayResolveSchema(
 		name.CatalogName = tree.Name(d.schemaResolver.CurrentDatabase())
 	}
 	db := d.MayResolveDatabase(ctx, name.CatalogName)
-	schema, err := d.descsCollection.GetImmutableSchemaByName(ctx, d.txn, db, name.Schema(), tree.SchemaLookupFlags{
-		AvoidLeased: true,
-	})
+	schema, err := d.descsCollection.MayGetImmutableSchemaByName(
+		ctx, d.txn, db, name.Schema(), descs.WithoutLeased(),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -126,11 +126,11 @@ func (d *buildDeps) MayResolveSchema(
 func (d *buildDeps) MayResolveTable(
 	ctx context.Context, name tree.UnresolvedObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
-	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, catalog.ObjectLookupFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{
 			AvoidLeased: true,
 		},
-		DesiredObjectKind: tree.TableObject,
+		DesiredObjectKind: catalog.TableObject,
 	})
 	if err != nil {
 		panic(err)
@@ -145,11 +145,11 @@ func (d *buildDeps) MayResolveTable(
 func (d *buildDeps) MayResolveType(
 	ctx context.Context, name tree.UnresolvedObjectName,
 ) (catalog.ResolvedObjectPrefix, catalog.TypeDescriptor) {
-	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
+	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, catalog.ObjectLookupFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{
 			AvoidLeased: true,
 		},
-		DesiredObjectKind: tree.TypeObject,
+		DesiredObjectKind: catalog.TypeObject,
 	})
 	if err != nil {
 		panic(err)
@@ -182,8 +182,8 @@ func (d *buildDeps) MayResolveIndex(
 func (d *buildDeps) ReadObjectNamesAndIDs(
 	ctx context.Context, db catalog.DatabaseDescriptor, schema catalog.SchemaDescriptor,
 ) (tree.TableNames, descpb.IDs) {
-	names, ids, err := d.descsCollection.GetObjectNamesAndIDs(ctx, d.txn, db, schema.GetName(), tree.DatabaseListFlags{
-		CommonLookupFlags: tree.CommonLookupFlags{
+	names, ids, err := d.descsCollection.GetObjectNamesAndIDs(ctx, d.txn, db, schema.GetName(), catalog.DatabaseListFlags{
+		CommonLookupFlags: catalog.CommonLookupFlags{
 			Required:       true,
 			RequireMutable: false,
 			AvoidLeased:    true,
@@ -238,7 +238,7 @@ func (d *buildDeps) CurrentDatabase() string {
 
 // MustReadDescriptor implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MustReadDescriptor(ctx context.Context, id descpb.ID) catalog.Descriptor {
-	flags := tree.CommonLookupFlags{
+	flags := catalog.CommonLookupFlags{
 		Required:       true,
 		RequireMutable: false,
 		AvoidLeased:    true,

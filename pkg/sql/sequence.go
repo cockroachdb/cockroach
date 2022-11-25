@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
@@ -41,7 +42,7 @@ import (
 func (p *planner) GetSerialSequenceNameFromColumn(
 	ctx context.Context, tn *tree.TableName, columnName tree.Name,
 ) (*tree.TableName, error) {
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
+	flags := catalog.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireTableDesc)
 	_, tableDesc, err := resolver.ResolveExistingTableObject(ctx, p, tn, flags)
 	if err != nil {
 		return nil, err
@@ -56,11 +57,11 @@ func (p *planner) GetSerialSequenceNameFromColumn(
 			//       as well as backward compatibility) so we're using this heuristic for now.
 			// TODO(#52487): fix this up.
 			if col.NumUsesSequences() == 1 {
-				seq, err := p.Descriptors().GetImmutableTableByID(
+				seq, err := p.Descriptors().MustGetImmutableTableByID(
 					ctx,
 					p.txn,
 					col.GetUsesSequenceID(0),
-					tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc),
+					descs.WithTableKind(tree.ResolveRequireSequenceDesc),
 				)
 				if err != nil {
 					return nil, err
@@ -78,8 +79,9 @@ func (p *planner) IncrementSequenceByID(ctx context.Context, seqID int64) (int64
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
 	}
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
+	descriptor, err := p.Descriptors().MustGetImmutableTableByID(
+		ctx, p.txn, descpb.ID(seqID), descs.WithTableKind(tree.ResolveRequireSequenceDesc),
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -251,8 +253,9 @@ func boundsExceededError(descriptor catalog.TableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequenceByID(
 	ctx context.Context, seqID int64,
 ) (int64, error) {
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
+	descriptor, err := p.Descriptors().MustGetImmutableTableByID(
+		ctx, p.txn, descpb.ID(seqID), descs.WithTableKind(tree.ResolveRequireSequenceDesc),
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -290,8 +293,9 @@ func (p *planner) SetSequenceValueByID(
 		return readOnlyError("setval()")
 	}
 
-	flags := tree.ObjectLookupFlagsWithRequiredTableKind(tree.ResolveRequireSequenceDesc)
-	descriptor, err := p.Descriptors().GetImmutableTableByID(ctx, p.txn, descpb.ID(seqID), flags)
+	descriptor, err := p.Descriptors().MustGetImmutableTableByID(
+		ctx, p.txn, descpb.ID(seqID), descs.WithTableKind(tree.ResolveRequireSequenceDesc),
+	)
 	if err != nil {
 		return err
 	}

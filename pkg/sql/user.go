@@ -772,9 +772,7 @@ func updateUserPasswordHash(
 				// Error, or no update took place.
 				return err
 			}
-			usersTable, err := d.GetMutableTableByID(
-				ctx, txn, keys.UsersTableID, tree.ObjectLookupFlagsWithRequired(),
-			)
+			usersTable, err := d.MustGetMutableTableByID(ctx, txn, keys.UsersTableID)
 			if err != nil {
 				return err
 			}
