@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package streamingccl
+package replicationutils
 
 import (
 	"sort"
