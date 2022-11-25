@@ -18,7 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamingtest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationtestutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/streamproducer"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -94,7 +95,7 @@ SET CLUSTER SETTING stream_replication.stream_liveness_track_frequency = '500ms'
 		";")...)
 
 	// Start the destination server.
-	hDest, cleanupDest := streamingtest.NewReplicationHelper(t,
+	hDest, cleanupDest := replicationtestutils.NewReplicationHelper(t,
 		// Test fails when run from within the test tenant. More investigation
 		// is required. Tracked with #76378.
 		// TODO(ajstorm): This may be the right course of action here as the
@@ -134,13 +135,13 @@ INSERT INTO d.t1 (i) VALUES (42);
 INSERT INTO d.t2 VALUES (2);
 `)
 
-	waitUntilStartTimeReached(t, destSQL, jobspb.JobID(ingestionJobID))
+	replicationtestutils.WaitUntilStartTimeReached(t, destSQL, jobspb.JobID(ingestionJobID))
 	cutoverTime := timeutil.Now().Round(time.Microsecond)
 	destSQL.Exec(t, `ALTER TENANT "destination-tenant" COMPLETE REPLICATION TO SYSTEM TIME $1::string`, hlc.Timestamp{WallTime: cutoverTime.UnixNano()}.AsOfSystemTime())
 	jobutils.WaitForJobToSucceed(t, destSQL, jobspb.JobID(ingestionJobID))
 	jobutils.WaitForJobToSucceed(t, sourceDBRunner, jobspb.JobID(streamProducerJobID))
 
-	stats := streamIngestionStats(t, ctx, destSQL, int(ingestionJobID))
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, destSQL, int(ingestionJobID))
 	require.Equal(t, cutoverTime, stats.IngestionProgress.CutoverTime.GoTime())
 	require.Equal(t, streampb.StreamReplicationStatus_STREAM_INACTIVE, stats.ProducerStatus.StreamStatus)
 
@@ -152,11 +153,11 @@ INSERT INTO d.t2 VALUES (2);
 	defer func() {
 		require.NoError(t, destTenantConn.Close())
 	}()
-	destTenantSQL := sqlutils.MakeSQLRunner(destTenantConn)
+	DestTenantSQL := sqlutils.MakeSQLRunner(destTenantConn)
 
 	query := "SELECT * FROM d.t1"
 	sourceData := sourceSQL.QueryStr(t, query)
-	destData := destTenantSQL.QueryStr(t, query)
+	destData := DestTenantSQL.QueryStr(t, query)
 	require.Equal(t, sourceData, destData)
 }
 
@@ -179,21 +180,21 @@ func TestTenantStreamingCreationErrors(t *testing.T) {
 	defer func() { require.NoError(t, srcTenantConn.Close()) }()
 
 	// Set required cluster settings.
-	srcSysSQL := sqlutils.MakeSQLRunner(srcDB)
-	srcSysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	SrcSysSQL := sqlutils.MakeSQLRunner(srcDB)
+	SrcSysSQL.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
 
-	destSysSQL := sqlutils.MakeSQLRunner(destDB)
-	destSysSQL.Exec(t, `SET enable_experimental_stream_replication = true`)
+	DestSysSQL := sqlutils.MakeSQLRunner(destDB)
+	DestSysSQL.Exec(t, `SET enable_experimental_stream_replication = true`)
 
 	// Sink to read data from.
 	srcPgURL, cleanupSink := sqlutils.PGUrl(t, srcServer.ServingSQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanupSink()
 
-	destSysSQL.ExpectErr(t, "pq: neither the source tenant \"source\" nor the destination tenant \"system\" can be the system tenant",
+	DestSysSQL.ExpectErr(t, "pq: neither the source tenant \"source\" nor the destination tenant \"system\" can be the system tenant",
 		`CREATE TENANT system FROM REPLICATION OF source ON $1`, srcPgURL.String())
 
-	destSysSQL.Exec(t, "CREATE TENANT \"100\"")
-	destSysSQL.ExpectErr(t, "pq: tenant with name \"100\" already exists",
+	DestSysSQL.Exec(t, "CREATE TENANT \"100\"")
+	DestSysSQL.ExpectErr(t, "pq: tenant with name \"100\" already exists",
 		`CREATE TENANT "100" FROM REPLICATION OF source ON $1`, srcPgURL.String())
 }
 
@@ -290,11 +291,11 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	ctx := context.Background()
 	planned := make(chan struct{})
 	canContinue := make(chan struct{})
-	args := defaultTenantStreamingClustersArgs
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
 
 	replicationSpecs := make([]*execinfrapb.StreamIngestionDataSpec, 0)
 	frontier := &execinfrapb.StreamIngestionFrontierSpec{}
-	args.testingKnobs = &sql.StreamingTestingKnobs{
+	args.TestingKnobs = &sql.StreamingTestingKnobs{
 		AfterReplicationFlowPlan: func(ingestionSpecs []*execinfrapb.StreamIngestionDataSpec,
 			frontierSpec *execinfrapb.StreamIngestionFrontierSpec) {
 			replicationSpecs = ingestionSpecs
@@ -303,20 +304,20 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 			<-canContinue
 		},
 	}
-	c, cleanup := createTenantStreamingClusters(ctx, t, args)
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
 	defer cleanup()
 	defer close(planned)
 	defer close(canContinue)
 
-	producerJobID, replicationJobID := c.startStreamReplication()
-	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+	producerJobID, replicationJobID := c.StartStreamReplication()
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 
 	// Wait for the distsql plan to be created.
 	<-planned
-	registry := c.destSysServer.ExecutorConfig().(sql.ExecutorConfig).JobRegistry
+	registry := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig).JobRegistry
 	var replicationJobDetails jobspb.StreamIngestionDetails
-	require.NoError(t, c.destSysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+	require.NoError(t, c.DestSysServer.DB().Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		j, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
 		require.NoError(t, err)
 		var ok bool
@@ -339,21 +340,21 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 
 	// Allow the job to make some progress.
 	canContinue <- struct{}{}
-	srcTime := c.srcCluster.Server(0).Clock().Now()
-	c.waitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
 
 	// Pause the job.
-	c.destSysSQL.Exec(t, `PAUSE JOB $1`, replicationJobID)
-	jobutils.WaitForJobToPause(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+	c.DestSysSQL.Exec(t, `PAUSE JOB $1`, replicationJobID)
+	jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 
 	// Unpause the job and ensure the resumption takes place at a later timestamp
 	// than the initial scan timestamp.
-	c.destSysSQL.Exec(t, `RESUME JOB $1`, replicationJobID)
-	jobutils.WaitForJobToRun(c.t, c.srcSysSQL, jobspb.JobID(producerJobID))
-	jobutils.WaitForJobToRun(c.t, c.destSysSQL, jobspb.JobID(replicationJobID))
+	c.DestSysSQL.Exec(t, `RESUME JOB $1`, replicationJobID)
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
 
 	<-planned
-	stats := streamIngestionStats(t, ctx, c.destSysSQL, replicationJobID)
+	stats := replicationutils.TestingGetStreamIngestionStatsFromReplicationJob(t, ctx, c.DestSysSQL, replicationJobID)
 
 	// Assert that the start time hasn't changed.
 	require.Equal(t, startTime, stats.IngestionDetails.ReplicationStartTime)
@@ -372,8 +373,8 @@ func TestReplicationJobResumptionStartTime(t *testing.T) {
 	}
 	require.Equal(t, frontier.HighWaterAtStart, previousHighWaterTimestamp)
 	canContinue <- struct{}{}
-	srcTime = c.srcCluster.Server(0).Clock().Now()
-	c.waitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
-	c.cutover(producerJobID, replicationJobID, srcTime.GoTime())
-	jobutils.WaitForJobToSucceed(t, c.destSysSQL, jobspb.JobID(replicationJobID))
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilHighWatermark(srcTime, jobspb.JobID(replicationJobID))
+	c.Cutover(producerJobID, replicationJobID, srcTime.GoTime())
+	jobutils.WaitForJobToSucceed(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
 }
