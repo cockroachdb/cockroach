@@ -1,0 +1,43 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "replicationutils",
+    srcs = ["utils.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/streamingccl/replicationutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/streamingccl/streamclient",
+        "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/storage",
+        "//pkg/testutils/sqlutils",
+        "//pkg/util/hlc",
+        "//pkg/util/protoutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+go_test(
+    name = "replicationutils_test",
+    srcs = ["utils_test.go"],
+    args = ["-test.timeout=295s"],
+    embed = [":replicationutils"],
+    deps = [
+        "//pkg/clusterversion",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/storage",
+        "//pkg/testutils/storageutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/timeutil",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")
