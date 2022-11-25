@@ -17,7 +17,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -651,7 +650,7 @@ func (s *Store) processTick(_ context.Context, rangeID roachpb.RangeID) bool {
 	if !ok {
 		return false
 	}
-	livenessMap, _ := s.livenessMap.Load().(liveness.IsLiveMap)
+	livenessMap, _ := s.livenessMap.Load().(livenesspb.IsLiveMap)
 	ioThresholds := s.ioThresholds.Current()
 
 	start := timeutil.Now()

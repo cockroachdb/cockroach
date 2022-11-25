@@ -14,6 +14,7 @@ option go_package = "roachpb";
 
 import "errorspb/errors.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
 
@@ -277,6 +278,23 @@ message SpanConfigEntry {
   SpanConfig config = 2 [(gogoproto.nullable) = false];
 };
 
+// SpanConfigConformanceReport reports ranges that (i) don't conform to span
+// configs that apply over them, and (ii) are unavailable. Also included in this
+// report are the IDs of unavailable nodes (possibly contributing to
+// under-replication or range-unavailability).
+message SpanConfigConformanceReport {
+  repeated ConformanceReportedRange under_replicated = 1 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange over_replicated = 2 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange violating_constraints = 3 [(gogoproto.nullable) = false];
+  repeated ConformanceReportedRange unavailable = 4 [(gogoproto.nullable) = false];
+  repeated int32 unavailable_node_ids = 5 [(gogoproto.customname) = "UnavailableNodeIDs"];
+};
+
+message ConformanceReportedRange {
+  RangeDescriptor range_descriptor = 1 [(gogoproto.nullable) = false];
+  SpanConfig config = 2 [(gogoproto.nullable) = false];
+}
+
 // GetSpanConfigsRequest is used to fetch the span configurations and system
 // span configurations.
 message GetSpanConfigsRequest {
@@ -344,6 +362,19 @@ message UpdateSpanConfigsResponse {
   errorspb.EncodedError error = 1 [(gogoproto.nullable) = false];
 };
 
+// SpanConfigConformanceRequest is used to determine whether ranges backing the
+// given keyspans conform to the span configs that apply over them.
+message SpanConfigConformanceRequest {
+  // Spans to request the conformance data for. The spans listed here are not
+  // allowed to overlap with one another.
+  repeated Span spans = 1 [(gogoproto.nullable) = false];
+};
+
+// SpanConfigConformanceResponse lists out ranges that (i) don't conform to span
+// configs that apply over them, and (ii) are unavailable.
+message SpanConfigConformanceResponse {
+  SpanConfigConformanceReport report = 1 [(gogoproto.nullable) = false];
+};
 
 // GetAllSystemSpanConfigsThatApplyRequest is used to fetch all system span
 // configs that apply to a given tenant. For a specific tenant range, this

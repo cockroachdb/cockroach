@@ -1025,21 +1025,11 @@ func (nl *NodeLiveness) SelfEx() (_ Record, ok bool) {
 	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
 }
 
-// IsLiveMapEntry encapsulates data about current liveness for a
-// node.
-type IsLiveMapEntry struct {
-	livenesspb.Liveness
-	IsLive bool
-}
-
-// IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
-type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
-
 // GetIsLiveMap returns a map of nodeID to boolean liveness status of
 // each node. This excludes nodes that were removed completely (dead +
 // decommissioning).
-func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
-	lMap := IsLiveMap{}
+func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
+	lMap := livenesspb.IsLiveMap{}
 	nl.mu.RLock()
 	defer nl.mu.RUnlock()
 	now := nl.clock.Now().GoTime()
@@ -1049,7 +1039,7 @@ func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 			// This is a node that was completely removed. Skip over it.
 			continue
 		}
-		lMap[nID] = IsLiveMapEntry{
+		lMap[nID] = livenesspb.IsLiveMapEntry{
 			Liveness: l.Liveness,
 			IsLive:   isLive,
 		}

@@ -669,7 +669,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	l1, _ := nl.GetLiveness(1)
 	l2, _ := nl.GetLiveness(2)
 	l3, _ := nl.GetLiveness(3)
-	expectedLMap := liveness.IsLiveMap{
+	expectedLMap := livenesspb.IsLiveMap{
 		1: {Liveness: l1.Liveness, IsLive: true},
 		2: {Liveness: l2.Liveness, IsLive: true},
 		3: {Liveness: l3.Liveness, IsLive: true},
@@ -705,7 +705,7 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	l1, _ = nl.GetLiveness(1)
 	l2, _ = nl.GetLiveness(2)
 	l3, _ = nl.GetLiveness(3)
-	expectedLMap = liveness.IsLiveMap{
+	expectedLMap = livenesspb.IsLiveMap{
 		1: {Liveness: l1.Liveness, IsLive: true},
 		2: {Liveness: l2.Liveness, IsLive: false},
 		3: {Liveness: l3.Liveness, IsLive: false},

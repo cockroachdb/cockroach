@@ -378,7 +378,7 @@ func (d ReplicaSet) HasReplicaOnNode(nodeID NodeID) bool {
 // the replication layer. This is more complicated than just counting the number
 // of replicas due to the existence of joint quorums.
 func (d ReplicaSet) CanMakeProgress(liveFunc func(descriptor ReplicaDescriptor) bool) bool {
-	return d.ReplicationStatus(liveFunc, 0 /* neededVoters */).Available
+	return d.ReplicationStatus(liveFunc, 0 /* neededVoters */, -1 /* neededNonVoters*/).Available
 }
 
 // RangeStatusReport contains info about a range's replication status. Returned
@@ -389,26 +389,33 @@ type RangeStatusReport struct {
 	Available bool
 	// UnderReplicated is set if the range is considered under-replicated
 	// according to the desired replication factor and the replica liveness info
-	// passed to ReplicationStatus. Dead replicas are considered to be missing.
+	// passed to ReplicationStatus. Only voting replicas are counted here. Dead
+	// replicas are considered to be missing.
 	UnderReplicated bool
-	// UnderReplicated is set if the range is considered under-replicated
+	// OverReplicated is set if the range is considered over-replicated
 	// according to the desired replication factor passed to ReplicationStatus.
-	// Replica liveness is not considered.
+	// Only voting replicas are counted here. Replica liveness is not
+	// considered.
 	//
 	// Note that a range can be under-replicated and over-replicated at the same
 	// time if it has many replicas, but sufficiently many of them are on dead
 	// nodes.
 	OverReplicated bool
+	// {Under,Over}ReplicatedNonVoters are like their {Under,Over}Replicated
+	// counterparts but applying only to non-voters.
+	UnderReplicatedNonVoters, OverReplicatedNonVoters bool
 }
 
 // ReplicationStatus returns availability and over/under-replication
 // determinations for the range.
 //
-// replicationFactor is the replica's desired replication for purposes of
-// determining over/under-replication. 0 can be passed if the caller is only
-// interested in availability and not interested in the other report fields.
+// neededVoters is the replica's desired replication for purposes of determining
+// over/under-replication of voters. If the caller is only interested in
+// availability of voting replicas, 0 can be passed in. neededNonVoters is the
+// counterpart for non-voting replicas but with -1 as the sentinel value (unlike
+// voters, it's possible to expect 0 non-voters).
 func (d ReplicaSet) ReplicationStatus(
-	liveFunc func(descriptor ReplicaDescriptor) bool, neededVoters int,
+	liveFunc func(descriptor ReplicaDescriptor) bool, neededVoters int, neededNonVoters int,
 ) RangeStatusReport {
 	var res RangeStatusReport
 	// isBoth takes two replica predicates and returns their conjunction.
@@ -440,13 +447,22 @@ func (d ReplicaSet) ReplicationStatus(
 
 	res.Available = availableIncomingGroup && availableOutgoingGroup
 
-	// Determine over/under-replication. Note that learners don't matter.
+	// Determine over/under-replication of voting replicas. Note that learners
+	// don't matter.
 	underReplicatedOldGroup := len(liveVotersOldGroup) < neededVoters
 	underReplicatedNewGroup := len(liveVotersNewGroup) < neededVoters
 	overReplicatedOldGroup := len(votersOldGroup) > neededVoters
 	overReplicatedNewGroup := len(votersNewGroup) > neededVoters
 	res.UnderReplicated = underReplicatedOldGroup || underReplicatedNewGroup
 	res.OverReplicated = overReplicatedOldGroup || overReplicatedNewGroup
+	if neededNonVoters == -1 {
+		return res
+	}
+
+	nonVoters := d.FilterToDescriptors(ReplicaDescriptor.IsNonVoter)
+	liveNonVoters := d.FilterToDescriptors(isBoth(ReplicaDescriptor.IsNonVoter, liveFunc))
+	res.UnderReplicatedNonVoters = len(liveNonVoters) < neededNonVoters
+	res.OverReplicatedNonVoters = len(nonVoters) > neededNonVoters
 	return res
 }
 

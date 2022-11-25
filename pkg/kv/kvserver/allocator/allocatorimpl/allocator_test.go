@@ -3390,9 +3390,7 @@ func TestAllocateCandidatesExcludeNonReadyNodes(t *testing.T) {
 		}
 		// No constraints.
 		conf := roachpb.SpanConfig{}
-		analyzed := constraint.AnalyzeConstraints(
-			ctx, a.StorePool.GetStoreDescriptor, existingRepls, conf.NumReplicas,
-			conf.Constraints)
+		analyzed := constraint.AnalyzeConstraints(a.StorePool, existingRepls, conf.NumReplicas, conf.Constraints)
 		allocationConstraintsChecker := voterConstraintsCheckerForAllocation(analyzed, constraint.EmptyAnalyzedConstraints)
 		removalConstraintsChecker := voterConstraintsCheckerForRemoval(analyzed, constraint.EmptyAnalyzedConstraints)
 		rebalanceConstraintsChecker := voterConstraintsCheckerForRebalance(analyzed, constraint.EmptyAnalyzedConstraints)
@@ -3747,9 +3745,7 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		conf := roachpb.SpanConfig{Constraints: tc.constraints}
-		analyzed := constraint.AnalyzeConstraints(
-			ctx, a.StorePool.GetStoreDescriptor, existingRepls, conf.NumReplicas,
-			conf.Constraints)
+		analyzed := constraint.AnalyzeConstraints(a.StorePool, existingRepls, conf.NumReplicas, conf.Constraints)
 		checkFn := voterConstraintsCheckerForAllocation(analyzed, constraint.EmptyAnalyzedConstraints)
 
 		candidates := rankedCandidateListForAllocation(
@@ -3979,8 +3975,7 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 				StoreID: storeID,
 			}
 		}
-		analyzed := constraint.AnalyzeConstraints(ctx, a.StorePool.GetStoreDescriptor, existingRepls,
-			0 /* numReplicas */, tc.constraints)
+		analyzed := constraint.AnalyzeConstraints(a.StorePool, existingRepls, 0 /* numReplicas */, tc.constraints)
 
 		// Check behavior in a span config where `voter_constraints` are empty.
 		checkFn := voterConstraintsCheckerForRemoval(analyzed, constraint.EmptyAnalyzedConstraints)
@@ -5186,9 +5181,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			Constraints: tc.constraints,
 			NumReplicas: tc.numReplicas,
 		}
-		analyzed := constraint.AnalyzeConstraints(
-			ctx, a.StorePool.GetStoreDescriptor, existingRepls,
-			conf.NumReplicas, conf.Constraints)
+		analyzed := constraint.AnalyzeConstraints(a.StorePool, existingRepls, conf.NumReplicas, conf.Constraints)
 		removalConstraintsChecker := voterConstraintsCheckerForRemoval(
 			analyzed,
 			constraint.EmptyAnalyzedConstraints,

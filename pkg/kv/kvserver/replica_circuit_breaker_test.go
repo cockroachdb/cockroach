@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
@@ -36,8 +36,8 @@ func TestReplicaUnavailableError(t *testing.T) {
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 1, StoreID: 10, ReplicaID: 100})
 	repls.AddReplica(roachpb.ReplicaDescriptor{NodeID: 2, StoreID: 20, ReplicaID: 200})
 	desc := roachpb.NewRangeDescriptor(10, roachpb.RKey("a"), roachpb.RKey("z"), repls)
-	lm := liveness.IsLiveMap{
-		1: liveness.IsLiveMapEntry{IsLive: true},
+	lm := livenesspb.IsLiveMap{
+		1: livenesspb.IsLiveMapEntry{IsLive: true},
 	}
 	ts, err := time.Parse("2006-01-02 15:04:05", "2006-01-02 15:04:05")
 	require.NoError(t, err)

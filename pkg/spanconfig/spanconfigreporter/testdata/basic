@@ -1,0 +1,189 @@
+# Walk through the basics of the datadriven syntax. We initialize a six node
+# cluster with two nodes in each region (us-{west,central,east}) and three
+# ranges.
+
+init
+n1: region=us-west
+n2: region=us-west
+n3: region=us-central
+n4: region=us-central
+n5: region=us-east
+n6: region=us-east
+r1: [a,b)
+r2: [b,c)
+r3: [c,d)
+----
+
+# Set-up a replication factor of 3 across the entire keyspan, and allocate
+# replicas accordingly. Our conformance report should indicate no problems.
+configure
+[a,d): num_replicas=3
+----
+
+allocate
+r1: voters=[n1,n3,n5]
+r2: voters=[n1,n3,n5]
+r3: voters=[n1,n3,n5]
+----
+
+report 
+----
+ok
+
+
+# Shift around the replicas for r1 to the second node in each region. We'll
+# kill these nodes one by one and verify that we report the range to first be
+# under-replicated, and then both under-replicated and unavailable.
+allocate
+r1: voters=[n2,n4,n6]
+----
+
+liveness
+n6: dead
+----
+
+report 
+----
+under replicated:
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying range default
+
+liveness
+n4: dead
+----
+
+report 
+----
+unavailable:
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying range default
+under replicated:
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying range default
+
+liveness
+n4: live
+n6: live
+----
+
+report
+----
+ok
+
+
+# Add extra replicas for r2, and verify that it shows up as over-replicated.
+allocate
+r2: voters=[n1,n3,n5,n6]
+----
+
+report
+----
+over replicated:
+  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5, (n6,s6):6] applying range default
+
+# It should also work when we don't have enough replicas.
+allocate
+r2: voters=[n1]
+----
+
+report
+----
+under replicated:
+  r2:{b-c} [(n1,s1):1] applying range default
+
+allocate
+r2: voters=[n1,n3,n5]
+----
+
+report
+----
+ok
+
+
+# Configuring different parts of the keyspan with different replication factors
+# will work as expected. All ranges currently have 3 replicas each, so if the
+# span configs indicate that we want a different number of replicas, the
+# reports should indicate as much.
+configure
+[c,d): num_replicas=5
+[a,b): num_replicas=1
+----
+
+report
+----
+under replicated:
+  r3:{c-d} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying range system
+over replicated:
+  r1:{a-b} [(n2,s2):2, (n4,s4):4, (n6,s6):6] applying num_replicas=1
+
+configure
+[a,d): num_replicas=3
+----
+
+report
+----
+ok
+
+
+# Verify that conformance reports also work for voter/non-voter
+# constraints/replica counts. 
+configure
+[b,c): num_replicas=6 num_voters=3
+----
+
+allocate
+r2: voters=[n1,n3,n5]
+----
+
+report
+----
+under replicated:
+  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying num_replicas=6 num_voters=3
+
+allocate
+r2: voters=[n1,n2,n3,n4,n5,n6]
+----
+
+# We're under replicated due to non-voters, over replicated due to voters.
+report
+----
+under replicated:
+  r2:{b-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5):5, (n6,s6):6] applying num_replicas=6 num_voters=3
+over replicated:
+  r2:{b-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5):5, (n6,s6):6] applying num_replicas=6 num_voters=3
+
+allocate
+r2: voters=[n1,n3,n5] non-voters=[n2,n4,n6]
+----
+
+report
+----
+ok
+
+configure
+[a,d): num_replicas=3
+----
+
+allocate
+r2: voters=[n1,n3,n5]
+----
+
+report
+----
+ok
+
+
+# Verify that constraints are also reported on.
+configure
+[b,c): num_replicas=3 constraints={'+region=us-central':2}
+----
+
+report
+----
+violating constraints:
+  r2:{b-c} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying constraints=[+region=us-central:2]
+
+allocate
+r2: voters=[n1,n3,n4]
+----
+
+report
+----
+ok

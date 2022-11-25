@@ -1,0 +1,87 @@
+# Walk through basics of constraint conformance reporting. We'll use a six-node
+# cluster with various attributes and see how constraints/allocation interact.
+
+init
+n1: region=us-west,dc=dc-a
+n2: region=us-west,dc=dc-b
+n3: region=us-west,dc=dc-c
+n4: region=us-east,dc=dc-d
+n5: region=us-east,dc=dc-e
+n6: region=us-east,dc=dc-f
+r1: [a,b)
+----
+
+# Pin all three replicas to us-west. If any replica is found outside of it, it
+# should be in violation.
+configure
+[a,b): num_replicas=3 constraints={'+region=us-west':3}
+----
+
+allocate
+r1: voters=[n1,n2,n4]
+----
+
+report
+----
+violating constraints:
+  r1:{a-b} [(n1,s1):1, (n2,s2):2, (n4,s4):4] applying constraints=[+region=us-west:3]
+
+# Pin replicas to two specific DCs. A conforming replica placement should show
+# up as such.
+configure
+[a,b): num_replicas=2 constraints={'+region=us-west,+dc=dc-a':1,'+region=us-east,+dc=dc-d':1}
+----
+
+allocate
+r1: voters=[n1,n4]
+----
+
+report
+----
+ok
+
+# Pin a voter and a non-voter to two specific DCs (n1 and n4 respectively).
+# It's in violation until we get exactly what we're looking for.
+configure
+[a,b): num_replicas=2 num_voters=1 constraints={'+dc=dc-a':1,'+dc=dc-d':1} voter_constraints={'+dc=dc-a':1}
+----
+
+allocate
+r1: voters=[n1] non-voters=[n3]
+----
+
+report
+----
+violating constraints:
+  r1:{a-b} [(n1,s1):1, (n3,s3):3NON_VOTER] applying num_replicas=2 num_voters=1 constraints=[+dc=dc-a:1 +dc=dc-d:1] voter_constraints=[+dc=dc-a:1]
+
+allocate
+r1: voters=[n1] non-voters=[n4]
+----
+
+report
+----
+ok
+
+# Try negative constraints over all replicas. If any are found in n1, n2 or n3,
+# we're in violation.
+configure
+[a,b): num_replicas=3 constraints=[-region=us-west]
+----
+
+allocate
+r1: voters=[n1,n3,n5]
+----
+
+report
+----
+violating constraints:
+  r1:{a-b} [(n1,s1):1, (n3,s3):3, (n5,s5):5] applying constraints=[-region=us-west]
+
+allocate
+r1: voters=[n4,n5,n6]
+----
+
+report
+----
+ok

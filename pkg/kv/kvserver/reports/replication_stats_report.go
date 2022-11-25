@@ -401,7 +401,10 @@ func (v *replicationStatsVisitor) countRange(
 ) {
 	status := r.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
 		return v.nodeChecker(rDesc.NodeID)
-	}, replicationFactor)
+		// NB: this reporting code was written before ReplicationStatus reported
+		// on non-voting replicas. This code will also soon be removed in favor
+		// of something that works with multi-tenancy (#89987).
+	}, replicationFactor, -1 /* neededNonVoters */)
 	// Note that a range can be under-replicated and over-replicated at the same
 	// time if it has many replicas, but sufficiently many of them are on dead
 	// nodes.
