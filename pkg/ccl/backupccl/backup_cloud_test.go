@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -51,8 +50,6 @@ func TestCloudBackupRestoreS3(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	creds, bucket := requiredS3CredsAndBucket(t)
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx := context.Background()
@@ -70,8 +67,6 @@ func TestCloudBackupRestoreS3WithLegacyPut(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	creds, bucket := requiredS3CredsAndBucket(t)
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx := context.Background()
@@ -131,8 +126,6 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 		skip.IgnoreLint(t, "GOOGLE_BUCKET env var must be set")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx := context.Background()
@@ -164,8 +157,6 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 		skip.IgnoreLint(t, "AZURE_CONTAINER env var must be set")
 	}
 
-	// TODO(dan): Actually invalidate the descriptor cache and delete this line.
-	defer lease.TestingDisableTableLeases()()
 	const numAccounts = 1000
 
 	ctx := context.Background()
