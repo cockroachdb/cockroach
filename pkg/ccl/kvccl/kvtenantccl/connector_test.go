@@ -125,6 +125,12 @@ func (m *mockServer) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
+func (m *mockServer) SpanConfigConformance(
+	context.Context, *roachpb.SpanConfigConformanceRequest,
+) (*roachpb.SpanConfigConformanceResponse, error) {
+	panic("unimplemented")
+}
+
 func gossipEventForClusterID(clusterID uuid.UUID) *roachpb.GossipSubscriptionEvent {
 	return &roachpb.GossipSubscriptionEvent{
 		Key:            gossip.KeyClusterID,

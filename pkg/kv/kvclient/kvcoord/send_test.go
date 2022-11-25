@@ -101,6 +101,12 @@ func (n Node) UpdateSpanConfigs(
 	panic("unimplemented")
 }
 
+func (n Node) SpanConfigConformance(
+	context.Context, *roachpb.SpanConfigConformanceRequest,
+) (*roachpb.SpanConfigConformanceResponse, error) {
+	panic("unimplemented")
+}
+
 func (n Node) TenantSettings(
 	*roachpb.TenantSettingsRequest, roachpb.Internal_TenantSettingsServer,
 ) error {

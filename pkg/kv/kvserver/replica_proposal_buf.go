@@ -17,7 +17,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1239,7 +1239,7 @@ func (rp *replicaProposer) ownsValidLease(ctx context.Context, now hlc.ClockTime
 
 func (rp *replicaProposer) shouldCampaignOnRedirect(raftGroup proposerRaft) bool {
 	r := (*Replica)(rp)
-	livenessMap, _ := r.store.livenessMap.Load().(liveness.IsLiveMap)
+	livenessMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
 	return shouldCampaignOnLeaseRequestRedirect(
 		raftGroup.BasicStatus(),
 		livenessMap,

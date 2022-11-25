@@ -3057,6 +3057,10 @@ service Internal {
   // keyspans.
   rpc UpdateSpanConfigs (UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) { }
 
+  // SpanConfigConformance is used to determine whether ranges backing the given
+  // keyspans conform to span configs that apply over them.
+  rpc SpanConfigConformance (SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) { }
+
   // TenantSettings is used by tenants to obtain and stay up to date with tenant
   // setting overrides.
   rpc TenantSettings (TenantSettingsRequest) returns (stream TenantSettingsEvent) { }

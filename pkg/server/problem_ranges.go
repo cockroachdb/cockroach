@@ -14,7 +14,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"google.golang.org/grpc/codes"
@@ -43,8 +43,8 @@ func (s *statusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = liveness.IsLiveMap{
-			requestedNodeID: liveness.IsLiveMapEntry{IsLive: true},
+		isLiveMap = livenesspb.IsLiveMap{
+			requestedNodeID: livenesspb.IsLiveMapEntry{IsLive: true},
 		}
 	}
 

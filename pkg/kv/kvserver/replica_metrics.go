@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"go.etcd.io/etcd/raft/v3"
@@ -60,7 +60,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.ClockTimestamp, livenessMap liveness.IsLiveMap, clusterNodes int,
+	ctx context.Context, now hlc.ClockTimestamp, livenessMap livenesspb.IsLiveMap, clusterNodes int,
 ) ReplicaMetrics {
 	r.store.unquiescedReplicas.Lock()
 	_, ticking := r.store.unquiescedReplicas.m[r.RangeID]
@@ -107,7 +107,7 @@ func (r *Replica) Metrics(
 type calcReplicaMetricsInput struct {
 	raftCfg               *base.RaftConfig
 	conf                  roachpb.SpanConfig
-	livenessMap           liveness.IsLiveMap
+	livenessMap           livenesspb.IsLiveMap
 	clusterNodes          int
 	desc                  *roachpb.RangeDescriptor
 	raftStatus            *raft.Status
@@ -194,7 +194,7 @@ func calcRangeCounter(
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	leaseStatus kvserverpb.LeaseStatus,
-	livenessMap liveness.IsLiveMap,
+	livenessMap livenesspb.IsLiveMap,
 	numVoters, numReplicas int32,
 	clusterNodes int,
 ) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
@@ -220,10 +220,10 @@ func calcRangeCounter(
 		status := desc.Replicas().ReplicationStatus(func(rDesc roachpb.ReplicaDescriptor) bool {
 			return livenessMap[rDesc.NodeID].IsLive
 		},
-			// neededVoters - we don't care about the under/over-replication
-			// determinations from the report because it's too magic. We'll do our own
-			// determination below.
-			0)
+			// needed{Voters,NonVoters} - we don't care about the
+			// under/over-replication determinations from the report because
+			// it's too magic. We'll do our own determination below.
+			0, -1)
 		unavailable = !status.Available
 		liveVoters := calcLiveVoterReplicas(desc, livenessMap)
 		liveNonVoters := calcLiveNonVoterReplicas(desc, livenessMap)
@@ -240,17 +240,17 @@ func calcRangeCounter(
 // replica is determined by checking its node in the provided liveness map. This
 // method is used when indicating under-replication so only voter replicas are
 // considered.
-func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
+func calcLiveVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
 	return calcLiveReplicas(desc.Replicas().VoterDescriptors(), livenessMap)
 }
 
 // calcLiveNonVoterReplicas returns a count of the live non-voter replicas; a live
 // replica is determined by checking its node in the provided liveness map.
-func calcLiveNonVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap) int {
+func calcLiveNonVoterReplicas(desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap) int {
 	return calcLiveReplicas(desc.Replicas().NonVoterDescriptors(), livenessMap)
 }
 
-func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap liveness.IsLiveMap) int {
+func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap livenesspb.IsLiveMap) int {
 	var live int
 	for _, rd := range repls {
 		if livenessMap[rd.NodeID].IsLive {
@@ -263,7 +263,7 @@ func calcLiveReplicas(repls []roachpb.ReplicaDescriptor, livenessMap liveness.Is
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap liveness.IsLiveMap,
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap livenesspb.IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas().Descriptors() {

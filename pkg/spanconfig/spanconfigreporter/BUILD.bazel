@@ -1,0 +1,57 @@
+load("//build/bazelutil/unused_checker:unused.bzl", "get_x_data")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanconfigreporter",
+    srcs = [
+        "disabled.go",
+        "reporter.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/util/rangedesciter",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanconfigreporter_test",
+    srcs = [
+        "datadriven_test.go",
+        "main_test.go",
+    ],
+    args = ["-test.timeout=295s"],
+    data = glob(["testdata/**"]),
+    deps = [
+        ":spanconfigreporter",
+        "//pkg/keys",
+        "//pkg/kv/kvserver/constraint",
+        "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/settings/cluster",
+        "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigstore",
+        "//pkg/spanconfig/spanconfigtestutils",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "//pkg/util/rangedesciter",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
+    ],
+)
+
+get_x_data(name = "get_x_data")

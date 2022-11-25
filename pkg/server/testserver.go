@@ -725,6 +725,11 @@ func (t *TestTenant) SpanConfigKVAccessor() interface{} {
 	return t.SQLServer.tenantConnect
 }
 
+// SpanConfigReporter is part TestTenantInterface.
+func (t *TestTenant) SpanConfigReporter() interface{} {
+	return t.SQLServer.tenantConnect
+}
+
 // SpanConfigReconciler is part TestTenantInterface.
 func (t *TestTenant) SpanConfigReconciler() interface{} {
 	return t.SQLServer.spanconfigMgr.Reconciler
@@ -1159,6 +1164,11 @@ func (ts *TestServer) MigrationServer() interface{} {
 // SpanConfigKVAccessor is part of TestServerInterface.
 func (ts *TestServer) SpanConfigKVAccessor() interface{} {
 	return ts.Server.node.spanConfigAccessor
+}
+
+// SpanConfigReporter is part of TestServerInterface.
+func (ts *TestServer) SpanConfigReporter() interface{} {
+	return ts.Server.node.spanConfigReporter
 }
 
 // SpanConfigReconciler is part of TestServerInterface.
