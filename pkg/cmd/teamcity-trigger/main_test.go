@@ -11,106 +11,59 @@
 package main
 
 import (
-	"fmt"
-	"sort"
-	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
-func TestRunTC(t *testing.T) {
-	count := 0
-	runTC(func(buildID string, opts map[string]string) {
-		count++
-		if pkg, ok := opts["env.PKG"]; ok {
-			if strings.Contains(pkg, "/vendor/") {
-				t.Errorf("unexpected package %s", pkg)
-			}
-		} else {
-			t.Errorf("parameters did not include package: %+v", opts)
-		}
-	})
-	if count == 0 {
-		t.Fatal("no builds were created")
+func TestGetMaxTime(t *testing.T) {
+	customTimeouts = map[string]timeoutSpec{
+		"//pkg/sql/logictest": {
+			maxTime: 3 * time.Hour,
+		},
+		"//pkg/kv/kvserver": {
+			maxTime: 3 * time.Hour,
+		},
+		"//pkg/ccl/backupccl": {
+			maxTime: 2 * time.Hour,
+		},
+		"//pkg/ccl/logictestccl/tests/3node-tenant": {
+			maxTime: 2 * time.Hour,
+		},
+		"//some/recursive/path": {
+			maxTime:   2 * time.Hour,
+			recursive: true,
+		},
+		"//not/recursive/path": {
+			maxTime: 5 * time.Hour,
+		},
 	}
-}
-
-func Example_runTC() {
-	// Shows sample output for the following packages, some of which runs with
-	// non-default configurations.
-	pkgs := map[string]struct{}{
-		getBaseImportPath() + "kv/kvnemesis":  {},
-		getBaseImportPath() + "sql/logictest": {},
-		getBaseImportPath() + "storage":       {},
+	for _, tc := range []struct {
+		in  string
+		out time.Duration
+	}{
+		{
+			in:  "//pkg/sql/logictest:logictest_test",
+			out: 3 * time.Hour,
+		},
+		{
+			in:  "//pkg/ccl/backupccl:backupccl_test",
+			out: 2 * time.Hour,
+		},
+		{
+			in:  "//some/recursive/path/suffix/another-suffix:another-suffix_test",
+			out: 2 * time.Hour,
+		},
+		{
+			in:  "//not/in/custom/timeouts:timeouts_test",
+			out: 1 * time.Hour,
+		},
+		{
+			in:  "//not/recursive/path/suffix:suffix_test",
+			out: 1 * time.Hour,
+		},
+	} {
+		require.Equal(t, tc.out, getMaxTime(tc.in))
 	}
-
-	runTC(func(buildID string, opts map[string]string) {
-		pkg := opts["env.PKG"]
-		if _, ok := pkgs[pkg]; !ok {
-			return
-		}
-		var keys []string
-		for k := range opts {
-			if k != "env.PKG" {
-				keys = append(keys, k)
-			}
-		}
-		sort.Strings(keys)
-		fmt.Println(pkg)
-		for _, k := range keys {
-			fmt.Printf("  %-16s %s\n", k+":", opts[k])
-		}
-		fmt.Println()
-	})
-
-	// Output:
-	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
-	//   env.GOFLAGS:     -parallel=4
-	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 4
-	//   env.TESTTIMEOUT: 40m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
-	//   env.GOFLAGS:     -parallel=4
-	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 4
-	//   env.TAGS:        deadlock
-	//   env.TESTTIMEOUT: 40m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/kv/kvnemesis
-	//   env.COCKROACH_KVNEMESIS_STEPS: 10000
-	//   env.GOFLAGS:     -race -parallel=4
-	//   env.STRESSFLAGS: -maxruns 0 -maxtime 1h0m0s -maxfails 1 -p 1
-	//   env.TESTTIMEOUT: 40m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/sql/logictest
-	//   env.GOFLAGS:     -parallel=2
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 3h0m0s -maxfails 1 -p 2
-	//   env.TESTTIMEOUT: 2h0m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/sql/logictest
-	//   env.GOFLAGS:     -parallel=2
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 3h0m0s -maxfails 1 -p 2
-	//   env.TAGS:        deadlock
-	//   env.TESTTIMEOUT: 2h0m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/sql/logictest
-	//   env.GOFLAGS:     -race -parallel=2
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 3h0m0s -maxfails 1 -p 1
-	//   env.TESTTIMEOUT: 2h0m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/storage
-	//   env.GOFLAGS:     -parallel=4
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 4
-	//   env.TESTTIMEOUT: 40m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/storage
-	//   env.GOFLAGS:     -parallel=4
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 4
-	//   env.TAGS:        deadlock
-	//   env.TESTTIMEOUT: 40m0s
-	//
-	// github.com/cockroachdb/cockroach/pkg/storage
-	//   env.GOFLAGS:     -race -parallel=4
-	//   env.STRESSFLAGS: -maxruns 100 -maxtime 1h0m0s -maxfails 1 -p 1
-	//   env.TESTTIMEOUT: 40m0s
 }

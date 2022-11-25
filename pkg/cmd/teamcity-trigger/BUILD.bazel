@@ -7,10 +7,8 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/teamcity-trigger",
     visibility = ["//visibility:private"],
     deps = [
-        "//pkg/build/bazel",
         "//pkg/cmd/cmdutil",
         "@com_github_abourget_teamcity//:teamcity",
-        "@com_github_kisielk_gotool//:gotool",
     ],
 )
 
@@ -26,7 +24,7 @@ go_test(
     srcs = ["main_test.go"],
     args = ["-test.timeout=55s"],
     embed = [":teamcity-trigger_lib"],
-    tags = ["broken_in_bazel"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
 
 get_x_data(name = "get_x_data")
