@@ -13,6 +13,7 @@ package pgwire
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"time"
 
@@ -20,9 +21,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
 
 // Fully-qualified names for metrics.
@@ -207,12 +211,12 @@ type PreServeStatus struct {
 
 // PreServe serves a single connection, up to and including the
 // point status parameters are read from the client (which happens
-// pre-authentication).  This logic is tenant-independent. Once the
+// pre-authentication). This logic is tenant-independent. Once the
 // status parameters are known, the connection can be routed to a
 // particular tenant.
 func (s *PreServeConnHandler) PreServe(
-	ctx context.Context, conn net.Conn, socketType SocketType,
-) (err error) {
+	ctx context.Context, origConn net.Conn, socketType SocketType,
+) (conn net.Conn, st PreServeStatus, err error) {
 	defer func() {
 		if err != nil {
 			s.tenantIndependentMetrics.PreServeConnFailures.Inc(1)
@@ -220,5 +224,105 @@ func (s *PreServeConnHandler) PreServe(
 	}()
 	s.tenantIndependentMetrics.PreServeNewConns.Inc(1)
 
-	return nil
+	conn = origConn
+	st.State = PreServeError // Will be overridden below as needed.
+
+	// In any case, first check the command in the start-up message.
+	//
+	// We're assuming that a client is not willing/able to receive error
+	// packets before we drain that message.
+	version, buf, err := s.readVersion(conn)
+	if err != nil {
+		return conn, st, err
+	}
+
+	switch version {
+	case versionCancel:
+		// The cancel message is rather peculiar: it is sent without
+		// authentication, always over an unencrypted channel.
+		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+			return conn, PreServeStatus{
+				State:     PreServeCancel,
+				CancelKey: key,
+			}, nil
+		} else {
+			return conn, st, errors.New("cannot read cancel key")
+		}
+
+	case versionGSSENC:
+		// This is a request for an unsupported feature: GSS encryption.
+		// https://github.com/cockroachdb/cockroach/issues/52184
+		//
+		// Ensure the right SQLSTATE is sent to the SQL client.
+		err := pgerror.New(pgcode.ProtocolViolation, "GSS encryption is not yet supported")
+		// Annotate a telemetry key. These objects
+		// are treated specially by sendErr: they increase a
+		// telemetry counter to indicate an attempt was made
+		// to use this feature.
+		err = errors.WithTelemetry(err, "#52184")
+		return conn, st, s.sendErr(ctx, conn, err)
+	}
+
+	// Compute the initial connType.
+	st.ConnType, err = socketType.asConnType()
+	if err != nil {
+		return conn, st, err
+	}
+
+	// If the client requests SSL, upgrade the connection to use TLS.
+	var clientErr error
+	conn, st.ConnType, version, clientErr, err = s.maybeUpgradeToSecureConn(ctx, conn, st.ConnType, version, &buf)
+	if err != nil {
+		return conn, st, err
+	}
+	if clientErr != nil {
+		return conn, st, s.sendErr(ctx, conn, clientErr)
+	}
+
+	// What does the client want to do?
+	switch version {
+	case version30:
+		// Normal SQL connection. Proceed normally below.
+
+	case versionCancel:
+		// The PostgreSQL protocol definition says that cancel payloads
+		// must be sent *prior to upgrading the connection to use TLS*.
+		// Yet, we've found clients in the wild that send the cancel
+		// after the TLS handshake, for example at
+		// https://github.com/cockroachlabs/support/issues/600.
+		if ok, key := readCancelKeyAndCloseConn(ctx, conn, &buf); ok {
+			return conn, PreServeStatus{
+				State:     PreServeCancel,
+				CancelKey: key,
+			}, nil
+		} else {
+			return conn, st, errors.New("cannot read cancel key")
+		}
+
+	default:
+		// We don't know this protocol.
+		err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
+		err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
+		return conn, st, s.sendErr(ctx, conn, err)
+	}
+
+	// Reserve some memory for this connection using the server's monitor. This
+	// reduces pressure on the shared pool because the server monitor allocates in
+	// chunks from the shared pool and these chunks should be larger than
+	// baseSQLMemoryBudget.
+	st.Reserved = s.tenantIndependentConnMonitor.MakeBoundAccount()
+	if err := st.Reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
+		return conn, st, errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
+			baseSQLMemoryBudget)
+	}
+
+	// Load the client-provided session parameters.
+	st.clientParameters, err = parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
+	if err != nil {
+		st.Reserved.Close(ctx)
+		return conn, st, s.sendErr(ctx, conn, err)
+	}
+
+	st.State = PreServeReady
+	return conn, st, nil
 }
