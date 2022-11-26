@@ -249,8 +249,13 @@ type Server struct {
 		identityMap *identmap.Conf
 	}
 
+	// sqlMemoryPool is the parent memory pool for all SQL memory allocations
+	// for this tenant, including SQL query execution, etc.
 	sqlMemoryPool *mon.BytesMonitor
-	connMonitor   *mon.BytesMonitor
+
+	// tenantSpecificConnMonitor is the pool where the memory usage for the
+	// initial connection overhead is accounted for.
+	tenantSpecificConnMonitor *mon.BytesMonitor
 
 	// testing{Conn,Auth}LogEnabled is used in unit tests in this
 	// package to force-enable conn/auth logging without dancing around
@@ -336,6 +341,7 @@ func MakeServer(
 	histogramWindow time.Duration,
 	executorConfig *sql.ExecutorConfig,
 ) *Server {
+	ctx := ambientCtx.AnnotateCtx(context.Background())
 	server := &Server{
 		AmbientCtx: ambientCtx,
 		cfg:        cfg,
@@ -346,8 +352,12 @@ func MakeServer(
 		// We are initializing preServeHandler here until the following issue is resolved:
 		// https://github.com/cockroachdb/cockroach/issues/84585
 		preServeHandler: MakePreServeConnHandler(
-			cfg, &st.SV,
-			executorConfig.RPCContext.GetServerTLSConfig),
+			ctx,
+			cfg, st,
+			executorConfig.RPCContext.GetServerTLSConfig,
+			histogramWindow,
+			parentMemoryMonitor,
+		),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -360,30 +370,28 @@ func MakeServer(
 		nil, /* curCount */
 		nil, /* maxHist */
 		0, noteworthySQLMemoryUsageBytes, st)
-	server.sqlMemoryPool.StartNoReserved(context.Background(), parentMemoryMonitor)
+	server.sqlMemoryPool.StartNoReserved(ctx, parentMemoryMonitor)
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	// TODO(knz,ben): Use a cluster setting for this.
 	server.trustClientProvidedRemoteAddr.Set(trustClientProvidedRemoteAddrOverride)
 
-	server.connMonitor = mon.NewMonitor("conn",
+	server.tenantSpecificConnMonitor = mon.NewMonitor("conn",
 		mon.MemoryResource,
 		server.tenantMetrics.ConnMemMetrics.CurBytesCount,
 		server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
 		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st)
-	server.connMonitor.StartNoReserved(context.Background(), server.sqlMemoryPool)
+	server.tenantSpecificConnMonitor.StartNoReserved(ctx, server.sqlMemoryPool)
 
 	server.mu.Lock()
 	server.mu.connCancelMap = make(cancelChanMap)
 	server.mu.Unlock()
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
-		loadLocalHBAConfigUponRemoteSettingChange(
-			ambientCtx.AnnotateCtx(context.Background()), server, st)
+		loadLocalHBAConfigUponRemoteSettingChange(ctx, server, st)
 	})
 	ConnIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
-		loadLocalIdentityMapUponRemoteSettingChange(
-			ambientCtx.AnnotateCtx(context.Background()), server, st)
+		loadLocalIdentityMapUponRemoteSettingChange(ctx, server, st)
 	})
 
 	return server
@@ -865,7 +873,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// reduces pressure on the shared pool because the server monitor allocates in
 	// chunks from the shared pool and these chunks should be larger than
 	// baseSQLMemoryBudget.
-	reserved := s.connMonitor.MakeBoundAccount()
+	reserved := s.preServeHandler.tenantIndependentConnMonitor.MakeBoundAccount()
 	if err := reserved.Grow(ctx, baseSQLMemoryBudget); err != nil {
 		return errors.Wrapf(err, "unable to pre-allocate %d bytes for this connection",
 			baseSQLMemoryBudget)
@@ -879,6 +887,13 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	}
 
 	sArgs, err := finalizeClientParameters(ctx, cp, &s.execCfg.Settings.SV, s.trustClientProvidedRemoteAddr.Get())
+	if err != nil {
+		reserved.Close(ctx)
+		return s.sendErr(ctx, conn, err)
+	}
+
+	// Transfer the memory account into this tenant.
+	tenantReserved, err := s.tenantSpecificConnMonitor.TransferAccount(ctx, &reserved)
 	if err != nil {
 		reserved.Close(ctx)
 		return s.sendErr(ctx, conn, err)
@@ -904,7 +919,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 	// This includes authentication.
 	s.serveConn(
 		ctx, conn, sArgs,
-		&reserved,
+		&tenantReserved,
 		connStart,
 		authOptions{
 			connType:        connType,
