@@ -139,6 +139,7 @@ type SQLServer struct {
 	stopper                 *stop.Stopper
 	stopTrigger             *stopTrigger
 	sqlIDContainer          *base.SQLIDContainer
+	pgPreServer             *pgwire.PreServeConnHandler
 	pgServer                *pgwire.Server
 	distSQLServer           *distsql.ServerImpl
 	execCfg                 *sql.ExecutorConfig
@@ -1040,6 +1041,27 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Set up internal memory metrics for use by internal SQL executors.
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
+
+	// Initialize the pgwire pre-server, which initializes connections,
+	// sets up TLS and reads client status parameters.
+	//
+	// We are initializing preServeHandler here until the following issue is resolved:
+	// https://github.com/cockroachdb/cockroach/issues/84585
+	pgPreServer := pgwire.MakePreServeConnHandler(
+		cfg.AmbientCtx,
+		cfg.Config,
+		cfg.Settings,
+		cfg.rpcContext.GetServerTLSConfig,
+		cfg.HistogramWindowInterval(),
+		rootSQLMemoryMonitor,
+	)
+
+	for _, m := range pgPreServer.Metrics() {
+		cfg.registry.AddMetricStruct(m)
+	}
+
+	// Initialize the pgwire server which handles connections
+	// established via the pgPreServer.
 	pgServer := pgwire.MakeServer(
 		cfg.AmbientCtx,
 		cfg.Config,
@@ -1276,6 +1298,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		stopper:                           cfg.stopper,
 		stopTrigger:                       cfg.stopTrigger,
 		sqlIDContainer:                    cfg.nodeIDContainer,
+		pgPreServer:                       &pgPreServer,
 		pgServer:                          pgServer,
 		distSQLServer:                     distSQLServer,
 		execCfg:                           execCfg,
@@ -1565,7 +1588,13 @@ func (s *SQLServer) startServeSQL(
 				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
 				tcpKeepAlive.configure(connCtx, conn)
 
-				if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketTCP); err != nil {
+				conn, status, err := s.pgPreServer.PreServe(connCtx, conn, pgwire.SocketTCP)
+				if err != nil {
+					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+					return
+				}
+
+				if err := s.pgServer.ServeConn(connCtx, conn, status); err != nil {
 					log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 				}
 			})
@@ -1615,8 +1644,15 @@ func (s *SQLServer) startServeSQL(
 			func(ctx context.Context) {
 				err := connManager.ServeWith(ctx, unixLn, func(ctx context.Context, conn net.Conn) {
 					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
-					if err := s.pgServer.ServeConn(connCtx, conn, pgwire.SocketUnix); err != nil {
-						log.Ops.Errorf(connCtx, "%v", err)
+
+					conn, status, err := s.pgPreServer.PreServe(connCtx, conn, pgwire.SocketUnix)
+					if err != nil {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
+						return
+					}
+
+					if err := s.pgServer.ServeConn(connCtx, conn, status); err != nil {
+						log.Ops.Errorf(connCtx, "serving SQL client conn: %v", err)
 					}
 				})
 				netutil.FatalIfUnexpected(err)
