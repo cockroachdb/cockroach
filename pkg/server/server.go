@@ -160,6 +160,10 @@ type Server struct {
 	// pgL is the SQL listener.
 	pgL net.Listener
 
+	// pgPreServer handles SQL connections prior to routing them to a
+	// specific tenant.
+	pgPreServer *pgwire.PreServeConnHandler
+
 	// TODO(knz): pull this down under the serverController.
 	sqlServer *SQLServer
 
@@ -861,6 +865,20 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	settingsWriter := newSettingsCacheWriter(engines[0], stopper)
 	stopTrigger := newStopTrigger()
 
+	// Initialize the pgwire pre-server, which initializes connections,
+	// sets up TLS and reads client status parameters.
+	pgPreServer := pgwire.MakePreServeConnHandler(
+		cfg.AmbientCtx,
+		cfg.Config,
+		cfg.Settings,
+		rpcContext.GetServerTLSConfig,
+		cfg.HistogramWindowInterval(),
+		sqlMonitorAndMetrics.rootSQLMemoryMonitor,
+	)
+	for _, m := range pgPreServer.Metrics() {
+		registry.AddMetricStruct(m)
+	}
+
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, sqlServerArgs{
 		sqlServerOptionalKVArgs: sqlServerOptionalKVArgs{
@@ -1012,6 +1030,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		replicationReporter:    replicationReporter,
 		protectedtsProvider:    protectedtsProvider,
 		spanConfigSubscriber:   spanConfig.subscriber,
+		pgPreServer:            &pgPreServer,
 		sqlServer:              sqlServer,
 		serverController:       sc,
 		externalStorageBuilder: externalStorageBuilder,
@@ -1796,7 +1815,7 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 	if err := startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.pgPreServer,
+		s.pgPreServer,
 		s.sqlServer.pgServer.ServeConn,
 		s.pgL,
 		&s.cfg.SocketFile,
