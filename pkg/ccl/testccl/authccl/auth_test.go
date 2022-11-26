@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -426,10 +427,13 @@ func TestClientAddrOverride(t *testing.T) {
 	// We can't use the cluster settings to do this, because
 	// cluster settings for booleans propagate asynchronously.
 	var pgServer *pgwire.Server
+	var pgPreServer *pgwire.PreServeConnHandler
 	if len(s.TestTenants()) > 0 {
 		pgServer = s.TestTenants()[0].PGServer().(*pgwire.Server)
+		pgPreServer = s.TestTenants()[0].(*server.TestTenant).PGPreServer()
 	} else {
 		pgServer = s.PGServer().(*pgwire.Server)
+		pgPreServer = s.(*server.TestServer).PGPreServer()
 	}
 	pgServer.TestingEnableAuthLogging()
 
@@ -487,7 +491,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-reject-override", func(t *testing.T) {
 				// Connect a first time, with trust override disabled. In that case,
 				// the server will complain that the remote override is not supported.
-				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(false)
+				_ = pgPreServer.TestingSetTrustClientProvidedRemoteAddr(false)
 
 				testDB, err := gosql.Open("postgres", pgURL.String())
 				if err != nil {
@@ -508,7 +512,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-hba-uses-override", func(t *testing.T) {
 				// Now recognize the override. Now we're expecting the connection
 				// to hit the HBA rule and fail with an authentication error.
-				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(true)
+				_ = pgPreServer.TestingSetTrustClientProvidedRemoteAddr(true)
 
 				testDB, err := gosql.Open("postgres", pgURL.String())
 				if err != nil {
