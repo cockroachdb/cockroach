@@ -209,10 +209,6 @@ type Server struct {
 	SQLServer  *sql.Server
 	execCfg    *sql.ExecutorConfig
 
-	// preServeHandler is under Server for now, until this issue is addressed:
-	// https://github.com/cockroachdb/cockroach/issues/84585
-	preServeHandler PreServeConnHandler
-
 	tenantMetrics tenantSpecificMetrics
 
 	mu struct {
@@ -338,16 +334,6 @@ func MakeServer(
 		execCfg:    executorConfig,
 
 		tenantMetrics: makeTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
-
-		// We are initializing preServeHandler here until the following issue is resolved:
-		// https://github.com/cockroachdb/cockroach/issues/84585
-		preServeHandler: MakePreServeConnHandler(
-			ctx,
-			cfg, st,
-			executorConfig.RPCContext.GetServerTLSConfig,
-			histogramWindow,
-			parentMemoryMonitor,
-		),
 	}
 	server.sqlMemoryPool = mon.NewMonitor("sql",
 		mon.MemoryResource,
@@ -434,13 +420,8 @@ func (s *Server) IsDraining() bool {
 }
 
 // Metrics returns the set of metrics structs.
-func (s *Server) Metrics() (res []interface{}) {
-	// We declare the metrics from preServeHandler here
-	// until this issue is resolved:
-	// https://github.com/cockroachdb/cockroach/issues/84585
-	res = s.preServeHandler.Metrics()
-
-	return append(res, []interface{}{
+func (s *Server) Metrics() []interface{} {
+	return []interface{}{
 		&s.tenantMetrics,
 		&s.SQLServer.Metrics.StartedStatementCounters,
 		&s.SQLServer.Metrics.ExecutedStatementCounters,
@@ -453,7 +434,7 @@ func (s *Server) Metrics() (res []interface{}) {
 		&s.SQLServer.ServerMetrics.StatsMetrics,
 		&s.SQLServer.ServerMetrics.ContentionSubsystemMetrics,
 		&s.SQLServer.ServerMetrics.InsightsMetrics,
-	}...)
+	}
 }
 
 // Drain prevents new connections from being served and waits the duration of
@@ -738,7 +719,9 @@ func (s *Server) TestingEnableAuthLogging() {
 // compatible with postgres.
 //
 // An error is returned if the initial handshake of the connection fails.
-func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType SocketType) (err error) {
+func (s *Server) ServeConn(
+	ctx context.Context, conn net.Conn, preServeStatus PreServeStatus,
+) (err error) {
 	defer func() {
 		if err != nil {
 			s.tenantMetrics.ConnFailures.Inc(1)
@@ -779,11 +762,6 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn, socketType Socket
 			log.StructuredEvent(ctx, ev)
 		}
 	}()
-
-	conn, preServeStatus, err := s.preServeHandler.PreServe(ctx, conn, socketType)
-	if err != nil {
-		return err
-	}
 
 	if preServeStatus.State == PreServeCancel {
 		s.handleCancel(ctx, preServeStatus.CancelKey)
