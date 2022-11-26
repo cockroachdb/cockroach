@@ -14,11 +14,13 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // Fully-qualified names for metrics.
@@ -47,6 +49,18 @@ var (
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
 	}
+	MetaPreServeMaxBytes = metric.Metadata{
+		Name:        "sql.pre_serve.mem.max",
+		Help:        "Memory usage for SQL connections prior to routing the connection to a specific tenant",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
+	MetaPreServeCurBytes = metric.Metadata{
+		Name:        "sql.pre_serve.mem.cur",
+		Help:        "Current memory usage for SQL connections prior to routing the connection to a specific tenant",
+		Measurement: "Memory",
+		Unit:        metric.Unit_BYTES,
+	}
 )
 
 // PreServeConnHandler implements the early initialization of an incoming
@@ -59,23 +73,44 @@ type PreServeConnHandler struct {
 	tenantIndependentMetrics tenantIndependentMetrics
 
 	getTLSConfig func() (*tls.Config, error)
+
+	// tenantIndependentConnMonitor is the pool where the
+	// memory usage for the initial connection overhead
+	// is accounted for. After the connection is attributed
+	// to a specific tenant, the account for the initial
+	// connection overhead is transferred to the per-tenant
+	// monitor.
+	tenantIndependentConnMonitor *mon.BytesMonitor
 }
 
 // MakePreServeConnHandler creates a PreServeConnHandler.
 // sv refers to the setting values "outside" of the current tenant - i.e. from the storage cluster.
 func MakePreServeConnHandler(
-	cfg *base.Config, sv *settings.Values, getTLSConfig func() (*tls.Config, error),
+	ctx context.Context,
+	cfg *base.Config,
+	st *cluster.Settings,
+	getTLSConfig func() (*tls.Config, error),
+	histogramWindow time.Duration,
+	parentMemoryMonitor *mon.BytesMonitor,
 ) PreServeConnHandler {
-	metrics := makeTenantIndependentMetrics()
-	return PreServeConnHandler{
+	metrics := makeTenantIndependentMetrics(histogramWindow)
+	s := PreServeConnHandler{
 		errWriter: errWriter{
-			sv:         sv,
+			sv:         &st.SV,
 			msgBuilder: newWriteBuffer(metrics.PreServeBytesOutCount),
 		},
 		cfg:                      cfg,
 		tenantIndependentMetrics: metrics,
 		getTLSConfig:             getTLSConfig,
+
+		tenantIndependentConnMonitor: mon.NewMonitor("pre-conn",
+			mon.MemoryResource,
+			metrics.PreServeCurBytes,
+			metrics.PreServeMaxBytes,
+			int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st),
 	}
+	s.tenantIndependentConnMonitor.StartNoReserved(ctx, parentMemoryMonitor)
+	return s
 }
 
 // tenantIndependentMetrics is the set of metrics for the
@@ -86,14 +121,18 @@ type tenantIndependentMetrics struct {
 	PreServeBytesOutCount *metric.Counter
 	PreServeConnFailures  *metric.Counter
 	PreServeNewConns      *metric.Counter
+	PreServeMaxBytes      *metric.Histogram
+	PreServeCurBytes      *metric.Gauge
 }
 
-func makeTenantIndependentMetrics() tenantIndependentMetrics {
+func makeTenantIndependentMetrics(histogramWindow time.Duration) tenantIndependentMetrics {
 	return tenantIndependentMetrics{
 		PreServeBytesInCount:  metric.NewCounter(MetaPreServeBytesIn),
 		PreServeBytesOutCount: metric.NewCounter(MetaPreServeBytesOut),
 		PreServeNewConns:      metric.NewCounter(MetaPreServeNewConns),
 		PreServeConnFailures:  metric.NewCounter(MetaPreServeConnFailures),
+		PreServeMaxBytes:      metric.NewHistogram(MetaPreServeMaxBytes, histogramWindow, metric.MemoryUsage64MBBuckets),
+		PreServeCurBytes:      metric.NewGauge(MetaPreServeCurBytes),
 	}
 }
 
