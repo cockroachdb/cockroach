@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -155,6 +156,9 @@ type Server struct {
 	protectedtsProvider protectedts.Provider
 
 	spanConfigSubscriber spanconfig.KVSubscriber
+
+	// pgL is the SQL listener.
+	pgL net.Listener
 
 	// TODO(knz): pull this down under the serverController.
 	sqlServer *SQLServer
@@ -1257,6 +1261,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.pgL = pgL
 
 	if s.cfg.TestingKnobs.Server != nil {
 		knobs := s.cfg.TestingKnobs.Server.(*TestingKnobs)
@@ -1716,7 +1721,6 @@ func (s *Server) PreStart(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.cfg.TestingKnobs,
-		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
@@ -1792,7 +1796,7 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 	if err := s.sqlServer.startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.pgL,
+		s.pgL,
 		&s.cfg.SocketFile,
 	); err != nil {
 		return err
