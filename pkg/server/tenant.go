@@ -105,6 +105,10 @@ type SQLServerWrapper struct {
 	// pgL is the SQL listener.
 	pgL net.Listener
 
+	// pgPreServer handles SQL connections prior to routing them to a
+	// specific tenant.
+	pgPreServer *pgwire.PreServeConnHandler
+
 	sqlServer *SQLServer
 	sqlCfg    *SQLConfig
 
@@ -241,6 +245,20 @@ func NewTenantServer(
 	// the eventsServer. This is currently performed in
 	// makeTenantSQLServerArgs().
 
+	// Initialize the pgwire pre-server, which initializes connections,
+	// sets up TLS and reads client status parameters.
+	pgPreServer := pgwire.MakePreServeConnHandler(
+		baseCfg.AmbientCtx,
+		baseCfg.Config,
+		args.Settings,
+		args.rpcContext.GetServerTLSConfig,
+		baseCfg.HistogramWindowInterval(),
+		args.monitorAndMetrics.rootSQLMemoryMonitor,
+	)
+	for _, m := range pgPreServer.Metrics() {
+		args.registry.AddMetricStruct(m)
+	}
+
 	// Instantiate the SQL server proper.
 	sqlServer, err := newSQLServer(ctx, args)
 	if err != nil {
@@ -329,6 +347,8 @@ func NewTenantServer(
 		stopper:         args.stopper,
 
 		debug: debugServer,
+
+		pgPreServer: &pgPreServer,
 
 		sqlServer: sqlServer,
 		sqlCfg:    args.SQLConfig,
@@ -675,7 +695,7 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 	if err := startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.pgPreServer,
+		s.pgPreServer,
 		s.sqlServer.pgServer.ServeConn,
 		s.pgL,
 		&s.sqlServer.cfg.SocketFile,

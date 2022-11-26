@@ -139,7 +139,6 @@ type SQLServer struct {
 	stopper                 *stop.Stopper
 	stopTrigger             *stopTrigger
 	sqlIDContainer          *base.SQLIDContainer
-	pgPreServer             *pgwire.PreServeConnHandler
 	pgServer                *pgwire.Server
 	distSQLServer           *distsql.ServerImpl
 	execCfg                 *sql.ExecutorConfig
@@ -1039,24 +1038,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
 	sqlMemMetrics := sql.MakeMemMetrics("sql", cfg.HistogramWindowInterval())
 
-	// Initialize the pgwire pre-server, which initializes connections,
-	// sets up TLS and reads client status parameters.
-	//
-	// We are initializing preServeHandler here until the following issue is resolved:
-	// https://github.com/cockroachdb/cockroach/issues/84585
-	pgPreServer := pgwire.MakePreServeConnHandler(
-		cfg.AmbientCtx,
-		cfg.Config,
-		cfg.Settings,
-		cfg.rpcContext.GetServerTLSConfig,
-		cfg.HistogramWindowInterval(),
-		rootSQLMemoryMonitor,
-	)
-
-	for _, m := range pgPreServer.Metrics() {
-		cfg.registry.AddMetricStruct(m)
-	}
-
 	// Initialize the pgwire server which handles connections
 	// established via the pgPreServer.
 	pgServer := pgwire.MakeServer(
@@ -1295,7 +1276,6 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		stopper:                           cfg.stopper,
 		stopTrigger:                       cfg.stopTrigger,
 		sqlIDContainer:                    cfg.nodeIDContainer,
-		pgPreServer:                       &pgPreServer,
 		pgServer:                          pgServer,
 		distSQLServer:                     distSQLServer,
 		execCfg:                           execCfg,
