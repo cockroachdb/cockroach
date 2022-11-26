@@ -13,6 +13,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -99,6 +100,9 @@ type SQLServerWrapper struct {
 	stopper      *stop.Stopper
 
 	debug *debug.Server
+
+	// pgL is the SQL listener.
+	pgL net.Listener
 
 	sqlServer *SQLServer
 	sqlCfg    *SQLConfig
@@ -378,6 +382,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	s.pgL = pgL
 
 	// NB: This is where (*Server).PreStart() reports the listener readiness
 	// via testing knobs: PauseAfterGettingRPCAddress, SignalAfterGettingRPCAddress.
@@ -575,7 +580,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.sqlServer.cfg.TestingKnobs,
-		pgL,
 		orphanedLeasesTimeThresholdNanos,
 	); err != nil {
 		return err
@@ -639,7 +643,7 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 	if err := s.sqlServer.startServeSQL(
 		workersCtx,
 		s.stopper,
-		s.sqlServer.pgL,
+		s.pgL,
 		&s.sqlServer.cfg.SocketFile,
 	); err != nil {
 		return err
