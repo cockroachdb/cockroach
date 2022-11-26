@@ -1799,6 +1799,8 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 		return err
 	}
 
+	s.sqlServer.isReady.Set(true)
+
 	log.Event(ctx, "server ready")
 	return nil
 }
