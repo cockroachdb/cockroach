@@ -2583,6 +2583,13 @@ var charts = []sectionDescription{
 					"sql.pre_serve.bytesout",
 				},
 			},
+			{
+				Title: "Memory usage, prior to tenant selection",
+				Metrics: []string{
+					"sql.pre_serve.mem.cur",
+					"sql.pre_serve.mem.max",
+				},
+			},
 		},
 	},
 	{

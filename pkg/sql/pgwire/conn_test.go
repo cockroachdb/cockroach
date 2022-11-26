@@ -51,8 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgproto3/v2"
-	"github.com/jackc/pgx/v4"
+	pgproto3 "github.com/jackc/pgproto3/v2"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -2005,7 +2005,7 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
 
-	before := s.PGServer().(*Server).connMonitor.AllocBytes()
+	before := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 
 	pgURL, cleanupFunc := sqlutils.PGUrl(
 		t, s.ServingSQLAddr(), "testConnClose" /* prefix */, url.User(username.RootUser),
@@ -2024,6 +2024,6 @@ func TestConnCloseReleasesReservedMem(t *testing.T) {
 	require.Regexp(t, "pq: option .* is invalid", err.Error())
 
 	// Check that no accounted-for memory is leaked, after the connection attempt fails.
-	after := s.PGServer().(*Server).connMonitor.AllocBytes()
+	after := s.PGServer().(*Server).tenantSpecificConnMonitor.AllocBytes()
 	require.Equal(t, before, after)
 }
