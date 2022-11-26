@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -94,13 +95,14 @@ type PreServeConnHandler struct {
 // MakePreServeConnHandler creates a PreServeConnHandler.
 // sv refers to the setting values "outside" of the current tenant - i.e. from the storage cluster.
 func MakePreServeConnHandler(
-	ctx context.Context,
+	ambientCtx log.AmbientContext,
 	cfg *base.Config,
 	st *cluster.Settings,
 	getTLSConfig func() (*tls.Config, error),
 	histogramWindow time.Duration,
 	parentMemoryMonitor *mon.BytesMonitor,
 ) PreServeConnHandler {
+	ctx := ambientCtx.AnnotateCtx(context.Background())
 	metrics := makeTenantIndependentMetrics(histogramWindow)
 	s := PreServeConnHandler{
 		errWriter: errWriter{
