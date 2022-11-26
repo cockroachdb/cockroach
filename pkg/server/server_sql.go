@@ -1662,8 +1662,6 @@ func (s *SQLServer) startServeSQL(
 		}
 	}
 
-	s.isReady.Set(true)
-
 	return nil
 }
 
