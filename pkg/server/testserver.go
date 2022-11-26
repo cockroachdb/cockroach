@@ -474,7 +474,7 @@ func (ts *TestServer) PGServer() interface{} {
 // the TestServer.
 func (ts *TestServer) PGPreServer() *pgwire.PreServeConnHandler {
 	if ts != nil {
-		return ts.sqlServer.pgPreServer
+		return ts.pgPreServer
 	}
 	return nil
 }
@@ -636,6 +636,10 @@ type TestTenant struct {
 	Cfg *BaseConfig
 	*httpTestServer
 	drain *drainServer
+
+	// pgPreServer handles SQL connections prior to routing them to a
+	// specific tenant.
+	pgPreServer *pgwire.PreServeConnHandler
 }
 
 var _ serverutils.TestTenantInterface = &TestTenant{}
@@ -977,6 +981,7 @@ func (ts *TestServer) StartTenant(
 
 	return &TestTenant{
 		SQLServer:      sw.sqlServer,
+		pgPreServer:    sw.pgPreServer,
 		Cfg:            &baseCfg,
 		httpTestServer: hts,
 		drain:          sw.drainServer,
