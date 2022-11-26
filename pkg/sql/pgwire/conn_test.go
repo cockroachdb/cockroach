@@ -576,11 +576,11 @@ func getSessionArgs(
 		}
 
 		ctx := context.Background()
-		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
+		cp, err := parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), trustRemoteAddr)
 		if err != nil {
 			return conn, sql.SessionArgs{}, err
 		}
-		args, err := finalizeClientParameters(ctx, cp, nil, trustRemoteAddr)
+		args, err := finalizeClientParameters(ctx, cp, nil)
 		return conn, args, err
 	}
 }
