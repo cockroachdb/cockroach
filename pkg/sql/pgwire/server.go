@@ -12,7 +12,6 @@ package pgwire
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"io"
 	"net"
@@ -1226,86 +1225,6 @@ func (s *Server) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
 	prev := s.trustClientProvidedRemoteAddr.Get()
 	s.trustClientProvidedRemoteAddr.Set(b)
 	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
-}
-
-// maybeUpgradeToSecureConn upgrades the connection to TLS/SSL if
-// requested by the client, and available in the server configuration.
-func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
-	ctx context.Context,
-	conn net.Conn,
-	connType hba.ConnType,
-	version uint32,
-	buf *pgwirebase.ReadBuffer,
-) (newConn net.Conn, newConnType hba.ConnType, newVersion uint32, clientErr, serverErr error) {
-	// By default, this is a no-op.
-	newConn = conn
-	newConnType = connType
-	newVersion = version
-	var n int // byte counts
-
-	if version != versionSSL {
-		// The client did not require a SSL connection.
-
-		// Insecure mode: nothing to say, nothing to do.
-		// TODO(knz): Remove this condition - see
-		// https://github.com/cockroachdb/cockroach/issues/53404
-		if s.cfg.Insecure {
-			return
-		}
-
-		// Secure mode: disallow if TCP and the user did not opt into
-		// non-TLS SQL conns.
-		if !s.cfg.AcceptSQLWithoutTLS && connType != hba.ConnLocal {
-			clientErr = pgerror.New(pgcode.ProtocolViolation, ErrSSLRequired)
-		}
-		return
-	}
-
-	if connType == hba.ConnLocal {
-		// No existing PostgreSQL driver ever tries to activate TLS over
-		// a unix socket. But in case someone, sometime, somewhere, makes
-		// that mistake, let them know that we don't want it.
-		clientErr = pgerror.New(pgcode.ProtocolViolation,
-			"cannot use SSL/TLS over local connections")
-		return
-	}
-
-	// Protocol sanity check.
-	if len(buf.Msg) > 0 {
-		serverErr = errors.Errorf("unexpected data after SSLRequest: %q", buf.Msg)
-		return
-	}
-
-	// The client has requested SSL. We're going to try and upgrade the
-	// connection to use TLS/SSL.
-
-	// Do we have a TLS configuration?
-	tlsConfig, serverErr := s.getTLSConfig()
-	if serverErr != nil {
-		return
-	}
-
-	if tlsConfig == nil {
-		// We don't have a TLS configuration available, so we can't honor
-		// the client's request.
-		n, serverErr = conn.Write(sslUnsupported)
-		if serverErr != nil {
-			return
-		}
-	} else {
-		// We have a TLS configuration. Upgrade the connection.
-		n, serverErr = conn.Write(sslSupported)
-		if serverErr != nil {
-			return
-		}
-		newConn = tls.Server(conn, tlsConfig)
-		newConnType = hba.ConnHostSSL
-	}
-	s.tenantIndependentMetrics.PreServeBytesOutCount.Inc(int64(n))
-
-	// Finally, re-read the version/command from the client.
-	newVersion, *buf, serverErr = s.readVersion(newConn)
-	return
 }
 
 // registerConn registers the incoming connection to the map of active connections,
