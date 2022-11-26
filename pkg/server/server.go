@@ -1825,9 +1825,11 @@ func (s *Server) PreStart(ctx context.Context) error {
 func (s *Server) AcceptClients(ctx context.Context) error {
 	workersCtx := s.AnnotateCtx(context.Background())
 
-	if err := s.sqlServer.startServeSQL(
+	if err := startServeSQL(
 		workersCtx,
 		s.stopper,
+		s.sqlServer.pgPreServer,
+		s.sqlServer.pgServer.ServeConn,
 		s.pgL,
 		&s.cfg.SocketFile,
 	); err != nil {
