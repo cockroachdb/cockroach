@@ -1585,7 +1585,7 @@ func (s *SQLServer) startServeSQL(
 		stop.TaskOpts{TaskName: "pgwire-listener", SpanOpt: stop.SterileRootSpan},
 		func(ctx context.Context) {
 			err := connManager.ServeWith(ctx, pgL, func(ctx context.Context, conn net.Conn) {
-				connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
+				connCtx := s.pgPreServer.AnnotateCtxForIncomingConn(ctx, conn)
 				tcpKeepAlive.configure(connCtx, conn)
 
 				conn, status, err := s.pgPreServer.PreServe(connCtx, conn, pgwire.SocketTCP)
@@ -1643,7 +1643,7 @@ func (s *SQLServer) startServeSQL(
 			stop.TaskOpts{TaskName: "unix-listener", SpanOpt: stop.SterileRootSpan},
 			func(ctx context.Context) {
 				err := connManager.ServeWith(ctx, unixLn, func(ctx context.Context, conn net.Conn) {
-					connCtx := s.pgServer.AnnotateCtxForIncomingConn(ctx, conn)
+					connCtx := s.pgPreServer.AnnotateCtxForIncomingConn(ctx, conn)
 
 					conn, status, err := s.pgPreServer.PreServe(connCtx, conn, pgwire.SocketUnix)
 					if err != nil {
