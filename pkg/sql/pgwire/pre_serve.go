@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -405,5 +406,27 @@ func (s *PreServeConnHandler) maybeUpgradeToSecureConn(
 
 	// Finally, re-read the version/command from the client.
 	newVersion, *buf, serverErr = s.readVersion(newConn)
+	return
+}
+
+// readVersion reads the start-up message, then returns the version
+// code (first uint32 in message) and the buffer containing the rest
+// of the payload.
+func (s *PreServeConnHandler) readVersion(
+	conn io.Reader,
+) (version uint32, buf pgwirebase.ReadBuffer, err error) {
+	var n int
+	buf = pgwirebase.MakeReadBuffer(
+		pgwirebase.ReadBufferOptionWithClusterSettings(s.errWriter.sv),
+	)
+	n, err = buf.ReadUntypedMsg(conn)
+	if err != nil {
+		return
+	}
+	version, err = buf.GetUint32()
+	if err != nil {
+		return
+	}
+	s.tenantIndependentMetrics.PreServeBytesInCount.Inc(int64(n))
 	return
 }
