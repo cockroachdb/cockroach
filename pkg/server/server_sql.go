@@ -177,9 +177,6 @@ type SQLServer struct {
 
 	isMeta1Leaseholder func(context.Context, hlc.ClockTimestamp) (bool, error)
 
-	// pgL is the shared RPC/SQL listener, opened when RPC was initialized.
-	pgL net.Listener
-
 	// isReady is the health status of the node. When true, the node is healthy;
 	// load balancers and connection management tools treat the node as "ready".
 	// When false, the node is unhealthy or "not ready", with load balancers and
@@ -1343,7 +1340,6 @@ func (s *SQLServer) preStart(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	knobs base.TestingKnobs,
-	pgL net.Listener,
 	orphanedLeasesTimeThresholdNanos int64,
 ) error {
 	// If necessary, start the tenant proxy first, to ensure all other
@@ -1411,7 +1407,6 @@ func (s *SQLServer) preStart(
 		s.sqlInstanceReader.Start(ctx, instance)
 	}
 
-	s.pgL = pgL
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
 	s.distSQLServer.Start()
