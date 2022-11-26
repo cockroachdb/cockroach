@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -469,6 +470,15 @@ func (ts *TestServer) PGServer() interface{} {
 	return nil
 }
 
+// PGPreServer exposes the pgwire.PreServeConnHandler instance used by
+// the TestServer.
+func (ts *TestServer) PGPreServer() *pgwire.PreServeConnHandler {
+	if ts != nil {
+		return ts.sqlServer.pgPreServer
+	}
+	return nil
+}
+
 // RaftTransport returns the RaftTransport used by the TestServer.
 func (ts *TestServer) RaftTransport() *kvserver.RaftTransport {
 	if ts != nil {
@@ -648,6 +658,15 @@ func (t *TestTenant) RPCAddr() string {
 // PGServer is part of TestTenantInterface.
 func (t *TestTenant) PGServer() interface{} {
 	return t.pgServer
+}
+
+// PGPreServer exposes the pgwire.PreServeConnHandler instance used by
+// the TestServer.
+func (ts *TestTenant) PGPreServer() *pgwire.PreServeConnHandler {
+	if ts != nil {
+		return ts.pgPreServer
+	}
+	return nil
 }
 
 // DiagnosticsReporter is part of TestTenantInterface.

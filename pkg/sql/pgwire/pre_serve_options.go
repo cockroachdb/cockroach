@@ -43,7 +43,10 @@ import (
 // tenantIndependentClientParameters struct then add logic to
 // finalizeClientParameters() accordingly.
 func parseClientProvidedSessionParameters(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, origRemoteAddr net.Addr,
+	ctx context.Context,
+	buf *pgwirebase.ReadBuffer,
+	origRemoteAddr net.Addr,
+	trustClientProvidedRemoteAddr bool,
 ) (args tenantIndependentClientParameters, err error) {
 	args.SessionArgs = sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
@@ -110,7 +113,31 @@ func parseClientProvidedSessionParameters(
 			args.foundBufferSize = true
 
 		case "crdb:remote_addr":
-			args.clientProvidedRemoteAddr = value
+			if !trustClientProvidedRemoteAddr {
+				return args, pgerror.Newf(pgcode.ProtocolViolation,
+					"server not configured to accept remote address override (requested: %q)",
+					value)
+			}
+			hostS, portS, err := net.SplitHostPort(value)
+			if err != nil {
+				return args, pgerror.Wrap(
+					err, pgcode.ProtocolViolation,
+					"invalid address format",
+				)
+			}
+			port, err := strconv.Atoi(portS)
+			if err != nil {
+				return args, pgerror.Wrap(
+					err, pgcode.ProtocolViolation,
+					"remote port is not numeric",
+				)
+			}
+			ip := net.ParseIP(hostS)
+			if ip == nil {
+				return args, pgerror.New(pgcode.ProtocolViolation,
+					"remote address is not numeric")
+			}
+			args.RemoteAddr = &net.TCPAddr{IP: ip, Port: port}
 
 		case "options":
 			opts, err := parseOptions(value)
@@ -298,7 +325,7 @@ func splitOption(opt, prefix string) (option, error) {
 var trustClientProvidedRemoteAddrOverride = envutil.EnvOrDefaultBool("COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR", false)
 
 // TestingSetTrustClientProvidedRemoteAddr is used in tests.
-func (s *Server) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
+func (s *PreServeConnHandler) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
 	prev := s.trustClientProvidedRemoteAddr.Get()
 	s.trustClientProvidedRemoteAddr.Set(b)
 	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }

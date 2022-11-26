@@ -604,6 +604,7 @@ func TestClientAddrOverride(t *testing.T) {
 	testServer := s.(*server.TestServer)
 	pgServer := testServer.PGServer().(*pgwire.Server)
 	pgServer.TestingEnableAuthLogging()
+	pgPreServer := testServer.PGPreServer()
 
 	testCases := []struct {
 		specialAddr string
@@ -659,7 +660,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-reject-override", func(t *testing.T) {
 				// Connect a first time, with trust override disabled. In that case,
 				// the server will complain that the remote override is not supported.
-				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(false)
+				_ = pgPreServer.TestingSetTrustClientProvidedRemoteAddr(false)
 
 				testDB, err := gosql.Open("postgres", pgURL.String())
 				if err != nil {
@@ -680,7 +681,7 @@ func TestClientAddrOverride(t *testing.T) {
 			t.Run("check-server-hba-uses-override", func(t *testing.T) {
 				// Now recognize the override. Now we're expecting the connection
 				// to hit the HBA rule and fail with an authentication error.
-				_ = pgServer.TestingSetTrustClientProvidedRemoteAddr(true)
+				_ = pgPreServer.TestingSetTrustClientProvidedRemoteAddr(true)
 
 				testDB, err := gosql.Open("postgres", pgURL.String())
 				if err != nil {
