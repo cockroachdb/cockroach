@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -463,6 +464,15 @@ func (ts *TestServer) DB() *kv.DB {
 func (ts *TestServer) PGServer() interface{} {
 	if ts != nil {
 		return ts.sqlServer.pgServer
+	}
+	return nil
+}
+
+// PGPreServer exposes the pgwire.PreServeConnHandler instance used by
+// the TestServer.
+func (ts *TestServer) PGPreServer() *pgwire.PreServeConnHandler {
+	if ts != nil {
+		return ts.sqlServer.pgPreServer
 	}
 	return nil
 }

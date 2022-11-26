@@ -26,10 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 // Fully-qualified names for metrics.
@@ -90,6 +93,25 @@ type PreServeConnHandler struct {
 	// connection overhead is transferred to the per-tenant
 	// monitor.
 	tenantIndependentConnMonitor *mon.BytesMonitor
+
+	// trustClientProvidedRemoteAddr indicates whether the server should honor
+	// a `crdb:remote_addr` status parameter provided by the client during
+	// session authentication. This status parameter can be set by SQL proxies
+	// to feed the "real" client address, where otherwise the CockroachDB SQL
+	// server would only see the address of the proxy.
+	//
+	// This setting is security-sensitive and should not be enabled
+	// without a SQL proxy that carefully scrubs any client-provided
+	// `crdb:remote_addr` field. In particular, this setting should never
+	// be set when there is no SQL proxy at all. Otherwise, a malicious
+	// client could use this field to pretend being from another address
+	// than its own and defeat the HBA rules.
+	//
+	// TODO(knz,ben): It would be good to have something more specific
+	// than a boolean, i.e. to accept the provided address only from
+	// certain peer IPs, or with certain certificates. (could it be a
+	// special hba.conf directive?)
+	trustClientProvidedRemoteAddr syncutil.AtomicBool
 }
 
 // MakePreServeConnHandler creates a PreServeConnHandler.
@@ -120,7 +142,41 @@ func MakePreServeConnHandler(
 			int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st),
 	}
 	s.tenantIndependentConnMonitor.StartNoReserved(ctx, parentMemoryMonitor)
+
+	// TODO(knz,ben): Use a cluster setting for this.
+	s.trustClientProvidedRemoteAddr.Set(trustClientProvidedRemoteAddrOverride)
+
 	return s
+}
+
+// Note: Usage of an env var here makes it possible to unconditionally
+// enable this feature when cluster settings do not work reliably,
+// e.g. in multi-tenant setups in v20.2. This override mechanism can
+// be removed after all of CC is moved to use v21.1 or a version which
+// supports cluster settings.
+var trustClientProvidedRemoteAddrOverride = envutil.EnvOrDefaultBool("COCKROACH_TRUST_CLIENT_PROVIDED_SQL_REMOTE_ADDR", false)
+
+// TestingSetTrustClientProvidedRemoteAddr is used in tests.
+func (s *PreServeConnHandler) TestingSetTrustClientProvidedRemoteAddr(b bool) func() {
+	prev := s.trustClientProvidedRemoteAddr.Get()
+	s.trustClientProvidedRemoteAddr.Set(b)
+	return func() { s.trustClientProvidedRemoteAddr.Set(prev) }
+}
+
+// AnnotateCtxForIncomingConn annotates the provided context with a
+// tag that reports the peer's address. In the common case, the
+// context is annotated with a "client" tag. When the server is
+// configured to recognize client-specified remote addresses, it is
+// annotated with a "peer" tag and the "client" tag is added later
+// when the session is set up.
+func (s *PreServeConnHandler) AnnotateCtxForIncomingConn(
+	ctx context.Context, conn net.Conn,
+) context.Context {
+	tag := "client"
+	if s.trustClientProvidedRemoteAddr.Get() {
+		tag = "peer"
+	}
+	return logtags.AddTag(ctx, tag, conn.RemoteAddr().String())
 }
 
 // tenantIndependentMetrics is the set of metrics for the
@@ -187,8 +243,7 @@ func (s *PreServeConnHandler) sendErr(ctx context.Context, conn net.Conn, err er
 // configuration adjustements.
 type tenantIndependentClientParameters struct {
 	sql.SessionArgs
-	foundBufferSize          bool
-	clientProvidedRemoteAddr string
+	foundBufferSize bool
 }
 
 // PreServeState describes the state of a connection after PrepareConn,
@@ -321,7 +376,7 @@ func (s *PreServeConnHandler) PreServe(
 	}
 
 	// Load the client-provided session parameters.
-	st.clientParameters, err = parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr())
+	st.clientParameters, err = parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get())
 	if err != nil {
 		st.Reserved.Close(ctx)
 		return conn, st, s.sendErr(ctx, conn, err)
