@@ -472,7 +472,7 @@ func (ts *TestServer) PGServer() interface{} {
 // the TestServer.
 func (ts *TestServer) PGPreServer() *pgwire.PreServeConnHandler {
 	if ts != nil {
-		return ts.sqlServer.pgPreServer
+		return ts.pgPreServer
 	}
 	return nil
 }
