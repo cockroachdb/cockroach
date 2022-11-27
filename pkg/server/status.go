@@ -58,7 +58,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -495,6 +494,23 @@ type statusServer struct {
 	si                       systemInfoOnce
 	stmtDiagnosticsRequester StmtDiagnosticsRequester
 	internalExecutor         *sql.InternalExecutor
+
+	// cancelSemaphore is a semaphore that limits the number of
+	// concurrent calls to the pgwire query cancellation endpoint. This
+	// is needed to avoid the risk of a DoS attack by malicious users
+	// that attempts to cancel random queries by spamming the request.
+	//
+	// See CancelQueryByKey() for details.
+	//
+	// The semaphore is initialized with a hard-coded limit of 256
+	// concurrent pgwire cancel requests (per node). We also add a
+	// 1-second penalty for failed cancellation requests in
+	// CancelQueryByKey, meaning that an attacker needs 1 second per
+	// guess. With an attacker randomly guessing a 32-bit secret, it
+	// would take 2^24 seconds to hit one query. If we suppose there are
+	// 256 concurrent queries actively running on a node, then it would
+	// take 2^16 seconds (18 hours) to hit any one of them.
+	cancelSemaphore *quotapool.IntPool
 }
 
 // systemStatusServer is an extension of the standard
@@ -571,7 +587,9 @@ func newStatusServer(
 	clock *hlc.Clock,
 ) *statusServer {
 	ambient.AddLogTag("status", nil)
-	ambient.AddLogTag("tenant", rpcCtx.TenantID)
+	if !rpcCtx.TenantID.IsSystem() {
+		ambient.AddLogTag("tenant", rpcCtx.TenantID)
+	}
 
 	server := &statusServer{
 		baseStatusServer: &baseStatusServer{
@@ -590,6 +608,9 @@ func newStatusServer(
 		db:               db,
 		metricSource:     metricSource,
 		internalExecutor: internalExecutor,
+
+		// See the docstring on cancelSemaphore for details about this initialization.
+		cancelSemaphore: quotapool.NewIntPool("pgwire-cancel", 256),
 	}
 
 	return server
@@ -617,25 +638,22 @@ func newSystemStatusServer(
 	spanConfigReporter spanconfig.Reporter,
 	clock *hlc.Clock,
 ) *systemStatusServer {
-	ambient.AddLogTag("status", nil)
-	server := &statusServer{
-		baseStatusServer: &baseStatusServer{
-			AmbientContext:     ambient,
-			privilegeChecker:   adminAuthzCheck,
-			sessionRegistry:    sessionRegistry,
-			closedSessionCache: closedSessionCache,
-			remoteFlowRunner:   remoteFlowRunner,
-			st:                 st,
-			rpcCtx:             rpcCtx,
-			stopper:            stopper,
-			serverIterator:     serverIterator,
-			clock:              clock,
-		},
-		cfg:              cfg,
-		db:               db,
-		metricSource:     metricSource,
-		internalExecutor: internalExecutor,
-	}
+	server := newStatusServer(
+		ambient,
+		st,
+		cfg,
+		adminAuthzCheck,
+		db,
+		metricSource,
+		rpcCtx,
+		stopper,
+		sessionRegistry,
+		closedSessionCache,
+		remoteFlowRunner,
+		internalExecutor,
+		serverIterator,
+		clock,
+	)
 
 	return &systemStatusServer{
 		statusServer:       server,
@@ -3036,7 +3054,7 @@ func (s *statusServer) CancelQueryByKey(
 	// second. But if an attacker crafts the CancelRequests to all target the
 	// same SQLInstance, then that one instance would have to process 100*X
 	// requests per second.
-	alloc, err := pgwirecancel.CancelSemaphore.TryAcquire(ctx, 1)
+	alloc, err := s.cancelSemaphore.TryAcquire(ctx, 1)
 	if err != nil {
 		return nil, status.Errorf(codes.ResourceExhausted, "exceeded rate limit of pgwire cancellation requests")
 	}
