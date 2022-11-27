@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -60,10 +62,11 @@ type onDemandServer interface {
 	// requests for this server.
 	getHTTPHandlerFn() http.HandlerFunc
 
-	// testingGetSQLAddr retrieves the address of the SQL listener.
-	// Used until the following issue is resolved:
-	// https://github.com/cockroachdb/cockroach/issues/84585
-	testingGetSQLAddr() string
+	// handleCancel processes a SQL async cancel query.
+	handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) error
+
+	// serveConn handles an incoming SQL connection.
+	serveConn(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error
 }
 
 type serverEntry struct {
@@ -179,17 +182,19 @@ func (c *serverController) Close() {
 	// on the map.
 	servers := c.getServers()
 	for _, s := range servers {
-		s.stop(context.Background())
+		if s.shouldStop {
+			s.server.stop(context.Background())
+		}
 	}
 }
 
-func (c *serverController) getServers() (res []onDemandServer) {
+// getServers retrieves all the currently instantiated in-memory
+// servers.
+func (c *serverController) getServers() (res []serverEntry) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, e := range c.mu.servers {
-		if e.shouldStop {
-			res = append(res, e.server)
-		}
+		res = append(res, e)
 	}
 	return res
 }
@@ -432,14 +437,53 @@ func (c *serverController) attemptLogoutFromAllTenants() http.Handler {
 	})
 }
 
-// TestingGetSQLAddrForTenant extracts the SQL address for the target tenant.
-// Used in tests until https://github.com/cockroachdb/cockroach/issues/84585 is resolved.
-func (s *Server) TestingGetSQLAddrForTenant(ctx context.Context, tenant string) string {
-	ts, err := s.serverController.getOrCreateServer(ctx, tenant)
-	if err != nil {
-		panic(err)
+// sqlMux redirects incoming SQL connections to the server selected
+// by the client-provided SQL parameters.
+// If no tenant is specifeid, the default tenant is used.
+func (c *serverController) sqlMux(
+	ctx context.Context, conn net.Conn, status pgwire.PreServeStatus,
+) error {
+	switch status.State {
+	case pgwire.PreServeCancel:
+		// Cancel requests do not contain enough data for routing; we
+		// simply broadcast them to all servers. One of the servers will
+		// pick it up.
+		var err error
+		atLeastOneCancellationSucceeded := false
+		for _, s := range c.getServers() {
+			thisErr := s.server.handleCancel(ctx, status.CancelKey)
+			atLeastOneCancellationSucceeded = atLeastOneCancellationSucceeded || thisErr == nil
+			err = errors.CombineErrors(err, thisErr)
+		}
+		if !atLeastOneCancellationSucceeded && err != nil {
+			// We only log a warning if none of the servers was able to
+			// process the cancellation.
+			log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+		}
+		return nil
+
+	case pgwire.PreServeReady:
+		tenantName := status.GetTenantName()
+		if tenantName == "" {
+			// TODO(knz): Make the default tenant route for SQL configurable.
+			// See: https://github.com/cockroachdb/cockroach/issues/91741
+			tenantName = catconstants.SystemTenantName
+		}
+
+		s, err := c.getOrCreateServer(ctx, tenantName)
+		if err != nil {
+			log.Warningf(ctx, "unable to start server for tenant %q: %v", tenantName, err)
+			// TODO(knz): we might want to send a pg error to the client here.
+			// See: https://github.com/cockroachdb/cockroach/issues/92525
+			_ = conn.Close()
+			return err
+		}
+
+		return s.serveConn(ctx, conn, status)
+
+	default:
+		return errors.AssertionFailedf("programming error: missing case %v", status.State)
 	}
-	return ts.testingGetSQLAddr()
 }
 
 type errInvalidTenantMarker struct{}
@@ -517,8 +561,20 @@ func (t *tenantServerWrapper) getHTTPHandlerFn() http.HandlerFunc {
 	return t.server.http.baseHandler
 }
 
-func (t *tenantServerWrapper) testingGetSQLAddr() string {
-	return t.server.sqlServer.cfg.SQLAddr
+func (t *tenantServerWrapper) handleCancel(
+	ctx context.Context, cancelKey pgwirecancel.BackendKeyData,
+) error {
+	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
+	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
+	return t.server.sqlServer.pgServer.HandleCancel(pgCtx, cancelKey)
+}
+
+func (t *tenantServerWrapper) serveConn(
+	ctx context.Context, conn net.Conn, status pgwire.PreServeStatus,
+) error {
+	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
+	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
+	return t.server.sqlServer.pgServer.ServeConn(pgCtx, conn, status)
 }
 
 // systemServerWrapper implements the onDemandServer interface for Server.
@@ -544,8 +600,20 @@ func (t *systemServerWrapper) getHTTPHandlerFn() http.HandlerFunc {
 	return t.server.http.baseHandler
 }
 
-func (t *systemServerWrapper) testingGetSQLAddr() string {
-	return t.server.cfg.SQLAddr
+func (t *systemServerWrapper) handleCancel(
+	ctx context.Context, cancelKey pgwirecancel.BackendKeyData,
+) error {
+	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
+	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
+	return t.server.sqlServer.pgServer.HandleCancel(pgCtx, cancelKey)
+}
+
+func (t *systemServerWrapper) serveConn(
+	ctx context.Context, conn net.Conn, status pgwire.PreServeStatus,
+) error {
+	pgCtx := t.server.sqlServer.AnnotateCtx(context.Background())
+	pgCtx = logtags.AddTags(pgCtx, logtags.FromContext(ctx))
+	return t.server.sqlServer.pgServer.ServeConn(pgCtx, conn, status)
 }
 
 // startInMemoryTenantServerInternal starts an in-memory server for
@@ -679,16 +747,12 @@ func makeInMemoryTenantServerConfig(
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 
 	// TODO(knz): use a single network interface for all tenant servers.
-	// See: https://github.com/cockroachdb/cockroach/issues/84585
+	// See: https://github.com/cockroachdb/cockroach/issues/92524
 	portOffset := kvServerCfg.Config.SecondaryTenantPortOffset
-	var err1, err2, err3, err4 error
+	var err1, err2 error
 	baseCfg.Addr, err1 = rederivePort(index, kvServerCfg.Config.Addr, "", portOffset)
 	baseCfg.AdvertiseAddr, err2 = rederivePort(index, kvServerCfg.Config.AdvertiseAddr, baseCfg.Addr, portOffset)
-	baseCfg.SQLAddr, err3 = rederivePort(index, kvServerCfg.Config.SQLAddr, "", portOffset)
-	baseCfg.SQLAdvertiseAddr, err4 = rederivePort(index, kvServerCfg.Config.SQLAdvertiseAddr, baseCfg.SQLAddr, portOffset)
-	if err := errors.CombineErrors(err1,
-		errors.CombineErrors(err2,
-			errors.CombineErrors(err3, err4))); err != nil {
+	if err := errors.CombineErrors(err1, err2); err != nil {
 		return baseCfg, sqlCfg, err
 	}
 
@@ -697,6 +761,12 @@ func makeInMemoryTenantServerConfig(
 	// Nevertheless, we like to know our own HTTP address.
 	baseCfg.HTTPAddr = kvServerCfg.Config.HTTPAddr
 	baseCfg.HTTPAdvertiseAddr = kvServerCfg.Config.HTTPAdvertiseAddr
+
+	// The parent server will route SQL connections to us.
+	baseCfg.DisableSQLListener = true
+	// Nevertheless, we like to know our own HTTP address.
+	baseCfg.SQLAddr = kvServerCfg.Config.SQLAddr
+	baseCfg.SQLAdvertiseAddr = kvServerCfg.Config.SQLAdvertiseAddr
 
 	// Define the unix socket intelligently.
 	// See: https://github.com/cockroachdb/cockroach/issues/84585

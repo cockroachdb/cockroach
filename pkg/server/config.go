@@ -216,6 +216,12 @@ type BaseConfig struct {
 	// other service (typically, the serverController) will accept and
 	// route requests instead.
 	DisableHTTPListener bool
+
+	// DisableSQLListener prevents this server from starting a TCP
+	// listener for the SQL service. Instead, it is expected that some
+	// other service (typically, the serverController) will accept and
+	// route SQL connections instead.
+	DisableSQLListener bool
 }
 
 // MakeBaseConfig returns a BaseConfig with default values.

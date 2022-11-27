@@ -685,6 +685,10 @@ func (s *Server) TestingEnableAuthLogging() {
 func (s *Server) ServeConn(
 	ctx context.Context, conn net.Conn, preServeStatus PreServeStatus,
 ) (err error) {
+	if preServeStatus.State != PreServeReady {
+		return errors.AssertionFailedf("programming error: cannot call ServeConn with state %v (did you mean HandleCancel?)", preServeStatus.State)
+	}
+
 	defer func() {
 		if err != nil {
 			s.tenantMetrics.ConnFailures.Inc(1)
@@ -725,11 +729,6 @@ func (s *Server) ServeConn(
 			log.StructuredEvent(ctx, ev)
 		}
 	}()
-
-	if preServeStatus.State == PreServeCancel {
-		s.handleCancel(ctx, preServeStatus.CancelKey)
-		return nil
-	}
 
 	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
@@ -809,7 +808,7 @@ func readCancelKeyAndCloseConn(
 	return true, pgwirecancel.BackendKeyData(backendKeyDataBits)
 }
 
-// handleCancel handles a pgwire query cancellation request. Note that the
+// HandleCancel handles a pgwire query cancellation request. Note that the
 // request is unauthenticated. To mitigate the security risk (i.e., a
 // malicious actor spamming this endpoint with random data to try to cancel
 // a query), the logic is rate-limited by a semaphore. Refer to the comments
@@ -818,7 +817,7 @@ func readCancelKeyAndCloseConn(
 // This function does not return an error, so the caller (and possible
 // attacker) will not know if the cancellation attempt succeeded. Errors are
 // logged so that an operator can be aware of any possibly malicious requests.
-func (s *Server) handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
+func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) error {
 	s.tenantMetrics.PGWireCancelTotalCount.Inc(1)
 
 	resp, err := func() (*serverpb.CancelQueryByKeyResponse, error) {
@@ -840,8 +839,8 @@ func (s *Server) handleCancel(ctx context.Context, cancelKey pgwirecancel.Backen
 		if respStatus := status.Convert(err); respStatus.Code() == codes.ResourceExhausted {
 			s.tenantMetrics.PGWireCancelIgnoredCount.Inc(1)
 		}
-		log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
 	}
+	return err
 }
 
 // finalizeClientParameters "fills in" the session arguments with
