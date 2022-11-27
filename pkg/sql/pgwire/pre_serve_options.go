@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"net"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -47,6 +48,7 @@ func parseClientProvidedSessionParameters(
 	buf *pgwirebase.ReadBuffer,
 	origRemoteAddr net.Addr,
 	trustClientProvidedRemoteAddr bool,
+	acceptTenantName bool,
 ) (args tenantIndependentClientParameters, err error) {
 	args.SessionArgs = sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
@@ -54,6 +56,7 @@ func parseClientProvidedSessionParameters(
 		RemoteAddr:                  origRemoteAddr,
 	}
 
+	hasTenantSelectOption := false
 	for {
 		// Read a key-value pair from the client.
 		key, err := buf.GetString()
@@ -147,12 +150,24 @@ func parseClientProvidedSessionParameters(
 			for _, opt := range opts {
 				// crdb:jwt_auth_enabled must be passed as an option in order for us to support non-CRDB
 				// clients. jwt_auth_enabled is not a session variable. We extract it separately here.
-				if strings.ToLower(opt.key) == "crdb:jwt_auth_enabled" {
+				switch strings.ToLower(opt.key) {
+				case "crdb:jwt_auth_enabled":
 					b, err := strconv.ParseBool(opt.value)
 					if err != nil {
 						return args, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "crdb:jwt_auth_enabled")
 					}
 					args.JWTAuthEnabled = b
+					continue
+				case "cluster":
+					if !acceptTenantName {
+						return args, pgerror.Newf(pgcode.InvalidParameterValue,
+							"tenant selection is not available on this server")
+					}
+					// The syntax after '.' will be extended in later versions.
+					// The period itself cannot occur in a tenant name.
+					parts := strings.SplitN(opt.value, ".", 2)
+					args.tenantName = parts[0]
+					hasTenantSelectOption = true
 					continue
 				}
 				err = loadParameter(ctx, opt.key, opt.value, &args.SessionArgs)
@@ -164,6 +179,23 @@ func parseClientProvidedSessionParameters(
 			err = loadParameter(ctx, key, value, &args.SessionArgs)
 			if err != nil {
 				return args, err
+			}
+		}
+	}
+
+	if !hasTenantSelectOption && acceptTenantName {
+		// NB: we only inspect the database name if the special option was
+		// not specified. See the tenant routing RFC for the rationale.
+		if match := tenantSelectionRe.FindStringSubmatch(args.SessionDefaults["database"]); match != nil {
+			args.tenantName = match[1]
+			dbName := match[2]
+			if dbName != "" {
+				args.SessionDefaults["database"] = dbName
+			} else {
+				// Tenant name was specified in dbname position, but nothing
+				// afterwards. This means the db name was not really specified.
+				// We'll fall back on the case below.
+				delete(args.SessionDefaults, "database")
 			}
 		}
 	}
@@ -187,6 +219,11 @@ func parseClientProvidedSessionParameters(
 
 	return args, nil
 }
+
+// tenantSelectionRe is the regular expression applied to the start of the
+// client-provided database name to find the target tenant.
+// See the tenant routing RFC for details.
+var tenantSelectionRe = regexp.MustCompile(`^cluster:([^/]*)(?:/|$)(.*)`)
 
 func loadParameter(ctx context.Context, key, value string, args *sql.SessionArgs) error {
 	key = strings.ToLower(key)
