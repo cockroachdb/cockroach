@@ -1,19 +1,12 @@
+# Please keep the list sorted.
+
 approvers:
-- heyitsanthony
-- philips
-- fanminshi
-- gyuho
+- ahrtr
+- hexfusion
 - mitake
-- jpbetz
-- xiang90
-- bdarnell
+- ptabor
+- serathius
+- spzala
+- tbg
+
 reviewers:
-- heyitsanthony
-- philips
-- fanminshi
-- gyuho
-- mitake
-- jpbetz
-- xiang90
-- bdarnell
-- tschottdorf
