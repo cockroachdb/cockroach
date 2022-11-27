@@ -112,6 +112,11 @@ type PreServeConnHandler struct {
 	// certain peer IPs, or with certain certificates. (could it be a
 	// special hba.conf directive?)
 	trustClientProvidedRemoteAddr syncutil.AtomicBool
+
+	// acceptTenantName determines whether this pre-serve handler will
+	// interpret a tenant name specification in the connection
+	// parameters.
+	acceptTenantName bool
 }
 
 // MakePreServeConnHandler creates a PreServeConnHandler.
@@ -123,6 +128,7 @@ func MakePreServeConnHandler(
 	getTLSConfig func() (*tls.Config, error),
 	histogramWindow time.Duration,
 	parentMemoryMonitor *mon.BytesMonitor,
+	acceptTenantName bool,
 ) PreServeConnHandler {
 	ctx := ambientCtx.AnnotateCtx(context.Background())
 	metrics := makeTenantIndependentMetrics(histogramWindow)
@@ -132,6 +138,7 @@ func MakePreServeConnHandler(
 			msgBuilder: newWriteBuffer(metrics.PreServeBytesOutCount),
 		},
 		cfg:                      cfg,
+		acceptTenantName:         acceptTenantName,
 		tenantIndependentMetrics: metrics,
 		getTLSConfig:             getTLSConfig,
 
@@ -244,6 +251,7 @@ func (s *PreServeConnHandler) sendErr(ctx context.Context, conn net.Conn, err er
 type tenantIndependentClientParameters struct {
 	sql.SessionArgs
 	foundBufferSize bool
+	tenantName      string
 }
 
 // PreServeState describes the state of a connection after PrepareConn,
@@ -284,6 +292,11 @@ type PreServeStatus struct {
 
 	// clientParameters is the set of client-provided status parameters.
 	clientParameters tenantIndependentClientParameters
+}
+
+// GetTenantName retrieves the selected tenant name.
+func (st PreServeStatus) GetTenantName() string {
+	return st.clientParameters.tenantName
 }
 
 // PreServe initializes the SQL connection, optionally upgrades
@@ -376,7 +389,8 @@ func (s *PreServeConnHandler) PreServe(
 	}
 
 	// Load the client-provided session parameters.
-	st.clientParameters, err = parseClientProvidedSessionParameters(ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get())
+	st.clientParameters, err = parseClientProvidedSessionParameters(
+		ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Get(), s.acceptTenantName)
 	if err != nil {
 		st.Reserved.Close(ctx)
 		return conn, st, s.sendErr(ctx, conn, err)

@@ -735,11 +735,6 @@ func (s *Server) ServeConn(
 		}
 	}()
 
-	if preServeStatus.State == PreServeCancel {
-		s.handleCancel(ctx, preServeStatus.CancelKey)
-		return nil
-	}
-
 	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
@@ -816,7 +811,7 @@ func readCancelKeyAndCloseConn(
 	return pgwirecancel.BackendKeyData(backendKeyDataBits)
 }
 
-// handleCancel handles a pgwire query cancellation request. Note that the
+// HandleCancel handles a pgwire query cancellation request. Note that the
 // request is unauthenticated. To mitigate the security risk (i.e., a
 // malicious actor spamming this endpoint with random data to try to cancel
 // a query), the logic is rate-limited by a semaphore. Refer to the comments
@@ -825,7 +820,7 @@ func readCancelKeyAndCloseConn(
 // This function does not return an error, so the caller (and possible
 // attacker) will not know if the cancellation attempt succeeded. Errors are
 // logged so that an operator can be aware of any possibly malicious requests.
-func (s *Server) handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
+func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	s.tenantMetrics.PGWireCancelTotalCount.Inc(1)
 
@@ -878,6 +873,7 @@ func parseClientProvidedSessionParameters(
 	buf *pgwirebase.ReadBuffer,
 	origRemoteAddr net.Addr,
 	trustClientProvidedRemoteAddr bool,
+	acceptTenantName bool,
 ) (args tenantIndependentClientParameters, err error) {
 	args.SessionArgs = sql.SessionArgs{
 		SessionDefaults:             make(map[string]string),
@@ -978,12 +974,20 @@ func parseClientProvidedSessionParameters(
 			for _, opt := range opts {
 				// crdb:jwt_auth_enabled must be passed as an option in order for us to support non-CRDB
 				// clients. jwt_auth_enabled is not a session variable. We extract it separately here.
-				if strings.ToLower(opt.key) == "crdb:jwt_auth_enabled" {
+				switch strings.ToLower(opt.key) {
+				case "crdb:jwt_auth_enabled":
 					b, err := strconv.ParseBool(opt.value)
 					if err != nil {
 						return args, pgerror.Wrapf(err, pgcode.InvalidParameterValue, "crdb:jwt_auth_enabled")
 					}
 					args.JWTAuthEnabled = b
+					continue
+				case "crdb:tenant":
+					if !acceptTenantName {
+						return args, pgerror.Newf(pgcode.InvalidParameterValue,
+							"tenant selection is not available on this server")
+					}
+					args.tenantName = opt.value
 					continue
 				}
 				err = loadParameter(ctx, opt.key, opt.value, &args.SessionArgs)
@@ -996,6 +1000,27 @@ func parseClientProvidedSessionParameters(
 			if err != nil {
 				return args, err
 			}
+		}
+	}
+
+	const tenantSelectionDBPrefix = "crdb:tenant-"
+	if dbname := args.SessionDefaults["database"]; strings.HasPrefix(dbname, tenantSelectionDBPrefix) {
+		if !acceptTenantName {
+			return args, pgerror.Newf(pgcode.InvalidParameterValue,
+				"tenant selection is not available on this server")
+		}
+		parts := strings.SplitN(dbname, ".", 2)
+		args.tenantName = parts[0][len(tenantSelectionDBPrefix):]
+
+		if len(parts) == 2 {
+			// Client specified "crdb:tenant-XXX.mydb".
+			// The db name is "mydb".
+			args.SessionDefaults["database"] = parts[1]
+		} else {
+			// Tenant name was specified in dbname position, but nothing
+			// afterwards. This means the db name was not really specified.
+			// We'll fall back on the case below.
+			delete(args.SessionDefaults, "database")
 		}
 	}
 

@@ -857,6 +857,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		rpcContext.GetServerTLSConfig,
 		cfg.HistogramWindowInterval(),
 		sqlMonitorAndMetrics.rootSQLMemoryMonitor,
+		true, /* acceptTenantName */
 	)
 	for _, m := range pgPreServer.Metrics() {
 		registry.AddMetricStruct(m)
@@ -1259,7 +1260,7 @@ func (s *Server) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc)
+	pgL, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, s.cfg.BaseConfig, s.stopper, s.grpc, true /* enableSQLListener */)
 	if err != nil {
 		return err
 	}
@@ -1798,7 +1799,7 @@ func (s *Server) AcceptClients(ctx context.Context) error {
 		workersCtx,
 		s.stopper,
 		s.pgPreServer,
-		s.sqlServer.pgServer.ServeConn,
+		s.serverController.sqlMux,
 		s.pgL,
 		&s.cfg.SocketFile,
 	); err != nil {
