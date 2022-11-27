@@ -33,10 +33,14 @@ import (
 // when waiting for init().
 // This does not start *accepting* connections just yet.
 func startListenRPCAndSQL(
-	ctx, workersCtx context.Context, cfg BaseConfig, stopper *stop.Stopper, grpc *grpcServer,
+	ctx, workersCtx context.Context,
+	cfg BaseConfig,
+	stopper *stop.Stopper,
+	grpc *grpcServer,
+	enableSQLListener bool,
 ) (sqlListener net.Listener, startRPCServer func(ctx context.Context), err error) {
 	rpcChanName := "rpc/sql"
-	if cfg.SplitListenSQL {
+	if cfg.SplitListenSQL || !enableSQLListener {
 		rpcChanName = "rpc"
 	}
 	var ln net.Listener
@@ -54,7 +58,7 @@ func startListenRPCAndSQL(
 	}
 
 	var pgL net.Listener
-	if cfg.SplitListenSQL {
+	if cfg.SplitListenSQL && enableSQLListener {
 		pgL, err = ListenAndUpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, "sql")
 		if err != nil {
 			return nil, nil, err
@@ -84,7 +88,7 @@ func startListenRPCAndSQL(
 
 	m := cmux.New(ln)
 
-	if !cfg.SplitListenSQL {
+	if !cfg.SplitListenSQL && enableSQLListener {
 		// If the pg port is split, it will be opened above. Otherwise,
 		// we make it hang off the RPC listener via cmux here.
 		pgL = m.Match(func(r io.Reader) bool {

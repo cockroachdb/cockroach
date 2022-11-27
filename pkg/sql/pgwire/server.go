@@ -726,11 +726,6 @@ func (s *Server) ServeConn(
 		}
 	}()
 
-	if preServeStatus.State == PreServeCancel {
-		s.handleCancel(ctx, preServeStatus.CancelKey)
-		return nil
-	}
-
 	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
@@ -807,7 +802,7 @@ func readCancelKeyAndCloseConn(
 	return pgwirecancel.BackendKeyData(backendKeyDataBits)
 }
 
-// handleCancel handles a pgwire query cancellation request. Note that the
+// HandleCancel handles a pgwire query cancellation request. Note that the
 // request is unauthenticated. To mitigate the security risk (i.e., a
 // malicious actor spamming this endpoint with random data to try to cancel
 // a query), the logic is rate-limited by a semaphore. Refer to the comments
@@ -816,7 +811,7 @@ func readCancelKeyAndCloseConn(
 // This function does not return an error, so the caller (and possible
 // attacker) will not know if the cancellation attempt succeeded. Errors are
 // logged so that an operator can be aware of any possibly malicious requests.
-func (s *Server) handleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
+func (s *Server) HandleCancel(ctx context.Context, cancelKey pgwirecancel.BackendKeyData) {
 	telemetry.Inc(sqltelemetry.CancelRequestCounter)
 	s.tenantMetrics.PGWireCancelTotalCount.Inc(1)
 
