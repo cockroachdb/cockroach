@@ -241,18 +241,23 @@ func NewTenantServer(
 	// the eventsServer. This is currently performed in
 	// makeTenantSQLServerArgs().
 
-	// Initialize the pgwire pre-server, which initializes connections,
-	// sets up TLS and reads client status parameters.
-	pgPreServer := pgwire.MakePreServeConnHandler(
-		baseCfg.AmbientCtx,
-		baseCfg.Config,
-		args.Settings,
-		args.rpcContext.GetServerTLSConfig,
-		baseCfg.HistogramWindowInterval(),
-		args.monitorAndMetrics.rootSQLMemoryMonitor,
-	)
-	for _, m := range pgPreServer.Metrics() {
-		args.registry.AddMetricStruct(m)
+	var pgPreServer *pgwire.PreServeConnHandler
+	if !baseCfg.DisableSQLListener {
+		// Initialize the pgwire pre-server, which initializes connections,
+		// sets up TLS and reads client status parameters.
+		ps := pgwire.MakePreServeConnHandler(
+			baseCfg.AmbientCtx,
+			baseCfg.Config,
+			args.Settings,
+			args.rpcContext.GetServerTLSConfig,
+			baseCfg.HistogramWindowInterval(),
+			args.monitorAndMetrics.rootSQLMemoryMonitor,
+			false, /* acceptTenantName */
+		)
+		for _, m := range ps.Metrics() {
+			args.registry.AddMetricStruct(m)
+		}
+		pgPreServer = &ps
 	}
 
 	// Instantiate the SQL server proper.
@@ -344,7 +349,7 @@ func NewTenantServer(
 
 		debug: debugServer,
 
-		pgPreServer: &pgPreServer,
+		pgPreServer: pgPreServer,
 
 		sqlServer: sqlServer,
 		sqlCfg:    args.SQLConfig,
@@ -420,11 +425,14 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// and dispatches the server worker for the RPC.
 	// The SQL listener is returned, to start the SQL server later
 	// below when the server has initialized.
-	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc)
+	enableSQLListener := !s.sqlServer.cfg.DisableSQLListener
+	pgL, rpcLoopbackDialFn, startRPCServer, err := startListenRPCAndSQL(ctx, workersCtx, *s.sqlServer.cfg, s.stopper, s.grpc, enableSQLListener)
 	if err != nil {
 		return err
 	}
-	s.pgL = pgL
+	if enableSQLListener {
+		s.pgL = pgL
+	}
 
 	// Tell the RPC context how to connect in-memory.
 	s.rpcContext.SetLoopbackDialer(rpcLoopbackDialFn)
@@ -686,17 +694,34 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 // This mirrors the implementation of (*Server).AcceptClients.
 // TODO(knz): Find a way to implement this method only once for both.
 func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
-	workersCtx := s.AnnotateCtx(context.Background())
+	if !s.sqlServer.cfg.DisableSQLListener {
+		workersCtx := s.AnnotateCtx(context.Background())
 
-	if err := startServeSQL(
-		workersCtx,
-		s.stopper,
-		s.pgPreServer,
-		s.sqlServer.pgServer.ServeConn,
-		s.pgL,
-		&s.sqlServer.cfg.SocketFile,
-	); err != nil {
-		return err
+		pgServer := s.sqlServer.pgServer
+		serveConn := func(ctx context.Context, conn net.Conn, status pgwire.PreServeStatus) error {
+			switch status.State {
+			case pgwire.PreServeCancel:
+				if err := pgServer.HandleCancel(ctx, status.CancelKey); err != nil {
+					log.Sessions.Warningf(ctx, "unexpected while handling pgwire cancellation request: %v", err)
+				}
+				return nil
+			case pgwire.PreServeReady:
+				return pgServer.ServeConn(ctx, conn, status)
+			default:
+				return errors.AssertionFailedf("programming error: missing case %v", status.State)
+			}
+		}
+
+		if err := startServeSQL(
+			workersCtx,
+			s.stopper,
+			s.pgPreServer,
+			serveConn,
+			s.pgL,
+			&s.sqlServer.cfg.SocketFile,
+		); err != nil {
+			return err
+		}
 	}
 
 	s.sqlServer.isReady.Set(true)

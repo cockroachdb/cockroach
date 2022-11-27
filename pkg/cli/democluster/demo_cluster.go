@@ -495,14 +495,16 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 			}
 		}
 
-		// Select the default tenant.
-		ie := c.firstServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
-		// Choose the tenant to use when no tenant is specified on a
-		// connection or web URL.
-		if _, err := ie.Exec(ctx, "default-tenant", nil,
-			`SET CLUSTER SETTING `+server.DefaultTenantSelectSettingName+` = $1`,
-			demoTenantName); err != nil {
-			return err
+		if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
+			// Select the default tenant.
+			ie := c.firstServer.DistSQLServer().(*distsql.ServerImpl).ServerConfig.Executor
+			// Choose the tenant to use when no tenant is specified on a
+			// connection or web URL.
+			if _, err := ie.Exec(ctx, "default-tenant", nil,
+				`SET CLUSTER SETTING `+server.DefaultTenantSelectSettingName+` = $1`,
+				demoTenantName); err != nil {
+				return err
+			}
 		}
 
 		// Prepare the URL for use by the SQL shell.
@@ -792,7 +794,10 @@ func (demoCtx *Context) sqlPort(serverIdx int, forSecondaryTenant bool) int {
 		return demoCtx.SQLPort + serverIdx
 	}
 	// System tenant.
-
+	if !demoCtx.DisableServerController {
+		// Using server controller: same port for app and system tenant.
+		return demoCtx.SQLPort + serverIdx
+	}
 	// Currently using a separate SQL listener. System tenant uses port number
 	// offset by NumNodes.
 	return demoCtx.SQLPort + serverIdx + demoCtx.NumNodes
@@ -1452,6 +1457,18 @@ func (c *transientCluster) getNetworkURLForServer(
 	if !forSecondaryTenant && c.demoCtx.Multitenant {
 		database = catalogkeys.DefaultDatabaseName
 	}
+
+	if c.demoCtx.Multitenant && !c.demoCtx.DisableServerController {
+		if forSecondaryTenant {
+			if err := u.SetOption("options", "-ccluster="+demoTenantName); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := u.SetOption("options", "-ccluster="+catconstants.SystemTenantName); err != nil {
+				return nil, err
+			}
+		}
+	}
 	host, port, _ := addr.SplitHostPort(sqlAddr, "")
 	u.
 		WithNet(pgurl.NetTCP(host, port)).
@@ -1904,7 +1921,11 @@ func (c *transientCluster) printURLs(
 	if c.demoCtx.Insecure {
 		secArgs = " --insecure"
 	}
-	fmt.Fprintln(w, "   (cli)     ", "cockroach sql"+secArgs+portArg)
+	db := sqlURL.GetDatabase()
+	if opt := sqlURL.GetOption("options"); strings.HasPrefix(opt, "-ccluster=") {
+		db = "cluster:" + opt[10:] + "/" + db
+	}
+	fmt.Fprintln(w, "   (cli)     ", "cockroach sql"+secArgs+portArg+" -d "+db)
 
 	fmt.Fprintln(w, "   (sql)     ", sqlURL.ToPQ())
 	if verbose {

@@ -3,16 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "pgwirecancel",
-    srcs = [
-        "backend_key_data.go",
-        "cancel_semaphore.go",
-    ],
+    srcs = ["backend_key_data.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/base",
-        "//pkg/util/quotapool",
-    ],
+    deps = ["//pkg/base"],
 )
 
 go_test(
