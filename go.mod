@@ -1,4 +1,4 @@
-module go.etcd.io/etcd/raft/v3
+module go.etcd.io/raft/v3
 
 go 1.19
 
@@ -22,13 +22,3 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-// Bad imports are sometimes causing attempts to pull that code.
-// This makes the error more explicit.
-replace go.etcd.io/etcd => ./FORBIDDEN_DEPENDENCY
-
-replace go.etcd.io/etcd/v3 => ./FORBIDDEN_DEPENDENCY
-
-replace go.etcd.io/etcd/client/pkg/v3 => ./FORBIDDEN_DEPENDENCY
-
-replace go.etcd.io/etcd/api/v3 => ./FORBIDDEN_DEPENDENCY
