@@ -520,6 +520,17 @@ func (cfg RaftConfig) RangeLeaseRenewalDuration() time.Duration {
 	return rangeLeaseRenewal
 }
 
+// RangeLeaseAcquireTimeout is the timeout for lease acquisition.
+func (cfg RaftConfig) RangeLeaseAcquireTimeout() time.Duration {
+	// The Raft election timeout is randomized by a factor of 1-2x per replica
+	// (the first one will trigger the election), and reproposing the lease
+	// acquisition command can take up to 1 Raft election timeout. On average, we
+	// should be able to elect a leader and acquire a lease within 2 election
+	// timeouts, assuming negligible RTT; otherwise, lease acquisition will
+	// typically be retried, only adding a bit of tail latency.
+	return 2 * cfg.RaftElectionTimeout()
+}
+
 // NodeLivenessDurations computes durations for node liveness expiration and
 // renewal based on a default multiple of Raft election timeout.
 func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal time.Duration) {
