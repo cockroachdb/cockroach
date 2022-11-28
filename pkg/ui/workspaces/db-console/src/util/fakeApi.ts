@@ -72,7 +72,10 @@ export function buildSQLApiDatabasesResponse(databases: string[]) {
       owner: "root",
       primary_region: null,
       secondary_region: null,
-      regions: [],
+      regions: [
+        "gcp-europe-west1",
+        "gcp-europe-west2",
+      ],
       survival_goal: null,
     };
   });

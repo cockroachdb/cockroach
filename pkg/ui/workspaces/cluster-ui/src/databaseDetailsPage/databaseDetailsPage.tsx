@@ -28,7 +28,7 @@ import {
 } from "src/sortedtable";
 import * as format from "src/util/format";
 import { DATE_FORMAT } from "src/util/format";
-import { mvccGarbage, syncHistory } from "../util";
+import { mvccGarbage, syncHistory, unique } from "../util";
 
 import styles from "./databaseDetailsPage.module.scss";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
@@ -41,6 +41,14 @@ import { Caution } from "@cockroachlabs/icons";
 import { Anchor } from "../anchor";
 import LoadingError from "../sqlActivity/errorComponent";
 import { Loading } from "../loading";
+import { Search } from "../search";
+import { 
+  Filter,
+  Filters,
+  defaultFilters,
+  calculateActiveFilters,
+} from "src/queryFilter";
+import { UIConfigState } from "src/store";
 
 const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
@@ -61,6 +69,10 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //     name: string;
 //     sortSettingTables: SortSetting;
 //     sortSettingGrants: SortSetting;
+//     search: string;
+//     filters: Filters;
+//     nodeRegions: { [nodeId: string]: string };
+//     isTenant: boolean;
 //     viewMode: ViewMode;
 //     tables: { // DatabaseDetailsPageDataTable[]
 //       name: string;
@@ -80,6 +92,7 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 //         lastError: Error;
 //         replicationSizeInBytes: number;
 //         rangeCount: number;
+//         nodes: number[];
 //         nodesByRegionString: string;
 //       };
 //     }[];
@@ -92,6 +105,10 @@ export interface DatabaseDetailsPageData {
   tables: DatabaseDetailsPageDataTable[];
   sortSettingTables: SortSetting;
   sortSettingGrants: SortSetting;
+  search: string;
+  filters: Filters;
+  nodeRegions: { [nodeId: string]: string };
+  isTenant?: UIConfigState["isTenant"];
   viewMode: ViewMode;
   showNodeRegionsColumn?: boolean;
 }
@@ -124,6 +141,11 @@ export interface DatabaseDetailsPageDataTableStats {
   lastError: Error;
   replicationSizeInBytes: number;
   rangeCount: number;
+  // Array of node IDs used to unambiguously filter by node and region.
+  nodes?: number[];
+  // String of nodes grouped by region in alphabetical order, e.g.
+  // regionA(n1,n2), regionB(n3). Used for display in the table's
+  // "Regions/Nodes" column.
   nodesByRegionString?: string;
 }
 
@@ -131,6 +153,8 @@ export interface DatabaseDetailsPageActions {
   refreshDatabaseDetails: (database: string) => void;
   refreshTableDetails: (database: string, table: string) => void;
   refreshTableStats: (database: string, table: string) => void;
+  onFilterChange?: (value: Filters) => void;
+  onSearchComplete?: (query: string) => void;
   onSortingTablesChange?: (columnTitle: string, ascending: boolean) => void;
   onSortingGrantsChange?: (columnTitle: string, ascending: boolean) => void;
   onViewModeChange?: (viewMode: ViewMode) => void;
@@ -147,11 +171,34 @@ export enum ViewMode {
 
 interface DatabaseDetailsPageState {
   pagination: ISortedTablePagination;
+  filters?: Filters;
+  activeFilters?: number;
   lastStatsError: Error;
   lastDetailsError: Error;
 }
 
 class DatabaseSortedTable extends SortedTable<DatabaseDetailsPageDataTable> {}
+
+// filterBySearchQuery returns true if the search query matches the database name.
+function filterBySearchQuery(
+  table: DatabaseDetailsPageDataTable,
+  search: string,
+): boolean {
+  const matchString = table.name.toLowerCase();
+
+  if (search.startsWith('"') && search.endsWith('"')) {
+    search = search.substring(1, search.length - 1);
+
+    return matchString.includes(search)
+  }
+
+  const res = search
+    .toLowerCase()
+    .split(" ")
+    .every(val => matchString.includes(val));
+
+  return res;
+}
 
 export class DatabaseDetailsPage extends React.Component<
   DatabaseDetailsPageProps,
@@ -284,6 +331,105 @@ export class DatabaseDetailsPage extends React.Component<
     if (onSortingChange) {
       onSortingChange(ss.columnTitle, ss.ascending);
     }
+  };
+
+  onClearSearchField = (): void => {
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete("");
+    }
+
+    syncHistory(
+      {
+        q: undefined,
+      },
+      this.props.history,
+    );
+  };
+
+  onSubmitSearchField = (search: string): void => {
+    if (this.props.onSearchComplete) {
+      this.props.onSearchComplete(search);
+    }
+
+    this.resetPagination();
+    syncHistory(
+      {
+        q: search,
+      },
+      this.props.history,
+    );
+  };
+
+  onSubmitFilters = (filters: Filters): void => {
+    if (this.props.onFilterChange) {
+      this.props.onFilterChange(filters);
+    }
+
+    this.setState({
+      filters: filters,
+      activeFilters: calculateActiveFilters(filters),
+    });
+
+    this.resetPagination();
+    syncHistory(
+      {
+        regions: filters.regions,
+        nodes: filters.nodes,
+      },
+      this.props.history,
+    );
+  };
+
+  resetPagination = (): void => {
+    this.setState(prevState => {
+      return {
+        pagination: {
+          current: 1,
+          pageSize: prevState.pagination.pageSize,
+        }
+      };
+    });
+  };
+
+  // Returns a list of database tables to the display based on input from the
+  // search box and the applied filters.
+  filteredDatabaseTables = (): DatabaseDetailsPageDataTable[] => {
+    const {
+      search,
+      tables,
+      filters,
+      isTenant,
+      nodeRegions,
+    } = this.props;
+
+    const regionsSelected = filters.regions.length > 0 ? filters.regions.split(",") : [];
+    const nodesSelected = filters.nodes.length > 0 ? filters.nodes.split(",") : [];
+
+    return tables
+      .filter(
+        table => search ? filterBySearchQuery(table, search) : true
+      )
+      .filter(
+        table => {
+          if (regionsSelected.length == 0 && nodesSelected.length == 0) return true;
+          if (isTenant) return true;
+
+          let foundRegion = regionsSelected.length == 0;
+          let foundNode = nodesSelected.length == 0;
+
+          table.stats.nodes?.forEach(node => {
+            if (foundRegion || regionsSelected.includes(nodeRegions[node.toString()])) {
+              foundRegion = true;
+            }
+            if (foundNode || nodesSelected.includes("n" + node.toString())) {
+              foundNode = true;
+            }
+            if (foundNode && foundRegion) return true;
+          });
+
+          return foundRegion && foundNode;
+        }
+      );
   };
 
   private changeViewMode(viewMode: ViewMode) {
@@ -594,10 +740,45 @@ export class DatabaseDetailsPage extends React.Component<
   }
 
   render(): React.ReactElement {
+    const {
+      search,
+      filters,
+      isTenant,
+      nodeRegions,
+    } = this.props;
+
+    console.log("databaseDetailsPage.isTenant =", isTenant);
+
+    const tablesToDisplay = this.filteredDatabaseTables();
+    const activeFilters = calculateActiveFilters(filters);
+
+    const nodes = Object.keys(nodeRegions)
+      .map(n => Number(n))
+      .sort();
+
+    const regions = unique(Object.values(nodeRegions));
+
     const sortSetting =
       this.props.viewMode == ViewMode.Tables
         ? this.props.sortSettingTables
         : this.props.sortSettingGrants;
+
+    // Only show the filter component when the viewMode is Tables.
+    const filterComponent = this.props.viewMode == ViewMode.Tables 
+      ? (<PageConfigItem>
+          <Filter
+            hideAppNames={true}
+            regions={regions}
+            hideTimeLabel={true}
+            nodes={nodes.map(n => "n" + n.toString())}
+            activeFilters={activeFilters}
+            filters={defaultFilters}
+            onSubmitFilters={this.onSubmitFilters}
+            showNodes={!isTenant && nodes.length > 1}
+            showRegions={regions.length > 1}
+          />
+        </PageConfigItem>)
+      : (<></>);
 
     return (
       <div className="root table-area">
@@ -631,6 +812,15 @@ export class DatabaseDetailsPage extends React.Component<
               View: {this.props.viewMode}
             </Dropdown>
           </PageConfigItem>
+          <PageConfigItem>
+              <Search
+                onSubmit={this.onSubmitSearchField}
+                onClear={this.onClearSearchField}
+                defaultValue={search}
+                placeholder={"Search Tables"}
+              />
+          </PageConfigItem>
+          {filterComponent}
         </PageConfig>
 
         <section className={sortableTableCx("cl-table-container")}>
@@ -652,7 +842,7 @@ export class DatabaseDetailsPage extends React.Component<
             render={() => (
               <DatabaseSortedTable
                 className={cx("database-table")}
-                data={this.props.tables}
+                data={tablesToDisplay}
                 columns={this.columns()}
                 sortSetting={sortSetting}
                 onChangeSortSetting={this.changeSortSetting}

@@ -17,6 +17,7 @@ import {
   DatabasesPageData,
   DatabasesPageDataDatabase,
   DatabasesPageDataMissingTable,
+  defaultFilters,
 } from "@cockroachlabs/cluster-ui";
 
 import { AdminUIState, createAdminUIStore } from "src/redux/state";
@@ -106,6 +107,9 @@ describe("Databases Page", function () {
       loaded: false,
       lastError: undefined,
       databases: [],
+      search: null,
+      filters: defaultFilters,
+      nodeRegions: {},
       sortSetting: { ascending: true, columnTitle: "name" },
       automaticStatsCollectionEnabled: true,
       showNodeRegionsColumn: false,
@@ -133,6 +137,7 @@ describe("Databases Page", function () {
           loaded: false,
           lastError: undefined,
           name: "system",
+          nodes: [],
           sizeInBytes: 0,
           tableCount: 0,
           rangeCount: 0,
@@ -145,6 +150,7 @@ describe("Databases Page", function () {
           loaded: false,
           lastError: undefined,
           name: "test",
+          nodes: [],
           sizeInBytes: 0,
           tableCount: 0,
           rangeCount: 0,
@@ -153,6 +159,9 @@ describe("Databases Page", function () {
           numIndexRecommendations: 0,
         },
       ],
+      search: null,
+      filters: defaultFilters,
+      nodeRegions: {},
       sortSetting: { ascending: true, columnTitle: "name" },
       showNodeRegionsColumn: false,
       automaticStatsCollectionEnabled: true,
@@ -165,6 +174,7 @@ describe("Databases Page", function () {
     fakeApi.stubDatabaseDetails("system", {
       table_names: ["foo", "bar"],
       stats: {
+        node_ids: [1, 2, 4],
         missing_tables: [],
         range_count: new Long(3),
         approximate_disk_bytes: new Long(7168),
@@ -174,6 +184,7 @@ describe("Databases Page", function () {
     fakeApi.stubDatabaseDetails("test", {
       table_names: ["widgets"],
       stats: {
+        node_ids: [3, 5],
         missing_tables: [],
         range_count: new Long(42),
         approximate_disk_bytes: new Long(1234),
@@ -189,10 +200,11 @@ describe("Databases Page", function () {
       loaded: true,
       lastError: null,
       name: "system",
+      nodes: [1, 2, 4],
       sizeInBytes: 7168,
       tableCount: 2,
       rangeCount: 3,
-      nodesByRegionString: "",
+      nodesByRegionString: "undefined(n1,n2,n4)",
       missingTables: [],
       numIndexRecommendations: 0,
     });
@@ -202,10 +214,11 @@ describe("Databases Page", function () {
       loaded: true,
       lastError: null,
       name: "test",
+      nodes: [3, 5],
       sizeInBytes: 1234,
       tableCount: 1,
       rangeCount: 42,
-      nodesByRegionString: "",
+      nodesByRegionString: "undefined(n3,n5)",
       missingTables: [],
       numIndexRecommendations: 0,
     });
@@ -233,6 +246,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 7168,
           tableCount: 2,
           rangeCount: 3,
@@ -268,6 +282,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 8192,
           tableCount: 2,
           rangeCount: 8,
@@ -294,6 +309,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 0,
           tableCount: 2,
           rangeCount: 0,
@@ -332,6 +348,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 7168,
           tableCount: 2,
           rangeCount: 3,
@@ -347,6 +364,7 @@ describe("Databases Page", function () {
           loaded: true,
           lastError: null,
           name: "system",
+          nodes: [],
           sizeInBytes: 8192,
           tableCount: 2,
           rangeCount: 8,
@@ -358,3 +376,7 @@ describe("Databases Page", function () {
     });
   });
 });
+
+// function makeStateWithNodeRegions() {
+//   const store = createAdminUIStore(createMemoryHistory());
+// }

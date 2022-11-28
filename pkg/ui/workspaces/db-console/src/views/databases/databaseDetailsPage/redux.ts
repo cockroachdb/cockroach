@@ -14,6 +14,8 @@ import { LocalSetting } from "src/redux/localsettings";
 import _ from "lodash";
 import {
   DatabaseDetailsPageData,
+  defaultFilters,
+  Filters,
   util,
   ViewMode,
 } from "@cockroachlabs/cluster-ui";
@@ -89,6 +91,18 @@ const viewModeLocalSetting = new LocalSetting(
   ViewMode.Tables,
 );
 
+const filtersLocalTablesSetting = new LocalSetting<AdminUIState, Filters>(
+  "filters/DatabasesDetailsTablesPage",
+  (state: AdminUIState) => state.localSettings,
+  defaultFilters,
+);
+
+const searchLocalTablesSetting = new LocalSetting(
+  "search/DatabasesDetailsTablesPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
+)
+
 export const mapStateToProps = createSelector(
   (_state: AdminUIState, props: RouteComponentProps): string =>
     getMatchParamByName(props.match, databaseNameAttr),
@@ -101,6 +115,8 @@ export const mapStateToProps = createSelector(
   state => viewModeLocalSetting.selector(state),
   state => sortSettingTablesLocalSetting.selector(state),
   state => sortSettingGrantsLocalSetting.selector(state),
+  state => filtersLocalTablesSetting.selector(state),
+  state => searchLocalTablesSetting.selector(state),
   (
     database,
     databaseDetails,
@@ -111,6 +127,8 @@ export const mapStateToProps = createSelector(
     viewMode,
     sortSettingTables,
     sortSettingGrants,
+    filtersLocalTables,
+    searchLocalTables,
   ): DatabaseDetailsPageData => {
     return {
       loading: !!databaseDetails[database]?.inFlight,
@@ -121,6 +139,9 @@ export const mapStateToProps = createSelector(
       viewMode,
       sortSettingTables,
       sortSettingGrants,
+      filters: filtersLocalTables,
+      search: searchLocalTables,
+      nodeRegions: nodeRegions,
       tables: _.map(databaseDetails[database]?.data?.table_names, table => {
         const tableId = generateTableID(database, table);
 
@@ -164,6 +185,7 @@ export const mapStateToProps = createSelector(
             replicationSizeInBytes: FixLong(
               stats?.data?.approximate_disk_bytes || 0,
             ).toNumber(),
+            nodes: nodes,
             rangeCount: FixLong(stats?.data?.range_count || 0).toNumber(),
             nodesByRegionString: getNodesByRegionString(nodes, nodeRegions),
           },
@@ -196,4 +218,6 @@ export const mapDispatchToProps = {
       ascending: ascending,
       columnTitle: columnName,
     }),
+  onSearchComplete: (query: string) => searchLocalTablesSetting.set(query),
+  onFilterChange: (filters: Filters) => filtersLocalTablesSetting.set(filters),
 };

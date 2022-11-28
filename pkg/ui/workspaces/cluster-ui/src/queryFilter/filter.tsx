@@ -43,6 +43,7 @@ interface QueryFilter {
   regions?: string[];
   nodes?: string[];
   hideAppNames?: boolean;
+  hideTimeLabel?: boolean;
   showDB?: boolean;
   showUsername?: boolean;
   showSessionStatus?: boolean;
@@ -394,6 +395,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
       showRegions,
       showNodes,
       timeLabel,
+      hideTimeLabel,
       showUsername,
       showSessionStatus,
       showSchemaInsightTypes,
@@ -672,7 +674,7 @@ export class Filter extends React.Component<QueryFilter, FilterState> {
             {showSqlType ? sqlTypeFilter : ""}
             {showRegions ? regionsFilter : ""}
             {showNodes ? nodesFilter : ""}
-            {filters.timeUnit && (
+            {hideTimeLabel ? "" : filters.timeUnit && (
               <>
                 <div className={filterLabel.margin}>
                   {timeLabel

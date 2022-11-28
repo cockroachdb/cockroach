@@ -14,6 +14,8 @@ import { LocalSetting } from "src/redux/localsettings";
 import {
   DatabasesPageData,
   DatabasesPageDataDatabase,
+  defaultFilters,
+  Filters,
 } from "@cockroachlabs/cluster-ui";
 
 import { cockroach } from "src/js/protos";
@@ -55,6 +57,18 @@ const sortSettingLocalSetting = new LocalSetting(
   "sortSetting/DatabasesPage",
   (state: AdminUIState) => state.localSettings,
   { ascending: true, columnTitle: "name" },
+);
+
+const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
+  "filters/DatabasesPage",
+  (state: AdminUIState) => state.localSettings,
+  defaultFilters,
+);
+
+const searchLocalSetting = new LocalSetting(
+  "search/DatabsesPage",
+  (state: AdminUIState) => state.localSettings,
+  null,
 );
 
 const selectDatabases = createSelector(
@@ -116,6 +130,7 @@ const selectDatabases = createSelector(
         sizeInBytes: sizeInBytes,
         tableCount: details?.data?.table_names?.length || 0,
         rangeCount: rangeCount,
+        nodes: nodes,
         nodesByRegionString,
         numIndexRecommendations,
         missingTables: missingTables.map(table => {
@@ -134,6 +149,9 @@ export const mapStateToProps = (state: AdminUIState): DatabasesPageData => ({
   lastError: selectLastError(state),
   databases: selectDatabases(state),
   sortSetting: sortSettingLocalSetting.selector(state),
+  filters: filtersLocalSetting.selector(state),
+  search: searchLocalSetting.selector(state),
+  nodeRegions: nodeRegionsByIDSelector(state),
   automaticStatsCollectionEnabled: selectAutomaticStatsCollectionEnabled(state),
   showNodeRegionsColumn: selectIsMoreThanOneNode(state),
 });
@@ -159,4 +177,6 @@ export const mapDispatchToProps = {
       ascending: ascending,
       columnTitle: columnName,
     }),
+    onSearchComplete: (query: string) => searchLocalSetting.set(query),
+    onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
 };
