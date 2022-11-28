@@ -995,6 +995,8 @@ vectorized: true
       table: t@t_pkey
       spans: FULL SCAN
 
+
+
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_attribute WHERE attrelid='t'::regclass
 ----
@@ -1006,6 +1008,31 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: pg_attribute@pg_attribute_attrelid_idx
   spans: [/t - /t]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = 1::regproc
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  estimated row count: 10 (missing stats)
+  table: pg_proc@pg_proc_oid_idx
+  spans: [/array_agg - /array_agg]
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM pg_proc WHERE oid = '12345'::regprocedure
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  columns: (oid, proname, pronamespace, proowner, prolang, procost, prorows, provariadic, protransform, proisagg, proiswindow, prosecdef, proleakproof, proisstrict, proretset, provolatile, proparallel, pronargs, pronargdefaults, prorettype, proargtypes, proallargtypes, proargmodes, proargnames, proargdefaults, protrftypes, prosrc, probin, proconfig, proacl, prokind, prosupport)
+  estimated row count: 10 (missing stats)
+  table: pg_proc@pg_proc_oid_idx
+  spans: [/12345 - /12345]
+
 
 query T
 EXPLAIN (VERBOSE) select * from pg_class where oid = 't'::regclass
@@ -1093,7 +1120,6 @@ vectorized: true
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
   spans: [/boolean[] - /boolean[]]
-
 
 query T
 EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
