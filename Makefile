@@ -1,6 +1,6 @@
 
 .PHONY: verify
-verify: verify-gofmt verify-dep verify-lint verify-mod-tidy
+verify: verify-gofmt verify-dep verify-lint verify-mod-tidy verify-genproto
 
 .PHONY: verify-gofmt
 verify-gofmt:
@@ -18,6 +18,9 @@ verify-lint:
 verify-mod-tidy:
 	PASSES="mod_tidy" ./scripts/test.sh
 
+.PHONY: verify-genproto
+verify-genproto:
+	PASSES="genproto" ./scripts/test.sh
 
 .PHONY: test
 test:
