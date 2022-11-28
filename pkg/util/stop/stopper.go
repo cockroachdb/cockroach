@@ -499,6 +499,14 @@ func (s *Stopper) NumTasks() int {
 //
 // Stop is idempotent; concurrent calls will block on each other.
 func (s *Stopper) Stop(ctx context.Context) {
+	defer s.recover(ctx)
+
+	// Don't bother doing any cleanup if we're panicking; the process is expected
+	// to terminate.
+	if r := recover(); r != nil {
+		panic(r)
+	}
+
 	s.mu.Lock()
 	stopCalled := s.mu.stopping
 	s.mu.stopping = true
@@ -515,70 +523,7 @@ func (s *Stopper) Stop(ctx context.Context) {
 		close(s.stopped)
 	}()
 
-	// The following recover() runs when a panic is encountered _above_
-	// the Stop() call, by its caller, when Stop() is called via `defer`.
-	// Contrast with the use of recover() below.
-	if r := recover(); r != nil {
-		// In this case, we do not use the full Quiesce/Close logic
-		// synchronously, which would likely block and cause stalls in the
-		// caller code. This in turn risks turning a failing test (with a
-		// quick error) into a hanging test (with a long CI timeout).
-		//
-		// Instead, we take a "best effort" approach: we initiate the
-		// quiesce and closes asynchronously. This hopefully causes a
-		// number of routines to still terminate, which simplifies
-		// subsequent goroutine dumps. It may avoid stalls and helps some
-		// tests in `./cli` finish cleanly (where panics happen on
-		// purpose).
-
-		// Ensure the panic we're recovering from goes to logs.
-		logcrash.ReportPanicWithGlobalSettings(ctx, r, 1)
-
-		// Quiesce all the tasks.
-		// NB: Quiesce has its own panic recovery code that takes care
-		// of reporting panic objects to logs. In addition, we consider
-		// a panic in Quiesce (which uses only local code) to be
-		// exceedingly unlikely, and so if it happens we'll be OK
-		// having that panic terminate the process immediately.
-		// Contrast with the closer behavior below.
-		go s.Quiesce(ctx)
-
-		// Run the closers async, without holding s.mu. There's no concern
-		// around new closers being added; we've marked this stopper as
-		// `stopping` above, so any attempts to do so will be refused.
-		for _, c := range s.mu.closers {
-			go func(c Closer) {
-				// NB: this is an async goroutine so we need it to have
-				// its own panic recovery which will ensure panic objects go to
-				// logs.
-				//
-				// Unlike Quiesce above, the Close method can be pretty
-				// much anything and may trigger panics more often (e.g. in
-				// failing tests). We like to look at these panic objects
-				// too.
-				defer func() {
-					if cr := recover(); cr != nil {
-						logcrash.ReportPanicWithGlobalSettings(ctx, cr, 1)
-					}
-				}()
-				c.Close()
-			}(c)
-		}
-		// Give a little bit of time to the Close goroutines to perform
-		// their closing and possible panic recovery/logging before we let
-		// the original panic object propagate.
-		time.Sleep(100 * time.Millisecond)
-		// Re-throw. This will continue unwinding the caller,
-		// unregistering the stopper on the way out.
-		panic(r)
-	}
-
-	// The following executes in the "normal" case, i.e.  not when Stop
-	// is catching a panic already encountered in the caller.
-
 	s.Quiesce(ctx)
-
-	defer s.recover(ctx)
 
 	// Run the closers without holding s.mu. There's no concern around new
 	// closers being added; we've marked this stopper as `stopping` above, so
