@@ -32,12 +32,9 @@ import (
 // queries, but the intent is to measure the impact of the index creation.
 func registerIndexOverload(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:  "admission-control/index-overload",
-		Owner: registry.OwnerAdmissionControl,
-		// TODO(baptist): After two weeks of nightly baking time, reduce
-		// this to a weekly cadence. This is a long-running test and serves only
-		// as a coarse-grained benchmark.
-		// 	Tags:    []string{`weekly`},
+		Name:    "admission-control/index-overload",
+		Owner:   registry.OwnerAdmissionControl,
+		Tags:    []string{`weekly`},
 		Cluster: r.MakeClusterSpec(4, spec.CPU(8)),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			crdbNodes := c.Spec().NodeCount - 1

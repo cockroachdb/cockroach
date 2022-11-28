@@ -1177,7 +1177,6 @@ type ExecutorConfig struct {
 	// available when not running as a system tenant.
 	SQLStatusServer    serverpb.SQLStatusServer
 	TenantStatusServer serverpb.TenantStatusServer
-	RegionsServer      serverpb.RegionsServer
 	MetricsRecorder    nodeStatusGenerator
 	SessionRegistry    *SessionRegistry
 	ClosedSessionCache *ClosedSessionCache

@@ -1374,7 +1374,7 @@ func (s *statusServer) Profile(
 	return profileLocal(ctx, req, s.st)
 }
 
-// Regions implements the serverpb.Status interface.
+// Regions implements the serverpb.StatusServer interface.
 func (s *statusServer) Regions(
 	ctx context.Context, req *serverpb.RegionsRequest,
 ) (*serverpb.RegionsResponse, error) {

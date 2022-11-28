@@ -73,10 +73,10 @@ type extendedEvalContext struct {
 	// tenants.
 	NodesStatusServer serverpb.OptionalNodesStatusServer
 
-	// RegionsServer gives access to valid regions in the cluster.
-	RegionsServer serverpb.RegionsServer
+	// TenantStatusServer gives access to tenant status in the cluster.
+	TenantStatusServer serverpb.TenantStatusServer
 
-	// SQLStatusServer gives access to a subset of the serverpb.Status service
+	// SQLStatusServer gives access to a subset of the serverpb.StatusServer
 	// that is available to both system and non-system tenants.
 	SQLStatusServer serverpb.SQLStatusServer
 
@@ -127,7 +127,7 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.NodeID = execCfg.NodeInfo.NodeID
 	evalCtx.Locality = execCfg.Locality
 	evalCtx.NodesStatusServer = execCfg.NodesStatusServer
-	evalCtx.RegionsServer = execCfg.RegionsServer
+	evalCtx.TenantStatusServer = execCfg.TenantStatusServer
 	evalCtx.SQLStatusServer = execCfg.SQLStatusServer
 	evalCtx.DistSQLPlanner = execCfg.DistSQLPlanner
 	evalCtx.VirtualSchemas = execCfg.VirtualSchemas

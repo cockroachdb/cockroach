@@ -2817,7 +2817,7 @@ CREATE TABLE crdb_internal.create_function_statements (
 				tree.NewDInt(tree.DInt(fnIDToScID[fnDesc.GetID()])), // schema_id
 				tree.NewDString(fnIDToScName[fnDesc.GetID()]),       // schema_name
 				tree.NewDInt(tree.DInt(fnDesc.GetID())),             // function_id
-				tree.NewDString(fnDesc.GetName()),                   //function_name
+				tree.NewDString(fnDesc.GetName()),                   // function_name
 				tree.NewDString(tree.AsString(treeNode)),            // create_statement
 			)
 			if err != nil {
@@ -4594,7 +4594,7 @@ CREATE TABLE crdb_internal.regions (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		resp, err := p.extendedEvalCtx.RegionsServer.Regions(ctx, &serverpb.RegionsRequest{})
+		resp, err := p.extendedEvalCtx.TenantStatusServer.Regions(ctx, &serverpb.RegionsRequest{})
 		if err != nil {
 			return err
 		}

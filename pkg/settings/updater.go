@@ -15,7 +15,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // EncodeDuration encodes a duration in the format of EncodedValue.Value.
@@ -36,6 +38,15 @@ func EncodeInt(i int64) string {
 // EncodeFloat encodes a float in the format of EncodedValue.Value.
 func EncodeFloat(f float64) string {
 	return strconv.FormatFloat(f, 'G', -1, 64)
+}
+
+// EncodeProtobuf encodes a protobuf in the format of EncodedValue.Value.
+func EncodeProtobuf(p protoutil.Message) string {
+	data := make([]byte, p.Size())
+	if _, err := p.MarshalTo(data); err != nil {
+		panic(errors.Wrapf(err, "encoding %s: %+v", proto.MessageName(p), p))
+	}
+	return string(data)
 }
 
 type updater struct {
@@ -91,6 +102,12 @@ func (u updater) Set(ctx context.Context, key string, value EncodedValue) error 
 	switch setting := d.(type) {
 	case *StringSetting:
 		return setting.set(ctx, u.sv, value.Value)
+	case *ProtobufSetting:
+		p, err := setting.DecodeValue(value.Value)
+		if err != nil {
+			return err
+		}
+		return setting.set(ctx, u.sv, p)
 	case *BoolSetting:
 		b, err := setting.DecodeValue(value.Value)
 		if err != nil {
