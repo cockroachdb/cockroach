@@ -11,15 +11,12 @@
 package syntheticprivilege
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 )
 
 // ExternalConnectionPrivilege represents privileges on external connection
@@ -28,32 +25,34 @@ type ExternalConnectionPrivilege struct {
 	ConnectionName string `priv:"ConnectionName"`
 }
 
-var _ catalog.PrivilegeObject = &ExternalConnectionPrivilege{}
+var _ Object = &ExternalConnectionPrivilege{}
 
 // GetPath implements the Object interface.
 func (e *ExternalConnectionPrivilege) GetPath() string {
 	return fmt.Sprintf("/externalconn/%s", e.ConnectionName)
 }
 
-// GetPrivilegeDescriptor implements the PrivilegeObject interface.
-func (e *ExternalConnectionPrivilege) GetPrivilegeDescriptor(
-	ctx context.Context, planner eval.Planner,
-) (*catpb.PrivilegeDescriptor, error) {
-	if planner.IsActive(ctx, clusterversion.V22_2SystemPrivilegesTable) {
-		return planner.SynthesizePrivilegeDescriptor(ctx, e.GetPath(),
-			e.GetObjectType())
-	}
-	return catpb.NewPrivilegeDescriptor(
-		username.PublicRoleName(), privilege.List{privilege.USAGE}, privilege.List{}, username.NodeUserName(),
-	), nil
+// SystemPrivilegesTableVersionGate implements the Object interface.
+func (p *ExternalConnectionPrivilege) SystemPrivilegesTableVersionGate() clusterversion.Key {
+	return clusterversion.V22_2SystemPrivilegesTable
 }
 
-// GetObjectType implements the PrivilegeObject interface.
+// GetFallbackPrivileges implements the Object interface.
+func (e *ExternalConnectionPrivilege) GetFallbackPrivileges() *catpb.PrivilegeDescriptor {
+	return catpb.NewPrivilegeDescriptor(
+		username.PublicRoleName(),
+		privilege.List{privilege.USAGE},
+		privilege.List{},
+		username.NodeUserName(),
+	)
+}
+
+// GetObjectType implements the Object interface.
 func (e *ExternalConnectionPrivilege) GetObjectType() privilege.ObjectType {
 	return privilege.ExternalConnection
 }
 
-// GetName implements the PrivilegeObject interface.
+// GetName implements the Object interface.
 func (e *ExternalConnectionPrivilege) GetName() string {
 	return e.ConnectionName
 }
