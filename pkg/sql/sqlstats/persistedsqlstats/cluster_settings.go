@@ -24,7 +24,7 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 	settings.TenantWritable,
 	"sql.stats.flush.interval",
 	"the interval at which SQL execution statistics are flushed to disk, "+
-		"this value must be less than or equal to sql.stats.aggregation.interval",
+		"this value must be less than or equal to 1 hour",
 	time.Minute*10,
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 ).WithPublic()
