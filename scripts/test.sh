@@ -33,6 +33,10 @@ function gofmt_pass {
   generic_checker go_fmt_for_package
 }
 
+function genproto_pass {
+  "${RAFT_ROOT_DIR}/scripts/verify_genproto.sh"
+}
+
 ######## VARIOUS CHECKERS ######################################################
 
 function dump_deps_of_module() {
