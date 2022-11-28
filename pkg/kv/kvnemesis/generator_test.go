@@ -16,6 +16,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -245,26 +246,43 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 		return seq
 	}
 
-	spAll := roachpb.Span{
-		Key:    roachpb.Key(uint64ToKey(0)),
-		EndKey: roachpb.Key(uint64ToKey(math.MaxUint64)),
-	}
-	var curRanges roachpb.SpanGroup
-	curRanges.Add(spAll)
-	currentSplits := map[string]struct{}{}
-	for _, n := range []uint64{1, 5, 10, 15, 20, 25, 30} {
-		k := uint64ToKey(n)
-		sp := roachpb.Span{Key: roachpb.Key(k)}
-		currentSplits[k] = struct{}{}
-		curRanges.Sub(sp)
+	splitKeys := []uint64{5000, 10000, 15000, 20000, 25000, 30000, math.MaxUint64 / 2} // sorted
+
+	splitPointMap := map[string]struct{}{}
+	splitPointCountMap := map[string]int{}
+	var splitSpans []roachpb.Span
+	{
+		// Temporarily put 0 and MaxUint64 into the slice to
+		// help generate the leftmost and rightmost range.
+		splitKeys := append([]uint64{0}, splitKeys...)
+		splitKeys = append(splitKeys, math.MaxUint64)
+		for i := range splitKeys {
+			if i == 0 {
+				continue
+			}
+			k := uint64ToKey(splitKeys[i-1])
+			ek := uint64ToKey(splitKeys[i])
+			splitSpans = append(splitSpans, roachpb.Span{
+				Key:    roachpb.Key(k),
+				EndKey: roachpb.Key(ek),
+			})
+			splitPointCountMap[ek] = 0
+			if splitKeys[i] == math.MaxUint64 {
+				// Don't put MaxUint64 into splitPointMap to make sure we're always
+				// generating useful ranges. There's no room to the right of this split
+				// point.
+				continue
+			}
+			splitPointMap[ek] = struct{}{}
+		}
 	}
 
-	rng := rand.New(rand.NewSource(0)) // deterministic
+	rng := rand.New(rand.NewSource(1)) // deterministic
 	const num = 1000
 
 	var numSingleRange, numCrossRange, numPoint int
 	for i := 0; i < num; i++ {
-		dr := randDelRangeUsingTombstoneImpl(currentSplits, nextSeq, rng).DeleteRangeUsingTombstone
+		dr := randDelRangeUsingTombstoneImpl(splitPointMap, nextSeq, rng).DeleteRangeUsingTombstone
 		sp := roachpb.Span{Key: dr.Key, EndKey: dr.EndKey}
 		nk, nek := uint64FromKey(string(dr.Key)), uint64FromKey(string(dr.EndKey))
 		s := fmt.Sprintf("[%d,%d)", nk, nek)
@@ -275,31 +293,46 @@ func TestRandDelRangeUsingTombstone(t *testing.T) {
 			numPoint++
 			continue
 		}
-		if curRanges.Encloses(sp) {
-			// `sp` does not contain a split point, i.e. this would likely end up
-			// being a single-range request.
-			if numSingleRange == 0 {
-				t.Logf("first single-range request: %s", s)
+		var contained bool
+		for _, splitSp := range splitSpans {
+			if splitSp.Contains(sp) {
+				// `sp` does not contain a split point, i.e. this would likely end up
+				// being a single-range request.
+				if numSingleRange == 0 {
+					t.Logf("first single-range request: %s", s)
+				}
+				numSingleRange++
+				contained = true
+				splitPointCountMap[string(splitSp.EndKey)]++
+				break
 			}
-			numSingleRange++
-		} else {
+		}
+		if !contained {
 			if numCrossRange == 0 {
 				t.Logf("first cross-range request: %s", s)
 			}
 			numCrossRange++
 		}
 	}
+
 	fracSingleRange := float64(numSingleRange) / float64(num)
 	fracCrossRange := float64(numCrossRange) / float64(num)
 	fracPoint := float64(numPoint) / float64(num)
 
-	echotest.Require(t,
-		fmt.Sprintf(`single-range: %.3f
-point:        %.3f
-cross-range:  %.3f
-------------------
-total         %.3f
-`, fracSingleRange, fracPoint, fracCrossRange,
-			fracSingleRange+fracPoint+fracCrossRange),
-		testutils.TestDataPath(t, t.Name()+".txt"))
+	var buf strings.Builder
+
+	fmt.Fprintf(&buf, "point:        %.3f n=%d\n", fracPoint, numPoint)
+	fmt.Fprintf(&buf, "cross-range:  %.3f n=%d\n", fracCrossRange, numCrossRange)
+
+	fmt.Fprintf(&buf, "single-range: %.3f n=%d\n", fracSingleRange, numSingleRange)
+
+	for _, splitSp := range splitSpans {
+		frac := float64(splitPointCountMap[string(splitSp.EndKey)]) / float64(numSingleRange)
+		fmt.Fprintf(&buf, "              ^---- %.3f [%d,%d)\n",
+			frac, uint64FromKey(string(splitSp.Key)), uint64FromKey(string(splitSp.EndKey)))
+	}
+
+	fmt.Fprintf(&buf, "------------------\ntotal         %.3f", fracSingleRange+fracPoint+fracCrossRange)
+
+	echotest.Require(t, buf.String(), testutils.TestDataPath(t, t.Name()+".txt"))
 }

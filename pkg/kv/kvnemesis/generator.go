@@ -552,50 +552,44 @@ func randDelRangeUsingTombstoneImpl(
 	currentSplits map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
 ) Operation {
 	yn := func(probY float64) bool {
-		return rng.Float64() > probY
+		return rng.Float64() <= probY
 	}
 
 	var k, ek string
 	if yn(0.95) {
 		// 95% chance of picking an entire existing range.
+		//
 		// In kvnemesis, DeleteRangeUsingTombstone is prevented from spanning ranges since
-		// CRDB executes such requests non-atomically and so we can't really verify them
-		// well.
+		// CRDB executes such requests non-atomically and so we can't verify them
+		// well. Thus, pick spans that are likely single-range most of the time.
+		//
+		// 75% of the time we'll also modify the bounds.
 		k, ek = randRangeSpan(rng, currentSplits)
 		if yn(0.5) {
-			// 50% chance of picking random subspan of this range.
-			if yn(0.5) {
-				// In 50% of cases, move startKey forward.
-				k = randKeyBetween(rng, k, ek)
-			}
-			if yn(0.3) {
-				// In 50% of cases, move endKey backward.
-				ek = randKeyBetween(rng, k, ek)
-			}
+			// In 50% of cases, move startKey forward.
+			k = randKeyBetween(rng, k, ek)
 		}
-
-		if yn(0.1) {
-			// 10% chance of turning the span we have now into a point write at
-			// the start key.
-			ek = uint64ToKey(uint64FromKey(k) + 1)
+		if yn(0.5) {
+			// In 50% of cases, move endKey backward.
+			nk := uint64FromKey(k) + 1
+			nek := uint64FromKey(ek)
+			if nek < math.MaxUint64 {
+				nek++
+			}
+			ek = randKeyBetween(rng, uint64ToKey(nk), uint64ToKey(nek))
 		}
+	} else if yn(0.5) {
+		// (100%-95%)*50% = 2.5% chance of turning the span we have now into a
+		// random point write.
+		k = randKey(rng)
+		ek = uint64ToKey(uint64FromKey(k) + 1)
 	} else {
-		// 5% chance of picking a completely random span. This will often span range
+		// 2.5% chance of picking a completely random span. This will often span range
 		// boundaries and be rejected, so these are essentially doomed to fail.
 		k, ek = randKey(rng), randKey(rng)
 		if ek < k {
+			// NB: if they're equal, that's just tough luck; we'll have an empty range.
 			k, ek = ek, k
-		}
-		if k == ek {
-			// On collision, move one by one unit in a direction
-			// that has no over/underflow.
-			if nk := uint64FromKey(k); nk == 0 {
-				// Both are zero, so use [0,1)
-				ek = uint64ToKey(1)
-			} else {
-				// Can subtract one off start key.
-				k = uint64ToKey(nk - 1)
-			}
 		}
 	}
 
@@ -752,9 +746,15 @@ func uint64ToKey(n uint64) string {
 	return string(key)
 }
 
-// Returns a span which represents two random sort-adjacent keys from the map.
-// If the last element is picked, the end key will repesent MaxUint64. If the
-// map is empty, behaves as though input map has one random uint64 key.
+func min(a, b uint64) uint64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// Interprets the provided map as the split points of the key space and returns
+// the boundaries of a random range.
 func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string, string) {
 	keys := make([]string, 0, len(curOrHistSplits))
 	for key := range curOrHistSplits {
@@ -762,14 +762,23 @@ func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string,
 	}
 	sort.Strings(keys) // for determinism
 	if len(keys) == 0 {
-		return uint64ToKey(rng.Uint64()), uint64ToKey(math.MaxUint64)
+		// No splits.
+		return uint64ToKey(0), uint64ToKey(math.MaxUint64)
 	}
-	idx := rng.Intn(len(keys))
-	k := keys[idx]
-	if idx == len(keys)-1 {
-		return k, uint64ToKey(math.MaxUint64)
+	idx := rng.Intn(len(keys) + 1)
+	if idx == len(keys) {
+		// Last range.
+		return keys[idx-1], uint64ToKey(math.MaxUint64)
 	}
-	return k, keys[idx+1]
+	if idx == 0 {
+		// First range.
+		if keys[idx] != uint64ToKey(0) {
+			return uint64ToKey(0), keys[idx]
+		}
+		idx++
+		// Fall through.
+	}
+	return keys[idx-1], keys[idx]
 }
 
 func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
@@ -781,7 +790,7 @@ func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
 func randKeyBetween(rng *rand.Rand, k, ek string) string {
 	a, b := uint64FromKey(k), uint64FromKey(ek)
 	if b <= a {
-		b = a + 1 // we will return `k`
+		b = a + 1 // we will return `a`
 	}
 	defer func() {
 		if r := recover(); r != nil {
