@@ -262,6 +262,7 @@ VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 
 			insight.Statement.RowsWritten,
 			insight.Transaction.UserPriority,
 			insight.Statement.Retries,
+			// TODO(abarganier): Do we need to use something like sql.NullString here?
 			insight.Statement.AutoRetryReason,
 			insight.Statement.Nodes,
 			encodeContentionTime(insight.Statement.Contention),
@@ -278,23 +279,38 @@ VALUES ( $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 
 }
 
 func encodeCauses(causes []insights.Cause) []string {
-	// TODO(todd): write this
-	return []string{}
+	out := make([]string, len(causes))
+	for i := 0; i < len(causes); i++ {
+		out[i] = causes[i].String()
+	}
+	return out
 }
 
 func encodeContentionEvents(events []roachpb.ContentionEvent) interface{} {
-	// TODO(todd): write this
-	return nil
+	// TODO(todd): Is this the correct way to encode to JSON? Does it
+	// match the format when querying the same row in crdb_internal?
+	jsonpb := protoutil.JSONPb{}
+	json, err := jsonpb.Marshal(events)
+	if err != nil {
+		panic(err)
+	}
+	// TODO(abarganier): Seems like if the JSON is null, it resolves to the string 'null'
+	// instead of an actual nil value. What's a better way to handle this?
+	if len(json) == 0 || string(json) == "null" {
+		return nil
+	}
+	return string(json)
 }
 
 func encodeContentionTime(contention *time.Duration) interface{} {
-	// TODO(todd): write this
 	return contention
 }
 
 func encodeIndexRecommendations(recommendations []string) []string {
-	// TODO(todd): write this
-	return []string{}
+	if recommendations == nil {
+		return []string{}
+	}
+	return recommendations
 }
 
 func encodeUint64ToBytes(id uint64) []byte {

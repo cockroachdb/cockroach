@@ -144,11 +144,15 @@ func TestEventIngestionIntegration(t *testing.T) {
 		},
 	)
 	defer s.Stopper().Stop(ctx)
-	pgURL, cleanupFunc := sqlutils.PGUrl(
-		t, s.ServingSQLAddr(),
-		"TestPersistEvents", url.User(username.RootUser),
-	)
-	defer cleanupFunc()
+	pgURL, cleanupFunc, err := sqlutils.PGUrlE(
+		s.ServingSQLAddr(), "TestPersistEvents", url.User(username.RootUser))
+	pgURL.Path = "defaultdb"
+	pgURL.RawQuery = "sslmode=disable"
+	obsDB, err := sql.Open("postgres", pgURL.String())
+	defer func() {
+		_ = obsDB.Close()
+		cleanupFunc()
+	}()
 
 	config, err := pgxpool.ParseConfig(pgURL.String())
 	require.NoError(t, err)
@@ -191,9 +195,6 @@ func TestEventIngestionIntegration(t *testing.T) {
 		_, err = sqlDB.Exec("select pg_sleep(0.2)")
 		require.NoError(t, err)
 
-		foo, err := sql.Open("postgres", pgURL.String())
-		require.NoError(t, err)
-
 		// Wait for an event to be ingested.
 		testutils.SucceedsSoon(t, func() error {
 			r := pool.QueryRow(ctx, "select count(*) from execution_insights where app_name=$1", t.Name())
@@ -214,14 +215,17 @@ func TestEventIngestionIntegration(t *testing.T) {
 			var timestamp time.Time
 			var id string
 
-			r = foo.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "execution_insights"), t.Name())
+			r = obsDB.QueryRow(fmt.Sprintf("select * from %s where app_name=$1", "execution_insights"), t.Name())
 			var fields []interface{}
 			fields = append(fields, &timestamp)
 			fields = append(fields, &id)
 			fields = append(fields, actual.fields()...)
-			require.NoError(t, r.Scan(fields...))
+			err = r.Scan(fields...)
+			// TODO(abarganier): We need to make sure all columns are populated. Also, lastRetryReason
+			// seems to be behaving unexpectedly with its sql.NullString value. One is valid, one isn't.
+			// Why is this?
+			require.NoError(t, err)
 			require.Equal(t, expected, actual)
-
 			return nil
 		})
 	})
