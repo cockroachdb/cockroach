@@ -1213,6 +1213,7 @@ func benchmarkRawNodeImpl(b *testing.B, peers ...uint64) {
 	stabilize()
 
 	if debug {
+		// nolint:staticcheck
 		b.N = 1
 	}
 

@@ -140,12 +140,6 @@ func TestConfChangeQuick(t *testing.T) {
 	t.Errorf("out1: %+v\nout2: %+v", cErr.Out1, cErr.Out2)
 }
 
-type confChangeTyp pb.ConfChangeType
-
-func (confChangeTyp) Generate(rand *rand.Rand, _ int) reflect.Value {
-	return reflect.ValueOf(confChangeTyp(rand.Intn(4)))
-}
-
 type confChanges []pb.ConfChangeSingle
 
 func genCC(num func() int, id func() uint64, typ func() pb.ConfChangeType) []pb.ConfChangeSingle {
