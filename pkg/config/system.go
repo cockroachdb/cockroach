@@ -408,8 +408,8 @@ func (s *SystemConfig) GetZoneConfigForObject(
 // requested. Note, this function is only intended to be called during test
 // execution, such as logic tests.
 func (s *SystemConfig) PurgeZoneConfigCache() {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if len(s.mu.zoneCache) != 0 {
 		s.mu.zoneCache = map[ObjectID]zoneEntry{}
 	}
